@@ -39,8 +39,16 @@ checks in the current directory, never `**/glob` patterns that search subfolders
    — the old project is already scaffolded, and `npx boardsmith init` hard-fails on an existing
    directory (`src/cli/commands/init.ts`); at most re-run only the compile/serve verification
    portion of `ingest/scaffold.md` (no `init`) to prove the old codebase still compiles. Skip
-   Step 2 as well and proceed to Step 3 (Synthesis) using the old project's captured content
-   instead of new transcription/interview output.
+   Step 2's questioning, but NOT its output shape: convert the old project's captured content
+   into the standard `rulebook/` shape first — write the old interview/PROJECT.md content as
+   `rulebook/NN-topic.md` slices (grouped by topic, per `ingest/interview-fallback.md`
+   "Output Re-Target"), with citation format
+   `designer statement, migrated from /design-game project`. Collect `citedTerms[]` /
+   `componentMentions[]` from those slices as you write them, exactly as the interview path
+   does. Then proceed to Step 3 (Synthesis), which runs unchanged — preserving the
+   input-path identity `ingest/interview-fallback.md` declares (every downstream step,
+   including `/bs-build-chunk`'s citation reads, consumes the same `rulebook/NN-topic.md` +
+   `rulebook/INDEX.md` shape regardless of input path). Migration is never a fourth shape.
 
 ## Step 1: Scaffold + Verify
 
