@@ -34,56 +34,73 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
 ### Phase Details
 
 #### Phase 140: Library Prerequisite — useAnnouncer()
+
 **Goal**: Game UIs can announce meaningful state changes to screen readers, so the per-chunk a11y floor can require it.
 **Depends on**: Nothing (first phase)
 **Requirements**: LIB-01
 **Success Criteria** (what must be TRUE):
+
   1. A developer can import `useAnnouncer()` from `boardsmith/ui` and call it from any game component to announce a message
   2. Announced messages are written to GameShell's existing live regions and are read by screen readers without adding new DOM nodes
   3. `useAnnouncer()` behaves identically whether used from a custom UI or an AutoUI renderer
+
 **Plans**: 1 plan
+
 - [x] 140-01-PLAN.md — useAnnouncer() composable + GameShell wiring + public export + parity/relay tests
+
 **UI hint**: yes
 
 #### Phase 141: File Templates & State-Machine Authority
+
 **Goal**: Every `bs-` skill has literal, unambiguous file templates to fill, and the hard state-machine rules that keep cold-resume safe are enforced from day one.
 **Depends on**: Nothing (independent of Phase 140; both are prerequisites for everything downstream)
 **Requirements**: TMPL-01, TMPL-02, TMPL-03
 **Success Criteria** (what must be TRUE):
+
   1. SKETCH.md, CHUNK.md, RULINGS.md, DECISIONS.md, DESIGN.md, and ASSETS.md each exist as literal template files with exact step names and status enum values
   2. A resumed session that finds a state file failing to parse against its template stops and asks the user instead of guessing
   3. CHUNK.md is authoritative for its own chunk's status; SKETCH.md holds only the ordered list and derived pointers; on contradiction CHUNK.md wins and the session logs + repairs the sketch; writes always go CHUNK.md first, SKETCH.md second
+
 **Plans**: 3 plans
+
 - [x] 141-01-PLAN.md — state-machine.md authority-rules doc + drift-test scaffold
 - [x] 141-02-PLAN.md — CHUNK.template.md + SKETCH.template.md (status-bearing templates) + cross-file agreement test
 - [x] 141-03-PLAN.md — RULINGS/DECISIONS/DESIGN/ASSETS ledger templates + full drift test
 
 #### Phase 142: `/bs-ingest-rules`
+
 **Goal**: A designer can turn a rulebook (or a from-scratch interview) into a scaffolded, compiling project with an approved sketch, ready for the first chunk.
 **Depends on**: Phase 140, Phase 141
 **Requirements**: INGEST-01, INGEST-02, INGEST-03, INGEST-04, INGEST-05, INGEST-06, INGEST-07
 **Success Criteria** (what must be TRUE):
+
   1. A designer can hand `/bs-ingest-rules` a PDF/image/text rulebook and receive canonical `rulebook/` slices with citations, each confirmed section-by-section with the user
   2. Ingest produces `rulebook/INDEX.md`, variant/edition tagging, a component inventory with aspect ratios, `ASSETS.md`, a visual identity survey, and player-count data
   3. A designer with no written rulebook can complete the same ingest via an interview fallback that produces the identical set of `rulebook/` files
   4. Ingest scaffolds the project (`boardsmith init` + naming rules), verifies the empty skeleton compiles and serves, and proposes a `SKETCH.md` — core-event-loop-first, mandatory game-end/final-acceptance chunks, `ui:` tags, outcome-based test scripts — gated on user approval with chunk-count/time expectations, including the UI strategy decision made with the user
   5. Re-running ingest on an existing project requires explicit confirmation, and an old `/design-game` project is offered a one-time conversion instead of being silently overwritten
+
 **Plans**: 3 plans
+
 - [x] 142-01-PLAN.md — drift test harness + lean orchestrator skill (INGEST-02/06/07)
 - [x] 142-02-PLAN.md — transcription fan-out + interview fallback reference files (INGEST-01/03)
 - [x] 142-03-PLAN.md — scaffold + sketch-derivation reference files (INGEST-04/05)
 
 #### Phase 143: `/bs-build-chunk` — Interpretation & Ask Gate
+
 **Goal**: A designer can start or resume any chunk at exactly the right step, and reach a human-approved, plain-language design before a single line of code is written.
 **Depends on**: Phase 142
 **Requirements**: BUILD-01, BUILD-02, BUILD-03, BUILD-04, BUILD-12
 **Success Criteria** (what must be TRUE):
+
   1. Running `/bs-build-chunk` resumes at the first incomplete step of the current chunk — including mid-loop and awaiting-playtest states — and routes conversational status/insert intents instead of misbuilding
   2. Investigate produces a numbered, citation-backed claims list plus a hidden-information visibility declaration, built from cited slices, INDEX-discovered slices, `RULINGS.md`, and `DECISIONS.md`
   3. Redteam runs 3 independent fresh-context agents (2 refuters + 1 coverage adversary) against the claims list with no investigator framing; a claim refuted twice escalates to the user as a plain-language ruling recorded in `RULINGS.md`
   4. The ask gate presents plain designer-language rules with citations, ambiguity questions with options, a "what you will NOT see yet" list, zero implementation vocabulary, and requests any needed assets with a never-blocking placeholder path
   5. Chunks tagged trivial run the light path (build → test → playtest) with the user explicitly told which ceremony is in effect
+
 **Plans**: 5 plans
+
 - [x] 143-01-PLAN.md — build-chunk.test.ts structural drift suite (Wave 0 contract: pins step/enum strings + return-shape field names)
 - [x] 143-02-PLAN.md — build-chunk.md orchestrator: resume routing, 3-way session lock, conversational intents, full+light routing (BUILD-01, BUILD-12)
 - [x] 143-03-PLAN.md — build/investigate.md: doc-reading + claims list + visibility declaration (BUILD-02)
@@ -91,77 +108,103 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
 - [x] 143-05-PLAN.md — build/ask.md: 4-part plain-language gate, zero impl vocab, never-blocking assets, gate-before-write (BUILD-04)
 
 #### Phase 144: `/bs-build-chunk` — Build & Test with UI Floor
+
 **Goal**: An approved design becomes extended, automatically-tested code that meets the per-chunk accessibility and visual-identity floor.
 **Depends on**: Phase 143
 **Requirements**: BUILD-05, BUILD-06, UIQ-01, UIQ-02, UIQ-03
 **Success Criteria** (what must be TRUE):
+
   1. Build reads the raw slices plus the approved interpretation, extends rather than restructures verified code (restructuring requires a user gate), appends to `DECISIONS.md`, and keeps a per-file manifest so a mid-build crash resumes file-by-file
   2. Test runs `tsc --noEmit`, the boardsmith eslint plugin, unit/integration tests, the full accumulated regression suite, and a random-simulation playthrough to a terminal state
   3. The first UI chunk's ask offers Adopt/Derive/Original visual directions and records the choice in `DESIGN.md` with token overrides and component recipes
   4. Components awaiting assets render designed, correctly-proportioned placeholders styled from `DESIGN.md` tokens, and a later asset swap causes zero layout change
   5. `ui: touches|major` chunks pass the a11y floor: keyboard-only ActionPanel completion, an axe-core scan, a no-color-literal grep, real semantic controls with game-meaning labels, focus management, and `prefers-reduced-motion` honored
+
 **Plans**: 4 plans
+
 - [x] 144-01-PLAN.md — Wave-0 drift-test scaffold (build-chunk.test.ts: BUILD-05/06, UIQ-01..03 blocks + updated path/marker arrays)
 - [x] 144-02-PLAN.md — Scaffold-template real code: axe-core + @vue/test-utils devDeps + tests/a11y.example.test.ts (UIQ-03)
 - [x] 144-03-PLAN.md — build/build.md + build/test.md ({build,test} step group: BUILD-05, BUILD-06, UIQ-02, UIQ-03)
 - [x] 144-04-PLAN.md — build/design-ask.md + ask.md hook + build-chunk.md routing (UIQ-01) + phase gate
+
 **UI hint**: yes
 
 #### Phase 145: `/bs-build-chunk` — Audit & Repair with Design Review
+
 **Goal**: Every chunk is adversarially checked against the rulebook, hidden-information leaks, undo sanity, and (for UI chunks) visual cohesion before it ever reaches the human.
 **Depends on**: Phase 144
 **Requirements**: BUILD-07, BUILD-08, UIQ-04
 **Success Criteria** (what must be TRUE):
+
   1. Audit agents read the raw slices + `RULINGS.md` + the code (never the interpretation) and record fidelity, visibility-leak (two-seat diff), and undo findings in a stable-ID ledger inside `CHUNK.md`
   2. Repair loops fix findings or refute them with citations, cap at 3 audit rounds enforcing an only-new-findings rule, and triage any remaining findings to the user
   3. `ui: touches|major` chunks get a screenshot-armed design-review agent that captures 3 Slate breakpoints × 2 themes, diffs against `DESIGN.md` and the previous chunk's stored screenshots, and feeds findings into the same repair loop
+
 **Plans**: 2 plans
 Plans:
+**Wave 1**
+
 - [ ] 145-01-PLAN.md — {audit, repair} step group: audit.md (BUILD-07, 3 lenses + leak diff) & repair.md (BUILD-08, bounded fix-or-refute loop)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 145-02-PLAN.md — design-review agent (UIQ-04): screenshot 3×2 breakpoint/theme grid, cohesion diff, server-kill
+
 **UI hint**: yes
 
 #### Phase 146: `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance
+
 **Goal**: A human verifies every chunk in the browser on the most polished artifact, feedback is triaged honestly, and closed chunks leave a durable, git-anchored, resumable trail.
 **Depends on**: Phase 145
 **Requirements**: BUILD-09, BUILD-10, BUILD-11, BUILD-13, UIQ-05
 **Success Criteria** (what must be TRUE):
+
   1. Playtest hands the user a numbered, click-by-click script (seat counts, dev-host affordances taught once, a build stamp, a regression line) with an explicit item-by-item verified checklist, and a `verified (user-waived)` state exists for honest skipping
   2. Feedback is triaged item-by-item (this-chunk / future-scope / not-built-yet / ruling); re-entry after a revise round shows a feedback disposition report with a targeted re-test script, not a blind full re-test
   3. Close records the verified commit hash in `CHUNK.md`, re-derives the sketch tail against the rulebook, and presents the delta for approval before proposing the next chunk
   4. Sessions commit at every step completion (`chunk-<slug>/step-<name>`), hand off at structural step-group seams with a non-programmer-readable resume message, and a second concurrent session is warned via a sketch lock note instead of silently clobbered
   5. The final-acceptance chunk runs the full design-QA pass (screen-reader playthrough, 200% zoom, touch targets, colorblind pass, both Slate themes, mobile layout) as part of what "done" means for the sketch
+
 **Plans**: TBD
 **UI hint**: yes
 
 #### Phase 147: `/bs-check-status` & `/bs-insert-chunk`
+
 **Goal**: A designer can see exactly where the project stands and reshape the sketch safely without corrupting state.
 **Depends on**: Phase 142, Phase 146
 **Requirements**: STAT-01, STAT-02
 **Success Criteria** (what must be TRUE):
+
   1. `/bs-check-status` reports chunks done/remaining, the current chunk and step, outstanding playtest feedback, waived verifications, outstanding asset debts, ideas backlog size, and the exact next command to run
   2. `/bs-insert-chunk` can add, reorder, split, or remove chunks, re-validating dependency order against citations and diffing the new chunk's citations against closed chunks to flag overlaps
   3. `/bs-insert-chunk` marks any already-detailed pending `CHUNK.md` as stale-needs-re-derivation and bumps the sketch version stamp so a concurrently resumed build session detects the sketch changed under it
+
 **Plans**: TBD
 
 #### Phase 148: Distribution — Installer & `/bs-generate-ai`
+
 **Goal**: Installing BoardSmith's Claude tooling gives a designer the complete, self-consistent `bs-` skill family with no dead `/design-game` path left behind.
 **Depends on**: Phase 142, Phase 146, Phase 147
 **Requirements**: DIST-01, DIST-02
 **Success Criteria** (what must be TRUE):
+
   1. `install-claude-command.ts` installs all five `bs-` skills plus the shared reference files (aspects, doc lists, templates) in one pass
   2. Running install removes the `design-game` template entirely, with no residual references left in the installed set
   3. `/generate-ai` is renamed `/bs-generate-ai`, keeps working as an AI-opponent generator, and is positioned/reachable as a late sketch chunk once game-end/scoring exists
+
 **Plans**: TBD
 
 #### Phase 149: End-to-End Dry-Run Validation
+
 **Goal**: The full rulebook-to-playable-game pipeline is proven end-to-end against a real rulebook before it is ever pointed at an actual designer.
 **Depends on**: Phase 148
 **Requirements**: VAL-01
 **Success Criteria** (what must be TRUE):
+
   1. `/bs-ingest-rules` through several `/bs-build-chunk` cycles run against a reference game's rulebook (e.g. Hex or Go Fish) end-to-end, including all playtest gates
   2. The dry-run's resulting implementation is compared against the existing hand-built reference implementation, with discrepancies reconciled or explicitly documented
   3. Any pipeline defects (skill logic, template gaps, gate friction) surfaced during the dry-run are fixed before the milestone ships
+
 **Plans**: TBD
 
 ### Progress
