@@ -35,8 +35,9 @@ boundaries within this range (a section rarely spans a page-range seam cleanly �
 section continues into the next range). For each section:
 
   1. WRITE the transcribed text — verbatim in substance, with an explicit page/section
-     citation prefix (e.g. "p.14, Movement:") — directly to `rulebook/NN-topic.md`
-     (numbered, topic-named — e.g. `rulebook/03-movement.md`).
+     citation prefix (e.g. "p.14, Movement:") — directly to `rulebook/NN-topic.md`, where
+     NN is the section's STARTING PAGE NUMBER, zero-padded to two digits (e.g. the section
+     starting on p.14 → `rulebook/14-movement.md`).
   2. RETURN a structured summary only — never the transcribed text itself:
      (a) slicePath — the rulebook/NN-topic.md file you wrote.
      (b) sectionSummary — 2-4 sentences describing what the section covers, written for a
@@ -73,6 +74,20 @@ If it comes back null, the orchestrator asks the user. The
 orchestrator records it as a header line in `rulebook/INDEX.md` (e.g. `Edition: 2nd edition,
 2019 printing`) so every later citation is anchored to the exact text that was transcribed. On
 the interview path the line reads `Edition: unpublished — designer statement`.
+
+**Slice numbering is page-anchored** (`NN` = the section's zero-padded starting page number,
+stated in the template above) precisely because it is self-allocating: a subagent needs no
+knowledge of how many sections any other range produced, so parallel ranges can never collide
+on a prefix and the files sort in page order with zero coordination between subagents. Do not
+substitute a sequential "numbering base" scheme — the orchestrator cannot know a range's
+section count before dispatching the next range's base, so sequential bases duplicate or go
+out of order under parallel dispatch. If two sections start on the same page, the subagent
+that owns that page writes both (a page range never splits mid-page), so it disambiguates
+locally (e.g. `14-movement.md`, `14-combat.md` — the topic name keeps the paths distinct).
+`rulebook/00-visual-survey.md` is reserved for the orchestrator's Step 3 visual identity
+survey — page numbering starts at 1, so no slice can collide with it. (The interview path
+numbers by question group instead — see `ingest/interview-fallback.md` "Output Re-Target";
+the two paths are mutually exclusive, so the schemes never mix in one project.)
 
 Do not ask a subagent to interpret or evaluate the rules — only transcribe, write, and extract
 the summary fields above. Interpretation is the orchestrator's and, later, `/bs-build-chunk`'s
