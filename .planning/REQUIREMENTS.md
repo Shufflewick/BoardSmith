@@ -78,7 +78,7 @@
 
 ### Cross-Repo Migration (GAMES)
 
-- [ ] **GAMES-01**: All 8 example games in `~/BoardSmithGames/` comply with the changed API surface; every suite green
+- [x] **GAMES-01**: All 8 example games in `~/BoardSmithGames/` comply with the changed API surface; every suite green
 - [ ] **GAMES-02**: MERC re-vendored onto the new version and green; gaps surfaced during migration fixed in BoardSmith `src/`, not worked around
 
 ## Future Requirements
@@ -131,7 +131,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | SDK-06 | Phase 136 | Complete |
 | TST-01 | Phase 137 | Complete |
 | TST-02 | Phase 137 | Complete |
-| GAMES-01 | Phase 138 | Pending |
+| GAMES-01 | Phase 138 | Complete |
 | GAMES-02 | Phase 138 | Pending |
 | DOCX-01 | Phase 139 | Pending |
 | DOCX-02 | Phase 139 | Pending |

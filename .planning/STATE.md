@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
-last_updated: "2026-07-04T01:16:05.638Z"
-last_activity: 2026-07-04 -- Phase 138 planning complete
+last_updated: "2026-07-04T01:22:25.385Z"
+last_activity: 2026-07-04
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 37
-  completed_plans: 34
+  completed_plans: 35
   percent: 78
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 138 — cross repo migration
+**Current focus:** Phase 138 — Cross-Repo Migration
 
 ## Current Position
 
-Phase: 138
-Plan: Not started
+Phase: 138 (Cross-Repo Migration) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-04 -- Phase 138 planning complete
+Last activity: 2026-07-04
 
-Progress: [██████████] 100%
+Progress: [██████████] 95%
 
 ## Milestones
 
@@ -168,6 +168,7 @@ Recent decisions affecting current work:
 - [Phase 137]: PROC-01 gate: F36/F37 both independently re-verified LEGITIMATE against post-Phase-136 source with zero drift; all six doAction call sites confirmed at original line numbers, locking the classification table for Plans 02-03
 - [Phase 137-02]: doAction now throws ActionExecutionError by default; tryAction is the never-throw escape hatch used by the four category-(b) harness call sites
 - [Phase 137-03]: Fixed literal 'test-seed' default (matching playUntilComplete-default house style); seed threaded via TestGame's private constructor and surfaced in doAction/assertActionAvailable/GameStuckError failure messages
+- [Phase 138]: no-hidden-info-leak.test.ts playSeveralAsks reclassified to loop-control (tryAction), overriding plan's literal Task 2(a) instruction to match driveAFewTurns's identical break-on-failure loop shape
 
 ### Pending Todos
 
@@ -179,7 +180,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T23:56:51.579Z
+Last session: 2026-07-04T01:21:02.630Z
 Stopped at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
