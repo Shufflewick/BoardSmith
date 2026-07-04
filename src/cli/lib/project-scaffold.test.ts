@@ -165,6 +165,13 @@ describe('generatePackageJson — axe-core scaffold devDependency', () => {
     const parsed = JSON.parse(generatePackageJson(config));
     expect(parsed.devDependencies).toHaveProperty('@vue/test-utils');
   });
+
+  it('includes jsdom in devDependencies (CR-02 regression: the a11y example runs in `@vitest-environment jsdom`, which vitest v2 does not bundle)', () => {
+    const parsed = JSON.parse(generatePackageJson(config));
+    // Without jsdom installed, `npm test` in a fresh scaffold is red out of the
+    // box: requesting the jsdom environment fails with `Cannot find package 'jsdom'`.
+    expect(parsed.devDependencies).toHaveProperty('jsdom');
+  });
 });
 
 describe('generateScaffoldFiles — a11y example test harness', () => {
@@ -183,6 +190,27 @@ describe('generateScaffoldFiles — a11y example test harness', () => {
 
   it('generateA11yExampleTestTs output matches the generateScaffoldFiles entry', () => {
     expect(generateA11yExampleTestTs()).toContain('axe.run(');
+  });
+
+  it('mounts with attachTo: document.body so axe.run scans an attached node (CR-01 regression)', () => {
+    // axe.run() throws "No elements found for include in page Context" on a
+    // DETACHED node — @vue/test-utils `mount` without `attachTo` renders detached.
+    // The executable proof that attachTo is what makes the node attached lives in
+    // project-scaffold.a11y.test.ts; this pins the generated string carries it.
+    const out = generateA11yExampleTestTs();
+    expect(out).toContain('attachTo: document.body');
+  });
+
+  it('detaches the mounted node after the scan so it does not leak into the next test (CR-01 regression)', () => {
+    const out = generateA11yExampleTestTs();
+    expect(out).toContain('wrapper.unmount()');
+    // The unmount must be unconditional (a `finally`), not skipped when axe throws.
+    expect(out).toMatch(/finally\s*\{[^}]*wrapper\.unmount\(\)/s);
+  });
+
+  it('runs in the jsdom vitest environment the a11y scan requires', () => {
+    const out = generateA11yExampleTestTs();
+    expect(out).toContain('// @vitest-environment jsdom');
   });
 });
 
