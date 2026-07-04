@@ -97,8 +97,13 @@ following artifacts **from subagent-returned summaries only** — never from re-
    `visualEvidence[]` lists the transcription subagents return (parallel to how INDEX.md is
    built from `citedTerms[]`) — the orchestrator never opens the PDF/images itself. On the
    interview path, whatever visual description the designer volunteers stands in for
-   `visualEvidence[]`. The actual design direction is decided later, at the first UI chunk's
-   `ask` step, against `DESIGN.md`.
+   `visualEvidence[]`. **Written to `rulebook/00-visual-survey.md`** in this step, alongside
+   INDEX.md and ASSETS.md — it is factual evidence, not gated sketch state, so pre-approval
+   writing is consistent with Step 7's carve-out. Its consumer is the first UI chunk's `ask`
+   step — a later, fresh-context session — so an in-context-only survey would be data loss:
+   the evidence the design ask depends on would be gone the moment this session ends. The
+   actual design direction is decided there, at the first UI chunk's `ask` step, against
+   `DESIGN.md`.
 6. **Player counts** — min/max player counts and any per-count setup differences, recorded at
    sketch level.
 
@@ -153,8 +158,9 @@ or any `CHUNK.md`. Only after Step 6's explicit approval:
   at the FIRST UI chunk's `ask` step, not at ingest — there is no visual identity to decide
   until a UI chunk needs one, and the file's very existence is the signal `/bs-build-chunk`
   uses to know the identity decision was made. Creating it blank here breaks that trigger.
-- `ASSETS.md` was already seeded at Step 3 (it records factual component inventory, not gated
-  sketch state) — do not re-copy its skeleton here.
+- `ASSETS.md` and `rulebook/00-visual-survey.md` were already written at Step 3 (they record
+  factual component inventory and visual evidence, not gated sketch state) — do not re-copy or
+  re-write them here.
 
 Never restate template or state-machine content inline in this file or in the written project
 files beyond what each template already documents — fill the placeholders, don't reinvent the

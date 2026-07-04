@@ -95,6 +95,13 @@ describe('INGEST-02 — synthesis artifact list', () => {
     expect(ingestRules).toMatch(/visual identity survey/i);
   });
 
+  it('gives the survey a durable write target consumed by the first UI chunk ask (CR-01)', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('rulebook/00-visual-survey.md');
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('rulebook/00-visual-survey.md');
+  });
+
   it('names player-count / min-max', () => {
     const ingestRules = read('ingest-rules.md');
     expect(ingestRules).toMatch(/min(?:imum)?\s*\/?\s*max(?:imum)?\s*player/i);

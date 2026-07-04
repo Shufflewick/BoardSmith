@@ -95,10 +95,12 @@ summary fields. For each confirmed section:
 3. Accumulate `componentMentions[]` (with aspect ratios) into the running component inventory
    that seeds `ASSETS.md` (see `templates/ASSETS.template.md` for the ledger shape this
    feeds — cite it, do not restate its columns here).
-4. Accumulate `visualEvidence[]` into the running visual identity survey (Step 3 item 5 in
-   `ingest-rules.md`) — the survey is built exclusively from these returned observations,
-   exactly parallel to how `rulebook/INDEX.md` is built from `citedTerms[]`; the orchestrator
-   never looks at the rulebook's visuals itself.
+4. Accumulate `visualEvidence[]` into the running visual identity survey, which Step 3 item 5
+   in `ingest-rules.md` writes to `rulebook/00-visual-survey.md` — the survey is built
+   exclusively from these returned observations, exactly parallel to how `rulebook/INDEX.md`
+   is built from `citedTerms[]`; the orchestrator never looks at the rulebook's visuals
+   itself. The file is the durable handoff to the first UI chunk's design `ask`, which runs
+   in a later, fresh-context session.
 
 ## Variant / Optional / Advanced Rules
 
