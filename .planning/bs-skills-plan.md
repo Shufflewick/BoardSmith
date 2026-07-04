@@ -44,7 +44,7 @@ Naming note: because `plan`/`step` collide with GSD vocabulary, on-disk files us
 - `CHUNK.md` owns its chunk's status; `SKETCH.md` holds only the ordered list and derived pointers. On contradiction, CHUNK.md wins; the session logs and repairs the sketch.
 - Write order is always CHUNK.md first, SKETCH.md second. Every write must leave the file valid for a cold resume (append-only round entries; `Status:` line updated last).
 - The skills ship **literal file templates** (canonical skeletons with exact step names and status enum values). Sessions fill templates, never restructure them. On resume, if a state file doesn't parse against its template, stop and ask the user — never guess.
-- Every bs- entry point begins with a **consistency check**: every sketch slug has a directory, every directory has a sketch entry, statuses parse, no stale session lock. Problems are reported and confirmed before proceeding.
+- Every bs- entry point begins with a **consistency check**: every sketch slug with a detailed entry has a directory (sketch-level tail entries exempt — they gain their directory when detailed at a close gate), every directory has a sketch entry, statuses parse, no stale session lock. Problems are reported and confirmed before proceeding.
 - **Rulings outrank the rulebook.** Every agent that reads a rulebook slice (investigate, redteam, audit) also reads `RULINGS.md`; the composite is the source of truth. This is what stops audit agents from "fixing" a house rule back to the printed rule forever.
 
 ## The Four Skills
@@ -144,7 +144,7 @@ Hidden information is largely solved server-side (`visibleAttributes` redaction 
 
 ### Context management
 - Every step writes its results to CHUNK.md **before** the next step starts; every write leaves state cold-resumable.
-- Self-assessed "remaining context" is not a real capability. Session budgets are **structural**: a single session runs at most one step group — {investigate + redteam + ask}, {build + test}, {audit + repair}, {playtest + one revise round} — and always hands off at those seams. Additionally, hand off after N subagent dispatches (their returned results are the real context cost). If the harness surfaces a context warning, obey it immediately.
+- Self-assessed "remaining context" is not a real capability. Session budgets are **structural**: a single session runs at most one step group — {investigate + redteam + ask}, {build + test}, {audit + repair}, {playtest + one revise round + close} — and always hands off at those seams. Additionally, hand off after N subagent dispatches (their returned results are the real context cost). If the harness surfaces a context warning, obey it immediately.
 - The handoff message is written for a non-programmer: the literal command to run next time, and the reassurance that everything is saved in the game folder.
 
 ### Human gates
