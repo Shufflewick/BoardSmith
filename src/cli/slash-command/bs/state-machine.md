@@ -37,8 +37,11 @@ The user is told which path is in effect when a chunk is proposed.
 Light-path status transitions: the light path has no `ask` step, so `approved` is unreachable
 for light chunks. A light chunk moves `proposed → built` directly when the user accepts the
 proposal (proposal acceptance is the light path's ask-equivalent authorization gate) and
-`build` + `test` complete; it then moves `built → verified` (or `verified (user-waived)`) at
-`playtest` exactly as a full-ceremony chunk does.
+`build` + `test` complete; it then moves `built → verified` (or `verified (user-waived)`)
+when the human confirms the playtest checklist. Because the light path has no `close` step,
+for light chunks the `playtest` step also performs `close`'s bookkeeping: it records the
+verified commit hash in CHUNK.md (the bisect anchor — see Git Protocol), updates the Status
+line (CHUNK.md first, SKETCH.md second, per Write Order), and rolls up decisions.
 
 ## Authority
 
