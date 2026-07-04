@@ -201,6 +201,16 @@ describe('BUILD-03 — redteam', () => {
     expect(redteam).toMatch(/never show/i);
   });
 
+  it('pins the no-framing independence rule for dispatch prompts', () => {
+    const redteam = read('build/redteam.md');
+    // The property the plan calls out as what "defeats independent review": dispatch prompts
+    // carry only slice paths + the numbered claims list — no investigator framing, no
+    // confidence adjectives.
+    expect(redteam).toMatch(/investigator'?s framing must never flow/i);
+    expect(redteam).toContain('no investigator rationale, no framing');
+    expect(redteam).toMatch(/prohibit confidence adjectives/i);
+  });
+
   it('defines every REDTEAM_REFUTER_FIELDS and REDTEAM_COVERAGE_FIELDS field', () => {
     const redteam = read('build/redteam.md');
     for (const field of [...REDTEAM_REFUTER_FIELDS, ...REDTEAM_COVERAGE_FIELDS]) {
@@ -239,6 +249,9 @@ describe('BUILD-04 — ask gate', () => {
     const ask = read('build/ask.md');
     expect(ask).toContain('Status: approved');
     expect(ask).toMatch(/explicit(ly)? approv/i);
+    // Pin the write-LAST ordering rule itself, not just the strings' presence — a reword that
+    // drops "last, after every other write" must fail here.
+    expect(ask).toContain('**last**, after every other write');
   });
 });
 
