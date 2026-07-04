@@ -42,8 +42,14 @@ section continues into the next range). For each section:
      (d) componentMentions[] — any physical component mentioned or depicted (cards, tiles, dice,
          board, tokens), each with its approximate aspect ratio if the rulebook shows or states
          dimensions, and the page citation.
+     (e) visualEvidence[] — visual identity observations from your assigned pages: dominant
+         palette candidates, typography feel, iconography, notes on board/card art, and a short
+         description of every setup diagram or embedded component image (with page citation).
+         Weave those diagram/image descriptions into the slice text you write as well — the
+         slice is the only downstream record of them; nothing re-reads the PDF/images later.
 
-Return exactly: one { slicePath, sectionSummary, citedTerms[], componentMentions[] } per section.
+Return exactly: one { slicePath, sectionSummary, citedTerms[], componentMentions[],
+visualEvidence[] } per section.
 ```
 
 Do not ask a subagent to interpret or evaluate the rules — only transcribe, write, and extract
@@ -78,6 +84,10 @@ summary fields. For each confirmed section:
 3. Accumulate `componentMentions[]` (with aspect ratios) into the running component inventory
    that seeds `ASSETS.md` (see `templates/ASSETS.template.md` for the ledger shape this
    feeds — cite it, do not restate its columns here).
+4. Accumulate `visualEvidence[]` into the running visual identity survey (Step 3 item 5 in
+   `ingest-rules.md`) — the survey is built exclusively from these returned observations,
+   exactly parallel to how `rulebook/INDEX.md` is built from `citedTerms[]`; the orchestrator
+   never looks at the rulebook's visuals itself.
 
 ## Variant / Optional / Advanced Rules
 

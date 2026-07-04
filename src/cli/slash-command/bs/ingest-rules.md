@@ -86,8 +86,13 @@ following artifacts **from subagent-returned summaries only** — never from re-
    placeholder-in-use, file path — see `templates/ASSETS.template.md`), seeded from the
    component inventory above. Assets are recorded as debt here, never requested up front.
 5. **Visual identity survey** — evidence only, no decision made cold: dominant palette
-   candidates, typography feel, iconography, notes on board/card art. The actual design
-   direction is decided later, at the first UI chunk's `ask` step, against `DESIGN.md`.
+   candidates, typography feel, iconography, notes on board/card art, and descriptions of setup
+   diagrams and embedded component images. Built exclusively from the accumulated
+   `visualEvidence[]` lists the transcription subagents return (parallel to how INDEX.md is
+   built from `citedTerms[]`) — the orchestrator never opens the PDF/images itself. On the
+   interview path, whatever visual description the designer volunteers stands in for
+   `visualEvidence[]`. The actual design direction is decided later, at the first UI chunk's
+   `ask` step, against `DESIGN.md`.
 6. **Player counts** — min/max player counts and any per-count setup differences, recorded at
    sketch level.
 
