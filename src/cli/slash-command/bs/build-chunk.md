@@ -120,19 +120,20 @@ reorder:
 | investigate | `build/investigate.md` |
 | redteam | `build/redteam.md` |
 | ask | `build/ask.md` |
-| build | `build/build.md` — authored in Phase 144 |
-| test | `build/test.md` — authored in Phase 144 |
+| build | `build/build.md` |
+| test | `build/test.md` |
 | audit | `build/audit.md` — authored in Phase 145 |
 | repair | `build/repair.md` — authored in Phase 145 |
 | playtest | `build/playtest.md` — authored in Phase 146 |
 | revise | `build/revise.md` — authored in Phase 146 |
 | close | `build/close.md` — authored in Phase 146 |
 
-Steps 4–10 are named here as forward references only — this router does not implement their
-prose, and the drift test that pins this file does not require `build/{build,test,audit,repair,
+Steps 6–10 are named here as forward references only — this router does not implement their
+prose, and the drift test that pins this file does not require `build/{audit,repair,
 playtest,revise,close}.md` to exist yet, only that this table names each path and its phase
-marker. When Phase 144/145/146 land, each reference file is authored and this table's forward
-references become live dispatches with no change to this router's routing logic.
+marker. `build/build.md` and `build/test.md` are now live dispatches. When Phase 145/146 land,
+each remaining reference file is authored and this table's forward references become live
+dispatches with no change to this router's routing logic.
 
 ### Light path (BUILD-12 — routing, not a step)
 
@@ -248,11 +249,14 @@ This skill delegates its heavyweight, step-scoped prose to:
   visibility declaration authoring
 - `build/redteam.md` — 3-way fresh-context adversarial fan-out, escalation
 - `build/ask.md` — 4-part presentation format, gate-before-write, asset requests
+- `build/design-ask.md` — first-UI-chunk visual identity gate (Adopt/Derive/Original), writes
+  DESIGN.md
+- `build/build.md` — code-writing step, fresh-context raw-slice exception, per-file build
+  manifest
+- `build/test.md` — the test-step command sequence, sandbox-rule gate, a11y floor for UI chunks
 
 And, forward-referenced only (not yet authored):
 
-- `build/build.md` — authored in Phase 144
-- `build/test.md` — authored in Phase 144
 - `build/audit.md` — authored in Phase 145
 - `build/repair.md` — authored in Phase 145
 - `build/playtest.md` — authored in Phase 146
