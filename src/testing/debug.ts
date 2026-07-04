@@ -377,7 +377,7 @@ export function logAvailableActions(game: Game, player?: Player): string {
  * @example
  * ```typescript
  * const before = JSON.stringify(testGame.getSnapshot());
- * testGame.doAction(0, 'move', { destination: cell });
+ * testGame.doAction(1, 'move', { destination: cell });
  * const after = JSON.stringify(testGame.getSnapshot());
  * console.log(diffSnapshots(before, after));
  * // Changes:
