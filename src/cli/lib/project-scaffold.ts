@@ -140,6 +140,9 @@ export function generatePackageJson(config: ProjectConfig): string {
       '@vitejs/plugin-vue': '^5.0.0',
       typescript: '^5.7.0',
       vitest: '^2.0.0',
+      // Vitest v2 does not bundle jsdom; the a11y example opens with
+      // `// @vitest-environment jsdom` and needs the package installed.
+      jsdom: '^29.1.1',
       'axe-core': '^4.12.1',
       '@vue/test-utils': '^2.4.11',
     },
