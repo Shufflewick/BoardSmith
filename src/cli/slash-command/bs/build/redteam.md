@@ -94,6 +94,17 @@ this file does not restate the max-1-round bound or the refuted-twice rule, it a
   adversary flag the same claim/gap on the re-investigate round): that is by definition an
   ambiguity. Escalate to the user — disputes go to the human, never to more agents.
 
+**Round-2 dispatch vs superseded claims:** the re-investigate round appends a superseding claim
+and leaves the refuted original untouched in place (append-only — see `build/investigate.md`
+"Re-Investigate Round Behavior"). When the round-2 agents are dispatched, the claims list
+embedded in their prompts marks every superseded claim in place — e.g.
+`7. [superseded by claim 12 — do not review] <original text>` — and the prompt instructs the
+agents that a claim marked "supersedes claim N" replaces claim N for review purposes:
+superseded claims receive **no verdict**, and re-refuting one is not a finding. Without this
+marking, fresh-context round-2 agents would correctly re-refute the original (it is still
+wrong, by design) and manufacture a spurious refuted-twice escalation on every re-investigate
+round.
+
 ## Persisting the Round (write before ask starts)
 
 When all 3 agents have returned and the escalation logic above has resolved (including any
