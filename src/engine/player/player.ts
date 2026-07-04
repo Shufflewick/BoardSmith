@@ -171,9 +171,9 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    * @example
    * ```typescript
    * // In an action condition
-   * action('playCard')
-   *   .condition(ctx => ctx.player.isCurrent())
-   *   .do(() => { ... })
+   * Action.create('playCard')
+   *   .condition({ 'is your turn': ctx => ctx.player.isCurrent() })
+   *   .execute(() => { ... })
    *
    * // Find the current player
    * const current = game.first(Player, p => p.isCurrent());
@@ -299,9 +299,9 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    * }
    *
    * // Use in action conditions
-   * action('playCard')
-   *   .condition(ctx => ctx.player.hasElement(Card))
-   *   .do(() => { ... })
+   * Action.create('playCard')
+   *   .condition({ 'has a card': ctx => ctx.player.hasElement(Card) })
+   *   .execute(() => { ... })
    * ```
    *
    * @see {@link my} - Get the actual element
