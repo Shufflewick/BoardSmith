@@ -42,7 +42,7 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
   2. Announced messages are written to GameShell's existing live regions and are read by screen readers without adding new DOM nodes
   3. `useAnnouncer()` behaves identically whether used from a custom UI or an AutoUI renderer
 **Plans**: 1 plan
-- [ ] 140-01-PLAN.md — useAnnouncer() composable + GameShell wiring + public export + parity/relay tests
+- [x] 140-01-PLAN.md — useAnnouncer() composable + GameShell wiring + public export + parity/relay tests
 **UI hint**: yes
 
 #### Phase 141: File Templates & State-Machine Authority
@@ -153,7 +153,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 140. Library Prerequisite — useAnnouncer() | 0/TBD | Not started | - |
+| 140. Library Prerequisite — useAnnouncer() | 1/1 | Complete   | 2026-07-04 |
 | 141. File Templates & State-Machine Authority | 0/TBD | Not started | - |
 | 142. `/bs-ingest-rules` | 0/TBD | Not started | - |
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 0/TBD | Not started | - |

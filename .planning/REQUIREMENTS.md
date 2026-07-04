@@ -9,7 +9,7 @@
 
 ### Library Prerequisite (LIB)
 
-- [ ] **LIB-01**: Game UIs can announce game-state changes to screen readers via a `useAnnouncer()` composable exported from `boardsmith/ui` that writes to GameShell's existing live regions
+- [x] **LIB-01**: Game UIs can announce game-state changes to screen readers via a `useAnnouncer()` composable exported from `boardsmith/ui` that writes to GameShell's existing live regions
 
 ### File Templates (TMPL)
 
@@ -82,7 +82,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LIB-01 | Phase 140 | Pending |
+| LIB-01 | Phase 140 | Complete |
 | TMPL-01 | Phase 141 | Pending |
 | TMPL-02 | Phase 141 | Pending |
 | TMPL-03 | Phase 141 | Pending |

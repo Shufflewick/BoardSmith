@@ -101,3 +101,7 @@ None - no external service configuration required.
 ---
 *Phase: 140-library-prerequisite-useannouncer*
 *Completed: 2026-07-04*
+
+## Self-Check: PASSED
+
+All created files exist on disk; both task commits (`bbbe138b`, `23da5d41`) found in git log.
