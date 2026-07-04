@@ -112,10 +112,13 @@ sketch writing) writes its artifacts into this directory, never the parent.
 
 ## Required Reading Pointer
 
-A fresh session about to touch the scaffolded project's output should still read the base docs
-list the old skill maintained (`src/cli/slash-command/instructions.md` lines 15-35 — e.g.
-`docs/core-concepts.md`, `docs/common-pitfalls.md`, `docs/actions-and-flow.md`,
-`docs/custom-ui-guide.md`, `docs/ui-components.md`). This file does not restate that list;
+A fresh session about to touch the scaffolded project's output should still read the base
+BoardSmith docs before generating any code: `docs/core-concepts.md` and
+`docs/common-pitfalls.md` always; `docs/actions-and-flow.md` when building actions;
+`docs/custom-ui-guide.md` and `docs/ui-components.md` when building UI; `docs/dice-and-scoring.md`
+for dice games. (This list is cited by the docs' own names deliberately — the old skill's
+`instructions.md`, which used to host it, is deleted when the bs- skills ship; the docs
+themselves are the durable reference.) This file does not restate the docs' content;
 `/bs-build-chunk`'s own `investigate` step owns the full required-reading discipline for chunk
 work. This scaffold step's concern is limited to: names derived correctly, `init` run from the
 right place, and the empty skeleton proven to compile and serve before any rules are written.
