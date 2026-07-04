@@ -310,6 +310,98 @@ describe('BUILD-12 — light path', () => {
   });
 });
 
+describe('BUILD-05 — build step', () => {
+  it('reads raw rulebook slices AND the approved interpretation', () => {
+    const build = read('build/build.md');
+    expect(build).toMatch(/raw rulebook slices/i);
+    expect(build).toMatch(/approved interpretation/i);
+  });
+
+  it('extends rather than restructures, gating restructuring behind a user gate', () => {
+    const build = read('build/build.md');
+    expect(build).toMatch(/extends rather than restructures/i);
+    expect(build).toMatch(/user gate/i);
+  });
+
+  it('appends data-model/naming decisions to DECISIONS.md', () => {
+    const build = read('build/build.md');
+    expect(build).toContain('DECISIONS.md');
+  });
+
+  it('cites the existing ## Build Manifest CHUNK section', () => {
+    const build = read('build/build.md');
+    expect(build).toContain('## Build Manifest');
+  });
+});
+
+describe('BUILD-06 — test step', () => {
+  it('names the exact command tokens', () => {
+    const test = read('build/test.md');
+    expect(test).toContain('tsc --noEmit');
+    expect(test).toContain('boardsmith lint');
+    expect(test).toMatch(/full.{0,20}(accumulated )?suite|regression/i);
+    expect(test).toContain('simulateRandomGames');
+  });
+
+  it('names all seven sandbox rule names', () => {
+    const test = read('build/test.md');
+    expect(test).toContain('no-network');
+    expect(test).toContain('no-filesystem');
+    expect(test).toContain('no-timers');
+    expect(test).toContain('no-nondeterministic');
+    expect(test).toContain('no-eval');
+    expect(test).toContain('no-element-identity-comparison');
+    expect(test).toContain('no-element-array-state');
+  });
+});
+
+describe('UIQ-01 — design ask', () => {
+  it('names the three direction names, with Derive as default recommendation', () => {
+    const designAsk = read('build/design-ask.md');
+    expect(designAsk).toContain('Adopt');
+    expect(designAsk).toContain('Derive');
+    expect(designAsk).toContain('Original');
+    expect(designAsk).toMatch(/Derive.{0,80}default/is);
+  });
+
+  it('writes DESIGN.md', () => {
+    const designAsk = read('build/design-ask.md');
+    expect(designAsk).toContain('DESIGN.md');
+  });
+
+  it('build/ask.md carries the first-UI-chunk pre-check hook', () => {
+    const ask = read('build/ask.md');
+    expect(ask).toMatch(/## ui:/);
+    expect(ask).toMatch(/touches.{0,20}major/i);
+    expect(ask).toMatch(/DESIGN\.md does not (yet )?exist/i);
+  });
+});
+
+describe('UIQ-02 — designed placeholders', () => {
+  it('cites DESIGN.md\'s ## Placeholder Policy by name, never restating it', () => {
+    const build = read('build/build.md');
+    expect(build).toContain('## Placeholder Policy');
+  });
+
+  it('states asset swap never changes geometry/layout', () => {
+    const build = read('build/build.md');
+    expect(build).toMatch(/never change[s]? (the )?geometry|zero[- ]layout[- ]diff/i);
+  });
+});
+
+describe('UIQ-03 — a11y floor', () => {
+  it('pins all five a11y floor items by phrase', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(/keyboard-only ActionPanel completion/i);
+    expect(test).toContain('axe-core');
+    expect(test).toMatch(/no-color-literal grep/i);
+    expect(test).toMatch(/game-semantic aria-labels/i);
+    expect(test).toContain('aria-hidden');
+    expect(test).toMatch(/focus management/i);
+    expect(test).toContain('prefers-reduced-motion');
+  });
+});
+
 describe('cross-file consistency — status enum + stale marker byte-identical', () => {
   it('build-chunk.md quotes the exact status enum values', () => {
     const buildChunk = read('build-chunk.md');
