@@ -36,6 +36,7 @@
 export {
   TestGame,
   createTestGame,
+  ActionExecutionError,
   type TestGameOptions,
 } from './test-game.js';
 
