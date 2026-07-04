@@ -54,7 +54,7 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
   2. A resumed session that finds a state file failing to parse against its template stops and asks the user instead of guessing
   3. CHUNK.md is authoritative for its own chunk's status; SKETCH.md holds only the ordered list and derived pointers; on contradiction CHUNK.md wins and the session logs + repairs the sketch; writes always go CHUNK.md first, SKETCH.md second
 **Plans**: 3 plans
-- [ ] 141-01-PLAN.md — state-machine.md authority-rules doc + drift-test scaffold
+- [x] 141-01-PLAN.md — state-machine.md authority-rules doc + drift-test scaffold
 - [ ] 141-02-PLAN.md — CHUNK.template.md + SKETCH.template.md (status-bearing templates) + cross-file agreement test
 - [ ] 141-03-PLAN.md — RULINGS/DECISIONS/DESIGN/ASSETS ledger templates + full drift test
 
@@ -157,7 +157,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 140. Library Prerequisite — useAnnouncer() | 1/1 | Complete    | 2026-07-04 |
-| 141. File Templates & State-Machine Authority | 0/3 | Not started | - |
+| 141. File Templates & State-Machine Authority | 1/3 | In Progress|  |
 | 142. `/bs-ingest-rules` | 0/TBD | Not started | - |
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 0/TBD | Not started | - |
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 0/TBD | Not started | - |
