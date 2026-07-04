@@ -33,8 +33,8 @@
 - [x] **BUILD-02**: Investigate reads cited slices plus INDEX-discovered slices, RULINGS.md, and DECISIONS.md, and produces a claims-list interpretation with a hidden-information visibility declaration
 - [x] **BUILD-03**: Redteam runs 3 fresh-context agents (2 refuters + 1 coverage adversary) on the claims list without investigator framing; refuted-twice escalates to the user as a plain-language ruling recorded in RULINGS.md
 - [x] **BUILD-04**: The ask gate presents plain game-designer language with citations, ambiguity questions with options, a "what you will NOT see yet" list, and zero implementation vocabulary; assets are requested here with a never-blocking placeholder path
-- [ ] **BUILD-05**: Build reads raw slices + approved interpretation, extends rather than restructures verified code (restructure requires a user gate), appends to DECISIONS.md, and keeps a per-file manifest for mid-step resume
-- [ ] **BUILD-06**: The test step runs tsc, boardsmith eslint, unit/integration tests, the full accumulated suite, and a random-simulation playthrough to a terminal state
+- [x] **BUILD-05**: Build reads raw slices + approved interpretation, extends rather than restructures verified code (restructure requires a user gate), appends to DECISIONS.md, and keeps a per-file manifest for mid-step resume
+- [x] **BUILD-06**: The test step runs tsc, boardsmith eslint, unit/integration tests, the full accumulated suite, and a random-simulation playthrough to a terminal state
 - [ ] **BUILD-07**: Audit agents read raw slices + RULINGS.md + code (never the interpretation) with fidelity, visibility-leak (two-seat diff), and undo lenses, writing to a stable-ID findings ledger
 - [ ] **BUILD-08**: Repair loops are bounded (max 3 audit rounds, only-new-findings rule, refutation-with-citation allowed) with remaining findings triaged to the user
 - [ ] **BUILD-09**: Playtest hands the user a numbered click-by-click script with seat counts, dev-host affordances, a build stamp, a regression line, and an explicit item-by-item verified checklist; `verified (user-waived)` is recordable
@@ -45,9 +45,9 @@
 
 ### UI Quality & Accessibility (UIQ)
 
-- [ ] **UIQ-01**: The first UI chunk's ask is a design ask offering Adopt / Derive / Original (frontend-design mood sketches), recorded in DESIGN.md with token overrides and component recipes
-- [ ] **UIQ-02**: Components awaiting assets render designed placeholders (correct aspect ratio, DESIGN.md tokens, labeled) whose asset swap never changes geometry
-- [ ] **UIQ-03**: UI chunks enforce the a11y floor: ActionPanel keyboard-only completability test, axe scan, no-color-literals grep, real controls with game-semantic labels, focus management, reduced-motion
+- [x] **UIQ-01**: The first UI chunk's ask is a design ask offering Adopt / Derive / Original (frontend-design mood sketches), recorded in DESIGN.md with token overrides and component recipes
+- [x] **UIQ-02**: Components awaiting assets render designed placeholders (correct aspect ratio, DESIGN.md tokens, labeled) whose asset swap never changes geometry
+- [x] **UIQ-03**: UI chunks enforce the a11y floor: ActionPanel keyboard-only completability test, axe scan, no-color-literals grep, real controls with game-semantic labels, focus management, reduced-motion
 - [ ] **UIQ-04**: UI chunks get a screenshot-armed design-review audit agent (3 breakpoints × 2 themes, drift diff vs stored shots) feeding the repair loop
 - [ ] **UIQ-05**: The final-acceptance chunk includes the design-QA pass (screen-reader playthrough, zoom, touch targets, colorblind, both themes, mobile)
 
@@ -98,11 +98,11 @@
 | BUILD-03 | Phase 143 | Complete |
 | BUILD-04 | Phase 143 | Complete |
 | BUILD-12 | Phase 143 | Complete |
-| BUILD-05 | Phase 144 | Pending |
-| BUILD-06 | Phase 144 | Pending |
-| UIQ-01 | Phase 144 | Pending |
-| UIQ-02 | Phase 144 | Pending |
-| UIQ-03 | Phase 144 | Pending |
+| BUILD-05 | Phase 144 | Complete |
+| BUILD-06 | Phase 144 | Complete |
+| UIQ-01 | Phase 144 | Complete |
+| UIQ-02 | Phase 144 | Complete |
+| UIQ-03 | Phase 144 | Complete |
 | BUILD-07 | Phase 145 | Pending |
 | BUILD-08 | Phase 145 | Pending |
 | UIQ-04 | Phase 145 | Pending |
