@@ -19,9 +19,9 @@
 
 ### `/bs-ingest-rules` (INGEST)
 
-- [ ] **INGEST-01**: Designer can ingest a rulebook (PDF/images/text) that is transcribed once by fan-out subagents into canonical `rulebook/` slices with citations, each confirmed with the user
+- [x] **INGEST-01**: Designer can ingest a rulebook (PDF/images/text) that is transcribed once by fan-out subagents into canonical `rulebook/` slices with citations, each confirmed with the user
 - [x] **INGEST-02**: Ingest produces `rulebook/INDEX.md` (term → slice cross-reference), variant/edition tagging, component inventory with aspect ratios, ASSETS.md, visual identity survey, and player-count data
-- [ ] **INGEST-03**: Designer with no written rulebook can use an interview fallback that produces the same `rulebook/` files section by section
+- [x] **INGEST-03**: Designer with no written rulebook can use an interview fallback that produces the same `rulebook/` files section by section
 - [ ] **INGEST-04**: Ingest scaffolds the project (`boardsmith init`, naming rules) and verifies the skeleton compiles and serves before rules work begins
 - [ ] **INGEST-05**: Ingest proposes a SKETCH.md whose first chunk is the core event loop, that mandates game-end and final-acceptance chunks, tags chunks `ui: none|touches|major`, uses outcome-based test scripts, and gates on user approval with chunk-count/time expectations
 - [x] **INGEST-06**: The UI strategy decision (Custom UI from chunk 1 vs AutoUI-with-cutover) is made with the user at ingest and recorded
@@ -86,9 +86,9 @@
 | TMPL-01 | Phase 141 | Complete |
 | TMPL-02 | Phase 141 | Complete |
 | TMPL-03 | Phase 141 | Complete |
-| INGEST-01 | Phase 142 | Pending |
+| INGEST-01 | Phase 142 | Complete |
 | INGEST-02 | Phase 142 | Complete |
-| INGEST-03 | Phase 142 | Pending |
+| INGEST-03 | Phase 142 | Complete |
 | INGEST-04 | Phase 142 | Pending |
 | INGEST-05 | Phase 142 | Pending |
 | INGEST-06 | Phase 142 | Complete |

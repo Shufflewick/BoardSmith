@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
-stopped_at: Completed 141-03-PLAN.md
-last_updated: "2026-07-04T19:49:33.372Z"
+stopped_at: Completed 142-02-PLAN.md
+last_updated: "2026-07-04T19:54:38.179Z"
 last_activity: 2026-07-04
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 20
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 142 (/bs-ingest-rules) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-04
 
-Progress: [███████░░░] 71%
+Progress: [█████████░] 86%
 
 ## Milestones
 
@@ -197,6 +197,7 @@ Recent decisions affecting current work:
 - [Phase 141-03]: templates.test.ts describe blocks named by requirement ID (TMPL-01, TMPL-02) extended for RULINGS/DECISIONS/DESIGN/ASSETS; ledgers use numbered append-only sections (Ruling N / Decision N) rather than flat tables, matching CHUNK.template.md's Revision Rounds pattern
 - [Phase ?]: [Phase 142-01]: read() calls moved inside individual it() bodies (not describe-level) in ingest.test.ts -- required since ingest-rules.md and bs/ingest/*.md files are authored progressively across Plans 01/02/03
 - [Phase ?]: [Phase 142-01]: ingest-rules.md kept to 131 lines by delegating every step's heavyweight prose to not-yet-authored ingest/*.md reference files, matching state-machine.md's citation-not-restatement convention
+- [Phase 142-02]: transcription.md and interview-fallback.md produce identical rulebook/ + INDEX.md output shape; interview citation format is 'designer statement, ingest session, Q{n}' — INGEST-03 requires the interview fallback to produce the same rulebook/ files as the transcription path, not PROJECT.md prose
 
 ### Pending Todos
 
@@ -208,8 +209,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T19:48:26.016Z
-Stopped at: Completed 141-03-PLAN.md
+Last session: 2026-07-04T19:54:38.172Z
+Stopped at: Completed 142-02-PLAN.md
 Resume file: None
 Next action: Break Phase 140 (Library Prerequisite — useAnnouncer()) down into plans via `/gsd:plan-phase 140`
 

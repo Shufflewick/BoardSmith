@@ -113,3 +113,10 @@ None - no external service configuration required.
 ---
 *Phase: 142-bs-ingest-rules*
 *Completed: 2026-07-04*
+
+## Self-Check: PASSED
+- FOUND: src/cli/slash-command/bs/ingest/transcription.md
+- FOUND: src/cli/slash-command/bs/ingest/interview-fallback.md
+- FOUND: adf8eb74
+- FOUND: 140b41ce
+- FOUND: d223b8af
