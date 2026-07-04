@@ -7,6 +7,14 @@ line of code is written. Mirrors `ingest-rules.md` Step 6 (Approval Gate) + Step
 Files) — same negotiate-then-gate posture, same single-point-of-write discipline, applied here
 to one chunk instead of the whole sketch.
 
+## First-UI-Chunk Design Check (pre-check, before Part (a))
+
+If this chunk's `## ui:` tag is `touches` or `major` AND DESIGN.md does not yet exist on disk,
+dispatch `build/design-ask.md` to completion (it writes `DESIGN.md`) before continuing to Part
+(a) of this file's 4-part presentation for this same chunk. A chunk whose `## ui:` tag is
+`none`, or whose game already has a `DESIGN.md` from an earlier UI chunk's ask, skips this
+pre-check entirely and proceeds straight to Part (a) below.
+
 ## Inputs
 
 The settled interpretation that clears `build/redteam.md` with no unresolved refuted-twice
@@ -136,5 +144,5 @@ sketch state re-written at Step 7).
 ## Downstream Shape (cite, never restate)
 
 Once `Status: approved` lands, the settled, user-approved interpretation from `build/redteam.md`
-is the upstream authority for `build/build.md` (authored in Phase 144) — the next session picks
-up the step group `{build, test}`. This file does not restate that step group's structure.
+is the upstream authority for `build/build.md` — the next session picks up the step group
+`{build, test}`. This file does not restate that step group's structure.
