@@ -219,6 +219,41 @@ describe('BUILD-03 — redteam', () => {
   });
 });
 
+describe('BUILD-03 — Redteam Rounds persistence + check-off discipline (CR-02 fix, pinned)', () => {
+  // The durable-round-record heading, byte-identical across redteam.md, build-chunk.md, and
+  // CHUNK.template.md — deleting the persistence contract from any of them must fail here.
+  const REDTEAM_ROUNDS_HEADING = '## Redteam Rounds';
+
+  it('redteam.md persists each round to ## Redteam Rounds before the ask step starts', () => {
+    const redteam = read('build/redteam.md');
+    expect(redteam).toContain(REDTEAM_ROUNDS_HEADING);
+    expect(redteam).toContain('Persisting the Round');
+    expect(redteam).toMatch(/before.*the ask step starts/i);
+    // WR-08: round entries land at the end of EACH round — Round 1's entry (disposition
+    // `re-investigate dispatched`) is written BEFORE the re-investigate subagent is dispatched,
+    // never deferred past it.
+    expect(redteam).toContain('re-investigate dispatched');
+  });
+
+  it('build-chunk.md pins the per-step persist-before-next-step check-off rule', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toContain(REDTEAM_ROUNDS_HEADING);
+    expect(buildChunk).toContain('Every step persists before the next starts');
+  });
+
+  it('CHUNK.template.md carries the ## Redteam Rounds section and the entry grammar', () => {
+    const template = read('templates/CHUNK.template.md');
+    expect(template).toContain(REDTEAM_ROUNDS_HEADING);
+    expect(template).toContain('### Redteam Round 1');
+  });
+
+  it('ask.md reads the persisted round record (cold resume at ask consumes the verdicts)', () => {
+    const ask = read('build/ask.md');
+    expect(ask).toContain(REDTEAM_ROUNDS_HEADING);
+    expect(ask).toContain('escalation open at ask');
+  });
+});
+
 describe('BUILD-04 — ask gate', () => {
   it('build/ask.md documents the 4-part format (a/b/c/d)', () => {
     const ask = read('build/ask.md');
