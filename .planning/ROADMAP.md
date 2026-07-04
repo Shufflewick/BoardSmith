@@ -235,7 +235,11 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   1. All 8 example games in `~/BoardSmithGames/` build and pass their test suites against the fixed API surface.
   2. MERC is re-vendored onto the new BoardSmith version and its test suite is green.
   3. Any gap surfaced during migration is fixed in BoardSmith `src/`, not worked around in game code.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 138-01-PLAN.md — 8-game migration (boardsmith.json sweep + checkers/go-fish doAction fixes; all suites green)
+- [ ] 138-02-PLAN.md — Playwright browser smokes (hex drag, go-fish toast+hidden-info, cribbage multiSelect)
+- [ ] 138-03-PLAN.md — MERC WIP-commit + re-vendor + iterate to green (gaps fixed in BoardSmith src)
 
 ### Phase 139: Documentation Audit & Corrections
 **Goal**: Documentation teaches the real, shipped API everywhere touched by this milestone — including the three findings that are purely docs-teaching-nonexistent-APIs.
