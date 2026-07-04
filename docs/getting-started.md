@@ -79,6 +79,10 @@ boardsmith dev --lan               # shorthand for --host 0.0.0.0
 
 # Disable teaching aids (AI hint, move heatmap, AI-vs-AI demo, tutorial)
 boardsmith dev --lock-teaching
+
+# Don't auto-launch a browser tab (for scripts/CI driving the dev host,
+# so an uncontrolled tab doesn't claim seat 1)
+boardsmith dev --no-open
 ```
 
 ### 3. Run Tests
