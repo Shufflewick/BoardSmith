@@ -149,6 +149,85 @@ describe('TMPL-02 — parse contract (CHUNK/SKETCH)', () => {
   });
 });
 
-// TODO(Plan 03): describe('TMPL-01 — RULINGS.template.md'), describe('TMPL-01 — DECISIONS.template.md'),
-// describe('TMPL-01 — DESIGN.template.md'), describe('TMPL-01 — ASSETS.template.md')
-// asserting each ledger template's required fields per the Durable Artifacts table.
+describe('TMPL-01 — six templates ship with required content', () => {
+  const rulingsTemplate = read('templates/RULINGS.template.md');
+  const decisionsTemplate = read('templates/DECISIONS.template.md');
+  const designTemplate = read('templates/DESIGN.template.md');
+  const assetsTemplate = read('templates/ASSETS.template.md');
+
+  const allTemplateFiles = [
+    'templates/SKETCH.template.md',
+    'templates/CHUNK.template.md',
+    'templates/RULINGS.template.md',
+    'templates/DECISIONS.template.md',
+    'templates/DESIGN.template.md',
+    'templates/ASSETS.template.md',
+  ];
+
+  it('all six template files exist and read non-empty', () => {
+    for (const path of allTemplateFiles) {
+      const content = read(path);
+      expect(content.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('RULINGS.template.md mentions the citation-per-entry requirement', () => {
+    expect(rulingsTemplate).toContain('Citation interpreted or overridden');
+  });
+
+  it('DECISIONS.template.md mentions invariants', () => {
+    expect(decisionsTemplate).toContain('Invariant');
+  });
+
+  it('DESIGN.template.md contains --bsg- and the theme-block color rule phrase', () => {
+    expect(designTemplate).toContain('--bsg-');
+    expect(designTemplate).toContain(
+      'color literals live only in the theme block, everything else references tokens'
+    );
+  });
+
+  it('ASSETS.template.md contains the exact column labels verbatim', () => {
+    expect(assetsTemplate).toContain('needed-by-chunk');
+    expect(assetsTemplate).toContain('requested');
+    expect(assetsTemplate).toContain('received');
+    expect(assetsTemplate).toContain('placeholder-in-use');
+    expect(assetsTemplate).toContain('file path');
+  });
+
+  it('none of the six template files is a {{BOARDSMITH_ROOT}} thin pointer', () => {
+    for (const path of allTemplateFiles) {
+      const content = read(path);
+      expect(content).not.toContain('{{BOARDSMITH_ROOT}}');
+    }
+  });
+});
+
+describe('TMPL-02 — each template declares its parse contract', () => {
+  const chunkTemplate = read('templates/CHUNK.template.md');
+  const sketchTemplate = read('templates/SKETCH.template.md');
+  const rulingsTemplate = read('templates/RULINGS.template.md');
+  const decisionsTemplate = read('templates/DECISIONS.template.md');
+  const designTemplate = read('templates/DESIGN.template.md');
+  const assetsTemplate = read('templates/ASSETS.template.md');
+
+  it('CHUNK.template.md exposes its authoritative Status: line grammar', () => {
+    expect(chunkTemplate).toContain('Status: proposed');
+    expect(chunkTemplate).toContain('PARSE CONTRACT (TMPL-02)');
+  });
+
+  it('SKETCH.template.md exposes its derived-status pointer grammar', () => {
+    expect(sketchTemplate).toContain('DERIVED');
+    expect(sketchTemplate).toContain('CHUNK.md');
+  });
+
+  it('each ledger template states its required sections (parse contract)', () => {
+    expect(rulingsTemplate).toContain('PARSE CONTRACT (TMPL-02)');
+    expect(rulingsTemplate).toContain('## Ledger');
+    expect(decisionsTemplate).toContain('PARSE CONTRACT (TMPL-02)');
+    expect(decisionsTemplate).toContain('## Ledger');
+    expect(designTemplate).toContain('PARSE CONTRACT (TMPL-02)');
+    expect(designTemplate).toContain('## Chosen Direction');
+    expect(assetsTemplate).toContain('PARSE CONTRACT (TMPL-02)');
+    expect(assetsTemplate).toContain('## Ledger');
+  });
+});
