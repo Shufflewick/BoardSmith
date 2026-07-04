@@ -37,6 +37,7 @@ program
   .option('--ai <players...>', 'Player positions to be AI (e.g., --ai 1 or --ai 2 4)')
   .option('--ai-level <level>', 'AI difficulty: easy, medium, hard, expert, or iteration count', 'medium')
   .option('--lock-teaching', 'Disable AI hint, move-quality heatmap, AI-vs-AI demo, and tutorial (action help stays enabled)')
+  .option('--no-open', 'Do not auto-launch a browser tab (use when driving the dev host from a script/CI, so an uncontrolled tab does not claim seat 1)')
   .action(devCommand);
 
 // Testing

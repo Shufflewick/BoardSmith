@@ -8,6 +8,7 @@ import {
   resolveHost,
   multiplayerBannerLine,
   formatUnknownKeyWarnings,
+  shouldOpenBrowser,
 } from './dev.js';
 
 /**
@@ -154,5 +155,20 @@ describe('formatUnknownKeyWarnings (CLIX-02: dev startup warns loudly, does not 
   it('returns no warnings for a clean config with only allowed keys', () => {
     const warnings = formatUnknownKeyWarnings({ name: 'x', displayName: 'X', description: 'd' });
     expect(warnings).toEqual([]);
+  });
+});
+
+describe('shouldOpenBrowser (138: --no-open opts out of auto-launching a real browser tab)', () => {
+  it('defaults to true when --no-open was not passed', () => {
+    expect(shouldOpenBrowser({})).toBe(true);
+  });
+
+  it('is false when --no-open sets options.open to false', () => {
+    // Commander's negatable-option convention: `--no-open` sets `options.open = false`.
+    expect(shouldOpenBrowser({ open: false })).toBe(false);
+  });
+
+  it('stays true when options.open is explicitly true', () => {
+    expect(shouldOpenBrowser({ open: true })).toBe(true);
   });
 });

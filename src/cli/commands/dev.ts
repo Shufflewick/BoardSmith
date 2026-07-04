@@ -32,6 +32,8 @@ interface DevOptions {
   ai?: string[];
   aiLevel?: string;
   lockTeaching?: boolean;
+  /** Commander's negatable `--no-open` sets this to `false`; unset/true auto-opens. */
+  open?: boolean;
 }
 
 /** Thrown by the pure dev.ts flag/host validators below; `devCommand` catches
@@ -115,6 +117,23 @@ export function validateAiSeats(aiPlayers: number[], effectivePlayerCount: numbe
  * silently dropping one — silently ignoring a security-relevant flag is the
  * same class of defect this phase removed from `--ai`/`--players`.
  */
+/**
+ * 138: whether `devCommand` should auto-launch a real browser tab at the dev
+ * host URL. Defaults to true (the normal interactive workflow) but `--no-open`
+ * (commander's negatable-option convention sets `options.open = false`) opts
+ * out — required for scripted/headless drivers of `boardsmith dev` (e.g.
+ * Playwright smokes), where the auto-opened REAL system browser would
+ * otherwise connect over WS as an uncontrolled extra player and win the
+ * "first arrival auto-seats seat 1" race in MultiplayerHost.hello() before the
+ * scripted client ever connects — starving the scripted client of its own
+ * seat's turn (or, in a simultaneousActionStep, letting the AI auto-play the
+ * seat the scripted client meant to occupy during the brief AI-seat window
+ * before it joins).
+ */
+export function shouldOpenBrowser(options: { open?: boolean }): boolean {
+  return options.open !== false;
+}
+
 export function resolveHost(options: { host?: string; lan?: boolean }): { host: string; isNonLocal: boolean } {
   if (options.lan && options.host !== undefined) {
     throw new DevFlagError(
@@ -763,7 +782,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
       console.log(chalk.yellow(`  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
     }
 
-    await open(hostUrl);
+    if (shouldOpenBrowser(options)) {
+      await open(hostUrl);
+    } else {
+      console.log(chalk.dim('  Skipping auto-open (--no-open): connect a client to claim seat 1 yourself.'));
+    }
 
     console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
 
