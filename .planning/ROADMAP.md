@@ -102,7 +102,7 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
   5. `ui: touches|major` chunks pass the a11y floor: keyboard-only ActionPanel completion, an axe-core scan, a no-color-literal grep, real semantic controls with game-meaning labels, focus management, and `prefers-reduced-motion` honored
 **Plans**: 4 plans
 - [x] 144-01-PLAN.md — Wave-0 drift-test scaffold (build-chunk.test.ts: BUILD-05/06, UIQ-01..03 blocks + updated path/marker arrays)
-- [ ] 144-02-PLAN.md — Scaffold-template real code: axe-core + @vue/test-utils devDeps + tests/a11y.example.test.ts (UIQ-03)
+- [x] 144-02-PLAN.md — Scaffold-template real code: axe-core + @vue/test-utils devDeps + tests/a11y.example.test.ts (UIQ-03)
 - [ ] 144-03-PLAN.md — build/build.md + build/test.md ({build,test} step group: BUILD-05, BUILD-06, UIQ-02, UIQ-03)
 - [ ] 144-04-PLAN.md — build/design-ask.md + ask.md hook + build-chunk.md routing (UIQ-01) + phase gate
 **UI hint**: yes
@@ -172,7 +172,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 141. File Templates & State-Machine Authority | 3/3 | Complete    | 2026-07-04 |
 | 142. `/bs-ingest-rules` | 3/3 | Complete    | 2026-07-04 |
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 5/5 | Complete    | 2026-07-04 |
-| 144. `/bs-build-chunk` — Build & Test with UI Floor | 1/4 | In Progress|  |
+| 144. `/bs-build-chunk` — Build & Test with UI Floor | 2/4 | In Progress|  |
 | 145. `/bs-build-chunk` — Audit & Repair with Design Review | 0/TBD | Not started | - |
 | 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 0/TBD | Not started | - |
 | 147. `/bs-check-status` & `/bs-insert-chunk` | 0/TBD | Not started | - |
