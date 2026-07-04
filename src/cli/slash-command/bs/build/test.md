@@ -92,9 +92,17 @@ tests — never a manual visual pass:
    import { mount } from '@vue/test-utils';
    import axe from 'axe-core';
 
-   const wrapper = mount(SomeComponent, { props: { /* ... */ } });
-   const results = await axe.run(wrapper.element);
-   expect(results.violations).toEqual([]);
+   // Mount WITH `attachTo: document.body` — axe.run() only scans nodes that are
+   // in the document; a plain `mount` renders a DETACHED node and axe throws
+   // "No elements found for include in page Context". Detach in `finally` so the
+   // node never leaks into the next test (mirrors Toast.a11y.test.ts).
+   const wrapper = mount(SomeComponent, { attachTo: document.body, props: { /* ... */ } });
+   try {
+     const results = await axe.run(wrapper.element);
+     expect(results.violations).toEqual([]);
+   } finally {
+     wrapper.unmount();
+   }
    ```
 
    Frame this scan as structural/semantic only — missing labels, invalid ARIA, duplicate IDs.

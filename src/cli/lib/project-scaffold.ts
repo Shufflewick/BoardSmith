@@ -469,7 +469,12 @@ import GameTable from '../src/ui/components/GameTable.vue';
 
 describe('GameTable — a11y floor (axe-core scan)', () => {
   it('has no axe-core violations', async () => {
+    // axe.run() only scans nodes that are actually IN the document —
+    // \`mount\` without \`attachTo\` renders into a DETACHED node and axe throws
+    // "No elements found for include in page Context". Attach on mount, then
+    // detach in \`finally\` so the node never leaks into the next test.
     const wrapper = mount(GameTable, {
+      attachTo: document.body,
       props: {
         gameView: null,
         playerSeat: 0,
@@ -478,8 +483,12 @@ describe('GameTable — a11y floor (axe-core scan)', () => {
         actionController: {} as never,
       },
     });
-    const results = await axe.run(wrapper.element);
-    expect(results.violations).toEqual([]);
+    try {
+      const results = await axe.run(wrapper.element);
+      expect(results.violations).toEqual([]);
+    } finally {
+      wrapper.unmount();
+    }
   });
 });
 `;
