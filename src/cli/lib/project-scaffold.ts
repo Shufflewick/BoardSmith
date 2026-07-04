@@ -140,6 +140,8 @@ export function generatePackageJson(config: ProjectConfig): string {
       '@vitejs/plugin-vue': '^5.0.0',
       typescript: '^5.7.0',
       vitest: '^2.0.0',
+      'axe-core': '^4.12.1',
+      '@vue/test-utils': '^2.4.11',
     },
   };
 
@@ -452,6 +454,38 @@ function handleAction() {
 }
 
 /**
+ * Generate tests/a11y.example.test.ts
+ *
+ * Example accessibility test demonstrating the axe-core scan pattern every UI
+ * chunk's a11y floor (UIQ-03) copies. Scans the scaffold's own GameTable.vue
+ * stub — replace with your own component(s) as you build UI chunks.
+ */
+export function generateA11yExampleTestTs(): string {
+  return `// @vitest-environment jsdom
+import { describe, it, expect } from 'vitest';
+import { mount } from '@vue/test-utils';
+import axe from 'axe-core';
+import GameTable from '../src/ui/components/GameTable.vue';
+
+describe('GameTable — a11y floor (axe-core scan)', () => {
+  it('has no axe-core violations', async () => {
+    const wrapper = mount(GameTable, {
+      props: {
+        gameView: null,
+        playerSeat: 0,
+        isMyTurn: true,
+        availableActions: [],
+        actionController: {} as never,
+      },
+    });
+    const results = await axe.run(wrapper.element);
+    expect(results.violations).toEqual([]);
+  });
+});
+`;
+}
+
+/**
  * Generate .gitignore
  */
 export function generateGitignore(): string {
@@ -477,6 +511,7 @@ export function generateScaffoldFiles(config: ProjectConfig): GeneratedFile[] {
     { path: 'src/ui/index.ts', content: generateUiIndexTs() },
     { path: 'src/ui/App.vue', content: generateAppVue(config) },
     { path: 'src/ui/components/GameTable.vue', content: generateGameTableVue() },
+    { path: 'tests/a11y.example.test.ts', content: generateA11yExampleTestTs() },
     { path: '.gitignore', content: generateGitignore() },
   ];
 }
