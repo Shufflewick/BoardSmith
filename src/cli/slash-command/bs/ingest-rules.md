@@ -129,14 +129,28 @@ files until the user has explicitly approved.
 ## Step 7: Write Files
 
 This is the **single point** where sketch state is written — no earlier step writes `SKETCH.md`
-or any `CHUNK.md`. Only after Step 6's explicit approval: copy the skeletons from
-`templates/*.template.md` into the game project (`SKETCH.md`, the detailed first chunks'
-`CHUNK.md` files, `RULINGS.md`, `DECISIONS.md`, `DESIGN.md`, `ASSETS.md`) and fill them with the
-approved content from Steps 3-6 (ordered chunk list, UI Strategy, Variants (deferred), player
-counts). Copy-and-fill is one operation per file — never copy a blank skeleton over a file that
-already carries content. Never restate template or state-machine content inline in this file or
-in the written project files beyond what each template already documents — fill the
-placeholders, don't reinvent the structure.
+or any `CHUNK.md`. Only after Step 6's explicit approval:
+
+- Copy `templates/SKETCH.template.md` into the game project as `SKETCH.md` and fill it with the
+  approved content from Steps 4-6 (ordered chunk list, UI Strategy, Variants (deferred), player
+  counts). Copy-and-fill is one operation — never copy a blank skeleton over a file that
+  already carries content.
+- Create `chunks/<slug>/CHUNK.md` from `templates/CHUNK.template.md` for the detailed next 2-3
+  chunks only (tail entries get no directory and no stub — see `ingest/sketch-derivation.md`).
+- Seed `RULINGS.md` and `DECISIONS.md` as empty ledgers from their templates. This is a
+  deliberate choice, not "copy everything": their first real content arrives at later gates
+  (any ask/playtest gate, and build/close respectively), and seeding them now means those later
+  steps append to an existing ledger instead of deciding whether to create one.
+- Do **NOT** create `DESIGN.md`. Per `templates/DESIGN.template.md`'s own header, it is written
+  at the FIRST UI chunk's `ask` step, not at ingest — there is no visual identity to decide
+  until a UI chunk needs one, and the file's very existence is the signal `/bs-build-chunk`
+  uses to know the identity decision was made. Creating it blank here breaks that trigger.
+- `ASSETS.md` was already seeded at Step 3 (it records factual component inventory, not gated
+  sketch state) — do not re-copy its skeleton here.
+
+Never restate template or state-machine content inline in this file or in the written project
+files beyond what each template already documents — fill the placeholders, don't reinvent the
+structure.
 
 End the session by printing the exact next command to run (`/bs-build-chunk`) and confirming
 everything is saved in the game folder.
