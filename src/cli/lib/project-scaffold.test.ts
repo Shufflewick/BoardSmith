@@ -10,6 +10,9 @@ import {
   generateGameTableVue,
   generateRulesIndexTs,
   generateUiIndexTs,
+  generatePackageJson,
+  generateScaffoldFiles,
+  generateA11yExampleTestTs,
   type ProjectConfig,
 } from './project-scaffold.js';
 import {
@@ -149,6 +152,37 @@ describe('generateUiIndexTs', () => {
   it('does not re-export GameTable (tree-shaking landmine)', () => {
     const out = generateUiIndexTs();
     expect(out).not.toContain('GameTable');
+  });
+});
+
+describe('generatePackageJson — axe-core scaffold devDependency', () => {
+  it('includes axe-core in devDependencies', () => {
+    const parsed = JSON.parse(generatePackageJson(config));
+    expect(parsed.devDependencies).toHaveProperty('axe-core');
+  });
+
+  it('includes @vue/test-utils in devDependencies (needed to mount components for the a11y example)', () => {
+    const parsed = JSON.parse(generatePackageJson(config));
+    expect(parsed.devDependencies).toHaveProperty('@vue/test-utils');
+  });
+});
+
+describe('generateScaffoldFiles — a11y example test harness', () => {
+  it('includes tests/a11y.example.test.ts', () => {
+    const files = generateScaffoldFiles(config);
+    expect(files.some((f) => f.path === 'tests/a11y.example.test.ts')).toBe(true);
+  });
+
+  it('the a11y example harness imports axe-core and calls axe.run(', () => {
+    const files = generateScaffoldFiles(config);
+    const entry = files.find((f) => f.path === 'tests/a11y.example.test.ts');
+    expect(entry).toBeDefined();
+    expect(entry!.content).toContain("from 'axe-core'");
+    expect(entry!.content).toContain('axe.run(');
+  });
+
+  it('generateA11yExampleTestTs output matches the generateScaffoldFiles entry', () => {
+    expect(generateA11yExampleTestTs()).toContain('axe.run(');
   });
 });
 
