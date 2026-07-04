@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: executing
+status: verifying
 stopped_at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
-last_updated: "2026-07-04T01:29:41.056Z"
+last_updated: "2026-07-04T02:01:24.404Z"
 last_activity: 2026-07-04
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 37
-  completed_plans: 36
-  percent: 78
+  completed_plans: 37
+  percent: 89
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 138 (Cross-Repo Migration) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-04
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -172,6 +172,7 @@ Recent decisions affecting current work:
 - [Phase 138]: MERC pre-existing dirty tree committed as-is in a standalone WIP commit before re-vendor, per locked CONTEXT decision
 - [Phase 138]: True MERC baseline (738 passed/7 skipped/28 files) established fresh via live suite run, not trusted blind from CONTEXT
 - [Phase 138]: Zero BoardSmith src fixes required for MERC re-vendor; ENG-05 dual-shape followUp resolvers empirically confirmed already-tolerant
+- [Phase ?]: [Phase 138-02]: go-fish/cribbage Playwright smokes intentionally left failing (non-zero exit) rather than faked -- they caught a real CLI dev-host seat-identity bug in the solo-human+AI-seat path, documented as a blocker rather than papered over
 
 ### Pending Todos
 
@@ -179,11 +180,11 @@ None yet for v4.5.
 
 ### Blockers/Concerns
 
-None.
+- 138-02: CLI dev-host (npx boardsmith dev) has a reproducible client/server seat-identity mismatch in the solo-human+AI-seat path (5/5 go-fish repro, 1/1 cribbage repro) -- blocks natural in-turn action testing for go-fish/cribbage smokes; root cause not fully isolated (see 138-02-SUMMARY.md)
 
 ## Session Continuity
 
-Last session: 2026-07-04T01:28:17.779Z
+Last session: 2026-07-04T02:01:06.710Z
 Stopped at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`

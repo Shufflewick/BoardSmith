@@ -97,7 +97,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] **Phase 135: CLI & Dev Experience** - boardsmith.json/gameDefinition source-of-truth, config validation, bundle-size limits, host binding, init templates, and --players/--ai flags are all correct or fail loudly (completed 2026-07-03)
 - [x] **Phase 136: Client SDK & Protocol** - GameConnection is awaitable, reconnect is predictable, MeepleClient has one error contract, and protocol types are canonical (completed 2026-07-03)
 - [x] **Phase 137: Testing Utilities** - TestGame.doAction fails loud by default and its default seed is deterministic (completed 2026-07-03)
-- [ ] **Phase 138: Cross-Repo Migration** - All 8 example games + MERC comply with the changed API surface, every suite green
+- [x] **Phase 138: Cross-Repo Migration** - All 8 example games + MERC comply with the changed API surface, every suite green (completed 2026-07-04)
 - [ ] **Phase 139: Documentation Audit & Corrections** - Pure-docs findings fixed and every API changed by this milestone has grep-verified doc updates
 
 ## Phase Details
@@ -276,7 +276,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 138-02-PLAN.md — Playwright browser smokes (hex drag, go-fish toast+hidden-info, cribbage multiSelect)
+- [x] 138-02-PLAN.md — Playwright browser smokes (hex drag, go-fish toast+hidden-info, cribbage multiSelect)
 
 ### Phase 139: Documentation Audit & Corrections
 
@@ -307,7 +307,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 135. CLI & Dev Experience | 6/6 | Complete    | 2026-07-03 |
 | 136. Client SDK & Protocol | 5/5 | Complete    | 2026-07-03 |
 | 137. Testing Utilities | 3/3 | Complete    | 2026-07-04 |
-| 138. Cross-Repo Migration | 2/3 | In Progress|  |
+| 138. Cross-Repo Migration | 3/3 | Complete   | 2026-07-04 |
 | 139. Documentation Audit & Corrections | 0/TBD | Not started | - |
 </content>
 </invoke>
