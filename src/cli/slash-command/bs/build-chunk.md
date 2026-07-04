@@ -182,8 +182,9 @@ gated — they were already written progressively at the investigate step, per t
 
 End of group 1: print the exact next command to run (`/bs-build-chunk`) and confirm everything
 written so far (claims list, the `## Redteam Rounds` entry, checked-off Step Checklist items,
-`Status: approved`, any `RULINGS.md`/`ASSETS.md` entries) is saved in the game folder —
-non-programmer handoff.
+`Status: approved`, SKETCH.md's updated derived-status pointer — CHUNK.md first, SKETCH.md
+second, per `state-machine.md` "Write Order" — and any `RULINGS.md`/`ASSETS.md` entries) is
+saved in the game folder — non-programmer handoff.
 
 ## Step Groups 2–4 (forward reference)
 

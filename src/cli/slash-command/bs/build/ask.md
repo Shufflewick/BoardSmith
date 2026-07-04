@@ -117,6 +117,13 @@ Only after that explicit yes:
    landed (cite `state-machine.md` "Write Order" — the `Status:` line is updated last so a
    session that crashes mid-write leaves a file whose status still reflects the last
    fully-completed state, never a half-written one).
+5. Then update this chunk's derived-status pointer in SKETCH.md to match: `Status (derived from
+   chunks/<slug>/CHUNK.md): approved`. This is the second half of every status write —
+   `state-machine.md` "Write Order": CHUNK.md first, then SKETCH.md second, never SKETCH.md
+   alone and never a status write without the derived pointer following. Step 4's **last**
+   governs CHUNK.md's own writes; this mirror write always follows it. Skipping it leaves
+   SKETCH.md reading `proposed` against CHUNK.md's `approved` — a known contradiction the next
+   session's consistency check would have to log and repair.
 
 **Carve-out:** `build/investigate.md`'s claims list — CHUNK.md's `## Interpretation`, `##
 Visibility Declaration`, and `## Newly Discovered Citations` — was already written progressively
