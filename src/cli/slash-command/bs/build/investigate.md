@@ -10,14 +10,18 @@ hidden-information visibility declaration — the input `redteam.md` independent
 ## Context-Economics Hard Rule (restated here — this is where the temptation is strongest)
 
 **The orchestrator never reads the chunk's cited slices, the INDEX-discovered slices,
-RULINGS.md, DECISIONS.md, the required BoardSmith docs, or DESIGN.md itself, and it never
-re-reads a CHUNK.md section after the investigate subagent writes it.** Every fact the
+RULINGS.md, DECISIONS.md, the required BoardSmith docs, or DESIGN.md itself.** Every fact the
 orchestrator needs about this chunk's rules content comes from the structured summary the
-subagent returns, not from opening any of those files again. The single most tempting mistake in
-this step is adding a "let me double-check by re-reading what I just wrote" pass after the
-subagent returns. Do not do this. It silently reintroduces the exact context-exhaustion failure
-mode the fan-out design exists to avoid. If something looks wrong in a returned summary, dispatch
-a narrower follow-up subagent or ask the user — never fall back to reading the chunk's sources
+subagent returns, plus ONE sanctioned state-file read: after the subagent finishes, the
+orchestrator reads CHUNK.md's `## Interpretation` and `## Visibility Declaration` sections
+(CHUNK.md is a state file; reading state files is the orchestrator's job — see
+`build-chunk.md`'s Context-Economics Hard Rule) so it can embed the numbered claims list in the
+redteam dispatch prompts and restate it at the ask step. That bounded read — one chunk's claims,
+never the slices, docs, or ledgers behind them — is NOT the failure mode this rule guards
+against. The failure mode is re-opening the chunk's *sources* to "double-check" the subagent's
+work: that silently reintroduces the exact context-exhaustion problem the fan-out design exists
+to avoid. If something looks wrong in a returned summary or in the written claims, dispatch a
+narrower follow-up subagent or ask the user — never fall back to reading the chunk's sources
 yourself.
 
 ## Required Reading (cite verbatim — do not re-derive)
@@ -88,11 +92,15 @@ newlyDiscoveredCitations (the list of any newly discovered citations, or empty) 
 ```
 
 The subagent is the sole writer of `## Interpretation`, `## Visibility Declaration`, and
-`## Newly Discovered Citations`. What flows back to the orchestrator is the short structured
-return above — never the full claims text, never the full visibility declaration prose beyond
-what's needed to relay it forward. This is the same discipline that fixed
-`142-REVIEW-FIX.iter2.md`'s CR-03 ("`sectionText` defeated context economics") — a subagent
-writes state directly; it does not hand its output back through the orchestrator's context.
+`## Newly Discovered Citations`. What flows back **through the return value** is the short
+structured summary above — the subagent never hands the full claims text back through its
+return. This is the same discipline that fixed `142-REVIEW-FIX.iter2.md`'s CR-03
+("`sectionText` defeated context economics") — a subagent writes state directly; it does not
+duplicate its output back through the orchestrator's context. The full claims text reaches
+redteam and ask through a different, sanctioned channel: once this step completes, the
+orchestrator reads CHUNK.md's `## Interpretation` and `## Visibility Declaration` (a bounded
+state-file read — see the Context-Economics Hard Rule above) and embeds that text verbatim as
+`{numberedClaimsList}` in the redteam dispatch prompts.
 
 ## Re-Investigate Round Behavior (redteam refuted-once path)
 
@@ -107,13 +115,16 @@ CHUNK.template.md consistent across every append-only section in the file — no
 text is ever edited or removed once written; correction always takes the form of a new, later
 claim that supersedes it.
 
-## Orchestrator Records (never re-reads CHUNK.md's `## Interpretation`)
+## Orchestrator Records (one sanctioned CHUNK.md read; never the sources)
 
-The investigate subagent writes every section named above; the orchestrator only accumulates the
-returned `claimsList`, `visibilityDeclaration`, and `newlyDiscoveredCitations` fields — it never
-opens CHUNK.md itself to double-check what the subagent wrote before handing the claims list
-forward to `redteam.md`. If a returned summary looks incomplete or wrong, dispatch a narrower
-follow-up investigate subagent rather than reading the file to verify.
+The investigate subagent writes every section named above; the orchestrator accumulates the
+returned `claimsList`, `visibilityDeclaration`, and `newlyDiscoveredCitations` fields, then
+performs the sanctioned bounded read of CHUNK.md's `## Interpretation` and `## Visibility
+Declaration` to obtain the numbered claims list text it will embed in the redteam dispatch
+prompts and restate at ask. It never re-opens the chunk's sources — slices, docs, RULINGS.md,
+DECISIONS.md, DESIGN.md — to verify the subagent's work. If a returned summary or the written
+claims look incomplete or wrong, dispatch a narrower follow-up investigate subagent rather than
+reading the sources to verify.
 
 ## Downstream Shape (cite, never restate)
 
@@ -121,6 +132,8 @@ The claims list this step writes into CHUNK.md's `## Interpretation` and `## Vis
 Declaration` feeds `build/redteam.md` — the 3 fresh-context adversarial reviewers (2 refuters + 1
 coverage adversary) that independently check this interpretation next — and, once redteam
 clears it, `build/ask.md`'s user-facing presentation. This file does not restate either
-consumer's structure; `redteam.md` and `ask.md` read directly from CHUNK.md and from the
-`claimsList`/`visibilityDeclaration`/`newlyDiscoveredCitations` return-shape fields defined
-above.
+consumer's structure. The transport is the orchestrator: it reads the claims text from CHUNK.md
+(the sanctioned state-file read above) and embeds it as `{numberedClaimsList}` in `redteam.md`'s
+dispatch prompts; `ask.md`'s presentation restates the same text in designer language. The
+redteam subagents themselves receive only raw slice paths plus the embedded claims list — they
+never open CHUNK.md.

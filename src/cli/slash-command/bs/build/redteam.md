@@ -10,22 +10,24 @@ independent-review gate that catches misinterpretations before the human ever se
 
 ## Context-Economics Hard Rule (restated here — this is where the temptation is strongest)
 
-**The orchestrator never reads the chunk's cited slices or the claims list's underlying prose
-itself, and it never re-reads CHUNK.md's `## Interpretation` after a redteam agent returns.**
-Every fact the orchestrator needs about this round's outcome comes from the structured verdicts
-each subagent returns, not from opening any of those files again. Do not add a "let me
-double-check by re-reading the claims" pass after the agents return — it silently reintroduces
-the exact context-exhaustion failure mode the fan-out design exists to avoid. If a returned
-verdict looks wrong, dispatch a narrower follow-up subagent or escalate to the user — never fall
-back to reading the sources yourself.
+**The orchestrator never reads the chunk's cited slices or any other rules source itself.** The
+numbered claims list text it embeds in each dispatch prompt comes from the one sanctioned
+state-file read — CHUNK.md's `## Interpretation` and `## Visibility Declaration`, read after
+investigate completes (see `build-chunk.md`'s Context-Economics Hard Rule) — and every fact the
+orchestrator needs about this round's outcome comes from the structured verdicts each subagent
+returns. Do not add a "let me double-check the claims against the rulebook" pass after the
+agents return — re-opening the slices silently reintroduces the exact context-exhaustion failure
+mode the fan-out design exists to avoid. If a returned verdict looks wrong, dispatch a narrower
+follow-up subagent or escalate to the user — never fall back to reading the sources yourself.
 
 ## Independence: Fresh-Context, No-Framing Dispatch
 
 Redteam runs 3 independent fresh-context agents — 2 refuters plus 1 coverage adversary — on the
 claims list produced by `build/investigate.md`. Each of the 3 agents is a SEPARATE Task-tool
 dispatch. The dispatch prompt for every agent contains ONLY the raw slice path(s) and the
-numbered claims list text — never the orchestrator's running conversation, never the investigate
-subagent's own prompt or rationale, and never a peer agent's verdict. This is
+numbered claims list text (the text the orchestrator read from CHUNK.md's `## Interpretation` —
+the sanctioned state-file read above) — never the orchestrator's running conversation, never the
+investigate subagent's own prompt or rationale, and never a peer agent's verdict. This is
 `transcription.md`'s "the transcribed text never flows back through the orchestrator's context"
 discipline applied one hop further: the investigator's framing must never flow to redteam,
 because framing is exactly what defeats independent review.

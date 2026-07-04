@@ -14,11 +14,18 @@ separate verify command; verification is a step state inside the chunk.
 ## Context-Economics Hard Rule
 
 **The orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself.**
-Every fact this router needs about a chunk's content comes from the structured return-shape a
-dispatched subagent hands back — never by re-reading a slice, `CHUNK.md` section, or source file
-a subagent just wrote. This applies to every step below; `build/investigate.md` and
-`build/redteam.md` restate it because those are the two steps where the temptation to
-"double-check by re-reading what a subagent just produced" is strongest.
+Every fact this router needs about a chunk's rules or code content comes from the structured
+return-shape a dispatched subagent hands back — never by re-reading a slice or source file a
+subagent just wrote. State files are different: `CHUNK.md` is a state file, and reading state
+files is exactly the orchestrator's job (alongside dispatching subagents, recording results, and
+talking to the user). In particular, after the investigate subagent writes `CHUNK.md`'s
+`## Interpretation` and `## Visibility Declaration`, the orchestrator reads those two sections —
+bounded to this one chunk's claims, never the slices or docs behind them — because that read is
+the **sanctioned channel** that supplies the numbered claims list to the redteam dispatch
+prompts and the ask presentation. The ban this rule enforces is on re-deriving content from
+sources (slices, docs, code), not on reading chunk state. `build/investigate.md` and
+`build/redteam.md` restate the source-reading ban because those are the two steps where the
+temptation to "double-check by re-reading the sources a subagent just read" is strongest.
 
 ## Step 0: Entry — Consistency Check + Session Lock
 
@@ -117,9 +124,12 @@ hands off. This is the first of the four groups.
 the chunk's cited slices, INDEX-discovered slices, `RULINGS.md`, `DECISIONS.md`, the relevant
 BoardSmith docs, and (for `ui: touches|major` chunks) `DESIGN.md`, and writing the numbered
 claims list and visibility declaration directly into `CHUNK.md`. Consume its return by the
-pinned field names: `claimsList`, `visibilityDeclaration`, `newlyDiscoveredCitations`. This
-router records only that summary — it never re-reads `CHUNK.md`'s `## Interpretation` section
-itself before handing the claims list on to redteam.
+pinned field names: `claimsList`, `visibilityDeclaration`, `newlyDiscoveredCitations` — the
+return is a summary, never the full claims text. To hand the claims on, this router then reads
+`CHUNK.md`'s `## Interpretation` and `## Visibility Declaration` directly — the sanctioned
+state-file read defined in the Context-Economics Hard Rule above. That text is what gets
+embedded verbatim as `{numberedClaimsList}` in each redteam dispatch prompt and later restated
+in designer language at the ask step.
 
 **redteam:** Delegate the entire redteam sequence to `build/redteam.md` — three fresh-context
 adversarial subagents (2 refuters + 1 coverage adversary) reviewing the claims list independent

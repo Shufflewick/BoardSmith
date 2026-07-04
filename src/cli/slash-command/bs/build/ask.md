@@ -11,7 +11,10 @@ to one chunk instead of the whole sketch.
 
 The settled interpretation that clears `build/redteam.md` with no unresolved refuted-twice
 escalations: CHUNK.md's `## Interpretation` and `## Visibility Declaration` sections (written by
-`build/investigate.md`), plus any ambiguity the redteam round escalated to the user directly
+`build/investigate.md`). The ask step has no subagent — the orchestrator reads these two
+CHUNK.md sections itself, the sanctioned state-file read defined in `build-chunk.md`'s
+Context-Economics Hard Rule, and restates them below; it never opens the rulebook slices or docs
+behind the claims. Plus any ambiguity the redteam round escalated to the user directly
 (`state-machine.md` "Redteam Escalation" — refuted-twice disputes go to the human, never to more
 agents; a ruling recorded there may already answer part (b) below).
 
