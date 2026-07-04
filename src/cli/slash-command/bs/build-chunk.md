@@ -53,11 +53,16 @@ into one branch:
 
 Before any step dispatch, intercept intents that are not "build the next thing":
 
-- **"what's left?" / status questions** — route internally to the status behavior that will
-  ship as `/bs-check-status` (Phase 147). Do not attempt to answer from a partial read; hand off
-  to that behavior's logic.
-- **"do the Chance cards next" / reordering intents** — route internally to the insert/reorder
-  behavior that will ship as `/bs-insert-chunk` (Phase 147).
+- **"what's left?" / status questions** — answer self-contained from state files: read
+  `SKETCH.md`'s ordered chunk list and, for the in-progress chunk, its `CHUNK.md` Status line
+  and Step Checklist (all state files the orchestrator may read), then summarize what is
+  verified, what is in progress (and at which step), and what remains. Never answer from memory
+  or a partial read — read the state files first. Tell the user the fuller status view ships as
+  `/bs-check-status` (Phase 147); until it lands, this summary IS the status behavior.
+- **"do the Chance cards next" / reordering intents** — forward reference: the insert/reorder
+  behavior ships as `/bs-insert-chunk` (Phase 147). Until it lands, tell the user reordering
+  is not wired up yet and stop for their decision — never improvise a reorder by editing
+  `SKETCH.md`'s ordered chunk list ad hoc.
 - **Neither matches** — continue to Step 2, the normal resume path.
 
 ## Step 2: Resume Routing (BUILD-01)
