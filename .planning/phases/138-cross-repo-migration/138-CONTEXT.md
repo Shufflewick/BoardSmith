@@ -28,6 +28,7 @@ Every example game and MERC comply with the full v4.5 API surface, with no linge
 
 ### Process
 - PROC-01-style verification doc NOT required for this phase (no audit findings — it's a migration phase), but a per-repo migration ledger (what changed, suite result) goes in the SUMMARYs.
+- **MERC pre-existing uncommitted changes (USER DECISION 2026-07-03): commit them first as-is** — snapshot the in-progress work (protocol.tgz ref, partial --bs-*→--bsg-* CSS rename, boardsmith.json churn) as a WIP commit in MERC so the re-vendor sits on a clean, recoverable base. Then proceed with the re-vendor loop.
 - BoardSmith suite must stay green (175 files / 2368 tests baseline) after any source fixes.
 
 ### Claude's Discretion
