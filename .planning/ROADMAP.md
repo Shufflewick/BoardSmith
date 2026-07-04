@@ -153,7 +153,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 140. Library Prerequisite — useAnnouncer() | 1/1 | Complete   | 2026-07-04 |
+| 140. Library Prerequisite — useAnnouncer() | 1/1 | Complete    | 2026-07-04 |
 | 141. File Templates & State-Machine Authority | 0/TBD | Not started | - |
 | 142. `/bs-ingest-rules` | 0/TBD | Not started | - |
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 0/TBD | Not started | - |
