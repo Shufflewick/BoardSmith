@@ -1851,7 +1851,8 @@ if (isDevBuild) {
           "Custom board failed to render: the #game-board slot measured 0×0 after game state arrived. " +
           "This usually means a percentage-width or container-type board is collapsing inside GameShell's " +
           "zoom container ('.game-shell__zoom-container { width: max-content }'). Give your board's root " +
-          'element a definite width (not 100%) or see the "Board Sizing" section of docs/custom-ui-guide.md.'
+          "element a definite width (not 100%), or pin it to the region with useBoardSize() from " +
+          'boardsmith/ui — see the "Board Sizing" section of docs/custom-ui-guide.md.'
         );
       }
     }, SETTLE_MS);

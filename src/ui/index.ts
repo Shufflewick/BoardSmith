@@ -150,6 +150,9 @@ export {
   type UseAnimationEventsReturn,
 } from './composables/useAnimationEvents.js';
 
+// Board sizing for content-flow custom boards (see docs/custom-ui-guide.md "Board Sizing")
+export { useBoardSize } from './composables/useBoardSize.js';
+
 export {
   useZoomPreview,
   type CardPreviewData,

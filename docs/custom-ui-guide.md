@@ -787,12 +787,43 @@ Give your board's root element a **definite width**, not a percentage:
 </template>
 ```
 
-If your board's size genuinely depends on content (e.g. a variable number of
-columns), compute a definite pixel width from that content instead of
-reaching for a percentage — or measure `.boardregion` (the ancestor GameShell
-sizes to the visible viewport) directly and set your board's width from that
-measurement rather than relying on percentage/`container-type` CSS to do it
-implicitly.
+### Content-flow boards: `useBoardSize()`
+
+Some boards have no natural fixed size at all — their width comes from their
+content: card hands, wrapping rows, responsive panels. Inside a `max-content`
+ancestor these never wrap (`flex-wrap` and `@container` queries have no region
+width to trigger against), so the board just grows horizontally as cards are
+added and players end up scrolling sideways.
+
+For these boards, use `useBoardSize()`: it measures `.boardregion` (the
+ancestor GameShell sizes to the visible viewport) and pins your board root to
+the region's available width, so wrapping works and growth is
+vertical-scroll only. It re-measures on region resize and window resize.
+
+```vue
+<script setup>
+import { ref } from 'vue';
+import { useBoardSize } from 'boardsmith/ui';
+
+const boardRef = ref(null);
+const { boardStyle } = useBoardSize(boardRef);
+</script>
+
+<template>
+  <div ref="boardRef" class="my-board" :style="boardStyle">...</div>
+</template>
+```
+
+Pick the model that matches your board:
+
+| Board type | Example | Sizing |
+|---|---|---|
+| Fixed intrinsic size | grid, hex map | Nothing — max-content + auto-zoom fits it |
+| Content-driven width | card hands, wrapping rows | `useBoardSize()` on the board root |
+
+Do not use `useBoardSize()` on a fixed-intrinsic board: pinning it to the
+region accomplishes nothing (its natural size doesn't change), and the
+startup zoom-fit already handles it.
 
 ## Debugging
 
