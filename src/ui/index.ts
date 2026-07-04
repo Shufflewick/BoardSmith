@@ -153,6 +153,15 @@ export {
 // Board sizing for content-flow custom boards (see docs/custom-ui-guide.md "Board Sizing")
 export { useBoardSize } from './composables/useBoardSize.js';
 
+// Screen-reader announcer (writes through GameShell's existing live regions)
+export {
+  useAnnouncer,
+  provideAnnouncer,
+  createAnnouncer,
+  ANNOUNCER_KEY,
+  type UseAnnouncerReturn,
+} from './composables/useAnnouncer.js';
+
 export {
   useZoomPreview,
   type CardPreviewData,

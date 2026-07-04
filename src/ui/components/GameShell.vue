@@ -46,6 +46,7 @@ import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useBoardActionBridge } from '../composables/useBoardActionBridge';
 import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
 import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
+import { createAnnouncer, provideAnnouncer } from '../composables/useAnnouncer.js';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
@@ -353,6 +354,11 @@ const animationEvents = createAnimationEvents({
   events: () => state.value?.state?.animationEvents,
 });
 provideAnimationEvents(animationEvents);
+
+// Announcer - lets any descendant (custom UI or AutoUI) write through the
+// existing live-region refs / postMessage relay above without new DOM nodes.
+const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
+provideAnnouncer(announcer);
 
 // Sync colorSelectionEnabled from game state (for non-lobby mode like --ai where lobbyInfo is never set)
 watch(state, (s) => {
