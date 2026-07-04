@@ -80,4 +80,41 @@
 
 ## Traceability
 
-(Filled by roadmap)
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| LIB-01 | Phase 140 | Pending |
+| TMPL-01 | Phase 141 | Pending |
+| TMPL-02 | Phase 141 | Pending |
+| TMPL-03 | Phase 141 | Pending |
+| INGEST-01 | Phase 142 | Pending |
+| INGEST-02 | Phase 142 | Pending |
+| INGEST-03 | Phase 142 | Pending |
+| INGEST-04 | Phase 142 | Pending |
+| INGEST-05 | Phase 142 | Pending |
+| INGEST-06 | Phase 142 | Pending |
+| INGEST-07 | Phase 142 | Pending |
+| BUILD-01 | Phase 143 | Pending |
+| BUILD-02 | Phase 143 | Pending |
+| BUILD-03 | Phase 143 | Pending |
+| BUILD-04 | Phase 143 | Pending |
+| BUILD-12 | Phase 143 | Pending |
+| BUILD-05 | Phase 144 | Pending |
+| BUILD-06 | Phase 144 | Pending |
+| UIQ-01 | Phase 144 | Pending |
+| UIQ-02 | Phase 144 | Pending |
+| UIQ-03 | Phase 144 | Pending |
+| BUILD-07 | Phase 145 | Pending |
+| BUILD-08 | Phase 145 | Pending |
+| UIQ-04 | Phase 145 | Pending |
+| BUILD-09 | Phase 146 | Pending |
+| BUILD-10 | Phase 146 | Pending |
+| BUILD-11 | Phase 146 | Pending |
+| BUILD-13 | Phase 146 | Pending |
+| UIQ-05 | Phase 146 | Pending |
+| STAT-01 | Phase 147 | Pending |
+| STAT-02 | Phase 147 | Pending |
+| DIST-01 | Phase 148 | Pending |
+| DIST-02 | Phase 148 | Pending |
+| VAL-01 | Phase 149 | Pending |
+
+**Coverage:** 34/34 v4.6 requirements mapped, no orphans, no duplicates.

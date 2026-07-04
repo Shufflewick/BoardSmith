@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
-status: planning
+status: roadmap-complete
 last_updated: "2026-07-04T17:16:17.170Z"
 last_activity: 2026-07-04
 progress:
-  total_phases: 0
+  total_phases: 10
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Milestone complete
+**Current focus:** Phase 140 (Library Prerequisite — useAnnouncer())
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-07-04 — Milestone v4.6 started
+Phase: 140 of 149 (Library Prerequisite — useAnnouncer())
+Plan: TBD (not yet broken down)
+Status: Ready to plan
+Last activity: 2026-07-04 — Roadmap created: 10 phases (140-149), 34/34 requirements mapped, 100% coverage
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Milestones
 
@@ -66,7 +68,7 @@ Last activity: 2026-07-04 — Milestone v4.6 started
 
 **In Progress:**
 
-- None — v4.5 shipped 2026-07-03
+- v4.6 BS Skills (Rulebook-Driven Game Building) (Phases 140-149) — roadmap created 2026-07-04, execution not yet started
 
 ## Deferred Items
 
@@ -90,6 +92,15 @@ Carried forward from v4.0 (still deferred, separate repo): ShufflewickPub host s
 ## Accumulated Context
 
 ### Roadmap Evolution
+
+- v4.6 roadmap defined (2026-07-04): 10 phases (140-149), 34 requirements (LIB, TMPL, INGEST, BUILD, UIQ, STAT, DIST, VAL) derived from `.planning/bs-skills-plan.md`. Continues phase numbering from v4.5 (ended at 139).
+- Phase 140 (LIB: `useAnnouncer()`) and Phase 141 (TMPL: the six file templates) are both independent prerequisites — everything downstream consumes one or both, but they don't depend on each other, so they're sequenced first per the plan's own "Build Order" section.
+- Phase 142 (`/bs-ingest-rules`) is the largest new-thinking surface (chunking, INDEX, visual survey, sketch heuristic, interview fallback, scaffold) and must exist before any chunk work can start.
+- `/bs-build-chunk` (BUILD-01..13) is split across four phases (143-146) along the plan's own mandated session-handoff seams — {investigate+redteam+ask}, {build+test}, {audit+repair}, {playtest+revise+close} — rather than treated as one monolithic phase, keeping each phase independently reviewable at fine granularity. UI/a11y requirements (UIQ-01..05) are folded into the build-chunk phase whose step they gate (ask→UIQ-01, build/test→UIQ-02/03, audit→UIQ-04, final-acceptance→UIQ-05) rather than given a separate UI phase, since they're enforcement mechanisms bolted onto build-chunk's own steps, not standalone deliverables.
+- Phase 147 (STAT: `/bs-check-status`, `/bs-insert-chunk`) depends on both ingest (142) and the full build-chunk engine (146) since it reads/edits the same sketch/chunk state those write.
+- Phase 148 (DIST: installer + `/bs-generate-ai` rename) comes after all five skills exist, since the installer bundles all of them.
+- Phase 149 (VAL: end-to-end dry-run) is last, proving the whole pipeline against a reference game (Hex or Go Fish) before the skills are pointed at a real designer.
+- Coverage: 34/34 requirements mapped, no orphans, no duplicates (see REQUIREMENTS.md Traceability table).
 
 - v4.5 roadmap defined (2026-07-02): 9 phases (131-139), 42 requirements (PROC, SEC, ENG, RST, SESS, UIX, CLIX, SDK, TST, DOCX, GAMES) derived from 38 confirmed audit findings (`boardsmith-audit-report-3.html`, F1-F38). Continues phase numbering from v4.4 (ended at 130).
 - Phase 131 (SEC+RST serialization/restore fidelity) is sequenced first: SEC-01/F1/F7 (the critical finding — zone visibility lost on every snapshot restore) and its cluster (SEC-02..04, RST-01/02) all share one root cause — constructor-applied config (`_zoneVisibility`, event handlers, `teachingDisabled`) that `loadSerializedState`/`GameSession.restore` silently discard. Fixed together at the serialization layer, not spot-patched. PROC-01/PROC-02 (verify-first discipline + regression-test-per-fix) are tracked here for traceability but apply fractally to every phase.
@@ -187,12 +198,12 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T02:55:07.399Z
-Stopped at: Completed 139-02-PLAN.md (DOCX-04 grep-verified sweep) -- Phase 139 complete (2/2 plans)
+Last session: 2026-07-04T17:16:17.170Z
+Stopped at: v4.6 ROADMAP.md + REQUIREMENTS.md traceability written (10 phases, 34/34 requirements mapped, 100% coverage)
 Resume file: None
-Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
+Next action: Break Phase 140 (Library Prerequisite — useAnnouncer()) down into plans via `/gsd:plan-phase 140`
 
 ## Operator Next Steps
 
-v4.5 roadmap ready (9 phases, 42 requirements, 100% coverage). Next: `/gsd:plan-phase 131` to break down the first phase (Serialization & Restore Fidelity — the critical SEC-01 finding and its restore-fidelity cluster).
+v4.6 roadmap ready (10 phases, 34 requirements, 100% coverage). Next: `/gsd:plan-phase 140` to break down the first phase (Library Prerequisite — `useAnnouncer()`, the a11y-floor-enabling composable that gates everything downstream).
 </content>
