@@ -240,6 +240,37 @@ describe('playUntilComplete — TEST-02', () => {
       expect('flowState' in caught!).toBe(true);
     });
 
+    it('GameStuckError message reports BOTH seeds when a custom playUntilComplete seed is passed', () => {
+      const testGame = TestGame.create(StuckGame, { playerCount: 2, seed: 'stuck-game-seed' });
+
+      let caught: GameStuckError | undefined;
+      try {
+        playUntilComplete(testGame, { seed: 'my-scenario-seed' });
+      } catch (e) {
+        if (e instanceof GameStuckError) caught = e;
+      }
+
+      expect(caught).toBeDefined();
+      // Repro needs the game seed AND the move-selection seed.
+      expect(caught!.message).toContain('stuck-game-seed');
+      expect(caught!.message).toContain('my-scenario-seed');
+    });
+
+    it('GameStuckError message flags a custom rng as not seed-reproducible', () => {
+      const testGame = TestGame.create(StuckGame, { playerCount: 2, seed: 'stuck-rng-seed' });
+
+      let caught: GameStuckError | undefined;
+      try {
+        playUntilComplete(testGame, { rng: () => 0.5 });
+      } catch (e) {
+        if (e instanceof GameStuckError) caught = e;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught!.message).toContain('stuck-rng-seed');
+      expect(caught!.message).toMatch(/custom rng/);
+    });
+
     it('GameStuckError.message is actionable (mentions seat or iteration)', () => {
       const testGame = TestGame.create(StuckGame, { playerCount: 2, seed: 'stuck-msg' });
 

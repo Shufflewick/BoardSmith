@@ -315,6 +315,15 @@ export function playUntilComplete<G extends Game>(
   // reproduce identical command history. NEVER falls back to Math.random.
   const rng =
     options?.rng ?? createSeededRandom(options?.seed ?? 'playUntilComplete-default');
+  // A 'random'-strategy run is determined by TWO seeds: the game seed
+  // (testGame.seed) and the move-selection seed. Failure messages must report
+  // both — replaying with only the game seed follows a different move sequence
+  // when the caller passed a custom seed. A caller-supplied rng has no seed at
+  // all, so flag it as not seed-reproducible.
+  const playSeedNote = options?.rng
+    ? 'custom rng (not seed-reproducible)'
+    : (options?.seed ?? 'playUntilComplete-default');
+  const seedLine = `Seed: ${testGame.seed} (playUntilComplete seed: ${playSeedNote})`;
 
   // movesExecuted counts only successful player-move iterations (where at
   // least one seat successfully executed a doAction call). Auto-advancing flow
@@ -366,7 +375,7 @@ export function playUntilComplete<G extends Game>(
         `awaitingPlayers=${JSON.stringify(flowState.awaitingPlayers ?? [])}). ` +
         `This is likely an engine-state inconsistency.\n` +
         `Flow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
-        `Seed: ${testGame.seed}`,
+        seedLine,
         i,
         availableActions,
         flowState,
@@ -416,7 +425,7 @@ export function playUntilComplete<G extends Game>(
           `This means enumerateLegalMoves returned moves that the action's validation rejects. ` +
           `Verify the action's validate() / chooseFrom() conditions match its execute() preconditions.\n` +
           `Flow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
-          `Seed: ${testGame.seed}`,
+          seedLine,
           i,
           availableActions,
           flowState,
@@ -429,7 +438,7 @@ export function playUntilComplete<G extends Game>(
         `If these actions require text/number input they cannot be auto-enumerated — use doAction() directly. ` +
         `Check that all required selections have valid choices for the current game state.\n` +
         `Flow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
-        `Seed: ${testGame.seed}`,
+        seedLine,
         i,
         availableActions,
         flowState,
@@ -456,7 +465,7 @@ export function playUntilComplete<G extends Game>(
       `Available actions: [${availableActions.join(', ')}]. ` +
       `Increase maxMoves or verify the game can reach a terminal state.\n` +
       `Flow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
-      `Seed: ${testGame.seed}`,
+      seedLine,
       maxMoves,
       availableActions,
       flowState,
