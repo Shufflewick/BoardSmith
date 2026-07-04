@@ -100,6 +100,7 @@ const REFERENCED_PATHS = [
   'build/test.md',
   'build/audit.md',
   'build/repair.md',
+  'build/design-review.md',
   'build/design-ask.md',
   'state-machine.md',
   'templates/CHUNK.template.md',
@@ -403,6 +404,37 @@ describe('BUILD-08 — repair', () => {
     expect(repair).toMatch(/real blocker/i);
     expect(repair).toMatch(/defer to a later chunk/i);
     expect(repair).toMatch(/auditor was wrong/i);
+  });
+});
+
+describe('UIQ-04 — design-review', () => {
+  it('captures 6 screenshots into chunks/<slug>/shots/', () => {
+    const designReview = read('build/design-review.md');
+    expect(designReview).toContain('chunks/<slug>/shots/');
+    expect(designReview).toMatch(/6 screenshots/i);
+  });
+
+  it('names the 3x2 breakpoint/theme grid by exact value', () => {
+    const designReview = read('build/design-review.md');
+    expect(designReview).toContain('640');
+    expect(designReview).toContain('1024');
+    expect(designReview).toContain('1440');
+  });
+
+  it('requires --no-open and an explicit server-kill step', () => {
+    const designReview = read('build/design-review.md');
+    expect(designReview).toContain('--no-open');
+    expect(designReview).toMatch(/kill the dev server/i);
+  });
+
+  it('never waits on networkidle', () => {
+    const designReview = read('build/design-review.md');
+    expect(designReview).toMatch(/never.{0,10}`?networkidle/i);
+  });
+
+  it('cites the Findings Ledger as the findings destination', () => {
+    const designReview = read('build/design-review.md');
+    expect(designReview).toContain('## Findings Ledger');
   });
 });
 

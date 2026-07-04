@@ -258,6 +258,8 @@ This skill delegates its heavyweight, step-scoped prose to:
   design-review dispatch for UI chunks, Findings Ledger round persistence
 - `build/repair.md` — fix-or-refute-with-citation loop, round-bound enforcement, round-3 user
   triage
+- `build/design-review.md` — the UI-chunk screenshot design-review agent dispatched by audit
+  for `ui: touches|major` chunks; findings land in the same Findings Ledger
 
 And, forward-referenced only (not yet authored):
 
