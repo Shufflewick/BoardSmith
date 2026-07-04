@@ -54,12 +54,17 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
 - Test script (outcome-based): <!-- "move a pawn one space; the board reflects it" style description -->
 
 <!-- Repeat one "### <slug>" block per chunk, in list order. Tail entries beyond the next 2-3
-     chunks may omit Citations/Test script detail and stay at sketch-level: -->
+     chunks may omit Citations/Test script detail and stay at sketch-level. A tail entry has NO
+     chunks/<slug>/ directory and NO CHUNK.md yet (ingest does not create stubs for the tail);
+     its Status line uses exactly the sketch-level marker below, which exempts it from
+     consistency-check item 1 (see ../state-machine.md "Consistency Check"). When the entry is
+     detailed at a close gate, its directory + CHUNK.md are created and this Status line is
+     rewritten to the derived form used above. -->
 
 ### <!-- slug (tail entry, sketch-level only) -->
 - What it builds: <!-- one-line description -->
 - ui: <!-- none | touches | major -->
-- Status: proposed
+- Status: proposed (sketch-level — no CHUNK.md yet)
 
 ## Variants (deferred)
 <!-- Out-of-scope-by-default variant/optional/advanced rules from the rulebook. Listed here so

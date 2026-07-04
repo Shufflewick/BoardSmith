@@ -63,7 +63,12 @@ This is the TMPL-02 parse-contract rule. "Guessing" includes silently picking th
 
 Every `bs-` skill, on entry, runs a consistency check before doing any other work:
 
-1. Every sketch slug (listed in SKETCH.md) has a corresponding `chunks/<slug>/` directory.
+1. Every sketch slug with a detailed SKETCH.md entry (one carrying a derived-status pointer,
+   `Status (derived from chunks/<slug>/CHUNK.md): ...`) has a corresponding `chunks/<slug>/`
+   directory. Tail entries marked `Status: proposed (sketch-level — no CHUNK.md yet)` are
+   exempt — by design, ingest details only the next 2-3 chunks and does NOT create stub
+   directories for sketch-level tail entries; a tail entry gains its `chunks/<slug>/` directory
+   when it is detailed at a close gate.
 2. Every `chunks/<slug>/` directory has a corresponding entry in SKETCH.md.
 3. All statuses parse against the Status Enum above.
 4. There is no stale session lock (see Session Lock below).
