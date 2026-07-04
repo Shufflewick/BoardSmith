@@ -93,8 +93,9 @@ following artifacts **from subagent-returned summaries only** — never from re-
 Delegate the sketch-authoring heuristic to `ingest/sketch-derivation.md`: how chunks are carved
 from the rulebook slices, the lazy-tail 2-3-chunk detail cap, and the Mandated Chunks contract
 (cite `templates/SKETCH.template.md`'s "## Mandated Chunks" section — do not restate it here).
-Write the result into `SKETCH.md` using the template skeleton from `templates/SKETCH.template.md`
-— copy the skeleton into the game project and fill it; never restructure it.
+The result of this step is an in-conversation **proposal** only — do **not** write `SKETCH.md`
+yet. The sketch is proposed, not imposed: the file is written exactly once, at Step 7, after
+the Step 6 approval gate. A rejection at Step 6 must leave no sketch state on disk to undo.
 
 ## Step 5: UI Strategy (INGEST-06)
 
@@ -119,11 +120,15 @@ files until the user has explicitly approved.
 
 ## Step 7: Write Files
 
-Copy the six skeletons from `templates/*.template.md` into the game project (`SKETCH.md`,
-first chunks' `CHUNK.md` files, `RULINGS.md`, `DECISIONS.md`, `DESIGN.md`, `ASSETS.md`) and fill
-them with the synthesized content from Steps 3-6. Never restate template or state-machine content
-inline in this file or in the written project files beyond what each template already documents
-— fill the placeholders, don't reinvent the structure.
+This is the **single point** where sketch state is written — no earlier step writes `SKETCH.md`
+or any `CHUNK.md`. Only after Step 6's explicit approval: copy the skeletons from
+`templates/*.template.md` into the game project (`SKETCH.md`, the detailed first chunks'
+`CHUNK.md` files, `RULINGS.md`, `DECISIONS.md`, `DESIGN.md`, `ASSETS.md`) and fill them with the
+approved content from Steps 3-6 (ordered chunk list, UI Strategy, Variants (deferred), player
+counts). Copy-and-fill is one operation per file — never copy a blank skeleton over a file that
+already carries content. Never restate template or state-machine content inline in this file or
+in the written project files beyond what each template already documents — fill the
+placeholders, don't reinvent the structure.
 
 End the session by printing the exact next command to run (`/bs-build-chunk`) and confirming
 everything is saved in the game folder.
