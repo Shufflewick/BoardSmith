@@ -39,7 +39,7 @@ in every command below.
 ## Directory Framing — `init` Always Creates a New Subdirectory
 
 `npx boardsmith init <name>` **unconditionally creates `<cwd>/<name>`** and **errors** if that
-path already exists (`Error: Directory "<name>" already exists`, `src/cli/commands/init.ts:19`).
+path already exists (`Error: Directory "<name>" already exists` — `src/cli/commands/init.ts`).
 There is no in-place mode and no "use the current directory if it's empty" mode — do not instruct
 a session to run `init` inside an existing directory expecting it to scaffold that directory in
 place. This corrects the old skill's stale Phase 1B framing, which conditionally used the current
@@ -84,7 +84,7 @@ error, and what to fix) — never proceed past a failing step assuming it will "
    npx boardsmith dev --no-open
    ```
 
-   `--no-open` suppresses the browser auto-launch (`src/cli/commands/dev.ts:788` logs
+   `--no-open` suppresses the browser auto-launch (`src/cli/commands/dev.ts` logs
    `Skipping auto-open (--no-open): connect a client to claim seat 1 yourself.`) so this step never
    depends on a browser being available. Wait for the exact ready-state line before considering the
    server up:
@@ -93,7 +93,8 @@ error, and what to fix) — never proceed past a failing step assuming it will "
    Ready! Press Ctrl+C to stop.
    ```
 
-   (`src/cli/commands/dev.ts:791`.) As an additional confirmation, curl the resolved dev-server URL
+   (Emitted by `src/cli/commands/dev.ts`; the drift test pins this string against the source, so
+   trust it verbatim.) As an additional confirmation, curl the resolved dev-server URL
    and confirm a non-error response. If the ready-state line never appears (or the curl fails),
    treat this as a scaffold failure — stop and report the actual server output, don't assume it's
    "probably fine."

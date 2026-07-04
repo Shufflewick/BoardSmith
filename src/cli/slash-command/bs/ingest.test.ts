@@ -180,6 +180,87 @@ describe('INGEST-07 — state detection', () => {
   });
 });
 
+/**
+ * The subagent structured-summary field names. ingest-rules.md and interview-fallback.md
+ * depend on these by name; transcription.md defines them. Pinned here so a rename in one
+ * file fails loudly instead of silently desynchronizing the three.
+ */
+const RETURN_SHAPE_FIELDS = [
+  'slicePath',
+  'sectionSummary',
+  'citedTerms[]',
+  'componentMentions[]',
+  'visualEvidence[]',
+  'variants[]',
+] as const;
+
+describe('return-shape field names — pinned across the file set (WR-07)', () => {
+  it('transcription.md defines every return-shape field', () => {
+    const transcription = read('ingest/transcription.md');
+    for (const field of RETURN_SHAPE_FIELDS) {
+      expect(transcription, `transcription.md must define "${field}"`).toContain(field);
+    }
+  });
+
+  it('ingest-rules.md consumes the synthesis-facing fields by the same names', () => {
+    const ingestRules = read('ingest-rules.md');
+    for (const field of ['citedTerms[]', 'componentMentions[]', 'visualEvidence[]', 'variants[]']) {
+      expect(ingestRules, `ingest-rules.md must reference "${field}"`).toContain(field);
+    }
+  });
+
+  it('interview-fallback.md produces the same citedTerms[]/componentMentions[] shape by name', () => {
+    const interviewFallback = read('ingest/interview-fallback.md');
+    expect(interviewFallback).toContain('citedTerms[]');
+    expect(interviewFallback).toContain('componentMentions[]');
+  });
+});
+
+describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => {
+  it('init.ts still emits the already-exists error scaffold.md quotes', () => {
+    const initSrc = read('../../commands/init.ts');
+    expect(initSrc).toContain('Error: Directory "${name}" already exists');
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain('already exists');
+  });
+
+  it('dev.ts still emits the --no-open skip message scaffold.md quotes', () => {
+    const devSrc = read('../../commands/dev.ts');
+    const skipMessage = 'Skipping auto-open (--no-open): connect a client to claim seat 1 yourself.';
+    expect(devSrc).toContain(skipMessage);
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain(skipMessage);
+  });
+
+  it('dev.ts still emits the load-bearing ready line scaffold.md waits for verbatim', () => {
+    const devSrc = read('../../commands/dev.ts');
+    const readyLine = 'Ready! Press Ctrl+C to stop.';
+    expect(devSrc).toContain(readyLine);
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain(readyLine);
+  });
+});
+
+describe('reference-file cross-citations resolve (WR-07)', () => {
+  it('transcription.md cites templates/ASSETS.template.md, which exists', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('templates/ASSETS.template.md');
+    expect(existsSync(join(__dirname, 'templates/ASSETS.template.md'))).toBe(true);
+  });
+
+  it('sketch-derivation.md cites templates/SKETCH.template.md, which exists', () => {
+    const sketchDerivation = read('ingest/sketch-derivation.md');
+    expect(sketchDerivation).toContain('templates/SKETCH.template.md');
+    expect(existsSync(join(__dirname, 'templates/SKETCH.template.md'))).toBe(true);
+  });
+
+  it('scaffold.md cites src/cli/lib/project-scaffold.ts, which exists', () => {
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain('src/cli/lib/project-scaffold.ts');
+    expect(existsSync(join(__dirname, '../../lib/project-scaffold.ts'))).toBe(true);
+  });
+});
+
 describe('cross-file consistency — aspects reference (WR-04)', () => {
   it('interview-fallback.md cites aspects/index.md by its resolvable relative path', () => {
     const interviewFallback = read('ingest/interview-fallback.md');
