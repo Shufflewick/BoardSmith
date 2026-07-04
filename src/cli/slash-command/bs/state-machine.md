@@ -34,6 +34,12 @@ Chunks tagged trivial at proposal time (e.g. "swap in the real card images") run
 
 The user is told which path is in effect when a chunk is proposed.
 
+Light-path status transitions: the light path has no `ask` step, so `approved` is unreachable
+for light chunks. A light chunk moves `proposed → built` directly when the user accepts the
+proposal (proposal acceptance is the light path's ask-equivalent authorization gate) and
+`build` + `test` complete; it then moves `built → verified` (or `verified (user-waived)`) at
+`playtest` exactly as a full-ceremony chunk does.
+
 ## Authority
 
 CHUNK.md wins on contradiction. Specifically:

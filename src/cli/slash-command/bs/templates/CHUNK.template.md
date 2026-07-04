@@ -38,7 +38,18 @@ full
 <!-- Full-ceremony step names (exact, in order) — do not paraphrase, do not reorder:
      investigate, redteam, ask, build, test, audit, repair, playtest, revise, close
      Light-path step names (exact, in order): build, test, playtest
-     Check off a step only when it is fully complete; do not check ahead. -->
+     Check off a step only when it is fully complete; do not check ahead.
+
+     CEREMONY-CONDITIONAL: this section contains exactly ONE checklist matching the declared
+     Ceremony above. When Ceremony: full, it is the 10-item list below. When Ceremony: light,
+     replace it with exactly these three items (in order):
+     - [ ] build
+     - [ ] test
+     - [ ] playtest
+     Writing the checklist to match the declared ceremony at proposal time is FILLING the
+     template, not restructuring it (see state-machine.md "Step Names" sections for the
+     light-path status transitions: light chunks move proposed → built directly — `approved`
+     is unreachable for them). -->
 
 - [ ] investigate
 - [ ] redteam
@@ -50,12 +61,6 @@ full
 - [ ] playtest
 - [ ] revise
 - [ ] close
-
-<!-- Light path (used instead of the full checklist above when Ceremony: light):
-- [ ] build
-- [ ] test
-- [ ] playtest
--->
 
 ## Interpretation
 <!-- Numbered list of factual claims this chunk's design rests on, each with a citation into
