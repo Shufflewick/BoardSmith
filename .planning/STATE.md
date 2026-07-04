@@ -4,13 +4,13 @@ milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
 stopped_at: Completed 143-03-PLAN.md
-last_updated: "2026-07-04T21:19:54.918Z"
+last_updated: "2026-07-04T21:23:25.687Z"
 last_activity: 2026-07-04
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
   percent: 30
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 143 (/bs-build-chunk — Interpretation & Ask Gate) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-04
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 92%
 
 ## Milestones
 
@@ -203,6 +203,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Light path is routing over build.md/test.md/playtest.md, not a fourth ceremony (no build/light.md file)
 - [Phase ?]: Session lock's three outcomes (same-chunk resume, different-live-lock warn, stale-confirm-clear) implemented as three literal branches
 - [Phase 143]: [Phase 143-03]: Re-investigate round behavior resolved as append-with-supersession — a refuted-once round appends a new claim noting supersession rather than editing/renumbering the original claim
+- [Phase 143-04]: Prohibit confidence adjectives in redteam dispatch prompts to prevent investigator framing from correlating the 3 independent agents; refuters default to REFUTED on uncertainty
 
 ### Pending Todos
 
@@ -214,7 +215,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T21:19:54.910Z
+Last session: 2026-07-04T21:22:10.956Z
 Stopped at: Completed 143-03-PLAN.md
 Resume file: None
 Next action: Break Phase 140 (Library Prerequisite — useAnnouncer()) down into plans via `/gsd:plan-phase 140`
