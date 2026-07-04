@@ -203,3 +203,12 @@ And to the shared reference files that ship with every `bs-` skill:
 - `state-machine.md` — status enum, consistency check, session lock, write order, authority
 - `templates/SKETCH.template.md` — the sketch skeleton this skill fills
 - `templates/ASSETS.template.md` — the asset ledger skeleton this skill seeds
+
+**Installed location:** every relative path above (the `ingest/` step files, `state-machine.md`,
+and `templates/`) resolves against the directory containing THIS skill file — the installer
+copies the whole `bs/` tree as one unit, so the shipped layout is identical wherever it is
+installed. When Step 7 says to "copy" a template, resolve `templates/<file>` from this file's
+own directory, never from the game project or the current working directory. (Installer-phase
+dependency: `src/cli/commands/install-claude-command.ts` does not yet install the `bs-` skills;
+the phase that teaches it to MUST preserve this skill-file-relative layout — `ingest/`,
+`templates/`, and `state-machine.md` siblings of this file — or update this paragraph.)
