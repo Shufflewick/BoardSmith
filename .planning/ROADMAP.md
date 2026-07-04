@@ -272,7 +272,7 @@ Plans:
 **Wave 1**
 
 - [x] 138-01-PLAN.md — 8-game migration (boardsmith.json sweep + checkers/go-fish doAction fixes; all suites green)
-- [ ] 138-03-PLAN.md — MERC WIP-commit + re-vendor + iterate to green (gaps fixed in BoardSmith src)
+- [x] 138-03-PLAN.md — MERC WIP-commit + re-vendor + iterate to green (gaps fixed in BoardSmith src)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -307,7 +307,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 135. CLI & Dev Experience | 6/6 | Complete    | 2026-07-03 |
 | 136. Client SDK & Protocol | 5/5 | Complete    | 2026-07-03 |
 | 137. Testing Utilities | 3/3 | Complete    | 2026-07-04 |
-| 138. Cross-Repo Migration | 1/3 | In Progress|  |
+| 138. Cross-Repo Migration | 2/3 | In Progress|  |
 | 139. Documentation Audit & Corrections | 0/TBD | Not started | - |
 </content>
 </invoke>

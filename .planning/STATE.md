@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
-last_updated: "2026-07-04T01:22:25.385Z"
+last_updated: "2026-07-04T01:29:41.056Z"
 last_activity: 2026-07-04
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 37
-  completed_plans: 35
+  completed_plans: 36
   percent: 78
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 138 (Cross-Repo Migration) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-04
 
-Progress: [██████████] 95%
+Progress: [██████████] 97%
 
 ## Milestones
 
@@ -169,6 +169,9 @@ Recent decisions affecting current work:
 - [Phase 137-02]: doAction now throws ActionExecutionError by default; tryAction is the never-throw escape hatch used by the four category-(b) harness call sites
 - [Phase 137-03]: Fixed literal 'test-seed' default (matching playUntilComplete-default house style); seed threaded via TestGame's private constructor and surfaced in doAction/assertActionAvailable/GameStuckError failure messages
 - [Phase 138]: no-hidden-info-leak.test.ts playSeveralAsks reclassified to loop-control (tryAction), overriding plan's literal Task 2(a) instruction to match driveAFewTurns's identical break-on-failure loop shape
+- [Phase 138]: MERC pre-existing dirty tree committed as-is in a standalone WIP commit before re-vendor, per locked CONTEXT decision
+- [Phase 138]: True MERC baseline (738 passed/7 skipped/28 files) established fresh via live suite run, not trusted blind from CONTEXT
+- [Phase 138]: Zero BoardSmith src fixes required for MERC re-vendor; ENG-05 dual-shape followUp resolvers empirically confirmed already-tolerant
 
 ### Pending Todos
 
@@ -180,7 +183,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-04T01:21:02.630Z
+Last session: 2026-07-04T01:28:17.779Z
 Stopped at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
