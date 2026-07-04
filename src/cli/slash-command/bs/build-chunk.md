@@ -77,6 +77,20 @@ never resume it here — surfacing accumulated waived chunks for a batch playtes
 Status line reads `stale — re-derive before build` stops routing instead — see "Status Enum and
 Stale Marker" below.
 
+**Sketch-level tail-entry target:** if the resume target is a sketch-level tail entry —
+`Status: proposed (sketch-level — no CHUNK.md yet)`, no `chunks/<slug>/` directory (by design;
+the consistency check exempts tail entries) — the missing CHUNK.md is NOT a parse failure and
+does not stop the session. Detailing is normally the previous chunk's close-gate duty (Phase
+146), but when routing reaches an undetailed entry, this router details it lazily before
+starting `investigate`: create `chunks/<slug>/`, derive the chunk's CHUNK.md by filling
+`templates/CHUNK.template.md` from the SKETCH.md entry (slug, `## ui:` tag, ceremony, cited
+slices — filling the template, never restructuring it), then rewrite the SKETCH.md tail line to
+the derived-pointer form `Status (derived from chunks/<slug>/CHUNK.md): proposed`
+(`state-machine.md` "Cold-Resume Parse Contract"; write order CHUNK.md first, SKETCH.md second)
+— and only then route to `investigate` as the first incomplete step. Step 0's lock
+classification uses this same derived target: a tail entry is still a nameable chunk slug for
+lock purposes, so all three lock outcomes classify against it unchanged.
+
 An **awaiting-playtest** chunk — one whose first incomplete Step Checklist item is `playtest`
 (everything through `repair` checked on the full ceremony, or through `test` on the light path)
 — is not a fresh start: this router's first move is to **re-pose the pending question verbatim**
@@ -133,7 +147,9 @@ restate the transition rule beyond this pointer): the light path has no `ask` st
 `approved` is **unreachable** for light chunks — a light chunk moves `proposed → built` directly
 when the user accepts the proposal and `build` + `test` complete. Because the light path has no
 `close` step, `playtest` performs `close`'s bookkeeping for light chunks (bisect-anchor commit
-hash, Status line update CHUNK.md-then-SKETCH.md, decision rollup).
+hash, Status line update CHUNK.md-then-SKETCH.md, decision rollup, and detailing the next 2-3
+sketch-level tail entries — `close`'s duty, authored in Phase 146; Step 2's lazy tail-entry
+detailing above covers any entry this bookkeeping misses).
 
 ## Step Group 1 Dispatch — `{investigate, redteam, ask}`
 
