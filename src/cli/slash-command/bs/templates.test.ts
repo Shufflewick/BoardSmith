@@ -43,6 +43,22 @@ const STATUS_ENUM_VALUES = [
 /** CHUNK-level stale marker (em-dash, not hyphen). */
 const STALE_MARKER = 'stale — re-derive before build';
 
+/**
+ * Sketch-level tail-entry marker (em-dash, not hyphen). Appears in BOTH
+ * state-machine.md (parse contract + consistency-check exemption) and
+ * SKETCH.template.md (tail-entry Status line) and must stay byte-identical —
+ * the consistency-check exemption matches this exact string.
+ */
+const SKETCH_LEVEL_MARKER = 'Status: proposed (sketch-level — no CHUNK.md yet)';
+
+/**
+ * Derived-pointer qualifier grammar. Appears in BOTH state-machine.md (parse
+ * contract + consistency-check item 1) and SKETCH.template.md (detailed-entry
+ * grammar) and must stay byte-identical — the `(derived from ...)` qualifier
+ * is what distinguishes a derived pointer from CHUNK.md's authoritative line.
+ */
+const DERIVED_POINTER_GRAMMAR = 'Status (derived from chunks/<slug>/CHUNK.md):';
+
 /** The exact enum line as it appears in state-machine.md ("Status Enum (exact)"). */
 const STATE_MACHINE_ENUM_LINE = STATUS_ENUM_VALUES.map((v) => `\`${v}\``).join(' | ');
 
@@ -141,7 +157,7 @@ describe('TMPL-01 — exact step names & status enum', () => {
     expect(sketchTemplate).toContain(STALE_MARKER);
     expect(sketchTemplate).not.toContain('stale - re-derive before build');
     // Tail entries use the exact sketch-level marker (exempt from consistency-check item 1).
-    expect(sketchTemplate).toContain('Status: proposed (sketch-level — no CHUNK.md yet)');
+    expect(sketchTemplate).toContain(SKETCH_LEVEL_MARKER);
   });
 
   it('CHUNK.template.md contains the exact full-ceremony step-name list', () => {
@@ -177,6 +193,23 @@ describe('TMPL-03 — CHUNK/SKETCH ↔ state-machine consistency', () => {
   it('CHUNK.template.md and SKETCH.template.md both carry an authority pointer to state-machine.md', () => {
     expect(chunkTemplate).toContain('state-machine.md');
     expect(sketchTemplate).toContain('state-machine.md');
+  });
+
+  it('sketch-level marker is byte-identical in state-machine.md and SKETCH.template.md', () => {
+    expect(stateMachine).toContain(SKETCH_LEVEL_MARKER);
+    expect(sketchTemplate).toContain(SKETCH_LEVEL_MARKER);
+    // Guard against a hyphen regression slipping into either copy.
+    expect(stateMachine).not.toContain('(sketch-level - no CHUNK.md yet)');
+    expect(sketchTemplate).not.toContain('(sketch-level - no CHUNK.md yet)');
+  });
+
+  it('derived-pointer grammar is byte-identical in state-machine.md and SKETCH.template.md', () => {
+    expect(stateMachine).toContain(DERIVED_POINTER_GRAMMAR);
+    expect(sketchTemplate).toContain(DERIVED_POINTER_GRAMMAR);
+  });
+
+  it('CHUNK.template.md pins the Ceremony valid values as exactly `full | light`', () => {
+    expect(chunkTemplate).toContain('Valid values: full | light');
   });
 });
 
