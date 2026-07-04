@@ -69,7 +69,7 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
   4. Ingest scaffolds the project (`boardsmith init` + naming rules), verifies the empty skeleton compiles and serves, and proposes a `SKETCH.md` — core-event-loop-first, mandatory game-end/final-acceptance chunks, `ui:` tags, outcome-based test scripts — gated on user approval with chunk-count/time expectations, including the UI strategy decision made with the user
   5. Re-running ingest on an existing project requires explicit confirmation, and an old `/design-game` project is offered a one-time conversion instead of being silently overwritten
 **Plans**: 3 plans
-- [ ] 142-01-PLAN.md — drift test harness + lean orchestrator skill (INGEST-02/06/07)
+- [x] 142-01-PLAN.md — drift test harness + lean orchestrator skill (INGEST-02/06/07)
 - [ ] 142-02-PLAN.md — transcription fan-out + interview fallback reference files (INGEST-01/03)
 - [ ] 142-03-PLAN.md — scaffold + sketch-derivation reference files (INGEST-04/05)
 
@@ -161,7 +161,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 |-------|----------------|--------|-----------|
 | 140. Library Prerequisite — useAnnouncer() | 1/1 | Complete    | 2026-07-04 |
 | 141. File Templates & State-Machine Authority | 3/3 | Complete    | 2026-07-04 |
-| 142. `/bs-ingest-rules` | 0/TBD | Not started | - |
+| 142. `/bs-ingest-rules` | 1/3 | In Progress|  |
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 0/TBD | Not started | - |
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 0/TBD | Not started | - |
 | 145. `/bs-build-chunk` — Audit & Repair with Design Review | 0/TBD | Not started | - |

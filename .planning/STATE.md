@@ -4,13 +4,13 @@ milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
 stopped_at: Completed 141-03-PLAN.md
-last_updated: "2026-07-04T19:44:18.645Z"
-last_activity: 2026-07-04 -- Phase 142 planning complete
+last_updated: "2026-07-04T19:49:33.372Z"
+last_activity: 2026-07-04
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 7
-  completed_plans: 4
+  completed_plans: 5
   percent: 20
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 142 — `/bs ingest rules`
+**Current focus:** Phase 142 — /bs-ingest-rules
 
 ## Current Position
 
-Phase: 142
-Plan: Not started
+Phase: 142 (/bs-ingest-rules) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-04 -- Phase 142 planning complete
+Last activity: 2026-07-04
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 71%
 
 ## Milestones
 
@@ -195,6 +195,8 @@ Recent decisions affecting current work:
 - [Phase 141-02]: SKETCH.template.md records the UI Strategy decision (custom-from-chunk-1 vs autoui-with-cutover) at ingest time, since DESIGN.md doesn't exist until the first UI chunk's ask
 - [Phase 141-02]: Drift test asserts CHUNK.template.md and state-machine.md contain the byte-identical step-name string; both new templates carry a literal state-machine.md pointer
 - [Phase 141-03]: templates.test.ts describe blocks named by requirement ID (TMPL-01, TMPL-02) extended for RULINGS/DECISIONS/DESIGN/ASSETS; ledgers use numbered append-only sections (Ruling N / Decision N) rather than flat tables, matching CHUNK.template.md's Revision Rounds pattern
+- [Phase ?]: [Phase 142-01]: read() calls moved inside individual it() bodies (not describe-level) in ingest.test.ts -- required since ingest-rules.md and bs/ingest/*.md files are authored progressively across Plans 01/02/03
+- [Phase ?]: [Phase 142-01]: ingest-rules.md kept to 131 lines by delegating every step's heavyweight prose to not-yet-authored ingest/*.md reference files, matching state-machine.md's citation-not-restatement convention
 
 ### Pending Todos
 
@@ -206,7 +208,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T18:58:51.667Z
+Last session: 2026-07-04T19:48:26.016Z
 Stopped at: Completed 141-03-PLAN.md
 Resume file: None
 Next action: Break Phase 140 (Library Prerequisite — useAnnouncer()) down into plans via `/gsd:plan-phase 140`
