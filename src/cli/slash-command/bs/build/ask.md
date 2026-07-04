@@ -11,21 +11,34 @@ to one chunk instead of the whole sketch.
 
 The settled interpretation that clears `build/redteam.md` with no unresolved refuted-twice
 escalations: CHUNK.md's `## Interpretation` and `## Visibility Declaration` sections (written by
-`build/investigate.md`). The ask step has no subagent — the orchestrator reads these two
-CHUNK.md sections itself, the sanctioned state-file read defined in `build-chunk.md`'s
-Context-Economics Hard Rule, and restates them below; it never opens the rulebook slices or docs
-behind the claims. Plus any ambiguity the redteam round escalated to the user directly
-(`state-machine.md` "Redteam Escalation" — refuted-twice disputes go to the human, never to more
-agents; a ruling recorded there may already answer part (b) below).
+`build/investigate.md`), plus CHUNK.md's `## Redteam Rounds` section (written by the
+orchestrator at the end of each redteam round — see `build/redteam.md` "Persisting the Round").
+The ask step has no subagent — the orchestrator reads these three CHUNK.md sections itself, the
+sanctioned state-file read defined in `build-chunk.md`'s Context-Economics Hard Rule, and
+restates them below; it never opens the rulebook slices or docs behind the claims.
+
+`## Redteam Rounds` is what makes this gate cold-resumable: a session resuming directly at ask
+(redteam checked, ask unchecked) consumes the **persisted** per-claim verdicts, objections, and
+round dispositions from that section — which claims were refuted and superseded, and whether any
+round's disposition reads `escalation open at ask` — never from conversation memory it does not
+have. Any round disposition of `escalation open at ask`, and any ambiguity the redteam round
+escalated to the user directly (`state-machine.md` "Redteam Escalation" — refuted-twice disputes
+go to the human, never to more agents), is surfaced as a part (b) question below; a ruling
+already recorded in RULINGS.md may already answer it.
 
 ## The Fixed 4-Part Presentation Format
 
 Present the chunk's design to the user in exactly these four parts, in this order. This shape is
 fixed — never reorder it, never merge parts, never add a fifth part:
 
-**(a) Rules interpretation in plain designer language, with citations.** Every claim from
-CHUNK.md's `## Interpretation` restated in the register a designer would use, each carrying its
-citation into the rulebook or RULINGS.md:
+**(a) Rules interpretation in plain designer language, with citations.** Every **live** claim
+from CHUNK.md's `## Interpretation` restated in the register a designer would use, each carrying
+its citation into the rulebook or RULINGS.md. A superseded claim is not live: a claim named as
+superseded by a later claim (marked in place, or recorded as refuted in the latest `## Redteam
+Rounds` entry with a superseding claim appended and no standing resolution) is **omitted** from
+this presentation — its superseding claim is presented in its place and carries the citation.
+Presenting a refuted original and its correction side by side as flat design facts would have
+the user approve a contradictory interpretation:
 
 > "When you land on an owned property, you pay rent equal to the amount shown on its card
 > (p.6, 'Rent'). If it's mortgaged, no rent is owed (p.9, 'Mortgages')."

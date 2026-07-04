@@ -18,10 +18,12 @@ Every fact this router needs about a chunk's rules or code content comes from th
 return-shape a dispatched subagent hands back — never by re-reading a slice or source file a
 subagent just wrote. State files are different: `CHUNK.md` is a state file, and reading state
 files is exactly the orchestrator's job (alongside dispatching subagents, recording results, and
-talking to the user). In particular, after the investigate subagent writes `CHUNK.md`'s
-`## Interpretation` and `## Visibility Declaration`, the orchestrator reads those two sections —
-bounded to this one chunk's claims, never the slices or docs behind them — because that read is
-the **sanctioned channel** that supplies the numbered claims list to the redteam dispatch
+talking to the user). In particular, the orchestrator reads the chunk-state sections the
+group-1 steps consume — `## Interpretation` and `## Visibility Declaration` after the
+investigate subagent writes them, plus `## Redteam Rounds` at the ask step (the persisted
+verdicts and round dispositions the gate consumes, especially on a cold resume) — bounded to
+this one chunk's state, never the slices or docs behind it — because that read is the
+**sanctioned channel** that supplies the numbered claims list to the redteam dispatch
 prompts and the ask presentation. The ban this rule enforces is on re-deriving content from
 sources (slices, docs, code), not on reading chunk state. `build/investigate.md` and
 `build/redteam.md` restate the source-reading ban because those are the two steps where the

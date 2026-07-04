@@ -16,8 +16,11 @@ subagent returns, plus ONE sanctioned state-file read: after the subagent finish
 orchestrator reads CHUNK.md's `## Interpretation` and `## Visibility Declaration` sections
 (CHUNK.md is a state file; reading state files is the orchestrator's job — see
 `build-chunk.md`'s Context-Economics Hard Rule) so it can embed the numbered claims list in the
-redteam dispatch prompts and restate it at the ask step. That bounded read — one chunk's claims,
-never the slices, docs, or ledgers behind them — is NOT the failure mode this rule guards
+redteam dispatch prompts and restate it at the ask step. The same sanctioned channel covers all
+the chunk-state sections the group-1 steps consume — at the ask step it extends to CHUNK.md's
+`## Redteam Rounds`, the persisted round record the gate reads (see `build-chunk.md`'s
+Context-Economics Hard Rule). That bounded read — one chunk's state,
+never the slices, docs, or ledgers behind it — is NOT the failure mode this rule guards
 against. The failure mode is re-opening the chunk's *sources* to "double-check" the subagent's
 work: that silently reintroduces the exact context-exhaustion problem the fan-out design exists
 to avoid. If something looks wrong in a returned summary or in the written claims, dispatch a
