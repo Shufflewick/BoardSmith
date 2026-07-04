@@ -18,7 +18,8 @@ findings:
   warning: 4
   info: 3
   total: 9
-status: issues_found
+status: resolved
+resolved_at: 2026-07-03T19:11:00Z
 ---
 
 # Phase 137: Code Review Report
@@ -62,6 +63,8 @@ export {
 ```
 Also add `ActionExecutionError` to the exports list in `docs/api/testing.md` (it appears in prose at line 25 but not in the Exports/Types sections).
 
+**Resolution:** status: fixed (commit `afd55be2`) — `ActionExecutionError` exported from `src/testing/index.ts` alongside `TestGame`/`createTestGame`, and added as an explicit bullet in the `docs/api/testing.md` Exports section (fields `actionName`/`playerSeat`/`args`/`result` named).
+
 ### CR-02: `docs/agent-control.md` Determinism section still documents the OLD `test-${Date.now()}` default seed — the exact contract this phase removed
 
 **File:** `docs/agent-control.md:334-338`
@@ -78,6 +81,8 @@ never `Date.now()`/`Math.random`). Pass an explicit `seed` when you want a
 *different* deterministic run. The resolved seed is exposed as
 `testGame.seed` and included in failure messages.
 ```
+
+**Resolution:** status: fixed (commit `7a8ad212`) — Determinism & Seeding section rewritten to the shipped contract: fixed literal `'test-seed'` default, seedless runs identical across runs, explicit `seed` for a *different* deterministic run, `testGame.seed` exposure + seed-in-failure-messages noted.
 
 ## Warnings
 
@@ -97,17 +102,23 @@ expect(results.stuck).toBe(0);
 console.log(`Average game length: ${results.averageActions} actions`);
 ```
 
+**Resolution:** status: fixed (commit `d0759965`) — example rewritten to the real API (`count: 100`, `playerCounts: [2]`); nonexistent `results.winRates` line removed. All remaining fields (`completed`, `stuck`, `errors`, `averageActions`) verified against `SimulationResults`.
+
 ### WR-02: `diffSnapshots` JSDoc example calls `doAction(0, ...)` — invalid seat that now throws under the new contract
 
 **File:** `src/testing/debug.ts:380`
 **Issue:** The example reads `testGame.doAction(0, 'move', { destination: cell });`. Seats are 1-indexed throughout `boardsmith/testing` (`docs/api/testing.md:100`). Under the old contract this example silently returned a failure result and the diff printed "No changes detected"; under the new contract seat 0 has no player, so `doAction` is now **guaranteed to throw** `ActionExecutionError` before the `after` snapshot line ever runs. The grep-style sweep for docs modeling the old contract missed this one.
 **Fix:** Change to `testGame.doAction(1, 'move', { destination: cell });`
 
+**Resolution:** status: fixed (commit `acf7b502`) — JSDoc example now uses seat 1.
+
 ### WR-03: `simulateTutorial`'s `seed` option is dead — JSDoc claims it "is recorded in the return value", but `SimulateTutorialResult` has no seed field
 
 **File:** `src/testing/simulate-tutorial.ts:76-78` (claim), `89-112` (result type), `163-274` (implementation)
 **Issue:** `SimulateTutorialOptions.seed`'s JSDoc says: "The `seed` option here is informational — it is recorded in the return value for traceability". The return type is `{ completed, finalStepId, stepsVisited }` — no seed field — and the function body never reads `options.seed` at all (only `seat` and `scenario` are destructured at line 168). The documented traceability behavior does not exist; the option is entirely inert. Given this phase's headline deliverable is seed traceability (`testGame.seed`, seed-in-messages), an inert seed option with a false JSDoc claim is exactly the wrong-path trap the phase set out to remove.
 **Fix:** Either (a) delete the `seed` option and point callers at `testGame.seed` (per the No Backward Compatibility rule, and since `TestGame` now always has a resolved seed), or (b) actually record it: add `seed: string` to `SimulateTutorialResult` populated from `options.seed ?? testGame.seed`. Option (a) is cleaner — the precedence caveat paragraph becomes unnecessary too.
+
+**Resolution:** status: fixed (commit `44539a6e`) — wired honestly (variant of option b, chosen because external games — checkers/go-fish tutorial tests and `docs/teaching-and-tutorials.md` — already pass `seed` at both levels): `SimulateTutorialResult.seed` now records the *effective* governing seed (`testGame.seed`, never the inert option), and `options.seed` became a fail-loud declared expectation — if it differs from `testGame.seed`, `simulateTutorial` throws immediately with an actionable message instead of silently running under a different seed. JSDoc rewritten in both places. Red-first: 2 new tests in `simulate-tutorial.test.ts` (result-seed traceability + mismatch throw), red confirmed pre-fix, green post-fix. Existing same-seed-both-levels usages keep passing unchanged.
 
 ### WR-04: `GameStuckError` messages report only the game seed — a run with a custom `playUntilComplete` seed/rng is NOT reproducible from the reported `Seed:` line
 
@@ -121,6 +132,8 @@ const playSeedNote = options?.rng
 // ...in each message:
 `Seed: ${testGame.seed} (playUntilComplete seed: ${playSeedNote})`
 ```
+
+**Resolution:** status: fixed (commit `e549e5d6`) — a single `seedLine` (game seed + `playUntilComplete seed:` note) computed once next to the rng and used at all four `GameStuckError` sites; custom `rng` flagged as `custom rng (not seed-reproducible)`. Red-first: 2 new tests in `play-until-complete.test.ts` (custom-seed run reports both seeds; custom-rng run reports the flag), red confirmed pre-fix, green post-fix.
 
 ## Info
 
