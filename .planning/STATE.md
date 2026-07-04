@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
-stopped_at: Completed 144-04-PLAN.md
-last_updated: "2026-07-04T23:41:13.015Z"
-last_activity: 2026-07-04 -- Phase 145 planning complete
+stopped_at: Completed 145-01-PLAN.md
+last_updated: "2026-07-04T23:46:38.948Z"
+last_activity: 2026-07-04
 progress:
   total_phases: 10
   completed_phases: 5
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 17
   percent: 50
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 145 — `/bs build chunk` — audit & repair with design review
+**Current focus:** Phase 145 — /bs-build-chunk — Audit & Repair with Design Review
 
 ## Current Position
 
-Phase: 145
-Plan: Not started
+Phase: 145 (/bs-build-chunk — Audit & Repair with Design Review) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-04 -- Phase 145 planning complete
+Last activity: 2026-07-04
 
-Progress: [██████████] 100%
+Progress: [█████████░] 94%
 
 ## Milestones
 
@@ -211,6 +211,8 @@ Recent decisions affecting current work:
 - [Phase 144-03]: test.md frames boardsmith lint's seven AST-based sandbox rules as the sole hard gate, distinct from the same command's regex-heuristic warnings
 - [Phase 144-04]: design-ask.md cites build/ask.md's and DESIGN.template.md's prose by name rather than restating it (citation-not-restatement convention)
 - [Phase 144-04]: build-chunk.md dispatch-table rewritten so build/build.md and build/test.md are live while audit/repair/playtest/revise/close remain forward references; zero 'authored in Phase 144' occurrences remain
+- [Phase 145]: audit.md's own no-framing rule forbids reading CHUNK.md's ## Interpretation, stronger than redteam's rule — even the settled conclusion (not just upstream rationale) must stay out of the dispatch prompt
+- [Phase 145]: repair.md's fix-or-refute-with-citation branch modeled on build/build.md's Extends Never Restructures shape — no exact prior analog existed for a refute-in-place-of-fix path
 
 ### Pending Todos
 
@@ -222,8 +224,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T22:49:59.637Z
-Stopped at: Completed 144-04-PLAN.md
+Last session: 2026-07-04T23:46:38.940Z
+Stopped at: Completed 145-01-PLAN.md
 Resume file: None
 Next action: Phase 144 complete (4/4 plans) — ready for phase verification (`/gsd:verify-phase 144`), then continue to Phase 145 (audit/repair)
 

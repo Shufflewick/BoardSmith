@@ -35,8 +35,8 @@
 - [x] **BUILD-04**: The ask gate presents plain game-designer language with citations, ambiguity questions with options, a "what you will NOT see yet" list, and zero implementation vocabulary; assets are requested here with a never-blocking placeholder path
 - [x] **BUILD-05**: Build reads raw slices + approved interpretation, extends rather than restructures verified code (restructure requires a user gate), appends to DECISIONS.md, and keeps a per-file manifest for mid-step resume
 - [x] **BUILD-06**: The test step runs tsc, boardsmith eslint, unit/integration tests, the full accumulated suite, and a random-simulation playthrough to a terminal state
-- [ ] **BUILD-07**: Audit agents read raw slices + RULINGS.md + code (never the interpretation) with fidelity, visibility-leak (two-seat diff), and undo lenses, writing to a stable-ID findings ledger
-- [ ] **BUILD-08**: Repair loops are bounded (max 3 audit rounds, only-new-findings rule, refutation-with-citation allowed) with remaining findings triaged to the user
+- [x] **BUILD-07**: Audit agents read raw slices + RULINGS.md + code (never the interpretation) with fidelity, visibility-leak (two-seat diff), and undo lenses, writing to a stable-ID findings ledger
+- [x] **BUILD-08**: Repair loops are bounded (max 3 audit rounds, only-new-findings rule, refutation-with-citation allowed) with remaining findings triaged to the user
 - [ ] **BUILD-09**: Playtest hands the user a numbered click-by-click script with seat counts, dev-host affordances, a build stamp, a regression line, and an explicit item-by-item verified checklist; `verified (user-waived)` is recordable
 - [ ] **BUILD-10**: Playtest feedback is triaged item-by-item (this-chunk / future-scope / not-built-yet / ruling) and re-entry after revision presents a feedback disposition report with a targeted re-test script
 - [ ] **BUILD-11**: Close records the verified commit hash, re-derives the sketch tail, and presents the delta for approval before proposing the next chunk
@@ -103,8 +103,8 @@
 | UIQ-01 | Phase 144 | Complete |
 | UIQ-02 | Phase 144 | Complete |
 | UIQ-03 | Phase 144 | Complete |
-| BUILD-07 | Phase 145 | Pending |
-| BUILD-08 | Phase 145 | Pending |
+| BUILD-07 | Phase 145 | Complete |
+| BUILD-08 | Phase 145 | Complete |
 | UIQ-04 | Phase 145 | Pending |
 | BUILD-09 | Phase 146 | Pending |
 | BUILD-10 | Phase 146 | Pending |

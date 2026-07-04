@@ -144,7 +144,7 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
 Plans:
 **Wave 1**
 
-- [ ] 145-01-PLAN.md — {audit, repair} step group: audit.md (BUILD-07, 3 lenses + leak diff) & repair.md (BUILD-08, bounded fix-or-refute loop)
+- [x] 145-01-PLAN.md — {audit, repair} step group: audit.md (BUILD-07, 3 lenses + leak diff) & repair.md (BUILD-08, bounded fix-or-refute loop)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -219,7 +219,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 142. `/bs-ingest-rules` | 3/3 | Complete    | 2026-07-04 |
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 5/5 | Complete    | 2026-07-04 |
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 4/4 | Complete    | 2026-07-04 |
-| 145. `/bs-build-chunk` — Audit & Repair with Design Review | 0/TBD | Not started | - |
+| 145. `/bs-build-chunk` — Audit & Repair with Design Review | 1/2 | In Progress|  |
 | 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 0/TBD | Not started | - |
 | 147. `/bs-check-status` & `/bs-insert-chunk` | 0/TBD | Not started | - |
 | 148. Distribution — Installer & `/bs-generate-ai` | 0/TBD | Not started | - |
