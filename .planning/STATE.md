@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: executing
-stopped_at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
-last_updated: "2026-07-03T23:56:51.588Z"
+status: ready_to_plan
+stopped_at: Phase 137 complete (3/3) — ready to discuss Phase 138
+last_updated: 2026-07-04T00:14:45.867Z
 last_activity: 2026-07-03
 progress:
   total_phases: 9
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 137 — testing utilities
+**Current focus:** Phase 138 — cross repo migration
 
 ## Current Position
 
-Phase: 137 (Testing Utilities) — EXECUTING
-Plan: 3 of 3 (137-03-PLAN.md remains)
-Status: Ready to execute
-Last activity: 2026-07-03
+Phase: 138
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-04
 
 Progress: [██████████] 100%
 
