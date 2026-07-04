@@ -4,9 +4,12 @@ This is the no-rulebook input path: the orchestrator (`ingest-rules.md` Step 2) 
 when the designer has no written rulebook (unpublished prototype, rules in the designer's head).
 The project scaffold (`ingest-rules.md` Step 1) has already run — every `rulebook/` write below
 targets the scaffolded project directory the session is now inside, never its parent.
-The question sequence below is extracted verbatim in shape from the old `/design-game` skill's
-Phase 2 (`instructions.md` lines 121-223) — same six questions, same one-at-a-time cadence,
-same Clarification Protocol. The one required adaptation (see "Output Re-Target" below) is that
+The question sequence below extends the old `/design-game` skill's Phase 2 six-question
+sequence (`instructions.md` lines 121-223) with two additions the plan requires — a setup
+question and an actions question — plus a component-proportions follow-up; same one-at-a-time
+cadence, same Clarification Protocol. Without those additions the interview path would produce
+no setup or actions slice for chunks to cite, and no aspect ratios for `ASSETS.md`'s
+layout-stable placeholders. The one required adaptation (see "Output Re-Target" below) is that
 this path produces the SAME `rulebook/NN-topic.md` + `rulebook/INDEX.md` files the transcription
 path (`ingest/transcription.md`) produces — not PROJECT.md prose. INGEST-03 depends on this
 identity: every downstream ingest step (synthesis, sketch derivation, scaffold) is unaffected by
@@ -47,20 +50,47 @@ Ask about each component type one at a time:
 For each component mentioned, note only the essentials:
 - What categories/types exist (e.g., "Red, Blue, Green suits" for cards)
 - Basic purpose (e.g., "deck to draw from, hand to hold")
+- Rough proportions, with ONE light follow-up per component type (e.g. "Standard poker-size
+  cards, or something else?", "Square tiles?", "Roughly what shape is the board — square,
+  wide, a track?") — these feed the `componentMentions[]` aspect ratios that `ASSETS.md`'s
+  layout-stable placeholders need; the transcription path gets them from the rulebook, this
+  path can only get them by asking
 
 **Keep it light, but clarify ambiguity:**
 - Do NOT ask about detailed card effects, scoring formulas, or edge cases
 - If the designer mentions a mechanic that sounds unclear, ask ONE follow-up to capture the core rule
 - Example: "Roll dice and guess" - Ask: "Do you guess before or after rolling?"
 
-### Question 3: Turn Structure
+### Question 3: Setup
+
+> "How is the game set up before the first turn? Walk me through what each player starts with
+> and what goes in the middle."
+
+Listen for:
+- Per-player starting resources (hand size, starting pieces, money)
+- Shared setup (board layout, decks shuffled, market rows dealt)
+- Any per-player-count differences (note them — they feed the sketch's Player Counts section)
+
+### Question 4: Turn Structure
 
 > "How do turns work? Options:"
 > - **Sequential:** One player completes their entire turn, then the next player goes
 > - **Simultaneous:** All players act at the same time
 > - **Phased:** All players do phase 1 together, then all do phase 2, etc.
 
-### Question 4: Round Completion
+### Question 5: Actions
+
+> "On their turn, what can a player actually DO? List the choices they pick from."
+
+Listen for:
+- The menu of turn options (draw, play, move, trade, pass...)
+- Whether players take one action or several
+- Any action that is mandatory vs optional
+
+Keep it at the same altitude as the components question — the core rule per action, not edge
+cases or full effect text.
+
+### Question 6: Round Completion
 
 > "How does a round end? Options:"
 > - All players take one turn
@@ -68,7 +98,7 @@ For each component mentioned, note only the essentials:
 > - A trigger condition happens (describe it)
 > - No rounds - continuous play until game ends
 
-### Question 5: Game End
+### Question 7: Game End
 
 > "How does the game end? Options:"
 > - Someone reaches a goal (points, collection, connection)
@@ -77,7 +107,7 @@ For each component mentioned, note only the essentials:
 > - Last player standing (elimination)
 > - Other (describe)
 
-### Question 6: Summary and Confirmation
+### Question 8: Summary and Confirmation
 
 After gathering responses, present a summary:
 
@@ -94,7 +124,9 @@ After gathering responses, present a summary:
 - Dice: [description or "None"]
 - Tokens: [description or "None"]
 
+**Setup:** [per-player starting state + shared setup]
 **Turn Structure:** [Sequential/Simultaneous/Phased]
+**Actions:** [the menu of turn options]
 **Round End:** [trigger]
 **Game End:** [condition]
 **Win Condition:** [how someone wins]
@@ -123,7 +155,9 @@ Wait for confirmation before proceeding to output writing.
 The old skill's Phase 2 fed straight into its own Phase 4 PROJECT.md template. This path does
 NOT do that. Each answer, once confirmed, becomes a cited slice written to
 `rulebook/NN-topic.md` — grouped by topic (e.g. Q1's vision answer → `rulebook/01-vision.md`,
-Q2's components answer → `rulebook/02-components.md`, and so on) — with citation format:
+Q2's components answer → `rulebook/02-components.md`, Q3's setup answer →
+`rulebook/03-setup.md`, Q5's actions answer → `rulebook/05-actions.md`, and so on) — with
+citation format:
 
 ```
 designer statement, ingest session, Q{n}
