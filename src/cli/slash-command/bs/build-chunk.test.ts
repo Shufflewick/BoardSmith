@@ -221,10 +221,12 @@ describe('BUILD-04 — ask gate', () => {
   it('warns against implementation vocabulary, listing the forbidden terms to AVOID', () => {
     const ask = read('build/ask.md');
     expect(ask).toMatch(/implementation vocabulary/i);
-    expect(ask).toContain('action');
-    expect(ask).toContain('flow');
-    expect(ask).toContain('state');
-    expect(ask).toContain('element');
+    // Assert the backticked list-entry forms the Prohibited Vocabulary section uses — bare
+    // `toContain('action')` is vacuous (matches "interaction", "adaptations", "restated"...).
+    expect(ask).toContain('- `action`');
+    expect(ask).toContain('- `flow`');
+    expect(ask).toContain('- `state`');
+    expect(ask).toContain('- `element`');
   });
 
   it('documents the never-blocking placeholder-art path', () => {
