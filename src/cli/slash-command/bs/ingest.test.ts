@@ -1,0 +1,196 @@
+/**
+ * Structural drift-protection test for the `/bs-ingest-rules` skill (INGEST-01..07).
+ *
+ * `bs/ingest-rules.md` (the lean orchestrator) and its four `bs/ingest/*.md` reference
+ * files are plain markdown consumed by an agent session, NOT parsed by any runtime code
+ * in this repo. This test pins the exact strings, citations, and cross-file pointers those
+ * files depend on so a future reword/reorg fails loudly here instead of being discovered
+ * only when a downstream ingest session misbehaves.
+ *
+ * Authored FIRST (Wave 0 gap in 142-VALIDATION.md), before Plans 02/03 author the four
+ * `bs/ingest/*.md` reference files. Most tests below are RED (or ERROR, since the files
+ * don't exist yet) until those files land — this is the intended Wave-0-first state.
+ * INGEST-02, INGEST-06, and INGEST-07 assert only against `ingest-rules.md` itself and
+ * turn (or stay) GREEN once Task 2 of this plan authors that file.
+ *
+ * Every `read()` call is made INSIDE its `it()` body (never at describe-level) so a
+ * missing file fails only that one assertion instead of aborting the whole suite's
+ * collection phase — required because several referenced files genuinely don't exist
+ * yet in this Wave-0-first state.
+ *
+ * Mirrors `src/cli/slash-command/bs/templates.test.ts` (Phase 141): same `__dirname`/
+ * `read()` helper, same named byte-identical-marker-constant technique, one `describe`
+ * per requirement ID.
+ */
+import { describe, it, expect } from 'vitest';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** Read a bs/ shared-reference file relative to this test file's directory. */
+function read(relativePath: string): string {
+  return readFileSync(join(__dirname, relativePath), 'utf-8');
+}
+
+/**
+ * Sketch-level tail-entry marker (em-dash, not hyphen). Byte-identical across
+ * state-machine.md, SKETCH.template.md, and any ingest reference file that
+ * quotes it (e.g. sketch-derivation.md's 2-3-chunk detail cap explanation).
+ */
+const SKETCH_LEVEL_MARKER = 'Status: proposed (sketch-level — no CHUNK.md yet)';
+
+/** The `ui:` tag values, exactly as SKETCH.template.md and templates.test.ts pin them. */
+const UI_TAG_REGEX = /none *\| *touches *\| *major/;
+
+/** Every path `ingest-rules.md` must cite by exact path (cross-file consistency, INGEST-*). */
+const REFERENCED_PATHS = [
+  'ingest/transcription.md',
+  'ingest/interview-fallback.md',
+  'ingest/sketch-derivation.md',
+  'ingest/scaffold.md',
+  'state-machine.md',
+  'templates/SKETCH.template.md',
+  'templates/ASSETS.template.md',
+] as const;
+
+describe('INGEST-01 — transcription per-section confirmation', () => {
+  it('ingest-rules.md references ingest/transcription.md', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('ingest/transcription.md');
+  });
+
+  it('transcription.md documents a per-section (not per-page, not bulk) confirmation protocol', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toMatch(/per[- ]section/i);
+    expect(transcription).not.toMatch(/per[- ]page confirmation/i);
+  });
+});
+
+describe('INGEST-02 — synthesis artifact list', () => {
+  it('names INDEX.md', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('INDEX.md');
+  });
+
+  it('names variant/edition tagging', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toMatch(/variant/i);
+  });
+
+  it('names component inventory + aspect ratio(s)', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toMatch(/component inventory/i);
+    expect(ingestRules).toMatch(/aspect ratio/i);
+  });
+
+  it('names ASSETS.md', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('ASSETS.md');
+  });
+
+  it('names the visual identity survey', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toMatch(/visual identity survey/i);
+  });
+
+  it('names player-count / min-max', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toMatch(/min(?:imum)?\s*\/?\s*max(?:imum)?\s*player/i);
+  });
+});
+
+describe('INGEST-03 — interview fallback', () => {
+  it('ingest-rules.md references ingest/interview-fallback.md', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('ingest/interview-fallback.md');
+  });
+
+  it('interview-fallback.md outputs rulebook/ files, not PROJECT.md prose', () => {
+    const interviewFallback = read('ingest/interview-fallback.md');
+    expect(interviewFallback).toContain('rulebook/');
+    expect(interviewFallback).not.toMatch(/Outputs?:?\s*PROJECT\.md/);
+  });
+});
+
+describe('INGEST-04 — scaffold with compile+serve verification', () => {
+  it('ingest-rules.md references ingest/scaffold.md', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('ingest/scaffold.md');
+  });
+
+  it('scaffold.md names boardsmith init, tsc --noEmit, and an explicit kill instruction', () => {
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain('boardsmith init');
+    expect(scaffold).toContain('tsc --noEmit');
+    expect(scaffold).toMatch(/kill/i);
+  });
+});
+
+describe('INGEST-05 — sketch derivation heuristic', () => {
+  it('ingest-rules.md references ingest/sketch-derivation.md', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('ingest/sketch-derivation.md');
+  });
+
+  it('sketch-derivation.md contains the byte-identical sketch-level marker', () => {
+    const sketchDerivation = read('ingest/sketch-derivation.md');
+    expect(sketchDerivation).toContain(SKETCH_LEVEL_MARKER);
+  });
+
+  it('sketch-derivation.md contains the ui: none|touches|major tag values', () => {
+    const sketchDerivation = read('ingest/sketch-derivation.md');
+    expect(sketchDerivation).toMatch(UI_TAG_REGEX);
+  });
+
+  it('sketch-derivation.md mandates core-event-loop-first, game-end, and final-acceptance chunks', () => {
+    const sketchDerivation = read('ingest/sketch-derivation.md');
+    expect(sketchDerivation).toMatch(/core event loop/i);
+    expect(sketchDerivation).toMatch(/game-end/i);
+    expect(sketchDerivation).toMatch(/final-acceptance/i);
+  });
+});
+
+describe('INGEST-06 — UI strategy step', () => {
+  it('references SKETCH.template.md\'s "## UI Strategy" section by name', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('## UI Strategy');
+  });
+
+  it('names both strategy values: custom-from-chunk-1 and autoui-with-cutover', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('custom-from-chunk-1');
+    expect(ingestRules).toContain('autoui-with-cutover');
+  });
+});
+
+describe('INGEST-07 — state detection', () => {
+  it('names the re-run guard (existing SKETCH.md)', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('SKETCH.md');
+    expect(ingestRules).toMatch(/re-run/i);
+  });
+
+  it('names the old-project migration trio: PROJECT.md, STATE.md, HISTORY.md', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('PROJECT.md');
+    expect(ingestRules).toContain('STATE.md');
+    expect(ingestRules).toContain('HISTORY.md');
+  });
+});
+
+describe('cross-file consistency — every referenced path resolves on disk', () => {
+  it('ingest-rules.md cites every reference path (contains the pointer string)', () => {
+    const ingestRules = read('ingest-rules.md');
+    for (const path of REFERENCED_PATHS) {
+      expect(ingestRules, `ingest-rules.md must cite "${path}"`).toContain(path);
+    }
+  });
+
+  for (const path of REFERENCED_PATHS) {
+    it(`${path} exists on disk`, () => {
+      expect(existsSync(join(__dirname, path)), `${path} must exist`).toBe(true);
+    });
+  }
+});
