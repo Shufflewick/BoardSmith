@@ -27,6 +27,43 @@ function read(relativePath: string): string {
   return readFileSync(join(__dirname, relativePath), 'utf-8');
 }
 
+/**
+ * The status enum values, in order — single source of truth for this suite.
+ * Both pinned lines below are derived from this array so the enum cannot
+ * drift between state-machine.md and CHUNK.template.md without a test edit.
+ */
+const STATUS_ENUM_VALUES = [
+  'proposed',
+  'approved',
+  'built',
+  'verified',
+  'verified (user-waived)',
+] as const;
+
+/** CHUNK-level stale marker (em-dash, not hyphen). */
+const STALE_MARKER = 'stale — re-derive before build';
+
+/** The exact enum line as it appears in state-machine.md ("Status Enum (exact)"). */
+const STATE_MACHINE_ENUM_LINE = STATUS_ENUM_VALUES.map((v) => `\`${v}\``).join(' | ');
+
+/** The exact enum value list as it appears in CHUNK.template.md and SKETCH.template.md. */
+const TEMPLATE_ENUM_LINE = [...STATUS_ENUM_VALUES, STALE_MARKER].join(' | ');
+
+/** The exact ASSETS.md ledger header row ("exactly these five columns, in this order"). */
+const ASSETS_HEADER_ROW = '| needed-by-chunk | requested | received | placeholder-in-use | file path |';
+
+/** Extract a file's actual H2 headings, in document order. */
+function actualHeadings(content: string): string[] {
+  return content.split('\n').filter((line) => line.startsWith('## '));
+}
+
+/** Extract a file's PARSE CONTRACT (TMPL-02) comment block, or fail loudly. */
+function parseContractBlock(content: string): string {
+  const match = content.match(/<!-- PARSE CONTRACT \(TMPL-02\)[\s\S]*?-->/);
+  expect(match, 'file must declare a PARSE CONTRACT (TMPL-02) comment').not.toBeNull();
+  return match![0];
+}
+
 describe('TMPL-03 — authority & write order', () => {
   const stateMachine = read('state-machine.md');
 
@@ -71,12 +108,10 @@ describe('TMPL-01/02/03 — shared enum & step-name invariants', () => {
     expect(stateMachine).toContain('build, test, playtest');
   });
 
-  it('contains every exact status-enum token', () => {
-    expect(stateMachine).toContain('`proposed`');
-    expect(stateMachine).toContain('`approved`');
-    expect(stateMachine).toContain('`built`');
-    expect(stateMachine).toContain('`verified`');
-    expect(stateMachine).toContain('verified (user-waived)');
+  it('contains the exact status-enum line, verbatim and in order', () => {
+    // Pinned as one exact line — bare-word containment would pass even if the
+    // enum line were reordered or partially deleted (the words appear in prose).
+    expect(stateMachine).toContain(STATE_MACHINE_ENUM_LINE);
   });
 
   it('contains the exact CHUNK-level stale marker (em-dash, not hyphen)', () => {
@@ -90,13 +125,23 @@ describe('TMPL-01 — exact step names & status enum', () => {
   const chunkTemplate = read('templates/CHUNK.template.md');
   const sketchTemplate = read('templates/SKETCH.template.md');
 
-  it('CHUNK.template.md contains every exact status-enum token', () => {
-    expect(chunkTemplate).toContain('proposed');
-    expect(chunkTemplate).toContain('approved');
-    expect(chunkTemplate).toContain('built');
-    expect(chunkTemplate).toContain('verified');
-    expect(chunkTemplate).toContain('verified (user-waived)');
-    expect(chunkTemplate).toContain('stale — re-derive before build');
+  it('CHUNK.template.md contains the exact status-enum value list, verbatim and in order', () => {
+    expect(chunkTemplate).toContain(TEMPLATE_ENUM_LINE);
+  });
+
+  it('SKETCH.template.md derived-status pointer lists the same exact enum values', () => {
+    expect(sketchTemplate).toContain(TEMPLATE_ENUM_LINE);
+  });
+
+  it('SKETCH.template.md carries the machine anchors and markers the skills depend on', () => {
+    // /bs-insert-chunk bumps this stamp; the lock check reads this line.
+    expect(sketchTemplate).toContain('Sketch Version:');
+    expect(sketchTemplate).toContain('Session Lock:');
+    // Stale marker must be present (em-dash, not hyphen) in the derived-status pointer.
+    expect(sketchTemplate).toContain(STALE_MARKER);
+    expect(sketchTemplate).not.toContain('stale - re-derive before build');
+    // Tail entries use the exact sketch-level marker (exempt from consistency-check item 1).
+    expect(sketchTemplate).toContain('Status: proposed (sketch-level — no CHUNK.md yet)');
   });
 
   it('CHUNK.template.md contains the exact full-ceremony step-name list', () => {
@@ -186,12 +231,10 @@ describe('TMPL-01 — six templates ship with required content', () => {
     );
   });
 
-  it('ASSETS.template.md contains the exact column labels verbatim', () => {
-    expect(assetsTemplate).toContain('needed-by-chunk');
-    expect(assetsTemplate).toContain('requested');
-    expect(assetsTemplate).toContain('received');
-    expect(assetsTemplate).toContain('placeholder-in-use');
-    expect(assetsTemplate).toContain('file path');
+  it('ASSETS.template.md contains the exact ledger header row, verbatim and in order', () => {
+    // Pinned as one exact row — unordered substring checks would pass even if
+    // the columns were reordered (several labels also appear in the prose).
+    expect(assetsTemplate).toContain(ASSETS_HEADER_ROW);
   });
 
   it('none of the six template files is a {{BOARDSMITH_ROOT}} thin pointer', () => {
@@ -230,4 +273,65 @@ describe('TMPL-02 — each template declares its parse contract', () => {
     expect(assetsTemplate).toContain('PARSE CONTRACT (TMPL-02)');
     expect(assetsTemplate).toContain('## Ledger');
   });
+});
+
+describe('TMPL-02 — parse-contract heading lists match each template\'s actual headings', () => {
+  // The exact H2 headings each template ships, in order. A template's PARSE
+  // CONTRACT comment must enumerate exactly these, and the file body must
+  // contain exactly these — a mismatch in either direction (a heading shipped
+  // but missing from the contract, or vice versa) is the CR-01 defect class.
+  const EXPECTED_HEADINGS: Record<string, string[]> = {
+    'templates/CHUNK.template.md': [
+      '## ui:',
+      '## Ceremony',
+      '## Step Checklist',
+      '## Interpretation',
+      '## Visibility Declaration',
+      '## Newly Discovered Citations',
+      '## Findings Ledger',
+      '## Revision Rounds',
+      '## Build Manifest',
+      '## Playtest Test Script',
+      '## Verified Checklist',
+      '## Verified Commit Hash',
+    ],
+    'templates/SKETCH.template.md': [
+      '## Player Counts',
+      '## UI Strategy',
+      '## Ordered Chunk List',
+      '## Variants (deferred)',
+      '## Ideas Backlog',
+      '## Mandated Chunks',
+    ],
+    'templates/RULINGS.template.md': ['## Ledger'],
+    'templates/DECISIONS.template.md': ['## Ledger'],
+    'templates/DESIGN.template.md': [
+      '## Chosen Direction',
+      '## Theme Block (--bsg-* / applyTheme() overrides)',
+      '## Typography & Spacing',
+      '## Component Recipes',
+      '## Placeholder Policy',
+      "## Do / Don't",
+    ],
+    'templates/ASSETS.template.md': ['## Ledger'],
+  };
+
+  for (const [path, expected] of Object.entries(EXPECTED_HEADINGS)) {
+    it(`${path}: actual H2 headings exactly match the expected list, in order`, () => {
+      expect(actualHeadings(read(path))).toEqual(expected);
+    });
+
+    it(`${path}: PARSE CONTRACT enumerates every shipped heading, in order`, () => {
+      const contract = parseContractBlock(read(path));
+      let cursor = -1;
+      for (const heading of expected) {
+        const index = contract.indexOf(heading, cursor + 1);
+        expect(
+          index,
+          `PARSE CONTRACT must list "${heading}" (after the previously listed heading)`
+        ).toBeGreaterThan(cursor);
+        cursor = index;
+      }
+    });
+  }
 });
