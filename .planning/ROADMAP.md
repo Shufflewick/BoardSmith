@@ -115,7 +115,10 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
   1. Audit agents read the raw slices + `RULINGS.md` + the code (never the interpretation) and record fidelity, visibility-leak (two-seat diff), and undo findings in a stable-ID ledger inside `CHUNK.md`
   2. Repair loops fix findings or refute them with citations, cap at 3 audit rounds enforcing an only-new-findings rule, and triage any remaining findings to the user
   3. `ui: touches|major` chunks get a screenshot-armed design-review agent that captures 3 Slate breakpoints × 2 themes, diffs against `DESIGN.md` and the previous chunk's stored screenshots, and feeds findings into the same repair loop
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 145-01-PLAN.md — {audit, repair} step group: audit.md (BUILD-07, 3 lenses + leak diff) & repair.md (BUILD-08, bounded fix-or-refute loop)
+- [ ] 145-02-PLAN.md — design-review agent (UIQ-04): screenshot 3×2 breakpoint/theme grid, cohesion diff, server-kill
 **UI hint**: yes
 
 #### Phase 146: `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance
