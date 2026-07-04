@@ -48,7 +48,7 @@
 - [x] **UIQ-01**: The first UI chunk's ask is a design ask offering Adopt / Derive / Original (frontend-design mood sketches), recorded in DESIGN.md with token overrides and component recipes
 - [x] **UIQ-02**: Components awaiting assets render designed placeholders (correct aspect ratio, DESIGN.md tokens, labeled) whose asset swap never changes geometry
 - [x] **UIQ-03**: UI chunks enforce the a11y floor: ActionPanel keyboard-only completability test, axe scan, no-color-literals grep, real controls with game-semantic labels, focus management, reduced-motion
-- [ ] **UIQ-04**: UI chunks get a screenshot-armed design-review audit agent (3 breakpoints × 2 themes, drift diff vs stored shots) feeding the repair loop
+- [x] **UIQ-04**: UI chunks get a screenshot-armed design-review audit agent (3 breakpoints × 2 themes, drift diff vs stored shots) feeding the repair loop
 - [ ] **UIQ-05**: The final-acceptance chunk includes the design-QA pass (screen-reader playthrough, zoom, touch targets, colorblind, both themes, mobile)
 
 ### Status & Sketch Editing (STAT)
@@ -105,7 +105,7 @@
 | UIQ-03 | Phase 144 | Complete |
 | BUILD-07 | Phase 145 | Complete |
 | BUILD-08 | Phase 145 | Complete |
-| UIQ-04 | Phase 145 | Pending |
+| UIQ-04 | Phase 145 | Complete |
 | BUILD-09 | Phase 146 | Pending |
 | BUILD-10 | Phase 146 | Pending |
 | BUILD-11 | Phase 146 | Pending |

@@ -148,7 +148,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 145-02-PLAN.md — design-review agent (UIQ-04): screenshot 3×2 breakpoint/theme grid, cohesion diff, server-kill
+- [x] 145-02-PLAN.md — design-review agent (UIQ-04): screenshot 3×2 breakpoint/theme grid, cohesion diff, server-kill
 
 **UI hint**: yes
 
@@ -219,7 +219,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 142. `/bs-ingest-rules` | 3/3 | Complete    | 2026-07-04 |
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 5/5 | Complete    | 2026-07-04 |
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 4/4 | Complete    | 2026-07-04 |
-| 145. `/bs-build-chunk` — Audit & Repair with Design Review | 1/2 | In Progress|  |
+| 145. `/bs-build-chunk` — Audit & Repair with Design Review | 2/2 | Complete   | 2026-07-04 |
 | 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 0/TBD | Not started | - |
 | 147. `/bs-check-status` & `/bs-insert-chunk` | 0/TBD | Not started | - |
 | 148. Distribution — Installer & `/bs-generate-ai` | 0/TBD | Not started | - |
