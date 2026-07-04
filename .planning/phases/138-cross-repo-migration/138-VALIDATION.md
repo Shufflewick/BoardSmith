@@ -38,10 +38,10 @@ created: 2026-07-03
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | GAMES-01 | — | 8× boardsmith.json cleaned (no playerCount/dead $schema); `boardsmith validate` passes per game | CLI | `cd <game> && npx boardsmith validate` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | GAMES-01 | — | checkers (1) + go-fish (12) doAction .success sites migrated; every suite green | unit | per-game `npx vitest run` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | GAMES-01 | — | Playwright smokes: hex (drag), go-fish (toast/restore), cribbage (multiSelect) | browser | scratchpad scripts | ❌ W0 scripts | ⬜ pending |
-| TBD | TBD | TBD | GAMES-02 | — | MERC WIP commit → re-vendor → suite green (gaps fixed in BoardSmith src red-first) | suite | MERC test command | ✅ | ⬜ pending |
+| 138-01-T1 | 138-01 | 1 | GAMES-01 | — | 8× boardsmith.json cleaned (no playerCount/dead $schema); `boardsmith validate` passes per game | CLI | `cd <game> && npx boardsmith validate` | ✅ | ⬜ pending |
+| 138-01-T2/T3 | 138-01 | 1 | GAMES-01 | — | checkers (1) + go-fish (12) doAction .success sites migrated; every suite green | unit | per-game `npx vitest run` | ✅ | ⬜ pending |
+| 138-02-T1/T2 | 138-02 | 2 | GAMES-01 | — | Playwright smokes: hex (drag), go-fish (toast/restore), cribbage (multiSelect) | browser | scratchpad scripts | ❌ W0 scripts | ⬜ pending |
+| 138-03-T1..T3 | 138-03 | 1 | GAMES-02 | — | MERC WIP commit → re-vendor → suite green (gaps fixed in BoardSmith src red-first) | suite | MERC test command | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

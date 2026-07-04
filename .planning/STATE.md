@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: ready_to_plan
-stopped_at: Phase 137 complete (3/3) — ready to discuss Phase 138
-last_updated: 2026-07-04T00:14:45.867Z
-last_activity: 2026-07-03
+status: executing
+stopped_at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
+last_updated: "2026-07-04T01:16:05.638Z"
+last_activity: 2026-07-04 -- Phase 138 planning complete
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 34
+  total_plans: 37
   completed_plans: 34
   percent: 78
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 138
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-07-04
+Status: Ready to execute
+Last activity: 2026-07-04 -- Phase 138 planning complete
 
 Progress: [██████████] 100%
 

@@ -277,7 +277,9 @@ if (!result.success) break;
 
 **If this table is empty:** N/A — see above, 3 assumptions logged, all resolved by "verify empirically during re-vendor iteration" or "checkpoint with user," not blocking research completion.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> RESOLVED: Q1 (MERC 738 baseline) — established fresh as the first MERC step in 138-03 (baseline-then-iterate). Q2 (MERC dirty tree) — user decision 2026-07-03: WIP-commit as-is first (138-03 Task 1; see 138-CONTEXT.md).
 
 1. **Does MERC's full test suite (738-test baseline) pass cleanly after `playerCount`/`.doAction()` fixes, or does it surface additional ENG-05/SEC-03/etc. issues not visible via static grep?**
    - What we know: Static analysis found zero additional breaking-change hits beyond the two confirmed categories.
