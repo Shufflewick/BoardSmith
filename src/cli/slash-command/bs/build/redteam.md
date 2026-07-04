@@ -105,17 +105,33 @@ marking, fresh-context round-2 agents would correctly re-refute the original (it
 wrong, by design) and manufacture a spurious refuted-twice escalation on every re-investigate
 round.
 
-## Persisting the Round (write before ask starts)
+## Persisting the Round (write at the end of EACH round — never deferred past a re-investigate)
 
-When all 3 agents have returned and the escalation logic above has resolved (including any
-re-investigate round), the orchestrator appends a `### Redteam Round N` entry to CHUNK.md's
-`## Redteam Rounds` section (`templates/CHUNK.template.md`) — per-claim verdicts, objection
-text, the coverage adversary's findings, and the round's disposition — **before** the ask step
-starts. This is a state-file write and is what makes the round cold-resumable: a crash or
-session handoff between redteam and ask must not lose the verdicts. Vote-privacy (below)
-governs what is *shown to the user*, not what is *written to state* — the recorded entry is
-internal, and the ask step still distills it into designer language. After the round entry
-lands, the orchestrator checks off `redteam` on CHUNK.md's Step Checklist.
+The orchestrator appends a `### Redteam Round N` entry to CHUNK.md's `## Redteam Rounds`
+section (`templates/CHUNK.template.md`) at the end of **each** round — per-claim verdicts,
+objection text, the coverage adversary's findings, and the round's disposition. Concretely:
+
+- **Round 1, refuted-once path:** append `### Redteam Round 1` with disposition
+  `re-investigate dispatched` **before** dispatching the re-investigate subagent — never
+  deferred until the re-investigate round completes. A crash mid-re-investigate must not lose
+  Round 1's verdicts while the re-investigate subagent's superseding claim (written directly to
+  `## Interpretation`) survives.
+- **Round 2, or a Round 1 that clears or escalates:** append that round's entry when its 3
+  agents have returned and its escalation logic has resolved, with disposition `cleared` or
+  `escalation open at ask`, **before** the ask step starts.
+
+This is a state-file write and is what makes every round cold-resumable: a crash or session
+handoff at any seam — mid-re-investigate, or between redteam and ask — must not lose an already
+resolved round's verdicts. **Resume rule:** a session resuming at redteam (unchecked) that finds
+a round entry with disposition `re-investigate dispatched` — or a claim in `## Interpretation`
+noting "supersedes claim N" — dispatches a **round-2** review with every superseded claim marked
+(see "Round-2 dispatch vs superseded claims" above), never a fresh Round 1; without the round
+record, the resume could not know the marking applies, both refuters would re-refute the
+superseded original, and a spurious refuted-twice escalation would be manufactured through the
+crash seam. Vote-privacy (below) governs what is *shown to the user*, not what is *written to
+state* — the recorded entry is internal, and the ask step still distills it into designer
+language. After the final round's entry lands, the orchestrator checks off `redteam` on
+CHUNK.md's Step Checklist.
 
 ## Vote-Privacy
 
