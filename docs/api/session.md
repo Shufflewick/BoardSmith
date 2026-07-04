@@ -97,13 +97,13 @@ const session = GameSession.create({
   playerNames: ['Alice', 'Bob'],
 });
 
-// Get state for a specific player
-const { flowState, state } = session.getState(0);
+// Get state for a specific player (seats are 1-indexed)
+const { flowState, state } = session.getState(1);
 console.log('Current player:', flowState.currentPlayer);
 console.log('Available actions:', flowState.actions);
 
 // Perform an action
-const result = await session.performAction('move', 0, {
+const result = await session.performAction('move', 1, {
   from: 'a1',
   to: 'b2',
 });
@@ -132,8 +132,9 @@ const session = GameSession.create({
   },
 });
 
-// AI moves are handled automatically when it's the AI's turn
-const result = await session.performAction('move', 0, { from: 'a1', to: 'b2' });
+// AI moves are handled automatically when it's the AI's turn.
+// Player 1 is AI here, so the human plays seat 2.
+const result = await session.performAction('move', 2, { from: 'a1', to: 'b2' });
 // After the human moves, AI will automatically play
 ```
 
@@ -177,8 +178,8 @@ if (storedState) {
   // Restore from saved state
   const session = GameSession.restore(storedState, MyGame, storage);
 
-  // Continue playing
-  const { flowState, state } = session.getState(0);
+  // Continue playing (seats are 1-indexed)
+  const { flowState, state } = session.getState(1);
 }
 ```
 

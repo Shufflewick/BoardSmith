@@ -2110,13 +2110,18 @@ describe('Unknown action warning (F20)', () => {
 
     // Names the unknown action.
     expect(message).toContain("references unknown action 'nope'");
-    // Points to the REAL, object-based registration API.
+    // Points to the REAL builder + registration API (Action.create(...).execute(...)
+    // registered via this.registerActions(...) in the game's constructor) --
+    // there is no defineActions()/defineFlow() lifecycle hook (139-02 DOCX-04).
     expect(message).toContain('registerActions(');
-    expect(message).toContain("action('nope')");
-    expect(message).toContain('defineActions()');
-    // Must NOT reference the non-existent method / wrong signature (the F20 defect).
+    expect(message).toContain("Action.create('nope')");
+    expect(message).toContain("game's constructor");
+    // Must NOT reference any of the non-existent phantom APIs (the F20 defect
+    // and its 139-02 successor: action()/.do()/defineActions() never existed).
     expect(message).not.toContain('defineAction(');
     expect(message).not.toContain("game.defineAction('nope', ...)");
+    expect(message).not.toContain('defineActions()');
+    expect(message).not.toMatch(/\baction\('nope'\)/);
   });
 
   it('simultaneous-action-step warning also points to the real API', () => {

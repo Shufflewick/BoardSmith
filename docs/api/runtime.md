@@ -67,8 +67,8 @@ const runner = new GameRunner({
 const snapshot = runner.getSnapshot();
 console.log('Current player:', snapshot.flowState.currentPlayer);
 
-// Perform an action (actionName, player, args)
-const result = runner.performAction('move', 0, { from: 'a1', to: 'b2' });
+// Perform an action (actionName, player, args) -- player seats are 1-indexed
+const result = runner.performAction('move', 1, { from: 'a1', to: 'b2' });
 
 if (result.success) {
   console.log('Move executed');
@@ -83,27 +83,22 @@ if (result.success) {
 ```typescript
 import { serializeAction, deserializeAction } from 'boardsmith/runtime';
 
-// On the client
-const action = {
-  action: 'play',
-  player: 0,
-  args: {
-    card: cardElement, // GameElement reference
-    target: spaceElement,
-  },
-};
-
-// Serialize for network transfer
-const serialized = serializeAction(action, game);
-// { action: 'play', player: 0, args: { card: { _ref: 'card-123' }, target: { _ref: 'space-456' } } }
+// On the client -- takes the real Player element (seats are 1-indexed) and
+// a game reference so GameElement args can be resolved to references
+const player = game.getPlayer(1)!;
+const serialized = serializeAction('play', player, {
+  card: cardElement, // GameElement reference
+  target: spaceElement,
+}, game);
+// { name: 'play', player: 1, args: { card: { _ref: 'card-123' }, target: { _ref: 'space-456' } }, timestamp: 1234567890 }
 
 // Send over WebSocket
 ws.send(JSON.stringify(serialized));
 
-// On the server
+// On the server -- resolves back to the real Player element and GameElement args
 const received = JSON.parse(message);
 const deserialized = deserializeAction(received, game);
-// { action: 'play', player: 0, args: { card: <Card element>, target: <Space element> } }
+// { actionName: 'play', player: <Player element>, args: { card: <Card element>, target: <Space element> } }
 ```
 
 ### Creating Player Views
@@ -114,16 +109,18 @@ import { createSnapshot, createPlayerView, createAllPlayerViews } from 'boardsmi
 // Create full snapshot (includes all hidden information)
 const fullSnapshot = createSnapshot(game);
 
-// Create view for specific player (respects visibility)
-const player0View = createPlayerView(game, 0);
-// Player 0 can see their own hand but not opponent's
+// Create view for specific player (respects visibility) -- seats are 1-indexed
+const player1View = createPlayerView(game, 1);
+// Player 1 can see their own hand but not opponent's
 
-// Create views for all players at once
+// Create views for all players at once -- returns a plain array (0-indexed
+// by array position, NOT by seat); each entry's `.player` field holds the
+// actual 1-indexed seat
 const allViews = createAllPlayerViews(game);
-// { 0: player0View, 1: player1View, ... }
+// allViews[0].player === 1 (first player's view), allViews[1].player === 2, ...
 
 // Views hide information the player shouldn't see
-console.log(player0View.elements);
+console.log(player1View.state);
 // Cards in opponent's hand show as { type: 'card', faceDown: true }
 ```
 
@@ -166,10 +163,10 @@ const runner = new GameRunner({
   seed: 'deterministic-seed',
 });
 
-// Perform a series of actions (actionName, player, args)
-runner.performAction('draw', 0, {});
-runner.performAction('play', 0, { card: 'card-1' });
+// Perform a series of actions (actionName, player, args) -- player seats are 1-indexed
 runner.performAction('draw', 1, {});
+runner.performAction('play', 1, { card: 'card-1' });
+runner.performAction('draw', 2, {});
 
 // Read the recorded action history (a public readonly field)
 console.log(`${runner.actionHistory.length} actions played`);

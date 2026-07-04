@@ -20,6 +20,10 @@ import { MeepleClient, GameConnection, audioService } from 'boardsmith/client';
 - `GameConnection` - Active connection to a game
 - `MeepleClientError` - Thrown by `MeepleClient`'s HTTP methods (game/lobby management) on failure; extends `Error` and carries an optional `errorCode`
 
+### Functions
+
+- `generatePlayerId()` - Generates a cryptographically random player ID string. `MeepleClient` calls this automatically when `config.playerId` is omitted; call it directly only if you need to generate/persist an ID before constructing the client.
+
 ### Audio
 
 - `audioService` - Audio playback service
@@ -189,6 +193,30 @@ if (!result.success) {
   showActionError(result.error);
 }
 ```
+
+### Connection Options
+
+`client.connect(gameId, config)` accepts `GameConnectionConfig` fields beyond `playerSeat`:
+
+```typescript
+const connection = client.connect(gameId, {
+  playerSeat: 1,
+  connectImmediately: false, // default true; false constructs without dialing --
+  //   call connection.connect() yourself when ready (e.g. useGame({ autoConnect: false }))
+  connectionTimeout: 15000,  // default 10000ms; bounds the handshake and
+  //   action()-awaits-open waits
+  wsImplementation: MyWebSocketPolyfill, // only needed on runtimes without a
+  //   global WebSocket (Node <22.4); Node >=22.4 needs no override
+});
+
+if (!connection.opened) {
+  await connection.connect(); // connectImmediately: false requires this call
+}
+```
+
+A dropped connection is retried automatically (`autoReconnect`/`maxReconnectAttempts`/
+`reconnectDelay` on the same config); an in-flight `action()` call transparently awaits
+the reconnect (bounded by `connectionTimeout`) rather than rejecting immediately.
 
 ### Performing Actions
 
