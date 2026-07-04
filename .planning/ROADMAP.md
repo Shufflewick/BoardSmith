@@ -83,7 +83,12 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
   3. Redteam runs 3 independent fresh-context agents (2 refuters + 1 coverage adversary) against the claims list with no investigator framing; a claim refuted twice escalates to the user as a plain-language ruling recorded in `RULINGS.md`
   4. The ask gate presents plain designer-language rules with citations, ambiguity questions with options, a "what you will NOT see yet" list, zero implementation vocabulary, and requests any needed assets with a never-blocking placeholder path
   5. Chunks tagged trivial run the light path (build → test → playtest) with the user explicitly told which ceremony is in effect
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 143-01-PLAN.md — build-chunk.test.ts structural drift suite (Wave 0 contract: pins step/enum strings + return-shape field names)
+- [ ] 143-02-PLAN.md — build-chunk.md orchestrator: resume routing, 3-way session lock, conversational intents, full+light routing (BUILD-01, BUILD-12)
+- [ ] 143-03-PLAN.md — build/investigate.md: doc-reading + claims list + visibility declaration (BUILD-02)
+- [ ] 143-04-PLAN.md — build/redteam.md: 3 fresh-context agents, no framing, refuted-twice → RULINGS.md (BUILD-03)
+- [ ] 143-05-PLAN.md — build/ask.md: 4-part plain-language gate, zero impl vocab, never-blocking assets, gate-before-write (BUILD-04)
 
 #### Phase 144: `/bs-build-chunk` — Build & Test with UI Floor
 **Goal**: An approved design becomes extended, automatically-tested code that meets the per-chunk accessibility and visual-identity floor.
