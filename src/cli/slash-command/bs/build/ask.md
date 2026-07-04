@@ -7,13 +7,20 @@ line of code is written. Mirrors `ingest-rules.md` Step 6 (Approval Gate) + Step
 Files) — same negotiate-then-gate posture, same single-point-of-write discipline, applied here
 to one chunk instead of the whole sketch.
 
-## First-UI-Chunk Design Check (pre-check, before Part (a))
+## First-UI-Chunk Design Check (the visual-identity opening of this same ask)
 
-If this chunk's `## ui:` tag is `touches` or `major` AND DESIGN.md does not yet exist on disk,
-dispatch `build/design-ask.md` to completion (it writes `DESIGN.md`) before continuing to Part
-(a) of this file's 4-part presentation for this same chunk. A chunk whose `## ui:` tag is
+For the first UI chunk, **the ask IS the design ask** — one ask step, one human-approval
+boundary, not two sequential "explicit yes" gates. If this chunk's `## ui:` tag is
+`touches` or `major` AND DESIGN.md does not yet exist on disk, open this ask by dispatching
+`build/design-ask.md` for the visual-identity direction menu (its three directions, Derive as
+default, and the `DESIGN.md` authoring mechanics), then present that direction choice **together
+with** Parts (a)-(d) below as a single combined presentation for this same chunk. The user's one
+explicit "yes" at this file's "Gate-Before-Write" authorizes BOTH durable writes — `DESIGN.md`
+first, then the interpretation-gate writes — in the single write sequence below. `design-ask.md`
+surfaces the direction choice into this ask's presentation; it does **not** run its own separate
+earlier approval turn (see `design-ask.md` "Gate-Before-Write"). A chunk whose `## ui:` tag is
 `none`, or whose game already has a `DESIGN.md` from an earlier UI chunk's ask, skips this
-pre-check entirely and proceeds straight to Part (a) below.
+opening entirely and proceeds straight to Part (a) below.
 
 ## Inputs
 
@@ -117,6 +124,10 @@ is not approving; only an explicit yes authorizes the write.
 
 Only after that explicit yes:
 
+0. **(First UI chunk only)** Write `DESIGN.md` from the approved visual-identity direction, per
+   `design-ask.md`'s section-fill order. This is the first durable write of this single gate — it
+   lands before the interpretation-gate writes below, authorized by the same explicit "yes", not a
+   separate earlier approval.
 1. Write any RULINGS.md `### Ruling N` entries from house-rule/adaptation choices made above.
 2. Write any ASSETS.md ledger row updates from the asset request above.
 3. Check off `ask` on CHUNK.md's Step Checklist (investigate and redteam were already checked

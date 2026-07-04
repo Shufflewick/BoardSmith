@@ -1,10 +1,13 @@
 # Design Ask — The First-UI-Chunk Visual Identity Gate (UIQ-01)
 
-Referenced by `build/ask.md`'s pre-check (first-UI-chunk detection: this chunk's `## ui:` tag is
-`touches`|`major` AND DESIGN.md does not yet exist on disk) — runs to completion before ask.md's
-4-part gate proceeds for that same chunk. This is the one-time gate that decides this game's
-visual identity before any UI chunk writes a single line of styling — every UI chunk after the
-first reads the settled `DESIGN.md` this step writes; it never re-asks this question.
+Referenced by `build/ask.md` (first-UI-chunk detection: this chunk's `## ui:` tag is
+`touches`|`major` AND DESIGN.md does not yet exist on disk). For the first UI chunk **the ask IS
+the design ask**: this file supplies the visual-identity direction menu that opens that single
+ask, presented alongside ask.md's 4-part interpretation gate under **one** human-approval
+boundary — not a separate earlier "explicit yes" (see "Gate-Before-Write" below). This is the
+one-time decision of this game's visual identity before any UI chunk writes a single line of
+styling — every UI chunk after the first reads the settled `DESIGN.md` this decision writes; it
+never re-asks this question.
 
 ## Inputs
 
@@ -38,10 +41,13 @@ same negotiate-then-gate posture as `build/ask.md`'s "Gate-Before-Write".
 
 ## Gate-Before-Write
 
-Present the three directions plus the rationale for the recommendation, then negotiate. Do
-**not** write `DESIGN.md` — not a partial draft, not a placeholder — until the user has given
-explicit approval of one direction. Presenting is not approving; only an explicit yes authorizes
-the write.
+Present the three directions plus the rationale for the recommendation as the opening of this
+chunk's single ask, **together with** ask.md's 4-part interpretation presentation, then negotiate.
+Do **not** write `DESIGN.md` — not a partial draft, not a placeholder — and do not run a separate
+earlier approval turn here: the direction choice is authorized by the **same** single explicit
+"yes" that clears ask.md's "Gate-Before-Write", where `DESIGN.md` is written first (its Step 0)
+before that gate's other durable writes. Presenting is not approving; only that one explicit yes
+authorizes the write.
 
 Only after that explicit yes, fill `templates/DESIGN.template.md`'s sections in the template's
 own order — cite these section names, never restructure or rename them:
