@@ -141,6 +141,8 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Validated
 
+- ✓ `useAnnouncer()` composable exported from `boardsmith/ui` writing to GameShell's existing live regions (LIB-01) — Validated in Phase 140: Library Prerequisite — useAnnouncer()
+
 - ✓ Game rules layer isolated from platform/networking — existing
 - ✓ Event sourcing via Command pattern — existing
 - ✓ Fluent action/flow builder APIs — existing
@@ -424,4 +426,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-04 — started milestone v4.6 BS Skills (Rulebook-Driven Game Building)*
+*Last updated: 2026-07-04 — Phase 140 complete (useAnnouncer library prerequisite)*
