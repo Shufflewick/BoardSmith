@@ -77,9 +77,12 @@ following artifacts **from subagent-returned summaries only** — never from re-
 
 1. **`rulebook/INDEX.md`** — a term → slice-file cross-reference table, built exclusively from
    the accumulated `citedTerms[]` lists.
-2. **Variant/edition tagging** — the rulebook's edition is recorded; variant/optional/advanced
-   rules are tagged out-of-scope-by-default in the slices and listed in `SKETCH.md`'s
-   "Variants (deferred)" section.
+2. **Variant/edition tagging** — the rulebook's edition is recorded as a header line in
+   `rulebook/INDEX.md`, sourced from the `edition` field the opening-pages transcription
+   subagent returns (or from the user if the rulebook states none; on the interview path it
+   reads "unpublished — designer statement" — see `ingest/transcription.md` "Edition").
+   Variant/optional/advanced rules are tagged out-of-scope-by-default in the slices and listed
+   in `SKETCH.md`'s "Variants (deferred)" section.
 3. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
    approximate aspect ratios (cards, tiles, board proportions), seeded into `ASSETS.md`.
 4. **`ASSETS.md`** — the component/asset ledger (needed-by-chunk, requested, received,

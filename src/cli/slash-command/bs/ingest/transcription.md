@@ -52,6 +52,13 @@ Return exactly: one { slicePath, sectionSummary, citedTerms[], componentMentions
 visualEvidence[] } per section.
 ```
 
+**Edition (opening-pages range only):** the subagent assigned the rulebook's first pages
+additionally returns an `edition` field — the edition/printing stated on the cover, title page,
+or colophon (null if the rulebook states none; the orchestrator then asks the user). The
+orchestrator records it as a header line in `rulebook/INDEX.md` (e.g. `Edition: 2nd edition,
+2019 printing`) so every later citation is anchored to the exact text that was transcribed. On
+the interview path the line reads `Edition: unpublished — designer statement`.
+
 Do not ask a subagent to interpret or evaluate the rules — only transcribe, write, and extract
 the summary fields above. Interpretation is the orchestrator's and, later, `/bs-build-chunk`'s
 job, not the transcription subagent's.
