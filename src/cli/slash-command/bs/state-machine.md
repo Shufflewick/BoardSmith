@@ -93,6 +93,13 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
 
 - `SKETCH.md` carries a lightweight session lock note: which chunk is in progress, plus a timestamp.
 - A second concurrent session, on entry, sees the lock note and **warns the user instead of silently clobbering** the in-progress session's work.
+- **Staleness criterion** (evaluated by consistency-check item 4): a lock is **stale** when its
+  timestamp is more than 24 hours old — a crashed or abandoned session, not a live one; the
+  session reports it and the user confirms clearing it. A lock naming the same chunk the
+  entering session is resuming is **not** stale and does not warn — the session refreshes the
+  lock's timestamp and continues (this is the normal resume path). Any other lock (less than
+  24 hours old, naming different work) is treated as a live concurrent session and triggers
+  the warning above.
 
 ## Git Protocol
 
