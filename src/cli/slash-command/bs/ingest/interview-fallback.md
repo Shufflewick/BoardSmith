@@ -172,9 +172,9 @@ produced the terms it's indexing.
 ## Aspect Detection (cite, do not recopy)
 
 After the interview is confirmed, detect which aspects apply using the keyword table in
-`aspects/index.md` — do not recopy that table here. Scan the Question 2 component answers for
-the keywords `aspects/index.md` lists (Dice, PlayingCards, HexGrid, SquareGrid), case-insensitive,
-allowing multiple aspects and keyword-absent inference exactly as `aspects/index.md` describes.
+`../aspects/index.md` — do not recopy that table here. Scan the Question 2 component answers for
+the keywords `../aspects/index.md` lists (Dice, PlayingCards, HexGrid, SquareGrid), case-insensitive,
+allowing multiple aspects and keyword-absent inference exactly as `../aspects/index.md` describes.
 Detected aspects feed the component inventory the same way a rulebook's stated components would
 in the transcription path — they are not a separate PROJECT.md field, they seed `ASSETS.md`
 alongside whatever else Step 3 synthesis records.

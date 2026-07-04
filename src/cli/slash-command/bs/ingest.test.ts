@@ -180,6 +180,17 @@ describe('INGEST-07 — state detection', () => {
   });
 });
 
+describe('cross-file consistency — aspects reference (WR-04)', () => {
+  it('interview-fallback.md cites aspects/index.md by its resolvable relative path', () => {
+    const interviewFallback = read('ingest/interview-fallback.md');
+    expect(interviewFallback).toContain('../aspects/index.md');
+  });
+
+  it('../aspects/index.md exists on disk (relative to bs/)', () => {
+    expect(existsSync(join(__dirname, '../aspects/index.md'))).toBe(true);
+  });
+});
+
 describe('cross-file consistency — every referenced path resolves on disk', () => {
   it('ingest-rules.md cites every reference path (contains the pointer string)', () => {
     const ingestRules = read('ingest-rules.md');
