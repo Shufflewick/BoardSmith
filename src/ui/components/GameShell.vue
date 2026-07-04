@@ -1747,19 +1747,23 @@ function handleRetry(): void {
 
 // ── Live-region watchers (immediate: false — never write to regions at mount) ─
 
+// All writes go through announcer.announce() so every live-region write shares
+// one scheduling discipline (clear-then-set on nextTick, last-write-wins in
+// call order) and duplicates re-announce. Never assign the refs directly here —
+// a raw synchronous write races the announcer's deferred commit and can be
+// silently clobbered by a descendant's announce() from the same tick.
+
 watch(isMyTurn, (newVal) => {
   const text = announceTurnChange(newVal);
   if (text) {
-    politeMessage.value = text;
-    emitAnnounce('polite', text);
+    announcer.announce(text);
   }
 }, { immediate: false });
 
 watch(connectionStatus, (newVal, oldVal) => {
   const text = announceConnectionChange(newVal, oldVal ?? '');
   if (text) {
-    politeMessage.value = text;
-    emitAnnounce('polite', text);
+    announcer.announce(text);
   }
 }, { immediate: false });
 
@@ -1774,8 +1778,7 @@ watch(
         return (p as any)?.name || `Player ${seat}`;
       });
       const text = announceGameOver(winnerNames);
-      assertiveMessage.value = text;
-      emitAnnounce('assertive', text);
+      announcer.announce(text, { assertive: true });
 
       // Stop any running AI demo when the game completes. isDemoRunning is
       // now derived from broadcast state (WR-04), so we only fire the request;
@@ -1792,8 +1795,7 @@ watch(awaitingPlayerNames, (newVal) => {
   if (newVal.length > 0 && !isMyTurn.value) {
     const text = announceOpponentTurn(newVal.map((p: any) => p.name));
     if (text) {
-      politeMessage.value = text;
-      emitAnnounce('polite', text);
+      announcer.announce(text);
     }
   }
 }, { immediate: false });
@@ -1816,8 +1818,7 @@ watch(actionController.errorTick, () => {
     ? err
     : `${actionController.currentAction.value ?? 'Action'} failed — try again or check the current selection.`;
   toast.error(text);
-  assertiveMessage.value = text;
-  emitAnnounce('assertive', text);
+  announcer.announce(text, { assertive: true });
 }, { immediate: false });
 
 // UIX-03: dev-mode diagnostic when a responsive custom board silently collapses
