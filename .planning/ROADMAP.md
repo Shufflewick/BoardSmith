@@ -88,7 +88,7 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
 - [x] 143-02-PLAN.md — build-chunk.md orchestrator: resume routing, 3-way session lock, conversational intents, full+light routing (BUILD-01, BUILD-12)
 - [x] 143-03-PLAN.md — build/investigate.md: doc-reading + claims list + visibility declaration (BUILD-02)
 - [x] 143-04-PLAN.md — build/redteam.md: 3 fresh-context agents, no framing, refuted-twice → RULINGS.md (BUILD-03)
-- [ ] 143-05-PLAN.md — build/ask.md: 4-part plain-language gate, zero impl vocab, never-blocking assets, gate-before-write (BUILD-04)
+- [x] 143-05-PLAN.md — build/ask.md: 4-part plain-language gate, zero impl vocab, never-blocking assets, gate-before-write (BUILD-04)
 
 #### Phase 144: `/bs-build-chunk` — Build & Test with UI Floor
 **Goal**: An approved design becomes extended, automatically-tested code that meets the per-chunk accessibility and visual-identity floor.
@@ -167,7 +167,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 140. Library Prerequisite — useAnnouncer() | 1/1 | Complete    | 2026-07-04 |
 | 141. File Templates & State-Machine Authority | 3/3 | Complete    | 2026-07-04 |
 | 142. `/bs-ingest-rules` | 3/3 | Complete    | 2026-07-04 |
-| 143. `/bs-build-chunk` — Interpretation & Ask Gate | 4/5 | In Progress|  |
+| 143. `/bs-build-chunk` — Interpretation & Ask Gate | 5/5 | Complete   | 2026-07-04 |
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 0/TBD | Not started | - |
 | 145. `/bs-build-chunk` — Audit & Repair with Design Review | 0/TBD | Not started | - |
 | 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 0/TBD | Not started | - |
