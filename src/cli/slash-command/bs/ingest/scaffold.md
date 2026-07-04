@@ -28,10 +28,13 @@ Rules for generating safe names:
 - Remove leading/trailing hyphens
 - For class names: remove hyphens and capitalize each word
 
-The CLI's own `toPascalCase`/`toDisplayName` helpers (`src/cli/lib/project-scaffold.ts`) already
-implement this exact algorithm and are what `boardsmith init` calls internally — the rules above
-are for narrating the derivation to the designer, not for re-implementing name generation
-yourself. Use the derived Project Name (kebab-case) as `<name>` in every command below.
+**You must derive the kebab-case Project Name yourself using the rules above** — `boardsmith
+init` does NOT sanitize its argument (pass it "Robot Arena 3000" and it will happily create a
+directory with spaces and derive a broken class name). The CLI's `toPascalCase`/`toDisplayName`
+helpers (`src/cli/lib/project-scaffold.ts`) split only on `-`/`_`: they derive the Class and
+Display names *from an already-kebab-cased name*, so do not re-derive those two — but the
+kebab-casing itself is entirely your job. Use the derived Project Name (kebab-case) as `<name>`
+in every command below.
 
 ## Directory Framing — `init` Always Creates a New Subdirectory
 
