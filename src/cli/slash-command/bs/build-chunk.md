@@ -60,10 +60,13 @@ Before any step dispatch, intercept intents that are not "build the next thing":
 Read `SKETCH.md` → find the first non-verified chunk → read that chunk's `chunks/<slug>/CHUNK.md`
 → route to the **first incomplete step** on its Step Checklist (`state-machine.md` "Step Names").
 
-An **awaiting-playtest** chunk (`Status: built`, `playtest` unchecked) is not a fresh start: this
-router's first move is to **re-pose the pending question verbatim** — the exact test-script text
-already recorded in `CHUNK.md` — rather than restating it in new words or silently re-running an
-earlier step.
+An **awaiting-playtest** chunk — one whose first incomplete Step Checklist item is `playtest`
+(everything through `repair` checked on the full ceremony, or through `test` on the light path)
+— is not a fresh start: this router's first move is to **re-pose the pending question verbatim**
+— the exact test-script text already recorded in `CHUNK.md` — rather than restating it in new
+words or silently re-running an earlier step. `Status: built` alone is NOT the test: a full-
+ceremony chunk that has not yet run `audit`/`repair` also reads `Status: built`; only the
+checklist position decides, per the first-incomplete-step rule above.
 
 ## Step 3: Ceremony Routing
 
