@@ -69,16 +69,15 @@ export interface SimulateTutorialOptions {
   scenario: TutorialScenarioMove[];
 
   /**
-   * Seed for reproducible runs.
+   * Declared expectation of the seed governing this run.
    *
-   * **Precedence:** if the `TestGame` was already created with an explicit seed,
-   * that seed governs the game's initial RNG state and takes precedence.
-   * The `seed` option here is informational — it is recorded in the return
-   * value for traceability but does NOT restart the game.
+   * The game's RNG is seeded once, at `TestGame.create(GameClass, { seed })` —
+   * an already-started game cannot be reseeded here. If you pass `seed` and it
+   * does not match `testGame.seed`, `simulateTutorial` throws immediately
+   * (fail-loud: the run would NOT be governed by the seed you named).
    *
-   * **For reproducible runs:** create your `TestGame` with the same seed via
-   * `TestGame.create(GameClass, { seed })`. Same seed + same scenario → identical
-   * run, regardless of whether you pass `seed` here.
+   * Omit this option in new code — the effective seed is always recorded on
+   * `SimulateTutorialResult.seed` (taken from `testGame.seed`).
    */
   seed?: string;
 }
@@ -109,6 +108,15 @@ export interface SimulateTutorialResult {
    * deduplicated. Each step appears at most once (tutorials are forward-only).
    */
   stepsVisited: string[];
+
+  /**
+   * The effective seed governing the run (`testGame.seed`): the seed the
+   * `TestGame` was created with, or the fixed literal default (`'test-seed'`)
+   * when none was supplied. Recorded for traceability — recreate the
+   * `TestGame` with this seed and replay the same scenario to reproduce
+   * the run exactly.
+   */
+  seed: string;
 }
 
 // ============================================
@@ -132,20 +140,23 @@ export interface SimulateTutorialResult {
  * 3. **Non-completion** — use `assertTutorialCompletes(result)` after the run
  *    to assert `result.completed === true`.
  *
- * **Seed precedence:**
+ * **Seeding:**
  *
- * Create your `TestGame` with an explicit `seed` option for reproducible runs.
- * The `seed` field in `options` is recorded in the result for traceability but
- * does NOT affect an already-started game's RNG state. Caller-seeded `TestGame`
- * wins.
+ * Create your `TestGame` with an explicit `seed` option for reproducible runs —
+ * an already-started game cannot be reseeded here. The effective seed
+ * (`testGame.seed`) is recorded on the result for traceability. Passing
+ * `options.seed` declares an expectation: if it does not match `testGame.seed`,
+ * `simulateTutorial` throws immediately rather than silently running under a
+ * different seed than the one you named.
  *
  * @param testGame - A started `TestGame` instance. The tutorial definition will
  *   be attached to `testGame.game` and tutorial progress initialized for `seat`.
  * @param tutorialDef - The tutorial definition to run.
- * @param options - Seat, scenario moves, and optional seed.
- * @returns `{ completed, finalStepId, stepsVisited }` after the scenario.
+ * @param options - Seat, scenario moves, and optional declared seed.
+ * @returns `{ completed, finalStepId, stepsVisited, seed }` after the scenario.
  *
- * @throws {Error} on gate drift, predicate drift, or action failure.
+ * @throws {Error} on gate drift, predicate drift, action failure, or a
+ *   `seed` option that mismatches `testGame.seed`.
  *
  * @example
  * ```typescript
@@ -166,6 +177,17 @@ export function simulateTutorial<G extends Game>(
   options: SimulateTutorialOptions,
 ): SimulateTutorialResult {
   const { seat, scenario } = options;
+
+  // 0. Seed-expectation check (fail-loud): an already-started game cannot be
+  //    reseeded, so a mismatched options.seed means the run would NOT be
+  //    governed by the seed the caller named. Throw before touching the game.
+  if (options.seed !== undefined && options.seed !== testGame.seed) {
+    throw new Error(
+      `simulateTutorial: options.seed ('${options.seed}') does not match the TestGame's seed ('${testGame.seed}'). ` +
+      `The game's RNG is seeded once, at TestGame.create — pass the seed there ` +
+      `(TestGame.create(GameClass, { seed: '${options.seed}' })) and either drop options.seed or pass the same value.`,
+    );
+  }
 
   // 1. Fail-loud validation (MR-03): surfaces structural problems at call time.
   validateTutorialDefinition(tutorialDef);
@@ -270,5 +292,5 @@ export function simulateTutorial<G extends Game>(
   const completed = finalProgress?.status === 'completed';
   const finalStepId = finalProgress?.stepId ?? null;
 
-  return { completed, finalStepId, stepsVisited };
+  return { completed, finalStepId, stepsVisited, seed: testGame.seed };
 }

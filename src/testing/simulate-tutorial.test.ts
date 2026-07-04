@@ -138,6 +138,29 @@ describe('simulateTutorial', () => {
       expect(() => assertTutorialCompletes(result)).not.toThrow();
     });
 
+    it('records the effective game seed in the result (seed traceability)', () => {
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
+      const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
+        seat: 1,
+        scenario: [{ action: 'move' }, { action: 'pass' }],
+      });
+
+      expect(result.seed).toBe('happy-seed');
+      expect(result.seed).toBe(testGame.seed);
+    });
+
+    it('throws an actionable error when options.seed mismatches the TestGame seed', () => {
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'game-seed' });
+
+      expect(() =>
+        simulateTutorial(testGame, HAPPY_TUTORIAL, {
+          seat: 1,
+          scenario: [{ action: 'move' }, { action: 'pass' }],
+          seed: 'different-seed',
+        }),
+      ).toThrow(/does not match/);
+    });
+
     it('seed makes the run reproducible: same seed → same result', () => {
       const run1 = () => {
         const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'pinned' });
