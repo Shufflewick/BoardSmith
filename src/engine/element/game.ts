@@ -428,7 +428,7 @@ function redactHiddenElementAttrs(attrs: Record<string, unknown>): Record<string
  *         .chooseElement('card', { filter: c => c.parent === this.currentPlayer.hand })
  *         .execute(({ card }) => card.flip()),
  *       Action.create('endTurn')
- *         .execute(() => this.nextPlayer())
+ *         .execute(() => this.setCurrentPlayer(this.nextPlayer()!))
  *     );
  *
  *     // Define game flow
@@ -947,7 +947,7 @@ export class Game<
    *     .execute(({ card, target }) => card.putInto(target)),
    *
    *   Action.create('endTurn')
-   *     .execute(() => this.nextPlayer())
+   *     .execute(() => this.setCurrentPlayer(this.nextPlayer()!))
    * );
    * ```
    */

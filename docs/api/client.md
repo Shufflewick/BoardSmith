@@ -209,9 +209,8 @@ const connection = client.connect(gameId, {
   //   global WebSocket (Node <22.4); Node >=22.4 needs no override
 });
 
-if (!connection.opened) {
-  await connection.connect(); // connectImmediately: false requires this call
-}
+connection.connect();      // connectImmediately: false requires this explicit call
+await connection.opened;   // then await the open promise
 ```
 
 A dropped connection is retried automatically (`autoReconnect`/`maxReconnectAttempts`/
