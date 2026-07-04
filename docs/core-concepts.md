@@ -5,8 +5,8 @@ This document explains the fundamental concepts and architecture of BoardSmith.
 ## Overview
 
 BoardSmith uses a hierarchical element tree to represent game state, with a clear separation between:
-- **Actions** (what players do) - high-level, game-specific
-- **Commands** (how state changes) - low-level, generic, event-sourced
+- **Actions** (what players do) - high-level, game-specific, defined with `Action.create(...)`
+- **Element mutation** (how state changes) - direct property/tree mutation inside an action's `execute` callback; there is no generic replayable command layer
 
 ## Element Tree
 
@@ -134,22 +134,33 @@ hand.contentsVisibleToOwner();
 
 ### Attribute Visibility
 
-Use static `visibleAttributes` to control which attributes are visible:
+`static visibleAttributes` whitelists which attributes of an element are sent
+to non-owners (players other than the element's effective owner, and
+spectators). When declared, every attribute NOT in the list is redacted from
+the game view for everyone except the owner. When left `undefined` (the
+default), every attribute stays visible to everyone — this is public-by-default,
+so existing custom attributes keep working with zero configuration.
 
 ```typescript
 class Card extends BaseCard {
   suit!: Suit;
   rank!: Rank;
-  secretValue!: number;  // Hidden from players
+  secretValue!: number;  // Redacted from non-owners' game view
 
-  // Only suit and rank are visible in hidden contexts
+  // Non-owners only ever see suit and rank; secretValue is stripped server-side
   static visibleAttributes = ['suit', 'rank'];
 }
 ```
 
-## Actions vs Commands
+This is attribute-level redaction, not element-level hiding — the element
+itself (and its whitelisted attributes) is still present in the view. To hide
+an entire element or an entire zone's contents, use the element/zone
+visibility controls below instead.
 
-BoardSmith separates player intent from state mutations.
+## Actions and State Mutation
+
+BoardSmith separates player intent (actions) from state mutation (direct
+element-tree writes). There is no generic replayable command layer between them.
 
 ### Actions (High-Level)
 
@@ -161,42 +172,53 @@ const moveAction = Action.create('move')
   .chooseElement('piece', { filter: p => p.player === ctx.player })
   .chooseElement('destination', { filter: c => c.isEmpty() })
   .execute((args, ctx) => {
-    args.piece.putInto(args.destination);  // Generates MoveCommand
+    args.piece.putInto(args.destination);  // Mutates the tree directly
   });
 ```
 
-### Commands (Low-Level)
+### State Mutation (Direct, Not Command-Based)
 
-Commands are generic state mutations that happen automatically when you call element methods:
+Element methods like `putInto()`, `remove()`, `shuffle()`, and property
+assignment (`player.score += 10`) mutate the live element tree directly and
+record nothing. There is no per-operation generated-object layer behind them,
+and elements have no generic attribute-setter method — assign properties
+directly instead (e.g. `card.faceUp = true`).
 
-| Element Method | Generated Command |
-|---------------|-------------------|
-| `parent.create(Class, name, attrs)` | `CreateElementCommand` |
-| `element.putInto(target)` | `MoveCommand` |
-| `element.remove()` | `RemoveCommand` |
-| `deck.shuffle()` | `ShuffleCommand` |
-| `element.setAttribute(key, value)` | `SetAttributeCommand` |
-| `element.contentsVisible()` | `SetVisibilityCommand` |
+`Game#commandHistory` exists, but it is populated ONLY through
+`Game#execute()`, an internal mechanism the engine uses for its own ANIMATE
+event stream (see `game.ts`'s `execute()`/`replayCommands()`). Game rule code
+never calls it and should not rely on it — it is not a general-purpose audit
+log or replay mechanism for game state.
 
-### Why This Matters
+### How State Actually Travels: Snapshots, Not Replay
 
-1. **Event Sourcing**: Commands form a replayable event log
-2. **Undo/Redo**: Actions can be undone by reversing commands
-3. **Networking**: Only commands are sent over the network
-4. **Security**: Players can't directly manipulate state
-5. **Debugging**: Full history of what happened
+BoardSmith is **state-authoritative**: the source of truth is the current
+element tree, not a log of operations that produced it.
+
+- **Networking**: Each player receives a filtered JSON view (`createPlayerView`)
+  derived from the live tree, not a stream of commands.
+- **Persistence / restore**: `runner.fromSnapshot()` restores a game directly
+  from a captured snapshot (tree state + flow state + RNG state) — it does
+  NOT replay commands or actions to rebuild state. This is deliberate: replaying
+  an incomplete or ambiguous history was a real source of bugs in earlier
+  designs (mis-positioned flow state on restore).
+- **Undo**: Undo/redo, where supported, works from captured snapshots of prior
+  states, not by reversing a command log.
+- **Security**: Direct manipulation is prevented because players only ever
+  call actions (validated, server-side) — never touch element methods
+  themselves — not because of a command-layer indirection.
 
 ### Best Practices
 
 ```typescript
-// DO: Use element methods in action execute functions
+// DO: Mutate elements directly inside action execute functions
 .execute((args, ctx) => {
   card.putInto(hand);
   player.score += 10;
 });
 
-// DON'T: Try to create commands manually
-// DON'T: Bypass actions for player operations
+// DON'T: Bypass actions for player-driven operations
+// DON'T: Rely on commandHistory as a game-logic audit trail
 ```
 
 ## Player System
@@ -320,8 +342,12 @@ const playerView = createPlayerView(game, playerSeat);
 ### Player Views
 
 Each player receives a filtered view of the game state:
-- Hidden elements show only `visibleAttributes`
-- Private zones of other players are hidden
+- Elements inside hidden zones are redacted to a minimal shape (id/className +
+  safe layout attributes only); non-owners never see their real attributes
+- A declared `static visibleAttributes` whitelist further redacts individual
+  attributes on visible elements for non-owners (see Attribute Visibility above)
+- Private zones of other players are hidden via `contentsHidden()` /
+  `contentsVisibleToOwner()`
 - Server-side information is stripped
 
 ## Game Lifecycle
