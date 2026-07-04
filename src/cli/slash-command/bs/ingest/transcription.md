@@ -1,7 +1,9 @@
 # Transcription — Fan-Out Subagent Dispatch (INGEST-01)
 
-This is the written-rulebook input path: the orchestrator (`ingest-rules.md` Step 1) delegates
-here when the designer has a rulebook (PDF/images/text) to transcribe. No prior `bs-` skill or
+This is the written-rulebook input path: the orchestrator (`ingest-rules.md` Step 2) delegates
+here when the designer has a rulebook (PDF/images/text) to transcribe. The project scaffold
+(`ingest-rules.md` Step 1) has already run — every `rulebook/NN-topic.md` write below targets
+the scaffolded project directory the session is now inside, never its parent. No prior `bs-` skill or
 old-skill section performs this kind of multi-subagent fan-out — this mechanism is net-new.
 
 ## Context-Economics Hard Rule (restated here — this is where the temptation is strongest)
@@ -73,12 +75,12 @@ For each confirmed section:
 Any rule the rulebook itself marks as a variant, optional module, or advanced/expert rule is
 tagged out-of-scope-by-default directly in the slice where it appears (e.g. a `> Variant:` note
 inline in the `rulebook/NN-topic.md` text), and the orchestrator lists it in `SKETCH.md`'s
-"Variants (deferred)" section during Step 2 synthesis. Variants are never silently folded into
+"Variants (deferred)" section during Step 3 synthesis. Variants are never silently folded into
 the base ruleset, and they are never dropped — they are deferred and visible.
 
 ## Downstream Shape (cite, never restate)
 
-The written slices, `rulebook/INDEX.md`, and the accumulated component inventory feed Step 2
+The written slices, `rulebook/INDEX.md`, and the accumulated component inventory feed Step 3
 (Synthesis) in `ingest-rules.md`, which seeds `ASSETS.md` (`templates/ASSETS.template.md`) and
 `SKETCH.md` (`templates/SKETCH.template.md`). This file does not restate either template's
 structure — the orchestrator fills them from what this step returns.

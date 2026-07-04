@@ -1,6 +1,8 @@
 # Scaffold + Verify
 
-Referenced by `ingest-rules.md` Step 3 ("Scaffold + Verify"). This file owns the entire
+Referenced by `ingest-rules.md` Step 1 ("Scaffold + Verify"). This step runs BEFORE
+transcription/interview — the `rulebook/` slices and every ledger the later steps write live
+inside the project directory this step creates. This file owns the entire
 scaffold-and-verify sequence: deriving the game's names, running `boardsmith init`, verifying the
 empty skeleton compiles and serves, and killing any server this skill starts before returning.
 Chunk 1 must start from a known-good, verified-compiling baseline — never begin rules work against
@@ -101,7 +103,9 @@ error, and what to fix) — never proceed past a failing step assuming it will "
    required by the plan itself: any server this skill starts must be killed before it returns.
 
 Only once all three steps have completed (compile clean, serve confirmed, process killed) is the
-scaffold considered verified and chunk 1 work may begin against it.
+scaffold considered verified and chunk 1 work may begin against it. The session stays inside
+`<name>/` from here on — every subsequent ingest step (transcription/interview, synthesis,
+sketch writing) writes its artifacts into this directory, never the parent.
 
 ## Required Reading Pointer
 

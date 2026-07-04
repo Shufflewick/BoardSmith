@@ -24,8 +24,11 @@ On entry, before any other work, run the consistency check described in `state-m
 ("Consistency Check"). Then determine which of three cases applies (use `ls <file>` direct
 checks in the current directory, never `**/glob` patterns that search subfolders):
 
-1. **Empty / fresh directory** — no `SKETCH.md`, no `PROJECT.md`. Proceed straight to Step 1.
-2. **Existing bs- project** (`SKETCH.md` present) — this is a **re-run guard**: re-ingesting is
+1. **Empty / fresh directory** — no `SKETCH.md`, no `PROJECT.md`. The current directory is the
+   **parent** the game project will be created under. Proceed straight to Step 1, which
+   scaffolds `<name>/`; every subsequent step then runs from inside `<name>/`.
+2. **Existing bs- project** (`SKETCH.md` present — i.e. the session was invoked *inside* a
+   project this skill already created) — this is a **re-run guard**: re-ingesting is
    destructive to sketch state (it would overwrite the ordered chunk list and rulebook slices).
    STOP and ask the user to explicitly confirm before proceeding. Do not treat re-run as a resume
    — resuming mid-sketch is `/bs-build-chunk`'s job, not this skill's.
@@ -35,7 +38,20 @@ checks in the current directory, never `**/glob` patterns that search subfolders
    they were verified under the old process. On acceptance, proceed to Step 3 (Synthesis) using
    the old project's captured content instead of new transcription/interview output.
 
-## Step 1: Route to Transcription or Interview Fallback
+## Step 1: Scaffold + Verify
+
+Delegate the entire scaffold-and-verify sequence to `ingest/scaffold.md`: deriving
+display/project/class names, running `boardsmith init`, verifying the empty skeleton compiles
+(`tsc --noEmit`) and serves, and killing any server this skill starts before returning. Chunk 1
+must start from a known-good, verified-compiling baseline.
+
+This step deliberately runs **before** transcription/interview: every artifact the later steps
+write (`rulebook/NN-topic.md`, `rulebook/INDEX.md`, `ASSETS.md`, `SKETCH.md`, ...) lives inside
+the game project, which does not exist until `init` creates `<name>/`. Once the scaffold is
+verified, `cd <name>` and treat the project directory as the working directory for every
+remaining step — nothing this skill produces is ever written to the parent directory.
+
+## Step 2: Route to Transcription or Interview Fallback
 
 Ask whether the designer has a written rulebook (PDF/images/text).
 
@@ -44,10 +60,10 @@ Ask whether the designer has a written rulebook (PDF/images/text).
   interview per `ingest/interview-fallback.md`, which produces the identical `rulebook/` shape so
   every downstream step is unaffected by which path was taken.
 
-Both paths write `rulebook/NN-topic.md` slice files and return `citedTerms[]` /
-`componentMentions[]` for Step 2's synthesis; neither is read back in full by this orchestrator.
+Both paths produce `rulebook/NN-topic.md` slice files and return `citedTerms[]` /
+`componentMentions[]` for Step 3's synthesis; neither is read back in full by this orchestrator.
 
-## Step 2: Synthesis
+## Step 3: Synthesis
 
 Once transcription or interview output has landed, this orchestrator-only step assembles the
 following artifacts **from subagent-returned summaries only** — never from re-reading slices:
@@ -67,13 +83,6 @@ following artifacts **from subagent-returned summaries only** — never from re-
    direction is decided later, at the first UI chunk's `ask` step, against `DESIGN.md`.
 6. **Player counts** — min/max player counts and any per-count setup differences, recorded at
    sketch level.
-
-## Step 3: Scaffold + Verify
-
-Delegate the entire scaffold-and-verify sequence to `ingest/scaffold.md`: deriving
-display/project/class names, running `boardsmith init`, verifying the empty skeleton compiles
-(`tsc --noEmit`) and serves, and killing any server this skill starts before returning. Chunk 1
-must start from a known-good, verified-compiling baseline.
 
 ## Step 4: Sketch Derivation
 
@@ -108,7 +117,7 @@ files until the user has explicitly approved.
 
 Copy the six skeletons from `templates/*.template.md` into the game project (`SKETCH.md`,
 first chunks' `CHUNK.md` files, `RULINGS.md`, `DECISIONS.md`, `DESIGN.md`, `ASSETS.md`) and fill
-them with the synthesized content from Steps 2-6. Never restate template or state-machine content
+them with the synthesized content from Steps 3-6. Never restate template or state-machine content
 inline in this file or in the written project files beyond what each template already documents
 — fill the placeholders, don't reinvent the structure.
 

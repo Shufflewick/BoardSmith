@@ -1,7 +1,9 @@
 # Interview Fallback — No-Rulebook Structured Interview (INGEST-03)
 
-This is the no-rulebook input path: the orchestrator (`ingest-rules.md` Step 1) delegates here
+This is the no-rulebook input path: the orchestrator (`ingest-rules.md` Step 2) delegates here
 when the designer has no written rulebook (unpublished prototype, rules in the designer's head).
+The project scaffold (`ingest-rules.md` Step 1) has already run — every `rulebook/` write below
+targets the scaffolded project directory the session is now inside, never its parent.
 The question sequence below is extracted verbatim in shape from the old `/design-game` skill's
 Phase 2 (`instructions.md` lines 121-223) — same six questions, same one-at-a-time cadence,
 same Clarification Protocol. The one required adaptation (see "Output Re-Target" below) is that
@@ -130,7 +132,7 @@ designer statement, ingest session, Q{n}
 exactly parallel to the transcription path's `p.{N}, {section}` page citations. Terms
 referenced in each answer (component names, mechanic vocabulary) are collected into the same
 `citedTerms[]` shape the transcription path's subagents return, and fed into `rulebook/INDEX.md`
-identically — the orchestrator's Step 2 synthesis does not need to know which input path
+identically — the orchestrator's Step 3 synthesis does not need to know which input path
 produced the terms it's indexing.
 
 ## Aspect Detection (cite, do not recopy)
@@ -141,4 +143,4 @@ the keywords `aspects/index.md` lists (Dice, PlayingCards, HexGrid, SquareGrid),
 allowing multiple aspects and keyword-absent inference exactly as `aspects/index.md` describes.
 Detected aspects feed the component inventory the same way a rulebook's stated components would
 in the transcription path — they are not a separate PROJECT.md field, they seed `ASSETS.md`
-alongside whatever else Step 2 synthesis records.
+alongside whatever else Step 3 synthesis records.
