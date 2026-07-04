@@ -122,18 +122,18 @@ reorder:
 | ask | `build/ask.md` |
 | build | `build/build.md` |
 | test | `build/test.md` |
-| audit | `build/audit.md` — authored in Phase 145 |
-| repair | `build/repair.md` — authored in Phase 145 |
+| audit | `build/audit.md` |
+| repair | `build/repair.md` |
 | playtest | `build/playtest.md` — authored in Phase 146 |
 | revise | `build/revise.md` — authored in Phase 146 |
 | close | `build/close.md` — authored in Phase 146 |
 
-Steps 6–10 are named here as forward references only — this router does not implement their
-prose, and the drift test that pins this file does not require `build/{audit,repair,
-playtest,revise,close}.md` to exist yet, only that this table names each path and its phase
-marker. `build/build.md` and `build/test.md` are now live dispatches. When Phase 145/146 land,
-each remaining reference file is authored and this table's forward references become live
-dispatches with no change to this router's routing logic.
+Steps 8–10 (`playtest`/`revise`/`close`) are named here as forward references only — this router
+does not implement their prose, and the drift test that pins this file does not require
+`build/{playtest,revise,close}.md` to exist yet, only that this table names each path and its
+phase marker. `build/build.md`, `build/test.md`, `build/audit.md`, and `build/repair.md` are now
+live dispatches. When Phase 146 lands, each remaining reference file is authored and this table's
+forward references become live dispatches with no change to this router's routing logic.
 
 ### Light path (BUILD-12 — routing, not a step)
 
@@ -254,11 +254,13 @@ This skill delegates its heavyweight, step-scoped prose to:
 - `build/build.md` — code-writing step, fresh-context raw-slice exception, per-file build
   manifest
 - `build/test.md` — the test-step command sequence, sandbox-rule gate, a11y floor for UI chunks
+- `build/audit.md` — 3 fresh-context adversarial lenses (fidelity, visibility, undo) +
+  design-review dispatch for UI chunks, Findings Ledger round persistence
+- `build/repair.md` — fix-or-refute-with-citation loop, round-bound enforcement, round-3 user
+  triage
 
 And, forward-referenced only (not yet authored):
 
-- `build/audit.md` — authored in Phase 145
-- `build/repair.md` — authored in Phase 145
 - `build/playtest.md` — authored in Phase 146
 - `build/revise.md` — authored in Phase 146
 - `build/close.md` — authored in Phase 146
@@ -269,7 +271,7 @@ And to the shared reference files that ship with every `bs-` skill:
   authority, session handoff seams, git protocol
 - `templates/CHUNK.template.md` — the file `investigate`/`redteam`/`ask` fill (claims list,
   visibility declaration, redteam rounds, Step Checklist check-offs, Status grammar; the
-  findings ledger belongs to `audit`, Phase 145)
+  findings ledger belongs to `audit`/`repair`)
 - `templates/RULINGS.template.md` — the ledger `ask`'s house-rule choices and redteam's
   refuted-twice escalations append to
 - `templates/ASSETS.template.md` — the ledger `ask`'s asset requests append to

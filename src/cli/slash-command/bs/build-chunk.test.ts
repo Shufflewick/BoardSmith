@@ -98,6 +98,8 @@ const REFERENCED_PATHS = [
   'build/ask.md',
   'build/build.md',
   'build/test.md',
+  'build/audit.md',
+  'build/repair.md',
   'build/design-ask.md',
   'state-machine.md',
   'templates/CHUNK.template.md',
@@ -105,11 +107,8 @@ const REFERENCED_PATHS = [
   'templates/ASSETS.template.md',
 ] as const;
 
-/** Phase 145-146 forward-reference stub markers build-chunk.md's routing table must carry. */
-const FORWARD_REFERENCE_MARKERS = [
-  'authored in Phase 145',
-  'authored in Phase 146',
-] as const;
+/** Phase 146 forward-reference stub marker build-chunk.md's routing table must carry. */
+const FORWARD_REFERENCE_MARKERS = ['authored in Phase 146'] as const;
 
 describe('BUILD-01 — resume routing', () => {
   it('build-chunk.md contains the full-ceremony step list verbatim', () => {
@@ -355,6 +354,58 @@ describe('BUILD-06 — test step', () => {
   });
 });
 
+describe('BUILD-07 — audit', () => {
+  it('names the three lenses by pinned phrase', () => {
+    const audit = read('build/audit.md');
+    expect(audit).toMatch(/fidelity/i);
+    expect(audit).toMatch(/visibility/i);
+    expect(audit).toMatch(/undo/i);
+  });
+
+  it('forbids reading the interpretation, citing Rulings Outrank Rulebook', () => {
+    const audit = read('build/audit.md');
+    expect(audit).toMatch(/never.{0,80}interpretation|interpretation.{0,80}never/is);
+    expect(audit).toContain('Rulings Outrank Rulebook');
+  });
+
+  it('cites diffPlayerViews and assertNoHiddenInfoLeak by exact name', () => {
+    const audit = read('build/audit.md');
+    expect(audit).toContain('diffPlayerViews');
+    expect(audit).toContain('assertNoHiddenInfoLeak');
+  });
+
+  it('cites the Findings Ledger and Session Handoff Seams by name', () => {
+    const audit = read('build/audit.md');
+    expect(audit).toContain('## Findings Ledger');
+    expect(audit).toContain('Session Handoff Seams');
+  });
+});
+
+describe('BUILD-08 — repair', () => {
+  it('cites "Repair Loop Bound" by exact name', () => {
+    const repair = read('build/repair.md');
+    expect(repair).toContain('Repair Loop Bound');
+  });
+
+  it('states the max-3-round bound and the only-new-findings rule', () => {
+    const repair = read('build/repair.md');
+    expect(repair).toMatch(/maximum 3 audit rounds|max(imum)? 3 rounds/i);
+    expect(repair).toMatch(/only NEW findings/i);
+  });
+
+  it('documents the refute-with-citation concept', () => {
+    const repair = read('build/repair.md');
+    expect(repair).toMatch(/refute-with-citation/i);
+  });
+
+  it('names the three round-3 plain-language triage options', () => {
+    const repair = read('build/repair.md');
+    expect(repair).toMatch(/real blocker/i);
+    expect(repair).toMatch(/defer to a later chunk/i);
+    expect(repair).toMatch(/auditor was wrong/i);
+  });
+});
+
 describe('UIQ-01 — design ask', () => {
   it('names the three direction names, with Derive as default recommendation', () => {
     const designAsk = read('build/design-ask.md');
@@ -431,7 +482,7 @@ describe('cross-file consistency — Steps 4-10 forward-reference stubs (no file
     }
   });
 
-  it('carries the three "authored in Phase 14X" forward-reference markers', () => {
+  it('carries the "authored in Phase 146" forward-reference marker', () => {
     const buildChunk = read('build-chunk.md');
     for (const marker of FORWARD_REFERENCE_MARKERS) {
       expect(buildChunk, `build-chunk.md must contain "${marker}"`).toContain(marker);
@@ -469,14 +520,8 @@ describe('cross-file consistency — every current-phase referenced path resolve
     });
   }
 
-  it('REFERENCED_PATHS does NOT include any Phase 145-146 step file', () => {
-    const excluded = [
-      'build/audit.md',
-      'build/repair.md',
-      'build/playtest.md',
-      'build/revise.md',
-      'build/close.md',
-    ];
+  it('REFERENCED_PATHS does NOT include any Phase 146 step file', () => {
+    const excluded = ['build/playtest.md', 'build/revise.md', 'build/close.md'];
     for (const path of excluded) {
       expect((REFERENCED_PATHS as readonly string[]).includes(path)).toBe(false);
     }
