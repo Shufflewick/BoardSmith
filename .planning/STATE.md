@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: executing
-stopped_at: Completed 139-01-PLAN.md (docs audit corrections DOCX-01/02/03) -- Phase 139 Plan 1 of 2 done
-last_updated: "2026-07-04T02:41:03.993Z"
+status: verifying
+stopped_at: Completed 139-02-PLAN.md (DOCX-04 grep-verified sweep) -- Phase 139 complete (2/2 plans)
+last_updated: "2026-07-04T02:55:07.407Z"
 last_activity: 2026-07-04
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 39
-  completed_plans: 38
-  percent: 89
+  completed_plans: 39
+  percent: 100
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 139 (Documentation Audit & Corrections) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-04
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -175,6 +175,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 138-02]: go-fish/cribbage Playwright smokes intentionally left failing (non-zero exit) rather than faked -- they caught a real CLI dev-host seat-identity bug in the solo-human+AI-seat path, documented as a blocker rather than papered over
 - [Phase ?]: [Phase 139-01]: visibleAttributes documented as real (Phase 131 SEC-02 shipped enforcement after the audit finding was written) -- corrected the plan's stale 'dead field' premise rather than following it literally
 - [Phase ?]: [Phase 139-01]: Fixed all phantom action()/.do()/.chooseOnBoard() JSDoc occurrences found by full-file grep in game.ts/player.ts, not just the plan's four named line refs
+- [Phase 139-02]: Fixed phantom action()/defineActions() text baked into src/engine/flow/engine.ts's own runtime warning (not just docs) and the matching stale engine.test.ts F20 assertion that encoded the phantom text as "the real API"
+- [Phase 139-02]: Fixed pervasive 0-indexed player/seat examples in docs/api/session.md and docs/api/runtime.md -- seats are 1-indexed throughout the engine/session (getPlayer, performAction, getState, createPlayerView)
+- [Phase 139-02]: Treated the Task 2 playerCount grep-gate false positives (real GameOptions.playerCount usages) as a blunt-instrument limitation rather than deleting legitimate API docs -- verified directly that zero boardsmith.json JSON examples reference playerCount/$schema, satisfying the actual DOCX-04 requirement
 
 ### Pending Todos
 
@@ -186,8 +189,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T02:41:03.986Z
-Stopped at: Completed 139-01-PLAN.md (docs audit corrections DOCX-01/02/03) -- Phase 139 Plan 1 of 2 done
+Last session: 2026-07-04T02:55:07.399Z
+Stopped at: Completed 139-02-PLAN.md (DOCX-04 grep-verified sweep) -- Phase 139 complete (2/2 plans)
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
 

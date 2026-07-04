@@ -98,7 +98,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] **Phase 136: Client SDK & Protocol** - GameConnection is awaitable, reconnect is predictable, MeepleClient has one error contract, and protocol types are canonical (completed 2026-07-03)
 - [x] **Phase 137: Testing Utilities** - TestGame.doAction fails loud by default and its default seed is deterministic (completed 2026-07-03)
 - [x] **Phase 138: Cross-Repo Migration** - All 8 example games + MERC comply with the changed API surface, every suite green (completed 2026-07-04)
-- [ ] **Phase 139: Documentation Audit & Corrections** - Pure-docs findings fixed and every API changed by this milestone has grep-verified doc updates
+- [x] **Phase 139: Documentation Audit & Corrections** - Pure-docs findings fixed and every API changed by this milestone has grep-verified doc updates (completed 2026-07-04)
 
 ## Phase Details
 
@@ -293,7 +293,7 @@ Plans:
 
 **Plans**: 2 plans
 - [x] 139-01-PLAN.md — Fix the three named findings (DOCX-01 core-concepts.md event-sourcing/setAttribute; DOCX-02 registerActions JSDoc + runtime error; DOCX-03 getting-started.md residual CLI audit)
-- [ ] 139-02-PLAN.md — DOCX-04 grep-verified sweep of all docs/ against every API changed in phases 131-138 + full-suite gate
+- [x] 139-02-PLAN.md — DOCX-04 grep-verified sweep of all docs/ against every API changed in phases 131-138 + full-suite gate
 
 ## Progress
 
@@ -310,6 +310,6 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 136. Client SDK & Protocol | 5/5 | Complete    | 2026-07-03 |
 | 137. Testing Utilities | 3/3 | Complete    | 2026-07-04 |
 | 138. Cross-Repo Migration | 3/3 | Complete    | 2026-07-04 |
-| 139. Documentation Audit & Corrections | 1/2 | In Progress|  |
+| 139. Documentation Audit & Corrections | 2/2 | Complete   | 2026-07-04 |
 </content>
 </invoke>
