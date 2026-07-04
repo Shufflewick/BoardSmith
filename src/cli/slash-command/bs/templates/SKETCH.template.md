@@ -38,8 +38,9 @@ Per-count setup differences: <!-- e.g. "3-player variant removes the yellow deck
 Strategy: <!-- custom-from-chunk-1 | autoui-with-cutover -->
 Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
 
-<!-- Reminder: any later change to UI strategy, or to DESIGN.md, flips every chunk whose verified
-     test script depended on the old presentation back to `built` (state-machine.md
+<!-- Reminder: any later change to UI strategy (the AutoUI→Custom-UI cutover) flips ALL
+     previously verified chunks back to `built` and re-opens their test scripts; any change to
+     DESIGN.md flips every chunk whose verified surface it re-styles (state-machine.md
      "Restyle/Cutover Rule"). There is no silent "we'll re-verify later." -->
 
 ## Ordered Chunk List

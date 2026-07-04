@@ -87,7 +87,7 @@ Every agent that reads a rulebook slice — `investigate`, `redteam`, `audit` �
 
 ## Restyle/Cutover Rule
 
-Any change that re-styles or re-lays-out previously verified surfaces flips those chunks back to `built`. This is the general form of the AutoUI→Custom-UI cutover rule: switching UI strategy, or changing `DESIGN.md`, explicitly re-opens every chunk whose verified test script depended on the old presentation. There is no silent "we'll re-verify later" — the flip happens immediately and is visible in CHUNK.md and SKETCH.md.
+Any change that re-styles or re-lays-out previously verified surfaces flips those chunks back to `built`. The AutoUI→Custom-UI cutover (any change of UI strategy) is the total case: it explicitly flips **all** previously verified chunks back to `built` and re-opens their test scripts — the entire presentation changed, so no prior verification survives, per the plan's UI-strategy rule. Changing `DESIGN.md` flips every chunk whose verified surface it re-styles or re-lays-out. There is no silent "we'll re-verify later" — the flip happens immediately and is visible in CHUNK.md and SKETCH.md.
 
 ## Session Lock
 
