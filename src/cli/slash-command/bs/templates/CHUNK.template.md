@@ -8,7 +8,8 @@ Status: proposed
 
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this Status line, "## ui:",
      "## Ceremony", "## Step Checklist", "## Interpretation", "## Visibility Declaration",
-     "## Findings Ledger", "## Revision Rounds", "## Build Manifest", "## Playtest Test Script",
+     "## Newly Discovered Citations", "## Findings Ledger", "## Revision Rounds",
+     "## Build Manifest", "## Playtest Test Script",
      "## Verified Checklist", "## Verified Commit Hash". If any required heading is missing, or
      the Status line doesn't match a recognized enum value above, a resuming session STOPS and
      asks the user — it never guesses the intended state. See ../state-machine.md
