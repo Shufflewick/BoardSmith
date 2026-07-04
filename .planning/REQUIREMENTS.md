@@ -29,10 +29,10 @@
 
 ### `/bs-build-chunk` (BUILD)
 
-- [ ] **BUILD-01**: Designer can run `/bs-build-chunk` at any time and it resumes at the first incomplete step of the current chunk, including mid-loop and awaiting-playtest states
-- [ ] **BUILD-02**: Investigate reads cited slices plus INDEX-discovered slices, RULINGS.md, and DECISIONS.md, and produces a claims-list interpretation with a hidden-information visibility declaration
-- [ ] **BUILD-03**: Redteam runs 3 fresh-context agents (2 refuters + 1 coverage adversary) on the claims list without investigator framing; refuted-twice escalates to the user as a plain-language ruling recorded in RULINGS.md
-- [ ] **BUILD-04**: The ask gate presents plain game-designer language with citations, ambiguity questions with options, a "what you will NOT see yet" list, and zero implementation vocabulary; assets are requested here with a never-blocking placeholder path
+- [x] **BUILD-01**: Designer can run `/bs-build-chunk` at any time and it resumes at the first incomplete step of the current chunk, including mid-loop and awaiting-playtest states
+- [x] **BUILD-02**: Investigate reads cited slices plus INDEX-discovered slices, RULINGS.md, and DECISIONS.md, and produces a claims-list interpretation with a hidden-information visibility declaration
+- [x] **BUILD-03**: Redteam runs 3 fresh-context agents (2 refuters + 1 coverage adversary) on the claims list without investigator framing; refuted-twice escalates to the user as a plain-language ruling recorded in RULINGS.md
+- [x] **BUILD-04**: The ask gate presents plain game-designer language with citations, ambiguity questions with options, a "what you will NOT see yet" list, and zero implementation vocabulary; assets are requested here with a never-blocking placeholder path
 - [ ] **BUILD-05**: Build reads raw slices + approved interpretation, extends rather than restructures verified code (restructure requires a user gate), appends to DECISIONS.md, and keeps a per-file manifest for mid-step resume
 - [ ] **BUILD-06**: The test step runs tsc, boardsmith eslint, unit/integration tests, the full accumulated suite, and a random-simulation playthrough to a terminal state
 - [ ] **BUILD-07**: Audit agents read raw slices + RULINGS.md + code (never the interpretation) with fidelity, visibility-leak (two-seat diff), and undo lenses, writing to a stable-ID findings ledger
@@ -40,7 +40,7 @@
 - [ ] **BUILD-09**: Playtest hands the user a numbered click-by-click script with seat counts, dev-host affordances, a build stamp, a regression line, and an explicit item-by-item verified checklist; `verified (user-waived)` is recordable
 - [ ] **BUILD-10**: Playtest feedback is triaged item-by-item (this-chunk / future-scope / not-built-yet / ruling) and re-entry after revision presents a feedback disposition report with a targeted re-test script
 - [ ] **BUILD-11**: Close records the verified commit hash, re-derives the sketch tail, and presents the delta for approval before proposing the next chunk
-- [ ] **BUILD-12**: Trivial chunks run a light path (build → test → playtest) with the user told which ceremony is in effect
+- [x] **BUILD-12**: Trivial chunks run a light path (build → test → playtest) with the user told which ceremony is in effect
 - [ ] **BUILD-13**: Sessions commit at every step completion (`chunk-<slug>/step-<name>`), hand off at structural step-group seams with a non-programmer-readable resume message, and detect concurrent sessions via a sketch lock note
 
 ### UI Quality & Accessibility (UIQ)
@@ -93,11 +93,11 @@
 | INGEST-05 | Phase 142 | Complete |
 | INGEST-06 | Phase 142 | Complete |
 | INGEST-07 | Phase 142 | Complete |
-| BUILD-01 | Phase 143 | Pending |
-| BUILD-02 | Phase 143 | Pending |
-| BUILD-03 | Phase 143 | Pending |
-| BUILD-04 | Phase 143 | Pending |
-| BUILD-12 | Phase 143 | Pending |
+| BUILD-01 | Phase 143 | Complete |
+| BUILD-02 | Phase 143 | Complete |
+| BUILD-03 | Phase 143 | Complete |
+| BUILD-04 | Phase 143 | Complete |
+| BUILD-12 | Phase 143 | Complete |
 | BUILD-05 | Phase 144 | Pending |
 | BUILD-06 | Phase 144 | Pending |
 | UIQ-01 | Phase 144 | Pending |
