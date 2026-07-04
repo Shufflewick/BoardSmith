@@ -71,7 +71,7 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
 **Plans**: 3 plans
 - [x] 142-01-PLAN.md — drift test harness + lean orchestrator skill (INGEST-02/06/07)
 - [x] 142-02-PLAN.md — transcription fan-out + interview fallback reference files (INGEST-01/03)
-- [ ] 142-03-PLAN.md — scaffold + sketch-derivation reference files (INGEST-04/05)
+- [x] 142-03-PLAN.md — scaffold + sketch-derivation reference files (INGEST-04/05)
 
 #### Phase 143: `/bs-build-chunk` — Interpretation & Ask Gate
 **Goal**: A designer can start or resume any chunk at exactly the right step, and reach a human-approved, plain-language design before a single line of code is written.
@@ -161,7 +161,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 |-------|----------------|--------|-----------|
 | 140. Library Prerequisite — useAnnouncer() | 1/1 | Complete    | 2026-07-04 |
 | 141. File Templates & State-Machine Authority | 3/3 | Complete    | 2026-07-04 |
-| 142. `/bs-ingest-rules` | 2/3 | In Progress|  |
+| 142. `/bs-ingest-rules` | 3/3 | Complete   | 2026-07-04 |
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 0/TBD | Not started | - |
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 0/TBD | Not started | - |
 | 145. `/bs-build-chunk` — Audit & Repair with Design Review | 0/TBD | Not started | - |
