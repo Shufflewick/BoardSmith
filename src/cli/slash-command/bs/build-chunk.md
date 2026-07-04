@@ -33,8 +33,13 @@ On entry, before any other work, run the consistency check described in `state-m
 ("Consistency Check"). Use literal `ls <file>` checks in the current directory, never
 `**/glob` patterns that search subfolders.
 
-Then resolve the session lock (`state-machine.md` "Session Lock") — implement ALL THREE
-outcomes literally, never collapse them into one branch:
+Then resolve the session lock (`state-machine.md` "Session Lock"). Outcomes 1 and 2 below
+compare the lock against **the chunk this session is about to resume**, so identify that target
+first: from `SKETCH.md`'s ordered chunk list (a read the consistency check above already
+performs), the resume target is the first chunk whose status is neither `verified` nor
+`verified (user-waived)` — the same rule Step 2 applies when it routes. Only with that target
+in hand can the lock be classified. Implement ALL THREE outcomes literally, never collapse them
+into one branch:
 
 1. **Same chunk resume** — the lock names the same chunk this session is about to resume.
    This is NOT stale and does not warn. Refresh the lock's timestamp silently and continue.
