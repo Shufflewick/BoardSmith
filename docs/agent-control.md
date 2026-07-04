@@ -331,11 +331,13 @@ const testGame = createTestGame(GoFishGame, {
 });
 ```
 
-If you don't supply a seed, `TestGame.create` generates one
-(`` `test-${Date.now()}` ``) — fine for one-off tests, but not reproducible
-across runs. **Always pass an explicit `seed` when you need a reproducible
-agent run** (e.g. debugging a specific failure, or comparing two agent
-strategies against the identical shuffle).
+If you don't supply a seed, `TestGame.create` uses the fixed literal
+`'test-seed'` — two seedless runs are identical (deterministic by default;
+never `Date.now()`/`Math.random`). Pass an explicit `seed` when you want a
+*different* deterministic run (e.g. comparing two agent strategies against
+different shuffles). The resolved seed is exposed as `testGame.seed` and
+included in `doAction`/`assertActionAvailable`/`playUntilComplete` failure
+messages, so a failing run is one copy-paste from a deterministic repro.
 
 ```typescript
 game.getRandomState(): number       // read the RNG's internal state (for custom snapshots)
