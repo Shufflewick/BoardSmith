@@ -291,7 +291,9 @@ Plans:
   3. `docs/getting-started.md` documents the CLI that actually exists (flags, ports, tab behavior, publish target).
   4. Every API changed by phases 131–138 has its docs updated and grep-verified against `src/`, mirroring the v4.4 Phase 130 doc-verifier pass.
 
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 139-01-PLAN.md — Fix the three named findings (DOCX-01 core-concepts.md event-sourcing/setAttribute; DOCX-02 registerActions JSDoc + runtime error; DOCX-03 getting-started.md residual CLI audit)
+- [ ] 139-02-PLAN.md — DOCX-04 grep-verified sweep of all docs/ against every API changed in phases 131-138 + full-suite gate
 
 ## Progress
 
@@ -308,6 +310,6 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 136. Client SDK & Protocol | 5/5 | Complete    | 2026-07-03 |
 | 137. Testing Utilities | 3/3 | Complete    | 2026-07-04 |
 | 138. Cross-Repo Migration | 3/3 | Complete    | 2026-07-04 |
-| 139. Documentation Audit & Corrections | 0/TBD | Not started | - |
+| 139. Documentation Audit & Corrections | 0/2 | Not started | - |
 </content>
 </invoke>
