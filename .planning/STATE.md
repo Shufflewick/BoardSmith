@@ -4,13 +4,13 @@ milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
 stopped_at: Completed 143-03-PLAN.md
-last_updated: "2026-07-04T22:40:19.473Z"
+last_updated: "2026-07-04T22:45:26.487Z"
 last_activity: 2026-07-04
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
   percent: 40
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 144 (/bs-build-chunk — Build & Test with UI Floor) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-04
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 ## Milestones
 
@@ -207,6 +207,8 @@ Recent decisions affecting current work:
 - [Phase 143-05]: ask.md uses lowercase 'what you will NOT see yet' to byte-match the BUILD-04 drift test; forbidden vocabulary scoped to action/flow/state/element per 143-RESEARCH.md Pitfall 2
 - [Phase ?]: 144-01: followed 144-PATTERNS.md verbatim for drift-pin scaffold constant edits
 - [Phase 144]: axe-core and @vue/test-utils added ONLY inside generatePackageJson()'s returned template-string literal — never installed into BoardSmith's own repo
+- [Phase 144-03]: fresh-context read exception documented explicitly in build.md as the one build-chunk step allowed to read raw rulebook slices directly
+- [Phase 144-03]: test.md frames boardsmith lint's seven AST-based sandbox rules as the sole hard gate, distinct from the same command's regex-heuristic warnings
 
 ### Pending Todos
 
@@ -218,7 +220,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T22:38:51.715Z
+Last session: 2026-07-04T22:44:17.047Z
 Stopped at: Completed 143-03-PLAN.md
 Resume file: None
 Next action: Break Phase 140 (Library Prerequisite — useAnnouncer()) down into plans via `/gsd:plan-phase 140`
