@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
-stopped_at: Completed 142-02-PLAN.md
-last_updated: "2026-07-04T21:15:33.638Z"
+stopped_at: Completed 143-03-PLAN.md
+last_updated: "2026-07-04T21:19:54.918Z"
 last_activity: 2026-07-04
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 30
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 143 (/bs-build-chunk — Interpretation & Ask Gate) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-04
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 83%
 
 ## Milestones
 
@@ -202,6 +202,7 @@ Recent decisions affecting current work:
 - [Phase 143]: 143-01: Return-shape field names fixed for build-chunk skill — INVESTIGATE_RETURN_FIELDS=[claimsList,visibilityDeclaration,newlyDiscoveredCitations]; REDTEAM_REFUTER_FIELDS=[claimNumber,verdict,objection]; REDTEAM_COVERAGE_FIELDS=[missingInteractions,ruleDescription,citation]
 - [Phase ?]: Light path is routing over build.md/test.md/playtest.md, not a fourth ceremony (no build/light.md file)
 - [Phase ?]: Session lock's three outcomes (same-chunk resume, different-live-lock warn, stale-confirm-clear) implemented as three literal branches
+- [Phase 143]: [Phase 143-03]: Re-investigate round behavior resolved as append-with-supersession — a refuted-once round appends a new claim noting supersession rather than editing/renumbering the original claim
 
 ### Pending Todos
 
@@ -213,8 +214,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T21:15:29.975Z
-Stopped at: Completed 142-02-PLAN.md
+Last session: 2026-07-04T21:19:54.910Z
+Stopped at: Completed 143-03-PLAN.md
 Resume file: None
 Next action: Break Phase 140 (Library Prerequisite — useAnnouncer()) down into plans via `/gsd:plan-phase 140`
 
