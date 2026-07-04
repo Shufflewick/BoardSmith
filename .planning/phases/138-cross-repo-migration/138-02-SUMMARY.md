@@ -105,3 +105,11 @@ Note on script location: per this execution's explicit instructions, the three v
 - VERIFIED: `lsof -ti:5173` empty — no dev server left running.
 
 ## Self-Check: PASSED (with a documented, unresolved blocker — see above; not a self-check failure, a product-defect finding)
+
+## Addendum (post-debug resolution)
+
+The seat-race blocker was root-caused (pre-existing `open(hostUrl)` auto-browser stealing seat 1 — NOT a v4.5 regression) and fixed via `--no-open` (commit 7cafb566, red-first tested). Both blocked smokes re-run and PASS:
+- go-fish: hidden-info clean before/after restore + exactly one failure toast ✅
+- cribbage: multiSelect discard via script clicks (no AI auto-play), flow advanced correctly ✅
+- hex: passed in the original run ✅
+Final: 3/3 smokes green; ports 5173/5199 free. Debug session: .planning/debug/resolved/138-devhost-seat-mismatch.md
