@@ -128,7 +128,11 @@ export function generatePackageJson(config: ProjectConfig): string {
     scripts: {
       dev: 'npx boardsmith dev',
       build: 'npx boardsmith build',
-      test: 'vitest',
+      // `vitest run` (not bare `vitest`) so `npm test` runs once and exits —
+      // matching BoardSmith's own convention and the no-hanging-process rule.
+      // Use `npm run test:watch` for interactive watch mode.
+      test: 'vitest run',
+      'test:watch': 'vitest',
       lint: 'npx boardsmith lint',
       validate: 'npx boardsmith validate',
     },
