@@ -59,10 +59,17 @@ here.
 
    expect(results.crashed).toBe(0);
    expect(results.stuck).toBe(0);
+   expect(results.timedOut).toBe(0);
+   expect(results.exceededMaxActions).toBe(0);
    ```
 
-   Both `results.crashed` and `results.stuck` must be `0`. This is the real API — do not
-   reimplement a hand-rolled random-play loop in its place.
+   All four of `results.crashed`, `results.stuck`, `results.timedOut`, and
+   `results.exceededMaxActions` must be `0` (the real fields on `SimulationResults` —
+   `src/testing/random-simulation.ts`). Asserting only `crashed`/`stuck` misses the flow-deadlock
+   class this step exists to catch: a flow that loops forever while still producing *valid* moves
+   is neither `crashed` nor `stuck` (stuck = "could not produce a valid move") — it surfaces as
+   `timedOut` or `exceededMaxActions`. This is the real API — do not reimplement a hand-rolled
+   random-play loop in its place.
 
 6. **A11y floor (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md `## ui:` tag
    is `touches` or `major`, run all five a11y floor items below as part of this same numbered
