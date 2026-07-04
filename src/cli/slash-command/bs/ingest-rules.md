@@ -35,8 +35,12 @@ checks in the current directory, never `**/glob` patterns that search subfolders
 3. **Old `/design-game` project** (`PROJECT.md` + `STATE.md` + `HISTORY.md` present, no
    `SKETCH.md`) — offer a **one-time migration**: interview data and the old skill's Deferred
    Ideas become sketch chunks; already-completed features are marked verified with a note that
-   they were verified under the old process. On acceptance, proceed to Step 3 (Synthesis) using
-   the old project's captured content instead of new transcription/interview output.
+   they were verified under the old process. On acceptance, **skip Step 1 (Scaffold) entirely**
+   — the old project is already scaffolded, and `npx boardsmith init` hard-fails on an existing
+   directory (`src/cli/commands/init.ts`); at most re-run only the compile/serve verification
+   portion of `ingest/scaffold.md` (no `init`) to prove the old codebase still compiles. Skip
+   Step 2 as well and proceed to Step 3 (Synthesis) using the old project's captured content
+   instead of new transcription/interview output.
 
 ## Step 1: Scaffold + Verify
 
