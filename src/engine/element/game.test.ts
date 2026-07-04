@@ -112,6 +112,30 @@ class FunctionValuedActionsGame extends Game<FunctionValuedActionsGame, Player> 
   }
 }
 
+class DynamicallyReferencedActionGame extends Game<DynamicallyReferencedActionGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    // 'dynamic' is registered and only ever offered through a function-valued
+    // `actions` list (the polyhedral-potions pattern). With any dynamic
+    // actionStep present, the referenced-name set is incomplete, so the
+    // unreachable-action devWarn pass must be suppressed entirely —
+    // including for 'static', which a naive check would still flag.
+    this.registerAction(
+      Action.create<DynamicallyReferencedActionGame>('dynamic').execute(() => {}),
+    );
+    this.registerAction(
+      Action.create<DynamicallyReferencedActionGame>('static').execute(() => {}),
+    );
+    this.setFlow(
+      defineFlow({
+        root: eachPlayer({
+          do: actionStep({ actions: () => ['dynamic'] }),
+        }),
+      }),
+    );
+  }
+}
+
 function makeOptions(): GameOptions {
   return {
     playerCount: 2,
@@ -332,6 +356,16 @@ describe('PIT-03', () => {
   it('does not throw when actionStep actions is a function (static-walk blind spot)', () => {
     const game = new FunctionValuedActionsGame(makeOptions());
     expect(() => game.startFlow()).not.toThrow();
+  });
+
+  it('suppresses the unreachable-action devWarn when any actionStep has function-valued actions', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const game = new DynamicallyReferencedActionGame(makeOptions());
+
+    expect(() => game.startFlow()).not.toThrow();
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 });
 

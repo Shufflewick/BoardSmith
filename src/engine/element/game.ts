@@ -1617,12 +1617,15 @@ export class Game<
    * per-context action lists), the referenced names cannot be enumerated
    * without invoking the function — which may depend on runtime game
    * state that doesn't exist yet at `startFlow()` time. Function-valued
-   * `actions` are skipped entirely by this static walk.
+   * `actions` are skipped entirely by this static walk — and when any are
+   * present, the unreachable-action warning pass is suppressed too, since
+   * the referenced set is incomplete and warnings would be false positives.
    */
   #validateActionReachability(): void {
     if (!this._flowDefinition) return;
 
     const referencedNames = new Set<string>();
+    let hasDynamicActionStep = false;
 
     for (const node of walkFlowNodes(this._flowDefinition.root)) {
       if (node.type !== 'action-step' && node.type !== 'simultaneous-action-step') {
@@ -1631,7 +1634,10 @@ export class Game<
       const { actions } = node.config;
       // Function-valued `actions` cannot be statically enumerated — skip.
       // (documented static-walk blind spot; see method doc comment above)
-      if (typeof actions === 'function') continue;
+      if (typeof actions === 'function') {
+        hasDynamicActionStep = true;
+        continue;
+      }
       for (const name of actions) {
         referencedNames.add(name);
       }
@@ -1646,6 +1652,12 @@ export class Game<
         );
       }
     }
+
+    // Any function-valued `actions` makes `referencedNames` incomplete —
+    // every registered action could be offered dynamically, so the
+    // unreachable-action warning would be guesswork. Stay silent rather
+    // than cry wolf.
+    if (hasDynamicActionStep) return;
 
     for (const name of this.getActionNames()) {
       if (!referencedNames.has(name)) {
