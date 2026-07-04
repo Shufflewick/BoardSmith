@@ -277,7 +277,7 @@ export function generateAppVue(config: ProjectConfig): string {
   font-size: 0.85rem;
   margin-top: 8px;
 }
-.stat-label { color: #888; }
+.stat-label { color: var(--bsg-ink-2); }
 .stat-value { font-weight: bold; color: var(--bsg-accent); }
 </style>
 `;
@@ -434,7 +434,7 @@ function handleAction() {
 }
 
 .waiting {
-  color: #888;
+  color: var(--bsg-ink-2);
 }
 
 .action-button {
