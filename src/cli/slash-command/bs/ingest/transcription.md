@@ -20,13 +20,17 @@ narrower follow-up subagent — never fall back to reading the slice yourself.
 ## Fan-Out Dispatch
 
 Divide the rulebook into page ranges (e.g. pp. 1-8, 9-16, 17-24, ...) sized so each subagent's
-read stays bounded regardless of total rulebook length. Dispatch one Task-tool subagent per page
-range, in parallel where the harness allows it. **The subagent writes the slice files itself**
-— the transcribed text never flows back through the orchestrator's context. Each subagent's
-prompt (give it the slice-numbering base for its range so file numbers stay in page order):
+read stays bounded regardless of total rulebook length. The total page count needed to divide
+the ranges comes from the user or from file metadata (a file listing for page images, PDF
+metadata for a PDF) — never from opening the rulebook content itself; that would violate the
+Hard Rule above. Dispatch one Task-tool subagent per page range, in parallel where the harness
+allows it. **The subagent writes the slice files itself** — the transcribed text never flows
+back through the orchestrator's context. Each subagent's prompt — fill `{rulebookPath}` with
+the actual path to the PDF/image files/text and `{N}`-`{M}` with the range; a fresh-context
+Task subagent has no inherited knowledge of where the source lives:
 
 ```
-Transcribe pages {N}-{M} of the rulebook to canonical text. Identify natural section
+Transcribe pages {N}-{M} of the rulebook at {rulebookPath} to canonical text. Identify natural section
 boundaries within this range (a section rarely spans a page-range seam cleanly — note where a
 section continues into the next range). For each section:
 
@@ -56,9 +60,16 @@ Return exactly: one { slicePath, sectionSummary, citedTerms[], componentMentions
 visualEvidence[], variants[] } per section.
 ```
 
-**Edition (opening-pages range only):** the subagent assigned the rulebook's first pages
-additionally returns an `edition` field — the edition/printing stated on the cover, title page,
-or colophon (null if the rulebook states none; the orchestrator then asks the user). The
+**Edition (opening-pages range only):** for the subagent assigned the rulebook's first pages,
+append this line to the prompt above — it is not part of the base template, so the other
+ranges never return it:
+
+```
+Additionally return one top-level `edition` field — the edition/printing stated on the
+cover, title page, or colophon (null if the rulebook states none).
+```
+
+If it comes back null, the orchestrator asks the user. The
 orchestrator records it as a header line in `rulebook/INDEX.md` (e.g. `Edition: 2nd edition,
 2019 printing`) so every later citation is anchored to the exact text that was transcribed. On
 the interview path the line reads `Edition: unpublished — designer statement`.
