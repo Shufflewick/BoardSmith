@@ -1,10 +1,15 @@
 # Rulings
 
+<!-- "state-machine.md" in this file refers to the bs- skills' shared reference file, installed
+     alongside the bs- skills themselves (the skill instructions state its installed location).
+     Decision: it is NOT copied into the game project — a copy would drift from the shipped
+     authority; the skills resolve the reference. -->
+
 <!-- This is an append-only ledger of designer decisions: ambiguity resolutions, house rules,
      and deliberate digital adaptations of the printed rulebook. Every entry pairs a decision
      with the exact rulebook citation it interprets or overrides.
 
-     RULINGS OUTRANK THE RULEBOOK (see ../state-machine.md "Rulings Outrank Rulebook"): every
+     RULINGS OUTRANK THE RULEBOOK (see state-machine.md "Rulings Outrank Rulebook"): every
      agent that reads a rulebook slice — investigate, redteam, audit — also reads this file.
      The rulebook plus RULINGS.md together form the composite source of truth. This is what
      stops an audit agent from "fixing" a deliberate house rule back to the printed rule.
@@ -12,7 +17,7 @@
      WHO WRITES HERE:
      - Any `ask` or `playtest` gate step, when the user makes an ambiguity call or requests a
        house rule / digital adaptation during that step.
-     - Redteam refuted-twice escalation (see ../state-machine.md "Redteam Escalation"): when a
+     - Redteam refuted-twice escalation (see state-machine.md "Redteam Escalation"): when a
        redteam finding is refuted twice, that is by definition an ambiguity — it is escalated to
        the user as a plain-language question, and the ruling is recorded here.
 
@@ -23,7 +28,7 @@
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this H1, the "## Ledger"
      heading, and (once populated) entries each carrying Decision / Citation / Rationale. If
      this file exists but "## Ledger" is missing, a resuming session STOPS and asks the user —
-     it never guesses the intended state. See ../state-machine.md "Cold-Resume Parse Contract". -->
+     it never guesses the intended state. See state-machine.md "Cold-Resume Parse Contract". -->
 
 ## Ledger
 

@@ -1,5 +1,10 @@
 # Decisions
 
+<!-- "state-machine.md" in this file refers to the bs- skills' shared reference file, installed
+     alongside the bs- skills themselves (the skill instructions state its installed location).
+     Decision: it is NOT copied into the game project — a copy would drift from the shipped
+     authority; the skills resolve the reference. -->
+
 <!-- This is an append-only ledger of implementation decisions: data-model choices, naming,
      and invariants. Unlike RULINGS.md (which records designer/rules-interpretation calls
      against the rulebook), this file records engineering decisions about how the rules are
@@ -19,7 +24,7 @@
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this H1, the "## Ledger"
      heading, and (once populated) entries each carrying Decision / Rationale / Invariant. If
      this file exists but "## Ledger" is missing, a resuming session STOPS and asks the user —
-     it never guesses the intended state. See ../state-machine.md "Cold-Resume Parse Contract". -->
+     it never guesses the intended state. See state-machine.md "Cold-Resume Parse Contract". -->
 
 ## Ledger
 

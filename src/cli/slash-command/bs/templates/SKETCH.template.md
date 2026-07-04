@@ -1,21 +1,26 @@
 # Sketch: <!-- game name -->
 
+<!-- "state-machine.md" in this file refers to the bs- skills' shared reference file, installed
+     alongside the bs- skills themselves (the skill instructions state its installed location).
+     Decision: it is NOT copied into the game project — a copy would drift from the shipped
+     authority; the skills resolve the reference. -->
+
 <!-- Sketch entries below are DERIVED — each chunk's authoritative status lives in its own
      chunks/<slug>/CHUNK.md. On contradiction, CHUNK.md wins; this session logs the contradiction
-     and repairs this file to match, never the reverse. See ../state-machine.md "Authority". -->
+     and repairs this file to match, never the reverse. See state-machine.md "Authority". -->
 
 Sketch Version: 1
 <!-- Bumped by /bs-insert-chunk on every structural change to the ordered chunk list below. -->
 
 Session Lock: <!-- none | "<slug> — locked at <ISO timestamp>" -->
 <!-- A second concurrent session sees this lock note on entry and warns the user instead of
-     silently clobbering the in-progress session's work. See ../state-machine.md "Session Lock". -->
+     silently clobbering the in-progress session's work. See state-machine.md "Session Lock". -->
 
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: "Sketch Version:", "Session Lock:",
      "## Player Counts", "## UI Strategy", "## Ordered Chunk List", "## Variants (deferred)",
      "## Ideas Backlog", "## Mandated Chunks". If any required heading is missing or malformed,
      a resuming session STOPS and asks the user — it never guesses the intended state. See
-     ../state-machine.md "Cold-Resume Parse Contract". -->
+     state-machine.md "Cold-Resume Parse Contract". -->
 
 ## Player Counts
 <!-- Min/max player counts and any per-count setup differences, recorded at ingest. -->
@@ -34,7 +39,7 @@ Strategy: <!-- custom-from-chunk-1 | autoui-with-cutover -->
 Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
 
 <!-- Reminder: any later change to UI strategy, or to DESIGN.md, flips every chunk whose verified
-     test script depended on the old presentation back to `built` (../state-machine.md
+     test script depended on the old presentation back to `built` (state-machine.md
      "Restyle/Cutover Rule"). There is no silent "we'll re-verify later." -->
 
 ## Ordered Chunk List
@@ -57,7 +62,7 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
      chunks may omit Citations/Test script detail and stay at sketch-level. A tail entry has NO
      chunks/<slug>/ directory and NO CHUNK.md yet (ingest does not create stubs for the tail);
      its Status line uses exactly the sketch-level marker below, which exempts it from
-     consistency-check item 1 (see ../state-machine.md "Consistency Check"). When the entry is
+     consistency-check item 1 (see state-machine.md "Consistency Check"). When the entry is
      detailed at a close gate, its directory + CHUNK.md are created and this Status line is
      rewritten to the derived form used above. -->
 

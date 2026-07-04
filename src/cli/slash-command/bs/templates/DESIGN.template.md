@@ -1,11 +1,16 @@
 # Design
 
+<!-- "state-machine.md" in this file refers to the bs- skills' shared reference file, installed
+     alongside the bs- skills themselves (the skill instructions state its installed location).
+     Decision: it is NOT copied into the game project — a copy would drift from the shipped
+     authority; the skills resolve the reference. -->
+
 <!-- This is the visual-identity contract for this game's UI. It is written at the FIRST UI
      chunk's `ask` step (the first chunk tagged `ui: touches` or `ui: major` in SKETCH.md), not
      at ingest — there is no visual identity to decide until a UI chunk actually needs one.
 
      CHANGING THIS FILE IS ITSELF A CHUNK: any edit here that re-styles or re-lays-out a
-     previously verified surface flips those chunks back to `built` (see ../state-machine.md
+     previously verified surface flips those chunks back to `built` (see state-machine.md
      "Restyle/Cutover Rule"). There is no silent "we'll re-verify later" — the flip happens
      immediately and is visible in the affected chunks' CHUNK.md files and in SKETCH.md.
 
@@ -19,7 +24,7 @@
      "## Theme Block (--bsg-* / applyTheme() overrides)", "## Typography & Spacing",
      "## Component Recipes", "## Placeholder Policy", "## Do / Don't". If any required heading
      is missing, a resuming session STOPS and asks the user — it never guesses the intended
-     state. See ../state-machine.md "Cold-Resume Parse Contract". -->
+     state. See state-machine.md "Cold-Resume Parse Contract". -->
 
 ## Chosen Direction
 
@@ -66,7 +71,7 @@ Rationale: <!-- why this direction fits this game -->
 
 ## Placeholder Policy
 
-<!-- How this game handles a missing asset (see ASSETS.template.md) at the presentation layer.
+<!-- How this game handles a missing asset (see ASSETS.md) at the presentation layer.
      A missing asset never blocks a chunk: record a designed placeholder here — correct aspect
      ratio, styled with this file's own tokens, so a placeholder never looks "broken," only
      "not-yet-final." State the concrete placeholder treatment (e.g. "a token-colored rounded

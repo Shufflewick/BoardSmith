@@ -1,9 +1,14 @@
 # Chunk: <!-- slug, e.g. movement (stable slug, not an ordinal — reorders in SKETCH.md never rename this) -->
 
+<!-- "state-machine.md" in this file refers to the bs- skills' shared reference file, installed
+     alongside the bs- skills themselves (the skill instructions state its installed location).
+     Decision: it is NOT copied into the game project — a copy would drift from the shipped
+     authority; the skills resolve the reference. -->
+
 Status: proposed
 <!-- Valid values (exact, case-sensitive): proposed | approved | built | verified | verified (user-waived) | stale — re-derive before build -->
 <!-- This line is authoritative for this chunk's status. SKETCH.md's entry for this chunk is DERIVED
-     and must match — see ../state-machine.md ("Authority" + "Write Order" sections). On contradiction,
+     and must match — see state-machine.md ("Authority" + "Write Order" sections). On contradiction,
      THIS file wins; SKETCH.md gets repaired to match, never the other way around. -->
 
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this Status line, "## ui:",
@@ -12,7 +17,7 @@ Status: proposed
      "## Build Manifest", "## Playtest Test Script",
      "## Verified Checklist", "## Verified Commit Hash". If any required heading is missing, or
      the Status line doesn't match a recognized enum value above, a resuming session STOPS and
-     asks the user — it never guesses the intended state. See ../state-machine.md
+     asks the user — it never guesses the intended state. See state-machine.md
      "Cold-Resume Parse Contract". -->
 
 ## ui:
@@ -77,7 +82,7 @@ full
 <!-- Populated by audit. Each finding gets a stable ID (e.g. F1, F2, ...) that never changes or
      gets reused. Round N+1 auditors read this ledger and report ONLY NEW findings — they do not
      re-litigate findings already recorded here. Max 3 audit rounds total (see
-     ../state-machine.md "Repair Loop Bound"); after round 3, remaining findings are triaged with
+     state-machine.md "Repair Loop Bound"); after round 3, remaining findings are triaged with
      the user: real blocker, defer to a later chunk, or auditor was wrong (refuted). -->
 
 <!-- ### Audit Round 1
@@ -141,6 +146,6 @@ Second-seat leak check (if hidden info): <!-- steps, or "n/a — no hidden info 
 <!-- Recorded at close. This is the bisect anchor for any later regression and the diff base
      for "what changed since the human last said yes." Commit BEFORE build starts too, so
      work-in-progress is always distinguishable from the last verified baseline
-     (../state-machine.md "Git Protocol"). -->
+     (state-machine.md "Git Protocol"). -->
 
 <!-- <commit-hash> -->
