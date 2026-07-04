@@ -1104,13 +1104,16 @@ actions: ['dictatorMove', 'dictatorAttack']
 
 // After consolidation, actions are unified
 // But flow still references old names!
-this.registerActions(action('move')...)  // 'dictatorMove' no longer exists
+this.registerActions(Action.create('move')...)  // 'dictatorMove' no longer exists
 ```
 
-**Fix:** Update flow to use new action names. The engine now warns about unknown actions:
+**Fix:** Update flow to use new action names. `startFlow()`'s static validation throws
+immediately for any action referenced by an `actionStep`/`simultaneousActionStep` that
+was never registered (see 14.5 below):
 ```
-[BoardSmith] Flow step 'player-turn' references unknown action 'dictatorMove'.
-Define it with action('dictatorMove') and register it via this.registerActions(...) in your game's defineActions() method.
+Error: Flow references action 'dictatorMove' that is not registered. Call
+this.registerActions(Action.create('dictatorMove')...) in your game's constructor before
+startFlow(), or fix the typo in the actionStep(...) that references it.
 ```
 
 #### 2. Dynamic Action Lists
@@ -1186,7 +1189,7 @@ referenced action was never registered, it throws immediately:
 
 ```
 Error: Flow references action 'atatck' that is not registered. Call
-this.registerActions(action('atatck')...) in your game's constructor before
+this.registerActions(Action.create('atatck')...) in your game's constructor before
 startFlow(), or fix the typo in the actionStep(...) that references it.
 ```
 

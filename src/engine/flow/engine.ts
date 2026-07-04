@@ -1363,7 +1363,7 @@ export class FlowEngine<G extends Game = Game> {
           this.warnedUnknownActions.add(actionName);
           console.warn(
             `[BoardSmith] Flow step '${config.name ?? 'action-step'}' references unknown action '${actionName}'. ` +
-            `Define it with action('${actionName}') and register it via this.registerActions(...) in your game's defineActions() method.`
+            `Define it with Action.create('${actionName}') and register it via this.registerActions(...) in your game's constructor.`
           );
         }
         return false;
@@ -1439,7 +1439,7 @@ export class FlowEngine<G extends Game = Game> {
             this.warnedUnknownActions.add(actionName);
             console.warn(
               `[BoardSmith] Flow step '${config.name ?? 'simultaneous-action-step'}' references unknown action '${actionName}'. ` +
-              `Define it with action('${actionName}') and register it via this.registerActions(...) in your game's defineActions() method.`
+              `Define it with Action.create('${actionName}') and register it via this.registerActions(...) in your game's constructor.`
             );
           }
           return false;

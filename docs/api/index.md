@@ -170,15 +170,17 @@ import { Game, Player, Space, Piece, Action } from 'boardsmith';
 class MyGame extends Game<MyGame, MyPlayer> {
   board!: Space<MyGame, MyPlayer>;
 
-  defineElements() {
+  constructor(options: GameOptions) {
+    super(options);
+
+    // Create elements directly in the constructor -- there is no
+    // defineElements()/defineActions() lifecycle hook.
     this.board = this.create(Space, 'board');
 
     for (let i = 0; i < 4; i++) {
       this.board.create(Piece, 'token', { color: i });
     }
-  }
 
-  defineActions() {
     this.registerActions(
       Action.create('move')
         .prompt('Select a token to move')

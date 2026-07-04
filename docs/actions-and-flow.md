@@ -774,6 +774,11 @@ repeat(5, actionStep({ actions: ['deal'] }))
 
 #### `eachPlayer` - Iterate over players
 
+Always wraps around the FULL player list starting from `startingPlayer` (or the
+`TurnOrder` preset's equivalent) -- every player gets exactly one turn, in seat
+order, regardless of which player you start from. There is no truncating or
+"stop before wrapping" option.
+
 ```typescript
 eachPlayer({
   name: 'player-turns',
@@ -784,6 +789,12 @@ eachPlayer({
 ```
 
 #### `forEach` - Iterate over array
+
+The collection is snapshotted once on loop entry -- a body that mutates the
+source collection (moves items, adds items) still visits exactly the original
+items. Items must be `GameElement` instances or JSON primitives (`string |
+number | boolean | null`); a loop body must not permanently delete an element
+it iterates over (moving it, including to the pile via `remove()`, is fine).
 
 ```typescript
 forEach({

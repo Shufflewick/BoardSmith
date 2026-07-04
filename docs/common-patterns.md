@@ -49,7 +49,10 @@ export function createGameFlow(game: MyGame): FlowDefinition {
         // Deal from current dealer
         execute(() => game.deal()),
 
-        // Play round starting from player after dealer
+        // Play round starting from player after dealer.
+        // eachPlayer always wraps around the FULL player list starting from
+        // startingPlayer -- every player gets exactly one turn, in order,
+        // regardless of which player you start from.
         eachPlayer({
           startingPlayer: () => game.playerAfterDealer,
           do: actionStep({ actions: ['play'] }),
