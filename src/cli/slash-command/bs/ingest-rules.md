@@ -64,8 +64,11 @@ Ask whether the designer has a written rulebook (PDF/images/text).
   interview per `ingest/interview-fallback.md`, which produces the identical `rulebook/` shape so
   every downstream step is unaffected by which path was taken.
 
-Both paths produce `rulebook/NN-topic.md` slice files and return `citedTerms[]` /
-`componentMentions[]` for Step 3's synthesis; neither is read back in full by this orchestrator.
+Both paths produce `rulebook/NN-topic.md` slice files — written by the transcription subagents
+themselves in the rulebook path (their full text never enters this orchestrator's context), and
+by this session from the designer's short answers in the interview path — and return
+`citedTerms[]` / `componentMentions[]` for Step 3's synthesis; no slice is ever read back in
+full by this orchestrator.
 
 ## Step 3: Synthesis
 

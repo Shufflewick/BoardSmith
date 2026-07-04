@@ -21,51 +21,60 @@ narrower follow-up subagent — never fall back to reading the slice yourself.
 
 Divide the rulebook into page ranges (e.g. pp. 1-8, 9-16, 17-24, ...) sized so each subagent's
 read stays bounded regardless of total rulebook length. Dispatch one Task-tool subagent per page
-range, in parallel where the harness allows it. Each subagent's prompt:
+range, in parallel where the harness allows it. **The subagent writes the slice files itself**
+— the transcribed text never flows back through the orchestrator's context. Each subagent's
+prompt (give it the slice-numbering base for its range so file numbers stay in page order):
 
 ```
 Transcribe pages {N}-{M} of the rulebook to canonical text. Identify natural section
 boundaries within this range (a section rarely spans a page-range seam cleanly — note where a
-section continues into the next range). For each section, emit:
+section continues into the next range). For each section:
 
-  (a) sectionText — the transcribed text, verbatim in substance, with an explicit page/section
-      citation prefix (e.g. "p.14, Movement:").
-  (b) citedTerms[] — every term this section defines or meaningfully references (rules
-      vocabulary a cross-reference table would need — not every noun, just game-rules terms).
-  (c) componentMentions[] — any physical component mentioned or depicted (cards, tiles, dice,
-      board, tokens), each with its approximate aspect ratio if the rulebook shows or states
-      dimensions, and the page citation.
+  1. WRITE the transcribed text — verbatim in substance, with an explicit page/section
+     citation prefix (e.g. "p.14, Movement:") — directly to `rulebook/NN-topic.md`
+     (numbered, topic-named — e.g. `rulebook/03-movement.md`).
+  2. RETURN a structured summary only — never the transcribed text itself:
+     (a) slicePath — the rulebook/NN-topic.md file you wrote.
+     (b) sectionSummary — 2-4 sentences describing what the section covers, written for a
+         user confirmation prompt.
+     (c) citedTerms[] — every term this section defines or meaningfully references (rules
+         vocabulary a cross-reference table would need — not every noun, just game-rules terms).
+     (d) componentMentions[] — any physical component mentioned or depicted (cards, tiles, dice,
+         board, tokens), each with its approximate aspect ratio if the rulebook shows or states
+         dimensions, and the page citation.
 
-Return exactly: { sectionText, citedTerms[], componentMentions[] }
+Return exactly: one { slicePath, sectionSummary, citedTerms[], componentMentions[] } per section.
 ```
 
-Do not ask a subagent to summarize, interpret, or evaluate the rules — only transcribe and
-extract terms/components. Interpretation is the orchestrator's and, later, `/bs-build-chunk`'s
+Do not ask a subagent to interpret or evaluate the rules — only transcribe, write, and extract
+the summary fields above. Interpretation is the orchestrator's and, later, `/bs-build-chunk`'s
 job, not the transcription subagent's.
 
 ## Per-Rulebook-Section User Confirmation
 
 Confirmation is batched per-section (per rulebook section), not per page and not one bulk gate
-for the whole rulebook (this is a locked design decision, not a stylistic default). As each subagent's
-sectionText lands, present its summary to the user:
+for the whole rulebook (this is a locked design decision, not a stylistic default). As each
+section's `sectionSummary` lands, present it to the user:
 
 > "Here's what I read on pages {N}-{M} ({section name}) — does this match your understanding of
 > the rule?"
 
-Wait for confirmation before writing the next page range's content and before moving to the next
-subagent's summary. If the user corrects something, update `sectionText` before it's written to
-disk — never write an unconfirmed slice, and never accumulate several sections' worth of
-confirmations into a single end-of-rulebook checkpoint.
+Wait for confirmation before moving to the next section's summary, and never accumulate several
+sections' worth of confirmations into a single end-of-rulebook checkpoint. If the user corrects
+something, dispatch a **narrow follow-up subagent** to amend the already-written slice with the
+correction (the same mechanism used for a suspect summary — see the Hard Rule above); never
+"fix it yourself" by opening the slice, and never hold unconfirmed transcription text in your
+own context awaiting confirmation — the subagent wrote it, the follow-up subagent amends it.
 
-## Orchestrator Writes (never re-reads)
+## Orchestrator Records (never writes slices, never re-reads them)
 
-For each confirmed section:
+The subagents write every `rulebook/NN-topic.md`; the orchestrator only accumulates the
+summary fields. For each confirmed section:
 
-1. Write `sectionText` to `rulebook/NN-topic.md` (numbered, topic-named — e.g.
-   `rulebook/03-movement.md`).
+1. Record `slicePath` against the section so INDEX entries and sketch citations can point at it.
 2. Accumulate `citedTerms[]` into the running term → slice-file map that becomes
    `rulebook/INDEX.md` — built exclusively from these accumulated lists, WITHOUT re-reading the
-   slice file just written.
+   slice file the subagent wrote.
 3. Accumulate `componentMentions[]` (with aspect ratios) into the running component inventory
    that seeds `ASSETS.md` (see `templates/ASSETS.template.md` for the ledger shape this
    feeds — cite it, do not restate its columns here).
