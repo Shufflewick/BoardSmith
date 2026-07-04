@@ -259,8 +259,8 @@ import { simulateRandomGames } from 'boardsmith/testing';
 
 test('game always terminates', async () => {
   const results = await simulateRandomGames(MyGame, {
-    playerCount: 2,
-    gameCount: 100,
+    count: 100,
+    playerCounts: [2],
     maxActions: 1000,
   });
 
@@ -269,7 +269,6 @@ test('game always terminates', async () => {
   expect(results.errors).toHaveLength(0);
 
   console.log(`Average game length: ${results.averageActions} actions`);
-  console.log(`Win rates: ${JSON.stringify(results.winRates)}`);
 });
 ```
 
