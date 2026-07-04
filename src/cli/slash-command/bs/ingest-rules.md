@@ -113,9 +113,11 @@ the Step 6 approval gate. A rejection at Step 6 must leave no sketch state on di
 
 ## Step 5: UI Strategy (INGEST-06)
 
-Made **with the user**, at ingest, and recorded into `templates/SKETCH.template.md`'s
-`## UI Strategy` section (that section already exists in the template — this step fills it, it
-does not invent a new field). Two values:
+Made **with the user**, at ingest. The decision lands in the proposed sketch's `## UI Strategy`
+section — the skeleton for which comes from `templates/SKETCH.template.md`, where that section
+already exists (fill it, do not invent a new field, and never edit the shipped template itself)
+— and is written to the game project's `SKETCH.md` at Step 7 with the rest of the approved
+sketch. Two values:
 
 - **`custom-from-chunk-1`** (default) — the playtest artifact is always the real product surface.
 - **`autoui-with-cutover`** — an AutoUI scaffold with a scheduled custom-UI cutover chunk named
