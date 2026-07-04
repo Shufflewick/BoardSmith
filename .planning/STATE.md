@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
-status: verifying
-stopped_at: Completed 142-02-PLAN.md
-last_updated: "2026-07-04T19:59:09.662Z"
+status: ready_to_plan
+stopped_at: Phase 142 complete (3/3) — ready to discuss Phase 143
+last_updated: 2026-07-04T20:35:35.273Z
 last_activity: 2026-07-04
 progress:
   total_phases: 10
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 142 — /bs-ingest-rules
+**Current focus:** Phase 143 — `/bs build chunk` — interpretation & ask gate
 
 ## Current Position
 
-Phase: 142 (/bs-ingest-rules) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 143
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-07-04
 
 Progress: [██████████] 100%
