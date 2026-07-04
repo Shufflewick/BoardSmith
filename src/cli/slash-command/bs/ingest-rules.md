@@ -81,8 +81,11 @@ following artifacts **from subagent-returned summaries only** — never from re-
    `rulebook/INDEX.md`, sourced from the `edition` field the opening-pages transcription
    subagent returns (or from the user if the rulebook states none; on the interview path it
    reads "unpublished — designer statement" — see `ingest/transcription.md` "Edition").
-   Variant/optional/advanced rules are tagged out-of-scope-by-default in the slices and listed
-   in `SKETCH.md`'s "Variants (deferred)" section.
+   Variant/optional/advanced rules were already tagged out-of-scope-by-default **in the slices
+   at write time** by the transcription subagents (per `ingest/transcription.md` "Variant /
+   Optional / Advanced Rules" — this orchestrator never edits a slice); this step's only
+   variant job is to build the `SKETCH.md` "Variants (deferred)" listing from the accumulated
+   `variants[]` lists the subagents return.
 3. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
    approximate aspect ratios (cards, tiles, board proportions), seeded into `ASSETS.md`.
 4. **`ASSETS.md`** — the component/asset ledger (needed-by-chunk, requested, received,

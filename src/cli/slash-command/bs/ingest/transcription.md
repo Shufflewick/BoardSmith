@@ -47,9 +47,13 @@ section continues into the next range). For each section:
          description of every setup diagram or embedded component image (with page citation).
          Weave those diagram/image descriptions into the slice text you write as well — the
          slice is the only downstream record of them; nothing re-reads the PDF/images later.
+     (f) variants[] — every rule this section marks as a variant, optional module, or
+         advanced/expert rule (name + page citation). Also tag each one out-of-scope-by-default
+         inline in the slice text you write (e.g. a `> Variant:` note) — the tag lives in the
+         slice, the list entry lives in your return.
 
 Return exactly: one { slicePath, sectionSummary, citedTerms[], componentMentions[],
-visualEvidence[] } per section.
+visualEvidence[], variants[] } per section.
 ```
 
 **Edition (opening-pages range only):** the subagent assigned the rulebook's first pages
@@ -99,10 +103,13 @@ summary fields. For each confirmed section:
 ## Variant / Optional / Advanced Rules
 
 Any rule the rulebook itself marks as a variant, optional module, or advanced/expert rule is
-tagged out-of-scope-by-default directly in the slice where it appears (e.g. a `> Variant:` note
-inline in the `rulebook/NN-topic.md` text), and the orchestrator lists it in `SKETCH.md`'s
-"Variants (deferred)" section during Step 3 synthesis. Variants are never silently folded into
-the base ruleset, and they are never dropped — they are deferred and visible.
+tagged out-of-scope-by-default **by the subagent, at write time**, directly in the slice where
+it appears (e.g. a `> Variant:` note inline in the `rulebook/NN-topic.md` text) and reported in
+the subagent's `variants[]` return list. The orchestrator's only variant job is downstream: at
+Step 3 synthesis it lists the accumulated `variants[]` entries in `SKETCH.md`'s
+"Variants (deferred)" section — it never edits or re-reads a slice to tag anything itself.
+Variants are never silently folded into the base ruleset, and they are never dropped — they are
+deferred and visible.
 
 ## Downstream Shape (cite, never restate)
 
