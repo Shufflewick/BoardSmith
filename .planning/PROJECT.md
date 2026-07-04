@@ -8,7 +8,19 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v4.5 Pit of Success Hardening (Audit #3 Fixes)
+## Current State
+
+**v4.5 shipped 2026-07-03.** No active milestone — run /gsd:new-milestone to start the next one.
+
+## Previous: v4.5 Shipped
+
+**Shipped:** 2026-07-03. 42/42 requirements, 9/9 phases verified, audit passed (`v4.5-MILESTONE-AUDIT.md`).
+
+Pit of Success Hardening (Audit #3 Fixes) — resolved all 38 confirmed findings from `boardsmith-audit-report-3.html` verify-first (34 code + 3 docs + cross-repo). Killed the critical zone-visibility-lost-on-restore leak at the serialization layer; enforced visibleAttributes + per-viewer state.players; engine fail-loud sweep (putInto/resolveArgs/forEach/registerAction/eachPlayer/simultaneous actionError + FlowHaltedError/multiSelect/switchOn); GameShell errorTick toast chokepoint + read-only runner facade; CLI hardening (localhost default, fail-fast flags, schema-validated boardsmith.json, single player-count source, real 50MB limit, --no-open); SDK awaitable lifecycle + one throwing contract + canonical types; deterministic fail-loud TestGame. BoardSmith 2371 tests, 8 games + MERC (738) migrated & green. Adversarial review loops caught ~11 critical + ~34 warning post-execution defects.
+
+### Archived v4.5 Milestone Goal
+
+<details><summary>Original v4.5 goal</summary>
 
 **Goal:** Resolve all 38 confirmed Pit of Success violations from `boardsmith-audit-report-3.html` — each finding re-verified before fixing, fixed at the source (not spot-patched), documented, and rolled out to all example games and MERC.
 
@@ -21,6 +33,8 @@ Make board game development fast and correct — the framework handles multiplay
 - All 8 example games + MERC (re-vendored) migrated to comply with any changed API surface, all suites green
 
 **Key context:** Findings are severity-ranked (1 critical, 8 high, 17 medium, 12 low) in `boardsmith-audit-report-3.html` with per-finding trap/fix suggestions and verifier reasoning. No Backward Compatibility rule applies — breaking API changes are fine when they're the clean fix. The 4 refuted findings are out of scope.
+
+</details>
 
 ## Previous: v4.4 Shipped
 

@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 139
+Phase: — (v4.5 complete; no active milestone)
 Plan: Not started
 Status: Milestone complete
 Last activity: 2026-07-04
@@ -65,10 +65,11 @@ Progress: [██████████] 100%
 - v4.2 Tutorial Primitives — Go Fish & Docs (Phases 112-115) -- shipped 2026-06-30
 - v4.3 Agent-Ready Engine — Introspection, Test Ergonomics & Devtools (Phases 116-122) -- shipped 2026-07-01
 - v4.4 Agent-Ergonomics Gaps (Audit Fixes) (Phases 123-130) -- shipped 2026-07-02
+- v4.5 Pit of Success Hardening (Audit #3 Fixes) (Phases 131-139) -- shipped 2026-07-03
 
 **In Progress:**
 
-- v4.5 Pit of Success Hardening (Audit #3 Fixes) (Phases 131-139) -- roadmap defined 2026-07-02, execution not yet started
+- None — v4.5 shipped 2026-07-03
 
 ## Deferred Items
 
