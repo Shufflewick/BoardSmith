@@ -21,19 +21,31 @@ below; `ingest/transcription.md` restates it because that is the step where the 
 ## Step 0: State Detection (INGEST-07)
 
 On entry, before any other work, run the consistency check described in `state-machine.md`
-("Consistency Check"). Then determine which of three cases applies (use `ls <file>` direct
+("Consistency Check"). Then determine which of four cases applies (use `ls <file>` direct
 checks in the current directory, never `**/glob` patterns that search subfolders):
 
-1. **Empty / fresh directory** — no `SKETCH.md`, no `PROJECT.md`. The current directory is the
-   **parent** the game project will be created under. Proceed straight to Step 1, which
-   scaffolds `<name>/`; every subsequent step then runs from inside `<name>/`.
-2. **Existing bs- project** (`SKETCH.md` present — i.e. the session was invoked *inside* a
+1. **Empty / fresh directory** — no `SKETCH.md`, no `PROJECT.md`, no `rulebook/`, no
+   `ASSETS.md`. The current directory is the **parent** the game project will be created
+   under. Proceed straight to Step 1, which scaffolds `<name>/`; every subsequent step then
+   runs from inside `<name>/`.
+2. **Interrupted ingest** (`rulebook/` or `ASSETS.md` present, but no `SKETCH.md`) — a
+   previous ingest session crashed after transcription/interview started but before Step 7
+   wrote the sketch. This is NOT a fresh directory: running Step 1's `init` here would
+   scaffold a nested `<name>/<name>/` project, and re-transcribing would orphan the
+   already-confirmed slices. STOP and ask the user whether to **resume from the existing
+   slices** (skip Steps 1-2, re-run Step 3 onward from the slices' accumulated INDEX/ASSETS
+   content — re-dispatching narrow subagents only for anything missing) or **discard and
+   restart** (delete `rulebook/`, `ASSETS.md`, and any `chunks/`, then treat the project
+   directory per Step 1's verification-only path — `init` already ran). Never proceed
+   silently on either path.
+3. **Existing bs- project** (`SKETCH.md` present — i.e. the session was invoked *inside* a
    project this skill already created) — this is a **re-run guard**: re-ingesting is
    destructive to sketch state (it would overwrite the ordered chunk list and rulebook slices).
    STOP and ask the user to explicitly confirm before proceeding. Do not treat re-run as a resume
    — resuming mid-sketch is `/bs-build-chunk`'s job, not this skill's.
-3. **Old `/design-game` project** (`PROJECT.md` + `STATE.md` + `HISTORY.md` present, no
-   `SKETCH.md`) — offer a **one-time migration**: interview data and the old skill's Deferred
+4. **Old `/design-game` project** (`PROJECT.md` + `STATE.md` + `HISTORY.md` present, no
+   `SKETCH.md`, no `rulebook/` — the trio distinguishes it from case 2) — offer a
+   **one-time migration**: interview data and the old skill's Deferred
    Ideas become sketch chunks; already-completed features are marked verified with a note that
    they were verified under the old process. On acceptance, **skip Step 1 (Scaffold) entirely**
    — the old project is already scaffolded, and `npx boardsmith init` hard-fails on an existing
