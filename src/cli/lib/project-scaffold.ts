@@ -406,6 +406,7 @@ function handleAction() {
       v-if="canTakeAction && isMyTurn"
       @click="handleAction"
       class="action-button"
+      :aria-label="\`Take the \${firstAction} action\`"
     >
       {{ firstAction }}
     </button>
@@ -476,13 +477,18 @@ describe('GameTable — a11y floor (axe-core scan)', () => {
     // \`mount\` without \`attachTo\` renders into a DETACHED node and axe throws
     // "No elements found for include in page Context". Attach on mount, then
     // detach in \`finally\` so the node never leaks into the next test.
+    // Mount with a real available action so GameTable renders its action
+    // <button> (canTakeAction = availableActions.length > 0). This is the copy-me
+    // template for every UI chunk's a11y floor: axe must scan a real interactive
+    // control (a focusable button with a game-semantic aria-label), not an
+    // empty render. Replace 'draw' with an action name from your own game.
     const wrapper = mount(GameTable, {
       attachTo: document.body,
       props: {
         gameView: null,
         playerSeat: 0,
         isMyTurn: true,
-        availableActions: [],
+        availableActions: ['draw'],
         actionController: {} as never,
       },
     });
