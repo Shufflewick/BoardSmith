@@ -1,8 +1,9 @@
 ---
 phase: 144-bs-build-chunk-build-test-ui-floor
-reviewed: 2026-07-04T18:00:00Z
+reviewed: 2026-07-04T18:15:00Z
 depth: standard
-files_reviewed: 8
+iteration: 2
+files_reviewed: 9
 files_reviewed_list:
   - src/cli/slash-command/bs/build/build.md
   - src/cli/slash-command/bs/build/test.md
@@ -12,186 +13,128 @@ files_reviewed_list:
   - src/cli/slash-command/bs/build-chunk.test.ts
   - src/cli/lib/project-scaffold.ts
   - src/cli/lib/project-scaffold.test.ts
+  - src/cli/lib/project-scaffold.a11y.test.ts
 findings:
-  critical: 2
-  warning: 4
-  info: 0
-  total: 6
+  critical: 0
+  warning: 2
+  info: 1
+  total: 3
 status: issues_found
 ---
 
-# Phase 144: Code Review Report
+# Phase 144: Code Review Report (Iteration 2)
 
-**Reviewed:** 2026-07-04T18:00:00Z
+**Reviewed:** 2026-07-04T18:15:00Z
 **Depth:** standard
-**Files Reviewed:** 8
-**Status:** issues_found
+**Files Reviewed:** 9
+**Status:** issues_found (0 blockers — all iteration-1 findings verified resolved)
 
 ## Summary
 
-Phase 144 authored the `build` + `test` step-group reference files, the first-UI-chunk
-`design-ask.md` gate, and a real scaffold-template change (axe-core + @vue/test-utils devDeps +
-a generated `tests/a11y.example.test.ts`).
+Re-review of the fix commits `be90d7ed..fc590cee`. All six iteration-1 findings are genuinely
+resolved, and I verified each empirically rather than trusting the diff:
 
-The markdown skill files hold up well against the plan and the shared templates: every cited API
-name (`simulateRandomGames` and its `count`/`playerCounts`/`timeout`/`seed` options,
-`results.crashed`/`results.stuck`), all seven sandbox rule names, `sandbox-scan.ts` as the SSOT
-for `validate`+`lint`, the precedent files (`CardRenderer.a11y.test.ts`,
-`interaction-integration.test.ts`), and the reactive-chain names (`fetchChoicesForPick`,
-`snapshotVersion`) all resolve to real code. Template section names cited by `design-ask.md`
-(DESIGN.template.md's 6 headings), `build.md` (`| File | Status |` Build Manifest), and `ask.md`
-(ASSETS 5-column ledger) are byte-consistent. Both test suites pass (78 tests green).
+- **CR-01 (detached-node axe throw) — RESOLVED, verified.** `generateA11yExampleTestTs`
+  now emits `mount(GameTable, { attachTo: document.body, ... })` with an unconditional
+  `wrapper.unmount()` in a `finally`. `build/test.md`'s documented axe pattern carries the same
+  `attachTo: document.body` + `finally`/unmount shape, so the fix propagates to every future UI
+  chunk. I generated the real `GameTable.vue` to a temp dir and mounted it under jsdom with the
+  exact harness props (`availableActions: []`, `isMyTurn: true`, `actionController: {} as never`)
+  using BoardSmith's installed `@vue/test-utils` + `@vitejs/plugin-vue`: it renders, attaches to
+  `document.body` (`document.body.contains(wrapper.element) === true`), and unmounts cleanly. The
+  precondition `axe.run()` requires is met by the real component.
+- **CR-02 (missing jsdom devDep) — RESOLVED, verified.** `jsdom: '^29.1.1'` is in the generated
+  `devDependencies`. All three new devDeps resolve on the registry and are coherent together:
+  `jsdom 29.1.1`, `@vue/test-utils 2.4.11`, `axe-core 4.12.1` (confirmed via `npm view` and
+  against BoardSmith's own installed `node_modules`), all compatible with the pinned
+  `vitest ^2.0.0`.
+- **WR-02 (flow-deadlock gate) — RESOLVED, verified.** `build/test.md` now asserts all four of
+  `results.crashed/stuck/timedOut/exceededMaxActions === 0`. Confirmed `timedOut` and
+  `exceededMaxActions` are real numeric fields on `SimulationResults`
+  (`src/testing/random-simulation.ts:104-110`).
+- **WR-03 (hardcoded `#888`) — RESOLVED, verified.** Replaced with `var(--bsg-ink-2)`; a full
+  color-literal grep of `project-scaffold.ts` returns zero hex/rgb/hsl literals.
+- **WR-04 / WR-01 single design-ask gate — RESOLVED, consistent.** `ask.md` and `design-ask.md`
+  now agree: "the ask IS the design ask", one human-approval boundary, one explicit "yes"
+  authorizing `DESIGN.md` (write step 0) before the interpretation-gate writes, `Status: approved`
+  written last, SKETCH.md mirror second. This matches `bs-skills-plan.md` §UI (lines 117-119, "the
+  first UI chunk's `ask` is the **design ask**") exactly. No two-gate residue remains.
 
-The serious problems are in the **real generated code**. The centerpiece deliverable — the
-a11y example test every UI chunk is meant to copy — **cannot run** for two independent reasons,
-and the documented axe pattern in `test.md` carries the same defect, so it propagates to every
-future UI chunk. The test suite passes green only because its a11y assertions are string-greps
-that never compile or execute the generated test — which is exactly why it caught neither defect.
+All 85 tests across the three suites pass (`project-scaffold.test.ts` 24, `.a11y.test.ts` 3,
+`build-chunk.test.ts` 58), including the real `tsc` compile of the generated rules module.
 
-## Critical Issues
-
-### CR-01: Generated a11y test throws on every run — `axe.run()` on a detached element
-
-**File:** `src/cli/lib/project-scaffold.ts:463-486` (`generateA11yExampleTestTs`); same defect in `src/cli/slash-command/bs/build/test.md:91-98`
-
-**Issue:** The generated test mounts the component with `mount(GameTable, { props: {...} })`
-and then calls `await axe.run(wrapper.element)`. `@vue/test-utils` `mount` **without** `attachTo`
-renders into a **detached** DOM node (not connected to `document`). `axe.run()` on a detached
-node throws — I verified this empirically under jsdom 29 + axe-core 4.12:
-
-```
-DETACHED: axe.run THREW -> No elements found for include in page Context
-ATTACHED: axe.run succeeded, violations = 0
-```
-
-So `tests/a11y.example.test.ts` fails unconditionally in every freshly scaffolded game. This is
-not a hypothetical: BoardSmith's own only-working a11y precedent, `Toast.a11y.test.ts:57`, mounts
-with `attachTo: document.body` precisely for this reason — the scaffold and `test.md` diverged
-from the one pattern that works. `test.md`'s item-2 code block (`mount(SomeComponent, {...})` then
-`axe.run(wrapper.element)`) has the identical omission, so every `ui: touches|major` chunk that
-copies the documented pattern inherits a test that always throws.
-
-**Fix:** Attach on mount and detach after, in both the generator and `test.md`:
-
-```typescript
-const wrapper = mount(GameTable, {
-  attachTo: document.body,          // axe.run requires the node be in the document
-  props: { gameView: null, playerSeat: 0, isMyTurn: true, availableActions: [], actionController: {} as never },
-});
-try {
-  const results = await axe.run(wrapper.element);
-  expect(results.violations).toEqual([]);
-} finally {
-  wrapper.unmount();                // detach so the node doesn't leak into the next test
-}
-```
-
-### CR-02: `jsdom` is missing from the generated project's devDependencies
-
-**File:** `src/cli/lib/project-scaffold.ts:139-145` (`generatePackageJson`); consumed at `:464` (`// @vitest-environment jsdom`)
-
-**Issue:** The generated a11y test opens with `// @vitest-environment jsdom`, but the scaffold's
-`devDependencies` list only `@vitejs/plugin-vue`, `typescript`, `vitest`, `axe-core`, and
-`@vue/test-utils` — **no `jsdom`**. Vitest v2 does not bundle jsdom; requesting the `jsdom`
-environment without the package installed fails with `Cannot find package 'jsdom'`. BoardSmith's
-own `package.json` carries `"jsdom": "^29.1.1"` for exactly this reason (`@vue/test-utils` + axe
-both need a DOM). In a published game (`boardsmith: '^0.0.1'`) jsdom is unambiguously absent; even
-in local-dev (`file:` link) it is not guaranteed to hoist from BoardSmith's own node_modules. Net
-effect: `npm test` in a fresh scaffold is red out of the box — a direct Pit-of-Success violation
-(the generated project should start green).
-
-**Fix:** Add jsdom to the generated devDependencies alongside the axe/test-utils additions:
-
-```typescript
-devDependencies: {
-  '@vitejs/plugin-vue': '^5.0.0',
-  typescript: '^5.7.0',
-  vitest: '^2.0.0',
-  jsdom: '^29.1.1',            // required by the `@vitest-environment jsdom` a11y example
-  'axe-core': '^4.12.1',
-  '@vue/test-utils': '^2.4.11',
-},
-```
+The remaining findings are quality gaps around how much of the generated a11y harness is actually
+exercised in-repo — none is a blocker.
 
 ## Warnings
 
-### WR-01: a11y-example test coverage in `project-scaffold.test.ts` is superficial
+### WR-01: Generated a11y harness's `axe.run()` path is never executed anywhere in-repo
 
-**File:** `src/cli/lib/project-scaffold.test.ts:170-187`
+**File:** `src/cli/lib/project-scaffold.a11y.test.ts:1-61`; `src/cli/lib/project-scaffold.test.ts:177-215`
 
-**Issue:** For the rules module, the suite does a **real** tsc compile against the live engine
-(`generateRulesIndexTs` CR-01 regression, lines 110-148) — that is exactly the right rigor. But
-the new a11y-example coverage only string-greps the generated output (`toContain("from 'axe-core'")`,
-`toContain('axe.run(')`). It never compiles the generated test, never mounts `GameTable`, never
-runs axe. That is why the suite is green while both CR-01 and CR-02 ship broken. The test name at
-line 176 ("imports axe-core and calls axe.run(") overstates what is actually verified. The whole
-point of shipping an a11y example is that it *runs*; the test proves only that a string is present.
+**Issue:** The iteration-1 CR-01 fix is proven two ways, and both stop short of running the
+generated harness end-to-end:
+1. `project-scaffold.test.ts` asserts only *strings* in the emitted source (`attachTo:
+   document.body`, `wrapper.unmount()`, `finally`) — it never compiles or runs the generated
+   test.
+2. `project-scaffold.a11y.test.ts` genuinely executes the attach/detach invariant with the real
+   `@vue/test-utils` + jsdom stack, but against a hand-written `Fixture` component and it
+   deliberately does **not** import `axe-core` (with an accurate comment explaining axe-core is
+   only the generated project's devDep). So it proves "attachTo yields an attached node", not
+   "`axe.run(wrapper.element)` succeeds against the real `GameTable.vue`."
 
-**Fix:** Mirror the rules-module approach — actually execute the generated harness in a jsdom
-vitest env (mount a trivial fixture component, add `attachTo`, assert `axe.run` resolves and
-`violations` is an array), or at minimum type-check the generated `.test.ts` the way the rules
-module is type-checked. A grep-only assertion cannot catch a detached-node throw or a missing
-environment dependency.
+Net: no test in this repo imports the real generated `GameTable.vue` and calls `axe.run()` on it.
+If `axe.run()` were to throw under jsdom for a reason unrelated to attachment (a future axe/jsdom
+incompatibility, an axe rule needing a layout box jsdom can't provide), nothing here catches it —
+the failure would first surface in a downstream generated game.
 
-### WR-02: `test.md` random-sim gate misses timeout / max-action deadlocks
+This is defensible (adding `axe-core` as a BoardSmith devDep purely to test generated-project code
+is a real cost), and `project-scaffold.a11y.test.ts` is a *real* proof of the narrow invariant it
+claims — not superficial. But it is narrower than "the generated a11y harness is proven runnable."
 
-**File:** `src/cli/slash-command/bs/build/test.md:50-62`
+**Fix:** Either (a) accept the boundary and add a one-line comment at the top of
+`generateA11yExampleTestTs` noting the emitted `axe.run()` path is validated only in generated
+projects, not in BoardSmith CI; or (b) add `axe-core` as a BoardSmith devDependency and extend
+`project-scaffold.a11y.test.ts` with one case that mounts the real generated `GameTable.vue`
+(reuse the temp-dir + generator pattern already in `project-scaffold.test.ts`'s CR-01 compile
+test) and runs `axe.run(wrapper.element)` — closing the gap the string-greps leave.
 
-**Issue:** The random-sim step asserts only `results.crashed === 0` and `results.stuck === 0`.
-`SimulationResults` also exposes `timedOut` and `exceededMaxActions` (see
-`src/testing/random-simulation.ts:100-118`). A flow that loops forever while still producing
-*valid* moves is not `crashed` and not `stuck` (stuck = "could not produce a valid move") — it
-surfaces as `exceededMaxActions` or `timedOut`. Those are precisely the "flow deadlock" class the
-plan (§build-chunk step 5) says this step exists to catch ("catches flow deadlocks a 5-minute
-human playtest never reaches"). As written, an infinite-loop flow passes this gate.
+### WR-02: The a11y example scans a near-empty render, giving shallow example coverage
 
-**Fix:** Assert the full failure set:
+**File:** `src/cli/lib/project-scaffold.ts:466-498` (`generateA11yExampleTestTs`)
 
-```typescript
-expect(results.crashed).toBe(0);
-expect(results.stuck).toBe(0);
-expect(results.timedOut).toBe(0);
-expect(results.exceededMaxActions).toBe(0);
-```
+**Issue:** The harness mounts `GameTable` with `availableActions: []`. In `GameTable.vue`,
+`canTakeAction = availableActions.length > 0` is therefore `false`, so the
+`v-if="canTakeAction && isMyTurn"` action `<button>` never renders. The axe scan runs over just
+`div.game-board > div.turn-status > span "Your Turn"` — no interactive control, no aria-label, no
+focusable element. The one element in `GameTable.vue` that a11y actually cares about (the action
+button with its keyboard path and label) is never in the scanned tree. As the copy-me template
+for "every UI chunk's a11y floor", this teaches a pattern that passes green while never scanning a
+real control — false confidence for authors who copy it verbatim.
 
-### WR-03: Generated components hardcode `#888` — violates the token-discipline rule this phase codifies
+**Fix:** Give the example non-empty `availableActions` (e.g. `['draw']`) so the action button
+renders and axe scans a real interactive control, exercising the label/role path the a11y floor
+exists to protect. Update the prop in `generateA11yExampleTestTs` (and the matching
+`project-scaffold.a11y.test.ts` fixture if you want the executed proof to cover a control too).
 
-**File:** `src/cli/lib/project-scaffold.ts:277` (App.vue shared styles) and `:434` (GameTable.vue)
+## Info
 
-**Issue:** `design-ask.md` (Token Discipline) makes this a verbatim hard rule: "color literals
-live ONLY in the Theme Block; ... a literal color anywhere outside the Theme Block is a
-pit-of-failure that silently breaks that [WCAG AA] guarantee." Yet the same phase's scaffold emits
-`.stat-label { color: #888; }` and `.waiting { color: #888; }` in the generated `App.vue` and
-`GameTable.vue` — raw hex outside any theme block. Worse, `GameTable.vue` is the exact component
-the a11y example test mounts as the copyable reference, and it is the "start here" custom-UI stub,
-so the generated starting point models the wrong path. (axe-core will not flag this — `test.md`
-item 3 acknowledges color literals are caught by grep, not axe — so nothing in the pipeline
-catches the scaffold's own violation.)
+### IN-01: Generated `test` script is `vitest` (watch) rather than `vitest run`
 
-**Fix:** Replace the `#888` literals with a `--bsg-*` muted/secondary text token (e.g.
-`var(--bsg-text-muted)` or the nearest existing Slate token), so the generated components model
-the token discipline every downstream chunk is held to.
+**File:** `src/cli/lib/project-scaffold.ts:131` (`generatePackageJson`, `scripts.test: 'vitest'`)
 
-### WR-04: `design-ask` is a prepended pre-check, not "the ask" — drift from the plan
+**Issue:** A freshly scaffolded game's `npm test` runs bare `vitest`, which enters interactive
+watch mode in a TTY and never exits. The a11y floor (`build/test.md`) is meant to be driven as
+`npm test` in generated games; in an agent/CI (non-TTY) context vitest v2 auto-runs once and
+exits, so this usually works, but it is fragile and inconsistent with BoardSmith's own
+`"test": "vitest run"` (`package.json:64`). Not touched by this phase's change, but relevant to
+the a11y-floor workflow this phase ships.
 
-**File:** `src/cli/slash-command/bs/build/ask.md:10-16` and `src/cli/slash-command/bs/build/design-ask.md:1-7`
-
-**Issue:** The plan (§UI, "Visual identity") states "The first UI chunk's `ask` **is** the design
-ask." The implementation instead makes `design-ask.md` a pre-check that "runs to completion ...
-before ask.md's 4-part gate proceeds" — and both files independently mandate their own
-explicit-approval Gate-Before-Write. The result is **two sequential "explicit yes" gates inside a
-single `ask` step** for the first UI chunk (direction approval, then the 4-part interpretation
-gate). This is a defensible elaboration, but it is a real divergence from the plan's wording and a
-heavier human-gate load than "the ask is the design ask" implies. If the double-gate is intended,
-say so explicitly in `ask.md` so a resuming session doesn't treat the design-ask approval as
-having satisfied the 4-part gate (or vice-versa); if not, collapse them.
-
-**Fix:** Reconcile the wording — either update the plan/`ask.md` to state the first-UI-chunk `ask`
-runs two nested gates by design, or fold the direction choice into part (b) of the 4-part gate so
-there is a single approval boundary as the plan describes.
+**Fix:** Change the generated script to `"test": "vitest run"` (optionally add
+`"test:watch": "vitest"`) so `npm test` is deterministic and exits.
 
 ---
 
-_Reviewed: 2026-07-04T18:00:00Z_
+_Reviewed: 2026-07-04T18:15:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
-_Depth: standard_
+_Depth: standard (iteration 2)_
