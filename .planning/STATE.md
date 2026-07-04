@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
-stopped_at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
-last_updated: "2026-07-04T02:33:51.725Z"
-last_activity: 2026-07-04 -- Phase 139 planning complete
+stopped_at: Completed 139-01-PLAN.md (docs audit corrections DOCX-01/02/03) -- Phase 139 Plan 1 of 2 done
+last_updated: "2026-07-04T02:41:03.993Z"
+last_activity: 2026-07-04
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 39
-  completed_plans: 37
+  completed_plans: 38
   percent: 89
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 139 — documentation audit & corrections
+**Current focus:** Phase 139 — Documentation Audit & Corrections
 
 ## Current Position
 
-Phase: 139
-Plan: Not started
+Phase: 139 (Documentation Audit & Corrections) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-04 -- Phase 139 planning complete
+Last activity: 2026-07-04
 
-Progress: [██████████] 100%
+Progress: [██████████] 97%
 
 ## Milestones
 
@@ -173,6 +173,8 @@ Recent decisions affecting current work:
 - [Phase 138]: True MERC baseline (738 passed/7 skipped/28 files) established fresh via live suite run, not trusted blind from CONTEXT
 - [Phase 138]: Zero BoardSmith src fixes required for MERC re-vendor; ENG-05 dual-shape followUp resolvers empirically confirmed already-tolerant
 - [Phase ?]: [Phase 138-02]: go-fish/cribbage Playwright smokes intentionally left failing (non-zero exit) rather than faked -- they caught a real CLI dev-host seat-identity bug in the solo-human+AI-seat path, documented as a blocker rather than papered over
+- [Phase ?]: [Phase 139-01]: visibleAttributes documented as real (Phase 131 SEC-02 shipped enforcement after the audit finding was written) -- corrected the plan's stale 'dead field' premise rather than following it literally
+- [Phase ?]: [Phase 139-01]: Fixed all phantom action()/.do()/.chooseOnBoard() JSDoc occurrences found by full-file grep in game.ts/player.ts, not just the plan's four named line refs
 
 ### Pending Todos
 
@@ -184,8 +186,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T02:01:06.710Z
-Stopped at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
+Last session: 2026-07-04T02:41:03.986Z
+Stopped at: Completed 139-01-PLAN.md (docs audit corrections DOCX-01/02/03) -- Phase 139 Plan 1 of 2 done
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
 
