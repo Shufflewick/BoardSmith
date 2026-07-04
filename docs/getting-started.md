@@ -314,7 +314,7 @@ These issues cause silent failures that are hard to debug. Five minutes reading 
 ## Next Steps
 
 - **Start here**: [Common Pitfalls](./common-pitfalls.md) - Critical issues to avoid
-- Read [Core Concepts](./core-concepts.md) to understand elements, actions, and commands
+- Read [Core Concepts](./core-concepts.md) to understand elements, actions, and state mutation
 - Learn about [Actions & Flow](./actions-and-flow.md) for complex game logic
 - Explore [UI Components](./ui-components.md) for building custom UIs
 - See [Game Examples](./game-examples.md) for real implementations
