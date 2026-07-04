@@ -124,7 +124,11 @@ Declaration` to obtain the numbered claims list text it will embed in the redtea
 prompts and restate at ask. It never re-opens the chunk's sources — slices, docs, RULINGS.md,
 DECISIONS.md, DESIGN.md — to verify the subagent's work. If a returned summary or the written
 claims look incomplete or wrong, dispatch a narrower follow-up investigate subagent rather than
-reading the sources to verify.
+reading the sources to verify. Once the return is recorded, the orchestrator checks off
+`investigate` on CHUNK.md's Step Checklist **before** dispatching redteam — every step persists
+its completion to CHUNK.md before the next step starts (see `build-chunk.md` "Step Group 1
+Dispatch"), so a cold resume never re-runs a completed investigate and appends a duplicate
+claims list.
 
 ## Downstream Shape (cite, never restate)
 

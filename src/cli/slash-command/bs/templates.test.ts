@@ -321,6 +321,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
       '## Interpretation',
       '## Visibility Declaration',
       '## Newly Discovered Citations',
+      '## Redteam Rounds',
       '## Findings Ledger',
       '## Revision Rounds',
       '## Build Manifest',

@@ -120,6 +120,15 @@ hash, Status line update CHUNK.md-then-SKETCH.md, decision rollup).
 A single session runs at most one step group (`state-machine.md` "Session Handoff Seams"), then
 hands off. This is the first of the four groups.
 
+**Every step persists before the next starts:** when a step completes, the orchestrator checks
+off that step's item on CHUNK.md's Step Checklist (a state-file write) before dispatching the
+next step — `investigate` is checked off after its return is recorded, `redteam` after its
+`### Redteam Round N` entry lands in CHUNK.md's `## Redteam Rounds` (see `build/redteam.md`
+"Persisting the Round"), and `ask` as part of the gate's write order (see `build/ask.md`
+"Gate-Before-Write"). This is the state Step 2's first-incomplete-step routing routes on: an
+unchecked step is re-run from scratch on a cold resume, so a completed-but-unchecked step would
+duplicate work — never leave a completed step unchecked.
+
 **investigate:** Delegate the entire investigate sequence to `build/investigate.md` — reading
 the chunk's cited slices, INDEX-discovered slices, `RULINGS.md`, `DECISIONS.md`, the relevant
 BoardSmith docs, and (for `ui: touches|major` chunks) `DESIGN.md`, and writing the numbered
@@ -152,8 +161,9 @@ gated — they were already written progressively at the investigate step, per t
 `ingest-rules.md` Step 7 established for `ASSETS.md`/`rulebook/00-visual-survey.md`.
 
 End of group 1: print the exact next command to run (`/bs-build-chunk`) and confirm everything
-written so far (claims list, redteam ledger, `Status: approved`, any `RULINGS.md`/`ASSETS.md`
-entries) is saved in the game folder — non-programmer handoff.
+written so far (claims list, the `## Redteam Rounds` entry, checked-off Step Checklist items,
+`Status: approved`, any `RULINGS.md`/`ASSETS.md` entries) is saved in the game folder —
+non-programmer handoff.
 
 ## Step Groups 2–4 (forward reference)
 
@@ -217,7 +227,8 @@ And to the shared reference files that ship with every `bs-` skill:
 - `state-machine.md` — status enum, step names, consistency check, session lock, write order,
   authority, session handoff seams, git protocol
 - `templates/CHUNK.template.md` — the file `investigate`/`redteam`/`ask` fill (claims list,
-  visibility declaration, findings ledger, Status grammar)
+  visibility declaration, redteam rounds, Step Checklist check-offs, Status grammar; the
+  findings ledger belongs to `audit`, Phase 145)
 - `templates/RULINGS.template.md` — the ledger `ask`'s house-rule choices and redteam's
   refuted-twice escalations append to
 - `templates/ASSETS.template.md` — the ledger `ask`'s asset requests append to

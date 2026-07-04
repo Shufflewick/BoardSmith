@@ -13,7 +13,7 @@ Status: proposed
 
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this Status line, "## ui:",
      "## Ceremony", "## Step Checklist", "## Interpretation", "## Visibility Declaration",
-     "## Newly Discovered Citations", "## Findings Ledger", "## Revision Rounds",
+     "## Newly Discovered Citations", "## Redteam Rounds", "## Findings Ledger", "## Revision Rounds",
      "## Build Manifest", "## Playtest Test Script",
      "## Verified Checklist", "## Verified Commit Hash". If any required heading is missing, or
      the Status line doesn't match a recognized enum value above, a resuming session STOPS and
@@ -82,6 +82,22 @@ full
 <!-- Appended during investigate when INDEX.md search surfaces rulebook sections not already
      cited above. Append-only — do not delete an entry once recorded, even if a later round
      supersedes it (supersession is itself a new entry). -->
+
+## Redteam Rounds
+<!-- Written by the ORCHESTRATOR at the end of each redteam round, BEFORE the ask step starts —
+     this is what makes the round's outcome cold-resumable (a crash or handoff between redteam
+     and ask must not lose the verdicts). Append-only: each round is a new "### Redteam Round N"
+     entry; never edit or renumber a prior round. Vote-privacy (build/redteam.md) governs what
+     is SHOWN to the user — never a raw tally or agent transcript — not what is recorded here:
+     this section is internal state, and per-claim verdicts + objections are recorded in full.
+     Distinct from the Findings Ledger below, which is populated by audit, not redteam. -->
+
+<!-- ### Redteam Round 1
+- claim 1 — verdicts: stands / stands — outcome: stands
+- claim 7 — verdicts: refuted / refuted — objections: <objection text> — outcome: refuted twice, escalated to user
+- coverage: <missing interactions found, or "none">
+- disposition: <cleared | re-investigate dispatched | escalation open at ask>
+-->
 
 ## Findings Ledger
 <!-- Populated by audit. Each finding gets a stable ID (e.g. F1, F2, ...) that never changes or

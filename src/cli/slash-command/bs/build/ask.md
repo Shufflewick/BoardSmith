@@ -98,7 +98,9 @@ Only after that explicit yes:
 
 1. Write any RULINGS.md `### Ruling N` entries from house-rule/adaptation choices made above.
 2. Write any ASSETS.md ledger row updates from the asset request above.
-3. Write `Status: approved` to CHUNK.md **last**, after every other write for this gate has
+3. Check off `ask` on CHUNK.md's Step Checklist (investigate and redteam were already checked
+   off when those steps completed — see `build-chunk.md` "Step Group 1 Dispatch").
+4. Write `Status: approved` to CHUNK.md **last**, after every other write for this gate has
    landed (cite `state-machine.md` "Write Order" — the `Status:` line is updated last so a
    session that crashes mid-write leaves a file whose status still reflects the last
    fully-completed state, never a half-written one).

@@ -94,9 +94,22 @@ this file does not restate the max-1-round bound or the refuted-twice rule, it a
   adversary flag the same claim/gap on the re-investigate round): that is by definition an
   ambiguity. Escalate to the user — disputes go to the human, never to more agents.
 
+## Persisting the Round (write before ask starts)
+
+When all 3 agents have returned and the escalation logic above has resolved (including any
+re-investigate round), the orchestrator appends a `### Redteam Round N` entry to CHUNK.md's
+`## Redteam Rounds` section (`templates/CHUNK.template.md`) — per-claim verdicts, objection
+text, the coverage adversary's findings, and the round's disposition — **before** the ask step
+starts. This is a state-file write and is what makes the round cold-resumable: a crash or
+session handoff between redteam and ask must not lose the verdicts. Vote-privacy (below)
+governs what is *shown to the user*, not what is *written to state* — the recorded entry is
+internal, and the ask step still distills it into designer language. After the round entry
+lands, the orchestrator checks off `redteam` on CHUNK.md's Step Checklist.
+
 ## Vote-Privacy
 
-Per-agent verdicts are internal signal the orchestrator holds until all 3 agents have returned.
+Per-agent verdicts are internal signal the orchestrator holds until all 3 agents have returned,
+then records durably in CHUNK.md's `## Redteam Rounds` (see "Persisting the Round" above).
 Never show the user a raw vote tally or an agent transcript — not "2 of 2 refuters rejected
 claim 7," not the objection text verbatim from an agent. When escalation triggers, the
 orchestrator distills the disagreement into a single plain-language question with concrete
