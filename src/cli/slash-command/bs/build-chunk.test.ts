@@ -96,15 +96,17 @@ const REFERENCED_PATHS = [
   'build/investigate.md',
   'build/redteam.md',
   'build/ask.md',
+  'build/build.md',
+  'build/test.md',
+  'build/design-ask.md',
   'state-machine.md',
   'templates/CHUNK.template.md',
   'templates/RULINGS.template.md',
   'templates/ASSETS.template.md',
 ] as const;
 
-/** Phase 144-146 forward-reference stub markers build-chunk.md's routing table must carry. */
+/** Phase 145-146 forward-reference stub markers build-chunk.md's routing table must carry. */
 const FORWARD_REFERENCE_MARKERS = [
-  'authored in Phase 144',
   'authored in Phase 145',
   'authored in Phase 146',
 ] as const;
@@ -375,10 +377,8 @@ describe('cross-file consistency — every current-phase referenced path resolve
     });
   }
 
-  it('REFERENCED_PATHS does NOT include any Phase 144-146 step file', () => {
+  it('REFERENCED_PATHS does NOT include any Phase 145-146 step file', () => {
     const excluded = [
-      'build/build.md',
-      'build/test.md',
       'build/audit.md',
       'build/repair.md',
       'build/playtest.md',
