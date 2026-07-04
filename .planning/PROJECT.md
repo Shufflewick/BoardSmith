@@ -145,6 +145,7 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ bs- skill file templates (SKETCH/CHUNK/RULINGS/DECISIONS/DESIGN/ASSETS) + state-machine.md authority rules + 44-test drift suite (TMPL-01..03) — Validated in Phase 141: File Templates & State-Machine Authority
 - ✓ `/bs-ingest-rules` skill: lean orchestrator + transcription/interview-fallback/scaffold/sketch-derivation references + 41-test drift suite (INGEST-01..07) — Validated in Phase 142
 - ✓ `/bs-build-chunk` group 1: orchestrator (resume routing, session lock, intents, light path) + investigate/redteam/ask references + 43-test drift suite (BUILD-01..04, BUILD-12) — Validated in Phase 143
+- ✓ `/bs-build-chunk` group 2: build/test/design-ask references + a11y floor + REAL scaffold-template change (axe-core/jsdom/@vue/test-utils devDeps + generated a11y harness) (BUILD-05/06, UIQ-01..03) — Validated in Phase 144
 
 - ✓ Game rules layer isolated from platform/networking — existing
 - ✓ Event sourcing via Command pattern — existing
@@ -429,4 +430,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-04 — Phase 143 complete (/bs-build-chunk interpretation & ask gate)*
+*Last updated: 2026-07-04 — Phase 144 complete (/bs-build-chunk build & test with UI floor)*
