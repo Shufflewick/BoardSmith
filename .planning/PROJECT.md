@@ -8,9 +8,20 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current State
+## Current Milestone: v4.6 BS Skills — Rulebook-Driven Game Building
 
-**v4.5 shipped 2026-07-03.** No active milestone — run /gsd:new-milestone to start the next one.
+**Goal:** Replace `/design-game` with a family of `bs-` skills that turn a game rulebook into a working BoardSmith game through small, adversarially-vetted, human-playtested chunks.
+
+**Target features:**
+- `useAnnouncer()` composable in `boardsmith/ui` — game-facing screen-reader announce API writing to GameShell's existing live regions (library prerequisite for enforceable per-chunk a11y)
+- File templates: SKETCH / CHUNK / RULINGS / DECISIONS / DESIGN / ASSETS skeletons with the state-machine authority rules
+- `/bs-ingest-rules` — rulebook transcription + chunking with citations, cross-reference INDEX, component inventory + visual identity survey, variant tagging, project scaffold, sketch with approval gate, interview fallback for rulebook-less prototypes, old-skill migration
+- `/bs-build-chunk` — the state-aware 10-step chunk engine (investigate → redteam → ask → build → test → audit → repair → playtest → revise → close) with bounded adversarial loops, human gates as file states, git protocol, scaled ceremony
+- `/bs-check-status` and `/bs-insert-chunk` — thin state readers/editors with consistency checks
+- `/bs-generate-ai` rename + `install-claude-command.ts` installs the full skill set, shared reference files, and removes design-game
+- Dry-run validation of the full pipeline against a reference game rulebook
+
+**Key context:** Full design contract — state-file schemas, subagent discipline, redteam independence rules, UI/a11y floor, loop bounds — lives in `.planning/bs-skills-plan.md`, hardened by a 4-lens adversarial review (user-confusion, agent-failure, completeness, UI/a11y/design).
 
 ## Previous: v4.5 Shipped
 
@@ -282,7 +293,7 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-v4.5 Pit of Success Hardening — resolve all 38 confirmed findings in `boardsmith-audit-report-3.html` (verify → fix → docs → games/MERC migration). Requirements defined in `.planning/REQUIREMENTS.md`.
+v4.6 BS Skills — rulebook-driven incremental game building. Requirements to be defined in `.planning/REQUIREMENTS.md`. Design contract: `.planning/bs-skills-plan.md`.
 
 Carried forward (deferred from v4.0):
 - ShufflewickPub host skin (separate repo) — HOST-01..04: PrimeVue tavern preset, host-side theme handshake, connection "Reconnecting" banner, host Game Over exit / pull-tab. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
@@ -413,4 +424,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-02 — started milestone v4.5 Pit of Success Hardening (Audit #3 Fixes)*
+*Last updated: 2026-07-04 — started milestone v4.6 BS Skills (Rulebook-Driven Game Building)*

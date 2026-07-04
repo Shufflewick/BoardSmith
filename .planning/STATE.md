@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.5
-milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: milestone_complete
-stopped_at: Milestone complete (Phase 139 was final phase)
-last_updated: 2026-07-04T03:04:28.689Z
+milestone: v4.6
+milestone_name: BS Skills (Rulebook-Driven Game Building)
+status: planning
+last_updated: "2026-07-04T17:16:17.170Z"
 last_activity: 2026-07-04
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 39
-  completed_plans: 39
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,12 +24,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: — (v4.5 complete; no active milestone)
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-07-04
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-07-04 — Milestone v4.6 started
 
 ## Milestones
 
