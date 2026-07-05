@@ -222,6 +222,18 @@ describe('STAT-02 — insert-chunk.md sketch editor', () => {
     expect(insertChunk).toMatch(/final.acceptance/i);
   });
 
+  it('mandated-chunks guard blocks DELETION, not just reordering (CR-01)', () => {
+    const insertChunk = read('insert-chunk.md');
+    // The guard must reject a `remove` targeting a mandated chunk, and must
+    // state that removal is only allowed with an explicit user replacement —
+    // never a silent drop. Pins the CR-01 fix so it cannot regress to the
+    // reorder-only wording that let a delete slip through.
+    expect(insertChunk).toMatch(/reject\s+any\s+remove\s+targeting\s+it/i);
+    expect(insertChunk).toMatch(/must\s+remain\s+present/i);
+    expect(insertChunk).toMatch(/explicitly\s+replaces\s+it/i);
+    expect(insertChunk).toMatch(/never\s+(as\s+)?a\s+silent\s+drop/i);
+  });
+
   it('cites each REFERENCED_SECTIONS_INSERT heading by exact string', () => {
     const insertChunk = read('insert-chunk.md');
     for (const heading of REFERENCED_SECTIONS_INSERT) {

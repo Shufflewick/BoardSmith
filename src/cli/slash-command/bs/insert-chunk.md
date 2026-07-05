@@ -31,10 +31,22 @@ case name the dependency concretely and propose the minimal prerequisite (same p
 `ingest-rules.md`'s Step 6 Approval Gate uses).
 
 Fold in the `## Mandated Chunks` invariant guard here (OQ2 resolved YES — `templates/
-SKETCH.template.md` "## Mandated Chunks"): a reshape must not move the final-acceptance chunk off
-the tail of the Ordered Chunk List, must not drop the game-end/scoring/winner-determination chunk,
-and must not displace the first chunk (the core event loop) from position one. Flag any of these
-concretely rather than allowing the reshape to silently break a mandated structural invariant.
+SKETCH.template.md` "## Mandated Chunks"): a reshape must never leave the sketch without all three
+mandated chunks, and must never change their required positions. Apply ONE consistent rule to every
+mandated chunk — reject both any `remove` targeting it AND any `reorder` that displaces it:
+- The core-event-loop chunk (the first chunk) must remain present AND stay at position one — reject
+  any remove targeting it and any reorder that moves it off position one.
+- The game-end/scoring/winner-determination chunk must remain present — reject any remove targeting
+  it.
+- The final-acceptance chunk must remain present AND stay the last entry (the tail) — reject any
+  remove targeting it and any reorder that moves it off the tail.
+
+`remove` is a first-class operation (see the heading below), so a "remove the final-acceptance
+chunk" or "remove the core-event-loop chunk" request is a reachable delete path this guard must
+block — not merely a reorder. Removing a mandated chunk is permitted ONLY when the user explicitly
+replaces it with another chunk serving the same mandated role in the same required position — never
+as a silent drop. Flag any violation concretely rather than allowing the reshape to silently break a
+mandated structural invariant.
 
 **(b) Closed-chunk citation-overlap diff.** For each CLOSED chunk (`Status` reads `verified` or
 `verified (user-waived)` — `state-machine.md` "Status Enum (exact)"), union its `## Interpretation`
