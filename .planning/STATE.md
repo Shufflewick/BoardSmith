@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
-status: milestone_complete
-stopped_at: Milestone complete (Phase 149 was final phase)
+status: roadmap-complete
+stopped_at: v4.6 reopened for playtest follow-up (Phases 150-151); ready to plan Phase 150
 last_updated: 2026-07-05T14:46:39.986Z
 last_activity: 2026-07-05
 progress:
-  total_phases: 10
+  total_phases: 12
   completed_phases: 10
   total_plans: 30
   completed_plans: 30
-  percent: 100
+  percent: 83
 ---
 
 # Project State
@@ -266,3 +266,13 @@ Items acknowledged and deferred at v4.6 milestone close on 2026-07-05:
 | todo | dev-host-debug-toggle-panel-not-opening | pre-existing dev-host tech debt, unrelated to v4.6 |
 | todo | dev-standalone-shell-height-gap | pre-existing dev-host tech debt, unrelated to v4.6 |
 | todo | v4-slate-token-and-a11y-polish | pre-existing polish todo, unrelated to v4.6 |
+
+## Current Position (v4.6 reopened — for the fresh context)
+
+Milestone v4.6 shipped + tagged, then reopened to close VAL-01's deferred human playtest.
+- **Phase 150 (Regenerate the pipeline-built Go Fish)** — READY TO PLAN. The Phase-149 dry-run's generated Go Fish lived only in a `/tmp` scratch dir that was deleted at cleanup, so there is no pipeline-built game to playtest. Phase 150 re-runs the ingest + chunk-1 build legs of the bs- pipeline against Go Fish into a STABLE location (recommend `~/BoardSmithGames/go-fish-dryrun/`, NOT `/tmp`), leaving it compiling+serving and NOT deleting it. Hand-built `~/BoardSmithGames/go-fish/` stays READ-ONLY.
+- **Phase 151 (Human playtest)** — after 150, the user walks `149-HUMAN-UAT.md` in the browser (verification `human_needed`).
+
+Reference for the fresh context: the Phase-149 artifacts (dry-run report, HUMAN-UAT script, the two SUMMARYs describing exactly how the machine-step dry-run was run, incl. the `${CLAUDE_SKILL_DIR}/../bs-shared/X` → `src/cli/slash-command/bs/X` path translation and the scaled-fan-out approach) are archived at `.planning/milestones/v4.6-phases/149-end-to-end-dry-run-validation/`.
+
+**Next command (fresh context):** `/gsd-autonomous` (picks up Phase 150) — or `/gsd:plan-phase 150` then `/gsd:execute-phase 150`.
