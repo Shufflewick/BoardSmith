@@ -65,9 +65,9 @@ mandated chunk — reject both any `remove` targeting it AND any `reorder` that 
 - The final-acceptance chunk must remain present AND stay the last entry (the tail) — reject any
   remove targeting it and any reorder that moves it off the tail.
 
-`remove` is a first-class operation (see the heading below), so a "remove the final-acceptance
-chunk" or "remove the core-event-loop chunk" request is a reachable delete path this guard must
-block — not merely a reorder. Removing a mandated chunk is permitted ONLY when the user explicitly
+`remove` is one of the four reshape types operation (e) performs (add / reorder / split / remove),
+so a "remove the final-acceptance chunk" or "remove the core-event-loop chunk" request is a
+reachable delete path this guard must block — not merely a reorder. Removing a mandated chunk is permitted ONLY when the user explicitly
 replaces it with another chunk serving the same mandated role in the same required position — never
 as a silent drop. Flag any violation concretely rather than allowing the reshape to silently break a
 mandated structural invariant.

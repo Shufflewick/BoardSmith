@@ -231,6 +231,16 @@ describe('STAT-02 — insert-chunk.md sketch editor', () => {
     expect(listEditIdx).toBeLessThan(versionBumpIdx);
   });
 
+  it('remove is described as a reshape type of op (e), with no dangling heading ref (WR-03)', () => {
+    const insertChunk = read('insert-chunk.md');
+    // The CR-01 guard once said "`remove` is a first-class operation (see the
+    // heading below)" — a dangling intra-file pointer to a nonexistent `remove`
+    // heading. Pin that the reference now points at op (e)'s reshape types and
+    // the dangling "see the heading below" phrasing is gone.
+    expect(insertChunk).not.toMatch(/see the heading below/i);
+    expect(insertChunk).toMatch(/`remove` is one of the four reshape types operation \(e\) performs/);
+  });
+
   it('documents write order CHUNK.md-first-then-SKETCH.md', () => {
     const insertChunk = read('insert-chunk.md');
     expect(insertChunk).toMatch(/CHUNK\.md/);
