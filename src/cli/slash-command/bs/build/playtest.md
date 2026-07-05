@@ -120,7 +120,7 @@ For a chunk running the light path (`build, test, playtest` — no `close` step 
 same `playtest` step also performs `close`'s bookkeeping once the Verified Checklist is
 confirmed: see `build/close.md`'s `## Bookkeeping Sequence` by name for the verified-hash
 capture, Status write order, and decision rollup — the exact **three-item** sequence
-`state-machine.md` "Step Names (exact, light path)" lists — this step performs on the light
+`state-machine.md` "Step Names (exact, light path — trivial chunks)" lists — this step performs on the light
 path's behalf. It does **not** detail the sketch tail: tail re-derivation is `close`'s
 user-gated `## Sketch-Tail Delta Gate`, which the light path does not run (`build-chunk.md`
 Step 2's lazy tail-entry detailing covers any undetailed tail entry instead). This file does not

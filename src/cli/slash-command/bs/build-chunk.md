@@ -189,12 +189,12 @@ same `build.md`/`test.md`/`playtest.md` reference files, not a fourth ceremony w
 The user is explicitly **told which** ceremony is in effect when the chunk is proposed, so no one
 discovers mid-chunk that fewer gates ran than they expected.
 
-Light-path status transitions (cite `state-machine.md` "Step Names (exact, light path)" — do not
+Light-path status transitions (cite `state-machine.md` "Step Names (exact, light path — trivial chunks)" — do not
 restate the transition rule beyond this pointer): the light path has no `ask` step, so
 `approved` is **unreachable** for light chunks — a light chunk moves `proposed → built` directly
 when the user accepts the proposal and `build` + `test` complete. Because the light path has no
 `close` step, `playtest` performs `close`'s bookkeeping for light chunks — the **three-item**
-sequence `state-machine.md` "Step Names (exact, light path)" lists: bisect-anchor commit hash,
+sequence `state-machine.md` "Step Names (exact, light path — trivial chunks)" lists: bisect-anchor commit hash,
 Status line update CHUNK.md-then-SKETCH.md, and decision rollup (see `build/close.md`'s
 `## Bookkeeping Sequence`, the exact sequence a light-path chunk runs on its own behalf). A
 light-path chunk does **not** detail the sketch tail or propose the next chunk from inside
