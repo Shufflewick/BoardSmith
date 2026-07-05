@@ -4,13 +4,13 @@ milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
 stopped_at: Completed 146-04-PLAN.md
-last_updated: "2026-07-05T01:51:55.992Z"
-last_activity: 2026-07-05 -- Phase 147 planning complete
+last_updated: "2026-07-05T01:54:45.600Z"
+last_activity: 2026-07-05
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
   percent: 70
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 147 — `/bs check status` & `/bs insert chunk`
+**Current focus:** Phase 147 — /bs-check-status & /bs-insert-chunk
 
 ## Current Position
 
-Phase: 147
-Plan: Not started
+Phase: 147 (/bs-check-status & /bs-insert-chunk) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-05 -- Phase 147 planning complete
+Last activity: 2026-07-05
 
-Progress: [██████████] 100%
+Progress: [██████████] 96%
 
 ## Milestones
 
@@ -220,6 +220,8 @@ Recent decisions affecting current work:
 - [Phase ?]: close.md's own bookkeeping duty starts AFTER the Status write since playtest.md already writes Status: verified/verified (user-waived) before close begins
 - [Phase ?]: final-acceptance.md splits the 7-point design-QA pass: checks 2/3/5/6/7 go to a single fresh-context agent dispatch reusing design-review.md's serve-capture-kill lifecycle; checks 1 (SR/VoiceOver) and 4 (colorblind) stay human-narrated
 - [Phase 146-04]: Step Groups 2-3 dispatch prose lives in build/build.md, test.md, audit.md, repair.md themselves; only Group 4 needed a live dispatch section authored in build-chunk.md — Groups 2-3 never had inline dispatch prose to retire (already citation-only, unlike Group 1)
+- [Phase ?]: [Phase 147-01]: check-status.md reuses build-chunk.md's Step 2 current-chunk/current-step derivation rule verbatim in spirit rather than re-deriving it
+- [Phase ?]: [Phase 147-01]: Waived-chunk batch-playtest proposal gated at 2+ waived chunks (0-1 just reports the count)
 
 ### Pending Todos
 
@@ -231,7 +233,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T00:58:25.449Z
+Last session: 2026-07-05T01:54:42.442Z
 Stopped at: Completed 146-04-PLAN.md
 Resume file: None
 Next action: Phase 145 complete (2/2 plans) — ready for phase verification (`/gsd:verify-phase 145`), then continue to Phase 146 (playtest/revise/close)
