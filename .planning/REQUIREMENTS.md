@@ -63,7 +63,7 @@
 
 ### Validation (VAL)
 
-- [ ] **VAL-01**: The full pipeline is dry-run against a reference game rulebook end-to-end (ingest → several chunks → playtest gates) and compared against the hand-built implementation before release
+- [x] **VAL-01**: The full pipeline is dry-run against a reference game rulebook end-to-end (ingest → several chunks → playtest gates) and compared against the hand-built implementation before release
 
 ## Future Requirements (deferred)
 
@@ -115,6 +115,6 @@
 | STAT-02 | Phase 147 | Complete |
 | DIST-01 | Phase 148 | Complete |
 | DIST-02 | Phase 148 | Complete |
-| VAL-01 | Phase 149 | Pending |
+| VAL-01 | Phase 149 | Complete |
 
 **Coverage:** 34/34 v4.6 requirements mapped, no orphans, no duplicates.

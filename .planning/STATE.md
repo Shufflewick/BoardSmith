@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
-status: executing
+status: verifying
 stopped_at: Completed 149-02-PLAN.md
-last_updated: "2026-07-05T14:25:04.052Z"
+last_updated: "2026-07-05T14:34:21.617Z"
 last_activity: 2026-07-05
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 30
-  completed_plans: 29
-  percent: 90
+  completed_plans: 30
+  percent: 100
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 149 (End-to-End Dry-Run Validation) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-05
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -231,6 +231,7 @@ Recent decisions affecting current work:
 - [Phase 148-03]: Used beforeAll/afterAll temp-dir install (single real installClaudeCommand call) rather than per-test try/finally; skip-list extended for line-wrapped refs, glob placeholders, and build/light.md's documented-nonexistent reference
 - [Phase 149-01]: Applied a scratch-project-local tsconfig.json workaround (vite/client types) to unblock the ingest dry-run after discovering a real scaffold-template defect (fresh npx boardsmith init fails tsc --noEmit) — logged for Plan 03, not fixed in BoardSmith source
 - [Phase 149]: 149-02: chose pond-empty as chunk-1's depth-cut isFinished() terminal condition (book-forming out of scope makes all-hands-empty unreachable) — Found via simulateRandomGames timedOut on every game; fixed and re-verified 0 crashed/stuck/timedOut/exceededMaxActions
+- [Phase 149]: D1/D2 pipeline defects fixed at source in CLI scaffold/init code (not skill markdown); F2/F3 documented as headless-dry-run friction, not defects
 
 ### Pending Todos
 
@@ -242,7 +243,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T14:25:04.045Z
+Last session: 2026-07-05T14:33:10.404Z
 Stopped at: Completed 149-02-PLAN.md
 Resume file: 
 None
