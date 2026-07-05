@@ -1,0 +1,100 @@
+# Close — Bookkeeping + Sketch-Tail Delta Gate (BUILD-11)
+
+Referenced by `build-chunk.md` Step 10 (`close`, third and last of the `{playtest, one revise
+round, close}` session step group — see `state-machine.md` "Session Handoff Seams"). This is the
+step that leaves a durable, git-anchored, resumable trail behind a just-verified chunk, and
+re-derives the sketch tail as a reviewable delta rather than a silent rewrite. Runs immediately
+after `playtest` (and any `revise` round it triggered) confirms `Status: verified` (or `verified
+(user-waived)`) on CHUNK.md.
+
+## Inputs
+
+CHUNK.md's `Status:` line (already `verified` or `verified (user-waived)` from `playtest`), its
+`## Revision Rounds` section (if a revise round ran), and SKETCH.md's `## Ordered Chunk List`
+tail entries beyond the chunk that just closed. The orchestrator reads these directly — the
+sanctioned state-file read defined in `build-chunk.md`'s Context-Economics Hard Rule — it does
+not re-open the rulebook slices behind the chunk's own claims (those were settled at `ask`).
+
+## Bookkeeping Sequence
+
+A self-contained numbered sequence. `playtest.md`'s light-path close-bookkeeping note cites this
+section BY NAME — a light-path chunk (`build, test, playtest`, no `close` step of its own) runs
+this exact sequence from inside its own `playtest` step, on this chunk's behalf, once its
+Verified Checklist is confirmed.
+
+1. **Status already landed; this step's own duty starts after.** `playtest` already wrote
+   `Status: verified` (or `verified (user-waived)`) to CHUNK.md and mirrored the derived pointer
+   to SKETCH.md — CHUNK.md first, then SKETCH.md second, cite `state-machine.md` "Write Order".
+   `close` does not repeat that write; its own bookkeeping starts at step 2 below.
+
+2. **Record the verified commit hash.** Run:
+
+   ```bash
+   git rev-parse HEAD
+   ```
+
+   and write the literal hash into CHUNK.md's `## Verified Commit Hash` section
+   (`templates/CHUNK.template.md`). Cite `state-machine.md` "Git Protocol" for why this hash
+   matters — the bisect anchor for any later regression and the diff base for "what changed
+   since the human last said yes" — and for the `chunk-<slug>/step-<name>` commit convention this
+   hash sits alongside. Do not restate that rationale or that format in new words here; cite it
+   by name.
+
+3. **Roll up decisions.** Append this chunk's settled house-rule/adaptation choices and any
+   revise-round resolutions into `DECISIONS.md`'s append-only ledger, one entry per decision, so
+   a future session (or `/bs-check-status`) can see what this chunk actually settled without
+   re-reading its whole CHUNK.md.
+
+## Sketch-Tail Delta Gate
+
+Modeled on `build/ask.md`'s fixed-format rigidity (`ask.md` "The Fixed 4-Part Presentation
+Format" — same negotiate-then-gate posture, applied here to the sketch tail instead of a single
+chunk's design). Now this chunk's citations are settled, re-derive the next 2-3 sketch-level tail
+entries in SKETCH.md's `## Ordered Chunk List` against the rulebook, and present ONLY the
+**delta** — entries changed, split, merged, or newly detailed — never the full tail restated as
+if nothing were already there. This is never a silent rewrite: SKETCH.md's tail is not
+overwritten until the user has explicitly approved the delta presented below.
+
+Present each changed entry in this fixed named structure — pin the structure so a future drift
+test can verify it byte-for-byte:
+
+```
+before: <the tail entry as it read before this chunk closed>
+after:  <the tail entry as it would read now>
+why:    <the one-line reason this chunk's outcome changed the tail>
+```
+
+For example:
+
+> before: "Chunk 'auction': players may bid on declined properties."
+> after: "Chunk 'auction-basic': players may bid on declined properties. Chunk
+> 'auction-improvements': players may add houses/hotels mid-auction."
+> why: this chunk's rulebook citations revealed the auction and the improvements rule are
+> independently testable and shouldn't ship as one chunk.
+
+An entry with no change is simply omitted from this presentation — only the delta is shown, per
+the "never a silent rewrite" rule above.
+
+**Gate it exactly like `ask.md`:** present the delta, require the user's explicit approval, and
+only after that explicit yes write SKETCH.md's `## Ordered Chunk List` to match. Presenting is not
+approving; do not write anything durable to SKETCH.md's tail until the user has said yes. If the
+user pushes back on the delta, negotiate the same way `ask.md`'s Gate-Before-Write does — their
+answer wins unless a hard rulebook dependency is violated, in which case name the dependency
+concretely and propose the minimal resolution.
+
+## Propose the Next Chunk
+
+Once the delta is approved and written, propose the next chunk in the (possibly newly-updated)
+Ordered Chunk List, naming its `ui:` tag (`none | touches | major`) so the user knows up front
+whether the a11y floor and design-review lens will apply to it. Print the exact next command for
+a non-programmer handoff — e.g. "Run `/bs-build-chunk` again to start the next chunk,
+`auction-basic` (ui: touches)."
+
+## Downstream Shape (cite, never restate)
+
+Once the delta is approved and the next chunk is proposed, this chunk's lifecycle is complete —
+its `Status` is `verified` (or `verified (user-waived)`), its `## Verified Commit Hash` is set,
+and SKETCH.md reflects the (possibly updated) tail. The next session starts a fresh
+`{investigate, redteam, ask}` group (`state-machine.md` "Session Handoff Seams") for the proposed
+chunk, or — if the sketch's `## Mandated Chunks` final-acceptance chunk is next — dispatches
+`build/final-acceptance.md` instead. This file does not restate either downstream shape.
