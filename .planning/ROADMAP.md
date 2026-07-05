@@ -245,7 +245,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 4/4 | Complete    | 2026-07-05 |
 | 147. `/bs-check-status` & `/bs-insert-chunk` | 2/2 | Complete    | 2026-07-05 |
 | 148. Distribution — Installer & `/bs-generate-ai` | 3/3 | Complete    | 2026-07-05 |
-| 149. End-to-End Dry-Run Validation | 3/3 | Complete   | 2026-07-05 |
+| 149. End-to-End Dry-Run Validation | 3/3 | Complete    | 2026-07-05 |
 
 ### Shipped milestones
 
