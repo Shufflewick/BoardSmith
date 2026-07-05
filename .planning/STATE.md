@@ -4,13 +4,13 @@ milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
 stopped_at: Completed 145-02-PLAN.md
-last_updated: "2026-07-05T00:45:24.451Z"
+last_updated: "2026-07-05T00:49:55.298Z"
 last_activity: 2026-07-05
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
   percent: 60
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 146 (/bs-build-chunk — Playtest, Revise, Close & Final Acceptance) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-05
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 91%
 
 ## Milestones
 
@@ -215,6 +215,8 @@ Recent decisions affecting current work:
 - [Phase 145]: repair.md's fix-or-refute-with-citation branch modeled on build/build.md's Extends Never Restructures shape — no exact prior analog existed for a refute-in-place-of-fix path
 - [Phase 145-02]: design-review.md registered only in build-chunk.md's Reference Files list (dispatched by audit, not a top-level dispatch-table step)
 - [Phase 146]: 146-01: assertCitedNearby scans all occurrences of a section-name anchor + both directions for the cite phrase, avoiding false negatives on already-correct citations
+- [Phase ?]: playtest.md forward-cites close.md's Bookkeeping Sequence for light-path duty ahead of close.md's own authoring in Plan 03
+- [Phase ?]: Build-stamp freshness taught as a hard-reload instruction since DevHost.vue has no on-screen version/commit indicator
 
 ### Pending Todos
 
@@ -226,7 +228,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T00:44:20.762Z
+Last session: 2026-07-05T00:48:40.366Z
 Stopped at: Completed 145-02-PLAN.md
 Resume file: None
 Next action: Phase 145 complete (2/2 plans) — ready for phase verification (`/gsd:verify-phase 145`), then continue to Phase 146 (playtest/revise/close)

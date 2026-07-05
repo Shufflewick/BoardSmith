@@ -167,7 +167,7 @@ Plans:
 
 **Plans**: 4 plans
 - [x] 146-01-PLAN.md — extend build-chunk.test.ts drift suite (BUILD-09/10/11/13 + UIQ-05 describe blocks; invert forward-ref markers to zero-remain)
-- [ ] 146-02-PLAN.md — author build/playtest.md (BUILD-09 human gate) + build/revise.md (BUILD-10 4-category triage)
+- [x] 146-02-PLAN.md — author build/playtest.md (BUILD-09 human gate) + build/revise.md (BUILD-10 4-category triage)
 - [ ] 146-03-PLAN.md — author build/close.md (BUILD-11 bookkeeping + sketch-tail delta gate) + build/final-acceptance.md (UIQ-05 6-point design-QA)
 - [ ] 146-04-PLAN.md — retire all forward-ref markers in build-chunk.md, register 4 files, reconcile Step Group 4 dispatch, assert full suite green (BUILD-13)
 **UI hint**: yes
@@ -224,7 +224,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 5/5 | Complete    | 2026-07-04 |
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 4/4 | Complete    | 2026-07-04 |
 | 145. `/bs-build-chunk` — Audit & Repair with Design Review | 2/2 | Complete    | 2026-07-05 |
-| 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 1/4 | In Progress|  |
+| 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 2/4 | In Progress|  |
 | 147. `/bs-check-status` & `/bs-insert-chunk` | 0/TBD | Not started | - |
 | 148. Distribution — Installer & `/bs-generate-ai` | 0/TBD | Not started | - |
 | 149. End-to-End Dry-Run Validation | 0/TBD | Not started | - |

@@ -37,8 +37,8 @@
 - [x] **BUILD-06**: The test step runs tsc, boardsmith eslint, unit/integration tests, the full accumulated suite, and a random-simulation playthrough to a terminal state
 - [x] **BUILD-07**: Audit agents read raw slices + RULINGS.md + code (never the interpretation) with fidelity, visibility-leak (two-seat diff), and undo lenses, writing to a stable-ID findings ledger
 - [x] **BUILD-08**: Repair loops are bounded (max 3 audit rounds, only-new-findings rule, refutation-with-citation allowed) with remaining findings triaged to the user
-- [ ] **BUILD-09**: Playtest hands the user a numbered click-by-click script with seat counts, dev-host affordances, a build stamp, a regression line, and an explicit item-by-item verified checklist; `verified (user-waived)` is recordable
-- [ ] **BUILD-10**: Playtest feedback is triaged item-by-item (this-chunk / future-scope / not-built-yet / ruling) and re-entry after revision presents a feedback disposition report with a targeted re-test script
+- [x] **BUILD-09**: Playtest hands the user a numbered click-by-click script with seat counts, dev-host affordances, a build stamp, a regression line, and an explicit item-by-item verified checklist; `verified (user-waived)` is recordable
+- [x] **BUILD-10**: Playtest feedback is triaged item-by-item (this-chunk / future-scope / not-built-yet / ruling) and re-entry after revision presents a feedback disposition report with a targeted re-test script
 - [ ] **BUILD-11**: Close records the verified commit hash, re-derives the sketch tail, and presents the delta for approval before proposing the next chunk
 - [x] **BUILD-12**: Trivial chunks run a light path (build → test → playtest) with the user told which ceremony is in effect
 - [ ] **BUILD-13**: Sessions commit at every step completion (`chunk-<slug>/step-<name>`), hand off at structural step-group seams with a non-programmer-readable resume message, and detect concurrent sessions via a sketch lock note
@@ -106,8 +106,8 @@
 | BUILD-07 | Phase 145 | Complete |
 | BUILD-08 | Phase 145 | Complete |
 | UIQ-04 | Phase 145 | Complete |
-| BUILD-09 | Phase 146 | Pending |
-| BUILD-10 | Phase 146 | Pending |
+| BUILD-09 | Phase 146 | Complete |
+| BUILD-10 | Phase 146 | Complete |
 | BUILD-11 | Phase 146 | Pending |
 | BUILD-13 | Phase 146 | Pending |
 | UIQ-05 | Phase 146 | Pending |
