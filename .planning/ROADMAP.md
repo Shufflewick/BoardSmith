@@ -236,7 +236,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 4/4 | Complete    | 2026-07-04 |
 | 145. `/bs-build-chunk` — Audit & Repair with Design Review | 2/2 | Complete    | 2026-07-05 |
 | 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 4/4 | Complete    | 2026-07-05 |
-| 147. `/bs-check-status` & `/bs-insert-chunk` | 2/2 | Complete   | 2026-07-05 |
+| 147. `/bs-check-status` & `/bs-insert-chunk` | 2/2 | Complete    | 2026-07-05 |
 | 148. Distribution — Installer & `/bs-generate-ai` | 0/TBD | Not started | - |
 | 149. End-to-End Dry-Run Validation | 0/TBD | Not started | - |
 
