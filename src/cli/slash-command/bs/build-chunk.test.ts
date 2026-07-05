@@ -13,11 +13,11 @@
  * (or ERROR, since the files don't exist yet) until those files land — this is the intended
  * Wave-0-first state. It turns GREEN plan-by-plan as each file is authored.
  *
- * BUILD-05..11 (build/test/audit/repair/playtest/revise/close) are NOT asserted here at all —
- * those steps are authored in Phases 144-146. Steps 4-10 are asserted only as forward-reference
- * stub text in build-chunk.md's routing table (the "authored in Phase 14X" marker), never as
- * file-existence checks, per 143-CONTEXT.md's "existence check covers only files due by the
- * current phase."
+ * BUILD-09/10/11/13 and UIQ-05 (playtest/revise/close/final-acceptance + the git-protocol
+ * citation discipline) were added by 146-01-PLAN.md as the Wave-0-first RED scaffold for Phase
+ * 146 — the four new reference files don't exist yet and build-chunk.md's forward-reference
+ * markers haven't been removed yet, so these assertions are intentionally RED until Plans
+ * 02-04 author the content and edit build-chunk.md.
  *
  * Every `read()` call is made INSIDE its `it()` body (never at describe-level) so a missing
  * file fails only that one assertion instead of aborting the whole suite's collection phase.
@@ -102,6 +102,10 @@ const REFERENCED_PATHS = [
   'build/repair.md',
   'build/design-review.md',
   'build/design-ask.md',
+  'build/playtest.md',
+  'build/revise.md',
+  'build/close.md',
+  'build/final-acceptance.md',
   'state-machine.md',
   'templates/CHUNK.template.md',
   'templates/RULINGS.template.md',
@@ -482,6 +486,137 @@ describe('UIQ-03 — a11y floor', () => {
     expect(test).toContain('aria-hidden');
     expect(test).toMatch(/focus management/i);
     expect(test).toContain('prefers-reduced-motion');
+  });
+});
+
+describe('BUILD-09 — playtest', () => {
+  it('documents the numbered click-by-click script with seat counts and dev-host affordances taught once', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toContain('npx boardsmith dev');
+    expect(playtest).toContain('--ai');
+    expect(playtest).toMatch(/seat count/i);
+    expect(playtest).toMatch(/taught once/i);
+  });
+
+  it('includes a build-stamp hard-reload freshness check', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toMatch(/reload/i);
+    expect(playtest).toContain('Build stamp');
+  });
+
+  it('includes a one-line regression check and the taste line', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toMatch(/regression check/i);
+    expect(playtest).toMatch(/anything look off/i);
+  });
+
+  it('includes a second-seat leak check for hidden-info chunks', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toMatch(/second-seat leak/i);
+  });
+
+  it('presents an item-by-item Verified Checklist, confirmed one at a time (not a vibe)', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toContain('## Verified Checklist');
+    expect(playtest).toMatch(/one at a time/i);
+    expect(playtest).toMatch(/not a vibe/i);
+  });
+
+  it('records "verified (user-waived)" as an honest, recordable skip state', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toContain('verified (user-waived)');
+  });
+});
+
+describe('BUILD-10 — revise', () => {
+  it('names all four triage categories', () => {
+    const revise = read('build/revise.md');
+    expect(revise).toMatch(/this-chunk defect/i);
+    expect(revise).toMatch(/future scope/i);
+    expect(revise).toMatch(/not-built-yet/i);
+    expect(revise).toContain('RULINGS.md');
+  });
+
+  it('appends to the ## Revision Rounds ledger with revise-1/revise-2 numbering', () => {
+    const revise = read('build/revise.md');
+    expect(revise).toContain('## Revision Rounds');
+    expect(revise).toMatch(/revise-1/);
+    expect(revise).toMatch(/revise-2/);
+  });
+
+  it('requires a feedback disposition report + targeted re-test on re-entry, forbidding a blind full re-test', () => {
+    const revise = read('build/revise.md');
+    expect(revise).toMatch(/feedback disposition report/i);
+    expect(revise).toMatch(/targeted re-test/i);
+    expect(revise).toMatch(/never.{0,60}blind full re-test|blind full re-test.{0,60}never/is);
+  });
+});
+
+describe('BUILD-11 — close', () => {
+  it('records the verified commit hash', () => {
+    const close = read('build/close.md');
+    expect(close).toContain('git rev-parse HEAD');
+    expect(close).toContain('## Verified Commit Hash');
+  });
+
+  it('presents the sketch-tail re-derivation as a delta gate, never a silent rewrite', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/delta/i);
+    expect(close).toMatch(/never a silent rewrite/i);
+  });
+
+  it('proposes the next chunk with its ui: tag', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/next chunk/i);
+    expect(close).toMatch(/ui:/);
+  });
+
+  it('names a "## Bookkeeping Sequence" section (byte-exact heading) for playtest\'s light-path close pointer', () => {
+    const close = read('build/close.md');
+    expect(close).toContain('## Bookkeeping Sequence');
+  });
+});
+
+describe('UIQ-05 — final-acceptance', () => {
+  it('documents all seven design-QA checks', () => {
+    const fa = read('build/final-acceptance.md');
+    expect(fa).toContain('useAnnouncer');
+    expect(fa).toMatch(/VoiceOver/);
+    expect(fa).toMatch(/200%\s*zoom/i);
+    expect(fa).toMatch(/compact.{0,20}touch target/i);
+    expect(fa).toMatch(/colorblind/i);
+    expect(fa).toMatch(/both Slate themes/i);
+    expect(fa).toMatch(/mobile layout/i);
+    expect(fa).toMatch(/iframe-shrink/i);
+  });
+
+  it('documents the coverage check (every non-variant slice cited by a closed chunk)', () => {
+    const fa = read('build/final-acceptance.md');
+    expect(fa).toMatch(/coverage check/i);
+    expect(fa).toMatch(/non-variant/i);
+  });
+
+  it('requires --no-open and an explicit server-kill discipline for any dispatched agent', () => {
+    const fa = read('build/final-acceptance.md');
+    expect(fa).toContain('--no-open');
+    expect(fa).toMatch(/kill/i);
+  });
+
+  it('cites the BREAKPOINTS values 640/1024/1440', () => {
+    const fa = read('build/final-acceptance.md');
+    expect(fa).toContain('640');
+    expect(fa).toContain('1024');
+    expect(fa).toContain('1440');
+  });
+
+  it('pins the drag-drop keyboard-alternates check and its build/test.md item-1 reuse', () => {
+    const fa = read('build/final-acceptance.md');
+    expect(fa).toMatch(/drag-drop|drag and drop/i);
+    expect(fa).toMatch(/keyboard alternate/i);
+    const dragIndex = fa.search(/drag-drop|drag and drop/i);
+    expect(dragIndex).toBeGreaterThan(-1);
+    const nearby = fa.slice(Math.max(0, dragIndex - 500), dragIndex + 1000);
+    expect(nearby).toContain('build/test.md');
   });
 });
 
