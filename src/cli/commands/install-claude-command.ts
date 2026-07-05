@@ -171,9 +171,13 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
       execSync('npm link --force', { cwd: boardsmithRoot, stdio: 'pipe' });
       console.log(chalk.green('✓ BoardSmith linked globally'));
     } catch (err) {
-      // Check if it's already linked by trying to run boardsmith
+      // Check if it's ALREADY linked globally without touching the network. A bare
+      // `npx boardsmith --version` would DOWNLOAD and execute a registry package named
+      // "boardsmith" when none is linked locally — an unrequested network side-effect,
+      // a supply-chain surface if a squatter owns that name, and a hang/prompt in CI.
+      // `npm ls -g` only inspects already-installed global packages and never fetches.
       try {
-        execSync('npx boardsmith --version', { stdio: 'pipe' });
+        execSync('npm ls -g --depth=0 boardsmith', { stdio: 'pipe' });
         console.log(chalk.green('✓ BoardSmith already linked globally'));
       } catch {
         console.error(chalk.yellow('Warning: Could not link BoardSmith globally.'));

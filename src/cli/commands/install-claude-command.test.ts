@@ -271,6 +271,27 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
 });
 
 /**
+ * WR-02: the global-link detection fallback must never probe the public registry. A bare
+ * `npx boardsmith --version` would DOWNLOAD+run a registry package named "boardsmith" when
+ * none is linked locally (supply-chain surface + CI hang). This asserts the installer source
+ * uses the network-free `npm ls -g` form and contains no bare `npx boardsmith` invocation.
+ */
+describe('installClaudeCommand — link detection never fetches from registry (WR-02)', () => {
+  it('uses a network-free global-presence probe, not a bare `npx boardsmith` that can fetch', () => {
+    const source = readFileSync(
+      join(REPO_ROOT, 'src', 'cli', 'commands', 'install-claude-command.ts'),
+      'utf-8'
+    );
+    // No `npx` may be EXECUTED: a bare `npx boardsmith` fetches from the registry when
+    // nothing is linked locally. (Prose mentions of `npx boardsmith` in comments are fine;
+    // this targets the execSync invocation form specifically.)
+    expect(source).not.toMatch(/execSync\(\s*['"`]npx/);
+    // The fallback probe must be the network-free `npm ls -g` form.
+    expect(source).toContain('npm ls -g --depth=0 boardsmith');
+  });
+});
+
+/**
  * WR-03: a partial/interrupted install (only the first sentinel SKILL.md written) must NOT be
  * misreported as "already installed" on a later non-force run. The completeness check keys on
  * the full expected set, so the run detects the tree is incomplete and finishes it.
