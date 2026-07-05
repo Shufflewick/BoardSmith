@@ -117,9 +117,13 @@ evidence trail for this round's review and the cohesion-diff source for the *nex
 design-review pass.
 
 **Theme injection — no toggle UI exists.** There is no button to click. Set the theme by
-injecting `document.documentElement.dataset.theme` (or the GameShell iframe's own
-`contentDocument`, since the iframe renders in platform mode — see the CLI's own dev-host
-framing), not by clicking anything.
+injecting it onto the **GameShell iframe's own document**, not by clicking anything:
+`iframe.contentDocument.documentElement.dataset.theme = 'dark'` (or `'light'`). The iframe
+renders the seat view in platform mode, so its *own* document — NOT the outer page's
+`document.documentElement` — is where `applyTheme` reads `html[data-theme]`
+(`src/ui/theme.ts:204,209,239-244`). Setting `data-theme` on the outer page does NOT re-theme
+the iframe content and silently yields same-theme screenshots for both the light and dark
+passes — a broken dark layout would then pass review unseen.
 
 **Iframe-resize caveat.** After setting `iframe.style.width` to a tier's capture width (e.g.
 `375` for compact), call `iframe.contentWindow.location.reload()` so the board remeasures.
