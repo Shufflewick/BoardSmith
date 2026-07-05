@@ -338,8 +338,11 @@ This skill delegates its heavyweight, step-scoped prose to:
 - `build/close.md` — verified-commit-hash bookkeeping, decision rollup, and the sketch-tail delta
   gate before proposing the next chunk
 - `build/final-acceptance.md` — the sketch's mandated-chunk design-QA pass (6-point check +
-  fresh-context automatable-checks dispatch), run in place of a normal chunk's `{playtest, revise,
-  close}` group when the sketch's `## Mandated Chunks` final-acceptance chunk is next
+  fresh-context automatable-checks dispatch), run **as the content of** the sketch's `## Mandated
+  Chunks` final-acceptance chunk's `{playtest, revise, close}` group when that chunk is next: its
+  coverage check and design-QA pass supply that chunk's playtest script, and the standard
+  playtest/revise/close semantics still run **on top of** it (never in place of the human
+  playtest/close of the finished game)
 
 And to the shared reference files that ship with every `bs-` skill:
 
