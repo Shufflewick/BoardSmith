@@ -13,6 +13,7 @@ import {
   generatePackageJson,
   generateScaffoldFiles,
   generateA11yExampleTestTs,
+  generateTsConfig,
   type ProjectConfig,
 } from './project-scaffold.js';
 import {
@@ -145,6 +146,28 @@ describe('generateRulesIndexTs', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('generateTsConfig — vite/client types (Phase 149 dry-run Defect 1)', () => {
+  // A freshly-scaffolded, unmodified project failed `tsc --noEmit` out of the
+  // box: `src/ui/index.ts` re-exports a type from `boardsmith/ui`, and
+  // `GameTable.vue` imports `UseActionControllerReturn` from `boardsmith/ui`
+  // directly. In local-monorepo dev mode `boardsmith`'s `./ui` export
+  // resolves to raw source, so tsc fully type-checks that module graph —
+  // reaching `useActionController.ts`'s `import.meta.env.DEV`, which is
+  // unresolvable without the `vite/client` ambient types. These tests pin the
+  // fix so it can't silently regress.
+  it('includes "vite/client" in compilerOptions.types', () => {
+    const parsed = JSON.parse(generateTsConfig());
+    expect(parsed.compilerOptions.types).toContain('vite/client');
+  });
+});
+
+describe('generatePackageJson — explicit vite devDependency (Phase 149 dry-run Defect 1)', () => {
+  it('includes vite explicitly (not relying on @vitejs/plugin-vue hoisting) so "vite/client" types always resolve', () => {
+    const parsed = JSON.parse(generatePackageJson(config));
+    expect(parsed.devDependencies).toHaveProperty('vite');
   });
 });
 

@@ -142,6 +142,10 @@ export function generatePackageJson(config: ProjectConfig): string {
     },
     devDependencies: {
       '@vitejs/plugin-vue': '^5.0.0',
+      // Explicit (not just transitively hoisted via @vitejs/plugin-vue) so
+      // `types: ["vite/client"]` in the generated tsconfig always resolves
+      // regardless of package-manager hoisting behavior (Phase 149 Defect 1).
+      vite: '^5.4.0',
       typescript: '^5.7.0',
       vitest: '^2.0.0',
       // Vitest v2 does not bundle jsdom; the a11y example opens with
@@ -165,6 +169,15 @@ export function generateTsConfig(): string {
       module: 'ESNext',
       moduleResolution: 'bundler',
       lib: ['ES2022', 'DOM', 'DOM.Iterable'],
+      // `src/ui/index.ts` re-exports types from `boardsmith/ui`, and the
+      // scaffold's `GameTable.vue` imports `UseActionControllerReturn` from
+      // `boardsmith/ui` directly. In local-monorepo dev mode `boardsmith`'s
+      // `./ui` export resolves to raw source, so tsc must fully type-check
+      // that module graph — which reaches `useActionController.ts`'s
+      // `import.meta.env.DEV` (a Vite-ambient global). Without this, a
+      // freshly-scaffolded, unmodified project fails `tsc --noEmit` out of
+      // the box with TS2339 on `ImportMeta.env` (Phase 149 dry-run Defect 1).
+      types: ['vite/client'],
       strict: true,
       esModuleInterop: true,
       skipLibCheck: true,

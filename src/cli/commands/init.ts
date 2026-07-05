@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { execSync } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
 import {
@@ -56,6 +57,26 @@ export async function initCommand(name: string): Promise<void> {
     const deps = getDependencyPaths();
     if (deps.isLocalDev) {
       console.log(chalk.dim(`  Using local BoardSmith from monorepo`));
+    }
+
+    // Initialize a git repository with an initial commit. The `/bs-build-chunk`
+    // skill's Git Protocol commits at every step (chunk-<slug>/step-<name>) —
+    // without this, a freshly scaffolded project has no git repo at all and
+    // the very first commit that protocol calls for fails outright (Phase 149
+    // dry-run Finding 1). Non-fatal on failure (e.g. no git on PATH, or the
+    // project dir is already nested in a repo the user manages themselves) —
+    // scaffolding must not fail because git setup did.
+    try {
+      execSync('git init', { cwd: projectPath, stdio: 'ignore' });
+      execSync('git add -A', { cwd: projectPath, stdio: 'ignore' });
+      execSync('git commit -m "chore: scaffold project via boardsmith init"', {
+        cwd: projectPath,
+        stdio: 'ignore',
+      });
+    } catch {
+      console.log(
+        chalk.dim('  (skipped git init — git not available or commit failed; run `git init` manually if you want version control)')
+      );
     }
 
     spinner.succeed(chalk.green(`Created ${name} successfully!`));

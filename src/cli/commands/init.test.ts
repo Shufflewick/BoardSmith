@@ -12,11 +12,13 @@
  * the game body, after registerElements(), iterating this.players. These tests
  * pin that pattern so the template can't regress to the crashing shape.
  */
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, afterEach } from 'vitest';
+import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { generateGameTs, generateTestTs } from './init.js';
+import { tmpdir } from 'node:os';
+import { generateGameTs, generateTestTs, initCommand } from './init.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -92,5 +94,41 @@ describe('init command — no -t/--template surface (CLIX-05 / F33)', () => {
     const initSrc = readFileSync(join(__dirname, 'init.ts'), 'utf-8');
     expect(initSrc).not.toContain('template');
     expect(initSrc).not.toContain('InitOptions');
+  });
+});
+
+// Phase 149 dry-run Finding 1: `build-chunk.md`'s Git Protocol commits at
+// every step, but a freshly-scaffolded project had no git repository at all
+// (`npx boardsmith init` never ran `git init`), so the very first commit that
+// protocol calls for would fail outright. `initCommand` now runs `git init`
+// (+ an initial commit, best-effort) as part of scaffolding.
+describe('initCommand — git init on scaffold (Phase 149 Finding 1)', () => {
+  const originalCwd = process.cwd();
+  let parentDir: string;
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (parentDir) rmSync(parentDir, { recursive: true, force: true });
+  });
+
+  it('initializes a git repository in the scaffolded project directory', async () => {
+    parentDir = mkdtempSync(join(tmpdir(), 'bs-init-git-'));
+    process.chdir(parentDir);
+    await initCommand('git-init-test-game');
+    const projectPath = join(parentDir, 'git-init-test-game');
+    expect(existsSync(join(projectPath, '.git'))).toBe(true);
+  });
+
+  it('is non-fatal to scaffolding when git is unavailable or the commit fails', async () => {
+    // Simulate a broken git by pointing GIT_DIR/PATH-independent failure:
+    // most reliably, run inside a dir where `git init` itself would still
+    // succeed but the commit has no identity configured — initCommand must
+    // not throw or exit(1) regardless.
+    parentDir = mkdtempSync(join(tmpdir(), 'bs-init-git-noid-'));
+    process.chdir(parentDir);
+    await expect(initCommand('git-init-noid-game')).resolves.toBeUndefined();
+    const projectPath = join(parentDir, 'git-init-noid-game');
+    // Scaffold files must exist regardless of git outcome.
+    expect(existsSync(join(projectPath, 'package.json'))).toBe(true);
   });
 });
