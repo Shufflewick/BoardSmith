@@ -63,18 +63,36 @@ guess these numbers:
 - `medium: 1024`
 - `wide: 1440`
 
-For each of the 3 breakpoints, capture both themes (light and dark), for 6 screenshots total.
-Save each into `chunks/<slug>/shots/` with names like `compact-light.png` through
-`wide-dark.png`. The shots directory is committed — it is both the evidence trail for this
-round's review and the cohesion-diff source for the *next* UI chunk's design-review pass.
+**These are tier boundaries, NOT capture widths.** `theme.ts:18` defines the tiers as
+`compact ≤639px · medium 640–1023px · wide ≥1024px`. `BREAKPOINTS.compact` (640) and
+`BREAKPOINTS.medium` (1024) are the *ceilings of the tier below* (640 = phone ceiling → at/above
+it is medium; 1024 = tablet ceiling → at/above it is wide), and `BREAKPOINTS.wide` (1440) is the
+wide-tier max-width cap, not a tier boundary at all. So driving `iframe.style.width` to a raw
+`BREAKPOINTS` value renders the tier *above* the one you meant to capture (640 → medium, 1024 →
+wide) — the compact/phone tier would never actually be screenshotted and a broken phone layout
+would pass review unseen. Capture at a representative width that falls clearly *inside* each
+tier, and label each file by the tier NAME that actually renders at that width:
+
+| Tier (name) | Tier range (theme.ts:18) | Capture width | Why this width lands in-tier |
+| --- | --- | --- | --- |
+| `compact` | ≤639px | **375** | below `BREAKPOINTS.compact` (640) — real phone layout |
+| `medium`  | 640–1023px | **800** | between `BREAKPOINTS.compact` (640) and `BREAKPOINTS.medium` (1024) — tablet layout |
+| `wide`    | ≥1024px | **1440** | ≥ `BREAKPOINTS.medium` (1024); equals `BREAKPOINTS.wide` (1440), also exercising the max-width cap |
+
+For each of the 3 tiers, capture both themes (light and dark), for 6 screenshots total. Save
+each into `chunks/<slug>/shots/` with filenames labelled by tier NAME — `compact-light.png`
+through `wide-dark.png` — so the filename matches the tier that actually rendered at its capture
+width, never the raw `BREAKPOINTS` number. The shots directory is committed — it is both the
+evidence trail for this round's review and the cohesion-diff source for the *next* UI chunk's
+design-review pass.
 
 **Theme injection — no toggle UI exists.** There is no button to click. Set the theme by
 injecting `document.documentElement.dataset.theme` (or the GameShell iframe's own
 `contentDocument`, since the iframe renders in platform mode — see the CLI's own dev-host
 framing), not by clicking anything.
 
-**Compact-breakpoint iframe-resize caveat.** After setting `iframe.style.width` to simulate the
-compact breakpoint, call `iframe.contentWindow.location.reload()` so the board remeasures.
+**Iframe-resize caveat.** After setting `iframe.style.width` to a tier's capture width (e.g.
+`375` for compact), call `iframe.contentWindow.location.reload()` so the board remeasures.
 `ResizeObserver` does not fire on a programmatic iframe resize — skipping the reload captures a
 stale, un-remeasured layout that looks wrong for reasons that have nothing to do with the
 chunk's actual code.
