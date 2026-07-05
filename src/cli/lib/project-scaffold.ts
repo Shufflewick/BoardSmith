@@ -177,6 +177,14 @@ export function generateTsConfig(): string {
       // `import.meta.env.DEV` (a Vite-ambient global). Without this, a
       // freshly-scaffolded, unmodified project fails `tsc --noEmit` out of
       // the box with TS2339 on `ImportMeta.env` (Phase 149 dry-run Defect 1).
+      //
+      // COUPLING (WR-04): listing `types` at all switches tsc from
+      // "auto-include every @types/* in node_modules" to "include ONLY these".
+      // Any future scaffold/game file that relies on ambient globals — Node
+      // `process`/`Buffer` (@types/node), vitest globals via `globals: true`,
+      // extra `@types/web` — will silently fail to type-check until its package
+      // is appended here explicitly (and added as a devDependency). Keep this
+      // array in sync when introducing such a dependency.
       types: ['vite/client'],
       strict: true,
       esModuleInterop: true,
