@@ -54,7 +54,7 @@
 ### Status & Sketch Editing (STAT)
 
 - [x] **STAT-01**: Designer can run `/bs-check-status` to see chunks done/remaining, current step, outstanding feedback, waived verifications, asset debts, and the exact next command
-- [ ] **STAT-02**: Designer can reshape the sketch via `/bs-insert-chunk`, which diffs citations against closed chunks, marks stale detailed chunks, and bumps the sketch version stamp
+- [x] **STAT-02**: Designer can reshape the sketch via `/bs-insert-chunk`, which diffs citations against closed chunks, marks stale detailed chunks, and bumps the sketch version stamp
 
 ### Distribution (DIST)
 
@@ -112,7 +112,7 @@
 | BUILD-13 | Phase 146 | Complete |
 | UIQ-05 | Phase 146 | Complete |
 | STAT-01 | Phase 147 | Complete |
-| STAT-02 | Phase 147 | Pending |
+| STAT-02 | Phase 147 | Complete |
 | DIST-01 | Phase 148 | Pending |
 | DIST-02 | Phase 148 | Pending |
 | VAL-01 | Phase 149 | Pending |

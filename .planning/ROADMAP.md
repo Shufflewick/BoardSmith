@@ -194,7 +194,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 147-02-PLAN.md — /bs-insert-chunk (STAT-02): sketch editor (4 ops, stale-mark, version bump) + retire build-chunk.md Phase-147 forward-refs
+- [x] 147-02-PLAN.md — /bs-insert-chunk (STAT-02): sketch editor (4 ops, stale-mark, version bump) + retire build-chunk.md Phase-147 forward-refs
 
 #### Phase 148: Distribution — Installer & `/bs-generate-ai`
 
@@ -236,7 +236,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 4/4 | Complete    | 2026-07-04 |
 | 145. `/bs-build-chunk` — Audit & Repair with Design Review | 2/2 | Complete    | 2026-07-05 |
 | 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 4/4 | Complete    | 2026-07-05 |
-| 147. `/bs-check-status` & `/bs-insert-chunk` | 1/2 | In Progress|  |
+| 147. `/bs-check-status` & `/bs-insert-chunk` | 2/2 | Complete   | 2026-07-05 |
 | 148. Distribution — Installer & `/bs-generate-ai` | 0/TBD | Not started | - |
 | 149. End-to-End Dry-Run Validation | 0/TBD | Not started | - |
 

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
-status: executing
+status: verifying
 stopped_at: Completed 146-04-PLAN.md
-last_updated: "2026-07-05T01:54:45.600Z"
+last_updated: "2026-07-05T01:59:35.525Z"
 last_activity: 2026-07-05
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 24
-  completed_plans: 23
-  percent: 70
+  completed_plans: 24
+  percent: 80
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 147 (/bs-check-status & /bs-insert-chunk) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-05
 
-Progress: [██████████] 96%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -222,6 +222,9 @@ Recent decisions affecting current work:
 - [Phase 146-04]: Step Groups 2-3 dispatch prose lives in build/build.md, test.md, audit.md, repair.md themselves; only Group 4 needed a live dispatch section authored in build-chunk.md — Groups 2-3 never had inline dispatch prose to retire (already citation-only, unlike Group 1)
 - [Phase ?]: [Phase 147-01]: check-status.md reuses build-chunk.md's Step 2 current-chunk/current-step derivation rule verbatim in spirit rather than re-deriving it
 - [Phase ?]: [Phase 147-01]: Waived-chunk batch-playtest proposal gated at 2+ waived chunks (0-1 just reports the count)
+- [Phase ?]: [Phase 147-02]: op (b)'s citation-overlap diff performed inline by insert-chunk.md, no subagent dispatch -- flags only, never triggers a revise round itself
+- [Phase ?]: [Phase 147-02]: Mandated-Chunks invariant guard folded into op (a) rather than a standalone fifth check
+- [Phase ?]: [Phase 147-02]: build-chunk.md line 76's parenthetical check-status pointer left unchanged -- correct live pointer, not one of the two Step-1 stopgap bullets targeted for retirement
 
 ### Pending Todos
 
@@ -233,7 +236,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T01:54:42.442Z
+Last session: 2026-07-05T01:58:32.924Z
 Stopped at: Completed 146-04-PLAN.md
 Resume file: None
 Next action: Phase 145 complete (2/2 plans) — ready for phase verification (`/gsd:verify-phase 145`), then continue to Phase 146 (playtest/revise/close)
