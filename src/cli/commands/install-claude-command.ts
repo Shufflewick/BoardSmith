@@ -43,6 +43,39 @@ function excludeTestFiles(src: string): boolean {
   return !src.endsWith('.test.ts');
 }
 
+/** Every filesystem path this installer owns under `targetDir`. */
+function ownedPaths(targetDir: string): string[] {
+  return [
+    ...SKILL_ENTRY_POINTS.map(({ skillName }) => join(targetDir, skillName)),
+    ...SHARED_DIRS.map((dirName) => join(targetDir, dirName)),
+    join(targetDir, 'state-machine.md'),
+  ];
+}
+
+/**
+ * The full set of paths a complete install must contain. Used to distinguish a complete
+ * install (short-circuit as "already installed") from a partial/interrupted one (proceed).
+ */
+function expectedInstallPaths(targetDir: string): string[] {
+  return [
+    ...SKILL_ENTRY_POINTS.map(({ skillName }) => join(targetDir, skillName, 'SKILL.md')),
+    ...SHARED_DIRS.map((dirName) => join(targetDir, dirName)),
+    join(targetDir, 'state-machine.md'),
+  ];
+}
+
+/** True only when EVERY expected install path is present (a complete, non-partial install). */
+async function isFullyInstalled(targetDir: string): Promise<boolean> {
+  for (const path of expectedInstallPaths(targetDir)) {
+    try {
+      await fs.access(path);
+    } catch {
+      return false; // Missing piece → partial/absent install
+    }
+  }
+  return true;
+}
+
 /**
  * Copy the Agent Skills tree (5 SKILL.md entry points + shared reference tree) into targetDir.
  *
@@ -56,15 +89,20 @@ async function copySkillTree(
   const slashCommandDir = join(boardsmithRoot, 'src', 'cli', 'slash-command');
   const bsDir = join(slashCommandDir, 'bs');
 
-  // Sentinel: use the first skill's SKILL.md as the "already installed" check.
-  const sentinelPath = join(targetDir, 'bs-ingest-rules', 'SKILL.md');
-  if (!force) {
-    try {
-      await fs.access(sentinelPath);
-      return false; // Already installed, not overwriting
-    } catch {
-      // Doesn't exist, proceed with install
-    }
+  // "Already installed" must mean the FULL expected set is present, not a single sentinel.
+  // A partial/interrupted install (e.g. first SKILL.md written but shared tree never copied)
+  // must NOT short-circuit as complete — it falls through to a clean re-copy that finishes it.
+  if (!force && (await isFullyInstalled(targetDir))) {
+    return false; // Fully installed, not overwriting
+  }
+
+  // Pre-clean every installer-owned path before copying so the result is authoritative:
+  // fs.cp merges into an existing tree and never deletes orphans (renamed/removed upstream
+  // files), so a --force reinstall (or completing a partial install) must delete first to
+  // produce a tree identical to a fresh install. Only paths this installer owns are removed —
+  // never the user's wider ~/.claude/skills tree. fs.rm with force:true is a no-op if absent.
+  for (const path of ownedPaths(targetDir)) {
+    await fs.rm(path, { recursive: true, force: true });
   }
 
   // Entry points: read each source .md verbatim, write to <targetDir>/<skillName>/SKILL.md

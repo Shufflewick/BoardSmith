@@ -15,7 +15,7 @@
  * `try { ... } finally { rmSync(..., { recursive: true, force: true }) }`.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -209,5 +209,111 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
       }
       expect(body).toMatch(/late sketch chunk|terminal state|game-end/i);
     });
+  });
+});
+
+/**
+ * WR-01: a `--force` reinstall must produce a tree identical to a fresh install — orphaned
+ * files left inside installer-owned dirs (from a prior install where an upstream file was
+ * renamed/removed) must NOT survive. fs.cp merges, so the installer pre-cleans owned paths.
+ */
+describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let skillsRoot: string;
+
+  const SKILL_NAMES = [
+    'bs-ingest-rules',
+    'bs-build-chunk',
+    'bs-check-status',
+    'bs-insert-chunk',
+    'bs-generate-ai',
+  ];
+
+  beforeAll(async () => {
+    origCwd = process.cwd();
+    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-orphan-'));
+    process.chdir(tempDir);
+    await installClaudeCommand({ local: true, force: true, skipLink: true });
+    skillsRoot = join(tempDir, '.claude', 'skills');
+  });
+
+  afterAll(() => {
+    process.chdir(origCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('a --force reinstall deletes orphaned files left in installer-owned dirs', async () => {
+    // Seed orphans: one inside a shared dir the installer owns, one inside a skill dir.
+    const orphanShared = join(skillsRoot, 'build', 'orphan-stale.md');
+    const orphanSkillFile = join(skillsRoot, 'bs-ingest-rules', 'orphan-extra.md');
+    writeFileSync(orphanShared, 'stale content that no longer exists upstream');
+    writeFileSync(orphanSkillFile, 'stale content that no longer exists upstream');
+    expect(existsSync(orphanShared)).toBe(true);
+    expect(existsSync(orphanSkillFile)).toBe(true);
+
+    // Reinstall with --force: the tree must come out identical to a fresh install.
+    await installClaudeCommand({ local: true, force: true, skipLink: true });
+
+    // Orphans are gone (pre-clean deleted the owned dirs before re-copying).
+    expect(existsSync(orphanShared)).toBe(false);
+    expect(existsSync(orphanSkillFile)).toBe(false);
+
+    // The legitimate tree is still fully present.
+    for (const name of SKILL_NAMES) {
+      expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
+    }
+    for (const dir of ['build', 'ingest', 'templates', 'aspects']) {
+      expect(existsSync(join(skillsRoot, dir))).toBe(true);
+    }
+    expect(existsSync(join(skillsRoot, 'state-machine.md'))).toBe(true);
+  });
+});
+
+/**
+ * WR-03: a partial/interrupted install (only the first sentinel SKILL.md written) must NOT be
+ * misreported as "already installed" on a later non-force run. The completeness check keys on
+ * the full expected set, so the run detects the tree is incomplete and finishes it.
+ */
+describe('installClaudeCommand — partial install is not misreported as complete (WR-03)', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let skillsRoot: string;
+
+  const SKILL_NAMES = [
+    'bs-ingest-rules',
+    'bs-build-chunk',
+    'bs-check-status',
+    'bs-insert-chunk',
+    'bs-generate-ai',
+  ];
+
+  beforeAll(() => {
+    origCwd = process.cwd();
+    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-partial-'));
+    process.chdir(tempDir);
+    skillsRoot = join(tempDir, '.claude', 'skills');
+    // Simulate an interrupted install: only the first-sentinel SKILL.md exists, nothing else.
+    mkdirSync(join(skillsRoot, 'bs-ingest-rules'), { recursive: true });
+    writeFileSync(join(skillsRoot, 'bs-ingest-rules', 'SKILL.md'), 'partial interrupted install');
+  });
+
+  afterAll(() => {
+    process.chdir(origCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('a non-force install over a partial tree completes it instead of short-circuiting', async () => {
+    // With the old single-sentinel check this would return "already installed" and leave the
+    // tree dangling. It must now detect the incomplete tree and finish the full install.
+    await installClaudeCommand({ local: true, force: false, skipLink: true });
+
+    for (const name of SKILL_NAMES) {
+      expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
+    }
+    for (const dir of ['build', 'ingest', 'templates', 'aspects']) {
+      expect(existsSync(join(skillsRoot, dir))).toBe(true);
+    }
+    expect(existsSync(join(skillsRoot, 'state-machine.md'))).toBe(true);
   });
 });
