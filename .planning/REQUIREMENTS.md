@@ -58,8 +58,8 @@
 
 ### Distribution (DIST)
 
-- [ ] **DIST-01**: `install-claude-command.ts` installs all five bs- skills + shared reference files (aspects, doc lists, templates) and removes the design-game template
-- [ ] **DIST-02**: `/generate-ai` is renamed `/bs-generate-ai` and positioned as a late sketch chunk after game-end exists
+- [x] **DIST-01**: `install-claude-command.ts` installs all five bs- skills + shared reference files (aspects, doc lists, templates) and removes the design-game template
+- [x] **DIST-02**: `/generate-ai` is renamed `/bs-generate-ai` and positioned as a late sketch chunk after game-end exists
 
 ### Validation (VAL)
 
@@ -113,8 +113,8 @@
 | UIQ-05 | Phase 146 | Complete |
 | STAT-01 | Phase 147 | Complete |
 | STAT-02 | Phase 147 | Complete |
-| DIST-01 | Phase 148 | Pending |
-| DIST-02 | Phase 148 | Pending |
+| DIST-01 | Phase 148 | Complete |
+| DIST-02 | Phase 148 | Complete |
 | VAL-01 | Phase 149 | Pending |
 
 **Coverage:** 34/34 v4.6 requirements mapped, no orphans, no duplicates.

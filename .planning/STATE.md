@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
-stopped_at: Completed 146-04-PLAN.md
-last_updated: "2026-07-05T02:58:48.229Z"
-last_activity: 2026-07-05 -- Phase 148 planning complete
+stopped_at: Completed 148-01-PLAN.md
+last_updated: "2026-07-05T03:06:36.368Z"
+last_activity: 2026-07-05
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 27
-  completed_plans: 24
+  completed_plans: 25
   percent: 80
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 148 — distribution — installer & `/bs generate ai`
+**Current focus:** Phase 148 — Distribution — Installer & /bs-generate-ai
 
 ## Current Position
 
-Phase: 148
-Plan: Not started
+Phase: 148 (Distribution — Installer & /bs-generate-ai) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-05 -- Phase 148 planning complete
+Last activity: 2026-07-05
 
-Progress: [██████████] 100%
+Progress: [█████████░] 93%
 
 ## Milestones
 
@@ -225,6 +225,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 147-02]: op (b)'s citation-overlap diff performed inline by insert-chunk.md, no subagent dispatch -- flags only, never triggers a revise round itself
 - [Phase ?]: [Phase 147-02]: Mandated-Chunks invariant guard folded into op (a) rather than a standalone fifth check
 - [Phase ?]: [Phase 147-02]: build-chunk.md line 76's parenthetical check-status pointer left unchanged -- correct live pointer, not one of the two Step-1 stopgap bullets targeted for retirement
+- [Phase 148]: 148-01: kept the pinned cite-state-machine.md citation phrase bare (unanchored) in build-chunk.md/check-status.md/insert-chunk.md since anchoring it broke BUILD-13 assertCitedNearby's 250-char window
 
 ### Pending Todos
 
@@ -236,9 +237,9 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T01:58:32.924Z
-Stopped at: Completed 146-04-PLAN.md
-Resume file: None
+Last session: 2026-07-05T03:06:36.360Z
+Stopped at: Completed 148-01-PLAN.md
+Resume file: 
 Next action: Phase 145 complete (2/2 plans) — ready for phase verification (`/gsd:verify-phase 145`), then continue to Phase 146 (playtest/revise/close)
 
 ## Operator Next Steps
