@@ -1,8 +1,8 @@
 ---
 phase: 146-bs-build-chunk-playtest-revise-close-final-acceptance
-reviewed: 2026-07-05T01:02:29Z
+reviewed: 2026-07-04T20:20:00Z
 depth: standard
-files_reviewed: 6
+files_reviewed: 7
 files_reviewed_list:
   - src/cli/slash-command/bs/build/playtest.md
   - src/cli/slash-command/bs/build/revise.md
@@ -10,230 +10,216 @@ files_reviewed_list:
   - src/cli/slash-command/bs/build/final-acceptance.md
   - src/cli/slash-command/bs/build-chunk.md
   - src/cli/slash-command/bs/build-chunk.test.ts
+  - src/cli/slash-command/bs/templates/CHUNK.template.md
 findings:
-  critical: 3
+  critical: 1
   warning: 4
   info: 2
-  total: 9
+  total: 7
 status: issues_found
 ---
 
-# Phase 146: Code Review Report
+# Phase 146: Code Review Report (Iteration 2)
 
-**Reviewed:** 2026-07-05T01:02:29Z
+**Reviewed:** 2026-07-04T20:20:00Z
 **Depth:** standard
-**Files Reviewed:** 6
+**Files Reviewed:** 7 (+ cross-referenced `state-machine.md`, `templates/SKETCH.template.md`)
 **Status:** issues_found
 
 ## Summary
 
-Phase 146 authored the final step group (`playtest`/`revise`/`close`) and `final-acceptance.md`,
-and retired the forward-reference markers in `build-chunk.md`, completing the 10-step engine. The
-drift-protection test suite passes and the surface-level requirements are met: the 7-point design-QA
-pass is complete, dev-host CLI claims (`--players`, `--ai`, `--no-open`, the `Ready! Press Ctrl+C to
-stop.` ready-string) all verify against `src/cli/commands/dev.ts`/`cli.ts`, `useAnnouncer()` and the
-`BREAKPOINTS` (640/1024/1440) citations resolve, `playtest.md` correctly asserts the user owns the
-server and that no build-stamp UI exists (freshness = hard reload), and `final-acceptance.md`'s
-automated portion correctly starts and kills its own server.
+Re-review after the CR-01/CR-02/CR-03/WR-01..04 fixes (552cc863..85bfe9c3). The drift-protection
+suite is fully green (106/106). CR-02 (on-top-of vs in-place-of) and CR-03 (light-path 3-item
+sequence, false sketch-tail citation removed) are genuinely resolved and now agree across
+`build-chunk.md`, `final-acceptance.md`, `close.md`, and `playtest.md`. The full-ceremony and
+light-path lifecycles trace cleanly end-to-end.
 
-However, walking the full lifecycle end-to-end surfaces **three orchestrator-coherence blockers** that
-the string-matching test suite cannot catch, all around the `final-acceptance` chunk and the
-light-path/close bookkeeping seam, plus contradictions with `state-machine.md` and the templates the
-new files fill. These are exactly the class of defect the phase brief asked to verify ("whether the
-now-complete orchestrator is internally coherent end-to-end"). The router is NOT yet coherent for the
-final-acceptance chunk or the light-path close.
+However, walking the **final-acceptance chunk** lifecycle again with the CR-01 router prose in
+place surfaces that the fix is **incomplete in its most common scenario**. The CR-01 fix added the
+*detection* prose (Step 2 "Final-acceptance chunk target" + Step Group 4 content dispatch), but it
+did not add any *author* for the special `[final-acceptance, playtest, revise, close]` Step
+Checklist it routes against, and it did not reconcile that detection with the "Sketch-level
+tail-entry target" paragraph that sits directly above it. Because the final-acceptance chunk is
+always the last Ordered-Chunk-List entry, it is a sketch-level tail entry (no CHUNK.md) until
+routing first reaches it — so on the cold resume the CR-01 fix explicitly names as its motivating
+case, the lazy-detailing path pre-empts the special routing and runs the chunk as an ordinary
+`investigate`-first chunk. Details in CR-01 below.
 
 ## Critical Issues
 
-### CR-01: `build-chunk.md` has no routing rule to dispatch `final-acceptance.md` — the router can never reach it on resume
+### CR-01: Final-acceptance chunk's special 4-item checklist has no author, and the lazy-detailing path pre-empts final-acceptance detection
 
-**File:** `src/cli/slash-command/bs/build-chunk.md:70-100, 214-245, 309-311`
-**Issue:** `final-acceptance.md` is only ever named in `build-chunk.md`'s **Reference Files** list
-(line 309). None of the router's actual routing logic — Step 2 "Resume Routing", Step 3 "Ceremony
-Routing", the Full-ceremony dispatch table (lines 116-130), or "Step Group 4 Dispatch" (lines
-214-245) — contains any rule for detecting that the resume target is the sketch's mandated
-final-acceptance chunk and dispatching `build/final-acceptance.md` instead of the ordinary
-`playtest`. Step 2 routes strictly to "the first incomplete step on its Step Checklist," and the
-CHUNK.template.md checklist has no `final-acceptance` step. The only place that says "dispatch
-`build/final-acceptance.md` instead" is `close.md:99-100`, which fires when the *previous* chunk
-closes and proposes the next one — it does not help a **cold session that resumes directly into the
-final-acceptance chunk**. Such a session will route to a normal checklist step and run the
-final-acceptance chunk as an ordinary chunk, never dispatching `final-acceptance.md`. The
-drift-protection test only asserts the string `build/final-acceptance.md` appears somewhere in
-`build-chunk.md` (test lines 730-735), which the Reference-Files mention satisfies — so the suite is
-green while the router is incoherent.
-**Fix:** Add an explicit routing rule to `build-chunk.md` Step 2 / Step Group 4: when the resume
-target chunk is the sketch's `## Mandated Chunks` final-acceptance chunk, dispatch
-`build/final-acceptance.md` in place of (or ahead of) the normal group-4 `playtest` dispatch,
-regardless of which step the checklist points at. State how the final-acceptance chunk's Step
-Checklist is shaped (it is neither the plain `full` nor `light` list the template ships), since
-resume routing keys on that checklist.
+**File:** `src/cli/slash-command/bs/build-chunk.md:80-115` (with `templates/CHUNK.template.md:37-63`, `templates/SKETCH.template.md:93-101`, `build/close.md:56-99`)
 
-### CR-02: `build-chunk.md` says final-acceptance runs "in place of" `{playtest, revise, close}`; `final-acceptance.md` says it runs "on top of" — direct contradiction
+**Issue:**
+The final-acceptance chunk is a normal entry in SKETCH.md's `## Ordered Chunk List` (SKETCH.template.md's
+`## Mandated Chunks` only *requires that one exist* — it is not a separate list). Being the "full game
+played start-to-finish" it is always the **last** entry, so it lives in the sketch tail and carries
+`Status: proposed (sketch-level — no CHUNK.md yet)` with no `chunks/<slug>/` directory until routing
+first reaches it. That means on the resume where routing lands on the final-acceptance chunk, **two**
+Step 2 paragraphs both apply, and they give contradictory instructions with no stated precedence:
 
-**File:** `src/cli/slash-command/bs/build-chunk.md:309-311` vs. `src/cli/slash-command/bs/build/final-acceptance.md:5-10, 132-138`
-**Issue:** `build-chunk.md:310` states `final-acceptance.md` is "run **in place of** a normal chunk's
-`{playtest, revise, close}` group." `final-acceptance.md:6` states the "`{playtest, revise, close}`
-step group ... **still applies** to it once its own content below is done," and `final-acceptance.md:135`
-states "this chunk still runs the standard `{playtest, revise, close}` semantics **on top of** this
-content." These are mutually exclusive: the router tells the reader the design-QA pass *replaces* the
-group; the reference file tells the reader the group *still runs after* the design-QA content. An
-orchestrator following `build-chunk.md` would skip the human playtest/close of the finished game
-entirely; one following `final-acceptance.md` would run the coverage/design-QA content and then also
-do the full playtest→revise→close. The final-acceptance chunk is the sketch's definition of "done,"
-so getting its lifecycle wrong is a data/behavior blocker.
-**Fix:** Pick one model and make both files agree. `final-acceptance.md`'s "on top of" model is the
-coherent one (the human must still playtest the finished game and `close` must still record the
-verified hash and tail delta). Rewrite `build-chunk.md:310` to: "run *as the content of* a normal
-chunk's `{playtest, revise, close}` group — its coverage check and 7-point design-QA pass supply that
-chunk's playtest script; the standard playtest/revise/close semantics still run on top."
+1. **"Sketch-level tail-entry target"** (lines 80-92) fires for *any* tail entry with no CHUNK.md:
+   "create `chunks/<slug>/`, derive the chunk's CHUNK.md by filling `templates/CHUNK.template.md` …
+   **and only then route to `investigate` as the first incomplete step.**" This is unconditional —
+   it has no carve-out for the final-acceptance chunk.
+2. **"Final-acceptance chunk target"** (lines 94-115) says the chunk's checklist is
+   `[final-acceptance, playtest, revise, close]`, "Route to the **first incomplete item** … if
+   `final-acceptance` is unchecked, dispatch `build/final-acceptance.md`," and claims this is
+   "what makes a cold session that resumes directly into the final-acceptance chunk dispatch
+   `build/final-acceptance.md` instead of running it as an ordinary checklist chunk."
 
-### CR-03: `build-chunk.md` and `playtest.md` misattribute "detail the next 2-3 sketch-tail entries" to `close.md`'s `## Bookkeeping Sequence`, which does not contain it — and this contradicts `state-machine.md`
+Paragraph 1 wins mechanically: it tells the router to fill `CHUNK.template.md` and route to
+`investigate`. And nothing anywhere ever writes the special 4-item checklist into a CHUNK.md:
 
-**File:** `src/cli/slash-command/bs/build-chunk.md:149-152` and `src/cli/slash-command/bs/build/playtest.md:117-124`
-**Issue:** Both files tell a light-path chunk to perform "close's bookkeeping," and both explicitly
-list "detailing the next 2-3 sketch-level tail entries" as part of it, citing
-`close.md`'s `## Bookkeeping Sequence` **by name** as the source
-(`build-chunk.md:149-150`; `playtest.md:121-122` — "see `build/close.md`'s `## Bookkeeping Sequence`
-by name for the verified-hash capture, Status write order, decision rollup, and next-2-3 sketch-tail
-detailing"). But `close.md`'s `## Bookkeeping Sequence` (lines 18-46) is a **self-contained** 3-step
-sequence — (1) status already landed, (2) record verified hash, (3) roll up decisions — and contains
-**no** tail-detailing. `close.md:20` even declares it "A self-contained numbered sequence" to scope
-exactly what the light path reuses. Tail re-derivation lives in a *separate* section, `close.md`'s
-`## Sketch-Tail Delta Gate` (lines 48-83), which is a **user-gated** operation not part of the
-Bookkeeping Sequence. Worse, the authoritative `state-machine.md:42-44` light-path description lists
-only the same 3 items (verified hash, Status update, decision rollup) and deliberately omits tail
-detailing. So `build-chunk.md`/`playtest.md` both (a) point the executor at a named section that does
-not contain the promised content, and (b) contradict the state-machine authority by adding a fourth
-light-path duty. A light-path session following the citation finds no tail-detailing instructions and
-either skips it or improvises.
-**Fix:** Remove "and detailing the next 2-3 sketch-level tail entries" from `build-chunk.md:149-150`
-and the "next-2-3 sketch-tail detailing" clause from `playtest.md:122`, so the light-path close
-bookkeeping matches `state-machine.md:42-44` and `close.md`'s actual `## Bookkeeping Sequence` (three
-items). If light-path chunks *are* intended to re-derive the tail, instead add that duty explicitly
-to `close.md`'s `## Bookkeeping Sequence` and to `state-machine.md`'s light-path transitions — do not
-leave the router claiming a section contains something it does not. (`build-chunk.md:152`'s "Step 2's
-lazy tail-entry detailing covers any entry this bookkeeping misses" only partially mitigates and does
-not excuse the false citation.)
+- `CHUNK.template.md`'s CEREMONY-CONDITIONAL rule (lines 43-52) permits **only** the 10-item `full`
+  or 3-item `light` checklist — there is no third variant, and no `final-acceptance` item.
+- The lazy-detailing path fills that template as-is, producing a `full`/`light` checklist.
+- `close.md` never creates a next-chunk CHUNK.md at all (see WR-02), so it cannot write the special
+  checklist either.
+
+So `build/final-acceptance.md`'s "route to the first incomplete item" reads a *physical* checklist
+that begins with `investigate` (or `build` on light), not `final-acceptance` — and dispatches
+`investigate`. The finished game gets run through a fresh `investigate/redteam/ask/build/test/…`
+cycle instead of the coverage-check + 7-point design-QA pass. The CR-01 detection prose is defeated
+in exactly the cold-resume case it was written to protect.
+
+**Fix:** Give the final-acceptance chunk's checklist an explicit author and precedence:
+1. In Step 2, make the "Final-acceptance chunk target" check run **before** the "Sketch-level
+   tail-entry target" path, or add a carve-out to the tail-entry path: "unless this tail entry is
+   the sketch's mandated final-acceptance chunk — in that case detail it per the Final-acceptance
+   chunk target rule below, not from the plain template."
+2. Make the detailing step **procedural**: "when the final-acceptance chunk is first detailed,
+   write its `## Step Checklist` as exactly `- [ ] final-acceptance / - [ ] playtest / - [ ] revise
+   / - [ ] close` (NOT the template's full/light list)."
+3. Add a third permitted checklist variant to `CHUNK.template.md`'s CEREMONY-CONDITIONAL block (or a
+   dedicated final-acceptance template stanza) so the physical file the router reads can legitimately
+   contain the 4-item checklist and the persistence/check-off discipline works against it.
+4. Pin all four with a new drift assertion (e.g. build-chunk.md's tail-entry paragraph names the
+   final-acceptance exception; CHUNK.template.md documents the 4-item variant).
 
 ## Warnings
 
-### WR-01: `build-chunk.md:309` says "6-point check" but `final-acceptance.md` is a **7-point** design-QA pass
+### WR-01: `## Ceremony` field is undefined for the final-acceptance chunk, and Step 3 ceremony routing has no carve-out for it
 
-**File:** `src/cli/slash-command/bs/build-chunk.md:309`
-**Issue:** The Reference-Files entry describes `final-acceptance.md` as "the sketch's mandated-chunk
-design-QA pass (**6-point check** + fresh-context automatable-checks dispatch)." The file itself is
-titled "**7-Point** Design-QA Pass" (`final-acceptance.md:1, 23`) and enumerates seven checks
-(screen-reader, 200% zoom, touch targets, colorblind, both themes, drag-drop keyboard alternates,
-mobile). The plan's UI design-QA chunk (`bs-skills-plan.md:135`) also lists all seven. The "6-point"
-count is a stale/incorrect number.
-**Fix:** Change "6-point check" to "7-point check" in `build-chunk.md:309`.
+**File:** `src/cli/slash-command/bs/build-chunk.md:125-137` (with `templates/CHUNK.template.md:29-35`)
 
-### WR-02: `revise.md`'s 4-category triage contradicts `CHUNK.template.md`'s Revision-Rounds comment (3 categories; category (c) recorded as "refuted")
+**Issue:** Every CHUNK.md must carry `## Ceremony: full | light` (CHUNK.template.md:34-35), and Step
+3 "Ceremony Routing" reads that field and quotes the full (10-step) or light (3-step) list verbatim
+with no third branch. The final-acceptance chunk is neither `full` nor `light` — its steps are
+`[final-acceptance, playtest, revise, close]`. Step 2 says it "does NOT route against the plain
+`full` or `light` Step Checklist," but Step 3 unconditionally does ceremony routing over exactly
+those two lists. There is no instruction telling Step 3 to skip the final-acceptance chunk, and no
+valid `## Ceremony` value for its CHUNK.md. This is the same root cause as CR-01 (the chunk doesn't
+fit the two-ceremony template) surfacing at a second seam.
 
-**File:** `src/cli/slash-command/bs/build/revise.md:9-39` vs. `src/cli/slash-command/bs/templates/CHUNK.template.md:113-117`
-**Issue:** `revise.md` defines the four triage categories from the plan (`bs-skills-plan.md:94`):
-(a) this-chunk defect, (b) future scope, (c) **not-built-yet → expectation reset, no write is made**
-(`revise.md:26-29`: "no write is made — there is nothing to record"), (d) rules change → RULINGS.md.
-But `CHUNK.template.md:116-117` — the section `revise.md` fills — describes a **three**-category
-triage: "category (a) fix now (recorded here), category (b) future scope (goes to SKETCH.md's Ideas
-Backlog instead), category (c) not a real issue (**recorded here as refuted**)." The template's
-category (c) says to *write a refuted entry*; `revise.md`'s category (c) says to write *nothing*, and
-the template has no (d) rules-change category at all. An executor filling the template while following
-`revise.md` gets conflicting instructions about whether category-(c) feedback produces a Revision-
-Rounds entry. `revise.md` matches the plan and is the correct one; the template comment is stale.
-**Fix:** Update `CHUNK.template.md`'s `## Revision Rounds` comment (lines 113-117) to describe the
-four categories `revise.md`/the plan define — (a) recorded here, (b) → Ideas Backlog, (c) not-built-yet
-= expectation reset, no write, (d) rules change → RULINGS.md — so the template and `revise.md` agree.
+**Fix:** Either give the final-acceptance chunk an explicit sentinel ceremony value (e.g.
+`## Ceremony: final-acceptance`) that Step 3 recognizes and routes past to the Step 2 special path,
+or add a Step 3 carve-out: "the mandated final-acceptance chunk is exempt from full/light ceremony
+routing — its step group is fixed by the Final-acceptance chunk target rule in Step 2."
 
-### WR-03: "one revise round" session-group cap contradicts the unbounded `revise-2, revise-3, …` loop both files describe
+### WR-02: `close.md` never creates the next chunk's CHUNK.md, contradicting build-chunk.md's claim that detailing is "the previous chunk's close-gate duty"
 
-**File:** `src/cli/slash-command/bs/build-chunk.md:214, 232-237` and `src/cli/slash-command/bs/build/revise.md:73-74`
-**Issue:** The session-handoff seam and the Step Group 4 header both name the group
-`{playtest, **one revise round**, close}` (`build-chunk.md:214`; `state-machine.md:140,143` "at most
-one revise round"). But the revise prose describes an in-session loop of arbitrarily many rounds:
-`revise.md:73-74` "appending `revise-2`, `revise-3`, and so on as needed, until every (a)-item across
-all rounds has a recorded disposition," and `build-chunk.md:236-237` "Revise loops back to `playtest`
-... until every this-chunk-defect item has a recorded disposition." Within a single session,
-"one revise round" and "loop revise-2/revise-3 until done" cannot both hold. This ambiguity affects
-where the structural session budget forces a handoff.
-**Fix:** Reconcile the two. Either (a) state that additional revise rounds beyond the first cross a
-session seam (hand off after `revise-1`, resume for `revise-2`), or (b) if multiple rounds are allowed
-in one session, change the group label everywhere to `{playtest, revise (loop), close}` and drop the
-"one revise round" cap from `state-machine.md:140,143` and `build-chunk.md:214`. Do not leave the cap
-and the unbounded loop both asserted.
+**File:** `src/cli/slash-command/bs/build/close.md:56-99` (contradicts `build-chunk.md:82-85`)
 
-### WR-04: `close.md`'s light-path reuse contract is undermined by CR-03's over-claim, leaving the light path's tail handling genuinely undefined
+**Issue:** build-chunk.md:83 states "Detailing is normally the previous chunk's close-gate duty
+(Phase 146), but when routing reaches an undetailed entry, this router details it lazily" — framing
+lazy detailing as an exceptional fallback and close-gate detailing as the norm. But `close.md`
+(Phase 146) contains no step that creates a `chunks/<slug>/` directory or CHUNK.md: its
+`## Sketch-Tail Delta Gate` only re-derives tail *descriptions* (entries stay at
+`Status: proposed (sketch-level — no CHUNK.md yet)`), and `## Propose the Next Chunk` only names the
+next chunk and prints the next command. So in practice CHUNK.md creation is **always** lazy (Step 2),
+never at close — the "normal" path build-chunk.md describes does not exist. An agent trusting
+build-chunk.md may look for a close-gate detailing step that isn't there.
 
-**File:** `src/cli/slash-command/bs/build/close.md:18-46, 48-91`
-**Issue:** `close.md` deliberately splits its work so the light path reuses only the 3-step
-`## Bookkeeping Sequence` and *not* the user-gated `## Sketch-Tail Delta Gate` / `## Propose the Next
-Chunk` sections. That is a defensible design — but combined with CR-03 (the router insisting the
-light path *does* detail the tail) it produces a genuine gap: on the light path there is no gate that
-re-derives or proposes the next chunks, yet `build-chunk.md:151` promises the user tail entries get
-detailed. A light-path chunk can therefore close leaving the sketch tail undetailed with no proposal
-of the next chunk to the user, contrary to the "every session ends by printing what to run next"
-principle (`bs-skills-plan.md:52`).
-**Fix:** Decide explicitly whether a light-path chunk proposes the next chunk / details the tail. If
-yes, factor a minimal "propose next chunk" step into the light-path close and cite it accurately; if
-no, remove the tail-detailing claim (per CR-03) and state that light-path chunks defer tail
-re-derivation to the next full chunk's `close` or to Step 2's lazy detailing.
+**Fix:** Either reword build-chunk.md:82-85 to state that detailing always happens lazily in Step 2
+(close only re-derives tail descriptions and proposes the next chunk), or add an explicit
+CHUNK.md-creation step to close.md so the "close-gate duty" claim is real. The former is simpler and
+matches the files as written.
+
+### WR-03: Final-acceptance chunk's step group is oversized and its content step is not sub-step resumable
+
+**File:** `src/cli/slash-command/bs/build/final-acceptance.md:63-130` (with `build-chunk.md:240-262`, `state-machine.md:133-151`)
+
+**Issue:** Session handoff seams (state-machine.md:135) exist to bound a session to "at most one step
+group." For the final-acceptance chunk, Step Group 4 becomes four steps —
+`final-acceptance → playtest → revise(loop) → close` — with no seam before `playtest`, and the added
+`final-acceptance` content step is by far the heaviest single step in the whole skill: a coverage
+check, a 7-point design-QA pass, a fresh-context agent dispatch (serve/capture/kill at 3 breakpoints
+× 2 themes + end-to-end keyboard drag-drop), two human-narrated checks (VoiceOver + colorblind), and
+a fix-or-refute Findings-Ledger repair loop. Packed with playtest + a revise loop + close in one
+no-handoff session, this risks blowing the session budget the seams are meant to enforce.
+
+Additionally, `final-acceptance` is a single checklist item covering all of the above. If the session
+crashes mid-pass (e.g. after the agent dispatch but before the human VoiceOver check), Step 2's
+"first incomplete item" routing re-runs the *entire* final-acceptance step from scratch — re-running
+the coverage check, re-dispatching the capture agent, and re-asking the human for VoiceOver. It is
+resumable at the 4-item granularity but not within the content step's own sub-parts, unlike the
+per-round persistence (`## Redteam Rounds`, `## Findings Ledger`, `## Revision Rounds`) every other
+heavyweight step gets.
+
+**Fix:** Consider a handoff seam after the `final-acceptance` content step (making it its own group,
+with `{playtest, revise, close}` the next session), and persist the content step's sub-parts (coverage
+result, agent-dispatch findings landed in `## Findings Ledger`, each human check) so a crash resumes
+mid-pass rather than re-dispatching. At minimum, document that the final-acceptance content step is a
+single re-runnable unit so the cost of a mid-pass crash is understood.
+
+### WR-04: Light-path/close citations name a section heading that isn't byte-exact
+
+**File:** `src/cli/slash-command/bs/build-chunk.md:167-174`, `src/cli/slash-command/bs/build/playtest.md:122,126`, `src/cli/slash-command/bs/build/close.md:30`
+
+**Issue:** All three files cite `state-machine.md "Step Names (exact, light path)"`, but the actual
+heading (state-machine.md:29) is `## Step Names (exact, light path — trivial chunks)`. The citations
+truncate `— trivial chunks`. In a skill whose entire design leans on byte-exact cross-file citations
+enforced by drift tests, a section citation that doesn't match its target heading is drift-prone —
+a future rename/reflow of that heading won't be caught by "find this cited section" tooling, and the
+existing test only pins the step *list* string, not the citation label.
+
+**Fix:** Cite the full heading `"Step Names (exact, light path — trivial chunks)"` in all three
+files, and consider a drift assertion that each `state-machine.md "…"` citation label matches an
+actual heading in `state-machine.md`.
 
 ## Info
 
-### IN-01: `playtest.md`/`revise.md`/`close.md` cite "`build-chunk.md` Step 8/9/10", but `build-chunk.md` has no such numbered headings
+### IN-01: The human plays the finished game twice, and "becomes this chunk's playtest script" is slightly muddled
 
-**File:** `src/cli/slash-command/bs/build/playtest.md:3`, `src/cli/slash-command/bs/build/revise.md:3`, `src/cli/slash-command/bs/build/close.md:3`
-**Issue:** Each reference file opens "Referenced by `build-chunk.md` Step 8/9/10." `build-chunk.md`'s
-actual headings are `Step 0`–`Step 3` then `Step Group 1`, `Step Groups 2-3`, `Step Group 4` — there
-is no heading literally named "Step 8/9/10." The intent (pipeline-step ordinal) is recoverable and
-mirrors the established `build.md`/`test.md`/`audit.md`/`repair.md` convention (`build-chunk.md:209`),
-so this is not a functional break — but a reader cross-referencing by heading finds no target.
-**Fix:** Consider "Referenced by `build-chunk.md` Step Group 4 (`playtest`, pipeline step 8)" for
-unambiguous back-references, or add pipeline-step ordinals to `build-chunk.md`'s group headings.
+**File:** `src/cli/slash-command/bs/build/final-acceptance.md:27-32,132-138` (with `build-chunk.md:106-110`)
 
-### IN-02: `final-acceptance.md` splits the 7 checks 5+2 by "Claude's Discretion" — the canonical/agent numbering is easy to desync
+**Issue:** Final-acceptance's 7-point pass, check 1, is a full **VoiceOver playthrough** ("The user
+runs VoiceOver themselves and plays through the game"). Then the `{playtest, revise, close}` group
+runs "on top of," and the human plays the finished game start-to-finish **again** as the playtest
+script. That is two full human playthroughs (one a11y-lensed, one functional). This may be
+intentional (different lenses), but the phrasing "its coverage check and design-QA pass supply that
+chunk's playtest script" (build-chunk.md:109-110, final-acceptance.md:136) blurs it: the design-QA
+pass is not itself a click-by-click script — the actual playtest script for this chunk is "play the
+whole finished game." Worth a one-line clarification so the operator knows check-1's playthrough and
+the playtest-step playthrough are distinct, not the same run double-counted.
 
-**File:** `src/cli/slash-command/bs/build/final-acceptance.md:24-61, 63-120`
-**Issue:** Checks are enumerated 1-7 in canonical order, then re-partitioned as "agent-dispatched
-(checks 2, 3, 5, 6, 7)" and "human-narrated (checks 1, 4)," and the Dispatch Template re-numbers the
-same five checks 1-5. The mapping is currently correct (dispatch 1-5 = canonical 2,3,5,6,7), but three
-different numberings for the same seven items is fragile: a future edit that inserts or reorders a
-canonical check will silently desync the "(checks 2,3,5,6,7)" list and the dispatch template's 1-5,
-with nothing pinning the correspondence. The drift test (test lines 634-673) checks phrases, not the
-partition arithmetic.
-**Fix:** Reference the checks by name rather than re-numbering in the partition and dispatch template
-(e.g. "agent-dispatched: 200% zoom, compact touch targets, both themes, drag-drop keyboard, mobile"),
-so a reorder cannot silently break the mapping.
+**Fix:** State explicitly that the final-acceptance chunk's playtest script is "play the finished game
+start-to-finish" and that the check-1 VoiceOver playthrough is a separate a11y-lensed pass, not the
+same run.
 
----
+### IN-02: `close.md`'s numbered "Bookkeeping Sequence" and state-machine.md's light-path "three-item sequence" are the same set framed differently
 
-## Narrative Findings (AI reviewer)
+**File:** `src/cli/slash-command/bs/build/close.md:19-54` (vs `state-machine.md:41-44`, `build-chunk.md:173-174`)
 
-All nine findings above are narrative findings from direct end-to-end review of the completed
-orchestrator. No structural-findings substrate was supplied with this review. The lifecycle walks
-performed:
+**Issue:** state-machine.md:42-44 lists the light-path three items as `[record verified hash, update
+Status line, roll up decisions]`. close.md's `## Bookkeeping Sequence` is a three-item numbered list
+`[1: Status already landed (a note, not an action), 2: record hash, 3: roll up decisions]`.
+build-chunk.md:173-174 and playtest.md:121 both tell the light path to "run the exact three-item
+sequence" and cite *both* sources as if identical. They describe the same set of concerns, and the
+framing is reconcilable (playtest writes the Status via its Verified Gate, then performs close's
+items 2-3), but an agent cross-reading the two numbered lists could momentarily disagree on whether
+"record hash" is item 1 or item 2. Low risk given the current wording, but a one-line note that
+close.md item 1 is the Status write state-machine.md counts as one of its three would remove the
+ambiguity.
 
-- **Full-ceremony chunk (fresh → 10 steps → close → next):** coherent through group 3; group 4
-  (`playtest → revise → close`) is internally coherent for an ordinary chunk **except** WR-03's
-  "one revise round" vs. unbounded-loop ambiguity.
-- **Light path (`build, test, playtest`):** playtest-as-terminal correctly performs close bookkeeping,
-  but CR-03/WR-04 leave its sketch-tail handling contradictory (router promises tail detailing the
-  cited `close.md` section does not provide, and which `state-machine.md` omits).
-- **Final-acceptance chunk:** two blockers — the router has no rule to dispatch `final-acceptance.md`
-  on resume (CR-01), and the router vs. the reference file disagree on whether `{playtest, revise,
-  close}` runs "in place of" or "on top of" the design-QA content (CR-02), plus the "6-point" count
-  error (WR-01).
-
-Verified as CORRECT (no defect): dev-host CLI flags `--players`/`--ai`/`--no-open` and the
-`Ready! Press Ctrl+C to stop.` ready-string (`dev.ts:780-791`, `cli.ts:36-40`); the no-build-stamp-UI
-/ hard-reload freshness handling in `playtest.md`; the user-owns-the-server boundary in `playtest.md`
-vs. final-acceptance's own serve/kill; all 7 design-QA checks present; `useAnnouncer()`,
-`BREAKPOINTS` (640/1024/1440), and the `build/test.md` item-1 and `design-review.md` section
-citations all resolve on disk.
+**Fix:** Add a parenthetical in close.md's Bookkeeping Sequence: "(item 1 is the Status write
+state-machine.md's light-path list counts as its second item; on the light path `playtest` performed
+it via its Verified Gate)."
 
 ---
 
-_Reviewed: 2026-07-05T01:02:29Z_
+_Reviewed: 2026-07-04T20:20:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
