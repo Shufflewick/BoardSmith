@@ -746,6 +746,73 @@ describe('UIQ-05 — final-acceptance router coherence (146-REVIEW CR/WR fixes, 
   });
 });
 
+describe('UIQ-05 — final-acceptance coherent-cluster fixes (146-REVIEW iter-2 CR-01/WR-01..04, pinned)', () => {
+  it('CR-01: final-acceptance detection runs BEFORE the generic lazy tail-entry detailing in Step 2', () => {
+    const buildChunk = read('build-chunk.md');
+    // Anchor on the bolded rule HEADINGS, not incidental references to them elsewhere in prose.
+    const faIdx = buildChunk.indexOf('**Final-acceptance chunk target');
+    const tailIdx = buildChunk.indexOf('**Sketch-level tail-entry target:**');
+    expect(faIdx, 'build-chunk.md must have a Final-acceptance chunk target rule').toBeGreaterThan(-1);
+    expect(tailIdx, 'build-chunk.md must have a Sketch-level tail-entry target rule').toBeGreaterThan(-1);
+    expect(faIdx, 'Final-acceptance detection must precede the generic tail-entry path').toBeLessThan(tailIdx);
+    // The tail-entry path must carry the final-acceptance carve-out so it never fills a full/light
+    // checklist for the mandated chunk.
+    const tailNearby = buildChunk.slice(tailIdx, tailIdx + 700);
+    expect(tailNearby).toMatch(/Carve-out/i);
+    // Detailing is procedural: it writes the special ceremony + 4-item checklist, not the template's.
+    expect(buildChunk).toContain('## Ceremony: final-acceptance');
+    expect(buildChunk).toMatch(/final-acceptance \/ playtest \/ revise \/ close/);
+  });
+
+  it('CR-01/WR-01: CHUNK.template.md recognizes the final-acceptance ceremony and its 4-item checklist variant', () => {
+    const template = read('templates/CHUNK.template.md');
+    expect(template).toContain('full | light | final-acceptance');
+    expect(template).toMatch(/When Ceremony: final-acceptance/);
+    // The 4-item variant is documented in the CEREMONY-CONDITIONAL block.
+    expect(template).toContain('- [ ] final-acceptance');
+    expect(template).toContain('- [ ] revise');
+  });
+
+  it('WR-01: build-chunk.md Step 3 exempts the final-acceptance chunk from full/light ceremony routing', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toMatch(/exempt from this full\/light ceremony routing/i);
+  });
+
+  it('WR-02: close.md states it does NOT create the next chunk\'s CHUNK.md, and build-chunk.md no longer claims a close-gate detailing duty', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/does NOT create the next chunk'?s `chunks\/<slug>\/CHUNK\.md`/i);
+    const buildChunk = read('build-chunk.md');
+    // The false "detailing is normally the previous chunk's close-gate duty" claim is gone.
+    expect(buildChunk).not.toMatch(/normally the previous chunk'?s close-gate duty/i);
+    // build-chunk.md states plainly that close never creates the next CHUNK.md (lazy detailing owns it).
+    expect(buildChunk).toMatch(/`close` never creates a next chunk'?s CHUNK\.md/i);
+  });
+
+  it('WR-03: final-acceptance carries a handoff seam before playtest and per-sub-part resumability', () => {
+    const fa = read('build/final-acceptance.md');
+    expect(fa).toContain('Sub-Step Resumability and the Handoff Seam Before `playtest`');
+    expect(fa).toMatch(/handoff seam/i);
+    const sm = read('state-machine.md');
+    expect(sm).toMatch(/Final-acceptance chunk exception/);
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toMatch(/extra\*?\*? handoff seam/i);
+  });
+
+  it('WR-04: the light-path citation names the byte-exact heading (— trivial chunks) in all three citing files', () => {
+    const LABEL = 'Step Names (exact, light path — trivial chunks)';
+    for (const rel of ['build-chunk.md', 'build/playtest.md', 'build/close.md']) {
+      const normalized = read(rel).replace(/\s+/g, ' ');
+      expect(normalized, `${rel} must cite the full light-path heading`).toContain(LABEL);
+      // The truncated bare citation must be gone.
+      expect(normalized, `${rel} must not carry the truncated light-path citation`).not.toMatch(
+        /Step Names \(exact, light path\)"/,
+      );
+    }
+    // The label must match state-machine.md's actual heading byte-for-byte.
+    expect(read('state-machine.md')).toContain(`## ${LABEL}`);
+  });
+});
+
 describe('cross-file consistency — status enum + stale marker byte-identical', () => {
   it('build-chunk.md quotes the exact status enum values', () => {
     const buildChunk = read('build-chunk.md');
