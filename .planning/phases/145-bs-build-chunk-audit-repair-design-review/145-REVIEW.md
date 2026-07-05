@@ -1,6 +1,6 @@
 ---
 phase: 145-bs-build-chunk-audit-repair-design-review
-reviewed: 2026-07-04T23:56:49Z
+reviewed: 2026-07-04T19:05:00Z
 depth: standard
 files_reviewed: 5
 files_reviewed_list:
@@ -10,196 +10,123 @@ files_reviewed_list:
   - src/cli/slash-command/bs/build-chunk.md
   - src/cli/slash-command/bs/build-chunk.test.ts
 findings:
-  critical: 1
-  warning: 4
-  info: 3
-  total: 8
+  critical: 0
+  warning: 1
+  info: 2
+  total: 3
 status: issues_found
 ---
 
-# Phase 145: Code Review Report
+# Phase 145: Code Review Report (Iteration 2)
 
-**Reviewed:** 2026-07-04T23:56:49Z
+**Reviewed:** 2026-07-04T19:05:00Z
 **Depth:** standard
 **Files Reviewed:** 5
 **Status:** issues_found
 
 ## Summary
 
-Phase 145 authored the `{audit, repair}` step group and the screenshot-armed design-review
-agent for `/bs-build-chunk`. These are LLM-executed instruction files, so "bugs" are contradictions,
-wrong API/constant claims, and lifecycle-rule violations that would misdirect a build-chunk session.
+Re-review of iteration 2 (commits `ff9fe279..5e813f2b`) confirming the fixes for CR-01 and
+WR-01..04 from iteration 1, and scanning for new defects the fixes introduced.
 
-I verified every load-bearing external claim against source:
+**CR-01 width fix — VERIFIED CORRECT.** Cross-checked `design-review.md`'s capture table
+(lines 106–110) against `src/ui/theme.ts:18` tier boundaries (`compact ≤639px · medium
+640–1023px · wide ≥1024px`) and the `BREAKPOINTS` constant (compact:640, medium:1024,
+wide:1440):
 
-- `diffPlayerViews(testGame, seatA, seatB)` atomic overload — **exists** with that exact signature
-  and `{ onlyInA, onlyInB, attributeDiffs, describe() }` return (`src/testing/view-diff.ts:187-245`,
-  WR-02 warning at 160-166). Correct.
-- `assertNoHiddenInfoLeak(...)` — **exists** (`src/testing/dom-leak.ts:458`). Correct.
-- `BREAKPOINTS` values `640 / 1024 / 1440` — **match** `src/ui/theme.ts:20-27` byte-for-byte.
-- `npx boardsmith dev --no-open` and the exact ready line `Ready! Press Ctrl+C to stop.` —
-  **both real** (`src/cli/cli.ts:40`, `src/cli/commands/dev.ts:788,791`).
-- Theme injection via `document.documentElement.dataset.theme` — **correct** mechanism
-  (`html[data-theme="light|dark"]` selectors, `src/ui/theme.ts:204-209`).
-- All cross-file heading citations resolve (redteam.md "Independence…"/"Persisting the Round"/
-  "Vote-Privacy", build.md "Extends, Never Restructures", test.md "Failures Loop Back", scaffold.md
-  "Verification Sequence" steps 2-3, state-machine.md "Repair Loop Bound"/"Rulings Outrank Rulebook").
-- The auditor-reads-interpretation guard is present in all three lens dispatch prompts.
-- Server-kill is an explicit numbered step in design-review.md, and the `networkidle` caveat is present.
-- Drift test `build-chunk.test.ts` — **74/74 green** with the new files.
+| Tier | Range | Capture width | Lands correctly? |
+| --- | --- | --- | --- |
+| compact | ≤639 | **375** | 375 < 640 → compact ✓ |
+| medium | 640–1023 | **800** | 640 ≤ 800 ≤ 1023 → medium ✓ |
+| wide | ≥1024 | **1440** | 1440 ≥ 1024 → wide ✓ |
 
-The API/constant/CLI surface is accurate. The defects are conceptual: one breakpoint-capture
-correctness bug that would screenshot the wrong responsive tier for 2 of 3 breakpoints, plus four
-independence/edge-case/contradiction gaps in the lifecycle prose.
+All three representative widths land squarely inside their intended tiers, and the
+tier-name → filename mapping (`compact-*` / `medium-*` / `wide-*`) matches the tier that
+actually renders at each width. The original defect (raw `BREAKPOINTS` values rendering the
+tier *above* the intended one, e.g. 640 → medium) is fully resolved. The explanatory prose at
+lines 96–104 ("ceilings of the tier below") is also consistent with `theme.ts`'s own
+`BREAKPOINTS.compact` / `BREAKPOINTS.medium` doc comments.
 
-## Critical Issues
+**Other fixes confirmed:**
+- WR-01 (visibility lens): `audit.md:70–90` now instructs the lens to read the raw slice +
+  `RULINGS.md` as ground truth and treat the Visibility Declaration as a *claim to verify*, not
+  an oracle — a disagreement is itself a finding. Correct.
+- WR-02 (three dispositions): `repair.md:9–33` cleanly separates two *repair actions* (fix,
+  refute-with-citation) from three *terminal dispositions* (`fixed | deferred | refuted`), and
+  the enum matches `templates/CHUNK.template.md:110`. The "WR-02 atomic overload" citation in
+  `audit.md:86,120` is accurate — `diffPlayerViews(testGame, seatA, seatB)` is a real overload
+  in `src/testing/view-diff.ts:187` and the WR-02 label is baked into that source (line 177),
+  so the citation is grep-verifiable, not a phantom reference.
+- WR-03 (design-review parity): `design-review.md:33–53` returns the same flat
+  `{ findingId, lens: 'design', description, citation, severity }` shape and stable-ID
+  convention (F1, F2, …) as `audit.md`'s three lens templates.
+- WR-04 (first-UI-chunk baseline): `design-review.md:155–162` records "no prior UI chunk;
+  cohesion baseline established" and skips the diff without hallucinating a directory. Correct.
 
-### CR-01: design-review captures the WRONG responsive tier for `compact` and `medium`
+All 74 drift-protection tests in `build-chunk.test.ts` pass. The cited APIs
+(`diffPlayerViews`, `assertNoHiddenInfoLeak`) exist and are exported via `boardsmith/testing`.
 
-**File:** `src/cli/slash-command/bs/build/design-review.md:57-80`
-**Issue:** The capture loop instructs the agent to set the iframe width to the raw `BREAKPOINTS`
-values — `compact: 640`, `medium: 1024`, `wide: 1440` — and screenshot at each ("For each of the 3
-breakpoints, capture both themes"; line 76 confirms it drives `iframe.style.width` to "simulate the
-compact breakpoint"). But those constants are tier **ceilings/thresholds**, not representative widths
-of each tier. `src/ui/theme.ts:18` documents the tiers explicitly: `compact ≤639px · medium
-640–1023px · wide ≥1024px`, with `compact: 640` = "Phone ceiling — below this is the compact tier"
-and `medium: 1024` = "Tablet ceiling — at/above this is the wide/desktop tier".
-
-Consequence when the agent uses the values as capture widths:
-- width `640` → renders the **medium** tier, but the file is saved as `compact-*.png`.
-- width `1024` → renders the **wide** tier, but the file is saved as `medium-*.png`.
-- width `1440` → renders wide (correct).
-
-So 2 of the 3 screenshots review the wrong layout. The compact tier is **never** actually captured,
-which defeats the entire purpose of a per-breakpoint sweep — a broken compact/phone layout would pass
-review because it was never rendered. This also contradicts the plan (`bs-skills-plan.md:133`: "the
-three Slate breakpoints", i.e. the three *tiers*, not the three threshold numbers). Note `1440` is a
-fourth concept entirely (the wide-tier max-width cap, `theme.ts:26`), not the wide-tier *boundary*
-(which is 1024).
-
-**Fix:** Capture at widths that fall clearly *inside* each tier, while still citing `BREAKPOINTS` for
-provenance. For example:
-
-```
-Capture at a representative width INSIDE each tier (BREAKPOINTS are tier boundaries, not target
-widths — theme.ts:18: "compact ≤639px · medium 640–1023px · wide ≥1024px"):
-- compact  → set iframe width to 375 (≤ 639, below BREAKPOINTS.compact)
-- medium   → set iframe width to 800 (between BREAKPOINTS.compact 640 and BREAKPOINTS.medium 1024)
-- wide     → set iframe width to 1440 (≥ BREAKPOINTS.medium 1024; also exercises the max-width cap)
-```
+No new blockers. One warning and two info items below.
 
 ## Warnings
 
-### WR-01: Visibility lens trusts the investigate-produced Visibility Declaration and never reads the raw slice — investigate-level leak errors are uncatchable
+### WR-01: Theme-injection instruction leads with the wrong DOM (outer page vs. iframe)
 
-**File:** `src/cli/slash-command/bs/build/audit.md:70-85`
-**Issue:** The whole thesis of `audit.md` is that lenses read the RAW source, never a prior agent's
-summary, so upstream errors "stay visible to something downstream" (lines 11-27). The fidelity lens
-correctly reads the raw slice + `RULINGS.md` and is forbidden the Interpretation. But the **visibility
-lens** is handed only `{visibilityDeclarationText}` (the investigate-produced `## Visibility
-Declaration`) plus the code, and is told to "Report anything… visible to a seat the Visibility
-Declaration says should not see it." It never reads the raw slice or `RULINGS.md`. So if `investigate`
-mis-judged what should be hidden (e.g. declared a public value as secret, or missed a rule that a
-house-rule in `RULINGS.md` makes public), the visibility lens inherits that exact error and can never
-catch it — precisely the failure mode this file's "Temptation" section (11-22) exists to prevent,
-applied to the Visibility Declaration instead of the Interpretation. This also violates
-`state-machine.md:94-96` "Rulings Outrank Rulebook", which names `audit` as a slice-reading agent that
-"also reads `RULINGS.md`" — the visibility lens reads neither.
-**Fix:** Have the visibility lens *also* read the raw rulebook slice(s) and `RULINGS.md`, and treat
-the Visibility Declaration as a claim to verify against them (mirroring how `redteam` checks the
-claims list against raw sources), not as an unchallengeable oracle. Add `{slicePaths}` + a RULINGS
-read + the "do not treat the declaration as ground truth" instruction to the visibility dispatch
-template.
-
-### WR-02: repair.md "Two Allowed Outcomes, Never a Third" contradicts its own three-value disposition enum
-
-**File:** `src/cli/slash-command/bs/build/repair.md:8-21` vs `52-58` and `60-76`
-**Issue:** The heading "Two Allowed Outcomes, Never a Third" and the flat assertion "There is no third
-outcome" (line 9) say every finding is either `fixed` or `refuted`. But the same file's "Persisting
-Dispositions" section (line 53) lists the disposition enum as **`fixed` | `deferred` | `refuted`**, and
-the Round-3 triage (60-76) produces `deferred` as a legitimate user-chosen disposition. This matches
-`CHUNK.template.md:110` (`disposition: fixed | deferred | refuted`) and `state-machine.md:125`, so
-`deferred` is unambiguously a real third disposition — the "Never a Third" framing is what's wrong. An
-LLM reading "There is no third outcome" literally could refuse to record a `deferred` disposition, or
-be unsure whether a round-3-deferred finding is validly "handled".
-**Fix:** Scope the absolute claim to the *per-round repair action*: "During a repair round, repair
-itself does exactly one of two things to a finding — fix it, or refute-it-with-citation. (`deferred`
-is not a repair action; it is only a user choice at the round-3 triage below, and is the third
-terminal disposition alongside `fixed`/`refuted`.)" Remove the unqualified "There is no third outcome."
-
-### WR-03: The design-review (4th) lens has no dispatch template while the other three do
-
-**File:** `src/cli/slash-command/bs/build/audit.md:45-103` and `src/cli/slash-command/bs/build/design-review.md`
-**Issue:** `audit.md` gives the orchestrator ready-to-paste "Dispatch Templates" for fidelity,
-visibility, and undo (52-99), each pinning the exact independence framing ("Do NOT read
-`## Interpretation`", the fixed return-shape fields). The 4th agent — design-review — has **no dispatch
-template** anywhere; `design-review.md` describes the agent's behavior in prose but never provides the
-copy-paste prompt the orchestrator must send. Because `build-chunk.md`'s Context-Economics rule bars
-the orchestrator from reading code/docs itself, the orchestrator must hand the design-review agent a
-fully self-contained prompt — and here it must synthesize one from prose, risking an inconsistent or
-framing-leaking dispatch (e.g. omitting the "never `## Interpretation`" guard that `design-review.md:17`
-requires, or the fresh-context/no-inherited-conversation constraint). The return-shape fields for a
-design-review finding are also unpinned (the other three lenses pin `{ findingId, lens, description,
-citation, severity }`; design-review only says findings "use the same stable-ID… shape").
-**Fix:** Add a "Dispatch Template" block to `design-review.md` (or `audit.md`) matching the other three
-lenses: the exact prompt text including the no-inherited-conversation / no-`## Interpretation` framing,
-the serve→capture→kill sequence pointer, and the explicit return shape (`lens: 'design'`).
-
-### WR-04: Cohesion-diff step assumes a previous UI chunk's shots exist — first UI chunk is unhandled
-
-**File:** `src/cli/slash-command/bs/build/design-review.md:98-105`
-**Issue:** The cohesion-diff pass tells the agent to "diff the 6 fresh shots against the previous
-chunk's stored shots in its own `chunks/<slug>/shots/` directory (a different `<slug>`, the most
-recently verified UI chunk)". For the **first** `ui: touches|major` chunk in a game there is no prior
-UI chunk and therefore no previous `shots/` directory to diff against. The file gives no guidance for
-this case, so the agent is left to look for a nonexistent directory — it may error, hallucinate a
-comparison, or silently skip cohesion review with no record. This is the exact edge case a lifecycle
-step should name explicitly.
-**Fix:** Add a first-UI-chunk branch: "If no previously-verified UI chunk exists (this is the first
-`ui: touches|major` chunk), the cohesion-diff pass is a no-op — record 'no prior UI chunk; cohesion
-baseline established' and skip the diff. This chunk's `shots/` becomes the baseline for the next UI
-chunk."
+**File:** `src/cli/slash-command/bs/build/design-review.md:119-122`
+**Issue:** The theme-injection step tells the design-review agent to "Set the theme by
+injecting `document.documentElement.dataset.theme` (or the GameShell iframe's own
+`contentDocument` …)". The screenshots this agent captures are of the **GameShell iframe's**
+seat view (platform mode) — `applyTheme()` injects the token `<style>` and reads
+`html[data-theme]` inside the *iframe's* document (`theme.ts:204,209`). Setting
+`dataset.theme` on the **outer page's** `document.documentElement` is a no-op for the iframe
+content that is actually screenshotted, so an agent taking the path-of-least-resistance
+reading (the first, unparenthesized option) would capture 6 shots that are all in the *same*
+(default) theme while believing it toggled light/dark — a broken dark-theme layout would pass
+review unseen. The correct target (iframe `contentDocument`) is buried as a parenthetical
+alternative rather than being the required path. This is the same class of "the easy path is
+the wrong path" footgun the CR-01 fix just eliminated for widths, applied to themes; it
+violates the repo's Pit-of-Success rule (`CLAUDE.md`).
+**Fix:** Make the iframe `contentDocument` the primary, non-optional target and demote the
+outer-page form to an explicit "does NOT work" warning, mirroring how the iframe-resize caveat
+(lines 124–128) and `--no-open` (lines 64–71) are written as required-not-optional:
+```
+Set the theme by injecting the tier's theme onto the **GameShell iframe's own document**:
+`iframe.contentDocument.documentElement.dataset.theme = 'dark'` (the iframe renders the seat
+view in platform mode, so its own document — NOT the outer page's `document.documentElement` —
+is where `applyTheme` reads `html[data-theme]`). Setting `data-theme` on the outer page does
+NOT re-theme the iframe content and silently yields same-theme screenshots.
+```
 
 ## Info
 
-### IN-01: Dangling citation to a phase-planning research doc that won't ship with the installed skill
+### IN-01: "3 Breakpoints" header labels tiers, contradicting the section's own thesis
 
-**File:** `src/cli/slash-command/bs/build/audit.md:108`
-**Issue:** The visibility-APIs section cites "(per 145-RESEARCH.md 'Don't Hand-Roll')". `145-RESEARCH.md`
-is a `.planning/` phase artifact; per `build-chunk.md:281-287` the installer copies the `bs/` tree as a
-unit, so an end user who installs the skill will not have `145-RESEARCH.md` — the citation resolves to
-nothing for them. The rest of the file cites shipped siblings (`state-machine.md`, `build/*.md`,
-`templates/*`) which do travel with the skill.
-**Fix:** Drop the `145-RESEARCH.md` citation or inline its one-line rationale ("cite the real functions
-by exact name, don't describe the check in prose") without pointing at a non-shipped planning file.
+**File:** `src/cli/slash-command/bs/build/design-review.md:87` (heading + line 79)
+**Issue:** The capture section is titled "3 Breakpoints × 2 Themes = 6 Screenshots" and refers
+to "3 Breakpoints", yet the section's whole point (lines 96–104) is that the three
+`BREAKPOINTS` *values* are tier boundaries, NOT capture widths, and that you must capture at
+representative widths *inside* each tier. Calling the three captures "breakpoints" reintroduces
+exactly the conflation the section warns against; they are tiers (compact/medium/wide).
+**Fix:** Rename to "3 Tiers × 2 Themes = 6 Screenshots" and use "tier" over "breakpoint" for
+the three captures, reserving "breakpoint" for the `BREAKPOINTS` boundary constants.
 
-### IN-02: Round N+1 re-run scope is ambiguous for the expensive design-review agent
+### IN-02: Wide capture at exactly 1440 leaves the uncapped-wide range (1024–1439) unscreenshotted
 
-**File:** `src/cli/slash-command/bs/build/audit.md:133-136`
-**Issue:** The only-new-findings rule says "a second or third audit round's **lenses**… report only NEW
-findings." It's unstated whether the 4th agent (design-review) re-runs each round. Design-review is
-expensive (serve → 6 screenshots → kill) and a round triggered by a non-UI fidelity fix may not need a
-re-screenshot — but a round that changed UI code should re-capture to catch new visual regressions.
-Leaving this implicit risks either wasted dev-server cycles or a missed regression.
-**Fix:** State the trigger explicitly, e.g. "the design-review agent re-runs on round N+1 only if that
-round's repair touched UI code (a `ui: touches|major` file); otherwise its prior findings carry
-forward unchanged."
-
-### IN-03: build-chunk.md's sanctioned-read enumeration never names `## Findings Ledger`
-
-**File:** `src/cli/slash-command/bs/build-chunk.md:15-30`
-**Issue:** The Context-Economics rule enumerates the specific CHUNK.md sections the orchestrator may
-read — `## Interpretation`, `## Visibility Declaration`, `## Redteam Rounds` — all group-1/2 sections.
-Group 3 (this phase) requires the orchestrator to read *and write* `## Findings Ledger` (audit.md:119,
-repair.md:52-58), but that section is not added to the enumeration. It's generically covered by "CHUNK.md
-is a state file, and reading state files is exactly the orchestrator's job", so this is not a
-correctness break — but the explicit list now lags the lifecycle it governs.
-**Fix:** Add `## Findings Ledger` to the "In particular, the orchestrator reads…" list, noting it is
-both read (round persistence, cold resume) and written (append `### Audit Round N`, record dispositions)
-during the `{audit, repair}` group.
+**File:** `src/cli/slash-command/bs/build/design-review.md:110`
+**Issue:** The wide capture width is 1440, which equals `BREAKPOINTS.wide` — the width at which
+"the board gains a centered max-width cap" (`theme.ts:25`). Capturing exactly at the cap
+boundary means the wide tier's *uncapped* sub-range (1024–1439, the common laptop range) is
+never screenshotted. Unlike the CR-01 defect this does NOT land in the wrong tier (1440 is
+correctly ≥1024 → wide), so it is a coverage nuance, not a tier error — but a layout bug that
+manifests only in uncapped wide would pass review unseen, the same failure mode CR-01 fixed one
+level down. The doc reasons about the choice explicitly ("also exercising the max-width cap"),
+so this is a documented tradeoff, not an oversight.
+**Fix:** Optional — either keep 1440 (accepting the tradeoff, as documented) or choose a
+representative uncapped-wide width (e.g. 1200) and note the cap is exercised separately. No
+action required if the cap-active layout is the priority.
 
 ---
 
-_Reviewed: 2026-07-04T23:56:49Z_
+_Reviewed: 2026-07-04T19:05:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
