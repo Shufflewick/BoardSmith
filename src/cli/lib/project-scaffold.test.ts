@@ -162,6 +162,60 @@ describe('generateTsConfig — vite/client types (Phase 149 dry-run Defect 1)', 
     const parsed = JSON.parse(generateTsConfig());
     expect(parsed.compilerOptions.types).toContain('vite/client');
   });
+
+  it('the UI type-graph compiles clean ONLY when vite/client types are present (WR-02: Defect 1 is load-bearing)', () => {
+    // The string assertion above proves the config CONTAINS 'vite/client'; it
+    // does not prove that removing it re-breaks a fresh scaffold. This test
+    // reproduces the actual failing graph: a UI entry that re-exports a type
+    // from `boardsmith/ui`, which reaches `useActionController.ts`'s
+    // `import.meta.env.DEV` (a Vite-ambient global). We compile that graph
+    // twice — without and with `types: ['vite/client']` — and assert the
+    // ImportMeta.env error appears without it and vanishes with it. Dropping
+    // 'vite/client' from generateTsConfig() therefore turns this test RED.
+    const dir = mkdtempSync(join(tmpdir(), 'bs-scaffold-ui-compile-'));
+    try {
+      const uiDir = join(dir, 'ui');
+      mkdirSync(uiDir, { recursive: true });
+      // Same re-export the scaffold's src/ui/index.ts carries (minus the .vue
+      // value import, which is irrelevant to the ImportMeta.env resolution).
+      writeFileSync(
+        join(uiDir, 'index.ts'),
+        "export type { UseActionControllerReturn } from 'boardsmith/ui';\n",
+      );
+
+      const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+      const uiEntry = join(repoRoot, 'src', 'ui', 'index.ts');
+
+      const importMetaEnvErrors = (types: string[]): string[] => {
+        const program = ts.createProgram([join(uiDir, 'index.ts')], {
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+          target: ts.ScriptTarget.ES2022,
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
+          types,
+          baseUrl: dir,
+          paths: { 'boardsmith/ui': [uiEntry] },
+        });
+        return ts
+          .getPreEmitDiagnostics(program)
+          // TS2339 "Property 'env' does not exist on type 'ImportMeta'" — the
+          // exact diagnostic a fresh scaffold hit before the fix.
+          .filter((d) => d.code === 2339)
+          .map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' '))
+          .filter((m) => m.includes('env'));
+      };
+
+      // Without vite/client: the original bug reproduces.
+      expect(importMetaEnvErrors([]).length).toBeGreaterThan(0);
+      // With vite/client: the ImportMeta.env access resolves cleanly.
+      expect(importMetaEnvErrors(['vite/client'])).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('generatePackageJson — explicit vite devDependency (Phase 149 dry-run Defect 1)', () => {
