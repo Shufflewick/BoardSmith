@@ -22,6 +22,14 @@ section BY NAME — a light-path chunk (`build, test, playtest`, no `close` step
 this exact sequence from inside its own `playtest` step, on this chunk's behalf, once its
 Verified Checklist is confirmed.
 
+The light path reuses **only** this three-item sequence. It does NOT run the `## Sketch-Tail
+Delta Gate` or `## Propose the Next Chunk` sections below — both are user-gated duties of a full
+`close`. A light-path chunk therefore defers sketch-tail re-derivation and the next-chunk
+proposal to `build-chunk.md` Step 2's lazy tail-entry detailing (which derives any undetailed
+tail entry when routing next reaches it) or to the next full chunk's `close`; it never silently
+details the tail from inside `playtest`. This matches `state-machine.md` "Step Names (exact,
+light path)", which lists exactly these three light-path bookkeeping items and no tail detailing.
+
 1. **Status already landed; this step's own duty starts after.** `playtest` already wrote
    `Status: verified` (or `verified (user-waived)`) to CHUNK.md and mirrored the derived pointer
    to SKETCH.md — CHUNK.md first, then SKETCH.md second, cite `state-machine.md` "Write Order".
