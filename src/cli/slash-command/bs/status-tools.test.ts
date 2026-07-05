@@ -255,6 +255,18 @@ describe('STAT-02 — insert-chunk.md sketch editor', () => {
     expect(insertChunk).toContain('## Session Lock');
   });
 
+  it('live-lock guard fires on ANY live lock, not only one naming a reshaped chunk (WR-01)', () => {
+    const insertChunk = read('insert-chunk.md');
+    // Because the reshape rewrites the ENTIRE ## Ordered Chunk List + version
+    // stamp, its write footprint is the whole SKETCH.md — so the guard must
+    // warn on ANY live lock naming in-flight work, NOT only one naming a chunk
+    // this reshape will stale-mark or reorder. Pins the WR-01 broadening so it
+    // cannot regress to the narrower footprint-scoped condition.
+    expect(insertChunk).toMatch(/names ANY chunk/);
+    expect(insertChunk).toMatch(/NOT limited to/i);
+    expect(insertChunk).toMatch(/(entire|whole)[^\n]*Ordered Chunk List/i);
+  });
+
   it('cites each REFERENCED_SECTIONS_INSERT heading by exact string', () => {
     const insertChunk = read('insert-chunk.md');
     for (const heading of REFERENCED_SECTIONS_INSERT) {

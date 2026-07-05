@@ -20,11 +20,16 @@ outside the scope of the reshape it was asked to perform.
 **Live session-lock check (this skill WRITES state, so it must resolve a live lock).** The
 consistency check's lock item (`state-machine.md` "## Consistency Check" item 4) only detects a
 *stale* lock (>24h). Because this reshape mutates state — operation (c) stale-marks a `CHUNK.md`,
-operations (d)/(e) rewrite `SKETCH.md` — you must ALSO handle a live (non-stale) lock exactly as
-`build-chunk.md` Step 0 outcome 2 does: if the `SKETCH.md` `Session Lock:` note names a chunk this
-reshape will stale-mark or reorder and the lock is NOT stale, a concurrent `/bs-build-chunk` session
-may be mid-write on that chunk — warn the user and STOP for their decision before writing anything,
-instead of silently clobbering it (`state-machine.md` "## Session Lock"; the plan's hard rule in
+operations (d)/(e) rewrite the ENTIRE `SKETCH.md` `## Ordered Chunk List` plus the version stamp —
+you must ALSO handle a live (non-stale) lock exactly as `build-chunk.md` Step 0 outcome 2 does: if
+the `SKETCH.md` `Session Lock:` note names ANY chunk (i.e. names in-flight work other than this
+reshape) and the lock is NOT stale, warn the user and STOP for their decision before writing
+anything. The condition is deliberately broad — NOT limited to a lock naming a chunk this reshape
+will stale-mark or reorder — because this reshape rewrites the whole `## Ordered Chunk List` and
+bumps the version stamp, so its write footprint is the entire `SKETCH.md` and can overlap ANY live
+`/bs-build-chunk` session's in-flight SKETCH.md derived-pointer write, not just the reshaped entries.
+Warn and STOP instead of silently clobbering it (`state-machine.md` "## Session Lock": any live lock
+naming different work triggers the warning; the plan's hard rule in
 `.planning/bs-skills-plan.md`: "A second concurrent session, on entry, sees the lock note and warns
 instead of silently clobbering"). Never touch, take, refresh, or clear the lock — only read it and
 warn.
