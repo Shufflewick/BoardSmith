@@ -166,10 +166,12 @@ Plans:
   5. The final-acceptance chunk runs the full design-QA pass (screen-reader playthrough, 200% zoom, touch targets, colorblind pass, both Slate themes, mobile layout) as part of what "done" means for the sketch
 
 **Plans**: 4 plans
+
 - [x] 146-01-PLAN.md — extend build-chunk.test.ts drift suite (BUILD-09/10/11/13 + UIQ-05 describe blocks; invert forward-ref markers to zero-remain)
 - [x] 146-02-PLAN.md — author build/playtest.md (BUILD-09 human gate) + build/revise.md (BUILD-10 4-category triage)
 - [x] 146-03-PLAN.md — author build/close.md (BUILD-11 bookkeeping + sketch-tail delta gate) + build/final-acceptance.md (UIQ-05 6-point design-QA)
 - [x] 146-04-PLAN.md — retire all forward-ref markers in build-chunk.md, register 4 files, reconcile Step Group 4 dispatch, assert full suite green (BUILD-13)
+
 **UI hint**: yes
 
 #### Phase 147: `/bs-check-status` & `/bs-insert-chunk`
@@ -186,7 +188,12 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 147-01-PLAN.md — /bs-check-status (STAT-01): read-only 7-item status report + status-tools.test.ts scaffold
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 147-02-PLAN.md — /bs-insert-chunk (STAT-02): sketch editor (4 ops, stale-mark, version bump) + retire build-chunk.md Phase-147 forward-refs
 
 #### Phase 148: Distribution — Installer & `/bs-generate-ai`
