@@ -91,6 +91,29 @@ the derived-pointer form `Status (derived from chunks/<slug>/CHUNK.md): proposed
 classification uses this same derived target: a tail entry is still a nameable chunk slug for
 lock purposes, so all three lock outcomes classify against it unchanged.
 
+**Final-acceptance chunk target:** if the resume target is the sketch's `## Mandated Chunks`
+final-acceptance chunk (the special sketch chunk `templates/SKETCH.template.md`'s `## Mandated
+Chunks` section requires — the full game played start-to-finish, a coverage check, and the
+design-QA/a11y pass), it is NOT an ordinary chunk and does NOT route against the plain `full` or
+`light` Step Checklist the template ships. Its Step Checklist is the group-4 gate with a leading
+content step:
+
+- [ ] final-acceptance
+- [ ] playtest
+- [ ] revise
+- [ ] close
+
+Route to the **first incomplete item** exactly as everywhere else — that is what makes this
+resumable: if `final-acceptance` is unchecked, dispatch `build/final-acceptance.md` (its coverage
+check + 7-point design-QA pass); once that content step is checked off, `playtest`/`revise`/`close`
+run **on top of** it as the ordinary group-4 gate (`build/playtest.md`, `build/revise.md`,
+`build/close.md`), because the design-QA content becomes this chunk's playtest script — it never
+replaces the human playtest/revise/close of the finished game. Detecting the final-acceptance
+chunk here (rather than only when the previous chunk's `close` proposes it) is what makes a cold
+session that resumes directly into the final-acceptance chunk dispatch `build/final-acceptance.md`
+instead of running it as an ordinary checklist chunk. See Step Group 4 and
+`build/final-acceptance.md` for the content itself.
+
 An **awaiting-playtest** chunk — one whose first incomplete Step Checklist item is `playtest`
 (everything through `repair` checked on the full ceremony, or through `test` on the light path)
 — is not a fresh start: this router's first move is to **re-pose the pending question verbatim**
@@ -223,6 +246,14 @@ before looping back to `playtest` (see `build/revise.md` "Round-Bounding and Per
 persists the verified commit hash and decision rollup before proposing the next chunk (see
 `build/close.md` "Bookkeeping Sequence"). An unchecked or unpersisted step is re-run from scratch
 on a cold resume — never leave a completed step's write pending.
+
+**final-acceptance (the sketch's `## Mandated Chunks` final-acceptance chunk only):** before
+`playtest` runs for that one special chunk, dispatch `build/final-acceptance.md` for its coverage
+check and 7-point design-QA pass (Step 2's "Final-acceptance chunk target" routes here on a cold
+resume). Its output — the finished game played start-to-finish — becomes this chunk's `playtest`
+script; the `{playtest, revise, close}` gate below then runs **on top of** that content, never in
+place of it. An ordinary chunk has no `final-acceptance` item on its Step Checklist and skips this
+step entirely.
 
 **playtest:** Delegate the entire human-verification gate to `build/playtest.md` — no subagent,
 the orchestrator narrates the numbered click-by-click test script directly to the human and
