@@ -73,7 +73,7 @@ Before any step dispatch, intercept intents that are not "build the next thing":
 Read `SKETCH.md` → find the first chunk whose status is neither `verified` nor
 `verified (user-waived)` (a waived chunk is closed — the user explicitly waived its playtest;
 never resume it here — surfacing accumulated waived chunks for a batch playtest is
-`/bs-check-status`'s job, Phase 147) → read that chunk's `chunks/<slug>/CHUNK.md` → route to the
+`/bs-check-status`'s job) → read that chunk's `chunks/<slug>/CHUNK.md` → route to the
 **first incomplete step** on its Step Checklist (`state-machine.md` "Step Names"). A chunk whose
 Status line reads `stale — re-derive before build` stops routing instead — see "Status Enum and
 Stale Marker" below.

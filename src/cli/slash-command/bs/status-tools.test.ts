@@ -295,6 +295,14 @@ describe('STAT-02 — build-chunk.md forward-ref retirement', () => {
     expect(buildChunk).not.toMatch(/until it lands/);
   });
 
+  it('leaks no internal planning-phase reference (any dangling "Phase 147") (WR-02)', () => {
+    const buildChunk = read('build-chunk.md');
+    // The earlier regexes only caught the `ships as ... (Phase 147)` shape; a
+    // bare `, Phase 147)` leftover slipped through. Forbid the phase number in
+    // any form so future drift fails loudly.
+    expect(buildChunk).not.toMatch(/Phase 147/);
+  });
+
   it('routes both intents to the now-live skills', () => {
     const buildChunk = read('build-chunk.md');
     expect(buildChunk).toContain('/bs-check-status');
