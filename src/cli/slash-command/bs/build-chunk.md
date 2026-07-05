@@ -77,26 +77,12 @@ never resume it here — surfacing accumulated waived chunks for a batch playtes
 Status line reads `stale — re-derive before build` stops routing instead — see "Status Enum and
 Stale Marker" below.
 
-**Sketch-level tail-entry target:** if the resume target is a sketch-level tail entry —
-`Status: proposed (sketch-level — no CHUNK.md yet)`, no `chunks/<slug>/` directory (by design;
-the consistency check exempts tail entries) — the missing CHUNK.md is NOT a parse failure and
-does not stop the session. Detailing is normally the previous chunk's close-gate duty (Phase
-146), but when routing reaches an undetailed entry, this router details it lazily before
-starting `investigate`: create `chunks/<slug>/`, derive the chunk's CHUNK.md by filling
-`templates/CHUNK.template.md` from the SKETCH.md entry (slug, `## ui:` tag, ceremony, cited
-slices — filling the template, never restructuring it), then rewrite the SKETCH.md tail line to
-the derived-pointer form `Status (derived from chunks/<slug>/CHUNK.md): proposed`
-(`state-machine.md` "Cold-Resume Parse Contract"; write order CHUNK.md first, SKETCH.md second)
-— and only then route to `investigate` as the first incomplete step. Step 0's lock
-classification uses this same derived target: a tail entry is still a nameable chunk slug for
-lock purposes, so all three lock outcomes classify against it unchanged.
-
-**Final-acceptance chunk target:** if the resume target is the sketch's `## Mandated Chunks`
-final-acceptance chunk (the special sketch chunk `templates/SKETCH.template.md`'s `## Mandated
-Chunks` section requires — the full game played start-to-finish, a coverage check, and the
-design-QA/a11y pass), it is NOT an ordinary chunk and does NOT route against the plain `full` or
-`light` Step Checklist the template ships. Its Step Checklist is the group-4 gate with a leading
-content step:
+**Final-acceptance chunk target (checked BEFORE the generic tail-entry path below):** if the
+resume target is the sketch's `## Mandated Chunks` final-acceptance chunk (the special sketch
+chunk `templates/SKETCH.template.md`'s `## Mandated Chunks` section requires — the full game
+played start-to-finish, a coverage check, and the design-QA/a11y pass), it is NOT an ordinary
+chunk and does NOT route against the plain `full` or `light` Step Checklist the template ships.
+Its Step Checklist is the group-4 gate with a leading content step:
 
 - [ ] final-acceptance
 - [ ] playtest
@@ -108,11 +94,46 @@ resumable: if `final-acceptance` is unchecked, dispatch `build/final-acceptance.
 check + 7-point design-QA pass); once that content step is checked off, `playtest`/`revise`/`close`
 run **on top of** it as the ordinary group-4 gate (`build/playtest.md`, `build/revise.md`,
 `build/close.md`), because the design-QA content becomes this chunk's playtest script — it never
-replaces the human playtest/revise/close of the finished game. Detecting the final-acceptance
-chunk here (rather than only when the previous chunk's `close` proposes it) is what makes a cold
-session that resumes directly into the final-acceptance chunk dispatch `build/final-acceptance.md`
-instead of running it as an ordinary checklist chunk. See Step Group 4 and
-`build/final-acceptance.md` for the content itself.
+replaces the human playtest/revise/close of the finished game.
+
+**Why this rule runs first, and how the chunk is detailed:** the final-acceptance chunk is always
+the LAST `## Ordered Chunk List` entry, so it is itself a sketch-level tail entry (`Status:
+proposed (sketch-level — no CHUNK.md yet)`, no `chunks/<slug>/` directory) until routing first
+reaches it. This rule therefore runs **before** the "Sketch-level tail-entry target" path below —
+otherwise that generic path would pre-empt it and fill an ordinary `full`/`light` checklist,
+defeating the detection on exactly the cold resume it exists to protect. When the final-acceptance
+chunk is first detailed, detail it the same way the generic tail path details any entry (create
+`chunks/<slug>/`, fill `templates/CHUNK.template.md`, rewrite the SKETCH.md tail line to the
+derived-pointer form — `state-machine.md` "Cold-Resume Parse Contract"; write order CHUNK.md
+first, SKETCH.md second) with **two mandatory differences** from an ordinary fill: write
+`## Ceremony: final-acceptance` (NOT `full`/`light`), and write the `## Step Checklist` as exactly
+the four items above (`final-acceptance / playtest / revise / close`, NOT the template's 10-item
+full or 3-item light list). `templates/CHUNK.template.md`'s CEREMONY-CONDITIONAL block recognizes
+this third `final-acceptance` variant, so the physical file the router reads legitimately contains
+the 4-item checklist and the per-step check-off discipline works against it. Detecting the
+final-acceptance chunk here (rather than only when the previous chunk's `close` proposes it) is
+what makes a cold session that resumes directly into the final-acceptance chunk dispatch
+`build/final-acceptance.md` instead of running it as an ordinary checklist chunk. See Step Group 4
+and `build/final-acceptance.md` for the content itself.
+
+**Sketch-level tail-entry target:** if the resume target is a sketch-level tail entry —
+`Status: proposed (sketch-level — no CHUNK.md yet)`, no `chunks/<slug>/` directory (by design;
+the consistency check exempts tail entries) — the missing CHUNK.md is NOT a parse failure and
+does not stop the session. **Carve-out:** if that tail entry is the sketch's mandated
+final-acceptance chunk, do NOT use this generic path — detail it per the "Final-acceptance chunk
+target" rule above (ceremony `final-acceptance`, the fixed 4-item checklist), never from the
+plain `full`/`light` template. For every OTHER tail entry, CHUNK.md creation always happens here,
+lazily, when routing first reaches the entry — `close` never creates a next chunk's CHUNK.md (its
+`## Sketch-Tail Delta Gate` only re-derives tail *descriptions*, and its `## Propose the Next
+Chunk` only names the next chunk; see `build/close.md` and WR-02's reconciliation). So this router
+details the entry lazily before starting `investigate`: create `chunks/<slug>/`, derive the
+chunk's CHUNK.md by filling `templates/CHUNK.template.md` from the SKETCH.md entry (slug, `## ui:`
+tag, ceremony, cited slices — filling the template, never restructuring it), then rewrite the
+SKETCH.md tail line to the derived-pointer form `Status (derived from chunks/<slug>/CHUNK.md):
+proposed` (`state-machine.md` "Cold-Resume Parse Contract"; write order CHUNK.md first, SKETCH.md
+second) — and only then route to `investigate` as the first incomplete step. Step 0's lock
+classification uses this same derived target: a tail entry is still a nameable chunk slug for
+lock purposes, so all three lock outcomes classify against it unchanged.
 
 An **awaiting-playtest** chunk — one whose first incomplete Step Checklist item is `playtest`
 (everything through `repair` checked on the full ceremony, or through `test` on the light path)

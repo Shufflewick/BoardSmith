@@ -46,6 +46,18 @@ full
      - [ ] build
      - [ ] test
      - [ ] playtest
+     When Ceremony: final-acceptance (the sketch's ONE mandated final-acceptance chunk only —
+     templates/SKETCH.template.md "## Mandated Chunks"), replace it with exactly these four items
+     (in order):
+     - [ ] final-acceptance
+     - [ ] playtest
+     - [ ] revise
+     - [ ] close
+     This third variant is filled by build-chunk.md's "Final-acceptance chunk target" rule
+     (Step 2) when that chunk is first detailed — the leading `final-acceptance` content step
+     dispatches build/final-acceptance.md (coverage check + 7-point design-QA pass), then
+     playtest/revise/close run on top of it. It is NOT an ordinary chunk's full/light checklist,
+     and it is exempt from build-chunk.md Step 3's full/light ceremony routing.
      Writing the checklist to match the declared ceremony at proposal time is FILLING the
      template, not restructuring it (see state-machine.md "Step Names" sections for the
      light-path status transitions: light chunks move proposed → built directly — `approved`
