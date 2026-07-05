@@ -49,8 +49,11 @@ create one; detailing a tail entry is `/bs-build-chunk`'s job. Otherwise, read t
 same first-incomplete-step rule `build-chunk.md` Step 2 applies (reuse it verbatim in spirit; do
 not invent new derivation logic).
 
-**3. Outstanding playtest feedback.** Read the current chunk's `## Revision Rounds`. Report any
-round whose triaged feedback items have not yet reached a recorded disposition (see
+**3. Outstanding playtest feedback.** If the current chunk is not yet detailed (a sketch-level tail
+entry with no `chunks/<slug>/CHUNK.md` yet — see the same guard in Item 2), report
+"n/a — current chunk not yet detailed" and SKIP the Revision Rounds read entirely; do not attempt
+to read a `CHUNK.md` that does not exist. Otherwise, read the current chunk's `## Revision Rounds`.
+Report any round whose triaged feedback items have not yet reached a recorded disposition (see
 `templates/CHUNK.template.md` "## Revision Rounds" — category (a) this-chunk-defect items are the
 ones still open until fixed and re-tested clean). If there are none, say so explicitly rather than
 omitting the item.
