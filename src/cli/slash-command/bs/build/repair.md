@@ -5,13 +5,25 @@ group — see `state-machine.md` "Session Handoff Seams"). Repair processes each
 `build/audit.md` recorded in this round's `## Findings Ledger` entry: every finding gets exactly
 one of two outcomes.
 
-## Two Allowed Outcomes, Never a Third
+## The Two Repair Actions vs. the Three Terminal Dispositions
 
-For each finding: **FIX** the code, or **refute-with-citation**. There is no third outcome — a
-finding is never silently marked "handled" without one of these two, and code is never changed
-in order to refute a finding (refuting is a citation, not a code change). This mirrors
-`build/build.md`'s "Extends, Never Restructures" shape — name the non-default path explicitly and
-record it durably, rather than leaving it implicit:
+Keep two things distinct. A *repair action* is what repair does to a finding during a round; a
+*disposition* is a finding's final recorded outcome.
+
+During a repair round, repair itself does exactly one of two things to a finding: **FIX** the
+code, or **refute-it-with-citation**. Those are the only two repair actions — a finding is never
+silently marked "handled" without one of them, and code is never changed in order to refute a
+finding (refuting is a citation, not a code change).
+
+`deferred` is NOT a repair action — repair cannot defer a finding on its own. It is only a user
+choice at the round-3 triage below (see "Round-3 User Triage"), and it is the third terminal
+disposition alongside `fixed` and `refuted` (matching `templates/CHUNK.template.md`'s
+`disposition: fixed | deferred | refuted` enum and `state-machine.md`). So there are two repair
+actions but three terminal dispositions; do not read the two-actions rule as forbidding a
+`deferred` disposition.
+
+This mirrors `build/build.md`'s "Extends, Never Restructures" shape — name the non-default path
+explicitly and record it durably, rather than leaving it implicit:
 
 - **Fix**: change the code so the finding no longer holds. Record the finding's disposition as
   `fixed` in its `## Findings Ledger` entry.
