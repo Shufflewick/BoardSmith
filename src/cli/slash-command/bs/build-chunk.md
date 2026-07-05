@@ -59,12 +59,13 @@ Before any step dispatch, intercept intents that are not "build the next thing":
   `SKETCH.md`'s ordered chunk list and, for the in-progress chunk, its `CHUNK.md` Status line
   and Step Checklist (all state files the orchestrator may read), then summarize what is
   verified, what is in progress (and at which step), and what remains. Never answer from memory
-  or a partial read — read the state files first. Tell the user the fuller status view ships as
-  `/bs-check-status` (Phase 147); until it lands, this summary IS the status behavior.
-- **"do the Chance cards next" / reordering intents** — forward reference: the insert/reorder
-  behavior ships as `/bs-insert-chunk` (Phase 147). Until it lands, tell the user reordering
-  is not wired up yet and stop for their decision — never improvise a reorder by editing
-  `SKETCH.md`'s ordered chunk list ad hoc.
+  or a partial read — read the state files first. This inline summary remains a valid quick
+  answer, but for the fuller status view (waived-chunk batch-playtest proposals, asset debts,
+  ideas backlog size, and the rest of the seven-item report), route the user to `/bs-check-status`.
+- **"do the Chance cards next" / reordering intents** — route the user to `/bs-insert-chunk`,
+  which re-validates dependency order, diffs citations against closed chunks, marks any
+  invalidated pending `CHUNK.md` stale, and bumps the sketch version — never improvise a reorder
+  by editing `SKETCH.md`'s ordered chunk list ad hoc here.
 - **Neither matches** — continue to Step 2, the normal resume path.
 
 ## Step 2: Resume Routing (BUILD-01)
