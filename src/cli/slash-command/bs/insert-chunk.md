@@ -17,9 +17,11 @@ in the current directory, never `**/glob` patterns. Report any problems found an
 user how to proceed before continuing — this skill never silently repairs a problem it finds
 outside the scope of the reshape it was asked to perform.
 
-## The Four Operations
+## The Operations
 
-Every reshape (add, reorder, split, remove) runs all four of the following, in order.
+Every reshape (add, reorder, split, remove) runs all of the following, in order. Operation (e) is
+the load-bearing mutation — the actual edit to the `## Ordered Chunk List` — and is enumerated
+explicitly so its content and write-order placement are never left implicit.
 
 **(a) Dependency-order re-validation.** Compare the moved/new chunk's `- Citations:` (from its
 SKETCH.md entry) — or, if it is already detailed, its `## Interpretation` citations (from
@@ -72,17 +74,26 @@ is the PRODUCER of that marker; it does not restate the consumer behavior.
 concurrently resumed `/bs-build-chunk` session detect that the sketch changed under it. Preserve
 the adjacent `Session Lock:` line exactly as found — this operation never touches the lock.
 
+**(e) Ordered Chunk List edit — the reshape itself.** Actually add / reorder / split / remove the
+entry in `SKETCH.md`'s `## Ordered Chunk List` (`templates/SKETCH.template.md` "## Ordered Chunk
+List"). This is the entire point of the skill and must never be left implicit or skipped. It lands
+in the SAME `SKETCH.md` write as the version bump (operation d): rewrite the `## Ordered Chunk List`
+FIRST, then write the `Sketch Version:` line LAST, per `state-machine.md` "## Write Order". Never
+bump the version stamp without rewriting the list, and never rewrite the list in a separate,
+out-of-order write.
+
 ## Write Order
 
 Cite `state-machine.md` "## Write Order" rather than restating it: within this reshape, `CHUNK.md`
-edits (operation c, the stale-marking) land FIRST, then the `SKETCH.md` version bump (operation d)
-lands SECOND. Within each file, the `Status:` (or version) line is written last, after all other
-content for that write has landed — this is what keeps every intermediate state valid for a cold
-resume.
+edits (operation c, the stale-marking) land FIRST, then the `SKETCH.md` write lands SECOND. That
+single `SKETCH.md` write carries BOTH the `## Ordered Chunk List` edit (operation e) and the version
+bump (operation d): rewrite the ordered chunk list first, then the `Sketch Version:` line last.
+Within each file, the `Status:` (or version) line is written last, after all other content for that
+write has landed — this is what keeps every intermediate state valid for a cold resume.
 
 ## Close
 
-After all four operations land, print the exact next command: most reshapes end with
+After all operations land, print the exact next command: most reshapes end with
 `/bs-build-chunk` (to continue building), but if more reshaping is queued in the same
 conversation, the next command is another `/bs-insert-chunk`.
 

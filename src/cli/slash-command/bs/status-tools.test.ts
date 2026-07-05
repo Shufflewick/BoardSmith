@@ -207,6 +207,16 @@ describe('STAT-02 — insert-chunk.md sketch editor', () => {
     expect(insertChunk).toContain('## Newly Discovered Citations');
   });
 
+  it('enumerates op (e): the ## Ordered Chunk List edit, folded into the SKETCH.md write (WR-01)', () => {
+    const insertChunk = read('insert-chunk.md');
+    // The core reshape mutation must be a NAMED operation, not left implicit,
+    // and its write-order placement must be pinned (rewrite list, then version
+    // line, in the same SKETCH.md write). Pins the WR-01 fix.
+    expect(insertChunk).toMatch(/\(e\)\s+Ordered Chunk List edit/i);
+    expect(insertChunk).toContain('## Ordered Chunk List');
+    expect(insertChunk).toMatch(/same\s+`?SKETCH\.md`?\s+write/i);
+  });
+
   it('documents write order CHUNK.md-first-then-SKETCH.md', () => {
     const insertChunk = read('insert-chunk.md');
     expect(insertChunk).toMatch(/CHUNK\.md/);
