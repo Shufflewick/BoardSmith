@@ -119,16 +119,32 @@ describe('initCommand — git init on scaffold (Phase 149 Finding 1)', () => {
     expect(existsSync(join(projectPath, '.git'))).toBe(true);
   });
 
-  it('is non-fatal to scaffolding when git is unavailable or the commit fails', async () => {
-    // Simulate a broken git by pointing GIT_DIR/PATH-independent failure:
-    // most reliably, run inside a dir where `git init` itself would still
-    // succeed but the commit has no identity configured — initCommand must
-    // not throw or exit(1) regardless.
+  it('is non-fatal to scaffolding when the commit fails (no git identity)', async () => {
+    // Genuinely force the commit-failure path (WR-01). The previous version
+    // just ran initCommand in a fresh dir — on any machine/CI with a global
+    // user.name/user.email, `git commit` SUCCEEDED, so the non-fatal catch was
+    // never exercised and the test passed even if the error handling were
+    // deleted. Here we neutralize git identity for the spawned git commit:
+    // empty config sources plus empty GIT_AUTHOR_*/GIT_COMMITTER_* means git
+    // cannot resolve an identity and the commit fails — while `git init` and
+    // `git add` still succeed. initCommand must not throw or exit(1).
     parentDir = mkdtempSync(join(tmpdir(), 'bs-init-git-noid-'));
     process.chdir(parentDir);
-    await expect(initCommand('git-init-noid-game')).resolves.toBeUndefined();
-    const projectPath = join(parentDir, 'git-init-noid-game');
-    // Scaffold files must exist regardless of git outcome.
-    expect(existsSync(join(projectPath, 'package.json'))).toBe(true);
+    const prev = { ...process.env };
+    process.env.GIT_CONFIG_GLOBAL = '/dev/null';
+    process.env.GIT_CONFIG_SYSTEM = '/dev/null';
+    process.env.GIT_AUTHOR_NAME = '';
+    process.env.GIT_AUTHOR_EMAIL = '';
+    process.env.GIT_COMMITTER_NAME = '';
+    process.env.GIT_COMMITTER_EMAIL = '';
+    try {
+      await expect(initCommand('git-init-noid-game')).resolves.toBeUndefined();
+      const projectPath = join(parentDir, 'git-init-noid-game');
+      // Scaffold survives, the repo exists, but no commit was made.
+      expect(existsSync(join(projectPath, 'package.json'))).toBe(true);
+      expect(existsSync(join(projectPath, '.git'))).toBe(true);
+    } finally {
+      process.env = prev;
+    }
   });
 });
