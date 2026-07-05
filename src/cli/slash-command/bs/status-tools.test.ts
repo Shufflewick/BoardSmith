@@ -66,6 +66,18 @@ const REFERENCED_SECTIONS = [
   '## Session Lock',
 ] as const;
 
+/**
+ * The exact state-machine.md headings insert-chunk.md must cite (never restate) — and which
+ * must actually exist in state-machine.md, guarding against a cited heading that doesn't exist
+ * (Pitfall 2).
+ */
+const REFERENCED_SECTIONS_INSERT = [
+  '## Write Order',
+  '## Consistency Check (every bs- entry point, before proceeding)',
+  '## Status Enum (exact)',
+  '## Session Lock',
+] as const;
+
 describe('STAT-01 — check-status.md read-only status reader', () => {
   it('check-status.md exists and is full, non-thin-pointer content', () => {
     const checkStatus = read('check-status.md');
@@ -144,5 +156,125 @@ describe('STAT-01 — check-status.md read-only status reader', () => {
 
   it('check-status.md itself exists on disk (drift-guard for the existence checks above)', () => {
     expect(existsSync(join(__dirname, 'check-status.md'))).toBe(true);
+  });
+});
+
+describe('STAT-02 — insert-chunk.md sketch editor', () => {
+  it('insert-chunk.md exists and is full, non-thin-pointer content', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk.length).toBeGreaterThan(2500);
+  });
+
+  it('enumerates op (a): dependency-order re-validation', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).toMatch(/dependency-order re-validation|dependency order/i);
+  });
+
+  it('enumerates op (b): closed-chunk citation-overlap diff', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).toMatch(/citation-overlap diff|citation overlap/i);
+  });
+
+  it('enumerates op (c): stale-marking', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).toMatch(/stale-marking|stale.marking/i);
+  });
+
+  it('enumerates op (d): version-stamp bump', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).toMatch(/version-stamp bump|version stamp/i);
+  });
+
+  it('pins STALE_MARKER byte-exact as the CHUNK.md Status value it sets', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).toContain(STALE_MARKER);
+  });
+
+  it('documents the version-stamp bump citing SKETCH.template.md\'s field AND ## Write Order', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).toContain('Sketch Version:');
+    expect(insertChunk).toContain('## Write Order');
+  });
+
+  it('does NOT cite a nonexistent state-machine "Sketch Version" heading', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).not.toMatch(/state-machine\.md[^\n]*"?Sketch Version"?/);
+  });
+
+  it('op (b) scans BOTH ## Interpretation and ## Newly Discovered Citations', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).toContain('## Interpretation');
+    expect(insertChunk).toContain('## Newly Discovered Citations');
+  });
+
+  it('documents write order CHUNK.md-first-then-SKETCH.md', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).toMatch(/CHUNK\.md/);
+    expect(insertChunk).toMatch(/SKETCH\.md/);
+    expect(insertChunk).toContain('## Write Order');
+  });
+
+  it('guards the ## Mandated Chunks invariants surviving a reshape (OQ2)', () => {
+    const insertChunk = read('insert-chunk.md');
+    expect(insertChunk).toContain('## Mandated Chunks');
+    expect(insertChunk).toMatch(/first.chunk|core event loop/i);
+    expect(insertChunk).toMatch(/game.end/i);
+    expect(insertChunk).toMatch(/final.acceptance/i);
+  });
+
+  it('cites each REFERENCED_SECTIONS_INSERT heading by exact string', () => {
+    const insertChunk = read('insert-chunk.md');
+    for (const heading of REFERENCED_SECTIONS_INSERT) {
+      const bareHeading = heading.replace(/^##\s*/, '');
+      expect(insertChunk).toContain(bareHeading);
+    }
+  });
+
+  it('every cited REFERENCED_SECTIONS_INSERT heading actually exists in state-machine.md', () => {
+    const stateMachine = read('state-machine.md');
+    for (const heading of REFERENCED_SECTIONS_INSERT) {
+      expect(stateMachine).toContain(heading);
+    }
+  });
+
+  it('references each REFERENCED_PATHS entry and every path exists (no dangling pointers)', () => {
+    const insertChunk = read('insert-chunk.md');
+    for (const path of REFERENCED_PATHS) {
+      expect(insertChunk).toContain(path);
+      expect(existsSync(join(__dirname, path))).toBe(true);
+    }
+  });
+});
+
+describe('STAT-02 — build-chunk.md forward-ref retirement', () => {
+  it('no longer contains the stale check-status forward-ref phrasing', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).not.toMatch(/ships as\s+`?\/bs-check-status`?\s*\(Phase 147\)/);
+  });
+
+  it('no longer contains the stale insert-chunk forward-ref phrasing', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).not.toMatch(/ships as\s+`?\/bs-insert-chunk`?\s*\(Phase 147\)/);
+  });
+
+  it('no longer contains "until it lands" stopgap phrasing', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).not.toMatch(/until it lands/);
+  });
+
+  it('routes both intents to the now-live skills', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toContain('/bs-check-status');
+    expect(buildChunk).toContain('/bs-insert-chunk');
+  });
+});
+
+describe('STAT-02 — both skills exist', () => {
+  it('check-status.md exists on disk', () => {
+    expect(existsSync(join(__dirname, 'check-status.md'))).toBe(true);
+  });
+
+  it('insert-chunk.md exists on disk', () => {
+    expect(existsSync(join(__dirname, 'insert-chunk.md'))).toBe(true);
   });
 });
