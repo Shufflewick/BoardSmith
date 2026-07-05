@@ -73,10 +73,14 @@ not as something to fix here.
 
 **7. The exact next command.** Derive this from what was found above — never guess, derive it
 from the state just read:
-- If the current chunk is mid-ceremony (any step checked, more remain), the next command is
-  `/bs-build-chunk` to resume it.
+- If the current chunk exists and is not yet fully verified — whether it is mid-ceremony (some
+  steps checked, more remain), detailed but not yet started (zero steps checked), or still a
+  sketch-level tail entry "not yet detailed" (no `chunks/<slug>/` directory yet, per Item 2) — the
+  next command is `/bs-build-chunk` (to start, detail, or resume it). This one bullet covers every
+  in-progress state so none falls through.
 - If a sketch reshape was just discussed with the user in this same conversation (reordering,
-  inserting, splitting, or removing a chunk), the next command is `/bs-insert-chunk`.
+  inserting, splitting, or removing a chunk), the next command is `/bs-insert-chunk` (this
+  overrides the build-chunk case above).
 - If nothing has started yet (no `SKETCH.md`, caught at Step 0 above), the next command is
   `/bs-ingest-rules`.
 
