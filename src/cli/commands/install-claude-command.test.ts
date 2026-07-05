@@ -63,7 +63,7 @@ const GAME_PROJECT_ARTIFACTS = [
  * exists or is needed, because the light path is a routing decision over build.md/test.md/
  * playtest.md, not a fourth ceremony"). These are negative references, not dangling ones.
  */
-const KNOWN_NONEXISTENT_REFS = ['build/light.md'];
+const KNOWN_NONEXISTENT_REFS = ['bs-shared/build/light.md'];
 
 function isGameProjectArtifact(stripped: string): boolean {
   if (stripped.endsWith('/...') || stripped === '...') return true;
@@ -120,15 +120,21 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
   });
 
   describe('DIST-01', () => {
-    it('installs bs- skill family: all 5 bs-<name>/SKILL.md + shared reference tree', () => {
+    it('installs bs- skill family: all 5 bs-<name>/SKILL.md + shared reference tree under bs-shared/', () => {
       for (const name of SKILL_NAMES) {
         expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
       }
-      expect(existsSync(join(skillsRoot, 'build'))).toBe(true);
-      expect(existsSync(join(skillsRoot, 'ingest'))).toBe(true);
-      expect(existsSync(join(skillsRoot, 'templates'))).toBe(true);
-      expect(existsSync(join(skillsRoot, 'aspects'))).toBe(true);
-      expect(existsSync(join(skillsRoot, 'state-machine.md'))).toBe(true);
+      // The shared reference tree is namespaced under a single bs-shared/ root (WR-01a), never
+      // as generic flat siblings (build/, templates/, …) that a reinstall could collide with.
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'build'))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'ingest'))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'templates'))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'aspects'))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
+      // The un-namespaced flat siblings must NOT exist — they were the collision hazard.
+      expect(existsSync(join(skillsRoot, 'build'))).toBe(false);
+      expect(existsSync(join(skillsRoot, 'templates'))).toBe(false);
+      expect(existsSync(join(skillsRoot, 'state-machine.md'))).toBe(false);
     });
 
     it('no dangling references: every entry-point SKILL.md relative reference resolves', () => {
@@ -160,9 +166,14 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
       expect(checkedAtLeastOne).toBe(true);
     });
 
-    it('aspects/index.md resolves via ingest/interview-fallback.md-style ../aspects/ reference', () => {
-      expect(existsSync(join(skillsRoot, 'aspects', 'index.md'))).toBe(true);
-      const ingestBody = readFileSync(join(skillsRoot, 'ingest', 'interview-fallback.md'), 'utf-8');
+    it('aspects/index.md resolves via ingest/interview-fallback.md-style ../aspects/ reference within bs-shared/', () => {
+      // Both ingest/ and aspects/ live under bs-shared/, so interview-fallback.md's
+      // `../aspects/index.md` (from bs-shared/ingest/) still resolves to bs-shared/aspects/.
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'aspects', 'index.md'))).toBe(true);
+      const ingestBody = readFileSync(
+        join(skillsRoot, 'bs-shared', 'ingest', 'interview-fallback.md'),
+        'utf-8'
+      );
       expect(ingestBody).toContain('../aspects/index.md');
     });
 
@@ -245,7 +256,7 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
 
   it('a --force reinstall deletes orphaned files left in installer-owned dirs', async () => {
     // Seed orphans: one inside a shared dir the installer owns, one inside a skill dir.
-    const orphanShared = join(skillsRoot, 'build', 'orphan-stale.md');
+    const orphanShared = join(skillsRoot, 'bs-shared', 'build', 'orphan-stale.md');
     const orphanSkillFile = join(skillsRoot, 'bs-ingest-rules', 'orphan-extra.md');
     writeFileSync(orphanShared, 'stale content that no longer exists upstream');
     writeFileSync(orphanSkillFile, 'stale content that no longer exists upstream');
@@ -264,9 +275,67 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
       expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
     }
     for (const dir of ['build', 'ingest', 'templates', 'aspects']) {
-      expect(existsSync(join(skillsRoot, dir))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', dir))).toBe(true);
     }
-    expect(existsSync(join(skillsRoot, 'state-machine.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
+  });
+});
+
+/**
+ * WR-01a: the pre-copy clean must ONLY delete installer-owned `bs-`-prefixed roots (the 5 skill
+ * dirs + the single bs-shared/ namespace). Before namespacing, the shared tree installed as flat
+ * siblings (`build/`, `templates/`, …) and the WR-01 recursive pre-copy `fs.rm` would wipe a
+ * user's UNRELATED skill that happened to be named exactly `templates`/`build`/etc. This locks in
+ * the collision-safety property: such an unrelated dir SURVIVES a --force reinstall.
+ */
+describe('installClaudeCommand — reinstall never deletes an unrelated user skill (WR-01a)', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let skillsRoot: string;
+
+  beforeAll(async () => {
+    origCwd = process.cwd();
+    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-collision-'));
+    process.chdir(tempDir);
+    await installClaudeCommand({ local: true, force: true, skipLink: true });
+    skillsRoot = join(tempDir, '.claude', 'skills');
+  });
+
+  afterAll(() => {
+    process.chdir(origCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('an unrelated ~/.claude/skills/templates/ dir is NOT deleted by a --force reinstall', async () => {
+    // Seed an unrelated user skill whose name collides with a former flat shared-dir name.
+    const unrelatedSkillDir = join(skillsRoot, 'templates');
+    const unrelatedSkillFile = join(unrelatedSkillDir, 'SKILL.md');
+    mkdirSync(unrelatedSkillDir, { recursive: true });
+    writeFileSync(unrelatedSkillFile, 'a user skill that has nothing to do with BoardSmith');
+
+    // Also seed unrelated dirs matching the other former flat names.
+    for (const name of ['build', 'ingest', 'aspects']) {
+      const dir = join(skillsRoot, name);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'SKILL.md'), `unrelated ${name} skill`);
+    }
+    const unrelatedRootFile = join(skillsRoot, 'state-machine.md');
+    writeFileSync(unrelatedRootFile, 'an unrelated top-level file');
+
+    // Reinstall with --force: the pre-copy clean runs over every owned path.
+    await installClaudeCommand({ local: true, force: true, skipLink: true });
+
+    // The unrelated user content SURVIVES — the installer only owns bs-* roots.
+    expect(existsSync(unrelatedSkillFile)).toBe(true);
+    expect(readFileSync(unrelatedSkillFile, 'utf-8')).toContain('nothing to do with BoardSmith');
+    for (const name of ['build', 'ingest', 'aspects']) {
+      expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
+    }
+    expect(existsSync(unrelatedRootFile)).toBe(true);
+
+    // And BoardSmith's own namespaced tree is still fully installed alongside it.
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'templates', 'SKETCH.template.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
   });
 });
 
@@ -333,8 +402,62 @@ describe('installClaudeCommand — partial install is not misreported as complet
       expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
     }
     for (const dir of ['build', 'ingest', 'templates', 'aspects']) {
-      expect(existsSync(join(skillsRoot, dir))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', dir))).toBe(true);
     }
-    expect(existsSync(join(skillsRoot, 'state-machine.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
+  });
+});
+
+/**
+ * WR-03a: an install interrupted mid-shared-tree can leave an EMPTY shared dir (fs.cp creates
+ * the destination dir before populating it). The completeness check must probe a known LEAF
+ * file inside each shared dir, not bare dir existence — otherwise a later non-force run sees the
+ * empty dir, reports "already installed", and leaves the partial tree in place. This seeds a
+ * complete-looking-but-empty shared tree and asserts a non-force install finishes it.
+ */
+describe('installClaudeCommand — empty shared dir is detected as partial, not complete (WR-03a)', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let skillsRoot: string;
+
+  const SKILL_NAMES = [
+    'bs-ingest-rules',
+    'bs-build-chunk',
+    'bs-check-status',
+    'bs-insert-chunk',
+    'bs-generate-ai',
+  ];
+
+  beforeAll(() => {
+    origCwd = process.cwd();
+    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-emptyshared-'));
+    process.chdir(tempDir);
+    skillsRoot = join(tempDir, '.claude', 'skills');
+    // Simulate an interrupt AFTER all 5 SKILL.md were written and the shared dirs were CREATED
+    // by fs.cp but BEFORE their leaf files were populated: every dir exists, all are empty.
+    for (const name of SKILL_NAMES) {
+      mkdirSync(join(skillsRoot, name), { recursive: true });
+      writeFileSync(join(skillsRoot, name, 'SKILL.md'), 'placeholder from interrupted install');
+    }
+    for (const dir of ['build', 'ingest', 'templates', 'aspects']) {
+      mkdirSync(join(skillsRoot, 'bs-shared', dir), { recursive: true });
+    }
+  });
+
+  afterAll(() => {
+    process.chdir(origCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('a non-force install over empty shared dirs completes them instead of short-circuiting', async () => {
+    // Bare dir existence would (wrongly) report "already installed". A leaf-file probe detects
+    // the empty shared dirs as partial and finishes the install.
+    await installClaudeCommand({ local: true, force: false, skipLink: true });
+
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'templates', 'SKETCH.template.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'build', 'build.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'ingest', 'transcription.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'aspects', 'index.md'))).toBe(true);
   });
 });

@@ -35,32 +35,60 @@ const SKILL_ENTRY_POINTS: Array<{ source: string; skillName: string }> = [
   { source: 'generate-ai-instructions.md', skillName: 'bs-generate-ai' },
 ];
 
-/** Shared reference directories copied as flat siblings under the skills root. */
+/**
+ * Single namespaced root the installer owns for the shared reference tree. Everything the
+ * skills read in common (build/, ingest/, templates/, aspects/, state-machine.md) lives UNDER
+ * this one `bs-`-prefixed dir — `~/.claude/skills/bs-shared/{build,ingest,templates,aspects,
+ * state-machine.md}` — so the installer never owns a generic top-level name like `templates`.
+ * This makes the pre-copy clean and the uninstaller collision-proof: a user's unrelated skill
+ * named exactly `templates`/`build`/`ingest`/`aspects` at the skills root is never touched.
+ */
+const SHARED_ROOT = 'bs-shared';
+
+/** Shared reference directories copied under the `bs-shared/` namespace root. */
 const SHARED_DIRS = ['build', 'ingest', 'templates', 'aspects'];
+
+/**
+ * A known leaf file inside each shared dir (relative to `targetDir`). A COMPLETE install
+ * contains every one of these; probing them — rather than bare-directory existence — is what
+ * distinguishes a finished install from an interrupted mid-copy that left an empty/partial
+ * shared dir behind (`fs.cp` creates the destination dir before populating it).
+ */
+const SHARED_LEAF_PROBES = [
+  join(SHARED_ROOT, 'state-machine.md'),
+  join(SHARED_ROOT, 'build', 'build.md'),
+  join(SHARED_ROOT, 'ingest', 'transcription.md'),
+  join(SHARED_ROOT, 'templates', 'SKETCH.template.md'),
+  join(SHARED_ROOT, 'aspects', 'index.md'),
+];
 
 /** Filter applied to every recursive tree copy: never ship test files. */
 function excludeTestFiles(src: string): boolean {
   return !src.endsWith('.test.ts');
 }
 
-/** Every filesystem path this installer owns under `targetDir`. */
+/**
+ * Every filesystem path this installer owns under `targetDir`: the 5 `bs-<name>/` skill dirs
+ * plus the single `bs-shared/` namespace root. Every entry is `bs-`-prefixed, so the pre-copy
+ * clean and the uninstaller can never recursively delete an unrelated user skill.
+ */
 function ownedPaths(targetDir: string): string[] {
   return [
     ...SKILL_ENTRY_POINTS.map(({ skillName }) => join(targetDir, skillName)),
-    ...SHARED_DIRS.map((dirName) => join(targetDir, dirName)),
-    join(targetDir, 'state-machine.md'),
+    join(targetDir, SHARED_ROOT),
   ];
 }
 
 /**
  * The full set of paths a complete install must contain. Used to distinguish a complete
  * install (short-circuit as "already installed") from a partial/interrupted one (proceed).
+ * The shared tree is probed by known LEAF files, not bare dir existence, so a half-copied
+ * shared dir is correctly detected as partial.
  */
 function expectedInstallPaths(targetDir: string): string[] {
   return [
     ...SKILL_ENTRY_POINTS.map(({ skillName }) => join(targetDir, skillName, 'SKILL.md')),
-    ...SHARED_DIRS.map((dirName) => join(targetDir, dirName)),
-    join(targetDir, 'state-machine.md'),
+    ...SHARED_LEAF_PROBES.map((leaf) => join(targetDir, leaf)),
   ];
 }
 
@@ -114,15 +142,19 @@ async function copySkillTree(
     await fs.writeFile(join(skillDir, 'SKILL.md'), content);
   }
 
-  // Shared reference dirs: copy recursively, excluding *.test.ts, as flat siblings.
+  // Shared reference dirs: copy recursively, excluding *.test.ts, UNDER the bs-shared/ root.
   for (const dirName of SHARED_DIRS) {
     const srcDir = dirName === 'aspects' ? join(slashCommandDir, 'aspects') : join(bsDir, dirName);
-    const destDir = join(targetDir, dirName);
+    const destDir = join(targetDir, SHARED_ROOT, dirName);
     await fs.cp(srcDir, destDir, { recursive: true, filter: excludeTestFiles });
   }
 
-  // state-machine.md: single file copy.
-  await fs.copyFile(join(bsDir, 'state-machine.md'), join(targetDir, 'state-machine.md'));
+  // state-machine.md: single file copy into bs-shared/.
+  await fs.mkdir(join(targetDir, SHARED_ROOT), { recursive: true });
+  await fs.copyFile(
+    join(bsDir, 'state-machine.md'),
+    join(targetDir, SHARED_ROOT, 'state-machine.md')
+  );
 
   return true;
 }
@@ -180,8 +212,11 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
         execSync('npm ls -g --depth=0 boardsmith', { stdio: 'pipe' });
         console.log(chalk.green('✓ BoardSmith already linked globally'));
       } catch {
-        console.error(chalk.yellow('Warning: Could not link BoardSmith globally.'));
-        console.error(chalk.gray('You may need to run with sudo or fix npm permissions.'));
+        // `npm ls -g` also exits non-zero for UNRELATED global-tree problems (extraneous or
+        // invalid deps elsewhere), so a failure here does not prove boardsmith is unlinked —
+        // it only means we could not confirm the link. Soften the wording accordingly.
+        console.error(chalk.yellow('Warning: Could not confirm BoardSmith is linked globally.'));
+        console.error(chalk.gray('If `npx boardsmith` is not found, run with sudo or fix npm permissions.'));
         console.error(chalk.gray(`Manual fix: cd ${boardsmithRoot} && npm link`));
       }
     }
@@ -200,7 +235,7 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log(chalk.cyan('  bs-generate-ai') + chalk.gray('   - Generate AI evaluation functions for a game chunk'));
   console.log('');
   console.log(chalk.gray('Each skill reads from a shared reference tree (build/, ingest/,'));
-  console.log(chalk.gray('templates/, aspects/, state-machine.md) installed alongside it.'));
+  console.log(chalk.gray('templates/, aspects/, state-machine.md) installed under bs-shared/.'));
   console.log(chalk.gray('Projects built with an older BoardSmith skill are auto-detected'));
   console.log(chalk.gray('and offered a one-time conversion by bs-ingest-rules.'));
   console.log('');
@@ -218,10 +253,12 @@ export async function uninstallClaudeCommand(options: { local?: boolean } = {}):
 
   let removedAny = false;
 
+  // Only ever remove installer-owned `bs-`-prefixed roots (the 5 skill dirs + the single
+  // bs-shared/ namespace). Never a generic top-level name like `templates`/`build`, so
+  // uninstall cannot wipe an unrelated user skill that happens to share that name.
   const itemsToRemove = [
     ...SKILL_ENTRY_POINTS.map(({ skillName }) => skillName),
-    ...SHARED_DIRS,
-    'state-machine.md',
+    SHARED_ROOT,
   ];
 
   for (const item of itemsToRemove) {

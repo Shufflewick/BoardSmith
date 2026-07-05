@@ -11,7 +11,7 @@ you are extending this skill, link to the relevant section instead of copying ru
 file is a lean router: it detects state, dispatches to the right reference file for each step's
 heavyweight prose, and synthesizes the durable artifacts from what subagents return. It does not
 explain the status enum, the consistency check, the session lock, or template structure inline —
-see `${CLAUDE_SKILL_DIR}/../state-machine.md` for all of that.
+see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
 
 Run once per game. Re-running on an existing project is destructive to sketch state and requires
 explicit confirmation (see Step 0 below).
@@ -21,12 +21,12 @@ explicit confirmation (see Step 0 below).
 **The orchestrator never reads full rulebook slices.** `rulebook/INDEX.md` is built exclusively
 from the `citedTerms[]` lists subagents return in their structured summaries — never by
 re-reading a slice file the orchestrator just had a subagent write. This applies to every step
-below; `${CLAUDE_SKILL_DIR}/../ingest/transcription.md` restates it because that is the step where the temptation to
+below; `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` restates it because that is the step where the temptation to
 "double-check by reading the slice" is strongest.
 
 ## Step 0: State Detection (INGEST-07)
 
-On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../state-machine.md`
+On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
 ("Consistency Check"). Then determine which of four cases applies (use `ls <file>` direct
 checks in the current directory, never `**/glob` patterns that search subfolders):
 
@@ -56,21 +56,21 @@ checks in the current directory, never `**/glob` patterns that search subfolders
    they were verified under the old process. On acceptance, **skip Step 1 (Scaffold) entirely**
    — the old project is already scaffolded, and `npx boardsmith init` hard-fails on an existing
    directory (`src/cli/commands/init.ts`); at most re-run only the compile/serve verification
-   portion of `${CLAUDE_SKILL_DIR}/../ingest/scaffold.md` (no `init`) to prove the old codebase still compiles. Skip
+   portion of `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/scaffold.md` (no `init`) to prove the old codebase still compiles. Skip
    Step 2's questioning, but NOT its output shape: convert the old project's captured content
    into the standard `rulebook/` shape first — write the old interview/PROJECT.md content as
-   `rulebook/NN-topic.md` slices (grouped by topic, per `${CLAUDE_SKILL_DIR}/../ingest/interview-fallback.md`
+   `rulebook/NN-topic.md` slices (grouped by topic, per `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/interview-fallback.md`
    "Output Re-Target"), with citation format
    `designer statement, migrated from /design-game project`. Collect `citedTerms[]` /
    `componentMentions[]` from those slices as you write them, exactly as the interview path
    does. Then proceed to Step 3 (Synthesis), which runs unchanged — preserving the
-   input-path identity `${CLAUDE_SKILL_DIR}/../ingest/interview-fallback.md` declares (every downstream step,
+   input-path identity `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/interview-fallback.md` declares (every downstream step,
    including `/bs-build-chunk`'s citation reads, consumes the same `rulebook/NN-topic.md` +
    `rulebook/INDEX.md` shape regardless of input path). Migration is never a fourth shape.
 
 ## Step 1: Scaffold + Verify
 
-Delegate the entire scaffold-and-verify sequence to `${CLAUDE_SKILL_DIR}/../ingest/scaffold.md`: deriving
+Delegate the entire scaffold-and-verify sequence to `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/scaffold.md`: deriving
 display/project/class names, running `boardsmith init`, verifying the empty skeleton compiles
 (`tsc --noEmit`) and serves, and killing any server this skill starts before returning. Chunk 1
 must start from a known-good, verified-compiling baseline.
@@ -85,9 +85,9 @@ remaining step — nothing this skill produces is ever written to the parent dir
 
 Ask whether the designer has a written rulebook (PDF/images/text).
 
-- **Rulebook available** — dispatch fan-out subagents per `${CLAUDE_SKILL_DIR}/../ingest/transcription.md`.
+- **Rulebook available** — dispatch fan-out subagents per `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md`.
 - **No rulebook** (unpublished prototype, rules in the designer's head) — run the structured
-  interview per `${CLAUDE_SKILL_DIR}/../ingest/interview-fallback.md`, which produces the identical `rulebook/` shape so
+  interview per `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/interview-fallback.md`, which produces the identical `rulebook/` shape so
   every downstream step is unaffected by which path was taken.
 
 Both paths produce `rulebook/NN-topic.md` slice files — written by the transcription subagents
@@ -106,16 +106,16 @@ following artifacts **from subagent-returned summaries only** — never from re-
 2. **Variant/edition tagging** — the rulebook's edition is recorded as a header line in
    `rulebook/INDEX.md`, sourced from the `edition` field the opening-pages transcription
    subagent returns (or from the user if the rulebook states none; on the interview path it
-   reads "unpublished — designer statement" — see `${CLAUDE_SKILL_DIR}/../ingest/transcription.md` "Edition").
+   reads "unpublished — designer statement" — see `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` "Edition").
    Variant/optional/advanced rules were already tagged out-of-scope-by-default **in the slices
-   at write time** by the transcription subagents (per `${CLAUDE_SKILL_DIR}/../ingest/transcription.md` "Variant /
+   at write time** by the transcription subagents (per `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` "Variant /
    Optional / Advanced Rules" — this orchestrator never edits a slice); this step's only
    variant job is to build the `SKETCH.md` "Variants (deferred)" listing from the accumulated
    `variants[]` lists the subagents return.
 3. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
    approximate aspect ratios (cards, tiles, board proportions), seeded into `ASSETS.md`.
 4. **`ASSETS.md`** — the component/asset ledger (needed-by-chunk, requested, received,
-   placeholder-in-use, file path — see `${CLAUDE_SKILL_DIR}/../templates/ASSETS.template.md`), seeded from the
+   placeholder-in-use, file path — see `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md`), seeded from the
    component inventory above. Assets are recorded as debt here, never requested up front.
 5. **Visual identity survey** — evidence only, no decision made cold: dominant palette
    candidates, typography feel, iconography, notes on board/card art, and descriptions of setup
@@ -135,9 +135,9 @@ following artifacts **from subagent-returned summaries only** — never from re-
 
 ## Step 4: Sketch Derivation
 
-Delegate the sketch-authoring heuristic to `${CLAUDE_SKILL_DIR}/../ingest/sketch-derivation.md`: how chunks are carved
+Delegate the sketch-authoring heuristic to `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/sketch-derivation.md`: how chunks are carved
 from the rulebook slices, the lazy-tail 2-3-chunk detail cap, and the Mandated Chunks contract
-(cite `${CLAUDE_SKILL_DIR}/../templates/SKETCH.template.md`'s "## Mandated Chunks" section — do not restate it here).
+(cite `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md`'s "## Mandated Chunks" section — do not restate it here).
 The result of this step is an in-conversation **proposal** only — do **not** write `SKETCH.md`
 yet. The sketch is proposed, not imposed: the file is written exactly once, at Step 7, after
 the Step 6 approval gate. A rejection at Step 6 must leave no sketch state on disk to undo.
@@ -145,7 +145,7 @@ the Step 6 approval gate. A rejection at Step 6 must leave no sketch state on di
 ## Step 5: UI Strategy (INGEST-06)
 
 Made **with the user**, at ingest. The decision lands in the proposed sketch's `## UI Strategy`
-section — the skeleton for which comes from `${CLAUDE_SKILL_DIR}/../templates/SKETCH.template.md`, where that section
+section — the skeleton for which comes from `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md`, where that section
 already exists (fill it, do not invent a new field, and never edit the shipped template itself)
 — and is written to the game project's `SKETCH.md` at Step 7 with the rest of the approved
 sketch. Two values:
@@ -153,7 +153,7 @@ sketch. Two values:
 - **`custom-from-chunk-1`** (default) — the playtest artifact is always the real product surface.
 - **`autoui-with-cutover`** — an AutoUI scaffold with a scheduled custom-UI cutover chunk named
   now. Any later cutover explicitly flips **all** previously verified chunks back to `built` and
-  re-opens their test scripts (see `${CLAUDE_SKILL_DIR}/../state-machine.md` "Restyle/Cutover Rule") — there is no
+  re-opens their test scripts (see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Restyle/Cutover Rule") — there is no
   silent "we'll make it custom later."
 
 ## Step 6: Approval Gate
@@ -170,17 +170,17 @@ files until the user has explicitly approved.
 This is the **single point** where sketch state is written — no earlier step writes `SKETCH.md`
 or any `CHUNK.md`. Only after Step 6's explicit approval:
 
-- Copy `${CLAUDE_SKILL_DIR}/../templates/SKETCH.template.md` into the game project as `SKETCH.md` and fill it with the
+- Copy `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md` into the game project as `SKETCH.md` and fill it with the
   approved content from Steps 4-6 (ordered chunk list, UI Strategy, Variants (deferred), player
   counts). Copy-and-fill is one operation — never copy a blank skeleton over a file that
   already carries content.
-- Create `chunks/<slug>/CHUNK.md` from `${CLAUDE_SKILL_DIR}/../templates/CHUNK.template.md` for the detailed next 2-3
-  chunks only (tail entries get no directory and no stub — see `${CLAUDE_SKILL_DIR}/../ingest/sketch-derivation.md`).
+- Create `chunks/<slug>/CHUNK.md` from `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CHUNK.template.md` for the detailed next 2-3
+  chunks only (tail entries get no directory and no stub — see `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/sketch-derivation.md`).
 - Seed `RULINGS.md` and `DECISIONS.md` as empty ledgers from their templates. This is a
   deliberate choice, not "copy everything": their first real content arrives at later gates
   (any ask/playtest gate, and build/close respectively), and seeding them now means those later
   steps append to an existing ledger instead of deciding whether to create one.
-- Do **NOT** create `DESIGN.md`. Per `${CLAUDE_SKILL_DIR}/../templates/DESIGN.template.md`'s own header, it is written
+- Do **NOT** create `DESIGN.md`. Per `${CLAUDE_SKILL_DIR}/../bs-shared/templates/DESIGN.template.md`'s own header, it is written
   at the FIRST UI chunk's `ask` step, not at ingest — there is no visual identity to decide
   until a UI chunk needs one, and the file's very existence is the signal `/bs-build-chunk`
   uses to know the identity decision was made. Creating it blank here breaks that trigger.
@@ -199,26 +199,28 @@ everything is saved in the game folder.
 
 This skill delegates its heavyweight, step-scoped prose to:
 
-- `${CLAUDE_SKILL_DIR}/../ingest/transcription.md` — fan-out subagent dispatch, per-section confirmation protocol
-- `${CLAUDE_SKILL_DIR}/../ingest/interview-fallback.md` — the no-rulebook structured interview
-- `${CLAUDE_SKILL_DIR}/../ingest/sketch-derivation.md` — chunk-carving heuristic and lazy-tail detail cap
-- `${CLAUDE_SKILL_DIR}/../ingest/scaffold.md` — naming rules, `boardsmith init`, compile + serve verification, kill
+- `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` — fan-out subagent dispatch, per-section confirmation protocol
+- `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/interview-fallback.md` — the no-rulebook structured interview
+- `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/sketch-derivation.md` — chunk-carving heuristic and lazy-tail detail cap
+- `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/scaffold.md` — naming rules, `boardsmith init`, compile + serve verification, kill
 
 And to the shared reference files that ship with every `bs-` skill:
 
-- `${CLAUDE_SKILL_DIR}/../state-machine.md` — status enum, consistency check, session lock, write order, authority
-- `${CLAUDE_SKILL_DIR}/../templates/SKETCH.template.md` — the sketch skeleton this skill fills
-- `${CLAUDE_SKILL_DIR}/../templates/ASSETS.template.md` — the asset ledger skeleton this skill seeds
+- `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` — status enum, consistency check, session lock, write order, authority
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md` — the sketch skeleton this skill fills
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md` — the asset ledger skeleton this skill seeds
 
 **Installed location:** this file installs as `.claude/skills/bs-ingest-rules/SKILL.md`. The
-shared `ingest/`, `templates/`, and `state-machine.md` referenced above install as siblings of
-`bs-ingest-rules/` — one directory up from this file, at `.claude/skills/ingest/`,
-`.claude/skills/templates/`, and `.claude/skills/state-machine.md`. `${CLAUDE_SKILL_DIR}` is
+shared `ingest/`, `templates/`, and `state-machine.md` referenced above install under the
+`bs-shared/` namespace root alongside `bs-ingest-rules/` — one directory up from this file then
+into `bs-shared/`, at `.claude/skills/bs-shared/ingest/`,
+`.claude/skills/bs-shared/templates/`, and `.claude/skills/bs-shared/state-machine.md`. `${CLAUDE_SKILL_DIR}` is
 Claude Code's built-in substitution for "the directory containing THIS skill file," resolved to
-an absolute path before the model ever sees the content — so `${CLAUDE_SKILL_DIR}/../ingest/...`
+an absolute path before the model ever sees the content — so `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/...`
 resolves correctly no matter whether this skill is installed at the project (`.claude/skills/`)
 or personal (`~/.claude/skills/`) level. When Step 7 says to "copy" a template, resolve
-`${CLAUDE_SKILL_DIR}/../templates/<file>`, never a path relative to the game project or the
+`${CLAUDE_SKILL_DIR}/../bs-shared/templates/<file>`, never a path relative to the game project or the
 current working directory. The installer phase (`src/cli/commands/install-claude-command.ts`)
-MUST preserve this layout — `ingest/`, `templates/`, and `state-machine.md` as siblings of every
-`bs-*` skill directory under `.claude/skills/` — or update this paragraph.
+MUST preserve this layout — `ingest/`, `templates/`, and `state-machine.md` under the
+`bs-shared/` root beside every `bs-*` skill directory under `.claude/skills/` — or update this
+paragraph.

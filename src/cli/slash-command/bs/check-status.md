@@ -12,7 +12,7 @@ file is a lean, READ-ONLY reader: it reads `SKETCH.md`, the in-progress chunk's 
 `ASSETS.md` directly, and dispatches **no subagents** — cite `build-chunk.md`'s Context-Economics
 Hard Rule, "reading state files is exactly the orchestrator's job." It does not explain the
 status enum, the step names, the session lock, or the consistency check inline — see
-`${CLAUDE_SKILL_DIR}/../state-machine.md` for all of that.
+`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
 
 Run any time the designer wants to know where the project stands. This is a query, never a
 mutation — this session performs no writes of any kind, not even a housekeeping refresh of the
@@ -23,7 +23,7 @@ user how to proceed; it does not repair them itself.
 
 ## Step 0: Consistency Check on Entry
 
-On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../state-machine.md`
+On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
 ("Consistency Check (every bs- entry point, before proceeding)"). Use literal `ls <file>` checks
 in the current directory, never `**/glob` patterns that search subfolders. Report any problems
 found (a sketch slug with no matching `chunks/<slug>/` directory, a directory with no matching
@@ -51,7 +51,7 @@ entry in the `## Ordered Chunk List` whose derived status is neither `verified` 
 (user-waived)`. If that entry is still a sketch-level tail entry (no `chunks/<slug>/` directory
 yet), report it as "not yet detailed" rather than reading a CHUNK.md that doesn't exist — do not
 create one; detailing a tail entry is `/bs-build-chunk`'s job. If instead that chunk's `Status:`
-reads `stale — re-derive before build` (`${CLAUDE_SKILL_DIR}/../state-machine.md` "Status Enum (exact)"), report it as
+reads `stale — re-derive before build` (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Status Enum (exact)"), report it as
 "stale — needs re-derivation (run `/bs-insert-chunk` or re-derive)" and do NOT report a step off its
 `## Step Checklist`: a stale chunk's checklist is invalid pending re-derivation, so `build-chunk.md`
 Step 2 stops routing on it rather than resuming it as an ordinary pending chunk (`build-chunk.md`
@@ -65,12 +65,12 @@ entry with no `chunks/<slug>/CHUNK.md` yet — see the same guard in Item 2), re
 "n/a — current chunk not yet detailed" and SKIP the Revision Rounds read entirely; do not attempt
 to read a `CHUNK.md` that does not exist. Otherwise, read the current chunk's `## Revision Rounds`.
 Report any round whose triaged feedback items have not yet reached a recorded disposition (see
-`${CLAUDE_SKILL_DIR}/../templates/CHUNK.template.md` "## Revision Rounds" — category (a) this-chunk-defect items are the
+`${CLAUDE_SKILL_DIR}/../bs-shared/templates/CHUNK.template.md` "## Revision Rounds" — category (a) this-chunk-defect items are the
 ones still open until fixed and re-tested clean). If there are none, say so explicitly rather than
 omitting the item.
 
 **4. Waived verifications.** Scan the entire `## Ordered Chunk List` for entries whose derived
-status reads `verified (user-waived)` (see `${CLAUDE_SKILL_DIR}/../state-machine.md` "Status Enum (exact)" — cite it, do
+status reads `verified (user-waived)` (see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Status Enum (exact)" — cite it, do
 not restate the enum). List every waived chunk found. If two or more accumulate, propose a batch
 playtest covering all of them in one sitting — this is the surfacing mechanism
 `build-chunk.md`'s "playtest" step defers to this skill (`.planning/bs-skills-plan.md` "8.
@@ -80,7 +80,7 @@ there are zero or one waived chunks, report the count and skip the batch proposa
 **5. Outstanding asset debts.** Read `ASSETS.md`'s `## Ledger`. An asset debt is any row where
 `requested = yes` AND `received = no`. List each such row's `needed-by-chunk` and `file path`.
 This is informational, never blocking — a missing asset never blocks a chunk (see
-`${CLAUDE_SKILL_DIR}/../templates/ASSETS.template.md`'s placeholder policy note); report it as a debt to keep visible,
+`${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md`'s placeholder policy note); report it as a debt to keep visible,
 not as something to fix here.
 
 **6. Ideas backlog size.** Read `SKETCH.md`'s `## Ideas Backlog` and report the count of entries.
@@ -120,20 +120,21 @@ skill to fix something it found, direct them to `/bs-build-chunk` or `/bs-insert
 This skill cites the shared reference files that ship with every `bs-` skill — it does not
 duplicate their content:
 
-- `${CLAUDE_SKILL_DIR}/../state-machine.md` — status enum, consistency check, session lock, write order, authority
-- `${CLAUDE_SKILL_DIR}/../templates/SKETCH.template.md` — the `## Ordered Chunk List` / `## Ideas Backlog` grammar this
+- `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` — status enum, consistency check, session lock, write order, authority
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md` — the `## Ordered Chunk List` / `## Ideas Backlog` grammar this
   skill reads from
-- `${CLAUDE_SKILL_DIR}/../templates/CHUNK.template.md` — the `## Step Checklist` / `## Revision Rounds` grammar this
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CHUNK.template.md` — the `## Step Checklist` / `## Revision Rounds` grammar this
   skill reads from
-- `${CLAUDE_SKILL_DIR}/../templates/ASSETS.template.md` — the asset ledger this skill reads from
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md` — the asset ledger this skill reads from
 
 **Installed location:** this file installs as `.claude/skills/bs-check-status/SKILL.md`. The
-shared `templates/` and `state-machine.md` referenced above install as siblings of
-`bs-check-status/` — one directory up from this file, at `.claude/skills/templates/` and
-`.claude/skills/state-machine.md`. `${CLAUDE_SKILL_DIR}` is Claude Code's built-in substitution
+shared `templates/` and `state-machine.md` referenced above install under the `bs-shared/`
+namespace root alongside `bs-check-status/` — one directory up from this file then into
+`bs-shared/`, at `.claude/skills/bs-shared/templates/` and
+`.claude/skills/bs-shared/state-machine.md`. `${CLAUDE_SKILL_DIR}` is Claude Code's built-in substitution
 for "the directory containing THIS skill file," resolved to an absolute path before the model
-ever sees the content — so `${CLAUDE_SKILL_DIR}/../templates/...` resolves correctly whether this
+ever sees the content — so `${CLAUDE_SKILL_DIR}/../bs-shared/templates/...` resolves correctly whether this
 skill is installed at the project (`.claude/skills/`) or personal (`~/.claude/skills/`) level.
 The installer phase (`src/cli/commands/install-claude-command.ts`) MUST preserve this layout —
-`templates/` and `state-machine.md` as siblings of every `bs-*` skill directory under
-`.claude/skills/` — or update this paragraph.
+`templates/` and `state-machine.md` under the `bs-shared/` root beside every `bs-*` skill
+directory under `.claude/skills/` — or update this paragraph.
