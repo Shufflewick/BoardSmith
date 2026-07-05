@@ -150,6 +150,7 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ `/bs-build-chunk` group 4 + skill complete: playtest/revise/close/final-acceptance references (human-gate script, 4-way triage, verified-hash + sketch-tail delta, 7-point design-QA) — full 10-step engine live, zero forward-ref markers (BUILD-09/10/11/13, UIQ-05) — Validated in Phase 146
 - ✓ `/bs-check-status` (read-only 7-item report) + `/bs-insert-chunk` (4 ops + citation-dep revalidation + closed-chunk overlap diff + stale-marking + version bump + mandated-chunk delete guard) (STAT-01/02) — Validated in Phase 147
 - ✓ Distribution: installer rewired to Claude Code Agent Skills layout (5 bs-<name>/SKILL.md + bs-shared/ reference tree via fs.cp, .test.ts excluded, collision-safe --force), /design-game fully removed, /generate-ai → /bs-generate-ai (DIST-01/02) — Validated in Phase 148
+- ✓ End-to-end dry-run: full bs- pipeline proven against Go Fish (ingest + chunk-1 build; generated code compiles, passes 16 tests + random-sim + hidden-hand leak check); surfaced+fixed 2 real scaffold defects (tsconfig vite/client types, boardsmith init git-init); browser playtest deferred as HUMAN-UAT (VAL-01) — Validated in Phase 149
 
 - ✓ Game rules layer isolated from platform/networking — existing
 - ✓ Event sourcing via Command pattern — existing
@@ -434,4 +435,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-05 — Phase 148 complete (installer + /bs-generate-ai; design-game removed)*
+*Last updated: 2026-07-05 — v4.6 all 10 phases complete (1 human playtest gate outstanding); ready for milestone audit*
