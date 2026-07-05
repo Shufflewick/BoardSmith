@@ -152,6 +152,15 @@ Two review passes, both performed fresh (never from `## Interpretation`):
    chunk (the Restyle/Cutover Rule), so silent drift with no such edit is a defect, not a style
    choice.
 
+   **First-UI-chunk branch — no prior shots to diff against.** If no previously-verified UI
+   chunk exists (this is the first `ui: touches|major` chunk in the game, so no other
+   `chunks/<other-slug>/shots/` directory is present), the cohesion diff is a no-op: do NOT
+   hunt for a nonexistent directory, hallucinate a comparison, or silently skip with no record.
+   Instead, record explicitly — "no prior UI chunk; cohesion baseline established" — and skip
+   the diff. This chunk's own `chunks/<slug>/shots/` becomes the baseline the *next* UI chunk's
+   cohesion diff compares against. The token/craft review in pass 1 still runs in full; only the
+   drift comparison is skipped.
+
 ## Findings Destination
 
 Every finding this agent surfaces — token violation, craft defect, or unexplained cohesion drift
