@@ -217,6 +217,20 @@ describe('STAT-02 — insert-chunk.md sketch editor', () => {
     expect(insertChunk).toMatch(/same\s+`?SKETCH\.md`?\s+write/i);
   });
 
+  it('presents the list edit (e) before the version bump (d), matching write order (WR-02)', () => {
+    const insertChunk = read('insert-chunk.md');
+    // Write Order requires the ## Ordered Chunk List rewrite FIRST and the
+    // Sketch Version: line LAST. The enumeration must therefore present op (e)
+    // before op (d) so "follow the list top-to-bottom" is correct by
+    // construction — pins the WR-02 reorder against regressing to (d)-then-(e),
+    // which would instruct writing the version line before the list.
+    const listEditIdx = insertChunk.indexOf('(e) Ordered Chunk List edit');
+    const versionBumpIdx = insertChunk.indexOf('(d) Version-stamp bump');
+    expect(listEditIdx).toBeGreaterThan(-1);
+    expect(versionBumpIdx).toBeGreaterThan(-1);
+    expect(listEditIdx).toBeLessThan(versionBumpIdx);
+  });
+
   it('documents write order CHUNK.md-first-then-SKETCH.md', () => {
     const insertChunk = read('insert-chunk.md');
     expect(insertChunk).toMatch(/CHUNK\.md/);

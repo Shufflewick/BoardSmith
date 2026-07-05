@@ -36,9 +36,14 @@ warn.
 
 ## The Operations
 
-Every reshape (add, reorder, split, remove) runs all of the following, in order. Operation (e) is
-the load-bearing mutation — the actual edit to the `## Ordered Chunk List` — and is enumerated
-explicitly so its content and write-order placement are never left implicit.
+Every reshape (add, reorder, split, remove) runs all of the following. Operations (a)-(c) run in
+the order shown; the single `SKETCH.md` write then rewrites the `## Ordered Chunk List` (operation
+e) FIRST and stamps the new `Sketch Version:` line (operation d) LAST, per `state-machine.md`
+"## Write Order" (the version/status line is always written last). The two SKETCH.md operations are
+therefore presented below in write order — list edit (e) before version bump (d) — so following the
+list top-to-bottom is correct by construction; the letters are stable IDs, not a write sequence.
+Operation (e) is the load-bearing mutation — the actual edit to the `## Ordered Chunk List` — and is
+enumerated explicitly so its content and write-order placement are never left implicit.
 
 **(a) Dependency-order re-validation.** Compare the moved/new chunk's `- Citations:` (from its
 SKETCH.md entry) — or, if it is already detailed, its `## Interpretation` citations (from
@@ -85,19 +90,21 @@ already documents the consumer side of this marker (a chunk whose Status reads `
 before build` stops routing rather than being resumed as an ordinary pending chunk) — this skill
 is the PRODUCER of that marker; it does not restate the consumer behavior.
 
-**(d) Version-stamp bump.** Increment `SKETCH.md`'s `Sketch Version: N` field to `N+1` (see
-`templates/SKETCH.template.md`'s `Sketch Version:` field and its inline comment: "Bumped by
-`/bs-insert-chunk` on every structural change to the ordered chunk list"). This is what lets a
-concurrently resumed `/bs-build-chunk` session detect that the sketch changed under it. Preserve
-the adjacent `Session Lock:` line exactly as found — this operation never touches the lock.
-
 **(e) Ordered Chunk List edit — the reshape itself.** Actually add / reorder / split / remove the
 entry in `SKETCH.md`'s `## Ordered Chunk List` (`templates/SKETCH.template.md` "## Ordered Chunk
 List"). This is the entire point of the skill and must never be left implicit or skipped. It lands
-in the SAME `SKETCH.md` write as the version bump (operation d): rewrite the `## Ordered Chunk List`
-FIRST, then write the `Sketch Version:` line LAST, per `state-machine.md` "## Write Order". Never
-bump the version stamp without rewriting the list, and never rewrite the list in a separate,
-out-of-order write.
+in the SAME `SKETCH.md` write as the version bump (operation d), and is written FIRST within that
+write: rewrite the `## Ordered Chunk List` FIRST, then write the `Sketch Version:` line LAST, per
+`state-machine.md` "## Write Order". Never bump the version stamp without rewriting the list, and
+never rewrite the list in a separate, out-of-order write.
+
+**(d) Version-stamp bump — written LAST.** Increment `SKETCH.md`'s `Sketch Version: N` field to
+`N+1` (see `templates/SKETCH.template.md`'s `Sketch Version:` field and its inline comment: "Bumped
+by `/bs-insert-chunk` on every structural change to the ordered chunk list"). Within the single
+SKETCH.md write, this `Sketch Version:` line lands LAST — after the `## Ordered Chunk List` edit
+(operation e) — per `state-machine.md` "## Write Order". This is what lets a concurrently resumed
+`/bs-build-chunk` session detect that the sketch changed under it. Preserve the adjacent
+`Session Lock:` line exactly as found — this operation never touches the lock.
 
 ## Write Order
 
