@@ -168,11 +168,14 @@ Light-path status transitions (cite `state-machine.md` "Step Names (exact, light
 restate the transition rule beyond this pointer): the light path has no `ask` step, so
 `approved` is **unreachable** for light chunks — a light chunk moves `proposed → built` directly
 when the user accepts the proposal and `build` + `test` complete. Because the light path has no
-`close` step, `playtest` performs `close`'s bookkeeping for light chunks (bisect-anchor commit
-hash, Status line update CHUNK.md-then-SKETCH.md, decision rollup, and detailing the next 2-3
-sketch-level tail entries — `close`'s duty; see `build/close.md`'s `## Bookkeeping Sequence` for
-the exact sequence a light-path chunk runs on its own behalf; Step 2's lazy tail-entry detailing
-above covers any entry this bookkeeping misses).
+`close` step, `playtest` performs `close`'s bookkeeping for light chunks — the **three-item**
+sequence `state-machine.md` "Step Names (exact, light path)" lists: bisect-anchor commit hash,
+Status line update CHUNK.md-then-SKETCH.md, and decision rollup (see `build/close.md`'s
+`## Bookkeeping Sequence`, the exact sequence a light-path chunk runs on its own behalf). A
+light-path chunk does **not** detail the sketch tail or propose the next chunk from inside
+`playtest`: tail re-derivation is `close`'s user-gated `## Sketch-Tail Delta Gate`, which the
+light path does not run. Instead Step 2's lazy tail-entry detailing above derives any undetailed
+tail entry when routing next reaches it.
 
 ## Step Group 1 Dispatch — `{investigate, redteam, ask}`
 
