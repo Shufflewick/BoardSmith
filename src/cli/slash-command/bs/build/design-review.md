@@ -22,6 +22,36 @@ orchestrator, never a separate track. This is the same repair loop `build/repair
 governs; a design-review finding is fixed or refuted exactly like any other Findings Ledger
 entry, bounded by the same `state-machine.md` "Repair Loop Bound".
 
+## Dispatch Template
+
+Parity with `build/audit.md`'s three lens "Dispatch Templates" (fidelity/visibility/undo): the
+orchestrator cannot read code or docs itself (`build-chunk.md` Context-Economics rule), so it
+must hand this agent a fully self-contained, copy-paste prompt — never synthesize one ad-hoc
+from this prose, which risks dropping the independence framing. Use exactly this, filling the
+`{...}` slots:
+
+```
+You are the DESIGN-REVIEW lens auditing the built UI for {gameName}, chunk "{slug}". This is a
+SEPARATE dispatch with NO inherited conversation: do NOT read the orchestrator's running
+conversation, any prior agent's framing, or CHUNK.md's "## Interpretation". You take your own
+screenshots and judge the UI independently.
+
+Read fresh: DESIGN.md (its "## Theme Block", "## Component Recipes", "## Do / Don't" sections)
+and this chunk's own built UI code at {codeFilePaths}.
+
+Serve → capture → kill: follow this file's "Dev-Host Lifecycle" sequence exactly — start the dev
+host with `npx boardsmith dev --no-open`, wait for `Ready! Press Ctrl+C to stop.` (never
+`networkidle`), run the breakpoint × theme capture loop (6 shots into chunks/{slug}/shots/), then
+kill the dev server before returning.
+
+Review passes: (1) token/craft against DESIGN.md; (2) cohesion diff against the prior UI chunk's
+shots/ (or establish the baseline if this is the first UI chunk).
+
+Return exactly: a list of { findingId, lens: 'design', description, citation, severity } — one
+entry per defect found (empty array if none). Use the same stable-ID shape (F1, F2, ...) the
+fidelity/visibility/undo lenses use; these findings land in the same ## Findings Ledger.
+```
+
 ## Dev-Host Lifecycle: Serve → Capture → Kill
 
 Copy the exact numbered serve-check-kill sequence `ingest/scaffold.md`'s "Verification
@@ -126,7 +156,9 @@ Two review passes, both performed fresh (never from `## Interpretation`):
 
 Every finding this agent surfaces — token violation, craft defect, or unexplained cohesion drift
 — is appended to CHUNK.md's `## Findings Ledger` (`templates/CHUNK.template.md`) by the
-orchestrator, using the same stable-ID (`F1`, `F2`, ...) and disposition (`fixed` / `deferred` /
-`refuted`) shape the fidelity/visibility/undo lenses already use. This is not a separate ledger
+orchestrator, returned in the same flat `{ findingId, lens: 'design', description, citation,
+severity }` shape (see "Dispatch Template" above) and carrying the same stable-ID (`F1`, `F2`,
+...) and disposition (`fixed` / `deferred` / `refuted`) shape the fidelity/visibility/undo lenses
+already use. This is not a separate ledger
 and not a separate repair track — `build/repair.md`'s fix-or-refute-with-citation loop and
 round-bound enforcement apply identically to a design-review finding.
