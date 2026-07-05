@@ -66,17 +66,33 @@ export async function initCommand(name: string): Promise<void> {
     // dry-run Finding 1). Non-fatal on failure (e.g. no git on PATH, or the
     // project dir is already nested in a repo the user manages themselves) —
     // scaffolding must not fail because git setup did.
+    // Split init/staging from the commit so the skip message names the actual
+    // failure point (WR-03). If `git init`/`git add` fail (no git on PATH), the
+    // remedy is "run git init manually". If only the commit fails (the common
+    // "no git identity configured" case), the repo already exists and staging
+    // succeeded — telling the user to run `git init` again would be misleading;
+    // they need to set their git identity and commit.
+    let gitRepoInitialized = false;
     try {
       execSync('git init', { cwd: projectPath, stdio: 'ignore' });
       execSync('git add -A', { cwd: projectPath, stdio: 'ignore' });
-      execSync('git commit -m "chore: scaffold project via boardsmith init"', {
-        cwd: projectPath,
-        stdio: 'ignore',
-      });
+      gitRepoInitialized = true;
     } catch {
       console.log(
-        chalk.dim('  (skipped git init — git not available or commit failed; run `git init` manually if you want version control)')
+        chalk.dim('  (skipped git init — git not available; run `git init` manually if you want version control)')
       );
+    }
+    if (gitRepoInitialized) {
+      try {
+        execSync('git commit -m "chore: scaffold project via boardsmith init"', {
+          cwd: projectPath,
+          stdio: 'ignore',
+        });
+      } catch {
+        console.log(
+          chalk.dim('  (git repo created but initial commit skipped — set `git config user.name` / `user.email`, then run `git commit`)')
+        );
+      }
     }
 
     spinner.succeed(chalk.green(`Created ${name} successfully!`));
