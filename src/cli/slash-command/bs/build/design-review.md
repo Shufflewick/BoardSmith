@@ -76,7 +76,7 @@ sequence, never split across steps, never a footnote:
    reaches network idle; a `networkidle` wait on this page hangs forever and is not evidence the
    page failed to render.
 
-3. **Capture** — run the breakpoint × theme capture loop (below).
+3. **Capture** — run the tier × theme capture loop (below).
 
 4. **Kill** — an explicit, numbered step in this SAME sequence, never a footnote left for later:
    kill the dev server process started in step 1 before this agent returns. Leaving a dev server
@@ -84,7 +84,7 @@ sequence, never split across steps, never a footnote:
    that you start.") and independently required here: this agent must never return with the
    server still up.
 
-## Capture Loop: 3 Breakpoints × 2 Themes = 6 Screenshots
+## Capture Loop: 3 Tiers × 2 Themes = 6 Screenshots
 
 Cite `src/ui/theme.ts`'s `BREAKPOINTS` constant by exact name and value — do not re-derive or
 guess these numbers:
