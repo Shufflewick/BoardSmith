@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
-status: executing
-stopped_at: Completed 145-02-PLAN.md
-last_updated: "2026-07-05T00:54:19.442Z"
+status: verifying
+stopped_at: Completed 146-04-PLAN.md
+last_updated: "2026-07-05T00:58:25.457Z"
 last_activity: 2026-07-05
 progress:
   total_phases: 10
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 22
-  completed_plans: 21
-  percent: 60
+  completed_plans: 22
+  percent: 70
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 146 (/bs-build-chunk — Playtest, Revise, Close & Final Acceptance) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-05
 
-Progress: [██████████] 95%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -219,6 +219,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Build-stamp freshness taught as a hard-reload instruction since DevHost.vue has no on-screen version/commit indicator
 - [Phase ?]: close.md's own bookkeeping duty starts AFTER the Status write since playtest.md already writes Status: verified/verified (user-waived) before close begins
 - [Phase ?]: final-acceptance.md splits the 7-point design-QA pass: checks 2/3/5/6/7 go to a single fresh-context agent dispatch reusing design-review.md's serve-capture-kill lifecycle; checks 1 (SR/VoiceOver) and 4 (colorblind) stay human-narrated
+- [Phase 146-04]: Step Groups 2-3 dispatch prose lives in build/build.md, test.md, audit.md, repair.md themselves; only Group 4 needed a live dispatch section authored in build-chunk.md — Groups 2-3 never had inline dispatch prose to retire (already citation-only, unlike Group 1)
 
 ### Pending Todos
 
@@ -230,8 +231,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T00:54:19.434Z
-Stopped at: Completed 145-02-PLAN.md
+Last session: 2026-07-05T00:58:25.449Z
+Stopped at: Completed 146-04-PLAN.md
 Resume file: None
 Next action: Phase 145 complete (2/2 plans) — ready for phase verification (`/gsd:verify-phase 145`), then continue to Phase 146 (playtest/revise/close)
 

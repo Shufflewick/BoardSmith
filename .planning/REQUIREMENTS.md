@@ -41,7 +41,7 @@
 - [x] **BUILD-10**: Playtest feedback is triaged item-by-item (this-chunk / future-scope / not-built-yet / ruling) and re-entry after revision presents a feedback disposition report with a targeted re-test script
 - [x] **BUILD-11**: Close records the verified commit hash, re-derives the sketch tail, and presents the delta for approval before proposing the next chunk
 - [x] **BUILD-12**: Trivial chunks run a light path (build → test → playtest) with the user told which ceremony is in effect
-- [ ] **BUILD-13**: Sessions commit at every step completion (`chunk-<slug>/step-<name>`), hand off at structural step-group seams with a non-programmer-readable resume message, and detect concurrent sessions via a sketch lock note
+- [x] **BUILD-13**: Sessions commit at every step completion (`chunk-<slug>/step-<name>`), hand off at structural step-group seams with a non-programmer-readable resume message, and detect concurrent sessions via a sketch lock note
 
 ### UI Quality & Accessibility (UIQ)
 
@@ -109,7 +109,7 @@
 | BUILD-09 | Phase 146 | Complete |
 | BUILD-10 | Phase 146 | Complete |
 | BUILD-11 | Phase 146 | Complete |
-| BUILD-13 | Phase 146 | Pending |
+| BUILD-13 | Phase 146 | Complete |
 | UIQ-05 | Phase 146 | Complete |
 | STAT-01 | Phase 147 | Pending |
 | STAT-02 | Phase 147 | Pending |
