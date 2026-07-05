@@ -1,3 +1,9 @@
+---
+name: bs-build-chunk
+description: Build, test, audit, and playtest the next smallest unit of a BoardSmith game per the approved sketch. Use to start or resume a chunk after /bs-ingest-rules has produced a sketch.
+disable-model-invocation: true
+---
+
 # `/bs-build-chunk` — Build the Next Smallest Unit
 
 Cite `state-machine.md` and `templates/*.template.md` rather than restating their rules — if
@@ -5,7 +11,7 @@ you are extending this skill, link to the relevant section instead of copying ru
 file is a lean router: it detects state, resolves the session lock, resumes at the first
 incomplete step, routes full vs. light ceremony, and dispatches each step's heavyweight prose to
 the matching reference file. It does not explain the status enum, the step names, the session
-lock, the write order, or the session-handoff seams inline — see `state-machine.md` for all of
+lock, the write order, or the session-handoff seams inline — see `${CLAUDE_SKILL_DIR}/../state-machine.md` for all of
 that.
 
 Run to start or resume a chunk. One entry point, routed by state — there is deliberately no
@@ -25,17 +31,17 @@ verdicts and round dispositions the gate consumes, especially on a cold resume) 
 this one chunk's state, never the slices or docs behind it — because that read is the
 **sanctioned channel** that supplies the numbered claims list to the redteam dispatch
 prompts and the ask presentation. The ban this rule enforces is on re-deriving content from
-sources (slices, docs, code), not on reading chunk state. `build/investigate.md` and
-`build/redteam.md` restate the source-reading ban because those are the two steps where the
+sources (slices, docs, code), not on reading chunk state. `${CLAUDE_SKILL_DIR}/../build/investigate.md` and
+`${CLAUDE_SKILL_DIR}/../build/redteam.md` restate the source-reading ban because those are the two steps where the
 temptation to "double-check by re-reading the sources a subagent just read" is strongest.
 
 ## Step 0: Entry — Consistency Check + Session Lock
 
-On entry, before any other work, run the consistency check described in `state-machine.md`
+On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../state-machine.md`
 ("Consistency Check"). Use literal `ls <file>` checks in the current directory, never
 `**/glob` patterns that search subfolders.
 
-Then resolve the session lock (`state-machine.md` "Session Lock"). Outcomes 1 and 2 below
+Then resolve the session lock (`${CLAUDE_SKILL_DIR}/../state-machine.md` "Session Lock"). Outcomes 1 and 2 below
 compare the lock against **the chunk this session is about to resume**, so identify that target
 first: from `SKETCH.md`'s ordered chunk list (a read the consistency check above already
 performs), the resume target is the first chunk whose status is neither `verified` nor
@@ -74,13 +80,13 @@ Read `SKETCH.md` → find the first chunk whose status is neither `verified` nor
 `verified (user-waived)` (a waived chunk is closed — the user explicitly waived its playtest;
 never resume it here — surfacing accumulated waived chunks for a batch playtest is
 `/bs-check-status`'s job) → read that chunk's `chunks/<slug>/CHUNK.md` → route to the
-**first incomplete step** on its Step Checklist (`state-machine.md` "Step Names"). A chunk whose
+**first incomplete step** on its Step Checklist (`${CLAUDE_SKILL_DIR}/../state-machine.md` "Step Names"). A chunk whose
 Status line reads `stale — re-derive before build` stops routing instead — see "Status Enum and
 Stale Marker" below.
 
 **Final-acceptance chunk target (checked BEFORE the generic tail-entry path below):** if the
 resume target is the sketch's `## Mandated Chunks` final-acceptance chunk (the special sketch
-chunk `templates/SKETCH.template.md`'s `## Mandated Chunks` section requires — the full game
+chunk `${CLAUDE_SKILL_DIR}/../templates/SKETCH.template.md`'s `## Mandated Chunks` section requires — the full game
 played start-to-finish, a coverage check, and the design-QA/a11y pass), it is NOT an ordinary
 chunk and does NOT route against the plain `full` or `light` Step Checklist the template ships.
 Its Step Checklist is the group-4 gate with a leading content step:
@@ -91,10 +97,10 @@ Its Step Checklist is the group-4 gate with a leading content step:
 - [ ] close
 
 Route to the **first incomplete item** exactly as everywhere else — that is what makes this
-resumable: if `final-acceptance` is unchecked, dispatch `build/final-acceptance.md` (its coverage
+resumable: if `final-acceptance` is unchecked, dispatch `${CLAUDE_SKILL_DIR}/../build/final-acceptance.md` (its coverage
 check + 7-point design-QA pass); once that content step is checked off, `playtest`/`revise`/`close`
-run **on top of** it as the ordinary group-4 gate (`build/playtest.md`, `build/revise.md`,
-`build/close.md`), because the design-QA content becomes this chunk's playtest script — it never
+run **on top of** it as the ordinary group-4 gate (`${CLAUDE_SKILL_DIR}/../build/playtest.md`, `${CLAUDE_SKILL_DIR}/../build/revise.md`,
+`${CLAUDE_SKILL_DIR}/../build/close.md`), because the design-QA content becomes this chunk's playtest script — it never
 replaces the human playtest/revise/close of the finished game.
 
 **Why this rule runs first, and how the chunk is detailed:** the final-acceptance chunk is always
@@ -104,18 +110,18 @@ reaches it. This rule therefore runs **before** the "Sketch-level tail-entry tar
 otherwise that generic path would pre-empt it and fill an ordinary `full`/`light` checklist,
 defeating the detection on exactly the cold resume it exists to protect. When the final-acceptance
 chunk is first detailed, detail it the same way the generic tail path details any entry (create
-`chunks/<slug>/`, fill `templates/CHUNK.template.md`, rewrite the SKETCH.md tail line to the
-derived-pointer form — `state-machine.md` "Cold-Resume Parse Contract"; write order CHUNK.md
+`chunks/<slug>/`, fill `${CLAUDE_SKILL_DIR}/../templates/CHUNK.template.md`, rewrite the SKETCH.md tail line to the
+derived-pointer form — `${CLAUDE_SKILL_DIR}/../state-machine.md` "Cold-Resume Parse Contract"; write order CHUNK.md
 first, SKETCH.md second) with **two mandatory differences** from an ordinary fill: write
 `## Ceremony: final-acceptance` (NOT `full`/`light`), and write the `## Step Checklist` as exactly
 the four items above (`final-acceptance / playtest / revise / close`, NOT the template's 10-item
-full or 3-item light list). `templates/CHUNK.template.md`'s CEREMONY-CONDITIONAL block recognizes
+full or 3-item light list). `${CLAUDE_SKILL_DIR}/../templates/CHUNK.template.md`'s CEREMONY-CONDITIONAL block recognizes
 this third `final-acceptance` variant, so the physical file the router reads legitimately contains
 the 4-item checklist and the per-step check-off discipline works against it. Detecting the
 final-acceptance chunk here (rather than only when the previous chunk's `close` proposes it) is
 what makes a cold session that resumes directly into the final-acceptance chunk dispatch
-`build/final-acceptance.md` instead of running it as an ordinary checklist chunk. See Step Group 4
-and `build/final-acceptance.md` for the content itself.
+`${CLAUDE_SKILL_DIR}/../build/final-acceptance.md` instead of running it as an ordinary checklist chunk. See Step Group 4
+and `${CLAUDE_SKILL_DIR}/../build/final-acceptance.md` for the content itself.
 
 **Sketch-level tail-entry target:** if the resume target is a sketch-level tail entry —
 `Status: proposed (sketch-level — no CHUNK.md yet)`, no `chunks/<slug>/` directory (by design;
@@ -126,12 +132,12 @@ target" rule above (ceremony `final-acceptance`, the fixed 4-item checklist), ne
 plain `full`/`light` template. For every OTHER tail entry, CHUNK.md creation always happens here,
 lazily, when routing first reaches the entry — `close` never creates a next chunk's CHUNK.md (its
 `## Sketch-Tail Delta Gate` only re-derives tail *descriptions*, and its `## Propose the Next
-Chunk` only names the next chunk; see `build/close.md` and WR-02's reconciliation). So this router
+Chunk` only names the next chunk; see `${CLAUDE_SKILL_DIR}/../build/close.md` and WR-02's reconciliation). So this router
 details the entry lazily before starting `investigate`: create `chunks/<slug>/`, derive the
-chunk's CHUNK.md by filling `templates/CHUNK.template.md` from the SKETCH.md entry (slug, `## ui:`
+chunk's CHUNK.md by filling `${CLAUDE_SKILL_DIR}/../templates/CHUNK.template.md` from the SKETCH.md entry (slug, `## ui:`
 tag, ceremony, cited slices — filling the template, never restructuring it), then rewrite the
 SKETCH.md tail line to the derived-pointer form `Status (derived from chunks/<slug>/CHUNK.md):
-proposed` (`state-machine.md` "Cold-Resume Parse Contract"; write order CHUNK.md first, SKETCH.md
+proposed` (`${CLAUDE_SKILL_DIR}/../state-machine.md` "Cold-Resume Parse Contract"; write order CHUNK.md first, SKETCH.md
 second) — and only then route to `investigate` as the first incomplete step. Step 0's lock
 classification uses this same derived target: a tail entry is still a nameable chunk slug for
 lock purposes, so all three lock outcomes classify against it unchanged.
@@ -147,7 +153,7 @@ checklist position decides, per the first-incomplete-step rule above.
 ## Step 3: Ceremony Routing
 
 Every chunk declares its ceremony in `CHUNK.md`'s `## Ceremony` field: `full`, `light`, or — for
-the sketch's one mandated final-acceptance chunk only — `final-acceptance` (`state-machine.md`
+the sketch's one mandated final-acceptance chunk only — `final-acceptance` (`${CLAUDE_SKILL_DIR}/../state-machine.md`
 "Step Names"). **The `final-acceptance` chunk is exempt from this full/light ceremony routing:**
 its step group is fixed by the "Final-acceptance chunk target" rule in Step 2
 (`[final-acceptance, playtest, revise, close]`), so when `## Ceremony: final-acceptance` is read
@@ -166,26 +172,26 @@ chunk, quote both step lists verbatim — never paraphrase, never reorder:
 
 | Step | Dispatch target |
 |------|------------------|
-| investigate | `build/investigate.md` |
-| redteam | `build/redteam.md` |
-| ask | `build/ask.md` |
-| build | `build/build.md` |
-| test | `build/test.md` |
-| audit | `build/audit.md` |
-| repair | `build/repair.md` |
-| playtest | `build/playtest.md` |
-| revise | `build/revise.md` |
-| close | `build/close.md` |
+| investigate | `${CLAUDE_SKILL_DIR}/../build/investigate.md` |
+| redteam | `${CLAUDE_SKILL_DIR}/../build/redteam.md` |
+| ask | `${CLAUDE_SKILL_DIR}/../build/ask.md` |
+| build | `${CLAUDE_SKILL_DIR}/../build/build.md` |
+| test | `${CLAUDE_SKILL_DIR}/../build/test.md` |
+| audit | `${CLAUDE_SKILL_DIR}/../build/audit.md` |
+| repair | `${CLAUDE_SKILL_DIR}/../build/repair.md` |
+| playtest | `${CLAUDE_SKILL_DIR}/../build/playtest.md` |
+| revise | `${CLAUDE_SKILL_DIR}/../build/revise.md` |
+| close | `${CLAUDE_SKILL_DIR}/../build/close.md` |
 
-All 10 steps now have live dispatch targets: `build/investigate.md`, `build/redteam.md`,
-`build/ask.md`, `build/build.md`, `build/test.md`, `build/audit.md`, `build/repair.md`,
-`build/playtest.md`, `build/revise.md`, and `build/close.md` each implement their own step's
+All 10 steps now have live dispatch targets: `${CLAUDE_SKILL_DIR}/../build/investigate.md`, `${CLAUDE_SKILL_DIR}/../build/redteam.md`,
+`${CLAUDE_SKILL_DIR}/../build/ask.md`, `${CLAUDE_SKILL_DIR}/../build/build.md`, `${CLAUDE_SKILL_DIR}/../build/test.md`, `${CLAUDE_SKILL_DIR}/../build/audit.md`, `${CLAUDE_SKILL_DIR}/../build/repair.md`,
+`${CLAUDE_SKILL_DIR}/../build/playtest.md`, `${CLAUDE_SKILL_DIR}/../build/revise.md`, and `${CLAUDE_SKILL_DIR}/../build/close.md` each implement their own step's
 prose, and this router does no more than route to the right one.
 
 ### Light path (BUILD-12 — routing, not a step)
 
 Chunks tagged `light` at proposal time run `build, test, playtest` only — no
-`build/light.md` file exists or is needed, because the light path is a routing decision over the
+`${CLAUDE_SKILL_DIR}/../build/light.md` file exists or is needed, because the light path is a routing decision over the
 same `build.md`/`test.md`/`playtest.md` reference files, not a fourth ceremony with its own prose.
 The user is explicitly **told which** ceremony is in effect when the chunk is proposed, so no one
 discovers mid-chunk that fewer gates ran than they expected.
@@ -195,8 +201,8 @@ restate the transition rule beyond this pointer): the light path has no `ask` st
 `approved` is **unreachable** for light chunks — a light chunk moves `proposed → built` directly
 when the user accepts the proposal and `build` + `test` complete. Because the light path has no
 `close` step, `playtest` performs `close`'s bookkeeping for light chunks — the **three-item**
-sequence `state-machine.md` "Step Names (exact, light path — trivial chunks)" lists: bisect-anchor commit hash,
-Status line update CHUNK.md-then-SKETCH.md, and decision rollup (see `build/close.md`'s
+sequence `${CLAUDE_SKILL_DIR}/../state-machine.md` "Step Names (exact, light path — trivial chunks)" lists: bisect-anchor commit hash,
+Status line update CHUNK.md-then-SKETCH.md, and decision rollup (see `${CLAUDE_SKILL_DIR}/../build/close.md`'s
 `## Bookkeeping Sequence`, the exact sequence a light-path chunk runs on its own behalf). A
 light-path chunk does **not** detail the sketch tail or propose the next chunk from inside
 `playtest`: tail re-derivation is `close`'s user-gated `## Sketch-Tail Delta Gate`, which the
@@ -205,19 +211,19 @@ tail entry when routing next reaches it.
 
 ## Step Group 1 Dispatch — `{investigate, redteam, ask}`
 
-A single session runs at most one step group (`state-machine.md` "Session Handoff Seams"), then
+A single session runs at most one step group (`${CLAUDE_SKILL_DIR}/../state-machine.md` "Session Handoff Seams"), then
 hands off. This is the first of the four groups.
 
 **Every step persists before the next starts:** when a step completes, the orchestrator checks
 off that step's item on CHUNK.md's Step Checklist (a state-file write) before dispatching the
 next step — `investigate` is checked off after its return is recorded, `redteam` after its
-`### Redteam Round N` entry lands in CHUNK.md's `## Redteam Rounds` (see `build/redteam.md`
-"Persisting the Round"), and `ask` as part of the gate's write order (see `build/ask.md`
+`### Redteam Round N` entry lands in CHUNK.md's `## Redteam Rounds` (see `${CLAUDE_SKILL_DIR}/../build/redteam.md`
+"Persisting the Round"), and `ask` as part of the gate's write order (see `${CLAUDE_SKILL_DIR}/../build/ask.md`
 "Gate-Before-Write"). This is the state Step 2's first-incomplete-step routing routes on: an
 unchecked step is re-run from scratch on a cold resume, so a completed-but-unchecked step would
 duplicate work — never leave a completed step unchecked.
 
-**investigate:** Delegate the entire investigate sequence to `build/investigate.md` — reading
+**investigate:** Delegate the entire investigate sequence to `${CLAUDE_SKILL_DIR}/../build/investigate.md` — reading
 the chunk's cited slices, INDEX-discovered slices, `RULINGS.md`, `DECISIONS.md`, the relevant
 BoardSmith docs, and (for `ui: touches|major` chunks) `DESIGN.md`, and writing the numbered
 claims list and visibility declaration directly into `CHUNK.md`. Consume its return by the
@@ -228,16 +234,16 @@ state-file read defined in the Context-Economics Hard Rule above. That text is w
 embedded verbatim as `{numberedClaimsList}` in each redteam dispatch prompt and later restated
 in designer language at the ask step.
 
-**redteam:** Delegate the entire redteam sequence to `build/redteam.md` — three fresh-context
+**redteam:** Delegate the entire redteam sequence to `${CLAUDE_SKILL_DIR}/../build/redteam.md` — three fresh-context
 adversarial subagents (2 refuters + 1 coverage adversary) reviewing the claims list independent
 of the investigator's framing. Consume the refuters' return by field name — `claimNumber`,
 `verdict`, `objection` — and the coverage adversary's return by field name —
 `missingInteractions` (itself keyed by `ruleDescription`, `citation`). Escalation logic
-(refuted-once re-investigate bound, refuted-twice user escalation) is `build/redteam.md`'s and
-`state-machine.md` "Redteam Escalation"'s to own — this router only routes the aggregated
+(refuted-once re-investigate bound, refuted-twice user escalation) is `${CLAUDE_SKILL_DIR}/../build/redteam.md`'s and
+`${CLAUDE_SKILL_DIR}/../state-machine.md` "Redteam Escalation"'s to own — this router only routes the aggregated
 outcome to the next step or to the user.
 
-**ask:** Delegate the ask-gate presentation to `build/ask.md` — presenting the 4-part format
+**ask:** Delegate the ask-gate presentation to `${CLAUDE_SKILL_DIR}/../build/ask.md` — presenting the 4-part format
 (interpretation, ambiguities, deferred list, zero implementation vocabulary), requesting assets,
 and gating the write. **Gate-before-write** (cite `state-machine.md` "Write Order"): `ask`
 presents, the user decides, and only after explicit approval does `Status: approved` get written
@@ -251,65 +257,65 @@ gated — they were already written progressively at the investigate step, per t
 End of group 1: print the exact next command to run (`/bs-build-chunk`) and confirm everything
 written so far (claims list, the `## Redteam Rounds` entry, checked-off Step Checklist items,
 `Status: approved`, SKETCH.md's updated derived-status pointer — CHUNK.md first, SKETCH.md
-second, per `state-machine.md` "Write Order" — and any `RULINGS.md`/`ASSETS.md` entries) is
+second, per `${CLAUDE_SKILL_DIR}/../state-machine.md` "Write Order" — and any `RULINGS.md`/`ASSETS.md` entries) is
 saved in the game folder — non-programmer handoff.
 
 ## Step Groups 2–3 (dispatch prose lives in their own reference files)
 
 Group 2 `{build, test}` and group 3 `{audit, repair}` are live dispatches, but unlike group 1
 their per-step delegation, persistence discipline, and end-of-group close are authored inside
-`build/build.md`, `build/test.md`, `build/audit.md`, and `build/repair.md` themselves rather than
+`${CLAUDE_SKILL_DIR}/../build/build.md`, `${CLAUDE_SKILL_DIR}/../build/test.md`, `${CLAUDE_SKILL_DIR}/../build/audit.md`, and `${CLAUDE_SKILL_DIR}/../build/repair.md` themselves rather than
 restated here — those four files already carry their own "Referenced by `build-chunk.md` Step N"
 framing and own their own round-persistence rules. This router's Step 3 dispatch table above names
 each target file; there is nothing further to add here for groups 2-3.
 
 ## Step Group 4 Dispatch — `{playtest, revise, close}`
 
-The last of the four session step groups (`state-machine.md` "Session Handoff Seams"). A single
+The last of the four session step groups (`${CLAUDE_SKILL_DIR}/../state-machine.md` "Session Handoff Seams"). A single
 session runs at most one step group, then hands off, same discipline as group 1. The `revise`
-step may loop (`revise-1`, `revise-2`, … — see `build/revise.md` "Round-Bounding and
+step may loop (`revise-1`, `revise-2`, … — see `${CLAUDE_SKILL_DIR}/../build/revise.md` "Round-Bounding and
 Persistence") entirely inside this one session; the loop never crosses the handoff seam, and the
 group label's single `revise` denotes that whole loop, not a one-round cap.
 
 **Every step persists before the next starts:** `playtest` checks off its own Step Checklist item
-as part of its Verified-Checklist gate write (see `build/playtest.md` "The Verified Gate"); a
+as part of its Verified-Checklist gate write (see `${CLAUDE_SKILL_DIR}/../build/playtest.md` "The Verified Gate"); a
 `revise` round is persisted as a new `### Revise N` entry in CHUNK.md's `## Revision Rounds`
-before looping back to `playtest` (see `build/revise.md` "Round-Bounding and Persistence"); `close`
+before looping back to `playtest` (see `${CLAUDE_SKILL_DIR}/../build/revise.md` "Round-Bounding and Persistence"); `close`
 persists the verified commit hash and decision rollup before proposing the next chunk (see
-`build/close.md` "Bookkeeping Sequence"). An unchecked or unpersisted step is re-run from scratch
+`${CLAUDE_SKILL_DIR}/../build/close.md` "Bookkeeping Sequence"). An unchecked or unpersisted step is re-run from scratch
 on a cold resume — never leave a completed step's write pending.
 
 **final-acceptance (the sketch's `## Mandated Chunks` final-acceptance chunk only):** before
-`playtest` runs for that one special chunk, dispatch `build/final-acceptance.md` for its coverage
+`playtest` runs for that one special chunk, dispatch `${CLAUDE_SKILL_DIR}/../build/final-acceptance.md` for its coverage
 check and 7-point design-QA pass (Step 2's "Final-acceptance chunk target" routes here on a cold
 resume). Its output — the finished game played start-to-finish — becomes this chunk's `playtest`
 script; the `{playtest, revise, close}` gate below then runs **on top of** that content, never in
 place of it. Because this content step is exceptionally heavy, the final-acceptance chunk carries an
 **extra** handoff seam ordinary chunks lack: the `final-acceptance` content step is its own session
-and `{playtest, revise, close}` is the next (`state-machine.md` "Session Handoff Seams"; see
-`build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the
+and `{playtest, revise, close}` is the next (`${CLAUDE_SKILL_DIR}/../state-machine.md` "Session Handoff Seams"; see
+`${CLAUDE_SKILL_DIR}/../build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the
 per-sub-part persistence that makes a mid-pass crash resume mid-pass instead of re-dispatching the
 whole step). An ordinary chunk has no `final-acceptance` item on its Step Checklist and skips this
 step entirely.
 
-**playtest:** Delegate the entire human-verification gate to `build/playtest.md` — no subagent,
+**playtest:** Delegate the entire human-verification gate to `${CLAUDE_SKILL_DIR}/../build/playtest.md` — no subagent,
 the orchestrator narrates the numbered click-by-click test script directly to the human and
 records their item-by-item confirmation. If the human confirms the whole script clean, this group
 proceeds to `close`. If the human reports any issue, this group proceeds to `revise` instead.
 
 **revise (only if playtest surfaced an issue):** Delegate the 4-category triage to
-`build/revise.md` — every feedback item the human reported gets exactly one of the four
+`${CLAUDE_SKILL_DIR}/../build/revise.md` — every feedback item the human reported gets exactly one of the four
 dispositions (this-chunk defect, future scope, not-built-yet, rules change), appended to CHUNK.md's
 `## Revision Rounds`. Revise loops back to `playtest` for a targeted re-test of just the items this
 round fixed, never a blind full re-test, until every this-chunk-defect item has a recorded
 disposition.
 
 **close:** Once `playtest` confirms the chunk clean (with or without an intervening `revise`
-loop), delegate the bookkeeping and sketch-tail delta gate to `build/close.md` — recording the
+loop), delegate the bookkeeping and sketch-tail delta gate to `${CLAUDE_SKILL_DIR}/../build/close.md` — recording the
 verified commit hash, rolling up decisions, and presenting the sketch tail's delta (never a silent
 rewrite) for the user's explicit approval before writing SKETCH.md's `## Ordered Chunk List`. A
 light-path chunk (`build, test, playtest`, no `close` step of its own) runs this same bookkeeping
-sequence from inside its own `playtest` step instead — see `build/close.md`'s `## Bookkeeping
+sequence from inside its own `playtest` step instead — see `${CLAUDE_SKILL_DIR}/../build/close.md`'s `## Bookkeeping
 Sequence` and the light-path note above.
 
 End of group 4 (and of this chunk's lifecycle): print the exact next command to run
@@ -343,7 +349,7 @@ as the group-2 entry point).
 
 ## Status Enum and Stale Marker (cite, do not restate)
 
-This router routes on the exact enum `state-machine.md` "Status Enum (exact)" defines:
+This router routes on the exact enum `${CLAUDE_SKILL_DIR}/../state-machine.md` "Status Enum (exact)" defines:
 `proposed`, `approved`, `built`, `verified`, `verified (user-waived)`. A `CHUNK.md` whose Status
 line reads `stale — re-derive before build` (set by `/bs-insert-chunk`) is never resumed as if it
 were a normal pending chunk — this router stops and hands off to the re-derivation this stale
@@ -353,28 +359,28 @@ marker calls for rather than guessing which step to resume.
 
 This skill delegates its heavyweight, step-scoped prose to:
 
-- `build/investigate.md` — cited-slice + INDEX-discovered-slice reading, claims list +
+- `${CLAUDE_SKILL_DIR}/../build/investigate.md` — cited-slice + INDEX-discovered-slice reading, claims list +
   visibility declaration authoring
-- `build/redteam.md` — 3-way fresh-context adversarial fan-out, escalation
-- `build/ask.md` — 4-part presentation format, gate-before-write, asset requests
-- `build/design-ask.md` — first-UI-chunk visual identity gate (Adopt/Derive/Original), writes
+- `${CLAUDE_SKILL_DIR}/../build/redteam.md` — 3-way fresh-context adversarial fan-out, escalation
+- `${CLAUDE_SKILL_DIR}/../build/ask.md` — 4-part presentation format, gate-before-write, asset requests
+- `${CLAUDE_SKILL_DIR}/../build/design-ask.md` — first-UI-chunk visual identity gate (Adopt/Derive/Original), writes
   DESIGN.md
-- `build/build.md` — code-writing step, fresh-context raw-slice exception, per-file build
+- `${CLAUDE_SKILL_DIR}/../build/build.md` — code-writing step, fresh-context raw-slice exception, per-file build
   manifest
-- `build/test.md` — the test-step command sequence, sandbox-rule gate, a11y floor for UI chunks
-- `build/audit.md` — 3 fresh-context adversarial lenses (fidelity, visibility, undo) +
+- `${CLAUDE_SKILL_DIR}/../build/test.md` — the test-step command sequence, sandbox-rule gate, a11y floor for UI chunks
+- `${CLAUDE_SKILL_DIR}/../build/audit.md` — 3 fresh-context adversarial lenses (fidelity, visibility, undo) +
   design-review dispatch for UI chunks, Findings Ledger round persistence
-- `build/repair.md` — fix-or-refute-with-citation loop, round-bound enforcement, round-3 user
+- `${CLAUDE_SKILL_DIR}/../build/repair.md` — fix-or-refute-with-citation loop, round-bound enforcement, round-3 user
   triage
-- `build/design-review.md` — the UI-chunk screenshot design-review agent dispatched by audit
+- `${CLAUDE_SKILL_DIR}/../build/design-review.md` — the UI-chunk screenshot design-review agent dispatched by audit
   for `ui: touches|major` chunks; findings land in the same Findings Ledger
-- `build/playtest.md` — the human-verification gate, no subagent, numbered click-by-click test
+- `${CLAUDE_SKILL_DIR}/../build/playtest.md` — the human-verification gate, no subagent, numbered click-by-click test
   script + item-by-item Verified Checklist
-- `build/revise.md` — 4-category feedback triage loop, append-only Revision Rounds, loops back to
+- `${CLAUDE_SKILL_DIR}/../build/revise.md` — 4-category feedback triage loop, append-only Revision Rounds, loops back to
   playtest for a targeted re-test
-- `build/close.md` — verified-commit-hash bookkeeping, decision rollup, and the sketch-tail delta
+- `${CLAUDE_SKILL_DIR}/../build/close.md` — verified-commit-hash bookkeeping, decision rollup, and the sketch-tail delta
   gate before proposing the next chunk
-- `build/final-acceptance.md` — the sketch's mandated-chunk design-QA pass (7-point check +
+- `${CLAUDE_SKILL_DIR}/../build/final-acceptance.md` — the sketch's mandated-chunk design-QA pass (7-point check +
   fresh-context automatable-checks dispatch), run **as the content of** the sketch's `## Mandated
   Chunks` final-acceptance chunk's `{playtest, revise, close}` group when that chunk is next: its
   coverage check and design-QA pass supply that chunk's playtest script, and the standard
@@ -383,19 +389,23 @@ This skill delegates its heavyweight, step-scoped prose to:
 
 And to the shared reference files that ship with every `bs-` skill:
 
-- `state-machine.md` — status enum, step names, consistency check, session lock, write order,
+- `${CLAUDE_SKILL_DIR}/../state-machine.md` — status enum, step names, consistency check, session lock, write order,
   authority, session handoff seams, git protocol
-- `templates/CHUNK.template.md` — the file `investigate`/`redteam`/`ask` fill (claims list,
+- `${CLAUDE_SKILL_DIR}/../templates/CHUNK.template.md` — the file `investigate`/`redteam`/`ask` fill (claims list,
   visibility declaration, redteam rounds, Step Checklist check-offs, Status grammar; the
   findings ledger belongs to `audit`/`repair`)
-- `templates/RULINGS.template.md` — the ledger `ask`'s house-rule choices and redteam's
+- `${CLAUDE_SKILL_DIR}/../templates/RULINGS.template.md` — the ledger `ask`'s house-rule choices and redteam's
   refuted-twice escalations append to
-- `templates/ASSETS.template.md` — the ledger `ask`'s asset requests append to
+- `${CLAUDE_SKILL_DIR}/../templates/ASSETS.template.md` — the ledger `ask`'s asset requests append to
 
-**Installed location:** every relative path above (the `build/` step files, `state-machine.md`,
-and `templates/`) resolves against the directory containing THIS skill file — the installer
-copies the whole `bs/` tree as one unit, so the shipped layout is identical wherever it is
-installed. (Installer-phase dependency: `src/cli/commands/install-claude-command.ts` does not
-yet install the `bs-` skills; the phase that teaches it to MUST preserve this skill-file-relative
-layout — `build/`, `templates/`, and `state-machine.md` siblings of this file — or update this
-paragraph.)
+**Installed location:** this file installs as `.claude/skills/bs-build-chunk/SKILL.md`. The
+shared `build/`, `templates/`, and `state-machine.md` referenced above install as siblings of
+`bs-build-chunk/` — one directory up from this file, at `.claude/skills/build/`,
+`.claude/skills/templates/`, and `.claude/skills/state-machine.md`. `${CLAUDE_SKILL_DIR}` is
+Claude Code's built-in substitution for "the directory containing THIS skill file," resolved to
+an absolute path before the model ever sees the content — so `${CLAUDE_SKILL_DIR}/../build/...`
+resolves correctly whether this skill is installed at the project (`.claude/skills/`) or
+personal (`~/.claude/skills/`) level. The installer phase
+(`src/cli/commands/install-claude-command.ts`) MUST preserve this layout — `build/`,
+`templates/`, and `state-machine.md` as siblings of every `bs-*` skill directory under
+`.claude/skills/` — or update this paragraph.
