@@ -69,8 +69,16 @@ one entry per defect found (empty array if none).
 
 ```
 You are auditing built code for {gameName}, chunk "{slug}", for HIDDEN-INFORMATION LEAKS. Read
-this chunk's Visibility Declaration (provided below) and the built code at: {codeFilePaths}.
-Do NOT read CHUNK.md "## Interpretation".
+the RAW rulebook slice(s): {slicePaths}, and read RULINGS.md in this project — rulings outrank
+the rulebook (state-machine.md "Rulings Outrank Rulebook"), and a house rule in RULINGS.md can
+make something public that the printed rulebook hides, or vice versa. These raw sources, NOT the
+Visibility Declaration, are the ground truth for what each seat should and should not see. Then
+read the built code at: {codeFilePaths}. Do NOT read CHUNK.md "## Interpretation".
+
+The chunk's investigate-produced Visibility Declaration is provided below as a CLAIM to verify
+against the raw sources — treat it the way redteam checks a claims list, not as an unchallengeable
+oracle. If it disagrees with the raw slice + RULINGS.md (e.g. it declared a public value secret,
+or missed a ruling that makes a value public), that disagreement is itself a finding.
 
 {visibilityDeclarationText}
 
@@ -78,7 +86,8 @@ Using the generated project's own test harness, run a two-seat diff via
 `diffPlayerViews(testGame, seatA, seatB)` (the atomic overload — avoids the WR-02
 different-instants footgun) from `boardsmith/testing`, and check the rendered UI output with
 `assertNoHiddenInfoLeak(...)` from the same package. Report anything either check surfaces as
-visible to a seat the Visibility Declaration says should not see it.
+visible to a seat that — per the raw slice(s) + RULINGS.md — should not see it, including cases
+where the Visibility Declaration itself is wrong about what should be hidden.
 
 Return exactly: a list of { findingId, lens: 'visibility', description, citation, severity } —
 one entry per leak found (empty array if none).
