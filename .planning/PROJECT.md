@@ -147,6 +147,7 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ `/bs-build-chunk` group 1: orchestrator (resume routing, session lock, intents, light path) + investigate/redteam/ask references + 43-test drift suite (BUILD-01..04, BUILD-12) — Validated in Phase 143
 - ✓ `/bs-build-chunk` group 2: build/test/design-ask references + a11y floor + REAL scaffold-template change (axe-core/jsdom/@vue/test-utils devDeps + generated a11y harness) (BUILD-05/06, UIQ-01..03) — Validated in Phase 144
 - ✓ `/bs-build-chunk` group 3: audit/repair references (3 lenses, two-seat leak diff via diffPlayerViews, bounded fix-or-refute loop) + screenshot-armed design-review agent (3 tiers × 2 themes) (BUILD-07/08, UIQ-04) — Validated in Phase 145
+- ✓ `/bs-build-chunk` group 4 + skill complete: playtest/revise/close/final-acceptance references (human-gate script, 4-way triage, verified-hash + sketch-tail delta, 7-point design-QA) — full 10-step engine live, zero forward-ref markers (BUILD-09/10/11/13, UIQ-05) — Validated in Phase 146
 
 - ✓ Game rules layer isolated from platform/networking — existing
 - ✓ Event sourcing via Command pattern — existing
@@ -431,4 +432,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-05 — Phase 145 complete (/bs-build-chunk audit & repair with design review)*
+*Last updated: 2026-07-05 — Phase 146 complete (/bs-build-chunk skill complete: playtest/revise/close/final-acceptance)*
