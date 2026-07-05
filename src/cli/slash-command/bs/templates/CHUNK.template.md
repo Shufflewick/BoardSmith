@@ -112,9 +112,11 @@ full
 
 ## Revision Rounds
 <!-- Append-only. Never edit or delete a prior round's entry — a new round is always a new
-     "### Revise N" section, even if it supersedes an earlier one. Fed by the playtest step's
-     triage: category (a) fix now (recorded here), category (b) future scope (goes to SKETCH.md's
-     Ideas Backlog instead), category (c) not a real issue (recorded here as refuted). -->
+     "### Revise N" section, even if it supersedes an earlier one. Fed by the revise step's
+     four-category triage (see build/revise.md): category (a) this-chunk defect = fix now
+     (recorded here), category (b) future scope (goes to SKETCH.md's Ideas Backlog instead),
+     category (c) not-built-yet = expectation reset (no write is made — nothing to record, the
+     chunk already correctly excluded it), category (d) rules change (goes to RULINGS.md). -->
 
 <!--
 ### Revise 1
