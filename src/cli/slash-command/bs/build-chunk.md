@@ -337,7 +337,7 @@ This skill delegates its heavyweight, step-scoped prose to:
   playtest for a targeted re-test
 - `build/close.md` — verified-commit-hash bookkeeping, decision rollup, and the sketch-tail delta
   gate before proposing the next chunk
-- `build/final-acceptance.md` — the sketch's mandated-chunk design-QA pass (6-point check +
+- `build/final-acceptance.md` — the sketch's mandated-chunk design-QA pass (7-point check +
   fresh-context automatable-checks dispatch), run **as the content of** the sketch's `## Mandated
   Chunks` final-acceptance chunk's `{playtest, revise, close}` group when that chunk is next: its
   coverage check and design-QA pass supply that chunk's playtest script, and the standard
