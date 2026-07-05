@@ -39,7 +39,7 @@
 - [x] **BUILD-08**: Repair loops are bounded (max 3 audit rounds, only-new-findings rule, refutation-with-citation allowed) with remaining findings triaged to the user
 - [x] **BUILD-09**: Playtest hands the user a numbered click-by-click script with seat counts, dev-host affordances, a build stamp, a regression line, and an explicit item-by-item verified checklist; `verified (user-waived)` is recordable
 - [x] **BUILD-10**: Playtest feedback is triaged item-by-item (this-chunk / future-scope / not-built-yet / ruling) and re-entry after revision presents a feedback disposition report with a targeted re-test script
-- [ ] **BUILD-11**: Close records the verified commit hash, re-derives the sketch tail, and presents the delta for approval before proposing the next chunk
+- [x] **BUILD-11**: Close records the verified commit hash, re-derives the sketch tail, and presents the delta for approval before proposing the next chunk
 - [x] **BUILD-12**: Trivial chunks run a light path (build → test → playtest) with the user told which ceremony is in effect
 - [ ] **BUILD-13**: Sessions commit at every step completion (`chunk-<slug>/step-<name>`), hand off at structural step-group seams with a non-programmer-readable resume message, and detect concurrent sessions via a sketch lock note
 
@@ -49,7 +49,7 @@
 - [x] **UIQ-02**: Components awaiting assets render designed placeholders (correct aspect ratio, DESIGN.md tokens, labeled) whose asset swap never changes geometry
 - [x] **UIQ-03**: UI chunks enforce the a11y floor: ActionPanel keyboard-only completability test, axe scan, no-color-literals grep, real controls with game-semantic labels, focus management, reduced-motion
 - [x] **UIQ-04**: UI chunks get a screenshot-armed design-review audit agent (3 breakpoints × 2 themes, drift diff vs stored shots) feeding the repair loop
-- [ ] **UIQ-05**: The final-acceptance chunk includes the design-QA pass (screen-reader playthrough, zoom, touch targets, colorblind, both themes, mobile)
+- [x] **UIQ-05**: The final-acceptance chunk includes the design-QA pass (screen-reader playthrough, zoom, touch targets, colorblind, both themes, mobile)
 
 ### Status & Sketch Editing (STAT)
 
@@ -108,9 +108,9 @@
 | UIQ-04 | Phase 145 | Complete |
 | BUILD-09 | Phase 146 | Complete |
 | BUILD-10 | Phase 146 | Complete |
-| BUILD-11 | Phase 146 | Pending |
+| BUILD-11 | Phase 146 | Complete |
 | BUILD-13 | Phase 146 | Pending |
-| UIQ-05 | Phase 146 | Pending |
+| UIQ-05 | Phase 146 | Complete |
 | STAT-01 | Phase 147 | Pending |
 | STAT-02 | Phase 147 | Pending |
 | DIST-01 | Phase 148 | Pending |
