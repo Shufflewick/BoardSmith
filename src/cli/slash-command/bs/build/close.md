@@ -98,6 +98,14 @@ whether the a11y floor and design-review lens will apply to it. Print the exact 
 a non-programmer handoff — e.g. "Run `/bs-build-chunk` again to start the next chunk,
 `auction-basic` (ui: touches)."
 
+**`close` does NOT create the next chunk's `chunks/<slug>/CHUNK.md`.** Proposing the next chunk
+names it and prints the command; it never derives that chunk's CHUNK.md. CHUNK.md creation is
+always lazy — `build-chunk.md` Step 2's "Sketch-level tail-entry target" path details an
+undetailed tail entry when routing first reaches it, on the next `/bs-build-chunk` run. This is
+the reconciled close-gate duty (146-REVIEW WR-02): `build-chunk.md` Step 2 owns detailing; `close`
+owns only tail *description* re-derivation (the `## Sketch-Tail Delta Gate` above) and the
+next-chunk proposal.
+
 ## Downstream Shape (cite, never restate)
 
 Once the delta is approved and the next chunk is proposed, this chunk's lifecycle is complete —
