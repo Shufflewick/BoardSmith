@@ -1,6 +1,6 @@
 ---
 phase: 147-bs-check-status-insert-chunk
-reviewed: 2026-07-04T00:00:00Z
+reviewed: 2026-07-05T02:13:59Z
 depth: standard
 files_reviewed: 4
 files_reviewed_list:
@@ -9,175 +9,146 @@ files_reviewed_list:
   - src/cli/slash-command/bs/status-tools.test.ts
   - src/cli/slash-command/bs/build-chunk.md
 findings:
-  critical: 1
-  warning: 5
+  critical: 0
+  warning: 4
   info: 1
-  total: 7
+  total: 5
 status: issues_found
 ---
 
-# Phase 147: Code Review Report
+# Phase 147: Code Review Report (Iteration 2)
 
-**Reviewed:** 2026-07-04
+**Reviewed:** 2026-07-05T02:13:59Z
 **Depth:** standard
 **Files Reviewed:** 4
 **Status:** issues_found
 
 ## Summary
 
-Phase 147 authored two thin state-reader/editor skills (`/bs-check-status`, `/bs-insert-chunk`)
-and retired build-chunk.md's Phase-147 forward-references. These are LLM-executed instruction
-files, so "bugs" are contradictions, gaps, and dangling references that will misdirect an agent
-session.
+Re-review after the iteration-1 fix commits (e2762248..d33ee5b8). I verified each claimed
+fix against `.planning/bs-skills-plan.md` (§/bs-check-status, §/bs-insert-chunk),
+`bs/state-machine.md` (Session Lock, Write Order, Consistency Check), and
+`templates/SKETCH.template.md` (## Mandated Chunks). I also walked insert-chunk's five
+operations (a)-(e) and the mandated-chunk deletion guard end-to-end.
 
-The good news first (verified clean against the ground-truth references): the byte-exact stale
-marker `stale — re-derive before build` (em-dash) is correct; the write-order is correct
-(CHUNK.md operation (c) before SKETCH.md operation (d)); the citation-overlap diff correctly reads
-per-chunk `## Interpretation` + `## Newly Discovered Citations` in each `chunks/<slug>/CHUNK.md`
-(not a central index); no nonexistent state-machine.md "Sketch Version" heading is cited (it
-correctly cites the SKETCH.template.md field); check-status.md truly performs no writes (it never
-refreshes the lock, unlike build-chunk.md Step 0); and every cited state-machine.md section
-heading and template path actually exists (including ingest-rules.md's `## Step 6: Approval Gate`).
+**All seven prior findings are genuinely resolved:**
+- **CR-01** — the Mandated-Chunks guard (insert-chunk.md:47-63) now rejects `remove` of a
+  mandated chunk, not just reorders, and requires an explicit same-role replacement ("never
+  as a silent drop"). Coherent with the template's three mandated invariants.
+- **WR-01** — the Ordered Chunk List edit is now enumerated as operation (e) with explicit
+  write-order placement (rewrite list first, version line last, single SKETCH.md write).
+- **WR-05** — insert-chunk.md:20-30 adds the live (non-stale) lock check mirroring build-chunk
+  Step 0 outcome 2.
+- **WR-02** — no `Phase 147` string remains anywhere in build-chunk.md (grep-confirmed); the
+  regex at status-tools.test.ts:303 now forbids it in any form.
+- **WR-03 / WR-04** — check-status Item 7 covers detailed-but-unstarted and undetailed-tail;
+  Item 3 guards the not-yet-detailed case before reading Revision Rounds.
 
-Seven defects remain. The most serious: the `## Mandated Chunks` invariant guard only reliably
-blocks *removal* for one of the three mandated chunks — the other two are guarded against
-reordering but not deletion, so an agent asked to "remove the final-acceptance chunk" can silently
-break a hard structural invariant the guard exists to protect.
+The full `status-tools.test.ts` suite (37 tests) passes.
 
-## Critical Issues
-
-### CR-01: Mandated-Chunks guard fails to block removal for 2 of 3 mandated chunks
-
-**File:** `src/cli/slash-command/bs/insert-chunk.md:33-37`
-**Issue:** Operation (a)'s Mandated-Chunks guard is worded per-chunk with three different verbs,
-and only one of them blocks removal:
-
-- final-acceptance: "must not **move** the final-acceptance chunk **off the tail**" — a positional
-  constraint. A user request "remove the final-acceptance chunk" is not "moving it off the tail";
-  the chunk is deleted, not repositioned. Nothing in this clause blocks the deletion.
-- first chunk: "must not **displace** the first chunk (the core event loop) **from position one**"
-  — also positional. Removing the core-event-loop chunk deletes it rather than displacing it to
-  another position; whether this clause fires on a delete is ambiguous at best.
-- game-end: "must not **drop** the game-end/scoring/winner-determination chunk" — "drop" = remove.
-  This is the only clause that clearly blocks removal.
-
-The `## Mandated Chunks` section of `templates/SKETCH.template.md:93-100` requires that the sketch
-*contain* all three "regardless of game specifics." The whole purpose of this guard is to prevent
-a reshape from breaking that invariant, yet as written it lets a `remove` operation delete the
-final-acceptance chunk or the core-event-loop chunk without flagging. "remove" is one of the four
-first-class operations this skill exists to run (line 10, line 22), so this is a reachable path,
-not a theoretical one.
-**Fix:** State each mandated invariant in remove-and-reorder terms, e.g.:
-```
-A reshape must never leave the sketch without all three mandated chunks, and must never
-change their required positions:
-- The final-acceptance chunk must remain present AND stay the last entry. Reject any remove
-  targeting it and any reorder that moves it off the tail.
-- The game-end/scoring/winner-determination chunk must remain present. Reject any remove
-  targeting it.
-- The core-event-loop chunk must remain present AND stay at position one. Reject any remove
-  targeting it and any reorder that moves it off position one.
-Flag the violation concretely instead of performing the reshape.
-```
+Remaining findings below are (1) an under-scoped live-lock guard that contradicts the very
+section it cites, (2) an ordering-presentation footgun in the operations list, (3) a
+dangling intra-file "the heading below" reference, and (4) a pre-existing stale-chunk gap in
+check-status Item 2. None are blockers — these are markdown agent-instruction files (no
+executable code but the test, which passes), and the SKETCH.md derived-pointer clobber in
+WR-01 below is backstopped by the version stamp + CHUNK.md-wins authority rule.
 
 ## Warnings
 
-### WR-01: The core reshape mutation (editing the Ordered Chunk List) is never enumerated
+### WR-01: insert-chunk live-lock guard is narrower than the ## Session Lock rule it cites
 
-**File:** `src/cli/slash-command/bs/insert-chunk.md:20-69`
-**Issue:** "The Four Operations" enumerates (a) dependency re-validation, (b) citation-overlap
-diff, (c) stale-marking, (d) version bump — but none of them is "actually add/reorder/split/remove
-the entry in SKETCH.md's `## Ordered Chunk List`." That edit is the entire point of the skill, yet
-it is only referenced obliquely ("the `## Ordered Chunk List` ... grammar this skill edits" in
-Reference Files, line 84). Because it is never a named operation, its placement in the Write Order
-section is undefined: the Write Order block (lines 64-69) discusses only operation (c)'s CHUNK.md
-write and operation (d)'s SKETCH.md version bump. An agent could plausibly bump the version stamp
-(d) without ever rewriting the list, or rewrite the list in a separate, out-of-order write. For an
-LLM instruction, the load-bearing mutation must be explicit and its write-order pinned.
-**Fix:** Add the list edit as an explicit operation folded into the SKETCH.md write, e.g.: "The
-add/reorder/split/remove edit to `## Ordered Chunk List` lands in the same SKETCH.md write as the
-version bump (operation d): rewrite the list first, then the `Sketch Version:` line last, per
-`state-machine.md` '## Write Order'."
+**File:** `src/cli/slash-command/bs/insert-chunk.md:24-29`
+**Issue:** The WR-05 fix warns only when the lock "names a chunk this reshape will stale-mark
+or reorder." But this skill ALWAYS rewrites the *entire* `## Ordered Chunk List` and bumps the
+version stamp (operations d + e), so its write footprint is the whole `SKETCH.md`, not just the
+reshaped entries. `state-machine.md` "## Session Lock" is unconditional: "Any other lock (less
+than 24 hours old, naming different work) is treated as a live concurrent session and triggers
+the warning." build-chunk.md Step 0 outcome 2 (which this fix claims to mirror) likewise fires
+on a lock that "names different work than this session is about to touch." Concrete miss: a live
+build session holds the lock on chunk `Z`; the user asks to `add` an unrelated chunk `W`.
+insert-chunk's narrowed condition does not warn, proceeds, and rewrites the full ordered list
+(including `Z`'s line) + version bump — silently overlapping the build session's in-flight
+SKETCH.md derived-pointer write for `Z`. Either the narrowing is a real gap or the citation to
+"## Session Lock" / build-chunk outcome 2 is misleading.
+**Fix:** Warn on ANY live (non-stale) lock naming work other than the reshape, since the full
+list rewrite touches every entry:
+```
+if the `Session Lock:` note names ANY chunk and the lock is NOT stale — because this reshape
+rewrites the whole `## Ordered Chunk List` and bumps the version stamp, it can overlap any live
+build session's SKETCH.md write — warn the user and STOP, exactly as build-chunk.md Step 0
+outcome 2 does for a lock naming different work. (state-machine.md "## Session Lock": any live
+lock naming different work triggers the warning.)
+```
+(Severity WARNING, not BLOCKER: the version-stamp bump lets the build session detect the change,
+and the "CHUNK.md wins, SKETCH.md repaired to match" authority rule self-heals a clobbered
+derived pointer on the next consistency check.)
 
-### WR-02: build-chunk.md forward-ref retirement left a dangling "Phase 147" reference
+### WR-02: Operations listed "in order" put version-bump (d) before list-edit (e), but the write order requires (e) first
 
-**File:** `src/cli/slash-command/bs/build-chunk.md:76`
-**Issue:** The line still reads "...surfacing accumulated waived chunks for a batch playtest is
-`/bs-check-status`'s job, Phase 147) → read that chunk's...". The retirement removed the
-"ships as ... (Phase 147)" / "until it lands" stopgap phrasing, but this leftover "Phase 147"
-internal planning reference survived. `status-tools.test.ts:250-263` does not catch it: its regexes
-require the literal `ships as ... (Phase 147)` shape and `until it lands`, neither of which matches
-`, Phase 147)`. A shipped skill file should not leak the internal planning-phase number that
-authored the now-live skill it points to.
-**Fix:** Drop the phase reference: "...surfacing accumulated waived chunks for a batch playtest is
-`/bs-check-status`'s job) → read that chunk's...". Consider tightening the test to
-`buildChunk.not.toMatch(/Phase 147/)` so future drift fails loudly.
+**File:** `src/cli/slash-command/bs/insert-chunk.md:34, 83-95`
+**Issue:** Line 34 states "Every reshape ... runs all of the following, in order," then lists
+(d) version-stamp bump *before* (e) Ordered Chunk List edit. The actual required physical write
+sequence is the reverse: within the single SKETCH.md write, rewrite the list FIRST, then the
+`Sketch Version:` line LAST (state-machine.md "## Write Order": Status/version line written
+last). An agent that reads "(d) then (e), in order" literally will write the version line before
+the list — the exact inversion the Write Order rule forbids. This cuts against the Pit-of-Success
+mantra (the easy path — follow the numbered order — becomes the wrong path). It is mitigated by
+three clarifying restatements (op d line 86-87, op e line 92-94, Write Order 97-104), so it is a
+robustness/clarity issue rather than a guaranteed bug.
+**Fix:** Reorder the enumeration so (e) precedes the version bump, or relabel: e.g. "(a)-(c)
+run in order; the SKETCH.md write then rewrites the list (e) and stamps the new version (d)
+LAST." Make the numbered order match the write order so "follow the list top-to-bottom" is
+correct by construction.
 
-### WR-03: check-status Item 7 has no next-command case for an unstarted or undetailed current chunk
+### WR-03: "remove is a first-class operation (see the heading below)" points to a heading that does not exist
 
-**File:** `src/cli/slash-command/bs/check-status.md:74-81`
-**Issue:** Item 7 derives the next command from three cases: (1) current chunk mid-ceremony (any
-step checked, more remain) → `/bs-build-chunk`; (2) a reshape was just discussed → `/bs-insert-chunk`;
-(3) nothing ingested → `/bs-ingest-rules`. It omits two very common states: a current chunk that is
-detailed but has **zero** steps checked (fresh, not yet started), and a current chunk that is a
-sketch-level tail entry "not yet detailed" (which Item 2 explicitly reports at lines 45-47). In both
-the correct next command is `/bs-build-chunk` (to start/detail it), but case (1) only covers
-"any step checked," so these states fall through all three bullets and leave the agent without a
-derived answer — the section explicitly forbids guessing ("never guess, derive it from the state").
-**Fix:** Broaden case (1) to "If the current chunk exists (detailed or still a tail entry) and is
-not yet fully verified — whether mid-ceremony or not yet started — the next command is
-`/bs-build-chunk`," keeping the reshape and no-project cases as overrides.
+**File:** `src/cli/slash-command/bs/insert-chunk.md:58`
+**Issue:** The CR-01 guard text says "`remove` is a first-class operation (see the heading
+below)." There is no `remove` heading anywhere in the file — the headings under "## The
+Operations" are (a) dependency-order, (b) citation-overlap, (c) stale-marking, (d) version bump,
+and (e) Ordered Chunk List edit. `remove` is a reshape *type* (add/reorder/split/remove) folded
+into operation (e), not a standalone operation with its own heading. The cross-reference dangles.
+This is precisely the class of intra-file pointer drift the STAT-02 test guards for cross-file
+pointers, but the test does not cover intra-file headings, so it slips through green.
+**Fix:** Repoint to op (e) explicitly: "`remove` is one of the four reshape types operation (e)
+performs, so a 'remove the final-acceptance chunk' request is a reachable delete path this guard
+must block." Drop "see the heading below."
 
-### WR-04: check-status Item 3 reads the current chunk's CHUNK.md without the "not yet detailed" guard Item 2 has
-
-**File:** `src/cli/slash-command/bs/check-status.md:52-56`
-**Issue:** Item 3 ("Outstanding playtest feedback") says "Read the current chunk's `## Revision
-Rounds`." Item 2 carefully handles the case where the current chunk is a sketch-level tail entry
-with no `chunks/<slug>/CHUNK.md` yet (lines 45-47: "report it as 'not yet detailed' rather than
-reading a CHUNK.md that doesn't exist"). Item 3 (and the CHUNK-reading tail of Item 2 at lines
-47-50) inherit no such guard: when the first non-verified chunk is an undetailed tail entry — a
-reachable state once all detailed chunks are verified and routing reaches a sketch-level tail —
-Item 3 would attempt to read `## Revision Rounds` from a file that does not exist.
-**Fix:** Add to Item 3: "If the current chunk is not yet detailed (no CHUNK.md — see Item 2), report
-'n/a — current chunk not yet detailed' and skip the Revision Rounds read." Apply the same guard to
-Item 2's Step-Checklist read.
-
-### WR-05: insert-chunk writes state but never resolves a live session lock
-
-**File:** `src/cli/slash-command/bs/insert-chunk.md:12-18, 61`
-**Issue:** insert-chunk mutates state (operation (c) writes CHUNK.md, operation (d) writes
-SKETCH.md), but its Step 0 runs only the consistency check, whose lock item (state-machine.md
-`## Consistency Check` item 4) detects only a **stale** lock (>24h). It never performs the live-lock
-resolution that build-chunk.md Step 0 does (outcome 2: "Different, live lock ... warn the user
-instead of silently clobbering it"). state-machine.md `## Session Lock` and the plan
-(`.planning/bs-skills-plan.md` line 157) make this a hard rule: "A second concurrent session, on
-entry, sees the lock note and warns instead of silently clobbering." insert-chunk is exactly such a
-writing session, yet it proceeds to stale-mark a `CHUNK.md` that a live `/bs-build-chunk` session
-may be mid-write on, only mentioning the lock to say "never touches the lock" (line 61). The
-version-bump (d) lets a concurrent build detect the change *after the fact*, but does not prevent
-insert-chunk from clobbering an in-flight chunk write.
-**Fix:** Add a live-lock check to Step 0: "If the consistency check surfaces a live (non-stale) lock
-naming a chunk this reshape will stale-mark or reorder, warn the user and stop for their decision
-before writing — same as `build-chunk.md` Step 0 outcome 2 (`state-machine.md` '## Session Lock')."
-
-## Info
-
-### IN-01: check-status Item 2 reports a "current step" even for a stale chunk
+### WR-04: check-status Item 2 has no handling for a `stale — re-derive before build` current chunk
 
 **File:** `src/cli/slash-command/bs/check-status.md:42-50`
 **Issue:** Item 2 derives the current chunk as the first entry whose derived status is neither
-`verified` nor `verified (user-waived)`, then reads its Step Checklist and reports "the first
-unchecked step." A chunk whose Status is `stale — re-derive before build` (which Item 1 correctly
-classifies as "remaining," line 39) satisfies that predicate, so Item 2 would present its first
-unchecked step as if resumable — but build-chunk.md Step 2 (line 78-79) explicitly *stops routing*
-on a stale chunk rather than resuming a step. The report would imply a resume path that
-`/bs-build-chunk` will not take.
-**Fix:** In Item 2, add: "If the current chunk's Status is `stale — re-derive before build`, report
-it as needing re-derivation (cite `build-chunk.md` '## Status Enum and Stale Marker') instead of
-reporting a first-unchecked step."
+`verified` nor `verified (user-waived)` — which includes a chunk whose Status reads
+`stale — re-derive before build`. For a stale chunk, Item 2 then instructs "read that chunk's
+`## Step Checklist` and report the current step as the first unchecked `- [ ]` item." But
+build-chunk.md Step 2 (line 78-79) and "Status Enum and Stale Marker" (line 344-350) say a stale
+chunk "stops routing instead" — its checklist is invalid pending re-derivation, so reporting a
+"current step" off it is misleading. Item 2 cites build-chunk Step 2 as its authority but omits
+the stale carve-out that authority defines. (Pre-existing; not introduced by the iteration-1
+fixes, but surfaced by the Item-2/Item-7 walk this review was asked to perform.)
+**Fix:** Add a stale guard to Item 2 parallel to the not-yet-detailed guard: "If the current
+chunk's Status reads `stale — re-derive before build` (state-machine.md "Status Enum (exact)"),
+report it as 'stale — awaiting re-derivation' and do NOT report a step off its checklist; the
+checklist is invalid until `/bs-insert-chunk`'s re-derivation runs (build-chunk.md 'Status Enum
+and Stale Marker')."
+
+## Info
+
+### IN-01: check-status Item 7 third bullet is unreachable given Step 0's early exit
+
+**File:** `src/cli/slash-command/bs/check-status.md:87-88`
+**Issue:** Item 7's third bullet ("If nothing has started yet (no `SKETCH.md`, caught at Step 0
+above), the next command is `/bs-ingest-rules`") can never fire: Step 0 (line 26-27) already
+stops and returns "no project has been ingested yet" when `SKETCH.md` is absent, so the
+seven-item synthesis — and therefore Item 7 — is never reached in that case. The bullet even
+acknowledges this ("caught at Step 0 above"), so it is documentation-for-completeness rather
+than a live path. Harmless, but a dead branch.
+**Fix:** Either drop the bullet or reframe it as a note ("the no-SKETCH.md case is terminal at
+Step 0 and never reaches this item; documented here only so the next-command mapping is
+complete").
 
 ---
 
-_Reviewed: 2026-07-04_
+_Reviewed: 2026-07-05T02:13:59Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
