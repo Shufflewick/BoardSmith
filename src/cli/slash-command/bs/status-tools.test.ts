@@ -244,6 +244,17 @@ describe('STAT-02 — insert-chunk.md sketch editor', () => {
     expect(insertChunk).toMatch(/never\s+(as\s+)?a\s+silent\s+drop/i);
   });
 
+  it('Step 0 resolves a LIVE (non-stale) session lock, not just a stale one (WR-05)', () => {
+    const insertChunk = read('insert-chunk.md');
+    // insert-chunk writes state, so it must warn-instead-of-clobber on a live
+    // lock, same as build-chunk.md Step 0 outcome 2. Pins the WR-05 fix so it
+    // cannot regress to only checking for a stale (>24h) lock.
+    expect(insertChunk).toMatch(/live[\s(-]*(non-?stale)?[\s)]*lock/i);
+    expect(insertChunk).toMatch(/warn/i);
+    expect(insertChunk).toMatch(/clobber/i);
+    expect(insertChunk).toContain('## Session Lock');
+  });
+
   it('cites each REFERENCED_SECTIONS_INSERT heading by exact string', () => {
     const insertChunk = read('insert-chunk.md');
     for (const heading of REFERENCED_SECTIONS_INSERT) {
