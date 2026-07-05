@@ -89,8 +89,10 @@ from the state just read:
 - If a sketch reshape was just discussed with the user in this same conversation (reordering,
   inserting, splitting, or removing a chunk), the next command is `/bs-insert-chunk` (this
   overrides the build-chunk case above).
-- If nothing has started yet (no `SKETCH.md`, caught at Step 0 above), the next command is
-  `/bs-ingest-rules`.
+- (Note, not a live branch:) the no-`SKETCH.md` case is terminal at Step 0 — it stops and returns
+  "no project has been ingested yet" before this seven-item synthesis is ever reached, so this item
+  never fires for it. Documented here only so the next-command mapping is complete: that case maps
+  to `/bs-ingest-rules`.
 
 Present all seven items together as one report, in the order above, followed by the exact next
 command on its own line.
