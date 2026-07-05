@@ -165,7 +165,11 @@ Plans:
   4. Sessions commit at every step completion (`chunk-<slug>/step-<name>`), hand off at structural step-group seams with a non-programmer-readable resume message, and a second concurrent session is warned via a sketch lock note instead of silently clobbered
   5. The final-acceptance chunk runs the full design-QA pass (screen-reader playthrough, 200% zoom, touch targets, colorblind pass, both Slate themes, mobile layout) as part of what "done" means for the sketch
 
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 146-01-PLAN.md — extend build-chunk.test.ts drift suite (BUILD-09/10/11/13 + UIQ-05 describe blocks; invert forward-ref markers to zero-remain)
+- [ ] 146-02-PLAN.md — author build/playtest.md (BUILD-09 human gate) + build/revise.md (BUILD-10 4-category triage)
+- [ ] 146-03-PLAN.md — author build/close.md (BUILD-11 bookkeeping + sketch-tail delta gate) + build/final-acceptance.md (UIQ-05 6-point design-QA)
+- [ ] 146-04-PLAN.md — retire all forward-ref markers in build-chunk.md, register 4 files, reconcile Step Group 4 dispatch, assert full suite green (BUILD-13)
 **UI hint**: yes
 
 #### Phase 147: `/bs-check-status` & `/bs-insert-chunk`
