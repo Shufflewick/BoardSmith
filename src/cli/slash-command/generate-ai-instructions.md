@@ -1,6 +1,22 @@
+---
+name: bs-generate-ai
+description: Generate a complete AI opponent (all 5 hooks) for a BoardSmith game project. Use as a late sketch chunk after game-end/scoring exists (MCTS needs terminal states); also usable earlier for --ai solo-playtest seat-fill.
+disable-model-invocation: true
+---
+
 # BoardSmith AI Generation Instructions
 
 You are helping the user generate custom AI evaluation functions for their BoardSmith game. Your goal is to create a complete AI implementation with all 5 hooks, modeled on production-quality patterns.
+
+## When to Run This (Late Sketch Chunk)
+
+`/bs-generate-ai` is normally invoked as a **late** sketch chunk in a `/bs-ingest-rules` +
+`/bs-build-chunk` project — after the game-end/scoring/winner-determination chunk is built and
+verified, since MCTS needs real terminal states (win/loss/score) to evaluate against; generating
+AI hooks before scoring exists produces objectives with nothing to optimize toward. It can also
+be run earlier, standalone, to fill an AI seat for solo `--ai` playtesting during development —
+that use does not require the full sketch/chunk state to exist at all, only a compiling
+BoardSmith game project.
 
 ## The 5 AI Hooks
 
