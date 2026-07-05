@@ -673,6 +673,79 @@ describe('UIQ-05 — final-acceptance', () => {
   });
 });
 
+describe('UIQ-05 — final-acceptance router coherence (146-REVIEW CR/WR fixes, pinned)', () => {
+  it('CR-01: build-chunk.md Step 2 has a Final-acceptance chunk resume-routing rule that dispatches final-acceptance.md', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toMatch(/Final-acceptance chunk target/i);
+    expect(buildChunk).toContain('## Mandated Chunks');
+    const idx = buildChunk.search(/Final-acceptance chunk target/i);
+    const nearby = buildChunk.slice(idx, idx + 1400);
+    // The rule must name the dispatch target and the special leading content step in the checklist.
+    expect(nearby).toContain('build/final-acceptance.md');
+    expect(nearby).toContain('- [ ] final-acceptance');
+    expect(nearby).toMatch(/first incomplete item/i);
+    // Group-4 dispatch must also carry a final-acceptance content step.
+    expect(buildChunk).toMatch(/\*\*final-acceptance \(the sketch'?s `## Mandated Chunks`/);
+  });
+
+  it('CR-02: final-acceptance runs "on top of" / "as the content of" the group — build-chunk.md never says "in place of" that group', () => {
+    const buildChunk = read('build-chunk.md');
+    const fa = read('build/final-acceptance.md');
+    expect(buildChunk).toMatch(/as the content of/i);
+    expect(buildChunk).toMatch(/on top of/i);
+    // The old contradiction must not return.
+    expect(buildChunk).not.toMatch(/in place of a normal chunk'?s `\{playtest, revise/i);
+    // final-acceptance.md's on-top-of model must remain the coherent one both files agree on.
+    expect(fa).toMatch(/on top of/i);
+    expect(fa).toMatch(/still applies/i);
+  });
+
+  it('CR-03: light-path close bookkeeping is the 3-item sequence, with NO false sketch-tail-detailing citation', () => {
+    const buildChunk = read('build-chunk.md');
+    const playtest = read('build/playtest.md');
+    // The false "detail the next 2-3 sketch-tail entries" citation must be gone from both files.
+    expect(buildChunk).not.toMatch(/detailing the next 2-3\s+sketch-level tail entries/i);
+    expect(playtest).not.toMatch(/next-2-3 sketch-tail detailing/i);
+    // Both must route light-path tail handling to Step 2's lazy detailing and cite the delta gate as NOT run.
+    expect(buildChunk).toMatch(/lazy tail-entry detailing/i);
+    expect(playtest).toContain('## Sketch-Tail Delta Gate');
+    // close.md must state the light path reuses ONLY the three-item Bookkeeping Sequence.
+    const close = read('build/close.md');
+    expect(close).toMatch(/light path reuses \*\*only\*\* this three-item sequence/i);
+  });
+
+  it('WR-01: build-chunk.md calls final-acceptance a 7-point check, never 6-point', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toContain('7-point check');
+    expect(buildChunk).not.toContain('6-point');
+  });
+
+  it('WR-02: CHUNK.template.md Revision-Rounds comment describes all four revise triage categories', () => {
+    const template = read('templates/CHUNK.template.md');
+    expect(template).toMatch(/category \(a\)/);
+    expect(template).toMatch(/category \(b\)/);
+    expect(template).toMatch(/category \(c\)/);
+    expect(template).toMatch(/category \(d\)/);
+    expect(template).toMatch(/not-built-yet/i);
+    expect(template).toContain('build/revise.md');
+  });
+
+  it('WR-03: the group label is {playtest, revise, close} with no "one revise round" cap in any bs- file', () => {
+    for (const rel of [
+      'build-chunk.md',
+      'state-machine.md',
+      'build/playtest.md',
+      'build/revise.md',
+      'build/close.md',
+      'build/repair.md',
+    ]) {
+      const text = read(rel);
+      expect(text, `${rel} must not carry the "one revise round" cap wording`).not.toMatch(/one revise\s+round/i);
+      expect(text, `${rel} must use the {playtest, revise, close} group label`).toContain('{playtest, revise, close}');
+    }
+  });
+});
+
 describe('cross-file consistency — status enum + stale marker byte-identical', () => {
   it('build-chunk.md quotes the exact status enum values', () => {
     const buildChunk = read('build-chunk.md');
