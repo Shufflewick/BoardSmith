@@ -1,7 +1,7 @@
 # Playtest — The Human-Verification Gate (BUILD-09)
 
-Referenced by `build-chunk.md` Step 8 (`playtest`, first of the `{playtest, one revise round,
-close}` session step group — see `state-machine.md` "Session Handoff Seams"). This is the
+Referenced by `build-chunk.md` Step 8 (`playtest`, first of the `{playtest, revise, close}`
+session step group — see `state-machine.md` "Session Handoff Seams"). This is the
 human-verification boundary: the point where the chunk's actual, running behavior is confirmed
 by a human playing it, not just described. This step has **no subagent** — the orchestrator
 narrates the numbered test script to the human directly, in the main session, and records their

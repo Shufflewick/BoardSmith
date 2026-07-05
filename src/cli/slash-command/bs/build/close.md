@@ -1,7 +1,7 @@
 # Close — Bookkeeping + Sketch-Tail Delta Gate (BUILD-11)
 
-Referenced by `build-chunk.md` Step 10 (`close`, third and last of the `{playtest, one revise
-round, close}` session step group — see `state-machine.md` "Session Handoff Seams"). This is the
+Referenced by `build-chunk.md` Step 10 (`close`, third and last of the `{playtest, revise,
+close}` session step group — see `state-machine.md` "Session Handoff Seams"). This is the
 step that leaves a durable, git-anchored, resumable trail behind a just-verified chunk, and
 re-derives the sketch tail as a reviewable delta rather than a silent rewrite. Runs immediately
 after `playtest` (and any `revise` round it triggered) confirms `Status: verified` (or `verified

@@ -137,12 +137,15 @@ A single session runs at most **one** step group, then hands off. The step group
 1. `{investigate, redteam, ask}`
 2. `{build, test}`
 3. `{audit, repair}`
-4. `{playtest, one revise round, close}`
+4. `{playtest, revise, close}`
 
 Every one of the 10 full-ceremony steps belongs to exactly one group. `close` belongs to
-group 4: the session that runs the human playtest gate (and at most one revise round) also
-closes the chunk — marking it verified, recording the verified commit hash, and rolling up
+group 4: the session that runs the human playtest gate (and its revise loop — `revise-1`,
+`revise-2`, … appended as needed until every this-chunk-defect item has a recorded disposition)
+also closes the chunk — marking it verified, recording the verified commit hash, and rolling up
 decisions — because close is cheap and splitting it into its own session would leave a
-verified-but-unclosed chunk across a handoff.
+verified-but-unclosed chunk across a handoff. The handoff seam wraps the WHOLE group: a single
+session runs playtest → its revise loop → close as one unit and does not hand off mid-group. The
+group name's `revise` denotes that whole loop, not a hard cap of one revision.
 
 Self-assessed "remaining context" is not a real capability — session budgets are structural, based on these fixed group boundaries, not on a session's own estimate of how much context it has left. If the harness surfaces a context warning, the session obeys it immediately regardless of which step group it's in.

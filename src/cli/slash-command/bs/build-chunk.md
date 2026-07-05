@@ -237,10 +237,13 @@ restated here — those four files already carry their own "Referenced by `build
 framing and own their own round-persistence rules. This router's Step 3 dispatch table above names
 each target file; there is nothing further to add here for groups 2-3.
 
-## Step Group 4 Dispatch — `{playtest, one revise round, close}`
+## Step Group 4 Dispatch — `{playtest, revise, close}`
 
 The last of the four session step groups (`state-machine.md` "Session Handoff Seams"). A single
-session runs at most one step group, then hands off, same discipline as group 1.
+session runs at most one step group, then hands off, same discipline as group 1. The `revise`
+step may loop (`revise-1`, `revise-2`, … — see `build/revise.md` "Round-Bounding and
+Persistence") entirely inside this one session; the loop never crosses the handoff seam, and the
+group label's single `revise` denotes that whole loop, not a one-round cap.
 
 **Every step persists before the next starts:** `playtest` checks off its own Step Checklist item
 as part of its Verified-Checklist gate write (see `build/playtest.md` "The Verified Gate"); a

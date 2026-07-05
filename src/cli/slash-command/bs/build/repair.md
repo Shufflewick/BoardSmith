@@ -90,5 +90,5 @@ Ideas Backlog, the same destination `build/build.md`'s category-(b) future-scope
 ## Downstream Shape (cite, never restate)
 
 Once every finding across all rounds has a disposition (`fixed`, `deferred`, or `refuted`) and no
-audit round remains open, this chunk moves to the `{playtest, one revise round, close}` session
-group — authored in Phase 146. This file does not restate that group's structure.
+audit round remains open, this chunk moves to the `{playtest, revise, close}` session group. This
+file does not restate that group's structure.
