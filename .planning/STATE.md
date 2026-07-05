@@ -4,13 +4,13 @@ milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
 stopped_at: Completed 148-03-PLAN.md
-last_updated: "2026-07-05T13:43:14.121Z"
-last_activity: 2026-07-05 -- Phase 149 planning complete
+last_updated: "2026-07-05T13:51:34.287Z"
+last_activity: 2026-07-05
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 30
-  completed_plans: 27
+  completed_plans: 28
   percent: 90
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 149 — end to end dry run validation
+**Current focus:** Phase 149 — End-to-End Dry-Run Validation
 
 ## Current Position
 
-Phase: 149
-Plan: Not started
+Phase: 149 (End-to-End Dry-Run Validation) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-05 -- Phase 149 planning complete
+Last activity: 2026-07-05
 
-Progress: [██████████] 100%
+Progress: [█████████░] 93%
 
 ## Milestones
 
@@ -229,6 +229,7 @@ Recent decisions affecting current work:
 - [Phase 148]: 148-02: Scoped design-game residual grep to installer source (install-claude-command.ts) + cli.ts, matching Plan 01's identical scoping decision for legitimate migration-prose files in bs/ingest-rules.md and bs/ingest/*.md
 - [Phase 148]: 148-02: Added InstallOptions.skipLink to gate the npm-link global side-effect; verified via a temporary smoke test that install-to-temp-dir performs zero execSync calls when skipLink is true
 - [Phase 148-03]: Used beforeAll/afterAll temp-dir install (single real installClaudeCommand call) rather than per-test try/finally; skip-list extended for line-wrapped refs, glob placeholders, and build/light.md's documented-nonexistent reference
+- [Phase 149-01]: Applied a scratch-project-local tsconfig.json workaround (vite/client types) to unblock the ingest dry-run after discovering a real scaffold-template defect (fresh npx boardsmith init fails tsc --noEmit) — logged for Plan 03, not fixed in BoardSmith source
 
 ### Pending Todos
 
@@ -240,7 +241,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T03:18:21.766Z
+Last session: 2026-07-05T13:50:15.942Z
 Stopped at: Completed 148-03-PLAN.md
 Resume file: 
 None
