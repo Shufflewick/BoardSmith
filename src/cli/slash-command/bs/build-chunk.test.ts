@@ -577,6 +577,59 @@ describe('BUILD-11 — close', () => {
   });
 });
 
+describe('BUILD-13 — git protocol / handoff / lock citation, no restatement', () => {
+  const CITE_PHRASE = 'cite `state-machine.md`';
+
+  /**
+   * Checks EVERY occurrence of `anchor` in `text` (case-insensitive) and passes if at least one
+   * occurrence has `CITE_PHRASE` within 250 chars either before or after it — the citation
+   * sentence may name the section before or after the "cite `state-machine.md`" phrase, and a
+   * heading occurrence of the same words (e.g. "## Git Protocol") is expected to exist alongside
+   * the citing sentence, not instead of it.
+   */
+  function assertCitedNearby(text: string, anchor: string) {
+    const lowerText = text.toLowerCase();
+    const lowerAnchor = anchor.toLowerCase();
+    const lowerCite = CITE_PHRASE.toLowerCase();
+    let searchFrom = 0;
+    let found = false;
+    let occurrences = 0;
+    for (;;) {
+      const idx = lowerText.indexOf(lowerAnchor, searchFrom);
+      if (idx === -1) break;
+      occurrences += 1;
+      const nearby = lowerText.slice(Math.max(0, idx - 250), idx + anchor.length + 250);
+      if (nearby.includes(lowerCite)) {
+        found = true;
+        break;
+      }
+      searchFrom = idx + anchor.length;
+    }
+    expect(occurrences, `build-chunk.md must mention "${anchor}"`).toBeGreaterThan(0);
+    expect(found, `"${anchor}" must be cited via "${CITE_PHRASE}" nearby at least once, not restated`).toBe(true);
+  }
+
+  it('cites state-machine.md "Git Protocol" by name, not restated', () => {
+    const buildChunk = read('build-chunk.md');
+    assertCitedNearby(buildChunk, 'Git Protocol');
+  });
+
+  it('cites state-machine.md "Session Lock" by name, not restated', () => {
+    const buildChunk = read('build-chunk.md');
+    assertCitedNearby(buildChunk, 'Session Lock');
+  });
+
+  it('cites state-machine.md "Session Handoff Seams" by name, not restated', () => {
+    const buildChunk = read('build-chunk.md');
+    assertCitedNearby(buildChunk, 'Session Handoff Seams');
+  });
+
+  it('quotes the chunk-<slug>/step-<name> commit convention as a worked example', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toContain('chunk-<slug>/step-<name>');
+  });
+});
+
 describe('UIQ-05 — final-acceptance', () => {
   it('documents all seven design-QA checks', () => {
     const fa = read('build/final-acceptance.md');
@@ -641,7 +694,7 @@ describe('cross-file consistency — status enum + stale marker byte-identical',
   });
 });
 
-describe('cross-file consistency — Steps 4-10 forward-reference stubs (no file-existence check)', () => {
+describe('cross-file consistency — Steps 4-10 forward-reference stubs, now retired (skill complete)', () => {
   it('build-chunk.md names each of build/{build,test,audit,repair,playtest,revise,close}.md as plain text', () => {
     const buildChunk = read('build-chunk.md');
     for (const step of ['build', 'test', 'audit', 'repair', 'playtest', 'revise', 'close']) {
@@ -649,10 +702,10 @@ describe('cross-file consistency — Steps 4-10 forward-reference stubs (no file
     }
   });
 
-  it('carries the "authored in Phase 146" forward-reference marker', () => {
+  it('carries ZERO "authored in Phase 146" forward-reference markers (skill complete)', () => {
     const buildChunk = read('build-chunk.md');
     for (const marker of FORWARD_REFERENCE_MARKERS) {
-      expect(buildChunk, `build-chunk.md must contain "${marker}"`).toContain(marker);
+      expect(buildChunk, `build-chunk.md must NOT contain "${marker}" — the skill is complete`).not.toContain(marker);
     }
   });
 });
@@ -687,10 +740,10 @@ describe('cross-file consistency — every current-phase referenced path resolve
     });
   }
 
-  it('REFERENCED_PATHS does NOT include any Phase 146 step file', () => {
-    const excluded = ['build/playtest.md', 'build/revise.md', 'build/close.md'];
-    for (const path of excluded) {
-      expect((REFERENCED_PATHS as readonly string[]).includes(path)).toBe(false);
+  it('REFERENCED_PATHS now includes the four Phase 146 step files', () => {
+    const included = ['build/playtest.md', 'build/revise.md', 'build/close.md', 'build/final-acceptance.md'];
+    for (const path of included) {
+      expect((REFERENCED_PATHS as readonly string[]).includes(path)).toBe(true);
     }
   });
 });
