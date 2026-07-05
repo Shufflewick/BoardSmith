@@ -226,7 +226,7 @@ Plans:
 
 **Plans**: 3 plans (3 waves — sequential dry-run)
 - [x] 149-01-PLAN.md — Ingest leg: subagents follow bs/ingest-rules.md + ingest/* against Go Fish → scaffold + rulebook slices + SKETCH.md + chunk-1 CHUNK.md (interview-fallback path)
-- [ ] 149-02-PLAN.md — Chunk-1 build leg: follow bs/build-chunk.md steps (investigate→redteam→build→test, audit→repair) → generated chunk-1 code + REAL automated checks + hidden-hand leak check; ask/playtest gates captured
+- [x] 149-02-PLAN.md — Chunk-1 build leg: follow bs/build-chunk.md steps (investigate→redteam→build→test, audit→repair) → generated chunk-1 code + REAL automated checks + hidden-hand leak check; ask/playtest gates captured
 - [ ] 149-03-PLAN.md — Compare vs hand-built go-fish, fix pipeline defects at source (bs/ drift suites green), write 149-DRYRUN-REPORT.md + create HUMAN-UAT playtest item
 
 ### Progress
@@ -245,7 +245,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 4/4 | Complete    | 2026-07-05 |
 | 147. `/bs-check-status` & `/bs-insert-chunk` | 2/2 | Complete    | 2026-07-05 |
 | 148. Distribution — Installer & `/bs-generate-ai` | 3/3 | Complete    | 2026-07-05 |
-| 149. End-to-End Dry-Run Validation | 1/3 | In Progress|  |
+| 149. End-to-End Dry-Run Validation | 2/3 | In Progress|  |
 
 ### Shipped milestones
 

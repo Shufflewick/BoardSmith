@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
-stopped_at: Completed 148-03-PLAN.md
-last_updated: "2026-07-05T13:51:34.287Z"
+stopped_at: Completed 149-02-PLAN.md
+last_updated: "2026-07-05T14:25:04.052Z"
 last_activity: 2026-07-05
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 30
-  completed_plans: 28
+  completed_plans: 29
   percent: 90
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 149 (End-to-End Dry-Run Validation) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-05
 
-Progress: [█████████░] 93%
+Progress: [██████████] 97%
 
 ## Milestones
 
@@ -230,6 +230,7 @@ Recent decisions affecting current work:
 - [Phase 148]: 148-02: Added InstallOptions.skipLink to gate the npm-link global side-effect; verified via a temporary smoke test that install-to-temp-dir performs zero execSync calls when skipLink is true
 - [Phase 148-03]: Used beforeAll/afterAll temp-dir install (single real installClaudeCommand call) rather than per-test try/finally; skip-list extended for line-wrapped refs, glob placeholders, and build/light.md's documented-nonexistent reference
 - [Phase 149-01]: Applied a scratch-project-local tsconfig.json workaround (vite/client types) to unblock the ingest dry-run after discovering a real scaffold-template defect (fresh npx boardsmith init fails tsc --noEmit) — logged for Plan 03, not fixed in BoardSmith source
+- [Phase 149]: 149-02: chose pond-empty as chunk-1's depth-cut isFinished() terminal condition (book-forming out of scope makes all-hands-empty unreachable) — Found via simulateRandomGames timedOut on every game; fixed and re-verified 0 crashed/stuck/timedOut/exceededMaxActions
 
 ### Pending Todos
 
@@ -241,8 +242,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T13:50:15.942Z
-Stopped at: Completed 148-03-PLAN.md
+Last session: 2026-07-05T14:25:04.045Z
+Stopped at: Completed 149-02-PLAN.md
 Resume file: 
 None
 
