@@ -562,3 +562,5 @@
 **What's next:** Milestone complete. Project goals achieved.
 
 ---
+
+- **v4.6 BS Skills (Rulebook-Driven Game Building)** — SHIPPED 2026-07-05 — Phases 140-149, 34/34 requirements, audit passed. `bs-` skill family (rulebook→game pipeline) replaces `/design-game`; proven end-to-end vs Go Fish. Known deferred items at close: 7 (see STATE.md Deferred Items).

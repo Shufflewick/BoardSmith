@@ -252,3 +252,17 @@ None
 
 v4.6 roadmap ready (10 phases, 34 requirements, 100% coverage). Next: `/gsd:plan-phase 140` to break down the first phase (Library Prerequisite — `useAnnouncer()`, the a11y-floor-enabling composable that gates everything downstream).
 </content>
+
+## Deferred Items
+
+Items acknowledged and deferred at v4.6 milestone close on 2026-07-05:
+
+| Category | Item | Status |
+|----------|------|--------|
+| verification | 149 browser playtest (149-HUMAN-UAT.md) | human_needed — deferred by design (VAL-01's inherent human gate; user chose to ship with it outstanding) |
+| uat | 149-HUMAN-UAT.md (Go Fish chunk-1 browser playtest) | pending — surfaces in /gsd:audit-uat |
+| debug | knowledge-base | pre-existing, unrelated to v4.6 |
+| todo | dev-host-ai-open-seat-not-auto-playing | pre-existing dev-host tech debt, unrelated to v4.6 |
+| todo | dev-host-debug-toggle-panel-not-opening | pre-existing dev-host tech debt, unrelated to v4.6 |
+| todo | dev-standalone-shell-height-gap | pre-existing dev-host tech debt, unrelated to v4.6 |
+| todo | v4-slate-token-and-a11y-polish | pre-existing polish todo, unrelated to v4.6 |
