@@ -124,16 +124,14 @@ reorder:
 | test | `build/test.md` |
 | audit | `build/audit.md` |
 | repair | `build/repair.md` |
-| playtest | `build/playtest.md` — authored in Phase 146 |
-| revise | `build/revise.md` — authored in Phase 146 |
-| close | `build/close.md` — authored in Phase 146 |
+| playtest | `build/playtest.md` |
+| revise | `build/revise.md` |
+| close | `build/close.md` |
 
-Steps 8–10 (`playtest`/`revise`/`close`) are named here as forward references only — this router
-does not implement their prose, and the drift test that pins this file does not require
-`build/{playtest,revise,close}.md` to exist yet, only that this table names each path and its
-phase marker. `build/build.md`, `build/test.md`, `build/audit.md`, and `build/repair.md` are now
-live dispatches. When Phase 146 lands, each remaining reference file is authored and this table's
-forward references become live dispatches with no change to this router's routing logic.
+All 10 steps now have live dispatch targets: `build/investigate.md`, `build/redteam.md`,
+`build/ask.md`, `build/build.md`, `build/test.md`, `build/audit.md`, `build/repair.md`,
+`build/playtest.md`, `build/revise.md`, and `build/close.md` each implement their own step's
+prose, and this router does no more than route to the right one.
 
 ### Light path (BUILD-12 — routing, not a step)
 
@@ -149,8 +147,9 @@ restate the transition rule beyond this pointer): the light path has no `ask` st
 when the user accepts the proposal and `build` + `test` complete. Because the light path has no
 `close` step, `playtest` performs `close`'s bookkeeping for light chunks (bisect-anchor commit
 hash, Status line update CHUNK.md-then-SKETCH.md, decision rollup, and detailing the next 2-3
-sketch-level tail entries — `close`'s duty, authored in Phase 146; Step 2's lazy tail-entry
-detailing above covers any entry this bookkeeping misses).
+sketch-level tail entries — `close`'s duty; see `build/close.md`'s `## Bookkeeping Sequence` for
+the exact sequence a light-path chunk runs on its own behalf; Step 2's lazy tail-entry detailing
+above covers any entry this bookkeeping misses).
 
 ## Step Group 1 Dispatch — `{investigate, redteam, ask}`
 
@@ -203,13 +202,54 @@ written so far (claims list, the `## Redteam Rounds` entry, checked-off Step Che
 second, per `state-machine.md` "Write Order" — and any `RULINGS.md`/`ASSETS.md` entries) is
 saved in the game folder — non-programmer handoff.
 
-## Step Groups 2–4 (forward reference)
+## Step Groups 2–3 (dispatch prose lives in their own reference files)
 
-Group 2 `{build, test}`, group 3 `{audit, repair}`, and group 4 `{playtest, one revise round,
-close}` are dispatched identically in shape once their reference files exist — this router's
-Step 3 dispatch table above already names each target file and its owning phase. Every group ends
-the same way group 1 does: print the exact next command to run and confirm the game folder is
-saved.
+Group 2 `{build, test}` and group 3 `{audit, repair}` are live dispatches, but unlike group 1
+their per-step delegation, persistence discipline, and end-of-group close are authored inside
+`build/build.md`, `build/test.md`, `build/audit.md`, and `build/repair.md` themselves rather than
+restated here — those four files already carry their own "Referenced by `build-chunk.md` Step N"
+framing and own their own round-persistence rules. This router's Step 3 dispatch table above names
+each target file; there is nothing further to add here for groups 2-3.
+
+## Step Group 4 Dispatch — `{playtest, one revise round, close}`
+
+The last of the four session step groups (`state-machine.md` "Session Handoff Seams"). A single
+session runs at most one step group, then hands off, same discipline as group 1.
+
+**Every step persists before the next starts:** `playtest` checks off its own Step Checklist item
+as part of its Verified-Checklist gate write (see `build/playtest.md` "The Verified Gate"); a
+`revise` round is persisted as a new `### Revise N` entry in CHUNK.md's `## Revision Rounds`
+before looping back to `playtest` (see `build/revise.md` "Round-Bounding and Persistence"); `close`
+persists the verified commit hash and decision rollup before proposing the next chunk (see
+`build/close.md` "Bookkeeping Sequence"). An unchecked or unpersisted step is re-run from scratch
+on a cold resume — never leave a completed step's write pending.
+
+**playtest:** Delegate the entire human-verification gate to `build/playtest.md` — no subagent,
+the orchestrator narrates the numbered click-by-click test script directly to the human and
+records their item-by-item confirmation. If the human confirms the whole script clean, this group
+proceeds to `close`. If the human reports any issue, this group proceeds to `revise` instead.
+
+**revise (only if playtest surfaced an issue):** Delegate the 4-category triage to
+`build/revise.md` — every feedback item the human reported gets exactly one of the four
+dispositions (this-chunk defect, future scope, not-built-yet, rules change), appended to CHUNK.md's
+`## Revision Rounds`. Revise loops back to `playtest` for a targeted re-test of just the items this
+round fixed, never a blind full re-test, until every this-chunk-defect item has a recorded
+disposition.
+
+**close:** Once `playtest` confirms the chunk clean (with or without an intervening `revise`
+loop), delegate the bookkeeping and sketch-tail delta gate to `build/close.md` — recording the
+verified commit hash, rolling up decisions, and presenting the sketch tail's delta (never a silent
+rewrite) for the user's explicit approval before writing SKETCH.md's `## Ordered Chunk List`. A
+light-path chunk (`build, test, playtest`, no `close` step of its own) runs this same bookkeeping
+sequence from inside its own `playtest` step instead — see `build/close.md`'s `## Bookkeeping
+Sequence` and the light-path note above.
+
+End of group 4 (and of this chunk's lifecycle): print the exact next command to run
+(`/bs-build-chunk`) and confirm everything written so far (Verified Checklist, `## Revision
+Rounds` entries if any, `## Verified Commit Hash`, `DECISIONS.md` rollup, the approved sketch-tail
+delta, `Status: verified`/`verified (user-waived)`, SKETCH.md's updated derived-status pointer —
+CHUNK.md first, SKETCH.md second) is saved in the game folder — non-programmer handoff, same as
+group 1's close.
 
 ## Session Handoff Seams
 
@@ -260,12 +300,15 @@ This skill delegates its heavyweight, step-scoped prose to:
   triage
 - `build/design-review.md` — the UI-chunk screenshot design-review agent dispatched by audit
   for `ui: touches|major` chunks; findings land in the same Findings Ledger
-
-And, forward-referenced only (not yet authored):
-
-- `build/playtest.md` — authored in Phase 146
-- `build/revise.md` — authored in Phase 146
-- `build/close.md` — authored in Phase 146
+- `build/playtest.md` — the human-verification gate, no subagent, numbered click-by-click test
+  script + item-by-item Verified Checklist
+- `build/revise.md` — 4-category feedback triage loop, append-only Revision Rounds, loops back to
+  playtest for a targeted re-test
+- `build/close.md` — verified-commit-hash bookkeeping, decision rollup, and the sketch-tail delta
+  gate before proposing the next chunk
+- `build/final-acceptance.md` — the sketch's mandated-chunk design-QA pass (6-point check +
+  fresh-context automatable-checks dispatch), run in place of a normal chunk's `{playtest, revise,
+  close}` group when the sketch's `## Mandated Chunks` final-acceptance chunk is next
 
 And to the shared reference files that ship with every `bs-` skill:
 
