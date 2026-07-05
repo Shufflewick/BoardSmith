@@ -129,6 +129,35 @@ shape: same `{ findingId, lens, description, citation, severity }` fields and th
 CHUNK.md rather than any earlier chunk's. This is not a separate ledger and not a separate repair
 track.
 
+## Sub-Step Resumability and the Handoff Seam Before `playtest`
+
+The `final-acceptance` content step above (coverage check + 7-point design-QA pass) is by far the
+heaviest single step in the skill — a coverage check, a fresh-context agent dispatch (serve →
+capture → kill across 3 breakpoints × 2 themes + end-to-end keyboard drag-drop), two human-narrated
+checks (VoiceOver + colorblind), and a fix-or-refute repair loop. To keep a session bounded to at
+most one step group (`state-machine.md` "Session Handoff Seams"), the final-acceptance chunk carries
+an **extra** handoff seam that ordinary chunks do not: the leading `final-acceptance` content step is
+its own session, and `{playtest, revise, close}` runs as the next session. The seam sits between
+`final-acceptance` and `playtest` — this content step is never packed into the same session as the
+human playtest gate and its revise loop.
+
+**Persist sub-parts as they land**, so a mid-pass crash resumes mid-pass rather than re-running the
+whole step from scratch (mirrors the per-round persistence `## Redteam Rounds` / `## Findings
+Ledger` / `## Revision Rounds` gives every other heavyweight step):
+
+- The coverage-check result — each uncovered non-variant slice, or "complete" — is recorded in
+  CHUNK.md before the 7-point pass starts.
+- Every agent-dispatch finding lands in `## Findings Ledger` (with its stable `F<n>` id and
+  disposition) as it is triaged, before the human-narrated checks run — a crash after the dispatch
+  never re-dispatches the serve/capture/kill agent.
+- Each human-narrated check (VoiceOver, colorblind) is recorded as it completes, so a crash after
+  the agent dispatch but before or between the human checks resumes at the first unrecorded human
+  check rather than re-asking the human for checks already done.
+
+The `final-acceptance` content-step Step Checklist item is checked off **only** once all of the
+above have landed; until then a resume re-enters this step and continues from the first unrecorded
+sub-part, never from the top.
+
 ## Downstream Shape (cite, never restate)
 
 Once the coverage check and all seven design-QA points are triaged (fixed, deferred, or

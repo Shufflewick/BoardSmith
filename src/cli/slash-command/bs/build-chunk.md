@@ -283,7 +283,12 @@ on a cold resume — never leave a completed step's write pending.
 check and 7-point design-QA pass (Step 2's "Final-acceptance chunk target" routes here on a cold
 resume). Its output — the finished game played start-to-finish — becomes this chunk's `playtest`
 script; the `{playtest, revise, close}` gate below then runs **on top of** that content, never in
-place of it. An ordinary chunk has no `final-acceptance` item on its Step Checklist and skips this
+place of it. Because this content step is exceptionally heavy, the final-acceptance chunk carries an
+**extra** handoff seam ordinary chunks lack: the `final-acceptance` content step is its own session
+and `{playtest, revise, close}` is the next (`state-machine.md` "Session Handoff Seams"; see
+`build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the
+per-sub-part persistence that makes a mid-pass crash resume mid-pass instead of re-dispatching the
+whole step). An ordinary chunk has no `final-acceptance` item on its Step Checklist and skips this
 step entirely.
 
 **playtest:** Delegate the entire human-verification gate to `build/playtest.md` — no subagent,
