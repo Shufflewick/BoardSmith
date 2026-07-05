@@ -30,9 +30,14 @@ none
 <!-- Declared at proposal time. Full ceremony runs all 10 steps below. Light path is for chunks
      tagged trivial at proposal (e.g. "swap in the real card images") and only runs
      build, test, playtest — skipping investigate/redteam/ask/audit/repair/revise/close's
-     adversarial machinery. The user is told which path is in effect when the chunk is proposed. -->
+     adversarial machinery. The user is told which path is in effect when the chunk is proposed.
+     The `final-acceptance` value is reserved for the sketch's ONE mandated final-acceptance chunk
+     (templates/SKETCH.template.md's "## Mandated Chunks") — it is neither full nor light: its Step
+     Checklist is the fixed 4-item group [final-acceptance, playtest, revise, close], build-chunk.md's
+     "Final-acceptance chunk target" rule (Step 2) owns its routing, and it is exempt from Step 3's
+     full/light ceremony routing. -->
 full
-<!-- Valid values: full | light -->
+<!-- Valid values: full | light | final-acceptance -->
 
 ## Step Checklist
 <!-- Full-ceremony step names (exact, in order) — do not paraphrase, do not reorder:

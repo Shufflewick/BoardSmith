@@ -145,9 +145,13 @@ checklist position decides, per the first-incomplete-step rule above.
 
 ## Step 3: Ceremony Routing
 
-Every chunk declares its ceremony in `CHUNK.md`'s `## Ceremony` field: `full` or `light`
-(`state-machine.md` "Step Names"). Quote both step lists verbatim — never paraphrase, never
-reorder:
+Every chunk declares its ceremony in `CHUNK.md`'s `## Ceremony` field: `full`, `light`, or — for
+the sketch's one mandated final-acceptance chunk only — `final-acceptance` (`state-machine.md`
+"Step Names"). **The `final-acceptance` chunk is exempt from this full/light ceremony routing:**
+its step group is fixed by the "Final-acceptance chunk target" rule in Step 2
+(`[final-acceptance, playtest, revise, close]`), so when `## Ceremony: final-acceptance` is read
+here, skip the full/light routing below and defer to that Step 2 rule instead. For every other
+chunk, quote both step lists verbatim — never paraphrase, never reorder:
 
 **Full ceremony (10 steps, exact):**
 
