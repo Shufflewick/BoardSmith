@@ -183,7 +183,11 @@ Plans:
   2. `/bs-insert-chunk` can add, reorder, split, or remove chunks, re-validating dependency order against citations and diffing the new chunk's citations against closed chunks to flag overlaps
   3. `/bs-insert-chunk` marks any already-detailed pending `CHUNK.md` as stale-needs-re-derivation and bumps the sketch version stamp so a concurrently resumed build session detects the sketch changed under it
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 147-01-PLAN.md — /bs-check-status (STAT-01): read-only 7-item status report + status-tools.test.ts scaffold
+- [ ] 147-02-PLAN.md — /bs-insert-chunk (STAT-02): sketch editor (4 ops, stale-mark, version bump) + retire build-chunk.md Phase-147 forward-refs
 
 #### Phase 148: Distribution — Installer & `/bs-generate-ai`
 
