@@ -106,6 +106,10 @@ None - no external service configuration required.
 - No `boardsmith dev` process was left running (killed and confirmed via `pgrep`); `~/BoardSmithGames/go-fish/` (hand-built reference) was never written to — confirmed clean (`git status --short` empty) at the end of this plan.
 - SKETCH.md/CHUNK.md byte-match their templates' PARSE CONTRACT headings in order — Plan 02 can cold-resume from this state without ambiguity.
 
+## Self-Check: PASSED
+
+All created files confirmed present on disk (go-fish-dryrun project files + this SUMMARY.md); all task commit hashes (`55b7053`, `5bd1f61`, `8c5f316`, `d675d0e` in go-fish-dryrun's repo; `62f426a2` in the BoardSmith repo) confirmed present via `git log`.
+
 ---
 *Phase: 150-regenerate-the-pipeline-built-go-fish-stable-location*
 *Completed: 2026-07-05*

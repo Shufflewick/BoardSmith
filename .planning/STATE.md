@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
-status: roadmap-complete
-stopped_at: v4.6 reopened for playtest follow-up (Phases 150-151); ready to plan Phase 150
-last_updated: 2026-07-05T14:46:39.986Z
+status: executing
+stopped_at: Completed 149-02-PLAN.md
+last_updated: "2026-07-05T23:50:23.171Z"
 last_activity: 2026-07-05
 progress:
-  total_phases: 12
-  completed_phases: 10
-  total_plans: 30
-  completed_plans: 30
-  percent: 83
+  total_phases: 2
+  completed_phases: 0
+  total_plans: 4
+  completed_plans: 1
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Milestone complete
+**Current focus:** Phase 150 — regenerate-the-pipeline-built-go-fish-stable-location
 
 ## Current Position
 
-Phase: 149
-Plan: Not started
-Status: Milestone complete
+Phase: 150 (regenerate-the-pipeline-built-go-fish-stable-location) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-07-05
 
-Progress: [██████████] 100%
+Progress: [███░░░░░░░] 25%
 
 ## Milestones
 
@@ -232,6 +232,9 @@ Recent decisions affecting current work:
 - [Phase 149-01]: Applied a scratch-project-local tsconfig.json workaround (vite/client types) to unblock the ingest dry-run after discovering a real scaffold-template defect (fresh npx boardsmith init fails tsc --noEmit) — logged for Plan 03, not fixed in BoardSmith source
 - [Phase 149]: 149-02: chose pond-empty as chunk-1's depth-cut isFinished() terminal condition (book-forming out of scope makes all-hands-empty unreachable) — Found via simulateRandomGames timedOut on every game; fixed and re-verified 0 crashed/stuck/timedOut/exceededMaxActions
 - [Phase 149]: D1/D2 pipeline defects fixed at source in CLI scaffold/init code (not skill markdown); F2/F3 documented as headless-dry-run friction, not defects
+- [Phase 150]: boardsmith.json displayName corrected to designer's original 'Go Fish' rather than the lossy kebab-case round-trip, per scaffold.md's Display Name correction rule
+- [Phase 150]: Chunk-1 CHUNK.md pre-documents the pond-empty terminal-condition depth-cut (claim 6) ahead of Plan 02's build leg, mirroring the fix the 149 dry-run had to make reactively
+- [Phase 150]: 150-01 task commits landed inside go-fish-dryrun's own git repo (created by boardsmith init), not the BoardSmith repo, since sub_repos is unconfigured and the plan's deliverables live entirely outside BoardSmith
 
 ### Pending Todos
 
@@ -243,7 +246,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T14:33:10.404Z
+Last session: 2026-07-05T23:49:02.366Z
 Stopped at: Completed 149-02-PLAN.md
 Resume file: 
 None
@@ -270,6 +273,7 @@ Items acknowledged and deferred at v4.6 milestone close on 2026-07-05:
 ## Current Position (v4.6 reopened — for the fresh context)
 
 Milestone v4.6 shipped + tagged, then reopened to close VAL-01's deferred human playtest.
+
 - **Phase 150 (Regenerate the pipeline-built Go Fish)** — READY TO PLAN. The Phase-149 dry-run's generated Go Fish lived only in a `/tmp` scratch dir that was deleted at cleanup, so there is no pipeline-built game to playtest. Phase 150 re-runs the ingest + chunk-1 build legs of the bs- pipeline against Go Fish into a STABLE location (recommend `~/BoardSmithGames/go-fish-dryrun/`, NOT `/tmp`), leaving it compiling+serving and NOT deleting it. Hand-built `~/BoardSmithGames/go-fish/` stays READ-ONLY.
 - **Phase 151 (Human playtest)** — after 150, the user walks `149-HUMAN-UAT.md` in the browser (verification `human_needed`).
 

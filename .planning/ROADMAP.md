@@ -19,7 +19,7 @@ _Prior milestones (v0.1–v4.5) archived under `.planning/milestones/`._
   2. The regenerated project compiles (`tsc --noEmit` clean), passes its generated tests + `simulateRandomGames` to a terminal state, proves opponent hands don't leak (`diffPlayerViews`/`assertNoHiddenInfoLeak`), and `npx boardsmith dev` serves it (server then killed — never left running).
   3. The regenerated location + the exact dev-server run command are recorded, and `149-HUMAN-UAT.md`'s playtest script is updated to point at this location. The generated project is NOT deleted (it is the artifact of the pending playtest).
 **Plans**: 4 plans (waves 1→4, strictly sequential — each writes into the same durable project dir)
-- [ ] 150-01-PLAN.md — Ingest leg: scaffold + interview-fallback + sketch-derivation into `~/BoardSmithGames/go-fish-dryrun/`
+- [x] 150-01-PLAN.md — Ingest leg: scaffold + interview-fallback + sketch-derivation into `~/BoardSmithGames/go-fish-dryrun/`
 - [ ] 150-02-PLAN.md — Chunk-1 build (code): investigate → redteam → ask → build (generates `src/rules/*` + real-controller UI)
 - [ ] 150-03-PLAN.md — Verify + harden: test → audit → repair (tsc/lint/tests/sim/a11y/leak-check, fix depth-cut bug)
 - [ ] 150-04-PLAN.md — Record location + run command, repoint `149-HUMAN-UAT.md`, verify READ-ONLY + preservation
@@ -40,7 +40,7 @@ _Prior milestones (v0.1–v4.5) archived under `.planning/milestones/`._
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 150 | 0 | Planned (4 plans) | — |
+| 150 | 1/4 | In Progress|  |
 | 151 | 0 | Not started | — |
 
 ## Next

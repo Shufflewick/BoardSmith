@@ -9,12 +9,12 @@ into a stable location and complete the human playtest.
 
 ## Requirements (GEN, PLAY)
 
-- [ ] **GEN-01**: The `bs-` pipeline regenerates the Go Fish chunk-1 game (ingest + core-event-loop build via the real skills) into a STABLE, non-throwaway location that survives cleanup (e.g. `~/BoardSmithGames/go-fish-dryrun/`), leaving a compiling+serving project and a recorded dev-server run command — this is the pipeline's OUTPUT, distinct from the hand-built `~/BoardSmithGames/go-fish/` reference.
+- [x] **GEN-01**: The `bs-` pipeline regenerates the Go Fish chunk-1 game (ingest + core-event-loop build via the real skills) into a STABLE, non-throwaway location that survives cleanup (e.g. `~/BoardSmithGames/go-fish-dryrun/`), leaving a compiling+serving project and a recorded dev-server run command — this is the pipeline's OUTPUT, distinct from the hand-built `~/BoardSmithGames/go-fish/` reference.
 - [ ] **PLAY-01**: A human playtests the pipeline-generated Go Fish in the browser using the `149-HUMAN-UAT.md` script (updated to point at the regenerated location), records the item-by-item result, and thereby closes VAL-01's deferred human gate.
 
 ## Traceability
 
 | Req | Phase | Status |
 |-----|-------|--------|
-| GEN-01 | Phase 150 | Pending |
+| GEN-01 | Phase 150 | Complete |
 | PLAY-01 | Phase 151 | Pending |
