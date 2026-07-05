@@ -44,10 +44,15 @@ Step 2 does — cite it, do not re-derive the rule independently: the current ch
 entry in the `## Ordered Chunk List` whose derived status is neither `verified` nor `verified
 (user-waived)`. If that entry is still a sketch-level tail entry (no `chunks/<slug>/` directory
 yet), report it as "not yet detailed" rather than reading a CHUNK.md that doesn't exist — do not
-create one; detailing a tail entry is `/bs-build-chunk`'s job. Otherwise, read that chunk's
-`## Step Checklist` and report the current step as the first unchecked `- [ ]` item, using the
-same first-incomplete-step rule `build-chunk.md` Step 2 applies (reuse it verbatim in spirit; do
-not invent new derivation logic).
+create one; detailing a tail entry is `/bs-build-chunk`'s job. If instead that chunk's `Status:`
+reads `stale — re-derive before build` (`state-machine.md` "Status Enum (exact)"), report it as
+"stale — needs re-derivation (run `/bs-insert-chunk` or re-derive)" and do NOT report a step off its
+`## Step Checklist`: a stale chunk's checklist is invalid pending re-derivation, so `build-chunk.md`
+Step 2 stops routing on it rather than resuming it as an ordinary pending chunk (`build-chunk.md`
+"Status Enum and Stale Marker") — reporting a "current step" off an invalid checklist would be
+bogus. Otherwise, read that chunk's `## Step Checklist` and report the current step as the first
+unchecked `- [ ]` item, using the same first-incomplete-step rule `build-chunk.md` Step 2 applies
+(reuse it verbatim in spirit; do not invent new derivation logic).
 
 **3. Outstanding playtest feedback.** If the current chunk is not yet detailed (a sketch-level tail
 entry with no `chunks/<slug>/CHUNK.md` yet — see the same guard in Item 2), report

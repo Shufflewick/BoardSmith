@@ -96,6 +96,18 @@ describe('STAT-01 — check-status.md read-only status reader', () => {
     expect(checkStatus).toMatch(/current step|first unchecked/i);
   });
 
+  it('item 2 carves out a stale current chunk, reporting re-derivation not a step (WR-04)', () => {
+    const checkStatus = read('check-status.md');
+    // A chunk whose Status reads the stale marker has an invalid checklist —
+    // build-chunk.md Step 2 stops routing on it. Item 2 must NOT report a
+    // "current step" off it; it reports the re-derivation carve-out instead.
+    // Pins the WR-04 fix so the stale case cannot silently fall back to
+    // reading an invalid checklist.
+    expect(checkStatus).toContain(STALE_MARKER);
+    expect(checkStatus).toContain('stale — needs re-derivation');
+    expect(checkStatus).toMatch(/do NOT report a step/i);
+  });
+
   it('enumerates report item 3: outstanding playtest feedback', () => {
     const checkStatus = read('check-status.md');
     expect(checkStatus).toMatch(/outstanding.*(playtest|feedback)/i);
