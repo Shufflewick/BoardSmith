@@ -210,7 +210,7 @@ Plans:
 **Plans**: 3 plans
 
 - [x] 148-01-PLAN.md — Skill content: Agent Skills frontmatter + ${CLAUDE_SKILL_DIR} ref-anchoring on 5 entry points, bs-generate-ai reframe, delete design-game sources
-- [ ] 148-02-PLAN.md — Installer rewire: fs.cp Agent Skills copy-tree (.test.ts excluded), bs-generate-ai emit, aspects placement, purge all design-game from src/cli
+- [x] 148-02-PLAN.md — Installer rewire: fs.cp Agent Skills copy-tree (.test.ts excluded), bs-generate-ai emit, aspects placement, purge all design-game from src/cli
 - [ ] 148-03-PLAN.md — Real install-to-temp-dir test (layout + references-resolve + no-residual + rename) + full-suite-green + zero-dep gate
 
 #### Phase 149: End-to-End Dry-Run Validation
@@ -241,7 +241,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | 145. `/bs-build-chunk` — Audit & Repair with Design Review | 2/2 | Complete    | 2026-07-05 |
 | 146. `/bs-build-chunk` — Playtest, Revise, Close & Final Acceptance | 4/4 | Complete    | 2026-07-05 |
 | 147. `/bs-check-status` & `/bs-insert-chunk` | 2/2 | Complete    | 2026-07-05 |
-| 148. Distribution — Installer & `/bs-generate-ai` | 1/3 | In Progress|  |
+| 148. Distribution — Installer & `/bs-generate-ai` | 2/3 | In Progress|  |
 | 149. End-to-End Dry-Run Validation | 0/TBD | Not started | - |
 
 ### Shipped milestones

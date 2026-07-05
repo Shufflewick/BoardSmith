@@ -4,13 +4,13 @@ milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
 stopped_at: Completed 148-01-PLAN.md
-last_updated: "2026-07-05T03:06:36.368Z"
+last_updated: "2026-07-05T03:12:16.247Z"
 last_activity: 2026-07-05
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 27
-  completed_plans: 25
+  completed_plans: 26
   percent: 80
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 148 (Distribution — Installer & /bs-generate-ai) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-05
 
-Progress: [█████████░] 93%
+Progress: [██████████] 96%
 
 ## Milestones
 
@@ -226,6 +226,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 147-02]: Mandated-Chunks invariant guard folded into op (a) rather than a standalone fifth check
 - [Phase ?]: [Phase 147-02]: build-chunk.md line 76's parenthetical check-status pointer left unchanged -- correct live pointer, not one of the two Step-1 stopgap bullets targeted for retirement
 - [Phase 148]: 148-01: kept the pinned cite-state-machine.md citation phrase bare (unanchored) in build-chunk.md/check-status.md/insert-chunk.md since anchoring it broke BUILD-13 assertCitedNearby's 250-char window
+- [Phase 148]: 148-02: Scoped design-game residual grep to installer source (install-claude-command.ts) + cli.ts, matching Plan 01's identical scoping decision for legitimate migration-prose files in bs/ingest-rules.md and bs/ingest/*.md
+- [Phase 148]: 148-02: Added InstallOptions.skipLink to gate the npm-link global side-effect; verified via a temporary smoke test that install-to-temp-dir performs zero execSync calls when skipLink is true
 
 ### Pending Todos
 
@@ -237,10 +239,10 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T03:06:36.360Z
+Last session: 2026-07-05T03:10:54.205Z
 Stopped at: Completed 148-01-PLAN.md
 Resume file: 
-Next action: Phase 145 complete (2/2 plans) — ready for phase verification (`/gsd:verify-phase 145`), then continue to Phase 146 (playtest/revise/close)
+None
 
 ## Operator Next Steps
 
