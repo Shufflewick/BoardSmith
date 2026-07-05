@@ -207,7 +207,11 @@ Plans:
   2. Running install removes the `design-game` template entirely, with no residual references left in the installed set
   3. `/generate-ai` is renamed `/bs-generate-ai`, keeps working as an AI-opponent generator, and is positioned/reachable as a late sketch chunk once game-end/scoring exists
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+- [ ] 148-01-PLAN.md — Skill content: Agent Skills frontmatter + ${CLAUDE_SKILL_DIR} ref-anchoring on 5 entry points, bs-generate-ai reframe, delete design-game sources
+- [ ] 148-02-PLAN.md — Installer rewire: fs.cp Agent Skills copy-tree (.test.ts excluded), bs-generate-ai emit, aspects placement, purge all design-game from src/cli
+- [ ] 148-03-PLAN.md — Real install-to-temp-dir test (layout + references-resolve + no-residual + rename) + full-suite-green + zero-dep gate
 
 #### Phase 149: End-to-End Dry-Run Validation
 
