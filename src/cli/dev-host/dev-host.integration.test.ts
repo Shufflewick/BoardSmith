@@ -14,6 +14,7 @@ import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
 import { executeOp, ErrorCode, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type ClientInbound } from './multiplayer-host.js';
+import { createDevHostConnectionHandler } from './connection-handler.js';
 import { createDevHostClient, type DevHostInboundMessage } from '../../client/dev-host-client.js';
 
 /**
@@ -307,16 +308,16 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
   });
 
   describe('stale close (DEF-C transport-layer race)', () => {
-    // Standalone real WebSocketServer + MultiplayerHost, wired with a
-    // connection handler that mirrors dev.ts:739-763 FAITHFULLY: clientId is
-    // read from the `hello` message body (not assigned per-connection like
-    // this file's own beforeAll harness above), so TWO raw sockets can share
-    // ONE clientId string — exactly how a page reload behaves (persisted
-    // clientId in localStorage, DevHost.vue:29-36). The close handler here
-    // carries the same socket-identity guard as dev.ts's real handler
-    // (hand-mirrored, kept in sync per 153-RESEARCH.md Pitfall 3). Before the
-    // fix landed this test failed against the unguarded shape, proving the
-    // DEF-C repro; it now passes with the guard in place.
+    // Standalone real WebSocketServer + MultiplayerHost, wired with the SAME
+    // `createDevHostConnectionHandler` the real dev server (dev.ts) uses — so
+    // clientId is read from the `hello` message body (not assigned
+    // per-connection like this file's own beforeAll harness above), letting TWO
+    // raw sockets share ONE clientId string, exactly how a page reload behaves
+    // (persisted clientId in localStorage, DevHost.vue:29-36). Because the guard
+    // is the literal shared implementation (no hand-mirrored copy), a future
+    // edit that regresses the socket-identity check fails HERE. Before the fix
+    // landed this test failed against the unguarded handler, proving the DEF-C
+    // repro; it now passes with the guard in place.
     let staleWss: WebSocketServer;
     let staleHost: MultiplayerHost;
     let stalePort: number;
@@ -342,41 +343,22 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
 
       staleWss = new WebSocketServer({ port: 0 });
 
+      // Use the SAME connection handler the real dev server runs (dev.ts) — no
+      // hand-mirrored copy. This is what gives the regression test teeth: it
+      // exercises the literal socket-identity guard, so a future edit that
+      // regresses it fails here. The extra socket-tracking wrapper is test-only
+      // cleanup bookkeeping and does not affect the handler under test.
+      const handleConnection = createDevHostConnectionHandler({
+        mpHost: staleHost,
+        clients: staleClients,
+        onError: (err) => {
+          throw err instanceof Error ? err : new Error(String(err));
+        },
+      });
       staleWss.on('connection', (socket) => {
         staleServerSockets.add(socket);
         socket.once('close', () => staleServerSockets.delete(socket));
-        let clientId: string | null = null;
-        socket.on('message', (raw) => {
-          let msg: { type?: string; clientId?: unknown; [key: string]: unknown };
-          try {
-            msg = JSON.parse(raw.toString());
-          } catch {
-            return;
-          }
-          if (msg.type === 'hello') {
-            clientId = typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
-            staleClients.set(clientId, socket);
-            Promise.resolve(staleHost.handleMessage(clientId, { type: 'hello' })).catch((err) => {
-              throw err instanceof Error ? err : new Error(String(err));
-            });
-            return;
-          }
-          if (!clientId) return;
-          Promise.resolve(staleHost.handleMessage(clientId, msg as ClientInbound)).catch((err) => {
-            throw err instanceof Error ? err : new Error(String(err));
-          });
-        });
-        socket.on('close', () => {
-          // Hand-mirrored to dev.ts's close handler (RESEARCH.md Pitfall 3 —
-          // these are two independent, hand-copied implementations that must
-          // be kept in sync). Only tear down if THIS socket still owns the
-          // clientId mapping; a stale close from a superseded (reloaded)
-          // socket must not disconnect the reconnected client.
-          if (clientId && staleClients.get(clientId) === socket) {
-            staleClients.delete(clientId);
-            staleHost.disconnect(clientId);
-          }
-        });
+        handleConnection(socket);
       });
 
       await new Promise<void>((resolve) => staleWss.once('listening', resolve));

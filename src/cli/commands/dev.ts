@@ -10,6 +10,7 @@ import open from 'open';
 
 import type { GameDefinition, Op, OpResult } from '../../session/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
+import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
 import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 
@@ -729,46 +730,19 @@ export async function devCommand(options: DevOptions): Promise<void> {
       wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
     });
 
-    // A rejected message handler must never crash the dev process.
-    const dispatch = (clientId: string, msg: Parameters<typeof mpHost.handleMessage>[1]) => {
-      Promise.resolve(mpHost.handleMessage(clientId, msg)).catch((err) => {
-        console.error(chalk.red(`[boardsmith dev] message '${msg.type}' failed:`), err);
-      });
-    };
-
-    wss.on('connection', (socket) => {
-      let clientId: string | null = null;
-      socket.on('message', (raw) => {
-        let msg: { type?: string; clientId?: unknown; [key: string]: unknown };
-        try {
-          msg = JSON.parse(raw.toString());
-        } catch {
-          return;
-        }
-        if (msg.type === 'hello') {
-          clientId = typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
-          clients.set(clientId, socket);
-          dispatch(clientId, { type: 'hello' });
-          return;
-        }
-        if (!clientId) return; // a client must identify itself via `hello` first
-        dispatch(clientId, msg as Parameters<typeof mpHost.handleMessage>[1]);
-      });
-      socket.on('close', () => {
-        // Only tear down session state if THIS socket is still the currently
-        // registered connection for clientId. A page reload opens a new
-        // socket (same persisted clientId) whose 'hello' can be processed
-        // BEFORE this (older) socket's 'close' event fires — Node gives no
-        // ordering guarantee between them. If a newer connection has already
-        // claimed the mapping, this close is stale: the client has already
-        // reconnected and must not be marked disconnected (would silently
-        // orphan every future broadcast/response to that seat — DEF-C).
-        if (clientId && clients.get(clientId) === socket) {
-          clients.delete(clientId);
-          mpHost.disconnect(clientId);
-        }
-      });
-    });
+    // Per-connection WS handling (hello routing + DEF-C stale-close guard) lives
+    // in one shared, unit-tested factory so the dev server and the DEF-C
+    // regression test run the identical implementation. A rejected message
+    // handler must never crash the dev process — log and continue.
+    wss.on(
+      'connection',
+      createDevHostConnectionHandler({
+        mpHost,
+        clients,
+        onError: (err, msgType) =>
+          console.error(chalk.red(`[boardsmith dev] message '${msgType}' failed:`), err),
+      }),
+    );
 
     const resolvedUrl = vite.resolvedUrls?.local[0];
     const uiPort = resolvedUrl ? parseInt(new URL(resolvedUrl).port || '5173', 10) : port;

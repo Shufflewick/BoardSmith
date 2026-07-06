@@ -32,8 +32,11 @@ This is the end-to-end browser confirmation of the plan-153-01 `dev.ts` socket-i
 **Verdict:** `A_stayed_on_seat1_after_storm: true`, `A_received_broadcast_after_reconnect: true`,
 `A_received_broadcast_on_ai_handoff: true`, **`never_orphaned: true`**.
 
-Screenshot: `153-02-browser-proof.png` (both seats show green "connected" dots in A's view after the
-storm + B's join — A tracked every server change).
+Screenshot: `153-02-browser-proof.png` shows A's view at the FINAL step (after B left → Seat 2 handed
+back to AI): Seat 1 "Player 1" green (A, connected) and Seat 2 "Player 2 (away)" with "Take seat"
+re-offered. That A's view reflects B's departure at all is itself the proof — A kept receiving
+broadcasts through the whole storm→join→leave sequence. The load-bearing evidence is the per-step
+inbound-broadcast tally above (2 → 3 → 4), not the single final frame.
 
 ## Why this proves SC-3
 
