@@ -92,3 +92,5 @@ None - no external service configuration required.
 
 - `AssetImage.vue` now ships from Chunk 0 in every generated game — 152-02 (or whichever plan closes ASSET-01/ASSET-02's remaining half) can build the `bs-build-chunk` skill-level guard that requires custom-UI chunks to actually USE this component for card/piece art instead of a bare `<img>`.
 - No blockers. The generator is pure string-template code with no runtime dependency on a real game, so it composes cleanly with any downstream `bs-build-chunk` skill work.
+
+## Self-Check: PASSED

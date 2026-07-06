@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.7
 milestone_name: Playtest Follow-Up Fixes
-status: planning
-last_updated: "2026-07-06T03:07:17.038Z"
+status: executing
+stopped_at: Completed 152-01-PLAN.md
+last_updated: "2026-07-06T03:43:29.640Z"
 last_activity: 2026-07-06
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 5
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.7 Playtest Follow-Up Fixes — close DEF-A (asset completeness), DEF-C (dev-host reconnect desync), and propagate DEF-B to MERC
+**Current focus:** Phase 152 — asset-completeness-in-bs-build-chunk
 
 ## Current Position
 
-Phase: 152 (Asset Completeness in bs-build-chunk) — ready to plan
-Plan: —
-Status: Roadmap created, awaiting phase planning
-Last activity: 2026-07-06 — v4.7 roadmap created (Phases 152-154, 5/5 requirements mapped)
+Phase: 152 (asset-completeness-in-bs-build-chunk) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-07-06
 
 ## Milestones
 
@@ -247,6 +248,7 @@ Recent decisions affecting current work:
 - [Phase 150-03]: F2 fix: GameTable.vue compares the target pick's wire-flattened choice value directly (c.value === seat), not a nested (choice.value as any)?.value -- pick-handler.ts flattens playerChoices()-sourced {value,display} raw choices rather than re-wrapping them; the nested comparison made the ask action's opponent-hand selection completely non-functional in production, found via a real headless-session keyboard-completion a11y test
 - [Phase 150-03]: F1 fix: DESIGN.md authored retroactively (Direction: Adopt) after discovering Plan 02's ask step skipped the design-ask visual-identity sub-gate despite this chunk being tagged ui: major
 - [Phase ?]: Phase 150: Task 1/3 verification-only, no commits produced; only Task 2's UAT doc edit required a commit
+- [Phase ?]: AssetImage.vue single kind-discriminant component, fallback always rendered underneath
 
 ### Pending Todos
 
@@ -258,8 +260,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-06T00:36:52.622Z
-Stopped at: Completed 150-04-PLAN.md — Phase 150 complete
+Last session: 2026-07-06T03:43:29.633Z
+Stopped at: Completed 152-01-PLAN.md
 Resume file: 
 None
 
