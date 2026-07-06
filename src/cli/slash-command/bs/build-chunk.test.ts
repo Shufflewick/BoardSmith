@@ -357,6 +357,13 @@ describe('BUILD-06 — test step', () => {
     expect(test).toContain('no-element-identity-comparison');
     expect(test).toContain('no-element-array-state');
   });
+
+  it('includes a ui-conditional asset-reachability gate citing asset-scan.ts', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(/asset-reachability/i);
+    expect(test).toMatch(/asset-scan|scanAssetReachability/);
+    expect(test).toMatch(/ui: touches\|major|touches.{0,20}major/i);
+  });
 });
 
 describe('BUILD-07 — audit', () => {
@@ -473,6 +480,12 @@ describe('UIQ-02 — designed placeholders', () => {
   it('states asset swap never changes geometry/layout', () => {
     const build = read('build/build.md');
     expect(build).toMatch(/never change[s]? (the )?geometry|zero[- ]layout[- ]diff/i);
+  });
+
+  it('prohibits a bare asset <img> and mandates AssetImage.vue', () => {
+    const build = read('build/build.md');
+    expect(build).toContain('AssetImage');
+    expect(build).toMatch(/bare.{0,20}(asset )?<img>|<img>.{0,20}bare/i);
   });
 });
 
