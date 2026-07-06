@@ -337,3 +337,13 @@ describe('generateAssetImageVue — onerror reverts to the fallback (never a bro
     expect(out).toMatch(/onError[\s\S]*loaded\.value\s*=\s*false/);
   });
 });
+
+describe('generateAssetImageVue — resets loaded on src change (CR-01 regression)', () => {
+  it('watches props.src and resets loaded to false so a reused AssetImage re-guards', () => {
+    const out = generateAssetImageVue();
+    // Must import watch and watch props.src, resetting loaded — otherwise a reused
+    // instance flashes the stale/unresolved image at full opacity (DEF-A class).
+    expect(out).toMatch(/import\s*\{[^}]*\bwatch\b[^}]*\}\s*from\s*'vue'/);
+    expect(out).toMatch(/watch\(\s*\(\)\s*=>\s*props\.src[\s\S]*loaded\.value\s*=\s*false/);
+  });
+});

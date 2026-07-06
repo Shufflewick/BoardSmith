@@ -65,4 +65,25 @@ describe('PieceRenderer asset fallback (ASSET-01)', () => {
     // The drawn fallback stays in the DOM the whole time (zero-layout-diff).
     expect(wrapper.find('.piece-token').exists()).toBe(true);
   });
+
+  it('resets loaded to false when the resolved src changes (reused element re-guards)', async () => {
+    const wrapper = mount(PieceRenderer, {
+      props: { element: makePieceElement(1), depth: 0 },
+    });
+
+    await wrapper.find('img.piece-image').trigger('load');
+    expect(wrapper.find('img.piece-image').classes()).toContain('is-loaded');
+
+    // Same instance re-bound to a different piece's art must re-guard.
+    await wrapper.setProps({
+      element: {
+        id: 2,
+        className: 'Piece',
+        name: 'black-bishop',
+        attributes: { $images: 'https://example.test/black-bishop.png' },
+      },
+    });
+
+    expect(wrapper.find('img.piece-image').classes()).not.toContain('is-loaded');
+  });
 });

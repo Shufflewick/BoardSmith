@@ -9,13 +9,14 @@
  * flags any bare `<img` tag found outside `AssetImage.vue`'s own definition — the
  * coarse, pit-of-success heuristic locked in 152-CONTEXT.md. Routing art through
  * `<AssetImage>` is the one sanctioned path; anything else is a FAIL regardless
- * of what `src` resolves to, so `boardsmith build`/`boardsmith lint` and any
- * future caller all delegate here rather than growing a second, subtly
- * different regex scanner.
+ * of what `src` resolves to. Today the `bs-build-chunk` skill's `test` step is the
+ * caller (see build/test.md); any future CLI wiring (`boardsmith build`/`lint`)
+ * should delegate here too rather than growing a second, subtly different regex
+ * scanner — the single-source-of-truth pattern `sandbox-scan.ts` established.
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, relative, basename } from 'node:path';
+import { join, relative } from 'node:path';
 
 export interface AssetViolation {
   /** Path relative to the project root. */
@@ -43,7 +44,15 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
   return files;
 }
 
-const BARE_IMG_TAG = /<img\b/;
+// A real <img> tag: `<img` followed by whitespace, `/`, or `>` — case-insensitive
+// (HTML tag names are). The trailing class excludes kebab-case custom elements
+// like `<img-carousel>` (a false positive `\b` would have matched).
+const BARE_IMG_TAG = /<img[\s/>]/i;
+
+// The one sanctioned wrapper, identified by its canonical scaffold-relative path
+// (not just basename) so a stray/second file merely named AssetImage.vue elsewhere
+// cannot bypass the gate.
+const ASSET_IMAGE_RELATIVE_PATH = join('src', 'ui', 'components', 'AssetImage.vue');
 
 /**
  * Scan `<cwd>/src/ui` for bare `<img` tags outside `AssetImage.vue`.
@@ -56,12 +65,12 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
   const violations: AssetViolation[] = [];
 
   for (const filePath of collectSourceFiles(uiDir)) {
+    const relPath = relative(cwd, filePath);
     // AssetImage.vue's own <img> definition is the sanctioned wrapper — excluded
-    // by basename regardless of directory.
-    if (basename(filePath) === 'AssetImage.vue') continue;
+    // by its canonical path, not merely its basename.
+    if (relPath === ASSET_IMAGE_RELATIVE_PATH) continue;
 
     const content = readFileSync(filePath, 'utf-8');
-    const relPath = relative(cwd, filePath);
     const lines = content.split('\n');
     for (let i = 0; i < lines.length; i++) {
       if (BARE_IMG_TAG.test(lines[i])) {

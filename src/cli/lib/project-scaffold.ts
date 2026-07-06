@@ -551,7 +551,7 @@ export function generateAssetImageVue(): string {
  * \`@error\` reverts to the fallback. Fallback and <img> share one aspect-ratio
  * input, so swapping in the real asset causes zero layout change.
  */
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 
 const props = withDefaults(
   defineProps<{
@@ -578,6 +578,16 @@ const props = withDefaults(
 );
 
 const loaded = ref(false);
+
+// Reset when the resolved src changes so an AssetImage reused for a different
+// asset re-guards — otherwise a stale loaded=true would flash the previous (or a
+// new, still-unresolved) image at full opacity before its own load/error fires.
+watch(
+  () => props.src,
+  () => {
+    loaded.value = false;
+  },
+);
 
 function onLoad() {
   loaded.value = true;

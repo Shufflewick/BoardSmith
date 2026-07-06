@@ -66,4 +66,27 @@ describe('CardRenderer asset fallback (ASSET-01)', () => {
     // The drawn fallback stays in the DOM the whole time (zero-layout-diff).
     expect(wrapper.find('.card-face').exists()).toBe(true);
   });
+
+  it('resets loaded to false when the resolved src changes (reused element re-guards)', async () => {
+    const wrapper = mount(CardRenderer, {
+      props: { element: makeCardElement(1), depth: 0 },
+    });
+
+    await wrapper.find('img.card-image').trigger('load');
+    expect(wrapper.find('img.card-image').classes()).toContain('is-loaded');
+
+    // Same instance re-bound to a different card's art must re-guard: the new
+    // <img> stays hidden (drawn fallback shown) until its own load/error fires,
+    // never flashing the stale image at full opacity.
+    await wrapper.setProps({
+      element: {
+        id: 2,
+        className: 'Card',
+        name: 'king-of-hearts',
+        attributes: { $images: { face: 'https://example.test/king-of-hearts.png' } },
+      },
+    });
+
+    expect(wrapper.find('img.card-image').classes()).not.toContain('is-loaded');
+  });
 });
