@@ -41,7 +41,7 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 2. After the fix, the same scenario passes in a multi-client regression test (fails on pre-fix code, passes on post-fix code).
 3. A human or scripted 2-client dev-host session (reload mid-game, reconnect, then hand a seat to AI and back) never shows "your turn" on a client whose turn it is not.
 **Plans**: 2 plans (Wave 1 fix + tests; Wave 2 browser proof)
-- [ ] 153-01-PLAN.md — dev.ts socket-identity guard + real-ws stale-close regression test (fails pre-fix / passes post-fix) + MultiplayerHost canary (Wave 1, autonomous, TDD) [DEVHOST-01, DEVHOST-02]
+- [x] 153-01-PLAN.md — dev.ts socket-identity guard + real-ws stale-close regression test (fails pre-fix / passes post-fix) + MultiplayerHost canary (Wave 1, autonomous, TDD) [DEVHOST-01, DEVHOST-02]
 - [ ] 153-02-PLAN.md — scripted 2-client Playwright reload/reconnect/AI-handoff browser proof (Wave 2, checkpoint) [DEVHOST-01, DEVHOST-02]
 
 #### Phase 154: MERC Re-Vendor
@@ -59,5 +59,5 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 152. Asset Completeness in bs-build-chunk | 5/5 | Complete   | 2026-07-06 |
-| 153. Dev-Host Multi-Client Turn-Desync Fix | 0/2 | Not started | - |
+| 153. Dev-Host Multi-Client Turn-Desync Fix | 1/2 | In Progress|  |
 | 154. MERC Re-Vendor | 0/TBD | Not started | - |

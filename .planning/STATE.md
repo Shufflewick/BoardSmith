@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.7
 milestone_name: Playtest Follow-Up Fixes
 status: executing
-stopped_at: Completed 152-04-PLAN.md
-last_updated: "2026-07-06T04:00:07.893Z"
+stopped_at: Completed 153-01-PLAN.md
+last_updated: "2026-07-06T16:18:40.585Z"
 last_activity: 2026-07-06
 progress:
   total_phases: 3
-  completed_phases: 0
-  total_plans: 5
-  completed_plans: 4
-  percent: 0
+  completed_phases: 1
+  total_plans: 7
+  completed_plans: 6
+  percent: 33
 ---
 
 # Project State
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 152 — asset-completeness-in-bs-build-chunk
+**Current focus:** Phase 153 — dev-host-multi-client-turn-desync-fix
 
 ## Current Position
 
-Phase: 152 (asset-completeness-in-bs-build-chunk) — EXECUTING
-Plan: 5 of 5
+Phase: 153 (dev-host-multi-client-turn-desync-fix) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
 Last activity: 2026-07-06
 
@@ -254,6 +254,7 @@ Recent decisions affecting current work:
 - [Phase ?]: 152-03: Fixtures authored as real on-disk files under __fixtures__/asset-scan/ per plan's files_modified naming them as deliverables
 - [Phase ?]: 152-03: AssetImage.vue exclusion matches by basename only (not directory path), per plan's explicit NOTE
 - [Phase 152]: Asset-reachability gate failure routes to build (not repair per plan text) — matches test.md's pre-existing Failures-Loop-Back-to-build convention
+- [Phase 153]: 153-01: Fix scoped exactly to dev.ts's WS close handler (socket-identity guard) — no changes to MultiplayerHost/SnapshotSessionHost/handleServerRequest, per RESEARCH.md's proven root cause and explicit anti-patterns
 
 ### Pending Todos
 
@@ -265,8 +266,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-06T04:00:07.886Z
-Stopped at: Completed 152-04-PLAN.md
+Last session: 2026-07-06T16:18:40.577Z
+Stopped at: Completed 153-01-PLAN.md
 Resume file: 
 None
 

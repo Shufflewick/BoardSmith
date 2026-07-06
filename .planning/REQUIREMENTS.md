@@ -11,8 +11,8 @@ Closes the three tracked follow-ups from v4.6's human playtest (see `milestones/
 
 ### DEVHOST — Dev-host multi-client turn consistency (DEF-C)
 
-- [ ] **DEVHOST-01**: The dev-host multiplayer path (`MultiplayerHost` + `SnapshotSessionHost`) is reliably reproduced failing on the reconnect/seat-takeover turn-desync (a repeatable multi-client scenario where a client's view goes stale — shows "your turn" when the server has moved on), establishing the root cause before any fix.
-- [ ] **DEVHOST-02**: The desync is fixed at the source so every connected client's turn view (`isMyTurn`/`currentPlayer`) stays consistent with the server across reload, reconnect, and AI-seat takeover — a client is never told it is its turn when it is not. Covered by a multi-client regression test that fails before the fix and passes after.
+- [x] **DEVHOST-01**: The dev-host multiplayer path (`MultiplayerHost` + `SnapshotSessionHost`) is reliably reproduced failing on the reconnect/seat-takeover turn-desync (a repeatable multi-client scenario where a client's view goes stale — shows "your turn" when the server has moved on), establishing the root cause before any fix.
+- [x] **DEVHOST-02**: The desync is fixed at the source so every connected client's turn view (`isMyTurn`/`currentPlayer`) stays consistent with the server across reload, reconnect, and AI-seat takeover — a client is never told it is its turn when it is not. Covered by a multi-client regression test that fails before the fix and passes after.
 
 ### VENDOR — MERC re-vendor of the DEF-B fix
 
@@ -35,8 +35,8 @@ Closes the three tracked follow-ups from v4.6's human playtest (see `milestones/
 |--------|-------|--------|
 | ASSET-01 | Phase 152 | Complete |
 | ASSET-02 | Phase 152 | Complete |
-| DEVHOST-01 | Phase 153 | Pending |
-| DEVHOST-02 | Phase 153 | Pending |
+| DEVHOST-01 | Phase 153 | Complete |
+| DEVHOST-02 | Phase 153 | Complete |
 | VENDOR-01 | Phase 154 | Pending |
 
 **Coverage:** 5/5 requirements mapped, no orphans, no duplicates.
