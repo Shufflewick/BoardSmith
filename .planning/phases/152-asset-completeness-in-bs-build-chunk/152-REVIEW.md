@@ -15,7 +15,8 @@ findings:
   warning: 4
   info: 2
   total: 7
-status: issues_found
+status: resolved
+resolution: "All findings fixed in commit after review — CR-01 (watch/reset on src change) + WR-01 (path-based exclusion) + WR-02 (case-insensitive regex, no kebab false-positive) + WR-03 (renderer src-change regression tests) + WR-04 (docstring softened). Full suite green (2675). IN-01/IN-02 left as noted (out of scope / pre-existing)."
 ---
 
 # Phase 152: Code Review Report
