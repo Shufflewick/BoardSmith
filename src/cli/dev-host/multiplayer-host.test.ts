@@ -243,6 +243,38 @@ describe('MultiplayerHost — seat stability on reconnect', () => {
   });
 });
 
+describe('MultiplayerHost — stale disconnect after reconnect (DEF-C session-layer canary)', () => {
+  it('drops broadcasts to a seat when a STALE disconnect() arrives after its reconnect hello (documents the consequence the dev.ts transport-layer guard must prevent)', async () => {
+    // This test intentionally drives the sequence that `MultiplayerHost`'s
+    // public API allows a careless transport to trigger: hello (reconnect)
+    // THEN a disconnect() call for the SAME clientId. MultiplayerHost has no
+    // way to know the disconnect is stale (it only sees clientId strings, not
+    // socket identity) — that check belongs one layer up, in dev.ts's
+    // `wss.on('connection', ...)` close handler (see 153-RESEARCH.md).
+    // This canary documents WHY that transport-layer guard is required: once
+    // disconnect() runs, this seat's connected flag flips false and every
+    // subsequent broadcast/response to it is silently dropped, even though
+    // the client just told the host it reconnected. The real fix (Task 2) is
+    // in dev.ts, NOT here — MultiplayerHost's disconnect() contract is
+    // correct on its own; the bug is a transport that calls it wrongly.
+    const { host, to, pass, clear } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1
+    await host.handleMessage('B', { type: 'hello' }); // B unseated
+    await host.handleMessage('B', { type: 'join', seat: 2 }); // B = seat 2
+    clear();
+
+    await host.handleMessage('A', { type: 'hello' }); // A's browser reloads and reconnects (same clientId)
+    clear();
+
+    host.disconnect('A'); // the OLD socket's belated close event finally arrives (stale)
+
+    clear();
+    await pass('A', 'r1'); // A acts — handleServerRequest has no connected-check, so this is accepted
+    expect(to('A').some((m) => m.type === 'game_state')).toBe(false); // dropped: connected flag is wrongly false
+    expect(to('A').some((m) => m.type === 'server_response')).toBe(false); // dropped for the same reason
+  });
+});
+
 describe('MultiplayerHost — follow active seat', () => {
   it('baseline: without follow, AI plays the open seat and the game completes', async () => {
     const { host, lastOfType, pass } = makeAltHost();

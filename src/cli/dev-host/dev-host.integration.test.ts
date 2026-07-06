@@ -306,6 +306,166 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     await expect(pendingRequest).rejects.toThrow(/connection to .* closed/);
   });
 
+  describe('stale close (DEF-C transport-layer race)', () => {
+    // Standalone real WebSocketServer + MultiplayerHost, wired with a
+    // connection handler that mirrors dev.ts:739-763 FAITHFULLY: clientId is
+    // read from the `hello` message body (not assigned per-connection like
+    // this file's own beforeAll harness above), so TWO raw sockets can share
+    // ONE clientId string — exactly how a page reload behaves (persisted
+    // clientId in localStorage, DevHost.vue:29-36). The close handler here is
+    // deliberately the UNGUARDED (pre-fix) shape for this task; Task 2 adds
+    // the identical guard here and to dev.ts itself (153-RESEARCH.md Pitfall 3).
+    let staleWss: WebSocketServer;
+    let staleHost: MultiplayerHost;
+    let stalePort: number;
+    const staleClients = new Map<string, NodeWebSocket>();
+    // Tracks every server-side socket ever accepted, independent of the
+    // clientId map above — the stale-close bug under test can leave a live
+    // socket's map entry deleted (see close handler below) while the socket
+    // itself stays open, so cleanup must not rely on staleClients alone.
+    const staleServerSockets = new Set<NodeWebSocket>();
+
+    beforeAll(async () => {
+      staleHost = new MultiplayerHost({
+        playerCount: 2,
+        minPlayers: 1,
+        makeSeed: () => 'stale-close',
+        executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
+          executeOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),
+        send: (clientId, message) => {
+          const sock = staleClients.get(clientId);
+          if (sock && sock.readyState === sock.OPEN) sock.send(JSON.stringify(message));
+        },
+      });
+
+      staleWss = new WebSocketServer({ port: 0 });
+
+      staleWss.on('connection', (socket) => {
+        staleServerSockets.add(socket);
+        socket.once('close', () => staleServerSockets.delete(socket));
+        let clientId: string | null = null;
+        socket.on('message', (raw) => {
+          let msg: { type?: string; clientId?: unknown; [key: string]: unknown };
+          try {
+            msg = JSON.parse(raw.toString());
+          } catch {
+            return;
+          }
+          if (msg.type === 'hello') {
+            clientId = typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+            staleClients.set(clientId, socket);
+            Promise.resolve(staleHost.handleMessage(clientId, { type: 'hello' })).catch((err) => {
+              throw err instanceof Error ? err : new Error(String(err));
+            });
+            return;
+          }
+          if (!clientId) return;
+          Promise.resolve(staleHost.handleMessage(clientId, msg as ClientInbound)).catch((err) => {
+            throw err instanceof Error ? err : new Error(String(err));
+          });
+        });
+        socket.on('close', () => {
+          // UNGUARDED (the bug, dev.ts:757-762 pre-fix): no check that this
+          // socket is still the currently-registered one for clientId.
+          if (clientId) {
+            staleClients.delete(clientId);
+            staleHost.disconnect(clientId);
+          }
+        });
+      });
+
+      await new Promise<void>((resolve) => staleWss.once('listening', resolve));
+      const address = staleWss.address();
+      if (typeof address === 'string' || address === null) {
+        throw new Error('Expected an AddressInfo from WebSocketServer({ port: 0 }).');
+      }
+      stalePort = address.port;
+    });
+
+    afterAll(async () => {
+      for (const sock of staleServerSockets) sock.close();
+      staleServerSockets.clear();
+      staleClients.clear();
+      await new Promise<void>((resolve, reject) => {
+        staleWss.close((err) => (err ? reject(err) : resolve()));
+      });
+    });
+
+    it('a stale close from the OLD socket must not orphan the reconnected (new) socket', async () => {
+      const url = `ws://localhost:${stalePort}`;
+
+      // S1: original connection, becomes seat 1 ("A").
+      const s1 = new NodeWebSocket(url);
+      await new Promise<void>((resolve) => s1.once('open', resolve));
+      s1.send(JSON.stringify({ type: 'hello', clientId: 'seat-a' }));
+      await waitFor(() => staleClients.has('seat-a'));
+
+      // Seat B joins seat 2 so the game is actually playing (2-player min).
+      const sB = new NodeWebSocket(url);
+      await new Promise<void>((resolve) => sB.once('open', resolve));
+      const sBMessages: Array<{ type?: string }> = [];
+      sB.on('message', (raw) => {
+        try {
+          sBMessages.push(JSON.parse(raw.toString()));
+        } catch {
+          // ignore
+        }
+      });
+      sB.send(JSON.stringify({ type: 'hello', clientId: 'seat-b' }));
+      await waitFor(() => staleClients.has('seat-b'));
+      sB.send(JSON.stringify({ type: 'join', seat: 2 }));
+      await waitFor(() => sBMessages.some((m) => m.type === 'joined'));
+
+      // S2: the page reload — a NEW socket sends `hello` with the SAME
+      // clientId BEFORE S1's `close` fires. This claims the `seat-a` mapping.
+      const s2 = new NodeWebSocket(url);
+      await new Promise<void>((resolve) => s2.once('open', resolve));
+      // Collect every message S2 receives, starting BEFORE its hello so we can
+      // observe reinitSeat's own init/game_state reply as proof hello landed.
+      const s2Messages: Array<{ type?: string; requestId?: string }> = [];
+      s2.on('message', (raw) => {
+        try {
+          s2Messages.push(JSON.parse(raw.toString()));
+        } catch {
+          // ignore
+        }
+      });
+      s2.send(JSON.stringify({ type: 'hello', clientId: 'seat-a' }));
+      // Confirm S2's hello was processed (reinitSeat replies with init) BEFORE
+      // firing S1's stale close — this is the exact ordering the real bug
+      // depends on (reconnect hello lands first, stale close arrives after).
+      await waitFor(() => s2Messages.some((m) => m.type === 'init'));
+
+      // NOW S1's close fires (stale — S2 already claimed the mapping).
+      s1.close();
+      await waitFor(() => s1.readyState === NodeWebSocket.CLOSED);
+      // Give the close handler's synchronous body a tick to run.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // A submits an action over S2 (the reconnected, live socket).
+      s2.send(JSON.stringify({ type: 'server_request', requestId: 'stale-r1', op: 'action', payload: { actionName: 'pass', args: {} } }));
+
+      // EXPECTATION (post-fix / GREEN): S2 still receives its own
+      // server_response AND the resulting game_state broadcast.
+      // EXPECTATION (pre-fix / RED, this task): the stale close's
+      // unconditional disconnect() silently drops both — this assertion
+      // fails against the unguarded handler above, proving the DEF-C repro.
+      await waitFor(
+        () => s2Messages.some((m) => m.type === 'server_response' && m.requestId === 'stale-r1'),
+        1500,
+      ).catch(() => {
+        // swallow the waitFor timeout so the assertion below produces the
+        // real, readable failure message instead of a generic timeout error.
+      });
+
+      expect(s2Messages.some((m) => m.type === 'server_response' && m.requestId === 'stale-r1')).toBe(true);
+      expect(s2Messages.some((m) => m.type === 'game_state')).toBe(true);
+
+      s2.close();
+      sB.close();
+    });
+  });
+
   it('rejects requestId-correlated requests with a timeout when the socket is open but nothing replies', async () => {
     // A real, open socket to a server that never responds — exercises the
     // requestId-correlation timeout-reject fallback specifically (distinct
