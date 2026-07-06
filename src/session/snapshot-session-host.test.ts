@@ -383,8 +383,14 @@ describe('SnapshotSessionHost', () => {
       expect((host.snapshot as { turn: number }).turn).toBe(1);
     });
 
-    it('runAITurns is re-entrant-safe (aiPumpRunning guard prevents double execution)', async () => {
-      let aiCallCount = 0;
+    it('serializes concurrent runAITurns calls (opChain — no overlapping pump execution)', async () => {
+      // Two concurrent runAITurns() calls must NOT run their pumps at the same
+      // time. Before the opChain fix, the aiPumpRunning guard made the second
+      // call a silent no-op; now the chain serializes them so the second runs
+      // strictly AFTER the first completes. Either way the invariant the
+      // dev-host relies on holds: aiTurn executions never overlap.
+      let concurrentAiTurns = 0;
+      let maxConcurrentAiTurns = 0;
       let resolveFirstAiCall!: (v: OpResult) => void;
       const firstAiCallPromise = new Promise<OpResult>((res) => {
         resolveFirstAiCall = res;
@@ -400,14 +406,23 @@ describe('SnapshotSessionHost', () => {
         winners: [],
       };
 
+      let aiCall = 0;
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
         executeOp: async (_snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult };
           if (op.type === 'aiTurn') {
-            aiCallCount++;
-            if (aiCallCount === 1) return firstAiCallPromise;
-            return { ...baseResult, aiMoved: false };
+            concurrentAiTurns++;
+            maxConcurrentAiTurns = Math.max(maxConcurrentAiTurns, concurrentAiTurns);
+            try {
+              aiCall++;
+              // First pump's first aiTurn stalls until we release it, holding the
+              // critical section open while the second runAITurns() is pending.
+              if (aiCall === 1) return await firstAiCallPromise;
+              return { ...baseResult, aiMoved: false };
+            } finally {
+              concurrentAiTurns--;
+            }
           }
           return { ...baseResult };
         },
@@ -418,18 +433,78 @@ describe('SnapshotSessionHost', () => {
       const host = new SnapshotSessionHost(adapters);
       await host.start();
 
-      // Start first pump (will stall on the first aiTurn call)
-      const pump1 = host.runAITurns();
-      // Immediately fire a second pump — should be a no-op due to aiPumpRunning guard
-      const pump2 = host.runAITurns();
-
-      // Resolve the first AI call so both pumps can finish
+      const pump1 = host.runAITurns(); // stalls on the first aiTurn
+      const pump2 = host.runAITurns(); // queued behind pump1 on opChain
       resolveFirstAiCall({ ...baseResult, aiMoved: false });
-
       await Promise.all([pump1, pump2]);
 
-      // Should only have been called once (first pump ran, second was a no-op)
-      expect(aiCallCount).toBe(1);
+      // The core guarantee: the two pumps never executed aiTurn concurrently.
+      expect(maxConcurrentAiTurns).toBe(1);
+    });
+
+    it('serializes a human op arriving during an in-flight AI pump (lost-update wedge fix)', async () => {
+      // Regression for the dev-host lost-update race (dev-host-ai-op-race #1):
+      // a human action op that arrives WHILE the AI pump is mid-flight must not
+      // read the same base snapshot and last-write-wins clobber the pump's move.
+      // The opChain must make the human op wait until the pump fully finishes.
+      const events: string[] = [];
+      let releaseAiTurn!: () => void;
+      const aiTurnGate = new Promise<void>((res) => {
+        releaseAiTurn = res;
+      });
+
+      const baseResult: OpResult = {
+        success: true,
+        snapshot: { v: 0 },
+        pendingState: null,
+        flowState: { awaitingInput: true, currentPlayer: 2 },
+        playerViews: [null, null],
+        isComplete: false,
+        winners: [],
+        aiMoved: false,
+      };
+
+      let aiCall = 0;
+      const adapters: SnapshotSessionAdapters = {
+        playerCount: 2,
+        executeOp: async (snap, _pend, op) => {
+          if (op.type === 'start') return { ...baseResult, snapshot: { v: 0 } };
+          if (op.type === 'aiTurn') {
+            aiCall++;
+            if (aiCall === 1) {
+              events.push('ai-read');
+              await aiTurnGate; // hold the pump open
+              events.push('ai-write');
+              return { ...baseResult, snapshot: { v: 1 }, aiMoved: true, aiPlayer: 2 };
+            }
+            return { ...baseResult, snapshot: snap as object, aiMoved: false };
+          }
+          if (op.type === 'action') {
+            // The human op MUST observe the snapshot the pump wrote (v:1), never
+            // the pre-pump base (v:0) — proving it did not run against stale state.
+            events.push(`human-read:v=${(snap as { v: number }).v}`);
+            return { ...baseResult, snapshot: { v: 2 }, flowState: { awaitingInput: true, currentPlayer: 1 } };
+          }
+          return { ...baseResult };
+        },
+        broadcast: () => {},
+        aiSeats: [{ seat: 2 }],
+      };
+
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      const pump = host.runAITurns(); // starts, blocks in the first aiTurn
+      // Fire a human action while the pump is stalled mid-flight.
+      const human = host.handleOp(1, { type: 'action', actionName: 'x', player: 1, args: {} } as unknown as Op);
+      // Let the pump finish; the human op should only then proceed.
+      releaseAiTurn();
+      await Promise.all([pump, human]);
+
+      // Order proves serialization: the pump fully wrote before the human read,
+      // and the human read the pump's result (v:1), not the stale base (v:0).
+      expect(events).toEqual(['ai-read', 'ai-write', 'human-read:v=1']);
+      expect((host.snapshot as { v: number }).v).toBe(2);
     });
 
     it('triggers runAITurns automatically after a successful human action', async () => {

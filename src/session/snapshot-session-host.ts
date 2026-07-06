@@ -73,6 +73,17 @@ export class SnapshotSessionHost {
   private pendingStates = new Map<number, Record<string, unknown>>();
   private aiPumpRunning = false;
 
+  /**
+   * Serialization chain for state-MUTATING op sequences (dev-host-ai-op-race #1
+   * fix). A human action/selection (executeOp → apply → trailing AI pump) and
+   * every externally-triggered runAITurns run to completion before the next
+   * begins. Without this, a human op arriving during the AI pump's think-time
+   * reads the same base snapshot and last-write-wins silently clobbers the
+   * other's move — the intermittent dev-host lost-update wedge. Read-only and
+   * teaching ops stay off the chain (they never write the game snapshot).
+   */
+  private opChain: Promise<unknown> = Promise.resolve();
+
   // Persistence health (ERR-03) — symmetric with GameSession's persistence surface.
   private lastPersistenceErrorEntry: PersistenceErrorEntry | null = null;
   private persistenceConsecutiveFailures = 0;
@@ -443,10 +454,27 @@ export class SnapshotSessionHost {
     }
 
     // Read-only ops (resolveChoices + debug queries) report state without
-    // mutating or broadcasting — just return the executor's result.
+    // mutating or broadcasting — just return the executor's result. They never
+    // write the game snapshot, so they stay OFF the serialization chain.
     if (READ_ONLY_OP_TYPES.has(op.type)) {
       return this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
     }
+
+    // Every state-MUTATING op sequence runs serialized on opChain. Its trailing
+    // AI pump is part of the SAME critical section (runAITurnsInner, not the
+    // public runAITurns), so a follow-up human op waits for the whole
+    // human-move → AI-moves sequence to finish rather than reading the same base
+    // snapshot mid-pump and last-write-wins clobbering it (dev-host-ai-op-race #1).
+    return this.enqueue(() => this.applyMutatingOp(seat, op));
+  }
+
+  /**
+   * The state-mutating tail of handleOp, always run inside the opChain critical
+   * section (via enqueue). Executes the op, applies + broadcasts the result, and
+   * drives any AI turns the move handed off to — all before the next enqueued
+   * mutation can begin.
+   */
+  private async applyMutatingOp(seat: number, op: Op): Promise<OpResult> {
     // A new direct action supersedes any in-progress selection for this seat.
     // Clear pending state BEFORE executing so a failed superseding action
     // doesn't leave stale selection state behind (matches the old DO's
@@ -478,7 +506,9 @@ export class SnapshotSessionHost {
     await this.apply(res, seat);
     const actionCompleted = op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete);
     if (!this.isComplete && actionCompleted) {
-      await this.runAITurns();
+      // Already inside the critical section — drive the pump directly rather
+      // than re-entering enqueue (which would deadlock on our own opChain link).
+      await this.runAITurnsInner();
     }
     // Keep any visible "Show move quality" heatmaps current as play proceeds:
     // recompute for the seat whose turn it now is, drop stale chips for the rest.
@@ -489,6 +519,21 @@ export class SnapshotSessionHost {
       await this.refreshVisibleHeatmaps();
     }
     return res;
+  }
+
+  /**
+   * Serialize a state-mutating unit of work on opChain: it runs only after every
+   * previously-enqueued mutation settles, and blocks the next one until it
+   * settles. A failure never poisons the chain — the continuation swallows it,
+   * while the caller still receives fn's real result or rejection.
+   */
+  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.opChain.then(fn, fn);
+    this.opChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   /**
@@ -526,7 +571,18 @@ export class SnapshotSessionHost {
     if (changed) this.broadcastCurrent();
   }
 
+  /**
+   * Public AI-pump entry. Serialized on opChain so an externally-triggered pump
+   * (follow-mode toggle, seat release, game start — multiplayer-host.ts) can
+   * never overlap an in-flight human op and clobber its snapshot. The trailing
+   * pump inside applyMutatingOp calls runAITurnsInner directly (already inside
+   * the critical section) to avoid re-entering the chain.
+   */
   async runAITurns(): Promise<void> {
+    await this.enqueue(() => this.runAITurnsInner());
+  }
+
+  private async runAITurnsInner(): Promise<void> {
     if (this.aiPumpRunning || !this.adapters.aiSeats?.length) return;
     this.aiPumpRunning = true;
     try {
