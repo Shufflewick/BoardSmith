@@ -101,13 +101,112 @@ manual step is the human-eyes confirmation of the same guarantee.
 
 ## Verified Checklist
 
-- [ ] Item 1 confirmed (hit — gives all matching cards, extra turn)
-- [ ] Item 2 confirmed (miss — go fish, correct turn-passing)
-- [ ] Item 3 confirmed (seat 2 can take its own turn)
+- [ ] Item 1 confirmed (hit — gives all matching cards, extra turn) — **BLOCKED by DEF-B**
+- [ ] Item 2 confirmed (miss — go fish, correct turn-passing) — **BLOCKED by DEF-B**
+- [ ] Item 3 confirmed (seat 2 can take its own turn) — **BLOCKED by DEF-B**
 - [ ] Regression check confirmed
-- [ ] Taste check confirmed
-- [ ] Second-seat leak check confirmed (no hand/drawn-card leak visible)
+- [x] Taste check confirmed — **FAILED: all cards render as broken images (DEF-A)**
+- [ ] Second-seat leak check confirmed (no hand/drawn-card leak visible) — could not reach (DEF-B); note the automated `diffPlayerViews`/`assertNoHiddenInfoLeak` proofs remain green
 
-**Status: NOT waived, NOT verified.** This is the single manual-verification
-item the v4.6 milestone ships with outstanding — route to the user via
-`/gsd:audit-uat`.
+**Status: PLAYED 2026-07-05 — NOT verified; two this-chunk defects recorded.**
+
+---
+
+## Playtest Results (2026-07-05, Phase 151 — human browser playtest, seat-2 `boardsmith dev --players 2`)
+
+The human playtest was RUN against the Phase-150 regenerated
+`~/BoardSmithGames/go-fish-dryrun/`. It surfaced **two real this-chunk
+defects** that the entire automated bar (38/38 tests incl. random-sim, a11y
+floor, and both hidden-info leak checks) did not catch — which is precisely
+the value of this deferred human gate. Both are triaged **this-chunk defect**
+(the ask→give/go-fish→turn-advance loop and card rendering ARE chunk-1's scope).
+
+### DEF-A — All cards render as broken images (this-chunk defect, root cause PROVEN)
+
+- **Symptom:** every card (hands, pond) shows a broken-image link, not card art.
+- **Root cause:** generated `src/rules/game.ts` hardcodes
+  `card.$images = { face: '/cards/${rank}${suit}.svg', back: '/cards/back.svg' }`
+  (lines 71-74; pond back line 49) — copying the hand-built go-fish's
+  convention — but the pipeline never emitted the 53 `public/cards/*.svg`
+  assets the hand-built game ships (`~/BoardSmithGames/go-fish/public/cards/`
+  has 53 svgs; `go-fish-dryrun/public/cards/` does not exist). Vite's SPA
+  fallback serves `index.html` (`HTTP 200`, `Content-Type: text/html`) for the
+  missing paths, so each `<img src="/cards/AH.svg">` receives HTML → broken.
+  The UI's CSS-drawn fallback (`GameTable.vue:224` `v-else`) never fires because
+  `$images.face` is truthy.
+- **Pipeline gap:** `build-chunk` emitted asset-referencing rules code without
+  emitting the assets OR guarding the UI to fall back when assets are absent.
+  No automated check catches a broken `<img src>` (tests assert DOM/handlers,
+  not rendered image bytes).
+
+### DEF-B — Ask action locks up in the dev-host 2-seat path (this-chunk defect, LOCALIZED)
+
+- **Symptom (user):** "when I pick something to ask the other player, it locks
+  up and I cannot proceed. It does not give me their card. It does not advance
+  to the next player's turn."
+- **Localization:** the ask MECHANICS pass in every in-process test —
+  `tests/game.test.ts` drives `doAction('ask', {target, rank})` and asserts
+  correct hit/miss/extra-turn/turn-passing (lines 195-283), and
+  `tests/a11y-keyboard-completion.test.ts` drives the REAL `useActionController`
+  + real `createHeadlessSession` via keyboard for BOTH picks and passes. The
+  lockup is therefore specific to the **dev-host multiplayer WS path**
+  (`boardsmith dev --players 2` → `SnapshotSessionHost`/`multiplayer-host.ts`),
+  which NO test and NO Phase-149/150 pipeline step ever exercised — the pipeline
+  only did an HTTP-200 reachability check, never a real WS playthrough.
+- **Status:** exact nature (real WS/turn-pass bug vs. two-tab UX vs. a BoardSmith
+  dev-host-library issue) pending: browser extension was not bridged this
+  session and Playwright's browser binary is not installed, so a full dev-host
+  repro was deferred to the disposition decision below.
+
+### Meta-finding (about the SKILLS, not just this game)
+
+The deferred human gate did its job: it caught two browser-level failures the
+pipeline's automated discipline is blind to. This is evidence the `bs-`
+pipeline needs (a) an asset-completeness / broken-`<img>` check, and (b) a real
+dev-host WS playthrough step — not just an HTTP reachability ping — before a
+generated game is called playable.
+
+---
+
+## Resolution (2026-07-05, Phase 151 — both defects fixed + re-verified)
+
+Both defects were root-caused and fixed; the pipeline-built game now renders and
+plays cleanly. Re-verified via headless-browser automation (Playwright against
+the real `boardsmith dev` WS host).
+
+### DEF-A — FIXED (generated artifact)
+- **Fix:** generated the 52 face + 1 back card SVGs the game references, via
+  `~/BoardSmithGames/go-fish-dryrun/scripts/generate-cards.mjs` →
+  `public/cards/*.svg` (go-fish-dryrun commit `98d3d15`). The game now SHIPS the
+  art it references.
+- **Verified:** `/cards/AH.svg` serves `Content-Type: image/svg+xml`; in-browser,
+  15 card `<img>`s render with 0 broken (naturalWidth > 0). Face cards show
+  rank+suit in correct red/black; backs show the patterned back.
+- **Skill-gap (follow-up):** `bs-build-chunk` should emit card assets (or
+  CSS-fallback-guard the UI so a missing `$images` path degrades to the drawn
+  fallback instead of a broken `<img>`). Tracked for the `bs-` skills.
+
+### DEF-B — FIXED (BoardSmith dev-host library)
+- **Root cause:** the latent dev-host lost-update race — `SnapshotSessionHost`'s
+  `handleOp` and `runAITurns` were unserialized, so a human op arriving during the
+  AI pump's think-time clobbered state and wedged the game. Pre-existing
+  (pre-v4.4), library-wide, NOT a generated-game bug (human-vs-human play was
+  proven flawless; the MCTS bot plays the game fine).
+- **Fix:** per-host async op queue serializing all mutating op sequences
+  (BoardSmith commit `281e8155`), + regression tests. Full suite 2653/2653.
+- **Verified:** 15 rapid ask cycles deliberately racing the AI-pump boundary →
+  97 log entries of smooth play, no wedge, 0 server errors.
+- **MERC note:** MERC uses a vendored BoardSmith copy — a re-vendor is needed for
+  it to pick up this fix (tracked as follow-up).
+
+## Verified Checklist (post-fix)
+
+- [x] Item 1 (hit — gives all matching cards, extra turn) — verified (log: "Player 2 gives Player 1 …")
+- [x] Item 2 (miss — go fish, correct turn-passing) — verified (log: "Go Fish! … play passes to the next player")
+- [x] Item 3 (seat 2 can take its own turn) — verified (2-human: seat-2 ask resolved; AI-seat: "Player 2 asks Player 1 …")
+- [x] Regression check — n/a (first playable chunk)
+- [x] Taste check — cards now render (DEF-A fixed); board legible
+- [x] Second-seat leak check — seat 1 sees only card BACKS for Player 2's hand (UI); automated `diffPlayerViews`/`assertNoHiddenInfoLeak` remain green
+
+**Status: RESOLVED — both playtest defects fixed and re-verified. Pending optional
+final human re-playtest to close VAL-01 with the user's own eyes.**
