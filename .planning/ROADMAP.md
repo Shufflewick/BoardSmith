@@ -14,7 +14,7 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 
 - [x] **Phase 152: Asset Completeness in bs-build-chunk** - Generated games never ship broken card/piece images, and the pipeline's own tests catch it if they would (completed 2026-07-06)
 - [x] **Phase 153: Dev-Host Multi-Client Turn-Desync Fix** - Every connected client's turn view stays correct across reload/reconnect/AI-seat takeover, proven by a reproduced-then-fixed regression test (completed 2026-07-06)
-- [ ] **Phase 154: MERC Re-Vendor** - MERC runs on a re-vendored BoardSmith carrying the DEF-B fix and all v4.7 fixes, full suite green
+- [x] **Phase 154: MERC Re-Vendor** - MERC runs on a re-vendored BoardSmith carrying the DEF-B fix and all v4.7 fixes, full suite green (completed 2026-07-06)
 
 ### Phase Details
 
@@ -60,4 +60,4 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 |-------|----------------|--------|-----------|
 | 152. Asset Completeness in bs-build-chunk | 5/5 | Complete   | 2026-07-06 |
 | 153. Dev-Host Multi-Client Turn-Desync Fix | 2/2 | Complete   | 2026-07-06 |
-| 154. MERC Re-Vendor | 0/TBD | Not started | - |
+| 154. MERC Re-Vendor | 1/1 | Complete   | 2026-07-06 |

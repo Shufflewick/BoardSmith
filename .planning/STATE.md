@@ -4,14 +4,14 @@ milestone: v4.7
 milestone_name: Playtest Follow-Up Fixes
 status: executing
 stopped_at: Completed 153-01-PLAN.md
-last_updated: "2026-07-06T16:18:40.585Z"
-last_activity: 2026-07-06
+last_updated: "2026-07-06T16:41:30.103Z"
+last_activity: 2026-07-06 -- Phase 154 execution started
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 7
-  completed_plans: 6
-  percent: 33
+  completed_phases: 2
+  total_plans: 8
+  completed_plans: 7
+  percent: 67
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 153 — dev-host-multi-client-turn-desync-fix
+**Current focus:** Phase 154 — merc-re-vendor
 
 ## Current Position
 
-Phase: 153 (dev-host-multi-client-turn-desync-fix) — EXECUTING
-Plan: 2 of 2
-Status: Ready to execute
-Last activity: 2026-07-06
+Phase: 154 (merc-re-vendor) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 154
+Last activity: 2026-07-06 -- Phase 154 execution started
 
 ## Milestones
 
