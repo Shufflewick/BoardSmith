@@ -7,7 +7,7 @@ Closes the three tracked follow-ups from v4.6's human playtest (see `milestones/
 ### ASSET — Generated-game asset completeness (DEF-A class)
 
 - [x] **ASSET-01**: The `bs-build-chunk` skill guarantees a generated game never renders broken images — it either emits the asset files it references (card/piece art) OR the generated UI degrades cleanly to a self-drawn fallback when an `$images` path resolves to nothing. Verified by a freshly regenerated game whose board renders every card with zero broken `<img>`s (no reliance on a hand-added asset set).
-- [ ] **ASSET-02**: The skill's automated verification (build/test step) includes an asset-reachability / broken-`<img>` check so an asset-referencing game that ships no assets FAILS the pipeline's own bar rather than passing green (the gap that let DEF-A ship).
+- [x] **ASSET-02**: The skill's automated verification (build/test step) includes an asset-reachability / broken-`<img>` check so an asset-referencing game that ships no assets FAILS the pipeline's own bar rather than passing green (the gap that let DEF-A ship).
 
 ### DEVHOST — Dev-host multi-client turn consistency (DEF-C)
 
@@ -34,7 +34,7 @@ Closes the three tracked follow-ups from v4.6's human playtest (see `milestones/
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
 | ASSET-01 | Phase 152 | Complete |
-| ASSET-02 | Phase 152 | Pending |
+| ASSET-02 | Phase 152 | Complete |
 | DEVHOST-01 | Phase 153 | Pending |
 | DEVHOST-02 | Phase 153 | Pending |
 | VENDOR-01 | Phase 154 | Pending |

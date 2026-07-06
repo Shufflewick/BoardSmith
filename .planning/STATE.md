@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.7
 milestone_name: Playtest Follow-Up Fixes
 status: executing
-stopped_at: Completed 152-01-PLAN.md
-last_updated: "2026-07-06T03:50:41.840Z"
+stopped_at: Completed 152-03-PLAN.md
+last_updated: "2026-07-06T03:55:24.129Z"
 last_activity: 2026-07-06
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 152 (asset-completeness-in-bs-build-chunk) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-06
 
@@ -251,6 +251,8 @@ Recent decisions affecting current work:
 - [Phase ?]: AssetImage.vue single kind-discriminant component, fallback always rendered underneath
 - [Phase 152-02]: PieceRenderer's two unguarded image branches (overlay presentationEntry.image override and engine pieceVisual image) merged into one effectivePieceImage computed + one load-guard rather than duplicating the guard twice
 - [Phase 152-02]: PieceRenderer fallback label/color derived defensively so a sane token-style fallback exists even when pieceVisual isn't literally token kind
+- [Phase ?]: 152-03: Fixtures authored as real on-disk files under __fixtures__/asset-scan/ per plan's files_modified naming them as deliverables
+- [Phase ?]: 152-03: AssetImage.vue exclusion matches by basename only (not directory path), per plan's explicit NOTE
 
 ### Pending Todos
 
@@ -262,8 +264,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-06T03:48:29.279Z
-Stopped at: Completed 152-01-PLAN.md
+Last session: 2026-07-06T03:55:24.121Z
+Stopped at: Completed 152-03-PLAN.md
 Resume file: 
 None
 
