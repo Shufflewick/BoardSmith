@@ -1,3 +1,7 @@
+---
+requirements-completed: [VENDOR-01]
+---
+
 # Plan 154-01 Summary — MERC Re-Vendor (VENDOR-01)
 
 **Plan:** 154-01 (execute — MERC re-vendor + integration proof)

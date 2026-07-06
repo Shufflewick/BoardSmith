@@ -37,6 +37,6 @@ Closes the three tracked follow-ups from v4.6's human playtest (see `milestones/
 | ASSET-02 | Phase 152 | Complete |
 | DEVHOST-01 | Phase 153 | Complete |
 | DEVHOST-02 | Phase 153 | Complete |
-| VENDOR-01 | Phase 154 | Pending |
+| VENDOR-01 | Phase 154 | Complete |
 
-**Coverage:** 5/5 requirements mapped, no orphans, no duplicates.
+**Coverage:** 5/5 requirements mapped, no orphans, no duplicates. All 5 satisfied (v4.7 complete).
