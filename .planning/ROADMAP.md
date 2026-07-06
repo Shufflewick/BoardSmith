@@ -13,7 +13,7 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 ### Phases
 
 - [x] **Phase 152: Asset Completeness in bs-build-chunk** - Generated games never ship broken card/piece images, and the pipeline's own tests catch it if they would (completed 2026-07-06)
-- [ ] **Phase 153: Dev-Host Multi-Client Turn-Desync Fix** - Every connected client's turn view stays correct across reload/reconnect/AI-seat takeover, proven by a reproduced-then-fixed regression test
+- [x] **Phase 153: Dev-Host Multi-Client Turn-Desync Fix** - Every connected client's turn view stays correct across reload/reconnect/AI-seat takeover, proven by a reproduced-then-fixed regression test (completed 2026-07-06)
 - [ ] **Phase 154: MERC Re-Vendor** - MERC runs on a re-vendored BoardSmith carrying the DEF-B fix and all v4.7 fixes, full suite green
 
 ### Phase Details
@@ -42,7 +42,7 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 3. A human or scripted 2-client dev-host session (reload mid-game, reconnect, then hand a seat to AI and back) never shows "your turn" on a client whose turn it is not.
 **Plans**: 2 plans (Wave 1 fix + tests; Wave 2 browser proof)
 - [x] 153-01-PLAN.md — dev.ts socket-identity guard + real-ws stale-close regression test (fails pre-fix / passes post-fix) + MultiplayerHost canary (Wave 1, autonomous, TDD) [DEVHOST-01, DEVHOST-02]
-- [ ] 153-02-PLAN.md — scripted 2-client Playwright reload/reconnect/AI-handoff browser proof (Wave 2, checkpoint) [DEVHOST-01, DEVHOST-02]
+- [x] 153-02-PLAN.md — scripted 2-client Playwright reload/reconnect/AI-handoff browser proof (Wave 2, checkpoint) [DEVHOST-01, DEVHOST-02]
 
 #### Phase 154: MERC Re-Vendor
 **Goal**: MERC's vendored BoardSmith copy carries the DEF-B dev-host lost-update fix (`281e8155`) plus the v4.7 asset and dev-host fixes, proven by MERC's own test suite staying green.
@@ -59,5 +59,5 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 152. Asset Completeness in bs-build-chunk | 5/5 | Complete   | 2026-07-06 |
-| 153. Dev-Host Multi-Client Turn-Desync Fix | 1/2 | In Progress|  |
+| 153. Dev-Host Multi-Client Turn-Desync Fix | 2/2 | Complete   | 2026-07-06 |
 | 154. MERC Re-Vendor | 0/TBD | Not started | - |
