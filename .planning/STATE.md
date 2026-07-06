@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
-stopped_at: Completed 149-02-PLAN.md
-last_updated: "2026-07-05T23:50:23.171Z"
-last_activity: 2026-07-05
+stopped_at: Completed 150-02-PLAN.md
+last_updated: "2026-07-06T00:04:55.312Z"
+last_activity: 2026-07-06
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 150 (regenerate-the-pipeline-built-go-fish-stable-location) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
-Last activity: 2026-07-05
+Last activity: 2026-07-06
 
-Progress: [███░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Milestones
 
@@ -235,6 +235,9 @@ Recent decisions affecting current work:
 - [Phase 150]: boardsmith.json displayName corrected to designer's original 'Go Fish' rather than the lossy kebab-case round-trip, per scaffold.md's Display Name correction rule
 - [Phase 150]: Chunk-1 CHUNK.md pre-documents the pond-empty terminal-condition depth-cut (claim 6) ahead of Plan 02's build leg, mirroring the fix the 149 dry-run had to make reactively
 - [Phase 150]: 150-01 task commits landed inside go-fish-dryrun's own git repo (created by boardsmith init), not the BoardSmith repo, since sub_repos is unconfigured and the plan's deliverables live entirely outside BoardSmith
+- [Phase 150-02]: Redteam Round 1 coverage adversary flagged empty-pond-during-a-miss gap; re-investigate appended claim 7 (append-only), mirroring the exact interaction the 149 dry-run's coverage-adversary pass caught
+- [Phase 150-02]: Books defined-but-unwired in chunk-1; isFinished()=pond-empty depth-cut, getWinners() always []; turn-loop does NOT gate on isFinished() (only outer game-loop does) so an earned extra turn is never denied mid-chain
+- [Phase 150-02]: Custom UI built directly per SKETCH.md's custom-from-chunk-1 strategy, wired to the real actionController/useBoardInteraction instances GameShell provides (never a mock)
 
 ### Pending Todos
 
@@ -246,8 +249,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-05T23:49:02.366Z
-Stopped at: Completed 149-02-PLAN.md
+Last session: 2026-07-06T00:04:55.304Z
+Stopped at: Completed 150-02-PLAN.md
 Resume file: 
 None
 
