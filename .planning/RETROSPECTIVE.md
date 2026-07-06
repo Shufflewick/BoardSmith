@@ -52,6 +52,42 @@ demonstration/refinement gate (DEMO-01); and a host-gated teaching lockout (LOCK
 - Phase 111 (lockout) executed fully autonomously (discuss→plan→execute) with a single
   human gate; Wave 1+2 plans each ~5–7 min on the main tree (worktrees disabled).
 
+## Milestone: v4.7 — Playtest Follow-Up Fixes
+
+**Shipped:** 2026-07-06
+**Phases:** 3 (152–154) | **Plans:** 8
+
+### What Was Built
+Closed v4.6's three playtest follow-ups: DEF-A (scaffold `AssetImage.vue` + AutoUI renderer guards + `scanAssetReachability` build gate), DEF-C (dev-host `dev.ts` stale-close socket-identity guard, shared into `connection-handler.ts`), and DEF-B propagation (MERC re-vendor, 738/7 green).
+
+### What Worked
+- **Prove-before-fix paid for itself twice.** The Phase 153 researcher *empirically reproduced* DEF-C in a throwaway vitest and pinned the true root cause in `dev.ts` — refuting the discuss-phase's leading `reinitSeat` hypothesis. Guessing would have "fixed" the wrong file.
+- **Both automated quality gates caught real defects the execution missed.** Code review found a genuine critical in 152 (shipped `AssetImage.vue` never reset `loaded` on `src` change → stale/broken flash) and a drift-risk in 153 (fix hand-duplicated between `dev.ts` and its test). Both fixed + regression-locked; the 153 fix was extracted into a shared handler so the test now guards the literal code.
+- **Playwright fallback held up again.** The Chrome extension was down for both browser proofs (152 asset rendering, 153 reload-storm/reconnect/AI-handoff); headless Playwright against the real `boardsmith dev` server closed SC-3 both times.
+- **Re-vendor-as-integration-test** once more validated the whole milestone in one shot: MERC absorbed all three fixes with zero source changes.
+
+### What Was Inefficient
+- The SC-3 browser proof burned real effort fighting the go-fish dev-host seat-picker UX (auto-seat vs "Take seat", game-in-iframe) before landing on a game-agnostic observable (WS-instrumented broadcast-delivery survival). A dev-host test-mode hook for "is this client still receiving broadcasts" would have made it a one-liner.
+- Left-behind dev-host processes from setup attempts collided on :5173 (had to hunt/kill a stray listener). A stricter "kill by port before start" preflight would avoid the churn.
+- Nyquist `VALIDATION.md` `nyquist_compliant` flags were left `false` on 152/153 even though real coverage was green — a bookkeeping-flag gap the audit correctly flagged as advisory.
+
+### Patterns Established
+- **Structural pit-of-success for missing assets:** a scaffold-emitted wrapper that renders a drawn fallback and only overlays the real `<img>` on `@load` — broken images become impossible, not merely discouraged.
+- **Static, file-system-level reachability gates** (never HTTP probes — Vite's SPA fallback 200s a missing path), mirroring `sandbox-scan.ts`'s single-source-of-truth shape.
+- **Share the handler under test:** when a regression test must mirror production wiring, extract the wiring into one exported function both import — the test then has teeth against the literal code (verified by neutering the guard).
+
+### Key Lessons
+- A green automated bar is not a substitute for a human/browser gate: DEF-A/DEF-C shipped green in v4.6 and only surfaced under real play. v4.7's real-browser proofs + adversarial code review are the structural answer.
+- Reproduction is the hard 80% of a concurrency/transport bug; once reproduced, the fix was one line.
+
+### Cost Observations
+- Model mix: planning on opus, research/executors/verifiers/reviewers on sonnet; orchestration on opus.
+- Worktrees disabled → wave-1 plans serialized on the main tree; fine at this scale (≤5 plans/phase).
+- Two browser proofs + one MERC full-suite run (independently re-run by the verifier) were the main wall-clock costs.
+
 ## Cross-Milestone Trends
 
 _(Seeded at v4.1 — populate as future milestones complete.)_
+
+**Recurring wins:** re-vendor-as-integration-test (v4.3/4.4/4.5/4.7); the human/browser gate catching what the automated bar shipped green (v4.6→v4.7); prove-before-fix refuting a plausible-but-wrong hypothesis (v4.7 DEF-C).
+**Recurring friction:** Chrome extension unavailability → standing Playwright fallback (v4.6/v4.7); dev-host process/port hygiene; Nyquist compliance flags left unflipped despite green coverage.
