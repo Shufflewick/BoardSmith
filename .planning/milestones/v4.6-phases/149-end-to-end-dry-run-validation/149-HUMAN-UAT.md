@@ -18,9 +18,11 @@ thing only a human can confirm: does the generated game actually feel right and
 correctly hide opponent information when a real person clicks through it.
 
 This file is self-contained (the script below is copied from the scratch
-project's `PLAYTEST-SCRIPT.md`, captured at the 149-02 build commit) so it
-survives scratch-workspace cleanup — the scratch dir at
-`/tmp/bs-dryrun-149.L7EU9I/go-fish-dryrun/` is throwaway and OS-temp-cleaned.
+project's `PLAYTEST-SCRIPT.md`, captured at the 149-02 build commit). The
+original 149 dry-run ran in a throwaway scratch dir
+(`/tmp/bs-dryrun-149.L7EU9I/go-fish-dryrun/`, since OS-temp-cleaned); Phase 150
+re-ran the same ingest + chunk-1 build legs into a durable, non-throwaway
+location so this script has a stable pipeline-OUTPUT project to point at.
 
 ---
 
@@ -28,17 +30,19 @@ survives scratch-workspace cleanup — the scratch dir at
 
 Two options, either is a valid UAT run:
 
-1. **The dry-run's own generated chunk-1 project** (if the scratch dir still
-   exists at `/tmp/bs-dryrun-149.L7EU9I/go-fish-dryrun/`) — this is the actual
-   pipeline OUTPUT being validated, the most direct proof.
+1. **`~/BoardSmithGames/go-fish-dryrun/`** — the Phase-150 regeneration of the
+   dry-run's chunk-1 project (compiling, tested, serve-verified, and
+   preserved — not a scratch dir). This is the actual pipeline OUTPUT being
+   validated, the most direct proof.
 2. **The hand-built `~/BoardSmithGames/go-fish/`** — a side-by-side taste
    comparison against the reference implementation the pipeline output was
    compared to in `149-DRYRUN-REPORT.md` §2.
 
 ```bash
-cd <chosen project dir>
-npx boardsmith dev --players 2
+cd ~/BoardSmithGames/go-fish-dryrun && npx boardsmith dev --players 2
 ```
+
+(Or, for the taste-comparison option: `cd ~/BoardSmithGames/go-fish && npx boardsmith dev --players 2`.)
 
 Kill the server (`Ctrl+C`) when done — do not leave it running.
 
