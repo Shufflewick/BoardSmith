@@ -8,16 +8,11 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v4.7 Playtest Follow-Up Fixes
+## Previous: v4.7 Shipped
 
-**Goal:** Close the three tracked follow-ups from v4.6's human playtest — harden the `bs-` pipeline's OUTPUT and the dev-host, and propagate the DEF-B session fix to MERC — so a generated game is genuinely playable out of the box and the dev-host survives real multi-client use.
+**Shipped:** 2026-07-06. 5/5 requirements, 3 phases (152–154), audit passed (`milestones/v4.7-MILESTONE-AUDIT.md`). BoardSmith suite 2677 green; MERC 738/7 green.
 
-**Target features:**
-- **`bs-build-chunk` asset-completeness** — a generated game must never ship broken images: the build-chunk skill either emits the assets it references (card/piece art) OR guards the generated UI to fall back cleanly when `$images` paths are absent. Fixes the DEF-A class defect at the SKILL level (the v4.6 playtest game hardcoded `/cards/*.svg` paths it never shipped).
-- **DEF-C dev-host reconnect turn-desync** — reliably reproduce, then fix, the multiplayer-host bug where a client's view goes stale ("not your turn") after a reload/reconnect storm or AI-seat takeover; add a multi-client regression test. (Reproduction is step one — it was intermittent in the v4.6 playtest.)
-- **MERC re-vendor** — re-vendor BoardSmith into `~/Dropbox/MERC/BoardSmith/MERC` to pick up the DEF-B dev-host lost-update fix (`281e8155`); verify MERC's suite stays green (integration test for the fix reaching the vendored consumer).
-
-**Key context:** These are fixes/hardening surfaced by v4.6's human playtest gate (see `v4.6-MILESTONE-AUDIT.md` Reopened Scope + `149-HUMAN-UAT.md`), not new features — no domain research needed. DEF-B (the dev-host lost-update race) was already fixed in v4.6 (`281e8155`); this milestone propagates it to MERC and closes the sibling asset + reconnect gaps the same playtest surfaced.
+Playtest Follow-Up Fixes — closed the three tracked follow-ups from v4.6's human playtest: **DEF-A** (generated games shipped card art `<img>`s with no asset files and no fallback) is now structurally impossible — the scaffold emits a preload-then-swap `AssetImage.vue`, the AutoUI `CardRenderer`/`PieceRenderer` got the same guard, and a file-system-only `scanAssetReachability` gate build-blocks any bare `<img>` in the `bs-build-chunk` test step. **DEF-C** (dev-host reconnect turn-desync) was empirically reproduced and fixed at its true root cause — a stale-socket `close` handler in `dev.ts` orphaning a reloaded client — with a one-line socket-identity guard, a shared `connection-handler.ts` both server and test import, and RED→GREEN + Playwright proofs. **DEF-B** was propagated to MERC via re-vendor (green at baseline). Both automated quality gates (code review) caught real defects the execution missed. Two real-browser Playwright proofs stood in for the unavailable Chrome extension.
 
 ## Previous: v4.6 Shipped
 
@@ -303,10 +298,13 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ Scriptable dev host — `getState`/`getLobby`/`debugToggle`/`uiSwitch` WS ops, Node-capable `GameConnection`, `createDevHostClient` — v4.4
 - ✓ Animation/drag-drop test story — Vue-free test-mode trace recorder, direct composable unit tests, fail-loud missing-anchor throws — v4.4
 - ✓ Migration + docs — all 8 games + MERC re-vendored green, seven docs updated + grep-verified — v4.4
+- ✓ Generated-game asset completeness — scaffold `AssetImage.vue` (preload-then-swap drawn fallback) + AutoUI `CardRenderer`/`PieceRenderer` load-guards + `scanAssetReachability` build-blocking gate (ASSET-01/02) — v4.7 (DEF-A closed)
+- ✓ Dev-host multi-client turn consistency — `dev.ts` socket-identity close guard via shared `connection-handler.ts`, reproduced-then-fixed with real-`ws` + Playwright regression proofs (DEVHOST-01/02) — v4.7 (DEF-C closed)
+- ✓ DEF-B propagation to MERC — re-vendored to current HEAD, MERC suite green at baseline 738/7 (VENDOR-01) — v4.7
 
 ### Active
 
-v4.6 BS Skills — rulebook-driven incremental game building. Requirements to be defined in `.planning/REQUIREMENTS.md`. Design contract: `.planning/bs-skills-plan.md`.
+_No active milestone — v4.7 shipped 2026-07-06. Next milestone requirements to be defined via `/gsd:new-milestone`._
 
 Carried forward (deferred from v4.0):
 - ShufflewickPub host skin (separate repo) — HOST-01..04: PrimeVue tavern preset, host-side theme handshake, connection "Reconnecting" banner, host Game Over exit / pull-tab. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
@@ -437,4 +435,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-05 — v4.6 all 10 phases complete (1 human playtest gate outstanding); ready for milestone audit*
+*Last updated: 2026-07-06 — after v4.7 Playtest Follow-Up Fixes milestone (DEF-A/DEF-C/DEF-B-propagation shipped, 5/5 reqs, audit passed)*

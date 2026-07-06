@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.7
 milestone_name: Playtest Follow-Up Fixes
-status: executing
+status: Awaiting next milestone
 stopped_at: Completed 153-01-PLAN.md
-last_updated: "2026-07-06T16:41:30.103Z"
-last_activity: 2026-07-06 -- Phase 154 execution started
+last_updated: "2026-07-06T16:53:21.615Z"
+last_activity: 2026-07-06 — Milestone v4.7 completed and archived
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
-  percent: 67
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 154 — merc-re-vendor
+**Current focus:** v4.7 shipped & archived — awaiting next milestone (`/gsd:new-milestone`)
 
 ## Current Position
 
-Phase: 154 (merc-re-vendor) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 154
-Last activity: 2026-07-06 -- Phase 154 execution started
+Phase: Milestone v4.7 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-06 — Milestone v4.7 completed and archived
 
 ## Milestones
 
@@ -91,6 +91,8 @@ Items acknowledged and deferred at v4.1 milestone close on 2026-06-30:
 Backlog for a future cribbage (v2 CRIB) milestone: R-05 (suppress Undo during guided tutorial steps), R-12 (strategy tutorial track), pit-of-success lint/dev-warning when a custom board omits `anchorAttrs`. Repo-wide: 2 pre-existing eslint no-shadow errors (useFlyingElements.ts) + tsc test-file looseness — future cleanup pass.
 
 Carried forward from v4.0 (still deferred, separate repo): ShufflewickPub host skin (HOST-01..04).
+
+**Still deferred at v4.7 close (2026-07-06):** the same pre-existing open artifacts remain non-blocking backlog — `knowledge-base` (stale debug/reference file), and todos `dev-host-ai-open-seat-not-auto-playing`, `dev-host-debug-toggle-panel-not-opening`, `dev-standalone-shell-height-gap`, `v4-slate-token-and-a11y-polish`. None were in v4.7 scope (the milestone deferred the AI insta-acknowledge race and broader dev-host work by design). Note: the dev-host-ai-open-seat and standalone-shell-height todos are the same v4.0 carry-forwards listed above.
 
 ## Accumulated Context
 
@@ -273,8 +275,7 @@ None
 
 ## Operator Next Steps
 
-v4.7 roadmap ready (3 phases, 5 requirements, 100% coverage). Next: `/gsd:plan-phase 152` to break down the first phase (Asset Completeness in bs-build-chunk).
-</content>
+- Start the next milestone with /gsd-new-milestone
 
 ## Deferred Items
 

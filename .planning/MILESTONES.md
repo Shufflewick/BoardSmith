@@ -1,5 +1,23 @@
 # Project Milestones: BoardSmith
 
+## v4.7 Playtest Follow-Up Fixes (Shipped: 2026-07-06)
+
+**Delivered:** Closed the three tracked follow-ups from v4.6's human playtest — DEF-A (generated-game asset completeness), DEF-C (dev-host multi-client reconnect turn-desync), and DEF-B propagation to MERC — hardening the `bs-` pipeline's output and the dev host, then proving it all reaches the most complex vendored consumer.
+
+**Phases completed:** 3 phases (152–154), 8 plans, 10 tasks. BoardSmith suite 2677 green; MERC 738/7 green.
+
+**Key accomplishments:**
+
+- **DEF-A (Phase 152):** `generateAssetImageVue()` emits a preload-then-swap `AssetImage.vue` into every `npx boardsmith init` project so missing/unresolved card or piece art always degrades to a drawn game-semantic fallback, never a broken `<img>`. Extended in scope (user-approved) to fix BoardSmith's own AutoUI `CardRenderer`/`PieceRenderer`, which carried the identical unguarded-`<img>` bug — so `ui:auto` games are covered too.
+- **DEF-A gate (Phase 152):** `scanAssetReachability(cwd)` — a file-system-only bare-`<img>` static gate (never an HTTP probe; Vite's SPA fallback 200s a missing asset), wired build-blocking into the `bs-build-chunk` `test` step so an asset-referencing-but-asset-less game FAILS instead of shipping green — the exact gap that let DEF-A ship. Real-browser Playwright proof confirmed zero visible broken images with no hand-added assets.
+- **DEF-C (Phase 153):** Root cause *empirically reproduced*, then fixed — a stale-socket `close` handler in `dev.ts` that orphaned a reloaded client (new socket's `hello` races ahead of the old socket's `close`, which then wrongly marked the reconnected seat disconnected and dropped its broadcasts). A one-line socket-identity guard, TDD RED→GREEN real-`ws` regression test, later refactored into a shared `connection-handler.ts` both `dev.ts` and the test import (so the test guards the literal code). Playwright 5× reload-storm + reconnect + AI-handoff proof: client never orphaned.
+- **DEF-B propagation (Phase 154):** Re-vendored MERC to current BoardSmith HEAD (carrying DEF-B `281e8155` + the v4.7 fixes); MERC's full suite passes at baseline (738 passed / 7 skipped), no MERC-side changes needed — the milestone's capstone cross-repo integration proof.
+- **Both automated quality gates earned their keep:** code review caught a genuine critical in Phase 152 (the shipped `AssetImage.vue` didn't reset on `src` change) and a maintainability drift-risk in Phase 153, both fixed and regression-locked.
+
+**Known deferred items at close:** 5 pre-existing, non-v4.7 open artifacts acknowledged (see STATE.md Deferred Items) — a stale knowledge-base debug session + 4 dev-host/UI todos (AI open-seat scheduling, debug-toggle panel, standalone-shell height gap, Slate token/a11y polish). None are v4.7 scope.
+
+---
+
 ## v4.4 Agent-Ergonomics Gaps (Audit Fixes) (Shipped: 2026-07-02)
 
 **Delivered:** Closed every verified gap from the 2026-07-01 agent-ergonomics audit — hidden-info verification, headless simulation, structured errors, a fully scriptable dev host, an animation/drag-drop test story, and flow/debug introspection with enforced determinism — then updated docs and migrated all example games + MERC onto the new surface.
