@@ -26,7 +26,11 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 1. Regenerating a game via the `bs-build-chunk` pipeline (e.g. re-running chunk-1 against Go Fish) produces zero broken `<img>` elements when browser-verified, without hand-adding an asset set afterward.
 2. If a hypothetical chunk references `$images` paths with no corresponding asset files and no fallback guard, the skill's automated build/test step fails (not passes green) — proven by a deliberate before/after test case.
 3. The fix lives in the skill/scaffold layer (`src/cli/slash-command/bs/build/*.md` and/or the scaffold UI template), not as a one-off hand-patch to a single generated game.
-**Plans**: TBD
+**Plans**: 4 plans (Wave 1, fully parallel)
+- [ ] 152-01-PLAN.md — AssetImage.vue scaffold component (generateAssetImageVue + project-scaffold.test.ts) [ASSET-01]
+- [ ] 152-02-PLAN.md — AutoUI renderer fallback fix (CardRenderer.vue + PieceRenderer.vue load/error guard + tests) [ASSET-01]
+- [ ] 152-03-PLAN.md — asset-scan.ts reachability gate module + before/after fixture proof [ASSET-02]
+- [ ] 152-04-PLAN.md — skill prose (build.md UIQ-02 + test.md gate) + build-chunk.test.ts regression assertions [ASSET-01, ASSET-02]
 
 #### Phase 153: Dev-Host Multi-Client Turn-Desync Fix
 **Goal**: The dev-host multiplayer path keeps every connected client's turn view (`isMyTurn`/`currentPlayer`) consistent with the server across reload, reconnect, and AI-seat takeover — a client is never told it's its turn when it isn't.
@@ -52,7 +56,6 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 152. Asset Completeness in bs-build-chunk | 0/TBD | Not started | - |
+| 152. Asset Completeness in bs-build-chunk | 0/4 | Not started | - |
 | 153. Dev-Host Multi-Client Turn-Desync Fix | 0/TBD | Not started | - |
 | 154. MERC Re-Vendor | 0/TBD | Not started | - |
-</content>
