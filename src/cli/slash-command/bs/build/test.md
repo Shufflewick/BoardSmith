@@ -71,7 +71,17 @@ here.
    `timedOut` or `exceededMaxActions`. This is the real API — do not reimplement a hand-rolled
    random-play loop in its place.
 
-6. **A11y floor (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md `## ui:` tag
+6. **Asset-reachability gate (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md
+   `## ui:` tag is `touches` or `major`, run `scanAssetReachability(cwd)` from
+   `src/cli/lib/asset-scan.ts` against the generated project. A `ui: none` chunk skips this item
+   entirely — it has no UI to check. This is the single source of truth for ASSET-02's bare-`<img>`
+   scan — do not reimplement or duplicate this scan in prose; cite it and run the real function,
+   the same discipline item 2 above applies to `sandbox-scan.ts`. Any non-empty result (any bare
+   asset `<img>` found outside `AssetImage.vue`) is a build-blocking FAIL that routes this chunk
+   back to `build` (see "Failures Loop Back to `build`" below) — never silently worked around
+   here.
+
+7. **A11y floor (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md `## ui:` tag
    is `touches` or `major`, run all five a11y floor items below as part of this same numbered
    sequence. A `ui: none` chunk skips this item entirely — it has no UI to check.
 
