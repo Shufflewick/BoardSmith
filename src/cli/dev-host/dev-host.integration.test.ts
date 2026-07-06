@@ -312,9 +312,11 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     // read from the `hello` message body (not assigned per-connection like
     // this file's own beforeAll harness above), so TWO raw sockets can share
     // ONE clientId string — exactly how a page reload behaves (persisted
-    // clientId in localStorage, DevHost.vue:29-36). The close handler here is
-    // deliberately the UNGUARDED (pre-fix) shape for this task; Task 2 adds
-    // the identical guard here and to dev.ts itself (153-RESEARCH.md Pitfall 3).
+    // clientId in localStorage, DevHost.vue:29-36). The close handler here
+    // carries the same socket-identity guard as dev.ts's real handler
+    // (hand-mirrored, kept in sync per 153-RESEARCH.md Pitfall 3). Before the
+    // fix landed this test failed against the unguarded shape, proving the
+    // DEF-C repro; it now passes with the guard in place.
     let staleWss: WebSocketServer;
     let staleHost: MultiplayerHost;
     let stalePort: number;
@@ -365,9 +367,12 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
           });
         });
         socket.on('close', () => {
-          // UNGUARDED (the bug, dev.ts:757-762 pre-fix): no check that this
-          // socket is still the currently-registered one for clientId.
-          if (clientId) {
+          // Hand-mirrored to dev.ts's close handler (RESEARCH.md Pitfall 3 —
+          // these are two independent, hand-copied implementations that must
+          // be kept in sync). Only tear down if THIS socket still owns the
+          // clientId mapping; a stale close from a superseded (reloaded)
+          // socket must not disconnect the reconnected client.
+          if (clientId && staleClients.get(clientId) === socket) {
             staleClients.delete(clientId);
             staleHost.disconnect(clientId);
           }
@@ -445,11 +450,11 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
       // A submits an action over S2 (the reconnected, live socket).
       s2.send(JSON.stringify({ type: 'server_request', requestId: 'stale-r1', op: 'action', payload: { actionName: 'pass', args: {} } }));
 
-      // EXPECTATION (post-fix / GREEN): S2 still receives its own
-      // server_response AND the resulting game_state broadcast.
-      // EXPECTATION (pre-fix / RED, this task): the stale close's
-      // unconditional disconnect() silently drops both — this assertion
-      // fails against the unguarded handler above, proving the DEF-C repro.
+      // EXPECTATION (post-fix / GREEN — current behavior with the guard in
+      // place): S2 still receives its own server_response AND the resulting
+      // game_state broadcast. Pre-fix, the stale close's unconditional
+      // disconnect() silently dropped both, which is exactly how this
+      // assertion proved the DEF-C repro before the guard was added.
       await waitFor(
         () => s2Messages.some((m) => m.type === 'server_response' && m.requestId === 'stale-r1'),
         1500,

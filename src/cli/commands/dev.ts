@@ -755,7 +755,15 @@ export async function devCommand(options: DevOptions): Promise<void> {
         dispatch(clientId, msg as Parameters<typeof mpHost.handleMessage>[1]);
       });
       socket.on('close', () => {
-        if (clientId) {
+        // Only tear down session state if THIS socket is still the currently
+        // registered connection for clientId. A page reload opens a new
+        // socket (same persisted clientId) whose 'hello' can be processed
+        // BEFORE this (older) socket's 'close' event fires — Node gives no
+        // ordering guarantee between them. If a newer connection has already
+        // claimed the mapping, this close is stale: the client has already
+        // reconnected and must not be marked disconnected (would silently
+        // orphan every future broadcast/response to that seat — DEF-C).
+        if (clientId && clients.get(clientId) === socket) {
           clients.delete(clientId);
           mpHost.disconnect(clientId);
         }
