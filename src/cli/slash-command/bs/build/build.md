@@ -87,6 +87,15 @@ swap is a zero-layout-diff swap; if incorporating a real asset would require res
 repositioning anything, the placeholder's aspect ratio was declared wrong at design time and that
 is a `DESIGN.md` correction (its own chunk), not something `build` improvises around.
 
+A chunk's UI MUST NEVER emit a bare asset `<img>` for card/piece art. All such art routes through
+the scaffold-shipped `AssetImage.vue` component — emitted by `project-scaffold.ts` into every
+project from Chunk 0 — which draws the game-semantic fallback and overlays the real image only
+once it has loaded. `AssetImage.vue` is the operationalization of `## Placeholder Policy` above:
+it is the one code path that makes the zero-layout-diff guarantee hold structurally, rather than
+by convention every chunk's author has to remember. A bare asset `<img>` is not merely
+discouraged — it is a `test`-step failure (see `build/test.md`'s asset-reachability gate), so the
+prohibition is enforced, not just advised.
+
 ## Downstream Shape (cite, never restate)
 
 Once this chunk's files are all written (every Build Manifest row `written`) and the test script
