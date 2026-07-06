@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.7
 milestone_name: Playtest Follow-Up Fixes
 status: executing
-stopped_at: Completed 152-03-PLAN.md
-last_updated: "2026-07-06T03:55:24.129Z"
+stopped_at: Completed 152-04-PLAN.md
+last_updated: "2026-07-06T04:00:07.893Z"
 last_activity: 2026-07-06
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 152 (asset-completeness-in-bs-build-chunk) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-06
 
@@ -253,6 +253,7 @@ Recent decisions affecting current work:
 - [Phase 152-02]: PieceRenderer fallback label/color derived defensively so a sane token-style fallback exists even when pieceVisual isn't literally token kind
 - [Phase ?]: 152-03: Fixtures authored as real on-disk files under __fixtures__/asset-scan/ per plan's files_modified naming them as deliverables
 - [Phase ?]: 152-03: AssetImage.vue exclusion matches by basename only (not directory path), per plan's explicit NOTE
+- [Phase 152]: Asset-reachability gate failure routes to build (not repair per plan text) — matches test.md's pre-existing Failures-Loop-Back-to-build convention
 
 ### Pending Todos
 
@@ -264,8 +265,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-06T03:55:24.121Z
-Stopped at: Completed 152-03-PLAN.md
+Last session: 2026-07-06T04:00:07.886Z
+Stopped at: Completed 152-04-PLAN.md
 Resume file: 
 None
 
