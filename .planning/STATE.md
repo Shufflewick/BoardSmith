@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.6
-milestone_name: BS Skills (Rulebook-Driven Game Building)
-status: milestone-complete
-stopped_at: v4.6 re-closed — playtest follow-up (Phases 150-151) shipped, human gate closed, tagged v4.6.1
-last_updated: "2026-07-06T00:36:55.135Z"
+milestone: v4.7
+milestone_name: Playtest Follow-Up Fixes
+status: planning
+last_updated: "2026-07-06T03:07:17.038Z"
 last_activity: 2026-07-06
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,12 +24,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 151 (human-playtest-the-pipeline-built-go-fish) — COMPLETE
+Phase: Not started (defining requirements)
 Plan: —
-Status: v4.6 complete (reopened playtest follow-up closed); human gate closed; tagged v4.6.1
-Last activity: 2026-07-06
-
-Progress: [██████████] 100%
+Status: Defining requirements
+Last activity: 2026-07-06 — Milestone v4.7 started
 
 ## Milestones
 

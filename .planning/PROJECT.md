@@ -8,20 +8,22 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v4.6 BS Skills — Rulebook-Driven Game Building
+## Current Milestone: v4.7 Playtest Follow-Up Fixes
 
-**Goal:** Replace `/design-game` with a family of `bs-` skills that turn a game rulebook into a working BoardSmith game through small, adversarially-vetted, human-playtested chunks.
+**Goal:** Close the three tracked follow-ups from v4.6's human playtest — harden the `bs-` pipeline's OUTPUT and the dev-host, and propagate the DEF-B session fix to MERC — so a generated game is genuinely playable out of the box and the dev-host survives real multi-client use.
 
 **Target features:**
-- `useAnnouncer()` composable in `boardsmith/ui` — game-facing screen-reader announce API writing to GameShell's existing live regions (library prerequisite for enforceable per-chunk a11y)
-- File templates: SKETCH / CHUNK / RULINGS / DECISIONS / DESIGN / ASSETS skeletons with the state-machine authority rules
-- `/bs-ingest-rules` — rulebook transcription + chunking with citations, cross-reference INDEX, component inventory + visual identity survey, variant tagging, project scaffold, sketch with approval gate, interview fallback for rulebook-less prototypes, old-skill migration
-- `/bs-build-chunk` — the state-aware 10-step chunk engine (investigate → redteam → ask → build → test → audit → repair → playtest → revise → close) with bounded adversarial loops, human gates as file states, git protocol, scaled ceremony
-- `/bs-check-status` and `/bs-insert-chunk` — thin state readers/editors with consistency checks
-- `/bs-generate-ai` rename + `install-claude-command.ts` installs the full skill set, shared reference files, and removes design-game
-- Dry-run validation of the full pipeline against a reference game rulebook
+- **`bs-build-chunk` asset-completeness** — a generated game must never ship broken images: the build-chunk skill either emits the assets it references (card/piece art) OR guards the generated UI to fall back cleanly when `$images` paths are absent. Fixes the DEF-A class defect at the SKILL level (the v4.6 playtest game hardcoded `/cards/*.svg` paths it never shipped).
+- **DEF-C dev-host reconnect turn-desync** — reliably reproduce, then fix, the multiplayer-host bug where a client's view goes stale ("not your turn") after a reload/reconnect storm or AI-seat takeover; add a multi-client regression test. (Reproduction is step one — it was intermittent in the v4.6 playtest.)
+- **MERC re-vendor** — re-vendor BoardSmith into `~/Dropbox/MERC/BoardSmith/MERC` to pick up the DEF-B dev-host lost-update fix (`281e8155`); verify MERC's suite stays green (integration test for the fix reaching the vendored consumer).
 
-**Key context:** Full design contract — state-file schemas, subagent discipline, redteam independence rules, UI/a11y floor, loop bounds — lives in `.planning/bs-skills-plan.md`, hardened by a 4-lens adversarial review (user-confusion, agent-failure, completeness, UI/a11y/design).
+**Key context:** These are fixes/hardening surfaced by v4.6's human playtest gate (see `v4.6-MILESTONE-AUDIT.md` Reopened Scope + `149-HUMAN-UAT.md`), not new features — no domain research needed. DEF-B (the dev-host lost-update race) was already fixed in v4.6 (`281e8155`); this milestone propagates it to MERC and closes the sibling asset + reconnect gaps the same playtest surfaced.
+
+## Previous: v4.6 Shipped
+
+**Shipped:** 2026-07-05 (playtest follow-up re-closed same day, tagged `v4.6.1`). 36/36 requirements, 12 phases (140-149 + reopened 150-151), audit passed (`v4.6-MILESTONE-AUDIT.md`).
+
+BS Skills — Rulebook-Driven Game Building: replaced the 3,072-line `/design-game` monolith with a family of `bs-` Claude Code Agent Skills (ingest → build-chunk 10-step engine → check-status/insert-chunk), installable in the Agent Skills layout. Proven end-to-end against Go Fish. Reopened to close VAL-01's deferred human playtest — which earned its keep by catching a real pre-existing dev-host lost-update race (DEF-B, fixed at source `281e8155`, full suite 2653/2653) plus a missing-card-assets defect (DEF-A) that every automated check shipped green. Three follow-ups tracked into v4.7.
 
 ## Previous: v4.5 Shipped
 
