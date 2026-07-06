@@ -8,6 +8,7 @@ import {
   generateAppVue,
   generateBoardsmithJson,
   generateGameTableVue,
+  generateAssetImageVue,
   generateRulesIndexTs,
   generateUiIndexTs,
   generatePackageJson,
@@ -302,5 +303,37 @@ describe('generateGameTableVue', () => {
   it('has "start here" guidance for custom UI authors', () => {
     const out = generateGameTableVue();
     expect(out.toLowerCase()).toContain('start here');
+  });
+});
+
+describe('generateScaffoldFiles — AssetImage.vue (ASSET-01)', () => {
+  it('includes src/ui/components/AssetImage.vue', () => {
+    const files = generateScaffoldFiles(config);
+    const entry = files.find((f) => f.path === 'src/ui/components/AssetImage.vue');
+    expect(entry).toBeDefined();
+    expect(entry!.content).toContain('AssetImage');
+  });
+});
+
+describe('generateAssetImageVue — AssetImage load-reveal + token fallback', () => {
+  it('emits an @load handler that reveals the loaded state, and a --bsg- token fallback', () => {
+    const out = generateAssetImageVue();
+    expect(out).toContain('@load');
+    expect(out).toContain('loaded');
+    expect(out).toContain('is-loaded');
+    expect(out).toMatch(/--bsg-/);
+  });
+
+  it('shares a single aspect-ratio input between the fallback container and the <img>', () => {
+    const out = generateAssetImageVue();
+    expect(out).toContain('aspectRatio');
+  });
+});
+
+describe('generateAssetImageVue — onerror reverts to the fallback (never a broken image)', () => {
+  it('emits an @error handler that reverts loaded to false', () => {
+    const out = generateAssetImageVue();
+    expect(out).toContain('@error');
+    expect(out).toMatch(/onError[\s\S]*loaded\.value\s*=\s*false/);
   });
 });
