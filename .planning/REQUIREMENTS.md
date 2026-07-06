@@ -33,10 +33,10 @@ Closes the three tracked follow-ups from v4.6's human playtest (see `milestones/
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| ASSET-01 | TBD | Pending |
-| ASSET-02 | TBD | Pending |
-| DEVHOST-01 | TBD | Pending |
-| DEVHOST-02 | TBD | Pending |
-| VENDOR-01 | TBD | Pending |
+| ASSET-01 | Phase 152 | Pending |
+| ASSET-02 | Phase 152 | Pending |
+| DEVHOST-01 | Phase 153 | Pending |
+| DEVHOST-02 | Phase 153 | Pending |
+| VENDOR-01 | Phase 154 | Pending |
 
-**Coverage:** 5 requirements, to be mapped to phases by the roadmap.
+**Coverage:** 5/5 requirements mapped, no orphans, no duplicates.

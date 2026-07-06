@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-07-06T03:07:17.038Z"
 last_activity: 2026-07-06
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Milestone complete — no active milestone (run `/gsd:new-milestone` for the next)
+**Current focus:** v4.7 Playtest Follow-Up Fixes — close DEF-A (asset completeness), DEF-C (dev-host reconnect desync), and propagate DEF-B to MERC
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 152 (Asset Completeness in bs-build-chunk) — ready to plan
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-06 — Milestone v4.7 started
+Status: Roadmap created, awaiting phase planning
+Last activity: 2026-07-06 — v4.7 roadmap created (Phases 152-154, 5/5 requirements mapped)
 
 ## Milestones
 
@@ -64,9 +64,13 @@ Last activity: 2026-07-06 — Milestone v4.7 started
 - v4.4 Agent-Ergonomics Gaps (Audit Fixes) (Phases 123-130) -- shipped 2026-07-02
 - v4.5 Pit of Success Hardening (Audit #3 Fixes) (Phases 131-139) -- shipped 2026-07-03
 
+**Completed:**
+
+- v4.6 BS Skills (Rulebook-Driven Game Building) (Phases 140-151) -- shipped 2026-07-05 (playtest follow-up re-closed same day, `v4.6.1`)
+
 **In Progress:**
 
-- v4.6 BS Skills (Rulebook-Driven Game Building) (Phases 140-149) — roadmap created 2026-07-04, execution not yet started
+- v4.7 Playtest Follow-Up Fixes (Phases 152-154) — roadmap created 2026-07-06, execution not yet started
 
 ## Deferred Items
 
@@ -90,6 +94,11 @@ Carried forward from v4.0 (still deferred, separate repo): ShufflewickPub host s
 ## Accumulated Context
 
 ### Roadmap Evolution
+
+- v4.7 roadmap defined (2026-07-06): 3 phases (152-154), 5 requirements (ASSET, DEVHOST, VENDOR) derived directly from v4.6's human-playtest follow-ups (DEF-A asset gap, DEF-C dev-host reconnect desync, DEF-B propagation to MERC). Continues phase numbering from v4.6 (ended at Phase 151).
+- Phase 152 (ASSET-01/02) and Phase 153 (DEVHOST-01/02) are independent of each other — both fix distinct gaps surfaced by the same playtest — but are numbered in the milestone's suggested order.
+- Phase 154 (VENDOR-01) depends on both 152 and 153 so the MERC re-vendor carries every v4.7 fix, not just the already-landed DEF-B fix.
+- Coverage: 5/5 requirements mapped, no orphans, no duplicates (see REQUIREMENTS.md Traceability table).
 
 - v4.6 roadmap defined (2026-07-04): 10 phases (140-149), 34 requirements (LIB, TMPL, INGEST, BUILD, UIQ, STAT, DIST, VAL) derived from `.planning/bs-skills-plan.md`. Continues phase numbering from v4.5 (ended at 139).
 - Phase 140 (LIB: `useAnnouncer()`) and Phase 141 (TMPL: the six file templates) are both independent prerequisites — everything downstream consumes one or both, but they don't depend on each other, so they're sequenced first per the plan's own "Build Order" section.
@@ -256,7 +265,7 @@ None
 
 ## Operator Next Steps
 
-v4.6 roadmap ready (10 phases, 34 requirements, 100% coverage). Next: `/gsd:plan-phase 140` to break down the first phase (Library Prerequisite — `useAnnouncer()`, the a11y-floor-enabling composable that gates everything downstream).
+v4.7 roadmap ready (3 phases, 5 requirements, 100% coverage). Next: `/gsd:plan-phase 152` to break down the first phase (Asset Completeness in bs-build-chunk).
 </content>
 
 ## Deferred Items
