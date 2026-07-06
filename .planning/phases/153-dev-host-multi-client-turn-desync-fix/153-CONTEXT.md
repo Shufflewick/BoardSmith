@@ -40,26 +40,28 @@ race (dev-host-ai-op-race #2, separate latent issue).
   hand a seat to AI → back), driven headless via **Playwright** (the Chrome extension is currently
   unavailable — Playwright is the standing fallback).
 
-### Fix Locus & Root-Cause Focus (DEVHOST-02)
-- Investigate the **`hello`/reconnect → `reinitSeat` path first** (`src/cli/dev-host/multiplayer-host.ts`):
-  a reconnecting client (page reload / HMR) resumes its seat via `reinitSeat` — the prime suspect is
-  it receiving a stale snapshot/turn view because server state moved on during the client's absence.
-- Fix principle: **server-authoritative, recompute-on-delivery** — a (re)connecting client always
-  receives a fresh authoritative snapshot with turn recomputed from current state, never a cached or
-  stale one.
-- Explicitly **determine whether DEF-C was a symptom of DEF-B** (the lost-update race fixed by the
-  per-host `opChain` at `281e8155`) vs a distinct reconnect-path bug — the harness must distinguish
-  them (e.g. does the desync only appear if you revert the opChain serialization, or independently?).
+### Fix Locus & Root-Cause Focus (DEVHOST-02) — ROOT CAUSE PROVEN (research, reproduced this session)
+- **PROVEN root cause (RESEARCH.md):** `src/cli/commands/dev.ts`'s WS `close` handler unconditionally
+  runs `clients.delete(clientId)` + `mpHost.disconnect(clientId)` with **no check that the closing
+  socket is still the currently-registered one**. On page reload, the NEW socket sends `hello` with
+  the same persisted `clientId` (`DevHost.vue` stores it in `localStorage`) BEFORE the OLD socket's
+  `close` fires; the stale `close` then wrongly flips the reconnected seat's `connected` flag to
+  `false`, silently dropping all future broadcasts/responses to it → the client's turn view goes
+  stale → the DEF-C "acted, then rejected / your-turn-when-it-isn't" symptom.
+- **My earlier `reinitSeat` stale-snapshot hypothesis is REFUTED:** `viewForSeat` reads
+  `lastPlayerViews`, freshly overwritten on every `apply()`, and reconnect delivers a correct view.
+  The bug is one layer UP, in the `dev.ts` WS transport — NOT in `MultiplayerHost`/`SnapshotSessionHost`.
+- **DEF-C is INDEPENDENT of DEF-B:** the repro runs cleanly against post-`281e8155` HEAD (opChain
+  already serialized) — a distinct transport-layer bug, not a residual op-race symptom.
+- **Fix:** a one-line guard in `dev.ts`'s `close` handler — `if (clientId && clients.get(clientId) === socket)` —
+  so a stale close superseded by a newer same-`clientId` connection is ignored. No changes to
+  `MultiplayerHost`/`SnapshotSessionHost`.
 
-### Acceptance if It Won't Reliably Reproduce
-- If a **rigorous, seeded, many-iteration harness across all three scenarios** cannot surface any
-  turn-view inconsistency AND we can prove *why* (DEF-B's serialization + broadcast-per-move already
-  guarantee it), the deliverable becomes an **invariant regression test** that locks the guarantee
-  (fails if you revert the serialization / fresh-snapshot behavior) PLUS a documented root-cause
-  finding that DEF-C was a DEF-B symptom.
-- This outcome is acceptable **only after a genuinely hard reproduction effort** — a real harness that
-  WOULD catch the desync if the invariant could break, not a few manual attempts. A weak
-  non-reproduction is not acceptable (SC-1 demands reliable repro or a proven invariant with cause).
+### Acceptance — MOOT (it reproduced reliably)
+- Grey Area 3's non-reproduction fallback is no longer needed: the researcher reproduced the desync
+  deterministically in a throwaway vitest (`hello('A') → disconnect('A') → pass('A')` delivers zero
+  messages to seat A). The regression test therefore genuinely fails on pre-fix code and passes on
+  post-fix code (SC-2) at the real-`ws`-socket layer that exercises the literal `dev.ts` path.
 </decisions>
 
 <code_context>
