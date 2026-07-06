@@ -4,13 +4,13 @@ milestone: v4.7
 milestone_name: Playtest Follow-Up Fixes
 status: executing
 stopped_at: Completed 152-01-PLAN.md
-last_updated: "2026-07-06T03:43:29.640Z"
+last_updated: "2026-07-06T03:50:41.840Z"
 last_activity: 2026-07-06
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 152 (asset-completeness-in-bs-build-chunk) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-06
 
@@ -249,6 +249,8 @@ Recent decisions affecting current work:
 - [Phase 150-03]: F1 fix: DESIGN.md authored retroactively (Direction: Adopt) after discovering Plan 02's ask step skipped the design-ask visual-identity sub-gate despite this chunk being tagged ui: major
 - [Phase ?]: Phase 150: Task 1/3 verification-only, no commits produced; only Task 2's UAT doc edit required a commit
 - [Phase ?]: AssetImage.vue single kind-discriminant component, fallback always rendered underneath
+- [Phase 152-02]: PieceRenderer's two unguarded image branches (overlay presentationEntry.image override and engine pieceVisual image) merged into one effectivePieceImage computed + one load-guard rather than duplicating the guard twice
+- [Phase 152-02]: PieceRenderer fallback label/color derived defensively so a sane token-style fallback exists even when pieceVisual isn't literally token kind
 
 ### Pending Todos
 
@@ -260,7 +262,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-06T03:43:29.633Z
+Last session: 2026-07-06T03:48:29.279Z
 Stopped at: Completed 152-01-PLAN.md
 Resume file: 
 None

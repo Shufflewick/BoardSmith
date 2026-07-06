@@ -28,7 +28,7 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 3. The fix lives in the skill/scaffold layer (`src/cli/slash-command/bs/build/*.md` and/or the scaffold UI template), not as a one-off hand-patch to a single generated game.
 **Plans**: 4 plans (Wave 1, fully parallel)
 - [x] 152-01-PLAN.md — AssetImage.vue scaffold component (generateAssetImageVue + project-scaffold.test.ts) [ASSET-01]
-- [ ] 152-02-PLAN.md — AutoUI renderer fallback fix (CardRenderer.vue + PieceRenderer.vue load/error guard + tests) [ASSET-01]
+- [x] 152-02-PLAN.md — AutoUI renderer fallback fix (CardRenderer.vue + PieceRenderer.vue load/error guard + tests) [ASSET-01]
 - [ ] 152-03-PLAN.md — asset-scan.ts reachability gate module + before/after fixture proof [ASSET-02]
 - [ ] 152-04-PLAN.md — skill prose (build.md UIQ-02 + test.md gate) + build-chunk.test.ts regression assertions [ASSET-01, ASSET-02]
 
@@ -56,6 +56,6 @@ Closes the three tracked follow-ups from v4.6's human playtest (DEF-A asset gap,
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 152. Asset Completeness in bs-build-chunk | 1/5 | In Progress|  |
+| 152. Asset Completeness in bs-build-chunk | 2/5 | In Progress|  |
 | 153. Dev-Host Multi-Client Turn-Desync Fix | 0/TBD | Not started | - |
 | 154. MERC Re-Vendor | 0/TBD | Not started | - |
