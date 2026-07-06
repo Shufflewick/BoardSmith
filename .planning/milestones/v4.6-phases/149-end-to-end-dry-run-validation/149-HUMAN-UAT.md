@@ -208,5 +208,23 @@ the real `boardsmith dev` WS host).
 - [x] Taste check — cards now render (DEF-A fixed); board legible
 - [x] Second-seat leak check — seat 1 sees only card BACKS for Player 2's hand (UI); automated `diffPlayerViews`/`assertNoHiddenInfoLeak` remain green
 
-**Status: RESOLVED — both playtest defects fixed and re-verified. Pending optional
-final human re-playtest to close VAL-01 with the user's own eyes.**
+### DEF-C — Action rejected "Not Player 1's turn" in 2-browser play (INVESTIGATED — not reproducible post-fix)
+
+- **Symptom (one occurrence):** during a 2-browser human-vs-human re-playtest, Seat 1's
+  ask was rejected with "Not Player 1's turn" while its own panel showed its turn.
+- **Diagnosis (client + host instrumentation, guided repro):** the UI action pipeline
+  is **correct** — browser traces showed `fill → isReady:true → auto-execute → sendAction`
+  all firing; the server simply (correctly) rejected the action because it was actually
+  Seat 2's turn. Host-side traces (`deliverGameState` with per-seat `currentPlayer`/`isMyTurn`)
+  showed **broadcasts reach Seat 1 on every move and report the correct turn**, including
+  through the AI-seat takeover — it is **not** a dropped-broadcast or a generated-game bug.
+- **Outcome:** DEF-C **did not reproduce** in two clean guided re-playtests (both played
+  fine per the user); the one occurrence correlated with a reload/reconnect storm (repeated
+  hard-reloads) and/or a stale pre-fix tab. Most plausibly a transient symptom of the DEF-B
+  AI/op lost-update race (now fixed) or stale client state. **Watch item**, not an open
+  blocker — the diagnosis + instrumentation approach are on file if it recurs.
+
+**Status: RESOLVED — DEF-A + DEF-B fixed and verified; the pipeline-built game's rules,
+UI action pipeline, hidden-info redaction, and turn handling (incl. AI-seat takeover) all
+verified correct in clean play. DEF-C not reproducible post-fix (watch item). VAL-01's
+human gate is CLOSED.**
