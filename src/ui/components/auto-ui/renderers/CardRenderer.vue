@@ -17,7 +17,7 @@
  * element.__hidden is true (T-93-04).
  */
 
-import { computed, inject, ref, type Ref, type ComputedRef } from 'vue';
+import { computed, inject, ref, watch, type Ref, type ComputedRef } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
@@ -277,6 +277,21 @@ const effectiveCardImage = computed((): ImageInfo | null => {
 });
 
 // ---------------------------------------------------------------------------
+// Load-guarded reveal for Baseline 1 (url image) — DEF-A guard.
+// The url <img> is revealed only after its own @load fires; @error reverts to
+// the always-rendered .card-face drawn fallback. Reset when the resolved src
+// changes so a card reused for a different asset re-guards (Pitfall: stale
+// `loaded=true` would flash a broken image state for the old src).
+// ---------------------------------------------------------------------------
+const loaded = ref(false);
+watch(
+  () => (effectiveCardImage.value?.type === 'url' ? effectiveCardImage.value.src : null),
+  () => {
+    loaded.value = false;
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Drag handlers
 // ---------------------------------------------------------------------------
 function handleDragStart(event: DragEvent) {
@@ -368,14 +383,28 @@ function handleDrop(event: DragEvent) {
       :element="element"
     />
 
-    <!-- Baseline 1: URL image (overlay image or engine face/back image) -->
-    <img
-      v-else-if="effectiveCardImage?.type === 'url'"
-      :src="effectiveCardImage.src"
-      class="card-image"
-      :class="{ 'card-image-back': element.__hidden || element.attributes?.__hidden }"
-      :alt="displayLabel"
-    />
+    <!-- Baseline 1: URL image (overlay image or engine face/back image).
+         Zero-layout-diff (DEF-A guard): the drawn .card-face fallback is always
+         rendered underneath at the fixed card-w/card-h box; the <img> overlays it
+         absolutely and is revealed only on @load, reverting to the fallback on
+         @error. Neither element leaves flow, so toggling `loaded` never resizes
+         the slot. -->
+    <div v-else-if="effectiveCardImage?.type === 'url'" class="card-face-container">
+      <div class="card-face">
+        {{ displayLabel }}
+      </div>
+      <img
+        :src="effectiveCardImage.src"
+        class="card-image card-image-overlay"
+        :class="{
+          'card-image-back': element.__hidden || element.attributes?.__hidden,
+          'is-loaded': loaded,
+        }"
+        :alt="displayLabel"
+        @load="loaded = true"
+        @error="loaded = false"
+      />
+    </div>
 
     <!-- Baseline 2: Sprite-sheet image -->
     <div
@@ -532,6 +561,32 @@ function handleDrop(event: DragEvent) {
   box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
   object-fit: contain;
+}
+
+/* Baseline 1 load-guard: fixed-size container shared by the drawn fallback and
+   the overlay <img> (DEF-A guard, zero-layout-diff) */
+.card-face-container {
+  position: relative;
+  width: var(--card-w);
+  height: var(--card-h);
+  flex-shrink: 0;
+}
+
+.card-face-container .card-face {
+  width: 100%;
+  height: 100%;
+}
+
+.card-image-overlay {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--bsg-dur-base) var(--bsg-ease);
+}
+
+.card-image-overlay.is-loaded {
+  opacity: 1;
 }
 
 /* Baseline 2: sprite sheet */
