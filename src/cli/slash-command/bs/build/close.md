@@ -107,11 +107,25 @@ the reconciled close-gate duty (146-REVIEW WR-02): `build-chunk.md` Step 2 owns 
 owns only tail *description* re-derivation (the `## Sketch-Tail Delta Gate` above) and the
 next-chunk proposal.
 
+**Then continue — do not hand off (cross-chunk continuation).** Proposing the next chunk and
+printing its command is NOT the end of the session by default. Per `state-machine.md` "Session
+Handoff Seams" → "Cross-chunk continuation", once the delta gate is resolved the same session rolls
+straight into the next chunk: re-enter `build-chunk.md` Step 2, route to the next chunk's
+`investigate` (Step 2 lazily details its tail entry first), and run `investigate → redteam`
+continuously, stopping at that chunk's `ask` gate (or, for a light-path next chunk, its `playtest`
+gate; or, for the mandated final-acceptance chunk, dispatch `build/final-acceptance.md`). Stop at
+this boundary **instead** only when a stop condition fires — the user said stop, context has crossed
+the 60% low-water mark, or an automated step is stuck/unrecoverable — in which case the printed
+command above is how the user resumes. Present the proposal either way, so the user always sees the
+next chunk (and can say "stop") before its first gate.
+
 ## Downstream Shape (cite, never restate)
 
 Once the delta is approved and the next chunk is proposed, this chunk's lifecycle is complete —
 its `Status` is `verified` (or `verified (user-waived)`), its `## Verified Commit Hash` is set,
-and SKETCH.md reflects the (possibly updated) tail. The next session starts a fresh
-`{investigate, redteam, ask}` group (`state-machine.md` "Session Handoff Seams") for the proposed
-chunk, or — if the sketch's `## Mandated Chunks` final-acceptance chunk is next — dispatches
-`build/final-acceptance.md` instead. This file does not restate either downstream shape.
+and SKETCH.md reflects the (possibly updated) tail. By default **the same session continues** into a
+fresh `{investigate, redteam, ask}` group for the proposed chunk (`state-machine.md` "Session Handoff
+Seams" → "Cross-chunk continuation"), stopping at its `ask` gate — or, if the sketch's `## Mandated
+Chunks` final-acceptance chunk is next, dispatches `build/final-acceptance.md` instead. Only when a
+stop condition fires at the chunk boundary does a fresh `/bs-build-chunk` invocation pick it up
+instead. This file does not restate either downstream shape.

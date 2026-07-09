@@ -130,24 +130,83 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
 - **Refuted twice:** that is by definition an ambiguity. Escalate to the user as a plain-language question; the ruling is recorded in `RULINGS.md`.
 - Disputes go to the human, never to more agents.
 
-## Session Handoff Seams (structural, not self-assessed)
+## Session Handoff Seams (cold-resume checkpoints, not mandatory stops)
 
-A single session runs at most **one** step group, then hands off. The step groups are:
+The four step groups are:
 
 1. `{investigate, redteam, ask}`
 2. `{build, test}`
 3. `{audit, repair}`
 4. `{playtest, revise, close}`
 
-Every one of the 10 full-ceremony steps belongs to exactly one group. `close` belongs to
-group 4: the session that runs the human playtest gate (and its revise loop — `revise-1`,
-`revise-2`, … appended as needed until every this-chunk-defect item has a recorded disposition)
-also closes the chunk — marking it verified, recording the verified commit hash, and rolling up
-decisions — because close is cheap and splitting it into its own session would leave a
-verified-but-unclosed chunk across a handoff. The handoff seam wraps the WHOLE group: a single
-session runs playtest → its revise loop → close as one unit and does not hand off mid-group. The
-group name's `revise` denotes that whole loop, not a hard cap of one revision.
+Every one of the 10 full-ceremony steps belongs to exactly one group. These group boundaries are
+the skill's **cold-resume/persistence checkpoints** — a seam marks where a session's work is
+guaranteed durable enough to stop and resume cleanly, NOT a point where the session must hand off.
+Each step still persists its own state to `CHUNK.md` before the next starts, and a commit still
+lands at every step completion (see "Write Order" and "Git Protocol"). What has changed is the
+stopping policy: **a single session now runs continuously across these group boundaries — and
+across chunk boundaries.** It stops only when (a) it reaches a human-input gate — it needs the user
+to answer a question or to test/playtest something — (b) the harness surfaces a context-low warning
+(the 60% low-water mark below), or (c) an automated step hits an unrecoverable or stuck state it
+cannot resolve on its own (a gate that keeps failing and `repair` cannot fix, a subagent that dies
+on a terminal error, a typecheck that will not go green) — which it surfaces to the user rather than
+looping or plowing ahead. Between those points it flows straight through: after `ask` approval it
+runs `build → test → audit → repair` and stops at `playtest`; after `playtest` (and any `revise`
+loop) it runs `close`, stops at close's sketch-tail delta gate **only if that gate needs approval**,
+and then — see "Cross-chunk continuation" below — rolls straight into the next chunk rather than
+ending the session.
 
-**Final-acceptance chunk exception.** The sketch's one mandated final-acceptance chunk (`templates/SKETCH.template.md` "## Mandated Chunks") has a fixed 4-item Step Checklist `[final-acceptance, playtest, revise, close]` (`build-chunk.md` "Final-acceptance chunk target"). Its leading `final-acceptance` content step — a coverage check plus a 7-point design-QA pass with a fresh-context agent dispatch and two human-narrated checks — is by far the heaviest single step in the skill, so it gets its OWN session: a handoff seam sits between `final-acceptance` and `playtest`, and `{playtest, revise, close}` runs as the next session's group 4. This is the one place a group-4 gate is preceded by a separate content session; see `build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the sub-part persistence that keeps a mid-pass crash resumable.
+**Human-input gates that DO stop the session:**
 
-Self-assessed "remaining context" is not a real capability — session budgets are structural, based on these fixed group boundaries, not on a session's own estimate of how much context it has left. If the harness surfaces a context warning, the session obeys it immediately regardless of which step group it's in.
+- The `ask` approval gate — the full 4-part presentation ceremony; the user approves the
+  interpretation before `Status: approved` is written and `build` begins.
+- The `playtest` human-verification gate — the human plays the numbered test script and confirms it
+  item-by-item; no subagent can stand in for this.
+- A **redteam refuted-twice escalation** — a claim refuted twice is by definition an ambiguity,
+  raised to the user as a plain-language question and recorded in `RULINGS.md` (see "Redteam
+  Escalation").
+- A **repair round-3 triage** — after 3 audit rounds any remaining findings are triaged with the
+  user: real blocker, defer, or refuted (see "Repair Loop Bound").
+- The `close` sketch-tail delta approval gate — the user explicitly approves the tail's delta
+  before SKETCH.md's `## Ordered Chunk List` is rewritten (never a silent rewrite).
+
+Between these gates the session continues automatically across seams — it does not hand off after
+each group. `close` belongs to group 4: the same session that runs the human playtest gate (and its
+revise loop — `revise-1`, `revise-2`, … appended as needed until every this-chunk-defect item has a
+recorded disposition) also closes the chunk — marking it verified, recording the verified commit
+hash, and rolling up decisions. The group name's `revise` denotes that whole loop, not a hard cap
+of one revision.
+
+**Cross-chunk continuation (the chunk→chunk seam).** The boundary between one chunk's `close` and
+the next chunk's `investigate` is itself a seam the session flows across, exactly like the four
+intra-chunk group boundaries — it is NOT a session terminus. When `close` finishes (its bookkeeping
+written, its sketch-tail delta gate resolved — approved if there was a delta, silently skipped if
+there was none), the session does NOT stop and tell the user to re-invoke. Instead, if none of the
+three stop conditions (a)/(b)/(c) above applies — the user has not said stop, context is below the
+60% low-water mark, and no automated step is stuck — it re-enters `build-chunk.md` Step 2 (Resume
+Routing), routes to the next chunk's first incomplete step (its `investigate`, lazily detailing the
+tail entry first per Step 2's "Sketch-level tail-entry target"), and runs `investigate → redteam`
+continuously, stopping at that next chunk's `ask` approval gate — a new chunk's first human-input
+gate. (A light-path next chunk has no `ask`; it continues to that chunk's `playtest` gate, its first
+human gate, instead. The mandated final-acceptance chunk dispatches `build/final-acceptance.md` per
+"Final-acceptance chunk exception" below.) This is what makes the router a **loop over chunks**
+bounded by human gates, context, and stuck-state — not a one-shot that halts after every `close`.
+`close` still presents the next-chunk proposal and its resume command before continuing, so the user
+always sees what is coming (and can say "stop") before that chunk's first gate; the printed command
+is the resume path for the case where a stop condition *does* fire at this boundary.
+
+**Context-low escape hatch.** "Context-low" has a concrete threshold: **60% of the context
+window used.** Below 60%, the session keeps going — it does NOT stop, wrap up, or suggest a
+`/clear` on a vaguer hunch that it is "getting long" (stopping at 40% because the work feels large
+is exactly the premature bail this threshold exists to forbid). At or above ~60% used (or the
+moment the harness surfaces a context warning earlier than that, whichever comes first), the
+session finishes the step it is on, lets that step persist to `CHUNK.md` under the cold-resume
+parse contract and commit per the git protocol, and then stops at that cold-resume checkpoint —
+telling the user to run `/clear` and re-invoke `/bs-build-chunk`, which picks up at the first
+incomplete step exactly where this one stopped. The 60% figure is a low-water mark, not a hard
+interrupt: never abandon a step mid-write to hit it, and never blow far past it either — stop at
+the next persisted checkpoint once crossed. The one thing that IS a real capability here is
+reading the harness's own context-usage signal against this 60% line; a session must not stop on a
+generic "this feels long" guess that ignores the actual percentage.
+
+**Final-acceptance chunk exception.** The sketch's one mandated final-acceptance chunk (`templates/SKETCH.template.md` "## Mandated Chunks") has a fixed 4-item Step Checklist `[final-acceptance, playtest, revise, close]` (`build-chunk.md` "Final-acceptance chunk target"). Its leading `final-acceptance` content step — a coverage check plus a 7-point design-QA pass with a fresh-context agent dispatch and two human-narrated checks — is by far the heaviest single step in the skill. The seam between `final-acceptance` and `playtest` is therefore a first-class **resume checkpoint**: because that content step is so heavy it is the most likely place a context-low warning fires, and its sub-parts persist individually so a resume re-enters mid-pass rather than re-running the whole step. It is NOT a mandatory auto-stop — if context holds, the same session flows from `final-acceptance` straight into the `{playtest, revise, close}` group and stops at the human `playtest` gate that follows, exactly like any other chunk. See `build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the sub-part persistence that keeps a mid-pass crash resumable.

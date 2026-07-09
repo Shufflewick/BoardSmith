@@ -211,8 +211,11 @@ tail entry when routing next reaches it.
 
 ## Step Group 1 Dispatch — `{investigate, redteam, ask}`
 
-A single session runs at most one step group (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams"), then
-hands off. This is the first of the four groups.
+This is the first of the four step groups (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams").
+A session no longer hands off after each group — it runs continuously across the group boundaries
+and stops only at a human-input gate or a harness context-low warning. Group 1's own stopping point
+is the `ask` approval gate below; if the user approves, this same session continues into group 2
+(`build → test`) rather than handing off.
 
 **Every step persists before the next starts:** when a step completes, the orchestrator checks
 off that step's item on CHUNK.md's Step Checklist (a state-file write) before dispatching the
@@ -254,11 +257,17 @@ that same explicit approval. Investigate's claims list and visibility declaratio
 gated — they were already written progressively at the investigate step, per the same precedent
 `ingest-rules.md` Step 7 established for `ASSETS.md`/`rulebook/00-visual-survey.md`.
 
-End of group 1: print the exact next command to run (`/bs-build-chunk`) and confirm everything
-written so far (claims list, the `## Redteam Rounds` entry, checked-off Step Checklist items,
-`Status: approved`, SKETCH.md's updated derived-status pointer — CHUNK.md first, SKETCH.md
+End of group 1: the `ask` step is itself the human-input gate that stops this group — the session
+pauses for the user's approval decision, not for a session handoff. When approval lands, confirm
+everything written so far (claims list, the `## Redteam Rounds` entry, checked-off Step Checklist
+items, `Status: approved`, SKETCH.md's updated derived-status pointer — CHUNK.md first, SKETCH.md
 second, per `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Write Order" — and any `RULINGS.md`/`ASSETS.md` entries) is
-saved in the game folder — non-programmer handoff.
+saved in the game folder, then **continue in this same session into group 2** (`build → test`) —
+no handoff, no "run `/bs-build-chunk` again" prompt. Only a harness context-low warning interrupts
+that continuation, in which case persist (already guaranteed) and tell the user to `/clear` and
+re-invoke `/bs-build-chunk` to resume (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams").
+If the redteam step hit a refuted-twice escalation earlier in this group, that is its own
+human-input gate — the session stops there for the user's ruling before reaching `ask`.
 
 ## Step Groups 2–3 (dispatch prose lives in their own reference files)
 
@@ -271,11 +280,12 @@ each target file; there is nothing further to add here for groups 2-3.
 
 ## Step Group 4 Dispatch — `{playtest, revise, close}`
 
-The last of the four session step groups (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams"). A single
-session runs at most one step group, then hands off, same discipline as group 1. The `revise`
-step may loop (`revise-1`, `revise-2`, … — see `${CLAUDE_SKILL_DIR}/../bs-shared/build/revise.md` "Round-Bounding and
-Persistence") entirely inside this one session; the loop never crosses the handoff seam, and the
-group label's single `revise` denotes that whole loop, not a one-round cap.
+The last of the four step groups (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams"). This group
+is reached by continuing from group 3 (`audit → repair`) in the same session — not by a handoff.
+Its stopping points are human-input gates: the `playtest` human-verification gate below, and — if
+it needs approval — `close`'s sketch-tail delta gate. The `revise` step may loop (`revise-1`,
+`revise-2`, … — see `${CLAUDE_SKILL_DIR}/../bs-shared/build/revise.md` "Round-Bounding and Persistence") entirely inside
+this one session; the group label's single `revise` denotes that whole loop, not a one-round cap.
 
 **Every step persists before the next starts:** `playtest` checks off its own Step Checklist item
 as part of its Verified-Checklist gate write (see `${CLAUDE_SKILL_DIR}/../bs-shared/build/playtest.md` "The Verified Gate"); a
@@ -291,12 +301,16 @@ check and 7-point design-QA pass (Step 2's "Final-acceptance chunk target" route
 resume). Its output — the finished game played start-to-finish — becomes this chunk's `playtest`
 script; the `{playtest, revise, close}` gate below then runs **on top of** that content, never in
 place of it. Because this content step is exceptionally heavy, the final-acceptance chunk carries an
-**extra** handoff seam ordinary chunks lack: the `final-acceptance` content step is its own session
-and `{playtest, revise, close}` is the next (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams"; see
-`${CLAUDE_SKILL_DIR}/../bs-shared/build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the
-per-sub-part persistence that makes a mid-pass crash resume mid-pass instead of re-dispatching the
-whole step). An ordinary chunk has no `final-acceptance` item on its Step Checklist and skips this
-step entirely.
+**extra** handoff seam ordinary chunks lack — but under the current stopping policy that seam is a
+**resume checkpoint**, not a forced stop: if context holds, the same session flows from
+`final-acceptance` straight into the `{playtest, revise, close}` gate and stops at the human
+`playtest` gate that follows, exactly like any other chunk. The seam earns its "extra" status
+because `final-acceptance` is the heaviest step and thus the most likely place a harness context-low
+warning fires; its sub-parts persist individually so that if the session does yield there, a resume
+re-enters mid-pass rather than re-dispatching the whole step (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
+"Session Handoff Seams"; see `${CLAUDE_SKILL_DIR}/../bs-shared/build/final-acceptance.md` "Sub-Step Resumability and the
+Handoff Seam Before `playtest`" for that per-sub-part persistence). An ordinary chunk has no
+`final-acceptance` item on its Step Checklist and skips this step entirely.
 
 **playtest:** Delegate the entire human-verification gate to `${CLAUDE_SKILL_DIR}/../bs-shared/build/playtest.md` — no subagent,
 the orchestrator narrates the numbered click-by-click test script directly to the human and
@@ -318,20 +332,34 @@ light-path chunk (`build, test, playtest`, no `close` step of its own) runs this
 sequence from inside its own `playtest` step instead — see `${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md`'s `## Bookkeeping
 Sequence` and the light-path note above.
 
-End of group 4 (and of this chunk's lifecycle): print the exact next command to run
-(`/bs-build-chunk`) and confirm everything written so far (Verified Checklist, `## Revision
+End of group 4 (and of this chunk's lifecycle): `close`'s sketch-tail delta gate is the group's
+human-input stopping point — it pauses for the user's explicit approval of the tail delta (when
+there is one to approve). Confirm everything written so far (Verified Checklist, `## Revision
 Rounds` entries if any, `## Verified Commit Hash`, `DECISIONS.md` rollup, the approved sketch-tail
 delta, `Status: verified`/`verified (user-waived)`, SKETCH.md's updated derived-status pointer —
-CHUNK.md first, SKETCH.md second) is saved in the game folder — non-programmer handoff, same as
-group 1's close.
+CHUNK.md first, SKETCH.md second) is saved in the game folder — a non-programmer-legible
+checkpoint. From here, by default, **the same session continues into the next chunk** — it re-enters
+Step 2, routes to the next chunk's `investigate`, and runs continuously to that chunk's `ask` gate (a
+new chunk's first human-input gate), per `state-machine.md` "Session Handoff Seams" → "Cross-chunk
+continuation". It stops at this boundary instead — telling the user to re-invoke `/bs-build-chunk` —
+only when a stop condition fires: the user said stop, context has crossed the 60% low-water mark, or
+an automated step is stuck/unrecoverable.
 
 ## Session Handoff Seams
 
-Cite `state-machine.md` "Session Handoff Seams" for the four fixed group boundaries — do not
-restate them here. A single session never crosses a seam even if it believes it has context
-remaining: self-assessed "remaining context" is not a real capability; session budgets are
-structural. If the harness surfaces a context warning mid-group, the session obeys it immediately
-regardless of which step it is on.
+Cite `state-machine.md` "Session Handoff Seams" for the four group boundaries and the stopping
+policy — do not restate them here. In short: the boundaries are cold-resume/persistence
+checkpoints, not mandatory stops; a single session runs continuously across them — and across chunk
+boundaries (after `close` it rolls straight into the next chunk's `investigate` and stops at that
+chunk's `ask`, per `state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation") — and
+stops only at a human-input gate (`ask` approval, a redteam refuted-twice escalation, the `playtest`
+gate, a repair round-3 triage, or `close`'s delta gate), when an automated step hits an
+unrecoverable/stuck state, or when context crosses the **60%-used** low-water mark (see
+`state-machine.md` "Session Handoff Seams" → "Context-low escape hatch" for the exact threshold
+rule). Below 60% the session keeps going — it does NOT stop early because the work feels large.
+At/above ~60% used (or an earlier harness context warning, or a stuck automated step), it finishes
+and persists the current step, then stops at that cold-resume checkpoint and tells the user to
+`/clear` and re-invoke `/bs-build-chunk` to resume.
 
 Example one-line progress narration (style guide, not a script — one or two per group):
 
