@@ -85,6 +85,72 @@ describe('initiatePublish error reporting', () => {
     expect(err.kind).toBe('SERVER');
     expect(err.message).toBe('manifest rejected');
   });
+
+  it('maps a 403 NO_ACCESS body to the NO_ACCESS kind with the server message', async () => {
+    mockFetchResponse(403, {
+      statusMessage: 'No develop access',
+      data: { code: 'NO_ACCESS' },
+    });
+
+    const err = await captureError(
+      initiatePublish('https://platform.example', 'key', 'slug', '1.0.0', {}),
+    );
+    expect(err.kind).toBe('NO_ACCESS');
+    expect(err.statusCode).toBe(403);
+    expect(err.message).toBe('No develop access');
+  });
+
+  it('maps a 403 SCOPE_VIOLATION body to the SCOPE_VIOLATION kind', async () => {
+    mockFetchResponse(403, {
+      statusMessage: 'Key scoped elsewhere',
+      data: { code: 'SCOPE_VIOLATION' },
+    });
+
+    const err = await captureError(
+      initiatePublish('https://platform.example', 'key', 'slug', '1.0.0', {}),
+    );
+    expect(err.kind).toBe('SCOPE_VIOLATION');
+    expect(err.statusCode).toBe(403);
+    expect(err.message).toBe('Key scoped elsewhere');
+  });
+
+  it('maps a 401 to the fixed invalid-key message regardless of body', async () => {
+    mockFetchResponse(401, { statusMessage: 'whatever' });
+
+    const err = await captureError(
+      initiatePublish('https://platform.example', 'key', 'slug', '1.0.0', {}),
+    );
+    expect(err.kind).toBe('SERVER');
+    expect(err.statusCode).toBe(401);
+    expect(err.message).toBe('Invalid or revoked API key.');
+  });
+
+  it('threads publisherSlug and publisherId into the request body and returns resolved publisherId', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          versionId: 'v1',
+          gameId: 'g1',
+          uploadUrl: 'https://up',
+          uploadCode: 'code',
+          publisherId: 'pub-resolved',
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await initiatePublish(
+      'https://platform.example', 'key', 'slug', '1.0.0', {},
+      'game-id', 'my-publisher', 'pub-id',
+    );
+
+    expect(result.publisherId).toBe('pub-resolved');
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.publisherSlug).toBe('my-publisher');
+    expect(body.publisherId).toBe('pub-id');
+    expect(body.gameId).toBe('game-id');
+  });
 });
 
 describe('completePublish error reporting', () => {
