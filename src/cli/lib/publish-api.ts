@@ -10,10 +10,11 @@ interface InitiateResponse {
   gameId: string;
   uploadUrl: string;
   uploadCode: string;
+  publisherId: string;
 }
 
 export interface PublishError {
-  kind: 'SLUG_TAKEN' | 'VERSION_EXISTS' | 'NETWORK' | 'SERVER';
+  kind: 'SLUG_TAKEN' | 'VERSION_EXISTS' | 'NO_ACCESS' | 'SCOPE_VIOLATION' | 'NETWORK' | 'SERVER';
   message: string;
   statusCode?: number;
 }
@@ -38,6 +39,8 @@ export async function initiatePublish(
   version: string,
   manifest: Record<string, unknown>,
   gameId?: string,
+  publisherSlug?: string,
+  publisherId?: string,
 ): Promise<InitiateResponse> {
   const url = `${platformUrl}/api/publish/initiate`;
   let res: Response;
@@ -50,6 +53,8 @@ export async function initiatePublish(
       },
       body: JSON.stringify({
         gameId,
+        publisherSlug,
+        publisherId,
         gameSlug,
         version,
         manifest: {
@@ -78,6 +83,12 @@ export async function initiatePublish(
     }
     if (res.status === 409 && data?.code === 'VERSION_EXISTS') {
       throw { kind: 'VERSION_EXISTS', message, statusCode: 409 } satisfies PublishError;
+    }
+    if (res.status === 403 && data?.code === 'NO_ACCESS') {
+      throw { kind: 'NO_ACCESS', message, statusCode: 403 } satisfies PublishError;
+    }
+    if (res.status === 403 && data?.code === 'SCOPE_VIOLATION') {
+      throw { kind: 'SCOPE_VIOLATION', message, statusCode: 403 } satisfies PublishError;
     }
     if (res.status === 401) {
       throw { kind: 'SERVER', message: 'Invalid or revoked API key.', statusCode: 401 } satisfies PublishError;
