@@ -1,7 +1,6 @@
 ---
 name: bs-ingest-rules
 description: Ingest a board game rulebook (or run a structured interview if none exists) and produce the initial sketch/chunk plan for a new BoardSmith game. Use when starting a new game project from a rulebook or from scratch.
-disable-model-invocation: true
 ---
 
 # `/bs-ingest-rules` — Start the Project
@@ -136,7 +135,9 @@ following artifacts **from subagent-returned summaries only** — never from re-
 ## Step 4: Sketch Derivation
 
 Delegate the sketch-authoring heuristic to `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/sketch-derivation.md`: how chunks are carved
-from the rulebook slices, the lazy-tail 2-3-chunk detail cap, and the Mandated Chunks contract
+from the rulebook slices, the chunk-granularity rule (one observable behavior per chunk; split a
+family of similar mechanics into one chunk each; the first chunk is the *smallest* core-loop turn,
+not the *coherent* whole), the lazy-tail 2-3-chunk detail cap, and the Mandated Chunks contract
 (cite `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md`'s "## Mandated Chunks" section — do not restate it here).
 The result of this step is an in-conversation **proposal** only — do **not** write `SKETCH.md`
 yet. The sketch is proposed, not imposed: the file is written exactly once, at Step 7, after

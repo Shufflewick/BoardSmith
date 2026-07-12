@@ -98,6 +98,7 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
   let skillsRoot: string;
 
   const SKILL_NAMES = [
+    'bs-create-game',
     'bs-ingest-rules',
     'bs-build-chunk',
     'bs-check-status',
@@ -120,7 +121,7 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
   });
 
   describe('DIST-01', () => {
-    it('installs bs- skill family: all 5 bs-<name>/SKILL.md + shared reference tree under bs-shared/', () => {
+    it('installs bs- skill family: all 6 bs-<name>/SKILL.md + shared reference tree under bs-shared/', () => {
       for (const name of SKILL_NAMES) {
         expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
       }
@@ -224,6 +225,75 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
 });
 
 /**
+ * Skill-handoff contract: bs- skills must be invocable BOTH by a user typing the slash command
+ * AND by the model (an agent handed a build brief must be able to run /bs-ingest-rules itself),
+ * so no bs- skill may ship `disable-model-invocation: true` — that flag makes a Skill-tool call
+ * fail with "cannot be used with Skill tool due to disable-model-invocation" and has regressed
+ * agent-driven builds before. Separately, no bs- SKILL.md may tell the model to invoke another
+ * bs- skill *via the Skill tool* — an alias like bs-create-game must hand off by READING the
+ * sibling SKILL.md, not re-dispatching it, so kickoff stays a single implementation executing
+ * in one context.
+ */
+describe('installClaudeCommand — bs- skill handoff contract (no Skill-tool self-dispatch)', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let skillsRoot: string;
+
+  const SKILL_NAMES = [
+    'bs-create-game',
+    'bs-ingest-rules',
+    'bs-build-chunk',
+    'bs-check-status',
+    'bs-insert-chunk',
+    'bs-generate-ai',
+  ];
+
+  beforeAll(async () => {
+    origCwd = process.cwd();
+    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-handoff-'));
+    process.chdir(tempDir);
+    await installClaudeCommand({ local: true, force: true, skipLink: true });
+    skillsRoot = join(tempDir, '.claude', 'skills');
+  });
+
+  afterAll(() => {
+    process.chdir(origCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('no bs- skill carries disable-model-invocation (agents must be able to self-invoke)', () => {
+    for (const name of SKILL_NAMES) {
+      const body = readFileSync(join(skillsRoot, name, 'SKILL.md'), 'utf-8');
+      expect(body, `${name}/SKILL.md must not set disable-model-invocation`).not.toMatch(
+        /disable-model-invocation/
+      );
+    }
+  });
+
+  it('no bs- skill instructs a Skill-tool invocation of another bs- skill', () => {
+    // Skill-to-skill re-dispatch forks kickoff into a second implementation/context. Guard
+    // against the phrasing that invites it: "via the Skill tool" (the bs-create-game bug) or any
+    // "invoke ... skill ... Skill tool" instruction naming a bs- skill.
+    for (const name of SKILL_NAMES) {
+      const body = readFileSync(join(skillsRoot, name, 'SKILL.md'), 'utf-8');
+      const bsSkillViaSkillTool =
+        /\bbs-[a-z-]+\b[^.\n]*\bSkill tool\b/i.test(body) ||
+        /\bSkill tool\b[^.\n]*\bbs-[a-z-]+\b/i.test(body);
+      expect(
+        bsSkillViaSkillTool,
+        `${name}/SKILL.md must not route to a bs- skill via the Skill tool ` +
+          `(hand off by reading the sibling SKILL.md — one implementation, one context)`
+      ).toBe(false);
+    }
+  });
+
+  it('bs-create-game hands off by reading bs-ingest-rules SKILL.md', () => {
+    const body = readFileSync(join(skillsRoot, 'bs-create-game', 'SKILL.md'), 'utf-8');
+    expect(body).toContain('bs-ingest-rules/SKILL.md');
+  });
+});
+
+/**
  * WR-01: a `--force` reinstall must produce a tree identical to a fresh install — orphaned
  * files left inside installer-owned dirs (from a prior install where an upstream file was
  * renamed/removed) must NOT survive. fs.cp merges, so the installer pre-cleans owned paths.
@@ -234,6 +304,7 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
   let skillsRoot: string;
 
   const SKILL_NAMES = [
+    'bs-create-game',
     'bs-ingest-rules',
     'bs-build-chunk',
     'bs-check-status',
@@ -371,6 +442,7 @@ describe('installClaudeCommand — partial install is not misreported as complet
   let skillsRoot: string;
 
   const SKILL_NAMES = [
+    'bs-create-game',
     'bs-ingest-rules',
     'bs-build-chunk',
     'bs-check-status',
@@ -421,6 +493,7 @@ describe('installClaudeCommand — empty shared dir is detected as partial, not 
   let skillsRoot: string;
 
   const SKILL_NAMES = [
+    'bs-create-game',
     'bs-ingest-rules',
     'bs-build-chunk',
     'bs-check-status',

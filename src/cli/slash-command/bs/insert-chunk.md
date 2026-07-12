@@ -1,7 +1,6 @@
 ---
 name: bs-insert-chunk
 description: Add, reorder, split, or remove a chunk in a BoardSmith game's sketch, re-validating dependency order and flagging citation overlaps with closed chunks. Use when the designer wants to reshape the plan.
-disable-model-invocation: true
 ---
 
 # `/bs-insert-chunk` — Reshape the Sketch

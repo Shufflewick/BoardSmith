@@ -134,12 +134,15 @@ track.
 The `final-acceptance` content step above (coverage check + 7-point design-QA pass) is by far the
 heaviest single step in the skill — a coverage check, a fresh-context agent dispatch (serve →
 capture → kill across 3 breakpoints × 2 themes + end-to-end keyboard drag-drop), two human-narrated
-checks (VoiceOver + colorblind), and a fix-or-refute repair loop. To keep a session bounded to at
-most one step group (`state-machine.md` "Session Handoff Seams"), the final-acceptance chunk carries
-an **extra** handoff seam that ordinary chunks do not: the leading `final-acceptance` content step is
-its own session, and `{playtest, revise, close}` runs as the next session. The seam sits between
-`final-acceptance` and `playtest` — this content step is never packed into the same session as the
-human playtest gate and its revise loop.
+checks (VoiceOver + colorblind), and a fix-or-refute repair loop. The final-acceptance chunk
+therefore carries an **extra** handoff seam that ordinary chunks do not, between `final-acceptance`
+and `playtest`. Under the current stopping policy (`state-machine.md` "Session Handoff Seams") that
+seam is a **resume checkpoint, not a mandatory stop**: if context holds, the same session flows from
+`final-acceptance` straight into the `{playtest, revise, close}` gate and stops at the human
+`playtest` gate that follows, exactly like any other chunk. The seam earns its "extra" status
+because `final-acceptance` is the heaviest step and thus the likeliest place a harness context-low
+warning fires; its sub-parts persist individually (below) so that if the session does yield here, a
+resume re-enters mid-pass rather than re-dispatching the whole step.
 
 **Persist sub-parts as they land**, so a mid-pass crash resumes mid-pass rather than re-running the
 whole step from scratch (mirrors the per-round persistence `## Redteam Rounds` / `## Findings

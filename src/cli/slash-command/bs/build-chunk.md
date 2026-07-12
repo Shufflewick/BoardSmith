@@ -1,7 +1,6 @@
 ---
 name: bs-build-chunk
 description: Build, test, audit, and playtest the next smallest unit of a BoardSmith game per the approved sketch. Use to start or resume a chunk after /bs-ingest-rules has produced a sketch.
-disable-model-invocation: true
 ---
 
 # `/bs-build-chunk` — Build the Next Smallest Unit

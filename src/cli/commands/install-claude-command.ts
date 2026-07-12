@@ -1,9 +1,9 @@
 /**
  * Install BoardSmith Agent Skills for Claude Code
  *
- * This installs the bs- skill family (bs-ingest-rules, bs-build-chunk, bs-check-status,
- * bs-insert-chunk, bs-generate-ai) globally so users can design and build BoardSmith games
- * directly within Claude Code conversations.
+ * This installs the bs- skill family (bs-create-game, bs-ingest-rules, bs-build-chunk,
+ * bs-check-status, bs-insert-chunk, bs-generate-ai) globally so users can design and build
+ * BoardSmith games directly within Claude Code conversations.
  */
 
 import { promises as fs } from 'node:fs';
@@ -26,8 +26,9 @@ interface InstallOptions {
   skipLink?: boolean;
 }
 
-/** The 5 bs- skill entry points, mapped from their source file to their installed skill name. */
+/** The bs- skill entry points, mapped from their source file to their installed skill name. */
 const SKILL_ENTRY_POINTS: Array<{ source: string; skillName: string }> = [
+  { source: join('bs', 'create-game.md'), skillName: 'bs-create-game' },
   { source: join('bs', 'ingest-rules.md'), skillName: 'bs-ingest-rules' },
   { source: join('bs', 'build-chunk.md'), skillName: 'bs-build-chunk' },
   { source: join('bs', 'check-status.md'), skillName: 'bs-check-status' },
@@ -228,6 +229,7 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log(chalk.gray(`  BoardSmith: ${boardsmithRoot}`));
   console.log('');
   console.log('Skills:');
+  console.log(chalk.cyan('  bs-create-game') + chalk.gray('   - Start a new game — from an idea or a rulebook (start here)'));
   console.log(chalk.cyan('  bs-ingest-rules') + chalk.gray('  - Ingest a rulebook and produce the initial sketch/chunk plan'));
   console.log(chalk.cyan('  bs-build-chunk') + chalk.gray('   - Build, test, audit, and playtest one chunk at a time'));
   console.log(chalk.cyan('  bs-check-status') + chalk.gray('  - Report sketch/chunk progress and next steps'));
@@ -238,6 +240,10 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log(chalk.gray('templates/, aspects/, state-machine.md) installed under bs-shared/.'));
   console.log(chalk.gray('Projects built with an older BoardSmith skill are auto-detected'));
   console.log(chalk.gray('and offered a one-time conversion by bs-ingest-rules.'));
+  console.log('');
+  console.log(chalk.bold('Next step: ') + 'open Claude Code and type ' + chalk.bold.cyan('/bs-create-game'));
+  console.log(chalk.gray('to start designing your first game. (Restart Claude Code first if it'));
+  console.log(chalk.gray("was already running, so it picks up the newly installed skills.)"));
   console.log('');
 
   if (options.local) {

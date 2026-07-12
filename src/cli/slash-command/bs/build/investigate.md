@@ -78,8 +78,12 @@ Investigate the rules interpretation for {gameName}, chunk "{slug}". Read the fo
 
 WRITE directly into this chunk's CHUNK.md — do not return this content, write it yourself:
   1. `## Interpretation` — a numbered list of factual claims this chunk's design rests on, each
-     with a citation into the rulebook (via INDEX.md) or RULINGS.md. Append new claims after any
-     already present — never renumber existing claims (CHUNK.template.md's parse contract).
+     with a citation into the rulebook (via INDEX.md) or RULINGS.md. When a claim quotes rule
+     text, copy it character-exactly from the slice — never quote from memory. A claim resting
+     on a slice line marked `Derived` or `Named-but-undefined` must say so explicitly, and a
+     `Named-but-undefined` rule can only feed an open question for the ask step, never a claim.
+     Append new claims after any already present — never renumber existing claims
+     (CHUNK.template.md's parse contract).
   2. `## Visibility Declaration` — what is hidden from whom, keyed to the claim numbers above
      (e.g. "claim 3: the drawn card is hidden from all other seats until played"). If this chunk
      has no hidden information, write that explicitly ("none — no hidden information in this

@@ -34,10 +34,25 @@ Transcribe pages {N}-{M} of the rulebook at {rulebookPath} to canonical text. Id
 boundaries within this range (a section rarely spans a page-range seam cleanly — note where a
 section continues into the next range). For each section:
 
-  1. WRITE the transcribed text — verbatim in substance, with an explicit page/section
-     citation prefix (e.g. "p.14, Movement:") — directly to `rulebook/NN-topic.md`, where
-     NN is the section's STARTING PAGE NUMBER, zero-padded to two digits (e.g. the section
-     starting on p.14 → `rulebook/14-movement.md`).
+  1. WRITE the transcribed text directly to `rulebook/NN-topic.md`, where NN is the section's
+     STARTING PAGE NUMBER, zero-padded to two digits (e.g. the section starting on p.14 →
+     `rulebook/14-movement.md`). Slice text is made of two visually distinct kinds of line —
+     never blend them:
+       - QUOTE lines: exact source sentences under a citation prefix (e.g. "p.14, Movement:").
+         A citation prefix is a promise of verbatim text — before writing each quote line,
+         re-check it word-for-word against the source page. Never put a paraphrase, a
+         condensation, or a logical consequence under a citation prefix, however faithful.
+       - DERIVED lines: anything you condensed or inferred, prefixed `Derived (p.14):`. A
+         derived line must follow from quote lines in this slice alone — never from your own
+         knowledge of this game or of any game like it.
+     If the source names a rule without defining it (a bare mention or cross-reference), write
+     `Named-but-undefined (p.N): <rule name>` and stop there — do not reconstruct the
+     definition from the rule's name or from general knowledge; downstream steps surface it
+     to the designer instead.
+     Worked examples, sample positions/states, and rule-bearing diagrams are
+     transcription-critical: copy their exact contents (coordinates, values, quantities,
+     captions) into the slice in full. They are the only seed downstream test scenarios
+     have — a dropped example gets silently replaced by an invented one later.
   2. RETURN a structured summary only — never the transcribed text itself:
      (a) slicePath — the rulebook/NN-topic.md file you wrote.
      (b) sectionSummary — 2-4 sentences describing what the section covers, written for a

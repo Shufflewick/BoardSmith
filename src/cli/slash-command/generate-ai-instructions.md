@@ -1,7 +1,6 @@
 ---
 name: bs-generate-ai
 description: Generate a complete AI opponent (all 5 hooks) for a BoardSmith game project. Use as a late sketch chunk after game-end/scoring exists (MCTS needs terminal states); also usable earlier for --ai solo-playtest seat-fill.
-disable-model-invocation: true
 ---
 
 # BoardSmith AI Generation Instructions

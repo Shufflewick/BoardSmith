@@ -1,7 +1,6 @@
 ---
 name: bs-check-status
 description: Report where a BoardSmith game project stands — chunks done/remaining, current chunk/step, outstanding playtest feedback, waived verifications, asset debts, ideas backlog, and the exact next command. Read-only. Use when the designer wants a status summary.
-disable-model-invocation: true
 ---
 
 # `/bs-check-status` — Where Are We?
