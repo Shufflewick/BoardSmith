@@ -109,6 +109,7 @@ program
   .command('publish')
   .description('Publish game to shufflewick.pub')
   .option('--api-key <key>', 'API key (saved for future use)')
+  .option('--publisher <slug>', 'Publisher slug that owns this game (required for a new game)')
   .option('--dry-run', 'Show what would be published without uploading')
   .addOption(new Option('--test').hideHelp())
   .action(publishCommand);

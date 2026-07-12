@@ -18,6 +18,7 @@ import { describeZipSizeViolation } from '../lib/bundle-limits.js';
 
 interface PublishOptions {
   apiKey?: string;
+  publisher?: string;
   test?: boolean;
   dryRun?: boolean;
 }
@@ -79,6 +80,25 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   // Fall back to slug derivation if no gameId (first publish or deleted).
   const existingGameId: string | undefined = config.gameId;
   const baseSlug = toSlug(config.name || pkg.name || 'game');
+
+  // -- Resolve publisher target --
+  // --publisher overrides everything; otherwise reuse the persisted publisherId.
+  // A brand-new game (no persisted publisherId, no flag) has no target and must fail.
+  const existingPublisherId: string | undefined = config.publisherId;
+  const existingPublisherSlug: string | undefined = config.publisher;
+  let targetPublisherSlug: string | undefined;
+  let targetPublisherId: string | undefined;
+  if (options.publisher) {
+    targetPublisherSlug = options.publisher;
+  } else if (existingPublisherId) {
+    targetPublisherId = existingPublisherId;
+  } else {
+    console.error(chalk.red(`No publisher target for new game "${displayName}".`));
+    console.error(chalk.dim('Pass --publisher <slug> to specify which publisher owns this game.'));
+    process.exit(1);
+  }
+  // Slug used when naming the publisher in access/scope error messages.
+  const effectiveSlug = options.publisher ?? existingPublisherSlug ?? existingPublisherId ?? '(unknown)';
 
   console.log(chalk.cyan(`\nPublishing ${displayName} v${version}\n`));
   console.log(chalk.dim(`  Platform:  ${platformUrl}`));
@@ -161,6 +181,8 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
         // Only pass gameId on first attempt (slug derivation).
         // Disambiguation attempts are slug-only since the game doesn't exist yet.
         attempt === 0 ? existingGameId : undefined,
+        targetPublisherSlug,
+        targetPublisherId,
       );
       resolvedSlug = candidateSlug;
       break;
@@ -182,6 +204,21 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
         console.error(chalk.dim('Bump the version in package.json and try again.'));
         process.exit(1);
       }
+      if (isPublishError(err) && err.kind === 'NO_ACCESS') {
+        spinner.fail('Publish failed');
+        console.error(chalk.red(
+          `You don't have develop access to this game under publisher \`${effectiveSlug}\`. `
+          + 'Ask an owner or manager to grant you develop access, then try again.',
+        ));
+        process.exit(1);
+      }
+      if (isPublishError(err) && err.kind === 'SCOPE_VIOLATION') {
+        spinner.fail('Publish failed');
+        console.error(chalk.red(
+          `This API key is scoped to a different publisher and can't publish to \`${effectiveSlug}\`.`,
+        ));
+        process.exit(1);
+      }
       spinner.fail('Publish failed');
       if (isPublishError(err)) {
         console.error(chalk.red(err.message));
@@ -199,9 +236,21 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Save gameId to boardsmith.json for future publishes
+  // Save gameId + resolved publisher target to boardsmith.json for future publishes
+  let configDirty = false;
   if (initResult.gameId !== config.gameId) {
     config.gameId = initResult.gameId;
+    configDirty = true;
+  }
+  if (initResult.publisherId !== config.publisherId) {
+    config.publisherId = initResult.publisherId;
+    configDirty = true;
+  }
+  if (options.publisher && options.publisher !== config.publisher) {
+    config.publisher = options.publisher;
+    configDirty = true;
+  }
+  if (configDirty) {
     writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
   }
 
