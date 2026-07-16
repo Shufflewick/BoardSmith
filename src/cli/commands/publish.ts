@@ -10,6 +10,7 @@ import {
   uploadBundle,
   completePublish,
   checkVersionAvailable,
+  abortPublish,
   fetchTaxonomy,
   isPublishError,
   type TaxonomyAudience,
@@ -285,6 +286,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     await uploadBundle(initResult.uploadUrl, initResult.uploadCode, zip);
   } catch (err: unknown) {
     spinner.fail('Upload failed');
+    await abortInFlightPublish(platformUrl, apiKey, initResult.versionId);
     if (isPublishError(err)) {
       console.error(chalk.red(err.message));
     } else {
@@ -304,12 +306,31 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     console.log('');
   } catch (err: unknown) {
     spinner.fail('Finalize failed');
+    await abortInFlightPublish(platformUrl, apiKey, initResult.versionId);
     if (isPublishError(err)) {
       console.error(chalk.red(err.message));
     } else {
       console.error(chalk.red(String(err)));
     }
     process.exit(1);
+  }
+}
+
+/**
+ * Best-effort cleanup after a failed upload/finalize. The platform only ever
+ * deletes a still-"uploading" row, so this can never destroy a completed
+ * publish; a cleanup failure is reported dimly but never masks the original
+ * error.
+ */
+async function abortInFlightPublish(
+  platformUrl: string,
+  apiKey: string,
+  versionId: string,
+): Promise<void> {
+  try {
+    await abortPublish(platformUrl, apiKey, versionId);
+  } catch {
+    console.error(chalk.dim('(Could not clean up the in-flight version; it will be swept automatically.)'));
   }
 }
 

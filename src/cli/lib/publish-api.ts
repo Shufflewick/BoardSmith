@@ -257,3 +257,23 @@ export async function fetchTaxonomy(platformUrl: string): Promise<{ audiences: T
 export function isPublishError(err: unknown): err is PublishError {
   return typeof err === 'object' && err !== null && 'kind' in err && 'message' in err;
 }
+
+/**
+ * Best-effort abort of an in-flight publish after a failed upload/finalize,
+ * so the platform never keeps a zombie "uploading" version. Failures here
+ * are swallowed by the caller — the original error is what the user needs.
+ */
+export async function abortPublish(
+  platformUrl: string,
+  apiKey: string,
+  versionId: string,
+): Promise<void> {
+  await fetch(`${platformUrl}/api/publish/abort`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ versionId }),
+  });
+}
