@@ -184,6 +184,30 @@ export function checkTaxonomyShape(config: Record<string, unknown>): string[] {
     issues.push('"cooperative" must be a boolean — true when players win or lose together.');
   }
 
+  if (config.colorPalette !== undefined) {
+    issues.push(...checkColorPaletteShape(config.colorPalette));
+  }
+
+  return issues;
+}
+
+/**
+ * The platform requires a stable `id` on every palette color — lobby sessions
+ * store the chosen `colorId`, so a label-only palette breaks color selection.
+ * Enforced here so the mismatch fails at authoring time, not at upload.
+ */
+function checkColorPaletteShape(palette: unknown): string[] {
+  const example = 'each "colorPalette" entry must be { "id", "hex", "label" } non-empty strings (e.g. { "id": "red", "hex": "#e74c3c", "label": "Red" })';
+  if (!Array.isArray(palette)) return [`"colorPalette" must be an array; ${example}.`];
+  const issues: string[] = [];
+  palette.forEach((entry, i) => {
+    const bad = ['id', 'hex', 'label'].filter(
+      (key) => typeof (entry as Record<string, unknown>)?.[key] !== 'string' || !(entry as Record<string, unknown>)[key],
+    );
+    if (bad.length > 0) {
+      issues.push(`colorPalette[${i}] is missing/invalid ${bad.map((b) => `"${b}"`).join(', ')} — ${example}.`);
+    }
+  });
   return issues;
 }
 

@@ -88,6 +88,14 @@
       "type": "string",
       "description": "Stable platform game identifier, written back into boardsmith.json by `boardsmith publish` after first publish. Read by publish.ts."
     },
+    "publisher": {
+      "type": "string",
+      "description": "Publisher slug, written back into boardsmith.json by `boardsmith publish` (from --publisher). Read by publish.ts."
+    },
+    "publisherId": {
+      "type": "string",
+      "description": "Stable platform publisher identifier, written back into boardsmith.json by `boardsmith publish`. Read by publish.ts."
+    },
     "version": {
       "type": "string",
       "description": "Optional manifest version override consumed by build.ts's deriveManifest (defaults to '1.0.0' when absent)."
