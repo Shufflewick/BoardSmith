@@ -92,6 +92,22 @@ describe('generateBoardsmithJson', () => {
     const parsed = JSON.parse(generateBoardsmithJson(config));
     expect(parsed).not.toHaveProperty('$schema');
   });
+
+  it('emits the taxonomy fields (audience/tags/playtime/cooperative), not the removed categories/estimatedDuration', () => {
+    const parsed = JSON.parse(generateBoardsmithJson(config));
+    expect(parsed.audience).toBe('casual');
+    expect(parsed.tags).toEqual([]);
+    expect(parsed.playtime).toEqual({ min: 15, max: 30 });
+    expect(parsed.cooperative).toBe(false);
+    expect(parsed).not.toHaveProperty('categories');
+    expect(parsed).not.toHaveProperty('estimatedDuration');
+  });
+
+  it('threads a caller-supplied audience and tags through', () => {
+    const parsed = JSON.parse(generateBoardsmithJson({ ...config, audience: 'strategy', tags: ['abstract'] }));
+    expect(parsed.audience).toBe('strategy');
+    expect(parsed.tags).toEqual(['abstract']);
+  });
 });
 
 describe('generateRulesIndexTs', () => {

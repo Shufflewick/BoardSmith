@@ -99,21 +99,32 @@ export async function validateCommand(): Promise<void> {
 export function checkMetadataIssues(config: Record<string, unknown>): string[] {
   const issues: string[] = [];
 
-  // Required fields
-  const required = ['name', 'displayName', 'description'];
+  // Required fields. audience/tags/playtime/cooperative seed the platform's
+  // game record on first publish, so a manifest without them can't publish.
+  const required = ['name', 'displayName', 'description', 'audience', 'tags', 'playtime', 'cooperative'];
   for (const field of required) {
-    if (!config[field]) {
+    if (config[field] === undefined || config[field] === null || config[field] === '') {
       issues.push(`Missing required field: ${field}`);
     }
   }
 
+  issues.push(...checkTaxonomyShape(config));
+
   // Unknown top-level keys — did-you-mean suggestions from the shared
-  // allowed-key set (CLIX-02). `playerCount` gets a pointed migration
-  // message instead of a generic did-you-mean (CLIX-01).
+  // allowed-key set (CLIX-02). Removed/renamed keys get pointed migration
+  // messages instead of a generic did-you-mean (CLIX-01).
   for (const { key, suggestion } of findUnknownKeys(config)) {
     if (key === 'playerCount') {
       issues.push(
         "Unknown key 'playerCount' — player count is now derived from your gameDefinition (compiled rules), remove this key from boardsmith.json.",
+      );
+    } else if (key === 'categories') {
+      issues.push(
+        "Unknown key 'categories' — replaced by 'audience' (a single string: who the game is for). Genre/theme/mechanism labels belong in 'tags'.",
+      );
+    } else if (key === 'estimatedDuration') {
+      issues.push(
+        "Unknown key 'estimatedDuration' — replaced by 'playtime': { \"min\": <minutes>, \"max\": <minutes> }.",
       );
     } else if (suggestion) {
       issues.push(`Unknown key '${key}' — did you mean '${suggestion}'?`);
@@ -142,6 +153,58 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
   }
 
   return issues;
+}
+
+/**
+ * Shape checks for the taxonomy fields (audience/tags/playtime/cooperative).
+ * SHAPE only — deliberately offline. The canonical audience VALUE list is
+ * platform curation (GET /api/taxonomy); `boardsmith publish` preflight
+ * validates the value, and the server is the final authority.
+ * Missing fields are reported by the required-field loop, not here.
+ */
+export function checkTaxonomyShape(config: Record<string, unknown>): string[] {
+  const issues: string[] = [];
+
+  if (config.audience !== undefined && (typeof config.audience !== 'string' || config.audience.length === 0)) {
+    issues.push('"audience" must be a non-empty string (e.g. "casual") — who the game is for.');
+  }
+
+  if (config.tags !== undefined) {
+    const tags = config.tags;
+    if (!Array.isArray(tags) || tags.some((t) => typeof t !== 'string' || t.length === 0)) {
+      issues.push('"tags" must be an array of non-empty strings (e.g. ["abstract", "classic"]).');
+    }
+  }
+
+  if (config.playtime !== undefined) {
+    issues.push(...checkPlaytimeShape(config.playtime));
+  }
+
+  if (config.cooperative !== undefined && typeof config.cooperative !== 'boolean') {
+    issues.push('"cooperative" must be a boolean — true when players win or lose together.');
+  }
+
+  return issues;
+}
+
+function checkPlaytimeShape(playtime: unknown): string[] {
+  const example = '"playtime" must be { "min": <minutes>, "max": <minutes> } (e.g. { "min": 15, "max": 30 })';
+
+  if (typeof playtime !== 'object' || playtime === null || Array.isArray(playtime)) {
+    return [`${example}.`];
+  }
+
+  const { min, max } = playtime as { min?: unknown; max?: unknown };
+  if (!Number.isInteger(min) || !Number.isInteger(max)) {
+    return [`${example} — min and max must be integers (minutes).`];
+  }
+  if ((min as number) < 1) {
+    return ['"playtime.min" must be at least 1 minute.'];
+  }
+  if ((min as number) > (max as number)) {
+    return [`"playtime.min" (${min}) must be <= "playtime.max" (${max}).`];
+  }
+  return [];
 }
 
 async function validateMetadata(cwd: string): Promise<ValidationResult> {

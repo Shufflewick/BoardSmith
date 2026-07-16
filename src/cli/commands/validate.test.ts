@@ -7,7 +7,7 @@ import {
   suggestKey,
   findUnknownKeys,
 } from '../lib/config-schema.js';
-import { checkMetadataIssues, validateBundleSize } from './validate.js';
+import { checkMetadataIssues, checkTaxonomyShape, validateBundleSize } from './validate.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 
 describe('config-schema', () => {
@@ -38,6 +38,10 @@ describe('config-schema', () => {
       name: 'x',
       displayName: 'X',
       description: 'desc',
+      audience: 'casual',
+      tags: ['abstract'],
+      playtime: { min: 15, max: 30 },
+      cooperative: false,
       gameOptions: [],
       playerOptions: [],
       colorPalette: [],
@@ -67,6 +71,19 @@ describe('config-schema', () => {
     expect(result).toEqual([]);
   });
 });
+
+/** A minimal fully-valid config — spread and override per test. */
+function validConfig(): Record<string, unknown> {
+  return {
+    name: 'x',
+    displayName: 'X',
+    description: 'desc',
+    audience: 'casual',
+    tags: ['abstract'],
+    playtime: { min: 15, max: 30 },
+    cooperative: false,
+  };
+}
 
 describe('validate.ts checkMetadataIssues', () => {
   it('fails on an unknown top-level key and names a suggestion', () => {
@@ -113,9 +130,7 @@ describe('validate.ts checkMetadataIssues', () => {
 
   it('passes a fully valid config with no unknown keys and no playerCount', () => {
     const issues = checkMetadataIssues({
-      name: 'x',
-      displayName: 'X',
-      description: 'desc',
+      ...validConfig(),
       ui: 'auto',
       gameOptions: [],
     });
@@ -125,11 +140,90 @@ describe('validate.ts checkMetadataIssues', () => {
   it('passes a config carrying the editor $schema key (CR-02 regression)', () => {
     const issues = checkMetadataIssues({
       $schema: 'https://boardsmith.io/schemas/boardsmith.schema.json',
-      name: 'x',
-      displayName: 'X',
-      description: 'desc',
+      ...validConfig(),
     });
     expect(issues).toEqual([]);
+  });
+
+  it('requires the taxonomy fields: audience, tags, playtime, cooperative', () => {
+    const issues = checkMetadataIssues({ name: 'x', displayName: 'X', description: 'desc' });
+    for (const field of ['audience', 'tags', 'playtime', 'cooperative']) {
+      expect(issues).toContain(`Missing required field: ${field}`);
+    }
+  });
+
+  it('accepts cooperative: false as present (falsy but valid)', () => {
+    const issues = checkMetadataIssues(validConfig());
+    expect(issues).toEqual([]);
+  });
+
+  it('fails a leftover categories key with a pointed migration message naming audience and tags', () => {
+    const issues = checkMetadataIssues({ ...validConfig(), categories: ['card-game'] });
+    expect(issues.some((i) => i.includes("'categories'") && i.includes('audience') && i.includes('tags'))).toBe(true);
+  });
+
+  it('fails a leftover estimatedDuration key with a pointed migration message naming playtime', () => {
+    const issues = checkMetadataIssues({ ...validConfig(), estimatedDuration: '15-30 minutes' });
+    expect(issues.some((i) => i.includes("'estimatedDuration'") && i.includes('playtime'))).toBe(true);
+  });
+});
+
+describe('validate.ts checkTaxonomyShape', () => {
+  it('returns nothing for a fully valid config', () => {
+    expect(checkTaxonomyShape(validConfig())).toEqual([]);
+  });
+
+  it('rejects a non-string audience', () => {
+    const issues = checkTaxonomyShape({ ...validConfig(), audience: ['casual'] });
+    expect(issues.some((i) => i.includes('"audience"'))).toBe(true);
+  });
+
+  it('rejects an empty-string audience', () => {
+    const issues = checkTaxonomyShape({ ...validConfig(), audience: '' });
+    expect(issues.some((i) => i.includes('"audience"'))).toBe(true);
+  });
+
+  it('does NOT validate the audience VALUE against the platform list (validate stays offline)', () => {
+    // "obviously-not-a-real-audience" is not a platform audience; shape-wise
+    // it is a non-empty string, so offline validate must accept it. The
+    // publish preflight (network) is where the value gets checked.
+    expect(checkTaxonomyShape({ ...validConfig(), audience: 'obviously-not-a-real-audience' })).toEqual([]);
+  });
+
+  it('rejects tags that are not an array of non-empty strings', () => {
+    expect(checkTaxonomyShape({ ...validConfig(), tags: 'abstract' }).length).toBe(1);
+    expect(checkTaxonomyShape({ ...validConfig(), tags: ['abstract', 7] }).length).toBe(1);
+    expect(checkTaxonomyShape({ ...validConfig(), tags: [''] }).length).toBe(1);
+  });
+
+  it('accepts an empty tags array', () => {
+    expect(checkTaxonomyShape({ ...validConfig(), tags: [] })).toEqual([]);
+  });
+
+  it('rejects playtime that is not an object with integer min/max', () => {
+    expect(checkTaxonomyShape({ ...validConfig(), playtime: '15-30 minutes' }).length).toBe(1);
+    expect(checkTaxonomyShape({ ...validConfig(), playtime: { min: 15 } }).length).toBe(1);
+    expect(checkTaxonomyShape({ ...validConfig(), playtime: { min: 15.5, max: 30 } }).length).toBe(1);
+  });
+
+  it('rejects playtime with min > max, naming both values', () => {
+    const issues = checkTaxonomyShape({ ...validConfig(), playtime: { min: 45, max: 30 } });
+    expect(issues.length).toBe(1);
+    expect(issues[0]).toContain('45');
+    expect(issues[0]).toContain('30');
+  });
+
+  it('rejects playtime with min < 1', () => {
+    expect(checkTaxonomyShape({ ...validConfig(), playtime: { min: 0, max: 30 } }).length).toBe(1);
+  });
+
+  it('accepts min === max (a fixed-length game)', () => {
+    expect(checkTaxonomyShape({ ...validConfig(), playtime: { min: 20, max: 20 } })).toEqual([]);
+  });
+
+  it('rejects a non-boolean cooperative', () => {
+    const issues = checkTaxonomyShape({ ...validConfig(), cooperative: 'yes' });
+    expect(issues.some((i) => i.includes('"cooperative"'))).toBe(true);
   });
 });
 

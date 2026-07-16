@@ -19,7 +19,8 @@ export interface ProjectConfig {
   displayName: string;
   description: string;
   playerCount: { min: number; max: number };
-  categories?: string[];
+  audience?: string;
+  tags?: string[];
   ui?: string;
 }
 
@@ -105,9 +106,11 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
     name: config.name,
     displayName: config.displayName,
     description: config.description,
-    estimatedDuration: '15-30 minutes',
+    audience: config.audience || 'casual',
+    tags: config.tags || [],
+    playtime: { min: 15, max: 30 },
+    cooperative: false,
     complexity: 2,
-    categories: config.categories || ['card-game'],
     thumbnail: './public/thumbnail.png',
     scoreboard: { stats: ['score'] },
     ui: config.ui ?? 'auto',

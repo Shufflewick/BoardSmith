@@ -5,7 +5,7 @@
   "description": "Single source of truth for the set of top-level keys a boardsmith.json project config may legitimately carry. `src/cli/lib/config-schema.ts` derives ALLOWED_TOP_LEVEL_KEYS from `Object.keys(properties)` below, and `boardsmith validate` / `boardsmith dev` startup use that list to reject unknown/misspelled keys with a did-you-mean suggestion. Do NOT add a key here unless a real read site in src/cli/commands consumes it — see the file:line trace in 135-05-PLAN.md's read_first.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["name", "displayName", "description"],
+  "required": ["name", "displayName", "description", "audience", "tags", "playtime", "cooperative"],
   "properties": {
     "$schema": {
       "type": "string",
@@ -23,18 +23,33 @@
       "type": "string",
       "description": "Short game description. Scaffold-emitted."
     },
-    "estimatedDuration": {
+    "audience": {
       "type": "string",
-      "description": "Human-readable play time estimate (e.g. '15-30 minutes'). Scaffold-emitted."
+      "minLength": 1,
+      "description": "Who the game is for — exactly one platform shelf. The canonical value list lives on the platform (GET /api/taxonomy); `boardsmith publish` preflight-validates against it. Scaffold-emitted; shape-checked by validate.ts."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Freeform discovery tags (mechanisms, themes, eras) — e.g. 'abstract', 'worker-placement', 'family-friendly'. Normalized server-side. Scaffold-emitted; shape-checked by validate.ts."
+    },
+    "playtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": { "type": "integer", "minimum": 1 },
+        "max": { "type": "integer", "minimum": 1 }
+      },
+      "description": "Estimated play time range in minutes (min <= max). Scaffold-emitted; shape-checked by validate.ts."
+    },
+    "cooperative": {
+      "type": "boolean",
+      "description": "True when players win or lose together. A structural fact synced to the platform on every publish. Scaffold-emitted; shape-checked by validate.ts."
     },
     "complexity": {
       "type": "number",
-      "description": "Relative complexity rating. Scaffold-emitted."
-    },
-    "categories": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Platform category tags. Scaffold-emitted."
+      "description": "Relative complexity rating (1-5). Scaffold-emitted."
     },
     "thumbnail": {
       "type": "string",

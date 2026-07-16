@@ -130,9 +130,11 @@ boardsmith publish
   "name": "my-game",
   "displayName": "My Game",
   "description": "A fun game for 2-4 players",
-  "estimatedDuration": "15-30 minutes",
+  "audience": "casual",
+  "tags": ["card-game"],
+  "playtime": { "min": 15, "max": 30 },
+  "cooperative": false,
   "complexity": 2,
-  "categories": ["card-game"],
   "thumbnail": "./public/thumbnail.png",
   "scoreboard": { "stats": ["score"] }
 }

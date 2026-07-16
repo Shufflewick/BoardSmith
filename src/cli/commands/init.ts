@@ -36,7 +36,8 @@ export async function initCommand(name: string): Promise<void> {
       displayName: toDisplayName(name),
       description: 'A fun game for 2-4 players',
       playerCount: { min: 2, max: 4 },
-      categories: ['card-game'],
+      audience: 'casual',
+      tags: ['card-game'],
     };
 
     // Generate scaffold files
