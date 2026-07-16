@@ -28,9 +28,11 @@ export interface PublishError {
  * Extract a human-readable message from an error response body.
  * Platform app endpoints (initiate/complete/check-version) return h3-style
  * { statusMessage, message }; the games worker (upload) returns { error }.
+ * `message` carries the actionable detail; h3's `statusMessage` is often just
+ * the generic HTTP reason phrase ("Server Error"), so it is the last resort.
  */
 function errorMessageFrom(body: Record<string, unknown>, fallback: string): string {
-  for (const field of ['statusMessage', 'message', 'error']) {
+  for (const field of ['message', 'error', 'statusMessage']) {
     const value = body[field];
     if (typeof value === 'string' && value.length > 0) return value;
   }

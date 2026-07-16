@@ -44,8 +44,8 @@ describe('uploadBundle error reporting', () => {
     expect(err.message).toBe('Bundle exceeds size limit');
   });
 
-  it('prefers statusMessage over message over error', async () => {
-    mockFetchResponse(400, { statusMessage: 'first', message: 'second', error: 'third' });
+  it('prefers message over error over statusMessage (statusMessage is often just the HTTP reason phrase)', async () => {
+    mockFetchResponse(400, { statusMessage: 'Server Error', message: 'first', error: 'second' });
 
     const err = await captureError(upload());
     expect(err.message).toBe('first');
