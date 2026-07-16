@@ -61,6 +61,14 @@ export async function initiatePublish(
           playerCount: manifest.playerCount,
           displayName: manifest.displayName ?? manifest.name ?? gameSlug,
           description: manifest.description,
+          // Taxonomy — audience/tags/playtime/complexity seed the game record
+          // on first publish (website-editable after); cooperative and
+          // playerCount are structural facts synced on every publish.
+          audience: manifest.audience,
+          tags: manifest.tags,
+          playtime: manifest.playtime,
+          cooperative: manifest.cooperative,
+          complexity: manifest.complexity,
           // Lobby option declarations — platform uses these for lobby UI
           ...(manifest.gameOptions ? { gameOptions: manifest.gameOptions } : {}),
           ...(manifest.playerOptions ? { playerOptions: manifest.playerOptions } : {}),
@@ -195,6 +203,40 @@ export async function checkVersionAvailable(
     // Other errors are non-fatal for preflight
     throw { kind: 'SERVER', message, statusCode: res.status } satisfies PublishError;
   }
+}
+
+export interface TaxonomyAudience {
+  value: string;
+  label: string;
+  helperText: string;
+  litmus: string;
+}
+
+/**
+ * Fetch the platform's canonical audience list (public, no auth). The platform
+ * is the sole authority on audience VALUES — the CLI only shape-checks — so
+ * publish preflights against this before uploading anything.
+ */
+export async function fetchTaxonomy(platformUrl: string): Promise<{ audiences: TaxonomyAudience[] }> {
+  const url = `${platformUrl}/api/taxonomy`;
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw { kind: 'NETWORK', message: `Failed to fetch taxonomy from ${url}: ${msg}` } satisfies PublishError;
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    throw {
+      kind: 'SERVER',
+      message: errorMessageFrom(body, `Taxonomy endpoint returned HTTP ${res.status}`),
+      statusCode: res.status,
+    } satisfies PublishError;
+  }
+
+  return res.json() as Promise<{ audiences: TaxonomyAudience[] }>;
 }
 
 export function isPublishError(err: unknown): err is PublishError {

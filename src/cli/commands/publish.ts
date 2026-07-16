@@ -10,7 +10,9 @@ import {
   uploadBundle,
   completePublish,
   checkVersionAvailable,
+  fetchTaxonomy,
   isPublishError,
+  type TaxonomyAudience,
 } from '../lib/publish-api.js';
 import { buildCommand } from './build.js';
 import { validateCommand } from './validate.js';
@@ -166,6 +168,9 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   // -- Read manifest for initiate --
   const manifest = JSON.parse(readFileSync(join(distDir, 'manifest.json'), 'utf-8'));
 
+  // -- Preflight: validate audience against the platform's canonical list --
+  await preflightAudience(platformUrl, manifest.audience);
+
   // -- Initiate (with slug disambiguation) --
   spinner.start('Publishing...');
 
@@ -291,6 +296,54 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     }
     process.exit(1);
   }
+}
+
+/**
+ * Pure mismatch check for the preflight — returns the actionable error lines
+ * when `audience` is not one of the platform's audiences, or null when valid.
+ * Exported for tests; the network fetch lives in preflightAudience.
+ */
+export function describeAudienceMismatch(
+  audience: unknown,
+  audiences: TaxonomyAudience[],
+): string[] | null {
+  if (typeof audience === 'string' && audiences.some((a) => a.value === audience)) {
+    return null;
+  }
+
+  const found = typeof audience === 'string' ? `"${audience}"` : 'missing';
+  return [
+    `Invalid "audience" in boardsmith.json: ${found}.`,
+    'Valid audiences:',
+    ...audiences.map((a) => `  ${a.value} — ${a.helperText}`),
+  ];
+}
+
+/**
+ * Fetch the platform's canonical audience list and abort publish (exit 1)
+ * when the manifest's audience is not on it. The platform is the value
+ * authority; `boardsmith validate` only shape-checks. Network failure is
+ * fatal — publish requires network anyway, and skipping the check would just
+ * defer the same rejection to the server.
+ */
+async function preflightAudience(platformUrl: string, audience: unknown): Promise<void> {
+  let audiences: TaxonomyAudience[];
+  try {
+    ({ audiences } = await fetchTaxonomy(platformUrl));
+  } catch (err: unknown) {
+    console.error(chalk.red(isPublishError(err) ? err.message : String(err)));
+    console.error(chalk.dim('Could not verify "audience" against the platform taxonomy. Check your connection and try again.'));
+    process.exit(1);
+  }
+
+  const mismatch = describeAudienceMismatch(audience, audiences);
+  if (!mismatch) return;
+
+  console.error(chalk.red(mismatch[0]));
+  for (const line of mismatch.slice(1)) {
+    console.error(chalk.dim(line));
+  }
+  process.exit(1);
 }
 
 function toSlug(name: string): string {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { uploadBundle, initiatePublish, completePublish, isPublishError } from './publish-api.js';
+import { uploadBundle, initiatePublish, completePublish, fetchTaxonomy, isPublishError } from './publish-api.js';
 import type { PublishError } from './publish-api.js';
 
 function mockFetchResponse(status: number, body: unknown): void {
@@ -150,6 +150,74 @@ describe('initiatePublish error reporting', () => {
     expect(body.publisherSlug).toBe('my-publisher');
     expect(body.publisherId).toBe('pub-id');
     expect(body.gameId).toBe('game-id');
+  });
+});
+
+describe('initiatePublish manifest payload', () => {
+  it('threads the taxonomy fields into the manifest body (seed/sync contract)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          versionId: 'v1', gameId: 'g1', uploadUrl: 'https://up', uploadCode: 'code', publisherId: 'p1',
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await initiatePublish('https://platform.example', 'key', 'slug', '1.0.0', {
+      playerCount: { min: 2, max: 4 },
+      displayName: 'Fixture',
+      description: 'desc',
+      audience: 'casual',
+      tags: ['abstract'],
+      playtime: { min: 15, max: 30 },
+      cooperative: false,
+      complexity: 2,
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.manifest.audience).toBe('casual');
+    expect(body.manifest.tags).toEqual(['abstract']);
+    expect(body.manifest.playtime).toEqual({ min: 15, max: 30 });
+    expect(body.manifest.cooperative).toBe(false);
+    expect(body.manifest.complexity).toBe(2);
+    expect(body.manifest.playerCount).toEqual({ min: 2, max: 4 });
+  });
+});
+
+describe('fetchTaxonomy', () => {
+  it('GETs {platformUrl}/api/taxonomy and returns the audience list', async () => {
+    const audiences = [
+      { value: 'casual', label: 'Casual', helperText: 'h', litmus: 'l' },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ audiences }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchTaxonomy('https://platform.example');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://platform.example/api/taxonomy');
+    expect(result.audiences).toEqual(audiences);
+  });
+
+  it('throws a NETWORK error naming the URL when the fetch itself fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+
+    const err = await captureError(fetchTaxonomy('https://platform.example'));
+    expect(err.kind).toBe('NETWORK');
+    expect(err.message).toContain('https://platform.example/api/taxonomy');
+    expect(err.message).toContain('ECONNREFUSED');
+  });
+
+  it('throws a SERVER error with the status when the endpoint responds non-OK', async () => {
+    mockFetchResponse(500, { statusMessage: 'boom' });
+
+    const err = await captureError(fetchTaxonomy('https://platform.example'));
+    expect(err.kind).toBe('SERVER');
+    expect(err.statusCode).toBe(500);
+    expect(err.message).toBe('boom');
   });
 });
 
