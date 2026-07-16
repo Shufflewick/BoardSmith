@@ -72,6 +72,33 @@ describe('deriveManifest', () => {
 
     expect(manifest.version).toBe('1.0.0');
   });
+
+  it('passes the taxonomy fields (audience/tags/playtime/cooperative) through to the manifest', () => {
+    const config = {
+      name: 'fixture',
+      audience: 'casual',
+      tags: ['abstract', 'classic'],
+      playtime: { min: 15, max: 30 },
+      cooperative: false,
+    };
+
+    const manifest = deriveManifest(config, makeGameDefinition(2, 4), 1);
+
+    expect(manifest.audience).toBe('casual');
+    expect(manifest.tags).toEqual(['abstract', 'classic']);
+    expect(manifest.playtime).toEqual({ min: 15, max: 30 });
+    expect(manifest.cooperative).toBe(false);
+  });
+
+  it('throws an actionable error when the gameDefinition lacks minPlayers/maxPlayers', () => {
+    // minPlayers/maxPlayers are optional on GameDefinition — a game that never
+    // declared them must fail the BUILD with the fix, not publish a bundle
+    // whose playerCount silently serialized to nothing.
+    const gameDefinition = {} as Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>;
+
+    expect(() => deriveManifest({ name: 'fixture' }, gameDefinition, 1))
+      .toThrow(/minPlayers\/maxPlayers.*src\/rules\/index\.ts/s);
+  });
 });
 
 // WR-02 regression: `.boardsmith` is a SHARED directory (pack tarballs,

@@ -28,6 +28,17 @@ export function deriveManifest(
   gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>,
   protocolVersion: number,
 ): Record<string, unknown> {
+  const { minPlayers, maxPlayers } = gameDefinition;
+  // The platform syncs playerCount on every publish (the catalog must never
+  // disagree with what the lobby enforces), so a bundle without it is
+  // unpublishable — fail the build here with the fix, not later on the server.
+  if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) {
+    throw new Error(
+      'Cannot determine player count: the game definition is missing minPlayers/maxPlayers. '
+      + 'Declare both as integers in your gameDefinition (src/rules/index.ts), e.g. minPlayers: 2, maxPlayers: 4.',
+    );
+  }
+
   return {
     ...config,
     buildTime: new Date().toISOString(),
