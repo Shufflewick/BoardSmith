@@ -13,6 +13,7 @@ import {
   fetchTaxonomy,
   isPublishError,
   type TaxonomyAudience,
+  type PlatformTarget,
 } from '../lib/publish-api.js';
 import { buildCommand } from './build.js';
 import { validateCommand } from './validate.js';
@@ -21,8 +22,19 @@ import { describeZipSizeViolation } from '../lib/bundle-limits.js';
 interface PublishOptions {
   apiKey?: string;
   publisher?: string;
+  dev?: boolean;
   test?: boolean;
   dryRun?: boolean;
+}
+
+function resolveTarget(options: PublishOptions): PlatformTarget {
+  if (options.dev && options.test) {
+    console.error(chalk.red('Pass at most one of --dev / --test.'));
+    process.exit(1);
+  }
+  if (options.dev) return 'dev';
+  if (options.test) return 'test';
+  return 'prod';
 }
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -30,8 +42,10 @@ const MAX_SLUG_ATTEMPTS = 10;
 
 export async function publishCommand(options: PublishOptions): Promise<void> {
   const cwd = process.cwd();
+  const target = resolveTarget(options);
 
-  // -- Resolve API key --
+  // -- Resolve API key (per target: dev/test/prod are separate deployments
+  // with separate key stores) --
   let apiKey = options.apiKey;
 
   if (apiKey) {
@@ -39,13 +53,13 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
       console.error(chalk.red('API key must start with spk_'));
       process.exit(1);
     }
-    saveApiKey(apiKey);
-    console.log(chalk.green('API key saved.'));
+    saveApiKey(target, apiKey);
+    console.log(chalk.green(`API key saved for ${target}.`));
   } else {
-    apiKey = getApiKey();
+    apiKey = getApiKey(target);
     if (!apiKey) {
-      console.error(chalk.red('No API key configured.'));
-      console.error(chalk.dim('Run: boardsmith publish --api-key spk_YOUR_KEY'));
+      console.error(chalk.red(`No API key configured for the ${target} platform.`));
+      console.error(chalk.dim(`Run: boardsmith publish${target === 'prod' ? '' : ` --${target}`} --api-key spk_YOUR_KEY`));
       process.exit(1);
     }
   }
@@ -75,7 +89,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   }
 
   const displayName = config.displayName || config.name || 'Unknown';
-  const platformUrl = getPlatformUrl(!!options.test);
+  const platformUrl = getPlatformUrl(target);
 
   // -- Resolve game identity early (needed for preflight) --
   // Prefer gameId from boardsmith.json (stable across slug changes).

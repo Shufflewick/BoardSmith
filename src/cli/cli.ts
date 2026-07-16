@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command, Option } from 'commander';
+import { Command } from 'commander';
 import { initCommand } from './commands/init.js';
 import { devCommand } from './commands/dev.js';
 import { buildCommand } from './commands/build.js';
@@ -111,7 +111,8 @@ program
   .option('--api-key <key>', 'API key (saved for future use)')
   .option('--publisher <slug>', 'Publisher slug that owns this game (required for a new game)')
   .option('--dry-run', 'Show what would be published without uploading')
-  .addOption(new Option('--test').hideHelp())
+  .option('--dev', 'Publish to the local dev platform (http://localhost:3006)')
+  .option('--test', 'Publish to the test platform (test.shufflewick.pub)')
   .action(publishCommand);
 
 // Claude Code integration

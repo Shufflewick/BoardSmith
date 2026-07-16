@@ -1,8 +1,13 @@
-const PROD_URL = 'https://shufflewick.pub';
-const TEST_URL = 'https://test.shufflewick.pub';
+export type PlatformTarget = 'dev' | 'test' | 'prod';
 
-export function getPlatformUrl(test: boolean): string {
-  return test ? TEST_URL : PROD_URL;
+const PLATFORM_URLS: Record<PlatformTarget, string> = {
+  dev: 'http://localhost:3006',
+  test: 'https://test.shufflewick.pub',
+  prod: 'https://shufflewick.pub',
+};
+
+export function getPlatformUrl(target: PlatformTarget): string {
+  return PLATFORM_URLS[target];
 }
 
 interface InitiateResponse {
