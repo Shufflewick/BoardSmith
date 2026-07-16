@@ -126,8 +126,9 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     await checkVersionAvailable(platformUrl, apiKey, existingGameId ?? baseSlug, version);
   } catch (err: unknown) {
     if (isPublishError(err) && err.kind === 'VERSION_EXISTS') {
-      console.error(chalk.red(`Version ${version} already exists for this game.`));
-      console.error(chalk.dim('Bump the version in package.json and try again.'));
+      // The platform's message names the latest published version.
+      console.error(chalk.red(err.message));
+      console.error(chalk.dim('Bump the version in package.json past it and try again.'));
       process.exit(1);
     }
     // Network errors during preflight are non-fatal — continue with build
@@ -219,8 +220,8 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
       }
       if (isPublishError(err) && err.kind === 'VERSION_EXISTS') {
         spinner.fail('Publish failed');
-        console.error(chalk.red(`Version ${version} already exists for this game.`));
-        console.error(chalk.dim('Bump the version in package.json and try again.'));
+        console.error(chalk.red(err.message));
+        console.error(chalk.dim('Bump the version in package.json past it and try again.'));
         process.exit(1);
       }
       if (isPublishError(err) && err.kind === 'NO_ACCESS') {
