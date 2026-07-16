@@ -219,6 +219,25 @@ describe('fetchTaxonomy', () => {
     expect(err.statusCode).toBe(500);
     expect(err.message).toBe('boom');
   });
+
+  it('throws a SERVER error when a 200 body has no "audiences" array', async () => {
+    mockFetchResponse(200, {});
+
+    const err = await captureError(fetchTaxonomy('https://platform.example'));
+    expect(err.kind).toBe('SERVER');
+    expect(err.message).toContain('no "audiences" list');
+    expect(err.message).toContain('https://platform.example/api/taxonomy');
+  });
+
+  it('throws a SERVER error when a 200 body is not valid JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('<html>proxy page</html>', { status: 200 }),
+    ));
+
+    const err = await captureError(fetchTaxonomy('https://platform.example'));
+    expect(err.kind).toBe('SERVER');
+    expect(err.message).toContain('no "audiences" list');
+  });
 });
 
 describe('completePublish error reporting', () => {

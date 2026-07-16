@@ -236,7 +236,15 @@ export async function fetchTaxonomy(platformUrl: string): Promise<{ audiences: T
     } satisfies PublishError;
   }
 
-  return res.json() as Promise<{ audiences: TaxonomyAudience[] }>;
+  const body = await res.json().catch(() => null) as { audiences?: unknown } | null;
+  if (!body || !Array.isArray(body.audiences)) {
+    throw {
+      kind: 'SERVER',
+      message: `Taxonomy endpoint at ${url} returned an unexpected response (no "audiences" list). The platform may be misconfigured or the URL may be wrong.`,
+      statusCode: res.status,
+    } satisfies PublishError;
+  }
+  return { audiences: body.audiences as TaxonomyAudience[] };
 }
 
 export function isPublishError(err: unknown): err is PublishError {
