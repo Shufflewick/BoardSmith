@@ -542,7 +542,8 @@ export class GameRunner<G extends Game = Game> {
    */
   static fromSnapshot<G extends Game>(
     snapshot: GameStateSnapshot,
-    GameClass: new (options: GameOptions) => G
+    GameClass: new (options: GameOptions) => G,
+    options?: { animationSeqFloor?: number }
   ): GameRunner<G> {
     // Use full gameOptions from snapshot if available, falling back to basic options
     // This ensures custom options like playerConfigs are preserved
@@ -572,7 +573,14 @@ export class GameRunner<G extends Game = Game> {
     // Adopt the authoritative element tree. loadSerializedState fully clears and
     // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState
     // / Game.restoreGame), so it stands alone with no prior replay.
-    runner.game.loadSerializedState(snapshot.state);
+    //
+    // `animationSeqFloor` (UNDO-04): absent for a normal full restore (adopt
+    // the persisted animation-event seq, today's behavior); supplied only by
+    // `fromCheckpoint` below, so an undo/rewind checkpoint restore can never
+    // move the live animation-event id sequence backwards. Do not thread a
+    // floor through any other caller of `fromSnapshot` -- see game.ts's
+    // `loadSerializedState` doc comment / RESEARCH.md §C.
+    runner.game.loadSerializedState(snapshot.state, options);
 
     // Restore the element sequence counter to its authoritative snapshot value.
     // The fromJSON tree rebuild in loadSerializedState advances _ctx.sequence, so
@@ -636,6 +644,14 @@ export class GameRunner<G extends Game = Game> {
     const checkpoint = checkpoints?.[actionIndex];
     if (!checkpoint) return null;
 
+    // UNDO-04: derive the animation-event floor from the ENCLOSING LIVE
+    // snapshot (not the historical checkpoint) so the restored runner's
+    // animation-event id sequence can never regress below where the live
+    // game already was. This is what makes the fix self-serving from this
+    // single call site -- no undo/rewind executor needs to remember to pass
+    // it. See game.ts's `loadSerializedState` doc comment / RESEARCH.md §C.
+    const animationSeqFloor = (snapshot.state as { animationEventSeq?: number }).animationEventSeq ?? 0;
+
     return GameRunner.fromSnapshot<G>(
       {
         version: snapshot.version,
@@ -650,6 +666,7 @@ export class GameRunner<G extends Game = Game> {
         actionCheckpoints: checkpoints!.slice(0, actionIndex + 1),
       },
       GameClass,
+      { animationSeqFloor },
     );
   }
 }

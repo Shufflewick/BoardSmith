@@ -2924,7 +2924,10 @@ export class Game<
    * which are recorded in neither commandHistory nor actionHistory) survive a
    * snapshot round-trip.
    */
-  loadSerializedState(json: ReturnType<Game['toJSON']>): void {
+  loadSerializedState(
+    json: ReturnType<Game['toJSON']>,
+    options?: { animationSeqFloor?: number }
+  ): void {
     // Restore game-level state from JSON. `messages`/`settings` are adopted
     // here by reference but rebuilt into fresh objects (with element/player
     // refs and Map/Set shapes resolved) by `resolveElementReferences(this)`
@@ -2935,9 +2938,45 @@ export class Game<
     this.messages = json.messages;
     this.settings = json.settings;
 
-    // Restore animation events if present
+    // Restore animation events if present.
+    //
+    // `animationSeqFloor` distinguishes the two callers of this method
+    // (UNDO-04): a FULL session restore (GameSession.restore -> fromSnapshot,
+    // no floor) is correct to unconditionally ADOPT the persisted seq -- the
+    // process is starting fresh, there is no live counter to protect. An
+    // undo/rewind CHECKPOINT restore (GameRunner.fromCheckpoint) supplies a
+    // floor derived from the enclosing LIVE snapshot: the checkpoint's own
+    // seq is historical and may be behind the live counter, and letting it
+    // overwrite the live counter backwards is exactly what makes the client's
+    // monotonic watermark (`e.id > lastQueuedId`) silently drop every
+    // replayed beat. When a floor is supplied, the seq never drops below it,
+    // and the restored buffer is re-stamped with fresh ids above it so those
+    // beats still animate instead of colliding with ids already delivered.
+    // Do not "simplify" this back into a single unconditional adopt -- see
+    // RESEARCH.md §C.
     const jsonWithEvents = json as { animationEvents?: AnimationEvent[]; animationEventSeq?: number };
-    if (jsonWithEvents.animationEvents) {
+    if (options?.animationSeqFloor !== undefined) {
+      // Checkpoint/undo-rewind restore: never let the seq drop below the
+      // live floor, whether or not this checkpoint happened to have a
+      // non-empty buffer (toJSON omits both fields entirely when the buffer
+      // was empty, so the floor must be applied unconditionally here -- not
+      // only inside the `if (jsonWithEvents.animationEvents)` branch).
+      this._animationEventSeq = Math.max(jsonWithEvents.animationEventSeq ?? 0, options.animationSeqFloor);
+      if (jsonWithEvents.animationEvents) {
+        // Copy the event objects too (CR-02): the snapshot may be restored
+        // again. Re-stamp each restored event with a fresh id above the
+        // floor, preserving relative order, so they are not filtered out by
+        // a client watermark that has already advanced past their old ids.
+        this._animationEvents = jsonWithEvents.animationEvents.map((e) => ({
+          ...e,
+          id: ++this._animationEventSeq,
+        }));
+      } else {
+        this._animationEvents = [];
+      }
+    } else if (jsonWithEvents.animationEvents) {
+      // Full restore (no floor supplied): unconditionally adopt the
+      // persisted seq, unchanged from today's behavior.
       // Copy the event objects too (CR-02): the snapshot may be restored again.
       this._animationEvents = jsonWithEvents.animationEvents.map((e) => ({ ...e }));
       this._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
