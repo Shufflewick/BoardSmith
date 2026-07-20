@@ -1183,4 +1183,116 @@ describe('useAnimationEvents', () => {
       expect(typeof useAnimationEvents).toBe('function');
     });
   });
+
+  // UNDO-04 / PROC-01 (Plan 155-05): defense-in-depth client watermark reset.
+  //
+  // A client that reconnects into a rewound session can carry a stale
+  // `lastQueuedId` above the ids of the batch it is now being sent, because
+  // the server-side fix (Plan 155-04) only guarantees monotonicity for a
+  // client that stayed connected throughout. `actionCount` is a new,
+  // always-published signal (src/session/utils.ts) the client can watch
+  // alongside `animationEvents`: a DECREASE between two observations means a
+  // rewind happened, and the watermark must be reset before the incoming
+  // batch is filtered -- otherwise ids at or below the (stale) old watermark
+  // are silently dropped, which is exactly "undo eats my animations" from
+  // the client's point of view.
+  describe('rewind detection via actionCount', () => {
+    it('replays events after a detected actionCount decrease (would be dropped without the reset)', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const actionCount = ref(5);
+      const delivered: number[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        actionCount: () => actionCount.value,
+      });
+
+      instance.registerHandler('test', async (event) => {
+        delivered.push(event.id);
+      }, { skip: 'drop' });
+
+      // Forward play: ids 1..5 delivered, watermark advances to 5.
+      events.value = [
+        createEvent(1, 'test'),
+        createEvent(2, 'test'),
+        createEvent(3, 'test'),
+        createEvent(4, 'test'),
+        createEvent(5, 'test'),
+      ];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(delivered).toEqual([1, 2, 3, 4, 5]);
+
+      // Rewind: actionCount decreases (undo/debug-rewind), then a replayed
+      // batch arrives carrying ids 3..4 -- below the old watermark of 5, but
+      // these are NEW beats for the rewound session and must be delivered.
+      actionCount.value = 3;
+      events.value = [createEvent(3, 'test'), createEvent(4, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+
+      // Beats delivered to the consumer, not raw watermark integers (PROC-01).
+      expect(delivered).toEqual([1, 2, 3, 4, 5, 3, 4]);
+    });
+
+    it('still dedupes at-or-below-watermark ids when actionCount has NOT decreased (forward play unaffected)', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const actionCount = ref(5);
+      const delivered: number[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        actionCount: () => actionCount.value,
+      });
+
+      instance.registerHandler('test', async (event) => {
+        delivered.push(event.id);
+      }, { skip: 'drop' });
+
+      events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(delivered).toEqual([1, 2]);
+
+      // actionCount increases (normal forward play) -- id 2 must NOT be redelivered.
+      actionCount.value = 6;
+      events.value = [createEvent(1, 'test'), createEvent(2, 'test'), createEvent(3, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(delivered).toEqual([1, 2, 3]);
+
+      // actionCount unchanged -- same guarantee.
+      actionCount.value = 6;
+      events.value = [createEvent(1, 'test'), createEvent(2, 'test'), createEvent(3, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(delivered).toEqual([1, 2, 3]);
+    });
+
+    it('behaves exactly as today when no actionCount source is supplied (absence is not a rewind signal)', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const delivered: number[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        // no actionCount option supplied
+      });
+
+      instance.registerHandler('test', async (event) => {
+        delivered.push(event.id);
+      }, { skip: 'drop' });
+
+      events.value = [createEvent(1, 'test'), createEvent(2, 'test'), createEvent(3, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(delivered).toEqual([1, 2, 3]);
+
+      // Re-delivering ids at or below the watermark must still be filtered --
+      // with no actionCount source, there is no signal to ever trigger a reset.
+      events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(delivered).toEqual([1, 2, 3]);
+    });
+  });
 });
