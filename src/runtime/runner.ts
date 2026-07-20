@@ -85,6 +85,63 @@ export class GameRunner<G extends Game = Game> {
   private actionCheckpoints: ActionCheckpoint[] = [];
 
   /**
+   * The durable execute()-barrier fence (UNDO-02, 155-02): the action-history
+   * length at the moment the MOST RECENT `execute()` flow node completed.
+   * Read by the session layer's shared `assertUndoAllowed` guard
+   * (`session/utils.ts`) to refuse an undo/rewind that would cross it.
+   * Public (like `actionHistory`) rather than accessed via a getter -- there
+   * is nothing to compute on read; the invariant lives entirely in how this
+   * field is WRITTEN (see `#recordExecuteBarrierAdvance`, `getSnapshot`,
+   * `fromSnapshot`, `fromCheckpoint`).
+   *
+   * Mirrors `actionCheckpoints`'s plumbing exactly: seeded on construction,
+   * refreshed after every history append, carried through `getSnapshot` /
+   * `fromSnapshot`, and clamped on `fromCheckpoint`.
+   */
+  executeBarrierIndex = 0;
+
+  /**
+   * Last-observed value of `game.getExecuteNodeCompletions()` (the live
+   * `FlowEngine`'s monotonic execute() counter). Compared on every history
+   * append to detect an advance; NOT itself persisted -- a fresh `FlowEngine`
+   * (built on every restore) always starts its own counter at 0, so this
+   * field is explicitly re-baselined to the freshly-built engine's counter
+   * immediately after restore (`fromSnapshot`), rather than assumed to carry
+   * over. Re-baselining, not the counter's raw value, is what makes
+   * `executeBarrierIndex` durable across a restore.
+   */
+  private lastSeenExecuteNodeCompletions = 0;
+
+  /**
+   * Compare the live flow engine's execute()-completion counter to the last
+   * seen value; if it advanced, extend `executeBarrierIndex` to the current
+   * action-history length (the barrier is set AT the action count where the
+   * execute() node completed) and update the last-seen value. Idempotent to
+   * call repeatedly with no intervening advance -- a no-op once the counter
+   * has already been observed.
+   *
+   * Called from `captureCheckpoint()` rather than directly from
+   * `performAction`/`recordSerializedAction`: an execute() node immediately
+   * following an action-step frequently runs INSIDE the completion of the
+   * NEXT flow step, which for the multi-step / repeating-selection funnel
+   * (`completePendingAction` here, `PendingActionManager` on the session
+   * layer) happens via `continueFlowAfterPendingAction` -- called AFTER
+   * `recordSerializedAction` already pushed to history. `captureCheckpoint()`
+   * is the one chokepoint both executors already call once the WHOLE op
+   * (including any such trailing flow advance) has settled -- the stateless
+   * path via `getSnapshot()`, the stateful path via `GameSession.broadcast()`
+   * (see that method's doc comment) -- so it is also the correct place to
+   * observe whether an execute() node ran during this op.
+   */
+  private recordExecuteBarrierAdvance(): void {
+    const completions = this.game.getExecuteNodeCompletions();
+    if (completions !== this.lastSeenExecuteNodeCompletions) {
+      this.lastSeenExecuteNodeCompletions = completions;
+      this.executeBarrierIndex = this.actionHistory.length;
+    }
+  }
+
+  /**
    * Per-player in-progress pending-action state for multi-step / repeating-
    * selection actions driven directly through the runner. This mirrors
    * `PendingActionManager`'s session-layer state machine, but is a session-free
@@ -147,6 +204,10 @@ export class GameRunner<G extends Game = Game> {
     const len = this.actionHistory.length;
     this.actionCheckpoints = this.actionCheckpoints.slice(0, len);
     this.actionCheckpoints[len] = createActionCheckpoint(this.game);
+    // UNDO-02: also the chokepoint for detecting an execute()-barrier
+    // advance -- see recordExecuteBarrierAdvance's doc comment for why this
+    // is the correct place (not the individual history-append call sites).
+    this.recordExecuteBarrierAdvance();
   }
 
   /**
@@ -464,7 +525,11 @@ export class GameRunner<G extends Game = Game> {
   getSnapshot(): GameStateSnapshot {
     this.captureCheckpoint();
     const base = createSnapshot(this.game, this.gameType, this.actionHistory, this.seed);
-    return { ...base, actionCheckpoints: [...this.actionCheckpoints] };
+    return {
+      ...base,
+      actionCheckpoints: [...this.actionCheckpoints],
+      executeBarrierIndex: this.executeBarrierIndex,
+    };
   }
 
   /**
@@ -570,6 +635,12 @@ export class GameRunner<G extends Game = Game> {
     // start fresh (their checkpoint at the current action count is rebuilt below).
     runner.actionCheckpoints = snapshot.actionCheckpoints ? [...snapshot.actionCheckpoints] : [];
 
+    // UNDO-02: adopt the durable execute()-barrier from the snapshot. Absent
+    // (older snapshot predating this field, or no execute() has run yet):
+    // read as 0 -- no barrier recorded, the honest reading, not a compat
+    // shim (project no-back-compat rule).
+    runner.executeBarrierIndex = snapshot.executeBarrierIndex ?? 0;
+
     // Adopt the authoritative element tree. loadSerializedState fully clears and
     // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState
     // / Game.restoreGame), so it stands alone with no prior replay.
@@ -612,6 +683,16 @@ export class GameRunner<G extends Game = Game> {
       runner.game.restoreFlowState(snapshot.flowState);
     }
 
+    // UNDO-02: re-baseline the last-seen execute()-completion count to the
+    // FRESHLY BUILT FlowEngine's own counter (always 0 for a brand-new
+    // engine -- see game.ts `restoreFlowState`). Without this, the next
+    // history append would compare the new engine's 0 against whatever
+    // value a PRIOR runner instance last observed and could spuriously
+    // detect (or miss) an advance. This is what makes `executeBarrierIndex`
+    // -- not the live counter -- the durable fact: every restore starts
+    // observation fresh from the persisted number adopted above.
+    runner.lastSeenExecuteNodeCompletions = runner.game.getExecuteNodeCompletions();
+
     return runner;
   }
 
@@ -652,6 +733,15 @@ export class GameRunner<G extends Game = Game> {
     // it. See game.ts's `loadSerializedState` doc comment / RESEARCH.md §C.
     const animationSeqFloor = (snapshot.state as { animationEventSeq?: number }).animationEventSeq ?? 0;
 
+    // UNDO-02: clamp the barrier to the restore point. A barrier set AHEAD of
+    // `actionIndex` (e.g. from an execute() node that ran after the point
+    // being restored to) describes a portion of the timeline this restored
+    // runner no longer has -- it must not haunt the rewound runner's own
+    // future undos. `Math.min` is exactly the right operation because the
+    // barrier is a monotonic high-water mark: what happened AT OR BEFORE
+    // `actionIndex` is still real and must still be fenced.
+    const executeBarrierIndex = Math.min(snapshot.executeBarrierIndex ?? 0, actionIndex);
+
     return GameRunner.fromSnapshot<G>(
       {
         version: snapshot.version,
@@ -664,6 +754,7 @@ export class GameRunner<G extends Game = Game> {
         randomState: checkpoint.randomState,
         gameOptions: snapshot.gameOptions,
         actionCheckpoints: checkpoints!.slice(0, actionIndex + 1),
+        executeBarrierIndex,
       },
       GameClass,
       { animationSeqFloor },

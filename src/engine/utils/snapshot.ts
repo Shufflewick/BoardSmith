@@ -66,6 +66,29 @@ export interface GameStateSnapshot {
    *  so a single snapshot carried O(N^2) action entries. Maintained by `GameRunner`,
    *  never nested. */
   actionCheckpoints?: ActionCheckpoint[];
+
+  /**
+   * The durable execute()-barrier fence (UNDO-02, 155-02): the action-history
+   * length at the moment the MOST RECENT `execute()` flow node completed. An
+   * undo/rewind targeting `turnStartActionIndex < executeBarrierIndex` must be
+   * refused -- it would silently roll back a committed, irreversible side
+   * effect (scoring, dealing, revealing hidden info) that `execute()` exists
+   * to run.
+   *
+   * This is the durable REPLACEMENT for `FlowEngine`'s transient
+   * `frame.completed` flag (`engine.ts` `executeExecute`): `frame.completed`
+   * lives on a flow stack frame that does not survive checkpoint restore (a
+   * fresh `FlowEngine` is rebuilt with an empty stack), so it cannot be the
+   * fence on its own. `executeBarrierIndex`, by contrast, is a plain number
+   * persisted as a snapshot sibling of `actionCheckpoints` and re-adopted on
+   * every `fromSnapshot`/`fromCheckpoint` restore -- monotonic within a run,
+   * and clamped to the restore point on `fromCheckpoint` (a barrier ahead of
+   * the rewound timeline no longer applies to it). Absent (older snapshot
+   * predating this field, or a run with no execute() node yet): read as `0`
+   * -- the honest reading of "no barrier was ever recorded", not a compat
+   * shim (project no-back-compat rule).
+   */
+  executeBarrierIndex?: number;
 }
 
 /**

@@ -1783,6 +1783,19 @@ export class Game<
   }
 
   /**
+   * Read the live `FlowEngine`'s monotonic count of completed `execute()`
+   * nodes (UNDO-02, 155-02). `0` when there is no active flow engine yet
+   * (matches the counter's own starting value). `GameRunner` is the only
+   * consumer -- it compares this against its own last-seen value after every
+   * recorded action to detect an advance and set/extend its durable
+   * `executeBarrierIndex`. This counter itself resets to 0 on every flow
+   * engine rebuild (restore); it is NOT durable on its own.
+   */
+  getExecuteNodeCompletions(): number {
+    return this._flowEngine?.executeNodeCompletions ?? 0;
+  }
+
+  /**
    * Get a structured, human- and machine-readable description of "where in
    * the flow are we right now" — phase, step, raw path, and who's being
    * awaited. Mirrors the `debugActionAvailability()` facade pattern: gather
