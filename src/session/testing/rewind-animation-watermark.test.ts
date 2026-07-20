@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
+import { GameSession } from '../game-session.js';
 import type { Op, GameDefinitionLike } from '../stateless-ops.js';
+import type { StorageAdapter, StoredGameState } from '../types.js';
 import {
   Game,
   Player,
@@ -182,5 +184,146 @@ describe('UNDO-04: animation-event watermark survives undo/rewind', () => {
     }
     // The post-rewind tick's beat specifically must have been delivered.
     expect(deliveredIds.length).toBeGreaterThan(4);
+  });
+});
+
+/** In-memory storage, matching restore-snapshot-authoritative.test.ts's
+ *  JsonRoundTripStorage: `GameSession.#save()` only populates
+ *  `storedState.snapshot` when a storage adapter is present. */
+class InMemoryStorage implements StorageAdapter {
+  saved: string | null = null;
+  async save(state: StoredGameState): Promise<void> {
+    this.saved = JSON.stringify(state);
+  }
+  async load(): Promise<StoredGameState | null> {
+    return this.saved ? (JSON.parse(this.saved) as StoredGameState) : null;
+  }
+}
+
+describe('UNDO-04: full session restore is unaffected (the two loadSerializedState callers stay distinguished)', () => {
+  it('GameSession.restore (server restart) still ADOPTS the persisted animation-event seq unchanged', async () => {
+    // GameSession.create -> performAction ticks -> GameSession.restore is the
+    // EXACT production path (game-session.ts:865 calls
+    // `GameRunner.fromSnapshot<G>(storedState.snapshot, GameClass)` with NO
+    // animationSeqFloor option). This is the guard against over-applying the
+    // fix: a full restore must keep adopting the persisted seq verbatim, not
+    // be floored against anything, because there is no "live" counter running
+    // across a cold restart to protect.
+    const session = GameSession.create<TickGame>({
+      gameType: 'tick-watermark',
+      GameClass: TickGame,
+      playerCount: 2,
+      playerNames: ['A', 'B'],
+      seed: 'restore-seed',
+      storage: new InMemoryStorage(),
+    });
+
+    expect((await session.performAction('tick', 1, {})).success).toBe(true);
+    expect((await session.performAction('tick', 1, {})).success).toBe(true);
+    expect((await session.performAction('tick', 2, {})).success).toBe(true);
+
+    const liveSeq = (session.runner.getSnapshot().state as { animationEventSeq?: number }).animationEventSeq;
+    expect(liveSeq).toBe(3);
+
+    // Simulate a cold restart: persist -> reload the stored state JSON, exactly
+    // as restore-snapshot-authoritative.test.ts's JsonRoundTripStorage does.
+    const storedState = JSON.parse(JSON.stringify(session.storedState));
+    const restored = GameSession.restore<TickGame>(storedState, TickGame);
+
+    const restoredSeq = (
+      restored.runner.getSnapshot().state as { animationEventSeq?: number }
+    ).animationEventSeq;
+    expect(restoredSeq).toBe(liveSeq);
+
+    // The next beat minted after restore continues the ADOPTED seq, not a
+    // floor derived from anything -- there is no floor on this path at all.
+    expect((await restored.performAction('tick', 2, {})).success).toBe(true);
+    const nextSeq = (
+      restored.runner.getSnapshot().state as { animationEventSeq?: number }
+    ).animationEventSeq;
+    expect(nextSeq).toBe(4);
+  });
+
+  it('adversarial: repeated undo -> act -> undo -> act cycles never produce a non-increasing delivered id', async () => {
+    const session = createHeadlessSession(tickFixtureDefinition, { playerCount: 2, seed: 'adversarial' });
+    await session.start();
+
+    const watermark: ClientWatermark = { lastQueuedId: 0 };
+    const deliveredIds: number[] = [];
+    const record = (result: { playerViews?: unknown[] }, seat: number) => {
+      deliveredIds.push(...clientDeliver(watermark, animationEventsFor(result, seat)));
+    };
+
+    // Actively try to drive the sequence backwards: undo -> act -> undo -> act,
+    // repeated several times in a row, entirely within player 1's opening turn
+    // (tick, undo, tick, undo, tick, ... -- always the first action of the
+    // turn, so undo stays offered every time).
+    for (let i = 0; i < 5; i++) {
+      const tick = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op);
+      expect(tick.success).toBe(true);
+      record(tick, 1);
+
+      const undo = await session.send(1, { type: 'undo', player: 1 });
+      expect(undo.success).toBe(true);
+      record(undo, 1);
+    }
+    // Final act after the last undo, so the run ends on a delivered beat.
+    const final = await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op);
+    expect(final.success).toBe(true);
+    record(final, 1);
+
+    expect(deliveredIds.length).toBeGreaterThanOrEqual(6);
+    for (let i = 1; i < deliveredIds.length; i++) {
+      expect(deliveredIds[i]).toBeGreaterThan(deliveredIds[i - 1]);
+    }
+  });
+
+  it('adversarial: a direct rewindToAction() call (bypassing the op layer) also preserves monotonicity', async () => {
+    const session = GameSession.create<TickGame>({
+      gameType: 'tick-watermark',
+      GameClass: TickGame,
+      playerCount: 2,
+      playerNames: ['A', 'B'],
+      seed: 'rewind-direct',
+    });
+
+    const watermark: ClientWatermark = { lastQueuedId: 0 };
+    const deliveredIds: number[] = [];
+    const recordState = (state: { animationEvents?: Array<{ id: number }> } | undefined) => {
+      deliveredIds.push(...clientDeliver(watermark, state?.animationEvents));
+    };
+
+    // Each performAction leaves its beats in the live game's buffer -- read
+    // straight off it, exactly like buildPlayerState/utils.ts:323 do.
+    const liveBeats = () => session.runner.game.pendingAnimationEvents;
+
+    const t1 = await session.performAction('tick', 1, {}); // action 0 -> id 1
+    expect(t1.success).toBe(true);
+    recordState({ animationEvents: liveBeats() });
+
+    const t2 = await session.performAction('tick', 1, {}); // action 1 -> id 2
+    expect(t2.success).toBe(true);
+    recordState({ animationEvents: liveBeats() });
+
+    const t3 = await session.performAction('tick', 2, {}); // action 2 -> id 3
+    expect(t3.success).toBe(true);
+    recordState({ animationEvents: liveBeats() });
+
+    // Bypass the op layer entirely: call StateHistory.rewindToAction directly
+    // via GameSession's delegating method, targeting action index 1 (right
+    // after the first tick).
+    const rewind = await session.rewindToAction(1);
+    expect(rewind.success).toBe(true);
+    recordState(rewind.state);
+
+    // Act again after the direct rewind -- the beat that must not collide.
+    const afterRewindTick = await session.performAction('tick', 1, {});
+    expect(afterRewindTick.success).toBe(true);
+    recordState({ animationEvents: liveBeats() });
+
+    for (let i = 1; i < deliveredIds.length; i++) {
+      expect(deliveredIds[i]).toBeGreaterThan(deliveredIds[i - 1]);
+    }
+    expect(deliveredIds.length).toBeGreaterThan(0);
   });
 });

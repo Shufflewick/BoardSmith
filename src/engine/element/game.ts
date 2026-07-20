@@ -2695,12 +2695,24 @@ export class Game<
         data?: Record<string, unknown>;
       }>,
       settings: this.serializeValue(this.settings, 'settings') as Record<string, unknown>,
-      // Only include animation events if buffer is non-empty (avoid cluttering empty snapshots)
+      // The seq must survive a snapshot round-trip on its OWN, independent of
+      // whether the CURRENT buffer happens to be empty (the buffer clears at
+      // the start of every performAction -- see `:1130`). Gating it on
+      // buffer-non-emptiness would silently drop the counter back to
+      // undefined the moment one action doesn't animate, and the next
+      // `loadSerializedState` reconstruction (every op, in the stateless
+      // executor) would then default it back to 0 -- reintroducing the exact
+      // animation-id collision UNDO-04 exists to prevent, just via the
+      // empty-buffer path instead of the undo path. Only include it once
+      // `animate()` has ever actually run (avoid cluttering a snapshot that
+      // never used animation events at all).
+      ...(this._animationEventSeq > 0 && { animationEventSeq: this._animationEventSeq }),
+      // Only include the events array if the buffer is non-empty (avoid
+      // cluttering empty snapshots with an empty array).
       ...(this._animationEvents.length > 0 && {
         // Copy the buffer (same CR-02 aliasing concern: the live array is
         // mutated in place as later events are recorded).
         animationEvents: this._animationEvents.map((e) => ({ ...e })),
-        animationEventSeq: this._animationEventSeq,
       }),
     };
   }
@@ -2974,11 +2986,17 @@ export class Game<
       } else {
         this._animationEvents = [];
       }
-    } else if (jsonWithEvents.animationEvents) {
+    } else if (jsonWithEvents.animationEventSeq !== undefined || jsonWithEvents.animationEvents) {
       // Full restore (no floor supplied): unconditionally adopt the
-      // persisted seq, unchanged from today's behavior.
+      // persisted seq, unchanged from today's behavior. Checked on
+      // `animationEventSeq` OR `animationEvents` (not `animationEvents`
+      // alone) because toJSON now serializes the seq independently of
+      // whether the buffer happens to be empty -- a restore must still
+      // adopt a nonzero seq even when there is no buffer to go with it.
       // Copy the event objects too (CR-02): the snapshot may be restored again.
-      this._animationEvents = jsonWithEvents.animationEvents.map((e) => ({ ...e }));
+      this._animationEvents = jsonWithEvents.animationEvents
+        ? jsonWithEvents.animationEvents.map((e) => ({ ...e }))
+        : [];
       this._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
     }
 
