@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
 import { collectFixtureDefinition } from './fixtures/collect-fixture.js';
+import { undoFenceFixtureDefinition, UndoFenceGame } from './fixtures/undo-fence-fixture.js';
+import { GameSession } from '../game-session.js';
 import type { Op } from '../stateless-ops.js';
 
 /**
@@ -96,5 +98,130 @@ describe('collect-equipment parity contract', () => {
     const explore = await session.send(1, { type: 'action', actionName: 'explore', player: 1, args: {} });
     expect(explore.success).toBe(true);
     expect(() => structuredClone(explore.followUp)).not.toThrow();
+  });
+});
+
+/**
+ * UNDO-01/UNDO-02 drift detector + adversarial verification (D-01/D-09,
+ * PROC-01, T-155-01/T-155-02). The stateless (SnapshotSessionHost) and
+ * stateful (GameSession) undo/rewind executors must agree on the refusal
+ * decision AND message for the same fixture scenario -- this is the locked
+ * "two executors must not drift" invariant.
+ *
+ * Every adversarial case here deliberately bypasses the client's advisory
+ * `canUndo` state -- it builds the raw op literal (or calls the session
+ * method directly) without ever reading it, exactly as an attacker would.
+ */
+const undoFenceGameOptions = { playerCount: 2, seed: 't' };
+
+async function statelessLockThenUndo() {
+  const session = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
+  await session.start();
+  const lock = await session.send(1, { type: 'action', actionName: 'lock', player: 1, args: {} });
+  expect(lock.success).toBe(true);
+  return session.send(1, { type: 'undo', player: 1 } as Op);
+}
+
+function newStatefulSession() {
+  return GameSession.create<UndoFenceGame>({
+    gameType: 'undo-fence',
+    GameClass: UndoFenceGame,
+    playerCount: 2,
+    playerNames: ['A', 'B'],
+    seed: 't',
+  });
+}
+
+async function statefulLockThenUndo() {
+  const session = newStatefulSession();
+  const lock = await session.performAction('lock', 1, {});
+  expect(lock.success).toBe(true);
+  return session.undoToTurnStart(1);
+}
+
+describe('undo-fence parity: stateless and stateful executors agree', () => {
+  it('non-undoable case: same refusal decision and message on both executors', async () => {
+    const statelessResult = await statelessLockThenUndo();
+    const statefulResult = await statefulLockThenUndo();
+
+    expect(statelessResult.success).toBe(false);
+    expect(statefulResult.success).toBe(false);
+    expect(statelessResult.error).toBe(statefulResult.error);
+  });
+
+  it('finished-phase case: same refusal decision and message on both executors', async () => {
+    const statelessSession = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
+    await statelessSession.start();
+    const statelessEnd = await statelessSession.send(1, {
+      type: 'action',
+      actionName: 'endGame',
+      player: 1,
+      args: {},
+    });
+    expect(statelessEnd.success).toBe(true);
+    const statelessUndo = await statelessSession.send(1, { type: 'undo', player: 1 } as Op);
+
+    const statefulSession = newStatefulSession();
+    const statefulEnd = await statefulSession.performAction('endGame', 1, {});
+    expect(statefulEnd.success).toBe(true);
+    const statefulUndo = await statefulSession.undoToTurnStart(1);
+
+    expect(statelessUndo.success).toBe(false);
+    expect(statefulUndo.success).toBe(false);
+    expect(statelessUndo.error).toBe(statefulUndo.error);
+  });
+});
+
+describe('undo-fence adversarial verification (bypassing canUndo)', () => {
+  it('a hand-crafted raw {type: "undo"} op sent without ever consulting canUndo is refused', async () => {
+    const session = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
+    await session.start();
+    const lock = await session.send(1, { type: 'action', actionName: 'lock', player: 1, args: {} });
+    expect(lock.success).toBe(true);
+
+    // Never read state.canUndo -- attempt the raw op directly.
+    const undoOp: Op = { type: 'undo', player: 1 };
+    const result = await session.send(1, undoOp);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/lock/i);
+  });
+
+  it('calling undoToTurnStart() directly on the stateful session, bypassing the UI, is refused', async () => {
+    const session = newStatefulSession();
+    const lock = await session.performAction('lock', 1, {});
+    expect(lock.success).toBe(true);
+
+    // Never read a UI-level canUndo flag -- call the session API directly.
+    const result = await session.undoToTurnStart(1);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/lock/i);
+  });
+
+  it('debugRewind op crossing a notUndoable action is refused', async () => {
+    const session = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
+    await session.start();
+    const lock = await session.send(1, { type: 'action', actionName: 'lock', player: 1, args: {} });
+    expect(lock.success).toBe(true);
+
+    // Rewind to action index 0 -- discarding the notUndoable `lock` action.
+    const rewindOp: Op = { type: 'debugRewind', player: 1, actionIndex: 0 };
+    const result = await session.send(1, rewindOp);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/lock/i);
+  });
+
+  it('rewindToAction() called directly, crossing a notUndoable action, is refused', async () => {
+    const session = newStatefulSession();
+    const lock = await session.performAction('lock', 1, {});
+    expect(lock.success).toBe(true);
+
+    // Rewind to action index 0 -- discarding the notUndoable `lock` action.
+    const result = await session.rewindToAction(0);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/lock/i);
   });
 });
