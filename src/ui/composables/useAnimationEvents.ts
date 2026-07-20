@@ -80,6 +80,20 @@ export interface UseAnimationEventsOptions {
    * Set to 0 to skip immediately (no wait).
    */
   handlerWaitTimeout?: number;
+  /**
+   * Optional getter for `PlayerGameState.actionCount` (UNDO-04 defense-in-depth).
+   *
+   * The server-side fix makes the animation-event id sequence monotonic for a client
+   * that stays connected, but a client that reconnects or joins mid-rewind can still
+   * carry a stale `lastQueuedId`/`lastProcessedId` above the ids it is now being sent.
+   * When this getter is supplied, a DECREASE in its value between two observations is
+   * treated as a detected rewind and resets both watermarks to 0 before the incoming
+   * `events` batch is filtered, so replayed beats are delivered instead of silently
+   * dropped. If omitted (or its value is `undefined`), there is no signal, and
+   * behavior is identical to not having this option at all -- absence must never be
+   * treated as "rewound".
+   */
+  actionCount?: () => number | undefined;
 }
 
 /**
@@ -129,7 +143,7 @@ export function useAnimationEvents(): UseAnimationEventsReturn | undefined {
  * @returns Animation events controller
  */
 export function createAnimationEvents(options: UseAnimationEventsOptions): UseAnimationEventsReturn {
-  const { events: getEvents, defaultDuration = 0, handlerWaitTimeout = 3000 } = options;
+  const { events: getEvents, defaultDuration = 0, handlerWaitTimeout = 3000, actionCount: getActionCount } = options;
 
   // Handler registry
   const handlers = new Map<string, { handler: AnimationHandler; skip: 'run' | 'drop' }>();
@@ -147,6 +161,11 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   // Track highest queued ID to avoid re-queueing during processing
   let lastQueuedId = 0;
+
+  // Last observed actionCount (UNDO-04 rewind signal). `undefined` means "no
+  // observation yet" -- distinct from the source being absent entirely, so the
+  // first tick never spuriously looks like a decrease.
+  let lastActionCount: number | undefined;
 
   // Processing state
   let isProcessing = false;
@@ -374,6 +393,23 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     (events) => {
       if (!events || events.length === 0) {
         return;
+      }
+
+      // UNDO-04: detect a rewind via a DECREASE in actionCount and reset both
+      // watermarks BEFORE filtering, so a rewind batch is never partially
+      // dropped. `undefined` (source not wired, or first observation) is
+      // "no signal" -- it must never be treated as a rewind.
+      if (getActionCount) {
+        const currentActionCount = getActionCount();
+        if (
+          currentActionCount !== undefined &&
+          lastActionCount !== undefined &&
+          currentActionCount < lastActionCount
+        ) {
+          lastQueuedId = 0;
+          lastProcessedId = 0;
+        }
+        lastActionCount = currentActionCount;
       }
 
       // Filter to only new events (id > lastQueuedId)
