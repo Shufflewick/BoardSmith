@@ -160,17 +160,23 @@ describe('UNDO-04: animation-event watermark survives undo/rewind', () => {
       deliveredIds.push(...clientDeliver(watermark, animationEventsFor(result, seat)));
     };
 
-    // Turn 1 -- player 1: two ticks (ids 1, 2).
+    // Turn 1 -- player 1: two ticks (ids 1, 2). The second tick ends the turn
+    // and fires the fixture's turn-advance execute() node, setting the
+    // durable execute()-barrier (UNDO-02, 155-02) at action index 2.
     record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op), 1);
     record(await session.send(1, { type: 'action', actionName: 'tick', player: 1, args: {} } as Op), 1);
-    // Turn 2 -- player 2: two ticks (ids 3, 4).
-    record(await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} } as Op), 2);
+    // Turn 2 -- player 2: FIRST tick only (id 3). Deliberately stop here
+    // (rather than completing player 2's turn too) so the barrier stays at 2
+    // -- completing another turn would advance it to 4 and the rewind below
+    // would then cross TWO barriers instead of landing exactly at one.
     record(await session.send(2, { type: 'action', actionName: 'tick', player: 2, args: {} } as Op), 2);
 
-    expect(deliveredIds).toEqual([1, 2, 3, 4]);
+    expect(deliveredIds).toEqual([1, 2, 3]);
 
     // Debug-rewind to action index 2 -- the checkpoint captured right after
-    // player 1's second tick, i.e. the start of player 2's turn.
+    // player 1's second tick / the turn-advance execute(), i.e. AT the
+    // barrier, not before it (turnStartActionIndex(2) < executeBarrierIndex(2)
+    // is false -- this must NOT be refused).
     const rewind = await session.send(1, { type: 'debugRewind', actionIndex: 2 } as Op);
     expect(rewind.success).toBe(true);
     record(rewind, 2);
@@ -183,7 +189,7 @@ describe('UNDO-04: animation-event watermark survives undo/rewind', () => {
       expect(deliveredIds[i]).toBeGreaterThan(deliveredIds[i - 1]);
     }
     // The post-rewind tick's beat specifically must have been delivered.
-    expect(deliveredIds.length).toBeGreaterThan(4);
+    expect(deliveredIds.length).toBeGreaterThan(3);
   });
 });
 
@@ -310,14 +316,18 @@ describe('UNDO-04: full session restore is unaffected (the two loadSerializedSta
     recordState({ animationEvents: liveBeats() });
 
     // Bypass the op layer entirely: call StateHistory.rewindToAction directly
-    // via GameSession's delegating method, targeting action index 1 (right
-    // after the first tick).
-    const rewind = await session.rewindToAction(1);
+    // via GameSession's delegating method, targeting action index 2 -- right
+    // AT the turn-advance execute() barrier (155-02, UNDO-02) that player 1's
+    // second tick fired, not before it. Index 1 (right after the FIRST tick)
+    // would cross that same-turn barrier and be refused.
+    const rewind = await session.rewindToAction(2);
     expect(rewind.success).toBe(true);
     recordState(rewind.state);
 
     // Act again after the direct rewind -- the beat that must not collide.
-    const afterRewindTick = await session.performAction('tick', 1, {});
+    // The rewound checkpoint sits right after player 1's turn ended, so it's
+    // player 2's turn now.
+    const afterRewindTick = await session.performAction('tick', 2, {});
     expect(afterRewindTick.success).toBe(true);
     recordState({ animationEvents: liveBeats() });
 

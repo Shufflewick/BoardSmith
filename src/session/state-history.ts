@@ -312,7 +312,12 @@ export class StateHistory<G extends Game = Game> {
       // the two executors must not drift (D-01/D-09). Placed inside this
       // try so the existing catch below converts the throw into the
       // established `{ success: false, error }` shape.
-      assertUndoAllowed({ game: runner.game, actionHistory: this.#storedState.actionHistory, turnStartActionIndex });
+      assertUndoAllowed({
+        game: runner.game,
+        actionHistory: this.#storedState.actionHistory,
+        turnStartActionIndex,
+        executeBarrierIndex: runner.executeBarrierIndex,
+      });
 
       // Restore the checkpoint, carrying its prefix forward so further undos work.
       const newRunner = GameRunner.fromCheckpoint<G>(snapshot, turnStartActionIndex, this.#GameClass);
@@ -396,6 +401,7 @@ export class StateHistory<G extends Game = Game> {
         game: this.#getRunner().game,
         actionHistory: this.#storedState.actionHistory,
         turnStartActionIndex: targetActionIndex,
+        executeBarrierIndex: this.#getRunner().executeBarrierIndex,
       });
 
       // Restore the checkpoint, carrying its prefix forward so further undos/rewinds work.

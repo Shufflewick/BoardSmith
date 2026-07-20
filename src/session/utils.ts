@@ -226,9 +226,9 @@ export function computeUndoInfo(
  * rule; T-155-03).
  */
 export class UndoRefusedError extends Error {
-  readonly reason: 'non-undoable' | 'finished-phase';
+  readonly reason: 'non-undoable' | 'finished-phase' | 'execute-barrier';
 
-  constructor(message: string, reason: 'non-undoable' | 'finished-phase') {
+  constructor(message: string, reason: 'non-undoable' | 'finished-phase' | 'execute-barrier') {
     super(message);
     this.name = 'UndoRefusedError';
     this.reason = reason;
@@ -241,10 +241,12 @@ export class UndoRefusedError extends Error {
  * `handleDebugRewind`, and `state-history.ts`'s `undoToTurnStart` and
  * `rewindToAction`. This is the fix for UNDO-01 (`.notUndoable()` was never
  * enforced server-side -- only hidden via the client's advisory `canUndo`)
- * and the `finished`-phase half of UNDO-02.
+ * and UNDO-02 (the `finished`-phase fence AND the durable execute()-barrier
+ * fence).
  *
- * Two independent, composable checks, in order (Open Question 2,
- * 155-RESEARCH.md):
+ * Three independent, composable checks (order does not matter -- Open
+ * Question 2, 155-RESEARCH.md -- each is O(1)/O(k) and evaluates against the
+ * SAME inputs regardless of what ran before it):
  *  1. Phase fence: refuse up front once `game.isFinished()` (D-04) --
  *     checked before any checkpoint lookup, never by silently rolling the
  *     phase back via a pre-finish checkpoint.
@@ -252,6 +254,14 @@ export class UndoRefusedError extends Error {
  *     for an entry recorded with `undoable === false`
  *     (`.notUndoable()` -> `action-builder.ts`) and refuse, naming the
  *     blocking action by name and index.
+ *  3. Execute-barrier fence (155-02): refuse when
+ *     `turnStartActionIndex < executeBarrierIndex` -- the target would
+ *     rewind through a completed `execute()` flow node, silently discarding
+ *     the irreversible side effect (scoring, dealing, revealing hidden
+ *     info) it committed. `executeBarrierIndex` is `GameRunner`'s durable
+ *     replacement for the transient `frame.completed` flag (see
+ *     `runner.ts`'s doc comments) -- callers pass `runner.executeBarrierIndex`
+ *     directly; there is nothing else to compute.
  *
  * Throws {@link UndoRefusedError}; returns normally (void) when the undo/
  * rewind is allowed. This is the pit-of-success mechanic (D-02): a new call
@@ -263,8 +273,9 @@ export function assertUndoAllowed(args: {
   game: Game;
   actionHistory: Array<{ player: number; undoable?: boolean; name?: string }>;
   turnStartActionIndex: number;
+  executeBarrierIndex: number;
 }): void {
-  const { game, actionHistory, turnStartActionIndex } = args;
+  const { game, actionHistory, turnStartActionIndex, executeBarrierIndex } = args;
 
   if (game.isFinished()) {
     throw new UndoRefusedError('Cannot undo: the game is finished.', 'finished-phase');
@@ -278,6 +289,13 @@ export function assertUndoAllowed(args: {
         'non-undoable',
       );
     }
+  }
+
+  if (turnStartActionIndex < executeBarrierIndex) {
+    throw new UndoRefusedError(
+      `Cannot undo: an execute() step has already committed at action ${executeBarrierIndex}.`,
+      'execute-barrier',
+    );
   }
 }
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
 import { collectFixtureDefinition } from './fixtures/collect-fixture.js';
 import { undoFenceFixtureDefinition, UndoFenceGame } from './fixtures/undo-fence-fixture.js';
+import { executeBarrierFixtureDefinition, ExecuteBarrierGame } from './fixtures/execute-barrier-fixture.js';
 import { GameSession } from '../game-session.js';
 import type { Op } from '../stateless-ops.js';
 
@@ -223,5 +224,113 @@ describe('undo-fence adversarial verification (bypassing canUndo)', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/lock/i);
+  });
+});
+
+/**
+ * UNDO-02 execute-barrier drift detector + adversarial verification
+ * (155-02, T-155-05..T-155-08). Same "stateless and stateful must not drift"
+ * invariant as the undo-fence block above, extended to the durable
+ * execute()-barrier fence. See `execute-barrier-fixture.ts` for exactly why
+ * this flow shape (plain act1/act2 action steps, same player throughout)
+ * exposes the defect.
+ */
+const executeBarrierGameOptions = { playerCount: 1, seed: 't' };
+
+function newExecuteBarrierStatefulSession() {
+  return GameSession.create<ExecuteBarrierGame>({
+    gameType: 'execute-barrier',
+    GameClass: ExecuteBarrierGame,
+    playerCount: 1,
+    playerNames: ['A'],
+    seed: 't',
+  });
+}
+
+async function playThroughExecuteBarrierStateless(send: (op: Op) => Promise<{ success: boolean }>) {
+  expect((await send({ type: 'action', actionName: 'act1', player: 1, args: {} })).success).toBe(true);
+  expect((await send({ type: 'action', actionName: 'act2', player: 1, args: {} })).success).toBe(true);
+  expect((await send({ type: 'action', actionName: 'act2', player: 1, args: {} })).success).toBe(true);
+}
+
+async function playThroughExecuteBarrierStateful(session: GameSession<ExecuteBarrierGame>) {
+  expect((await session.performAction('act1', 1, {})).success).toBe(true);
+  expect((await session.performAction('act2', 1, {})).success).toBe(true);
+  expect((await session.performAction('act2', 1, {})).success).toBe(true);
+}
+
+describe('execute-barrier parity: stateless and stateful executors agree', () => {
+  it('crossing-the-barrier undo: same refusal decision and message on both executors', async () => {
+    const statelessSession = createHeadlessSession(executeBarrierFixtureDefinition, executeBarrierGameOptions);
+    await statelessSession.start();
+    await playThroughExecuteBarrierStateless((op) => statelessSession.send(1, op));
+    const statelessUndo = await statelessSession.send(1, { type: 'undo', player: 1 } as Op);
+
+    const statefulSession = newExecuteBarrierStatefulSession();
+    await playThroughExecuteBarrierStateful(statefulSession);
+    const statefulUndo = await statefulSession.undoToTurnStart(1);
+
+    expect(statelessUndo.success).toBe(false);
+    expect(statefulUndo.success).toBe(false);
+    expect(statelessUndo.error).toBe(statefulUndo.error);
+  });
+
+  it('crossing-the-barrier debugRewind/rewindToAction: same refusal decision and message on both executors', async () => {
+    const statelessSession = createHeadlessSession(executeBarrierFixtureDefinition, executeBarrierGameOptions);
+    await statelessSession.start();
+    await playThroughExecuteBarrierStateless((op) => statelessSession.send(1, op));
+    const statelessRewind = await statelessSession.send(1, { type: 'debugRewind', actionIndex: 0 } as Op);
+
+    const statefulSession = newExecuteBarrierStatefulSession();
+    await playThroughExecuteBarrierStateful(statefulSession);
+    const statefulRewind = await statefulSession.rewindToAction(0);
+
+    expect(statelessRewind.success).toBe(false);
+    expect(statefulRewind.success).toBe(false);
+    expect(statelessRewind.error).toBe(statefulRewind.error);
+  });
+});
+
+describe('execute-barrier adversarial verification (bypassing canUndo)', () => {
+  it('a hand-crafted raw {type: "undo"} op sent without ever consulting canUndo is refused', async () => {
+    const session = createHeadlessSession(executeBarrierFixtureDefinition, executeBarrierGameOptions);
+    await session.start();
+    await playThroughExecuteBarrierStateless((op) => session.send(1, op));
+
+    // Never read state.canUndo -- attempt the raw op directly.
+    const undoOp: Op = { type: 'undo', player: 1 };
+    const result = await session.send(1, undoOp);
+
+    expect(result.success).toBe(false);
+  });
+
+  it('calling undoToTurnStart() directly on the stateful session, bypassing the UI, is refused', async () => {
+    const session = newExecuteBarrierStatefulSession();
+    await playThroughExecuteBarrierStateful(session);
+
+    // Never read a UI-level canUndo flag -- call the session API directly.
+    const result = await session.undoToTurnStart(1);
+
+    expect(result.success).toBe(false);
+  });
+
+  it('a hand-crafted raw {type: "debugRewind"} op targeting index 0 is refused', async () => {
+    const session = createHeadlessSession(executeBarrierFixtureDefinition, executeBarrierGameOptions);
+    await session.start();
+    await playThroughExecuteBarrierStateless((op) => session.send(1, op));
+
+    const rewindOp: Op = { type: 'debugRewind', actionIndex: 0 };
+    const result = await session.send(1, rewindOp);
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rewindToAction() called directly, bypassing the UI, is refused', async () => {
+    const session = newExecuteBarrierStatefulSession();
+    await playThroughExecuteBarrierStateful(session);
+
+    const result = await session.rewindToAction(0);
+
+    expect(result.success).toBe(false);
   });
 });

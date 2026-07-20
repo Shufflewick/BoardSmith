@@ -102,15 +102,62 @@ describe('stateful time-travel across a pending mutation', () => {
     expect(viewChildIds(at2.state!.view, 'held-1')).toContain(collectedId);
   });
 
-  it('rewindToAction restores the collected equipment into the live runner', async () => {
-    const { session, collectedId } = await buildSessionWithCollectedItem();
+  // UNDO-02 (155-02) supersedes this expectation: `collect-turns-fixture.ts`'s
+  // turn-advance `execute()` node (which flips `activeSeat`) now sets a durable
+  // execute()-barrier at the END of every turn. `buildSessionWithCollectedItem`
+  // plays through TWO full turns (player 1's then player 2's), so the live
+  // barrier sits at action index 5 by the time this test runs. Rewinding to
+  // action count 2 would cross BOTH turn-advance barriers -- which is exactly
+  // the class of defect this plan closes (T-155-05/06): the debug-panel
+  // time-travel path (`rewindToAction`) is one of the FOUR fenced entry
+  // points, not just live gameplay `undo`. The refusal below is the CORRECT,
+  // intended new behavior, not a regression -- see the next test for proof
+  // that a rewind which does NOT cross a barrier still authoritatively
+  // restores the collected equipment.
+  it('rewindToAction refuses to cross the turn-advance execute() barrier', async () => {
+    const { session } = await buildSessionWithCollectedItem();
 
-    // Rewind to action count 2 — the point just after `collect` was recorded (F43).
     const rewind = await session.rewindToAction(2);
-    expect(rewind.success).toBe(true);
+    expect(rewind.success).toBe(false);
+  });
 
-    // The live runner after rewind MUST still hold the collected item.
-    // Replay-based rewind would resurrect a runner with held-1 empty.
+  it('rewindToAction restores the collected equipment when the target does not cross an execute() barrier', async () => {
+    const session = GameSession.create<CollectTurnsGame>({
+      gameType: 'collect-turns',
+      GameClass: CollectTurnsGame,
+      playerCount: 2,
+      playerNames: ['A', 'B'],
+      seed: 't',
+    });
+
+    // Turn 1 (player 1): explore, then collect one item into held-1 (action
+    // counts 1 and 2).
+    const explore = await session.performAction('explore', 1, {});
+    expect(explore.success).toBe(true);
+    const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
+    const choices = session.getPickChoices('collect', 'item', 1, followUpArgs);
+    const collectedId = ((choices.validElements as Array<{ id: number }>) ?? [])[0].id;
+    const collect = await session.processSelectionStep(1, 'item', collectedId, 'collect', followUpArgs);
+    expect(collect.success).toBe(true);
+
+    // Finish turn 1 (action count 3). This `pass` is the turn's ENDING move --
+    // it's what triggers the fixture's turn-advance `execute()`, setting the
+    // barrier to 3.
+    const pass1 = await session.performAction('pass', 1, {});
+    expect(pass1.success).toBe(true);
+
+    // One more action so there's a later point to rewind FROM (rewindToAction
+    // refuses to "rewind forward" to the current tip).
+    const pass2 = await session.performAction('pass', 2, {});
+    expect(pass2.success).toBe(true);
+
+    // Rewind to action index 3 -- exactly AT the barrier, not before it: the
+    // barrier was set by this SAME turn's ending action, and the collected
+    // item was recorded earlier (index 2), well before the barrier. This must
+    // succeed and the restored runner must still hold the collected item --
+    // replay-based rewind would resurrect a runner with held-1 empty.
+    const rewind = await session.rewindToAction(3);
+    expect(rewind.success).toBe(true);
     expect(viewChildIds(session.runner.getSnapshot().state, 'held-1')).toContain(collectedId);
   });
 });

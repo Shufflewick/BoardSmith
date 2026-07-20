@@ -478,7 +478,12 @@ function handleUndo(
   // by `handleDebugRewind` below and by both `state-history.ts` methods --
   // the client's `canUndo` flag is advisory only and must not be trusted.
   try {
-    assertUndoAllowed({ game: runner.game, actionHistory: runner.actionHistory, turnStartActionIndex });
+    assertUndoAllowed({
+      game: runner.game,
+      actionHistory: runner.actionHistory,
+      turnStartActionIndex,
+      executeBarrierIndex: runner.executeBarrierIndex,
+    });
   } catch (err) {
     if (err instanceof UndoRefusedError) {
       return errorResult(err, 'executor', ErrorCode.UNDO_NOT_ALLOWED);
@@ -997,6 +1002,7 @@ function handleDebugRewind(
       game: current.game,
       actionHistory: current.actionHistory,
       turnStartActionIndex: op.actionIndex,
+      executeBarrierIndex: current.executeBarrierIndex,
     });
   } catch (err) {
     if (err instanceof UndoRefusedError) {
