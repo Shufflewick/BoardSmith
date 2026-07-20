@@ -46,13 +46,29 @@ replay is not revisited.
 - **No solo special-casing** — with the fallback gone, solo is just the general case.
 - **No backward compatibility** for snapshots lacking `moveCount`: treat as undo-unavailable
   (`canUndo: false`), per the project's no-back-compat hard rule.
+- **AMENDED post-research (2026-07-20): "one undo = one action-step", not "one turn."**
+  `moveCount` is scoped to the action-step *frame*, not the logical player turn. With the fallback
+  deleted it becomes authoritative, so on a multi-frame turn (`sequence(actionStep, actionStep)`)
+  one undo rewinds one action-step rather than the whole turn. This is the accepted contract — we do
+  **not** build turn-scoped accumulation. `undo-authoritative.test.ts` and
+  `stateful-undo-authoritative.test.ts` (which deliberately exercise the two-frame turn via
+  `collect-turns-fixture.ts`) must be **rewritten to assert the new contract**; their current
+  `undo.success === true` expectation for a mid-turn undo is superseded, not a regression to fix.
 
 ### Animation Watermark (UNDO-04)
 - **Server-primary fix**: the animation-event sequence must never move backwards across a rewind.
   That alone makes the client's monotonic watermark correct.
-- Achieve it by **excluding `animationEventSeq` from checkpoint restore** — it is volatile
-  presentation state, not game state (it already sits in the volatile-state allowlist,
-  `volatile-state.ts:38`), rather than a `max(live, restored)` reconciliation.
+- Achieve it by **not letting checkpoint restore lower the live sequence**, rather than a blanket
+  `max(live, restored)` reconciliation everywhere.
+- **CORRECTED post-research (2026-07-20): the premise that `volatile-state.ts:38` already excludes
+  the field was FALSE.** `SAFE_PROPERTIES` there is a dev-only HMR console-warning suppression list
+  with **zero effect on serialization or restore**. The real fix site is
+  `Game.loadSerializedState`, which is the single shared call path for *both* full session restore
+  (`GameSession.restore` — adopting the persisted seq is correct there) and undo/rewind checkpoint
+  restore (`GameRunner.fromCheckpoint` — where the seq must not regress). The two callers must be
+  explicitly distinguished (e.g. a `preserveAnimationSeq` option), and restored buffered events
+  must be **re-stamped with fresh ids** above the live watermark so they are not filtered out.
+  The decision is unchanged — server-primary, monotonic — only the mechanism is corrected.
 - Replayed beats **do animate** after undo: restored buffered events re-emit with fresh, higher ids.
 - **Also reset `lastQueuedId` / `lastProcessedId` on a detected rewind** in
   `useAnimationEvents.ts` as defense-in-depth, so a client that reconnects into a rewound session
