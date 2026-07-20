@@ -349,9 +349,14 @@ function emitAnnounce(level: 'polite' | 'assertive', text: string): void {
   window.postMessage({ source: 'boardsmith-a11y', type: 'announce', level, text }, '*');
 }
 
-// Animation events - wire createAnimationEvents to server state
+// Animation events - wire createAnimationEvents to server state.
+// actionCount (UNDO-04) is the rewind-detection signal: a decrease resets
+// the composable's watermark so a reconnect into a rewound session doesn't
+// carry a stale high-water mark forward (defense-in-depth for Plan 155-04's
+// server-side monotonic-sequence fix).
 const animationEvents = createAnimationEvents({
   events: () => state.value?.state?.animationEvents,
+  actionCount: () => state.value?.state?.actionCount,
 });
 provideAnimationEvents(animationEvents);
 

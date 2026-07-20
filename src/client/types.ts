@@ -160,6 +160,14 @@ export interface PlayerState {
 
   /** Formatted game messages visible to this player */
   messages?: Array<{ text: string }>;
+
+  /**
+   * Total number of actions taken in the game so far. Published unconditionally
+   * for every seat, including spectators -- see `PlayerGameState.actionCount`
+   * (`src/session/types.ts`) for the server-side source of truth. Used by
+   * `useAnimationEvents` as a rewind-detection signal (UNDO-04).
+   */
+  actionCount?: number;
 }
 
 export interface GameState {
