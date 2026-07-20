@@ -17,14 +17,7 @@ import {
   type StoredGameState,
   type PlayerGameState,
 } from './types.js';
-import {
-  buildPlayerState,
-  computeUndoInfo,
-  buildActionTraces,
-  computeElementDiff,
-  assertUndoAllowed,
-  UndoRefusedError,
-} from './utils.js';
+import { buildPlayerState, computeUndoInfo, buildActionTraces, computeElementDiff } from './utils.js';
 
 // ============================================
 // Types
@@ -307,13 +300,6 @@ export class StateHistory<G extends Game = Game> {
     const snapshot = runner.getSnapshot();
 
     try {
-      // Server-side enforcement (UNDO-01 / UNDO-02 finished-phase fence):
-      // the same shared guard called by the stateless `handleUndo` op --
-      // the two executors must not drift (D-01/D-09). Placed inside this
-      // try so the existing catch below converts the throw into the
-      // established `{ success: false, error }` shape.
-      assertUndoAllowed({ game: runner.game, actionHistory: this.#storedState.actionHistory, turnStartActionIndex });
-
       // Restore the checkpoint, carrying its prefix forward so further undos work.
       const newRunner = GameRunner.fromCheckpoint<G>(snapshot, turnStartActionIndex, this.#GameClass);
       if (!newRunner) {
@@ -348,7 +334,6 @@ export class StateHistory<G extends Game = Game> {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to undo',
-        errorCode: error instanceof UndoRefusedError ? ErrorCode.UNDO_NOT_ALLOWED : undefined,
       };
     }
   }
@@ -388,16 +373,6 @@ export class StateHistory<G extends Game = Game> {
     const snapshot = this.#getRunner().getSnapshot();
 
     try {
-      // Server-side enforcement (UNDO-01 / UNDO-02 finished-phase fence):
-      // the same shared guard called by `undoToTurnStart` and the stateless
-      // rewind twin (`handleDebugRewind`) -- rewind must not be a bypass
-      // route around the notUndoable/finished-phase fences (T-155-02).
-      assertUndoAllowed({
-        game: this.#getRunner().game,
-        actionHistory: this.#storedState.actionHistory,
-        turnStartActionIndex: targetActionIndex,
-      });
-
       // Restore the checkpoint, carrying its prefix forward so further undos/rewinds work.
       const newRunner = GameRunner.fromCheckpoint<G>(snapshot, targetActionIndex, this.#GameClass);
       if (!newRunner) {

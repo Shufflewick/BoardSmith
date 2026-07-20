@@ -10,7 +10,7 @@
  */
 
 import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
-import { ErrorCode } from '../types/protocol.js';
+import type { ErrorCode } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
@@ -25,8 +25,6 @@ import {
   buildActionTraces,
   computeElementDiff,
   serializeFlowDebugInfo,
-  assertUndoAllowed,
-  UndoRefusedError,
 } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -470,20 +468,6 @@ function handleUndo(
   );
   if (actionsThisTurn === 0) {
     return errorResult('No actions to undo');
-  }
-
-  // Server-side enforcement (UNDO-01 / UNDO-02 finished-phase fence): refuse
-  // an undo that would cross a `.notUndoable()` action or that is attempted
-  // once the game is finished. This is the single shared guard also called
-  // by `handleDebugRewind` below and by both `state-history.ts` methods --
-  // the client's `canUndo` flag is advisory only and must not be trusted.
-  try {
-    assertUndoAllowed({ game: runner.game, actionHistory: runner.actionHistory, turnStartActionIndex });
-  } catch (err) {
-    if (err instanceof UndoRefusedError) {
-      return errorResult(err, 'executor', ErrorCode.UNDO_NOT_ALLOWED);
-    }
-    throw err;
   }
 
   // Restore the turn-start state AUTHORITATIVELY from the per-action checkpoint
@@ -989,22 +973,6 @@ function handleDebugRewind(
       'protocol',
     );
   }
-
-  // Same shared guard as handleUndo (T-155-02): the debug rewind twin must
-  // not be a bypass route around the notUndoable/finished-phase fences.
-  try {
-    assertUndoAllowed({
-      game: current.game,
-      actionHistory: current.actionHistory,
-      turnStartActionIndex: op.actionIndex,
-    });
-  } catch (err) {
-    if (err instanceof UndoRefusedError) {
-      return errorResult(err, 'executor', ErrorCode.UNDO_NOT_ALLOWED);
-    }
-    throw err;
-  }
-
   const restored = runnerFromCheckpoint(def, snapshot, op.actionIndex);
   if (!restored) {
     return errorResult(`No checkpoint at action index ${op.actionIndex}.`, 'executor');
