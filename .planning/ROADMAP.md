@@ -50,9 +50,9 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 Plans:
 - [x] 155-01-PLAN.md — Shared undo guard: `.notUndoable()` + `finished`-phase fence, all four entry points [UNDO-01, UNDO-02] (wave 1)
 - [x] 155-04-PLAN.md — Animation-seq monotonicity across checkpoint restore (server-primary) [UNDO-04] (wave 1)
-- [ ] 155-02-PLAN.md — Durable `execute()` barrier record + third guard check [UNDO-02] (wave 2)
-- [ ] 155-03-PLAN.md — `moveCount` always published, backward-scan fallback deleted, undo suites rewritten to "one undo = one action-step" [UNDO-03] (wave 3)
-- [ ] 155-05-PLAN.md — Client watermark reset on detected rewind (`state.actionCount`) [UNDO-04] (wave 4)
+- [x] 155-02-PLAN.md — Durable `execute()` barrier record + third guard check [UNDO-02] (wave 2)
+- [x] 155-03-PLAN.md — `moveCount` always published, backward-scan fallback deleted, undo suites rewritten to "one undo = one action-step" [UNDO-03] (wave 3)
+- [x] 155-05-PLAN.md — Client watermark reset on detected rewind (`state.actionCount`) [UNDO-04] (wave 4)
 
 #### Phase 156: Sole-Option Auto-Execute
 **Goal**: When an action is the only legal option, the shell auto-*starts* it (surfacing it to the player) but never auto-*executes* it — the player still takes the beat (e.g. the draw is never silently played for them).

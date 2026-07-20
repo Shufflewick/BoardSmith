@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: Roadmap created, execution not yet started
-stopped_at: Completed 153-01-PLAN.md
-last_updated: "2026-07-20T22:40:49.887Z"
-last_activity: "2026-07-20 — Milestone v4.8 roadmap + requirements authored from the battery post-mortem (Part A D1–D32, Part B skills, Part C features, Part E #6 sweep)"
+status: Phase 155 complete (verification passed 5/5) — next is Phase 156
+stopped_at: Completed Phase 155 (all 5 plans, VERIFICATION passed)
+last_updated: "2026-07-20T23:59:00.000Z"
+last_activity: "2026-07-20 — Phase 155 (Undo/Rewind Family Correctness) shipped: UNDO-01..04 + PROC-01, 5 plans, 193/193 files / 2756 tests green; 2 latent bugs found by adversarial pass (toJSON seq-loss, injected-vs-created animation-events site)"
 progress:
   total_phases: 15
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 2
-  percent: 0
+  completed_plans: 5
+  percent: 7
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.8 Battery Post-Mortem Fixes — roadmap + requirements authored (Phases 155–169); execution not yet started (`/gsd:plan-phase 155`)
+**Current focus:** v4.8 Battery Post-Mortem Fixes — Phase 155 shipped (verification passed 5/5); next is Phase 156 (Sole-Option Auto-Execute)
 
 ## Current Position
 
-Phase: v4.8 not started — next is Phase 155 (Undo / Rewind Family Correctness)
+Phase: 156 (Sole-Option Auto-Execute) — next up. Phase 155 complete.
 Plan: —
-Status: Roadmap created, execution not yet started
-Last activity: 2026-07-20 — Milestone v4.8 roadmap + requirements authored from the battery post-mortem (Part A D1–D32, Part B skills, Part C features, Part E #6 sweep)
+Status: Phase 155 verification passed (5/5); code review in flight
+Last activity: 2026-07-20 — Phase 155 (Undo/Rewind Family Correctness) shipped end-to-end: shared server-side undo guard (`.notUndoable()` + `finished` fence at all 4 executor entry points), durable `executeBarrierIndex`, `moveCount` authoritative + branch-C fallback deleted ("one undo = one action-step"), server-monotonic animation seq + client watermark reset. 5 plans, 193/193 files / 2756 tests green.
 
 ## Milestones
 

@@ -26,14 +26,14 @@ the fix holds → only then close.**
 
 ### UNDO — Undo / rewind family (D1, D2, D5, D6) — Phase 155
 
-- [ ] **UNDO-01** (D1, 4 games, Blocker): `.notUndoable()` is enforced server-side — a server undo
+- [x] **UNDO-01** (D1, 4 games, Blocker): `.notUndoable()` is enforced server-side — a server undo
   executor honors `hasNonUndoableAction` so an undo across a non-undoable action is refused, not merely
   hidden from the client button. (Hit by Seven×2, 1-2 Punch, Doom.)
-- [ ] **UNDO-02** (D2, 3 games, Blocker): Undo is fenced at flow-node / terminal boundaries — it can no
+- [x] **UNDO-02** (D2, 3 games, Blocker): Undo is fenced at flow-node / terminal boundaries — it can no
   longer rewind through a completed `execute()` barrier or out of a `finished` phase (which caused data
   loss + hidden-info rewrite). The D1 fix and this fence are designed together (one fix largely closes
   both).
-- [ ] **UNDO-03** (D5, Doom, High): The solo-game undo path no longer wipes the game — `computeUndoInfo`
+- [x] **UNDO-03** (D5, Doom, High): The solo-game undo path no longer wipes the game — `computeUndoInfo`
   has no game-erasing fallback and `moveCount` is published so a single undo rewinds exactly one move.
 - [x] **UNDO-04** (D6, OTP, Med/latent): Rewind no longer resets the animation-event id sequence in a way
   that makes the client's watermark dedupe drop replayed beats.
