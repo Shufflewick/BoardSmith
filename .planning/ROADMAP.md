@@ -62,9 +62,8 @@ Plans:
 1. A sole/single-option action built with `ActionBuilder.manual()` is auto-started but requires the player to execute it — no auto-execution, no deleted draw beat (D7).
 2. A regression test drives a 3-games-affected scenario (auto-draw) and fails on pre-fix code, passes after.
 3. The default (non-`manual()`) behavior remains a deliberate, documented choice; the pit-of-success path is the correct one.
-**Plans** (suggested breakdown; finalized at plan-phase):
-- `ActionBuilder.manual()` API (auto-start, never auto-execute) + shell wiring [AUTOEXEC-01]
-- Regression test reproducing the silent auto-draw + adversarial verify [AUTOEXEC-01, PROC-01]
+**Plans** (1 plan, finalized at plan-phase):
+- [ ] 156-01-PLAN.md — `ActionBuilder.manual()` API + metadata threading + shell gate + one-time dev warning, RED->GREEN->adversarial [AUTOEXEC-01, PROC-01]
 
 #### Phase 157: Game-Over UI + Forward Exits
 **Goal**: A game controls its own end state — the shell `GameOverCard` is suppressable/dismissable and never mislabels a no-winner ending, and every forward exit (Rematch / New Game / dev-restart) actually restarts, unblocking multi-game formats.
