@@ -361,6 +361,8 @@ export function buildPlayerState(
     actionsThisTurn: isMyTurn ? actionsThisTurn : 0,
     turnStartActionIndex: isMyTurn ? turnStartActionIndex : undefined,
     messages: playerView.messages.length > 0 ? playerView.messages : undefined,
+    // Unconditional, unlike turnStartActionIndex -- see PlayerGameState.actionCount doc.
+    actionCount: runner.actionHistory.length,
   };
 
   // Optionally include action metadata for auto-UI

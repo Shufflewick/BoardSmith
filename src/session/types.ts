@@ -459,6 +459,19 @@ export interface PlayerGameState {
   /** Formatted game messages visible to this player */
   messages?: Array<{ text: string }>;
   /**
+   * Total number of actions taken in the game so far (`runner.actionHistory.length`).
+   *
+   * Published unconditionally for EVERY seat, including spectators (position 0) and
+   * non-acting seats -- unlike `turnStartActionIndex`, which is only sent to the
+   * player whose turn it is. This is the client's universal rewind-detection signal
+   * (UNDO-04): a client observing this value DECREASE between two observations knows
+   * its session was rewound (undo/debug-rewind) and must reset any cached high-water
+   * marks (e.g. `useAnimationEvents`'s `lastQueuedId`/`lastProcessedId`) rather than
+   * trusting them to still be valid. It is a count, not content -- no visibility
+   * concern, so it needs no seat gating.
+   */
+  actionCount: number;
+  /**
    * RESERVED (Plan 104-04): Active tutorial step projected for this player.
    *
    * `undefined` when no tutorial is running for this seat. Populated by
