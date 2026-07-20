@@ -23,9 +23,16 @@ class SimpleGame extends Game<SimpleGame, Player> {
     this.setFlow(defineFlow({
       root: loop({
         maxIterations: 1000,
+        // 155-03: repeatUntil (never true within these tests) keeps the SAME
+        // action-step frame -- and its moveCount -- open across repeated
+        // 'pass' actions. Without it, a plain single-move actionStep
+        // auto-completes and reopens a FRESH frame (moveCount === 0) after
+        // every move, and undo (now frame-scoped, UNDO-03) would always
+        // report "No actions to undo" regardless of currentPlayer.
         do: actionStep({
           actions: ['pass'],
           player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
         }),
       }),
     }));

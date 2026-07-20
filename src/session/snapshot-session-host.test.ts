@@ -101,9 +101,17 @@ class BotGame extends Game<BotGame, Player> {
       defineFlow({
         root: loop({
           maxIterations: 100,
+          // 155-03: repeatUntil (never true within these tests) keeps the
+          // SAME action-step frame -- and its moveCount -- open across
+          // repeated 'move' actions. Without it, a plain single-move
+          // actionStep auto-completes and reopens a FRESH frame
+          // (moveCount === 0) after every move, and undo (now frame-scoped,
+          // UNDO-03) would always report "No actions to undo" -- this
+          // fixture's undo test needs undo to actually succeed.
           do: actionStep({
             actions: ['move'],
             player: (ctx) => ctx.game.getPlayer(1)!,
+            repeatUntil: () => false,
           }),
         }),
       }),

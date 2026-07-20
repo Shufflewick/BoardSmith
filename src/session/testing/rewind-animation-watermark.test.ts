@@ -28,14 +28,19 @@ import {
  */
 
 // ── Fixture ───────────────────────────────────────────────────────────────
-// Mirrors collect-turns-fixture.ts's turn shape (two actions per turn, then
-// rotate) -- the minimal structure that makes undo/rewind reachable while
-// still current-player -- but its only action pushes an animation event, so
-// this is a purpose-built local fixture rather than a shared one nobody else
-// would use.
-
+// Two ticks per turn, then rotate -- but (155-03) as ONE actionStep with
+// repeatUntil counting to 2, not two sequenced actionSteps. moveCount is now
+// frame-scoped and authoritative with no fallback (UNDO-03): two SEPARATE
+// single-move actionSteps each auto-complete after their one move and reopen
+// a FRESH frame (moveCount === 0), so undo would be refused ("No actions to
+// undo") the instant the first tick of a turn committed -- before this
+// fixture's own animation-watermark mechanics ever come into play. Keeping
+// both ticks of a turn in the SAME open frame is what actually offers undo
+// at the moment these tests need it (CONTEXT D-06's "one undo = one
+// action-step" contract, not a workaround around it).
 class TickGame extends Game<TickGame, Player> {
   activeSeat = 1;
+  ticksThisTurn = 0;
 
   constructor(options: GameOptions) {
     super(options);
@@ -43,6 +48,7 @@ class TickGame extends Game<TickGame, Player> {
     this.registerAction(
       Action.create('tick').execute((_args, ctx) => {
         ctx.game.animate('tick', { seat: ctx.player.seat });
+        (ctx.game as TickGame).ticksThisTurn++;
         return { success: true };
       }),
     );
@@ -55,10 +61,14 @@ class TickGame extends Game<TickGame, Player> {
         root: loop({
           maxIterations: 1000,
           do: sequence(
-            actionStep({ actions: ['tick'], player: activePlayer }),
-            actionStep({ actions: ['tick'], player: activePlayer }),
+            actionStep({
+              actions: ['tick'],
+              player: activePlayer,
+              repeatUntil: (ctx) => (ctx.game as TickGame).ticksThisTurn >= 2,
+            }),
             execute((ctx) => {
               const game = ctx.game as TickGame;
+              game.ticksThisTurn = 0;
               game.activeSeat = game.activeSeat >= game.players.length ? 1 : game.activeSeat + 1;
             }),
           ),

@@ -1,15 +1,32 @@
 import { describe, it, expect } from 'vitest';
 import { GameSession } from '../game-session.js';
 import { CollectTurnsGame } from './fixtures/collect-turns-fixture.js';
+import {
+  Game,
+  Player,
+  Action,
+  defineFlow,
+  sequence,
+  actionStep,
+  execute,
+  loop,
+  type GameOptions,
+} from '../../engine/index.js';
+import type { GameDefinitionLike } from '../stateless-ops.js';
 
 /**
- * Stateful-session undo contract (StateHistory.undoToTurnStart). Mirrors the
- * stateless undo-authoritative test but exercises the in-memory GameSession path
+ * Stateful-session undo contract (StateHistory.undoToTurnStart). Mirrors
+ * `undo-authoritative.test.ts` but exercises the in-memory GameSession path
  * (game-session.ts + state-history.ts) used by BoardSmith's standalone
- * server/worker. Proves undoing the current turn preserves a prior turn's
- * pending-action mutation (collect → Piece.putInto, recorded in neither command
- * nor action history) — which replay-based undo loses (and mis-positions the
- * flow, throwing "Not Player N's turn").
+ * server/worker.
+ *
+ * 155-03 CONTRACT CHANGE (CONTEXT D-06, deliberate -- NOT a regression): see
+ * `undo-authoritative.test.ts`'s header comment for the full rationale.
+ * `moveCount` is frame-scoped; `collect-turns-fixture.ts`'s two-actionStep
+ * turn means an undo attempted after only the FIRST action of a turn now
+ * correctly reaches back across a closed frame boundary and is refused.
+ * This suite's old `undo.success === true` expectation for that exact
+ * scenario is SUPERSEDED, not restored.
  */
 
 function spaceChildIds(snapshot: unknown, spaceName: string): number[] {
@@ -25,8 +42,8 @@ function spaceChildIds(snapshot: unknown, spaceName: string): number[] {
   return (space?.children ?? []).map((c: any) => c.id as number);
 }
 
-describe('stateful undo across a prior pending mutation', () => {
-  it('undoToTurnStart preserves equipment collected on an earlier turn', async () => {
+describe('stateful undo across a prior pending mutation (155-03 contract)', () => {
+  it('the mid-turn cross-frame case is now REFUSED -- explore+collect (turn N-1) survives untouched', async () => {
     const session = GameSession.create<CollectTurnsGame>({
       gameType: 'collect-turns',
       GameClass: CollectTurnsGame,
@@ -53,15 +70,98 @@ describe('stateful undo across a prior pending mutation', () => {
     expect((await session.performAction('pass', 2, {})).success).toBe(true);
     expect((await session.performAction('pass', 2, {})).success).toBe(true);
 
-    // ── Turn 3 (player 1): take the first action, then undo it ────────────────
+    // ── Turn 3 (player 1): take the FIRST action of the turn ──────────────────
     const p1turn3 = await session.performAction('pass', 1, {});
     expect(p1turn3.success).toBe(true);
     expect((p1turn3.flowState as any)?.currentPlayer).toBe(1);
 
+    // Pre-155-03 this succeeded. Post-155-03, turn3's first actionStep frame
+    // already closed the instant its one action committed -- moveCount is 0
+    // for the SECOND (now-open) frame -- correctly refused.
     const undo = await session.undoToTurnStart(1);
+    expect(undo.success).toBe(false);
+    expect(undo.error).toMatch(/no actions to undo/i);
+
+    // A refused undo is a no-op -- turn 1's equipment (a PRIOR turn's
+    // pending-action mutation) was never at risk.
+    expect(spaceChildIds(session.runner.getSnapshot(), 'held-1')).toContain(collectedId);
+  });
+});
+
+// ── Positive case: undo of an action within the currently-active frame ─────
+// See undo-authoritative.test.ts for why collect-turns-fixture (both
+// actionSteps single-move) cannot itself demonstrate a mid-frame undo.
+
+class TwoMoveTurnGame extends Game<TwoMoveTurnGame, Player> {
+  activeSeat = 1;
+  movesThisTurn = 0;
+  score = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(Action.create('move').execute(() => {
+      this.movesThisTurn++;
+      this.score += 1;
+      return { success: true };
+    }));
+
+    const activePlayer = (ctx: { game: Game }) =>
+      ctx.game.getPlayer((ctx.game as TwoMoveTurnGame).activeSeat)!;
+
+    this.setFlow(defineFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: sequence(
+          actionStep({
+            actions: ['move'],
+            player: activePlayer,
+            repeatUntil: (ctx) => (ctx.game as TwoMoveTurnGame).movesThisTurn >= 2,
+          }),
+          execute((ctx) => {
+            const game = ctx.game as TwoMoveTurnGame;
+            game.movesThisTurn = 0;
+            game.activeSeat = game.activeSeat >= game.players.length ? 1 : game.activeSeat + 1;
+          }),
+        ),
+      }),
+    }));
+  }
+}
+
+const twoMoveTurnFixtureDefinition: GameDefinitionLike = {
+  gameClass: TwoMoveTurnGame as new (...args: unknown[]) => unknown,
+  gameType: 'two-move-turn',
+  minPlayers: 2,
+  maxPlayers: 2,
+};
+
+describe('undo within the currently-active action-step frame (positive case, 155-03)', () => {
+  it('one undo, mid-frame, removes exactly the pending move -- a prior turn is untouched', async () => {
+    const session = GameSession.create<TwoMoveTurnGame>({
+      gameType: 'two-move-turn',
+      GameClass: TwoMoveTurnGame,
+      playerCount: 2,
+      playerNames: ['A', 'B'],
+      seed: 't',
+    });
+
+    // Player 1's WHOLE turn -- history = [move, move], score = 2.
+    expect((await session.performAction('move', 1, {})).success).toBe(true);
+    const p1turnEnd = await session.performAction('move', 1, {});
+    expect(p1turnEnd.success).toBe(true);
+    expect((p1turnEnd.flowState as any)?.currentPlayer).toBe(2);
+
+    // Player 2's first move -- frame open, moveCount === 1.
+    const p2move1 = await session.performAction('move', 2, {});
+    expect(p2move1.success).toBe(true);
+    expect((session.runner.getSnapshot().state as { attributes?: { score?: number } }).attributes?.score).toBe(3);
+
+    const undo = await session.undoToTurnStart(2);
     expect(undo.success).toBe(true);
 
-    // The earlier-turn equipment MUST still be in held-1 after the undo.
-    expect(spaceChildIds(session.runner.getSnapshot(), 'held-1')).toContain(collectedId);
+    // Exactly player 2's one pending move was undone -- player 1's whole,
+    // already-closed turn is untouched.
+    expect((session.runner.getSnapshot().state as { attributes?: { score?: number } }).attributes?.score).toBe(2);
   });
 });

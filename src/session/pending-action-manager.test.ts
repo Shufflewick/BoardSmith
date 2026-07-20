@@ -364,18 +364,30 @@ describe('PendingActionManager', () => {
       expect(runner.actionHistory).toHaveLength(0);
     });
 
-    it('reports an undoable action for a turn whose only action was multi-step', async () => {
+    it('records a completed multi-step action in actionHistory (not lost mid-selection)', async () => {
       const { manager, runner } = createManager();
 
-      // Before completion, computeUndoInfo sees nothing to undo.
+      // Before completion, computeUndoInfo sees nothing to undo (no moveCount
+      // passed here -- and, 155-03, an absent moveCount is undo-unavailable
+      // regardless of player/history contents; there's no fallback to reach).
       expect(computeUndoInfo(runner.actionHistory, 1).actionsThisTurn).toBe(0);
+      expect(runner.actionHistory).toHaveLength(0);
 
       await manager.processSelectionStep(1, 'color', 'red', 'pick');
       await manager.processSelectionStep(1, 'size', 'M');
 
-      // After completion, the multi-step action is counted — undo is possible.
-      const undoInfo = computeUndoInfo(runner.actionHistory, 1);
-      expect(undoInfo.actionsThisTurn).toBeGreaterThanOrEqual(1);
+      // After completion, the multi-step action IS recorded -- it did not
+      // vanish partway through selection. `TwoStepGame`'s root is a single,
+      // un-wrapped actionStep with no minMoves/maxMoves/repeatUntil, so the
+      // whole flow completes (game finishes) the instant this one action
+      // does -- `moveCount` is genuinely undefined once there's no active
+      // action-step frame left to report it for (155-03: that's undo-
+      // unavailable, correctly, not a bug -- there is nothing left to undo
+      // TO). The property this test protects (the action was actually
+      // counted) is `runner.actionHistory`, not `computeUndoInfo`'s
+      // undo-eligibility verdict for an already-finished game.
+      expect(runner.actionHistory).toHaveLength(1);
+      expect(runner.actionHistory[0].name).toBe('pick');
     });
 
     it('replay/clone from actionHistory reproduces the completed multi-step action', async () => {
