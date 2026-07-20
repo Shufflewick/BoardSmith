@@ -366,6 +366,7 @@ export class StateHistory<G extends Game = Game> {
   async rewindToAction(targetActionIndex: number): Promise<{
     success: boolean;
     error?: string;
+    errorCode?: ErrorCode;
     actionsDiscarded?: number;
     state?: PlayerGameState;
     newRunner?: GameRunner<G>;
@@ -374,11 +375,11 @@ export class StateHistory<G extends Game = Game> {
 
     // Validate target index
     if (targetActionIndex < 0) {
-      return { success: false, error: `Invalid action index: ${targetActionIndex}` };
+      return { success: false, error: `Invalid action index: ${targetActionIndex}`, errorCode: ErrorCode.INVALID_ACTION_INDEX };
     }
 
     if (targetActionIndex >= currentLength) {
-      return { success: false, error: `Cannot rewind forward: target ${targetActionIndex} >= current ${currentLength}` };
+      return { success: false, error: `Cannot rewind forward: target ${targetActionIndex} >= current ${currentLength}`, errorCode: ErrorCode.CANNOT_REWIND_FORWARD };
     }
 
     const actionsDiscarded = currentLength - targetActionIndex;

@@ -454,9 +454,18 @@ function handleUndo(
 ): OpResult {
   const runner = runnerFromSnapshot(snapshot, def);
 
+  // Validate player seat (1-indexed) — parity with StateHistory.undoToTurnStart.
+  if (op.player < 1 || op.player > gameOptions.playerCount) {
+    return errorResult(
+      `Invalid player: ${op.player}. Player seats are 1-indexed (1 to ${gameOptions.playerCount}).`,
+      'protocol',
+      ErrorCode.INVALID_PLAYER,
+    );
+  }
+
   const flowState = runner.getFlowState() as AIFlowState | undefined;
   if (flowState?.currentPlayer !== op.player) {
-    return errorResult("It's not your turn");
+    return errorResult("It's not your turn", 'bundle', ErrorCode.NOT_YOUR_TURN);
   }
 
   // Pass flowState.moveCount so undo uses the SAME authoritative turn boundary
@@ -469,7 +478,7 @@ function handleUndo(
     flowState.moveCount,
   );
   if (actionsThisTurn === 0) {
-    return errorResult('No actions to undo');
+    return errorResult('No actions to undo', 'bundle', ErrorCode.NO_ACTIONS_TO_UNDO);
   }
 
   // Server-side enforcement (UNDO-01 / UNDO-02 finished-phase fence): refuse
@@ -988,10 +997,20 @@ function handleDebugRewind(
 ): OpResult {
   const current = runnerFromSnapshot(snapshot, def);
   const historyLength = current.actionHistory.length;
-  if (op.actionIndex < 0 || op.actionIndex > historyLength) {
+  if (op.actionIndex < 0) {
     return errorResult(
       `Invalid action index: ${op.actionIndex}. History has ${historyLength} actions.`,
       'protocol',
+      ErrorCode.INVALID_ACTION_INDEX,
+    );
+  }
+  // Parity with StateHistory.rewindToAction: a target at or past the current
+  // history length is a forward rewind, not a no-op — reject it identically.
+  if (op.actionIndex >= historyLength) {
+    return errorResult(
+      `Cannot rewind forward: target ${op.actionIndex} >= current ${historyLength}`,
+      'protocol',
+      ErrorCode.CANNOT_REWIND_FORWARD,
     );
   }
 

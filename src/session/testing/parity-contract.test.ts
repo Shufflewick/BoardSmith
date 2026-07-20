@@ -5,6 +5,7 @@ import { undoFenceFixtureDefinition, UndoFenceGame } from './fixtures/undo-fence
 import { executeBarrierFixtureDefinition, ExecuteBarrierGame } from './fixtures/execute-barrier-fixture.js';
 import { GameSession } from '../game-session.js';
 import type { Op } from '../stateless-ops.js';
+import { ErrorCode } from '../../types/protocol.js';
 
 /**
  * Parity contract: drives the SAME SnapshotSessionHost + executeOp snapshot
@@ -170,6 +171,41 @@ describe('undo-fence parity: stateless and stateful executors agree', () => {
     expect(statelessUndo.success).toBe(false);
     expect(statefulUndo.success).toBe(false);
     expect(statelessUndo.error).toBe(statefulUndo.error);
+  });
+
+  // Review follow-up (155-REVIEW W1/W3): the two executors must not drift on
+  // the machine-readable errorCode, only on the human message. A forward
+  // rewind (target === history length) is the edge where the twins previously
+  // disagreed -- one accepted it as a no-op, the other rejected it.
+  it('forward-rewind edge: both executors reject target === history length with CANNOT_REWIND_FORWARD', async () => {
+    const statelessSession = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
+    await statelessSession.start();
+    await statelessSession.send(1, { type: 'action', actionName: 'lock', player: 1, args: {} });
+    // One action in history -> index 1 is "forward" for both twins.
+    const statelessRewind = await statelessSession.send(1, { type: 'debugRewind', player: 1, actionIndex: 1 } as Op);
+
+    const statefulSession = newStatefulSession();
+    await statefulSession.performAction('lock', 1, {});
+    const statefulRewind = await statefulSession.rewindToAction(1);
+
+    expect(statelessRewind.success).toBe(false);
+    expect(statefulRewind.success).toBe(false);
+    expect(statelessRewind.errorCode).toBe(ErrorCode.CANNOT_REWIND_FORWARD);
+    expect(statefulRewind.errorCode).toBe(ErrorCode.CANNOT_REWIND_FORWARD);
+  });
+
+  it('turn/undo error codes are populated (not dropped) on the stateless path', async () => {
+    const session = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
+    await session.start();
+    // No actions taken yet -> "no actions to undo" on the current turn.
+    const noActions = await session.send(1, { type: 'undo', player: 1 } as Op);
+    expect(noActions.success).toBe(false);
+    expect(noActions.errorCode).toBe(ErrorCode.NO_ACTIONS_TO_UNDO);
+
+    // Out-of-range seat -> INVALID_PLAYER, matching the stateful twin.
+    const badSeat = await session.send(1, { type: 'undo', player: 99 } as Op);
+    expect(badSeat.success).toBe(false);
+    expect(badSeat.errorCode).toBe(ErrorCode.INVALID_PLAYER);
   });
 });
 

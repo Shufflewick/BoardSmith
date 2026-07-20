@@ -387,20 +387,18 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     }
   });
 
-  // Watch for new events
-  watch(
-    getEvents,
-    (events) => {
-      if (!events || events.length === 0) {
-        return;
-      }
-
-      // UNDO-04: detect a rewind via a DECREASE in actionCount and reset both
-      // watermarks BEFORE filtering, so a rewind batch is never partially
-      // dropped. `undefined` (source not wired, or first observation) is
-      // "no signal" -- it must never be treated as a rewind.
-      if (getActionCount) {
-        const currentActionCount = getActionCount();
+  // UNDO-04: detect a rewind via a DECREASE in actionCount and reset both
+  // watermarks. This runs in its OWN watcher (created before the events watcher
+  // below, so it fires first when both change in the same tick) and tracks
+  // actionCount CONTINUOUSLY -- even on ticks that carry no animation events.
+  // Tracking it inside the events watcher would skip the empty-tick gaps and
+  // could miss a rewind whose actionCount recovers before events resume.
+  // `undefined` (source not wired, or first observation) is "no signal" -- it
+  // must never be treated as a rewind.
+  if (getActionCount) {
+    watch(
+      getActionCount,
+      (currentActionCount) => {
         if (
           currentActionCount !== undefined &&
           lastActionCount !== undefined &&
@@ -410,6 +408,17 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
           lastProcessedId = 0;
         }
         lastActionCount = currentActionCount;
+      },
+      { immediate: true },
+    );
+  }
+
+  // Watch for new events
+  watch(
+    getEvents,
+    (events) => {
+      if (!events || events.length === 0) {
+        return;
       }
 
       // Filter to only new events (id > lastQueuedId)
