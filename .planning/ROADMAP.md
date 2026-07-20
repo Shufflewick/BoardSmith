@@ -45,11 +45,11 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 3. In a solo game, one undo rewinds exactly one move — `computeUndoInfo` has no game-erasing fallback and `moveCount` is published (D5).
 4. Rewind no longer resets the animation-event id sequence such that the client's watermark dedupe drops beats (D6).
 5. Each of D1/D2/D5/D6 is closed only after fix + regression test + adversarial verification (PROC-01).
-**Plans:** 5 plans in 4 waves
+**Plans:** 2/5 plans executed
 
 Plans:
-- [ ] 155-01-PLAN.md — Shared undo guard: `.notUndoable()` + `finished`-phase fence, all four entry points [UNDO-01, UNDO-02] (wave 1)
-- [ ] 155-04-PLAN.md — Animation-seq monotonicity across checkpoint restore (server-primary) [UNDO-04] (wave 1)
+- [x] 155-01-PLAN.md — Shared undo guard: `.notUndoable()` + `finished`-phase fence, all four entry points [UNDO-01, UNDO-02] (wave 1)
+- [x] 155-04-PLAN.md — Animation-seq monotonicity across checkpoint restore (server-primary) [UNDO-04] (wave 1)
 - [ ] 155-02-PLAN.md — Durable `execute()` barrier record + third guard check [UNDO-02] (wave 2)
 - [ ] 155-03-PLAN.md — `moveCount` always published, backward-scan fallback deleted, undo suites rewritten to "one undo = one action-step" [UNDO-03] (wave 3)
 - [ ] 155-05-PLAN.md — Client watermark reset on detected rewind (`state.actionCount`) [UNDO-04] (wave 4)
@@ -258,7 +258,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 155. Undo / Rewind Family Correctness | 0/? | Not started | — |
+| 155. Undo / Rewind Family Correctness | 2/5 | In Progress|  |
 | 156. Sole-Option Auto-Execute | 0/? | Not started | — |
 | 157. Game-Over UI + Forward Exits | 0/? | Not started | — |
 | 158. Auto-Zoom Re-Fit | 0/? | Not started | — |

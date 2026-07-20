@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.7
-milestone_name: Playtest Follow-Up Fixes
-status: Awaiting next milestone
+milestone: v4.8
+milestone_name: Battery Post-Mortem Fixes
+status: Roadmap created, execution not yet started
 stopped_at: Completed 153-01-PLAN.md
-last_updated: "2026-07-06T16:53:21.615Z"
-last_activity: 2026-07-06 — Milestone v4.7 completed and archived
+last_updated: "2026-07-20T22:40:49.887Z"
+last_activity: "2026-07-20 — Milestone v4.8 roadmap + requirements authored from the battery post-mortem (Part A D1–D32, Part B skills, Part C features, Part E #6 sweep)"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 15
+  completed_phases: 0
+  total_plans: 5
+  completed_plans: 2
+  percent: 0
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.7 shipped & archived — awaiting next milestone (`/gsd:new-milestone`)
+**Current focus:** v4.8 Battery Post-Mortem Fixes — roadmap + requirements authored (Phases 155–169); execution not yet started (`/gsd:plan-phase 155`)
 
 ## Current Position
 
-Phase: Milestone v4.7 complete
+Phase: v4.8 not started — next is Phase 155 (Undo / Rewind Family Correctness)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-06 — Milestone v4.7 completed and archived
+Status: Roadmap created, execution not yet started
+Last activity: 2026-07-20 — Milestone v4.8 roadmap + requirements authored from the battery post-mortem (Part A D1–D32, Part B skills, Part C features, Part E #6 sweep)
 
 ## Milestones
 
@@ -68,10 +68,11 @@ Last activity: 2026-07-06 — Milestone v4.7 completed and archived
 **Completed:**
 
 - v4.6 BS Skills (Rulebook-Driven Game Building) (Phases 140-151) -- shipped 2026-07-05 (playtest follow-up re-closed same day, `v4.6.1`)
+- v4.7 Playtest Follow-Up Fixes (Phases 152-154) -- shipped 2026-07-06
 
 **In Progress:**
 
-- v4.7 Playtest Follow-Up Fixes (Phases 152-154) — roadmap created 2026-07-06, execution not yet started
+- v4.8 Battery Post-Mortem Fixes (Phases 155-169) — roadmap created 2026-07-20, execution not yet started
 
 ## Deferred Items
 
@@ -97,6 +98,10 @@ Carried forward from v4.0 (still deferred, separate repo): ShufflewickPub host s
 ## Accumulated Context
 
 ### Roadmap Evolution
+
+- v4.8 roadmap defined (2026-07-20): 15 phases (155–169), 40 requirements (PROC, UNDO, AUTOEXEC, ENDGAME, ZOOM, AI, SIM, DEVHOST, TOOL, SPACE, LIBX, PLATLOG, SKILLDEF, SKILLAUTO, FEAT, SWEEP) derived from the 5-game build-battery post-mortem (`~/BoardSmithLab/findings/BATTERY-POST-MORTEM.md`). Continues phase numbering from v4.7 (ended at 154). Covers all 32 deduped library/platform defects (Part A, D1–D32), both filed skills defects + the autonomy rewrite (Part B), the three platform features (C.1→168, C.2→159, C.3→164+166), and the post-fix game de-workaround sweep (Part E #6→169). Part G (lab methodology) deliberately excluded — belongs to the lab, not this repo.
+  - Phases ordered by the Part A priority ranking: multi-game defects first (155 D1/D2, 156 D7, 157 D10/D11, 158 D12), then AI-blocking (159 D9/D8), then simultaneous-step + single-game/minor (160–165), then skills (166–167), feature spike (168), and the de-workaround sweep last (169, spans the game repos not the library). D1+D2 co-located in Phase 155 because the post-mortem notes one fix largely closes both (shared root cause). C.2 folded into Phase 159 (it overlaps D9's panel/enumeration work); C.3 split library-half (164 LIBX-01) + skills-half (166 SKILLDEF-03).
+  - Every fix phase bakes in PROC-01 (fix → write tests → adversarially verify → close); PROC-02 preserves Part D disciplines through the autonomy rewrite. Coverage: 40/40 requirements mapped, D1–D32 all covered, no orphans (see REQUIREMENTS.md Traceability).
 
 - v4.7 roadmap defined (2026-07-06): 3 phases (152-154), 5 requirements (ASSET, DEVHOST, VENDOR) derived directly from v4.6's human-playtest follow-ups (DEF-A asset gap, DEF-C dev-host reconnect desync, DEF-B propagation to MERC). Continues phase numbering from v4.6 (ended at Phase 151).
 - Phase 152 (ASSET-01/02) and Phase 153 (DEVHOST-01/02) are independent of each other — both fix distinct gaps surfaced by the same playtest — but are numbered in the milestone's suggested order.
@@ -257,6 +262,8 @@ Recent decisions affecting current work:
 - [Phase ?]: 152-03: AssetImage.vue exclusion matches by basename only (not directory path), per plan's explicit NOTE
 - [Phase 152]: Asset-reachability gate failure routes to build (not repair per plan text) — matches test.md's pre-existing Failures-Loop-Back-to-build convention
 - [Phase 153]: 153-01: Fix scoped exactly to dev.ts's WS close handler (socket-identity guard) — no changes to MultiplayerHost/SnapshotSessionHost/handleServerRequest, per RESEARCH.md's proven root cause and explicit anti-patterns
+- [Phase 155-01]: Shared `assertUndoAllowed`/`UndoRefusedError` guard in `session/utils.ts`, wired into all four undo/rewind entry points (`handleUndo`, `handleDebugRewind`, `undoToTurnStart`, `rewindToAction`) — single source of truth for the `.notUndoable()` fence and the `finished`-phase fence
+- [Phase 155-04]: `animationSeqFloor` option on `Game.loadSerializedState`, supplied only by `GameRunner.fromCheckpoint` (derived from the ENCLOSING live snapshot, not the historical checkpoint) — keeps undo/rewind checkpoint restore monotonic without any of the four undo/rewind call sites needing to change; restored buffered events re-stamped above the floor. Adversarial testing surfaced and fixed a related latent bug: `Game.toJSON()` only serialized `animationEventSeq` when the current buffer was non-empty, so the seq silently reset to 0 on any snapshot round-trip through an empty-buffer op (not just undo) — now serialized whenever nonzero, independent of buffer state.
 
 ### Pending Todos
 
@@ -275,7 +282,7 @@ None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan the first v4.8 phase with `/gsd:plan-phase 155`, then `/gsd:execute-phase 155` (or `/gsd-autonomous`).
 
 ## Deferred Items
 
