@@ -260,7 +260,15 @@ export interface FlowState {
   awaitingPlayers?: PlayerAwaitingState[];
   /** Current named phase (for UI display) */
   currentPhase?: string;
-  /** Move count for current action step (if minMoves/maxMoves configured) */
+  /**
+   * Number of moves taken in the CURRENTLY ACTIVE action-step frame. Published
+   * for every action step (not only ones declaring minMoves/maxMoves) --
+   * `session/utils.ts`'s `computeUndoInfo` treats this as the sole
+   * authoritative undo-boundary signal (UNDO-03): a MISSING value means "not
+   * currently in an action step" and is treated as undo-unavailable, never as
+   * "fall back to a heuristic" (no such fallback exists). Genuinely absent
+   * only when the flow isn't awaiting an action-step's input at all.
+   */
   moveCount?: number;
   /** Moves remaining until maxMoves (if configured) */
   movesRemaining?: number;

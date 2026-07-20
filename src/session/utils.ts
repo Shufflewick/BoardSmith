@@ -149,68 +149,49 @@ export function buildSingleActionMetadata(
 /**
  * Compute turn start action index and actions this turn for a player.
  *
- * Uses moveCount from FlowState as the authoritative source when available.
+ * `moveCount` (from `FlowState`, published for every active action step --
+ * `engine.ts` `getState()`) is the SOLE authoritative source (UNDO-03). There
+ * is no fallback: a solo game (or any same-player-repeats shape) has no
+ * "different player" boundary to scan backward for, so a history-scanning
+ * heuristic silently rewinds the ENTIRE game on first undo -- the D5
+ * game-erasing defect this function used to contain (deleted, not replaced).
+ * `moveCount === undefined` means "not currently in an action step" and is
+ * treated as undo-unavailable, per the project's no-backward-compatibility
+ * rule -- never as "guess from history."
+ *
  * This correctly handles games with phases where the same player can act at
  * the end of one phase and start of the next (e.g., MERC where Rebel Player
- * acts at end of Day 1 and start of Day 2).
- *
- * Falls back to scanning action history for player changes when moveCount
- * is not available.
+ * acts at end of Day 1 and start of Day 2): moveCount resets to 0 for the new
+ * action-step frame, so undo is (correctly) bounded to that frame and cannot
+ * reach back across the phase boundary into the prior one.
  *
  * @param actionHistory - The action history to scan
  * @param currentPlayer - The current player's position
- * @param moveCount - Optional move count from FlowState (actions taken in current action step)
+ * @param moveCount - Move count from FlowState (actions taken in the current
+ *   action-step frame). `undefined` means no action step is currently active.
  */
 export function computeUndoInfo(
   actionHistory: Array<{ player: number; undoable?: boolean }>,
   currentPlayer: number | undefined,
   moveCount?: number
 ): { turnStartActionIndex: number; actionsThisTurn: number; hasNonUndoableAction: boolean } {
-  if (currentPlayer === undefined || actionHistory.length === 0) {
-    return { turnStartActionIndex: 0, actionsThisTurn: 0, hasNonUndoableAction: false };
+  if (currentPlayer === undefined || actionHistory.length === 0 || moveCount === undefined) {
+    return { turnStartActionIndex: actionHistory.length, actionsThisTurn: 0, hasNonUndoableAction: false };
   }
 
-  // If we have moveCount from FlowState, use it as the authoritative source
-  // This correctly handles phase transitions where the same player acts
-  // at the end of one phase and start of the next
-  if (moveCount !== undefined) {
-    // moveCount tells us how many actions were taken in the current action step
-    // Only check the last 'moveCount' actions for non-undoable actions
-    let hasNonUndoableAction = false;
-    const turnStartActionIndex = Math.max(0, actionHistory.length - moveCount);
-
-    for (let i = actionHistory.length - 1; i >= turnStartActionIndex; i--) {
-      if (actionHistory[i].undoable === false) {
-        hasNonUndoableAction = true;
-        break;
-      }
-    }
-
-    return { turnStartActionIndex, actionsThisTurn: moveCount, hasNonUndoableAction };
-  }
-
-  // Fallback: Scan backwards through action history to find where current player's turn started
-  // Turn started when we find an action by a DIFFERENT player
-  // Note: This heuristic can fail for games with phases where the same player
-  // acts at the end of one phase and start of the next
-  let actionsThisTurn = 0;
+  // moveCount tells us how many actions were taken in the current action-step
+  // frame. Only check the last 'moveCount' actions for non-undoable actions.
   let hasNonUndoableAction = false;
+  const turnStartActionIndex = Math.max(0, actionHistory.length - moveCount);
 
-  for (let i = actionHistory.length - 1; i >= 0; i--) {
-    if (actionHistory[i].player === currentPlayer) {
-      actionsThisTurn++;
-      // Check if this action was non-undoable
-      if (actionHistory[i].undoable === false) {
-        hasNonUndoableAction = true;
-      }
-    } else {
-      // Found action by different player - turn started after this action
-      return { turnStartActionIndex: i + 1, actionsThisTurn, hasNonUndoableAction };
+  for (let i = actionHistory.length - 1; i >= turnStartActionIndex; i--) {
+    if (actionHistory[i].undoable === false) {
+      hasNonUndoableAction = true;
+      break;
     }
   }
 
-  // All actions in history are by current player - turn started at beginning
-  return { turnStartActionIndex: 0, actionsThisTurn, hasNonUndoableAction };
+  return { turnStartActionIndex, actionsThisTurn: moveCount, hasNonUndoableAction };
 }
 
 /**

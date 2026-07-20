@@ -585,8 +585,14 @@ export class FlowEngine<G extends Game = Game> {
       currentPhase: this.currentPhase,
     };
 
-    // Add move count info if in an action step with limits
-    if (this.currentActionConfig && (this.currentActionConfig.minMoves || this.currentActionConfig.maxMoves)) {
+    // Publish move count for ANY active action step, not just ones that
+    // declare minMoves/maxMoves (UNDO-03). moveCount is the sole authoritative
+    // input to computeUndoInfo's undo-boundary computation (session/utils.ts)
+    // now that its backward-scan fallback is gone -- a step that never
+    // reports moveCount is a step undo can never be offered for.
+    // movesRemaining/movesRequired stay limits-gated below: they're
+    // meaningless without minMoves/maxMoves.
+    if (this.currentActionConfig) {
       state.moveCount = this.moveCount;
       if (this.currentActionConfig.maxMoves) {
         state.movesRemaining = this.currentActionConfig.maxMoves - this.moveCount;
