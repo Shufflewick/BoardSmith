@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * useAutoZoom — one-shot startup fit for the board zoom.
+ * useAutoZoom — startup fit + persistent available-space re-fit for the board zoom.
  *
  * Behaviors under test:
  *   AZ-1: computeFitZoom returns the largest zoom where the board fits both
@@ -9,12 +9,16 @@
  *         (board rect ÷ applied zoom vs region client box minus padding and
  *         dock height).
  *   AZ-3: startup fitting keeps following board resizes while content settles
- *         in (including waiting out an initial 0×0 board), then STOPS once the
- *         size has been stable for SETTLE_MS — later content growth never
- *         moves the zoom.
- *   AZ-4: setZoom (the slider) clamps, applies, and cancels any in-flight
- *         startup fitting so the user's choice is never stomped.
- *   AZ-5: fitZoom re-fits once on demand.
+ *         in (including waiting out an initial 0×0 board), then the STARTUP
+ *         board observer stops once the size has been stable for SETTLE_MS —
+ *         later board CONTENT growth (with no dock/region change) never moves
+ *         the zoom.
+ *   AZ-4: setZoom (the slider) clamps, applies, cancels any in-flight startup
+ *         fitting, and takes manual control (auto-refit stops until fitZoom).
+ *   AZ-5: fitZoom re-fits once on demand and re-arms auto-refit.
+ *   ZOOM-01: after the startup fit settles, a dockHeight change or a region
+ *         resize re-fits the board (the persistent region observer + dock
+ *         watch), unless the user has taken manual control via setZoom.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { defineComponent, h, ref, nextTick, type Ref } from 'vue';
@@ -59,15 +63,19 @@ function fakeBoard(width: number, height: number, appliedZoom = 1) {
   return { el, setSize: (w: number, h: number) => { size.width = w; size.height = h; } };
 }
 
-function fakeRegion(clientWidth: number, clientHeight: number): HTMLElement {
+/** Mutable fake region: clientWidth/clientHeight are getter-backed over a
+ *  mutable size object so a test can drive a post-startup region resize
+ *  (mirrors fakeBoard's shape). */
+function fakeRegion(clientWidth: number, clientHeight: number) {
+  const size = { width: clientWidth, height: clientHeight };
   const el = document.createElement('div');
-  Object.defineProperty(el, 'clientWidth', { value: clientWidth });
-  Object.defineProperty(el, 'clientHeight', { value: clientHeight });
-  return el;
+  Object.defineProperty(el, 'clientWidth', { get: () => size.width, configurable: true });
+  Object.defineProperty(el, 'clientHeight', { get: () => size.height, configurable: true });
+  return { el, setSize: (w: number, h: number) => { size.width = w; size.height = h; } };
 }
 
 /** Controllable ResizeObserver stub: jsdom has none, and the composable's
- *  startup behavior is driven by when resize callbacks fire. */
+ *  startup + persistent-refit behavior is driven by when resize callbacks fire. */
 class FakeResizeObserver {
   static instances: FakeResizeObserver[] = [];
   observed: Element[] = [];
@@ -82,6 +90,17 @@ class FakeResizeObserver {
   unobserve() {}
   disconnect() { this.disconnected = true; }
   fire() { if (!this.disconnected) this.callback(); }
+}
+
+/** Controllable requestAnimationFrame queue: the composable rAF-coalesces
+ *  re-fits, and iframe/host resize catch-up also runs on rAF. Tests must
+ *  flush it deterministically rather than rely on real frame timing. */
+let rafId = 0;
+let rafQueue = new Map<number, () => void>();
+function flushRaf() {
+  const fns = Array.from(rafQueue.values());
+  rafQueue.clear();
+  fns.forEach((fn) => fn());
 }
 
 function mountAutoZoom(opts: {
@@ -99,11 +118,29 @@ function mountAutoZoom(opts: {
   return { api, wrapper };
 }
 
+/** Find the ResizeObserver instance observing a specific element (there are
+ *  two live instances post-fix: the startup board observer and the
+ *  persistent region observer — index alone is not reliable for the region
+ *  one once tests re-wire regionEl). */
+function observerFor(el: Element): FakeResizeObserver | undefined {
+  return FakeResizeObserver.instances.find((o) => o.observed.includes(el));
+}
+
 describe('useAutoZoom', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     FakeResizeObserver.instances = [];
     vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    rafId = 0;
+    rafQueue = new Map();
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      const id = ++rafId;
+      rafQueue.set(id, () => cb(0));
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      rafQueue.delete(id);
+    });
   });
 
   afterEach(() => {
@@ -115,7 +152,8 @@ describe('useAutoZoom', () => {
   it('AZ-2: fits at startup from element measurements', async () => {
     const board = fakeBoard(400, 300);
     const boardEl = ref<HTMLElement | null>(board.el);
-    const regionEl = ref<HTMLElement | null>(fakeRegion(800, 700));
+    const region = fakeRegion(800, 700);
+    const regionEl = ref<HTMLElement | null>(region.el);
     const dockHeight = ref(100);
     const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
     await nextTick(); // flush: 'post' watcher wires the observer
@@ -130,7 +168,8 @@ describe('useAutoZoom', () => {
     // size is 400×300 and the correct fit for a 600×450 region is 1.5, not 0.75.
     const board = fakeBoard(400, 300, 2);
     const boardEl = ref<HTMLElement | null>(board.el);
-    const regionEl = ref<HTMLElement | null>(fakeRegion(600, 450));
+    const region = fakeRegion(600, 450);
+    const regionEl = ref<HTMLElement | null>(region.el);
     const dockHeight = ref(0);
     const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
     await nextTick();
@@ -139,15 +178,16 @@ describe('useAutoZoom', () => {
     wrapper.unmount();
   });
 
-  it('AZ-3: keeps fitting while content settles, then stops for good', async () => {
+  it('AZ-3: keeps fitting while content settles, then the startup observer stops', async () => {
     // Board starts 0×0 — session state hasn't arrived yet.
     const board = fakeBoard(0, 0);
     const boardEl = ref<HTMLElement | null>(board.el);
-    const regionEl = ref<HTMLElement | null>(fakeRegion(800, 600));
+    const region = fakeRegion(800, 600);
+    const regionEl = ref<HTMLElement | null>(region.el);
     const dockHeight = ref(0);
     const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
     await nextTick();
-    const observer = FakeResizeObserver.instances[0]!;
+    const observer = observerFor(board.el)!;
 
     expect(api.zoomLevel.value).toBe(1.0); // nothing measurable yet
 
@@ -164,25 +204,28 @@ describe('useAutoZoom', () => {
     observer.fire();
     expect(api.zoomLevel.value).toBe(1.0);
 
-    // Size holds still for SETTLE_MS → startup over, observer disconnected.
+    // Size holds still for SETTLE_MS → startup over, board observer disconnected.
     vi.advanceTimersByTime(SETTLE_MS);
     expect(observer.disconnected).toBe(true);
 
-    // Mid-game growth never moves the zoom.
+    // Mid-game CONTENT growth (board is no longer observed) never moves the
+    // zoom by itself — no dock/region change accompanies it.
     board.setSize(800, 900);
-    observer.fire();
+    observer.fire(); // no-op: disconnected
+    flushRaf();
     expect(api.zoomLevel.value).toBe(1.0);
     wrapper.unmount();
   });
 
-  it('AZ-4: setZoom clamps, applies, and cancels in-flight startup fitting', async () => {
+  it('AZ-4: setZoom clamps, applies, cancels in-flight startup fitting, and takes manual control', async () => {
     const board = fakeBoard(400, 300);
     const boardEl = ref<HTMLElement | null>(board.el);
-    const regionEl = ref<HTMLElement | null>(fakeRegion(800, 600));
+    const region = fakeRegion(800, 600);
+    const regionEl = ref<HTMLElement | null>(region.el);
     const dockHeight = ref(0);
     const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
     await nextTick();
-    const observer = FakeResizeObserver.instances[0]!;
+    const observer = observerFor(board.el)!;
 
     // User grabs the slider while the board is still settling.
     api.setZoom(0.8);
@@ -204,7 +247,8 @@ describe('useAutoZoom', () => {
   it('AZ-5: fitZoom re-fits once on demand', async () => {
     const board = fakeBoard(400, 300);
     const boardEl = ref<HTMLElement | null>(board.el);
-    const regionEl = ref<HTMLElement | null>(fakeRegion(800, 700));
+    const region = fakeRegion(800, 700);
+    const regionEl = ref<HTMLElement | null>(region.el);
     const dockHeight = ref(100);
     const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
     await nextTick();
@@ -213,5 +257,57 @@ describe('useAutoZoom', () => {
     api.fitZoom();
     expect(api.zoomLevel.value).toBe(2.0);
     wrapper.unmount();
+  });
+
+  describe('re-fit on available-space change (ZOOM-01)', () => {
+    it('re-fits when dockHeight grows after the startup fit has settled', async () => {
+      const board = fakeBoard(400, 300);
+      const boardEl = ref<HTMLElement | null>(board.el);
+      const region = fakeRegion(800, 700);
+      const regionEl = ref<HTMLElement | null>(region.el);
+      const dockHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      await nextTick();
+      flushRaf();
+
+      // width: 800/400 = 2, height: (700-100)/300 = 2 → fit 2.0
+      expect(api.zoomLevel.value).toBe(2.0);
+
+      // Settle the startup fit (mirrors AZ-3's settle window).
+      vi.advanceTimersByTime(SETTLE_MS);
+
+      // The floating action dock lands: avail height now 700-400=300 →
+      // fit min(800/400, 300/300) = min(2, 1) = 1.0.
+      dockHeight.value = 400;
+      await nextTick();
+      flushRaf();
+
+      expect(api.zoomLevel.value).toBe(1.0);
+      wrapper.unmount();
+    });
+
+    it('re-fits when the region resizes after the startup fit has settled', async () => {
+      const board = fakeBoard(400, 300);
+      const boardEl = ref<HTMLElement | null>(board.el);
+      const region = fakeRegion(800, 700);
+      const regionEl = ref<HTMLElement | null>(region.el);
+      const dockHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      await nextTick();
+      flushRaf();
+      expect(api.zoomLevel.value).toBe(2.0);
+
+      vi.advanceTimersByTime(SETTLE_MS);
+
+      // The region shrinks (window/sidebar reflow): avail width now 400 →
+      // fit min(400/400, 600/300) = min(1, 2) = 1.0.
+      region.setSize(400, 700);
+      const regionObserver = observerFor(region.el);
+      regionObserver?.fire();
+      flushRaf();
+
+      expect(api.zoomLevel.value).toBe(1.0);
+      wrapper.unmount();
+    });
   });
 });
