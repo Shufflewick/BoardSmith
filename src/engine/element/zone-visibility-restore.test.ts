@@ -121,16 +121,13 @@ function roundTripJson<T>(value: T): T {
 }
 
 describe('SEC-01/F1/F7: zone visibility survives restore (byte-identity of opponent view)', () => {
-  it('a hidden Space reports __hidden contents to the opponent before any restore', () => {
+  it('a hidden Space reports neither childCount nor children to the opponent before any restore (SPACE-03/D24)', () => {
     const runner = buildRunner();
     const view = runner.game.toJSONForPlayer(OPPONENT_SEAT);
     const zoneJson = view.children?.find((c) => c.name === 'secret-zone');
-    const cards = zoneJson?.children ?? [];
-    expect(cards.length).toBe(3);
-    for (const card of cards) {
-      expect(card.attributes.__hidden).toBe(true);
-      expect(card.attributes.suit).toBeUndefined();
-    }
+    expect(zoneJson).toBeDefined();
+    expect('childCount' in zoneJson!).toBe(false);
+    expect('children' in zoneJson!).toBe(false);
   });
 
   it('(a) survives GameRunner.fromSnapshot', () => {
@@ -250,13 +247,24 @@ describe('SEC-01/F1/F7: zone visibility survives restore (byte-identity of oppon
     // default) is what must round-trip.
     const revealResult = runner.performAction('reveal', 1, {});
     expect(revealResult.success).toBe(true);
-    const revealedView = opponentView(runner);
-    expect(revealedView).not.toContain('__hidden');
+    const revealedZone = runner.game
+      .toJSONForPlayer(OPPONENT_SEAT)
+      .children?.find((c) => c.name === 'secret-zone');
+    expect(revealedZone).toBeDefined();
+    expect((revealedZone!.children ?? []).length).toBe(3);
+    expect((revealedZone!.children ?? []).every((c: any) => c.attributes.suit !== undefined)).toBe(true);
 
     const rehideResult = runner.performAction('rehide', 1, {});
     expect(rehideResult.success).toBe(true);
     const before = opponentView(runner);
-    expect(before).toContain('__hidden');
+    const beforeZone = runner.game
+      .toJSONForPlayer(OPPONENT_SEAT)
+      .children?.find((c) => c.name === 'secret-zone');
+    expect(beforeZone).toBeDefined();
+    // SPACE-03/D24: re-hiding must go back to true concealment — no
+    // childCount, no children — not just re-appear as anonymized placeholders.
+    expect('childCount' in beforeZone!).toBe(false);
+    expect('children' in beforeZone!).toBe(false);
 
     const snapshot = roundTripJson(runner.getSnapshot());
     const restored = GameRunner.fromSnapshot<ZoneVisGame>(snapshot, ZoneVisGame);

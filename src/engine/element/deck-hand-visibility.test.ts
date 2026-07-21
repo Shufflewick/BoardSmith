@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Piece, Player, Deck, Hand } from '../index.js';
+import { Game, Piece, Player, Deck, Hand, Space } from '../index.js';
 
 // Regression test for audit finding F32: Deck and Hand must be secure-by-default.
 // A freshly-created Deck hides its contents (faces AND order) from everyone, and a
@@ -24,21 +24,19 @@ describe('Deck/Hand secure-by-default visibility (F32)', () => {
     game = new TestGame({ playerCount: 2 });
   });
 
-  it('hides a fresh Deck contents from non-owner in per-player snapshot', () => {
+  it('hides a fresh Deck contents from non-owner in per-player snapshot (SPACE-03/D24: true concealment)', () => {
     const deck = game.create(Deck, 'draw-pile');
     deck.createMany(3, Card, 'card', (i) => ({ suit: 'H', rank: String(i + 1) }));
 
-    // A deck is a shared draw pile: nobody should see the contents by default.
+    // A deck is a shared draw pile in 'hidden' mode: nobody should see the
+    // contents by default -- and per D24, that means the exact count must
+    // not leak either. No `children` key and no `childCount` key at all.
     const view = game.toJSONForPlayer(2);
     const deckJson = findByName(view.children, 'draw-pile');
-    const cards = deckJson?.children ?? [];
 
-    expect(cards.length).toBe(3);
-    for (const card of cards) {
-      expect(card.attributes.__hidden).toBe(true);
-      expect(card.attributes.suit).toBeUndefined();
-      expect(card.attributes.rank).toBeUndefined();
-    }
+    expect(deckJson).toBeDefined();
+    expect('childCount' in deckJson).toBe(false);
+    expect('children' in deckJson).toBe(false);
   });
 
   it('reveals a fresh Hand contents only to its owner', () => {
@@ -74,6 +72,70 @@ describe('Deck/Hand secure-by-default visibility (F32)', () => {
     const cards = findByName(view.children, 'open-pile')?.children ?? [];
 
     expect(cards.length).toBe(3);
+    for (const card of cards) {
+      expect(card.attributes.__hidden).toBeUndefined();
+      expect(card.attributes.suit).toBe('H');
+    }
+  });
+});
+
+describe('SPACE-03/D24: hidden-mode child-count no longer leaks (count-only unaffected)', () => {
+  class SecretSpace extends Space<TestGame> {}
+  class CountedSpace extends Space<TestGame> {}
+
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+  });
+
+  it('a hidden Space exposes neither childCount nor children to a non-owner', () => {
+    const zone = game.create(SecretSpace, 'secret-zone');
+    zone.contentsHidden();
+    zone.createMany(4, Card, 'card', (i) => ({ suit: 'H', rank: String(i + 1) }));
+
+    const view = game.toJSONForPlayer(2);
+    const zoneJson = findByName(view.children, 'secret-zone');
+
+    expect(zoneJson).toBeDefined();
+    expect('childCount' in zoneJson).toBe(false);
+    expect('children' in zoneJson).toBe(false);
+  });
+
+  it('a count-only Space still exposes childCount and anonymized placeholders to a non-owner', () => {
+    const zone = game.create(CountedSpace, 'counted-zone');
+    zone.contentsCountOnly();
+    zone.createMany(4, Card, 'card', (i) => ({ suit: 'H', rank: String(i + 1) }));
+
+    const view = game.toJSONForPlayer(2);
+    const zoneJson = findByName(view.children, 'counted-zone');
+
+    expect(zoneJson.childCount).toBe(4);
+    const cards = zoneJson.children ?? [];
+    expect(cards.length).toBe(4);
+    for (const card of cards) {
+      expect(card.attributes.__hidden).toBe(true);
+      expect(card.attributes.suit).toBeUndefined();
+      expect(card.id).toBeLessThan(0);
+    }
+  });
+
+  it('the suppression is specific to hidden-mode zones, not the Space itself (default/all-visible control)', () => {
+    // Concealment is per-mode, not per-owner: 'hidden' mode has no owner
+    // concept (that is 'owner' mode's job -- see the pre-existing Hand test
+    // above, which already proves the real owner still sees their own
+    // 'owner'-mode contents unaffected by this change). This control proves
+    // the SAME Space class reveals real children when zone visibility is
+    // left at its default ('all'/unset), isolating the suppression above to
+    // 'hidden' mode specifically.
+    const zone = game.create(SecretSpace, 'visible-zone');
+    zone.createMany(4, Card, 'card', (i) => ({ suit: 'H', rank: String(i + 1) }));
+
+    const view = game.toJSONForPlayer(2);
+    const zoneJson = findByName(view.children, 'visible-zone');
+    const cards = zoneJson.children ?? [];
+
+    expect(cards.length).toBe(4);
     for (const card of cards) {
       expect(card.attributes.__hidden).toBeUndefined();
       expect(card.attributes.suit).toBe('H');
