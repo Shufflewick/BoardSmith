@@ -204,4 +204,179 @@ describe('ActionPanel executeAction — commit-leak gate on own completed flag (
     expect(sendAction).toHaveBeenCalledTimes(1);
     expect(sendAction).toHaveBeenCalledWith('confirm', {});
   });
+
+  // ── Task 3: adversarial ────────────────────────────────────────────────
+
+  it('CL-3 (adversarial, repeat submit): a completed seat that clicks repeatedly emits ZERO executes', async () => {
+    // Models a double-submit / stale-client re-trigger: the button is clicked
+    // five times in quick succession (some in the same tick, some across
+    // ticks). The gate must hold on every single attempt, not just the first.
+    const sendAction = vi.fn().mockResolvedValue({ success: true });
+    const { wrapper } = mountConfirmPanel({ completed: true, sendAction });
+    const button = wrapper.get('[data-bs-action="confirm"]');
+
+    await button.trigger('click');
+    await button.trigger('click');
+    await nextTick();
+    await button.trigger('click');
+    await nextTick();
+    await button.trigger('click');
+    await button.trigger('click');
+    await nextTick();
+    await nextTick();
+
+    expect(sendAction).not.toHaveBeenCalled();
+  });
+
+  it('CL-4 (adversarial, mid-step completed flip): a click that races a completed:true update emits ZERO executes once the flip lands', async () => {
+    // Models the realistic race this gate defends against: the viewer clicks
+    // right as the seat's own completed flag flips true (e.g. a co-decider's
+    // commit resolves the step and the broadcast lands mid-interaction).
+    const sendAction = vi.fn().mockResolvedValue({ success: true });
+    const controller = useActionController({
+      sendAction,
+      availableActions: ref(['confirm']),
+      actionMetadata: ref({ confirm: noArgsAction }),
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+    });
+
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller } },
+      props: { availableActions: ['confirm'], playerSeat: 0, isMyTurn: true, completed: false },
+    });
+
+    // Confirm the pre-flip state genuinely can execute (sanity, not yet clicked).
+    expect(wrapper.get('[data-bs-action="confirm"]').exists()).toBe(true);
+
+    // Flip completed BEFORE the click lands (the race).
+    await wrapper.setProps({ completed: true });
+    await wrapper.get('[data-bs-action="confirm"]').trigger('click');
+    await nextTick();
+    await nextTick();
+
+    expect(sendAction).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Task 3: adversarial self-filter — 3 awaiting seats, ordering + reactivity
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('GameShell awaitingPlayerNames/awaitingPlayerSeats — adversarial (D27, SIM-04)', () => {
+  it('SF-2: with 3 awaiting seats the viewer sees exactly the OTHER two, in order, never itself', () => {
+    const { awaitingPlayerNames, awaitingPlayerSeats } = buildAwaitingHarness(
+      1,
+      {
+        awaitingPlayers: [
+          { playerIndex: 0, completed: false, availableActions: ['confirm'] },
+          { playerIndex: 1, completed: false, availableActions: ['confirm'] },
+          { playerIndex: 2, completed: false, availableActions: ['confirm'] },
+        ],
+      },
+      [
+        { seat: 0, name: 'Ari' },
+        { seat: 1, name: 'You' },
+        { seat: 2, name: 'Sam' },
+      ],
+    );
+
+    expect(awaitingPlayerNames.value.map((p) => p.name)).toEqual(['Ari', 'Sam']);
+    expect(awaitingPlayerSeats.value).toEqual([0, 2]);
+  });
+
+  it('SF-3: the viewer stays excluded across a state update where its own completed flips', () => {
+    const { flowState, awaitingPlayerNames, awaitingPlayerSeats } = buildAwaitingHarness(
+      1,
+      {
+        awaitingPlayers: [
+          { playerIndex: 0, completed: false, availableActions: ['confirm'] },
+          { playerIndex: 1, completed: false, availableActions: ['confirm'] },
+          { playerIndex: 2, completed: false, availableActions: ['confirm'] },
+        ],
+      },
+      [
+        { seat: 0, name: 'Ari' },
+        { seat: 1, name: 'You' },
+        { seat: 2, name: 'Sam' },
+      ],
+    );
+
+    // Before the flip: viewer excluded, both co-deciders present.
+    expect(awaitingPlayerNames.value.map((p) => p.name)).toEqual(['Ari', 'Sam']);
+
+    // The viewer commits its own action — completed flips true.
+    flowState.value = {
+      awaitingPlayers: [
+        { playerIndex: 0, completed: false, availableActions: ['confirm'] },
+        { playerIndex: 1, completed: true, availableActions: [] },
+        { playerIndex: 2, completed: false, availableActions: ['confirm'] },
+      ],
+    };
+
+    // Still excluded (now doubly so: self-filter AND completed filter both
+    // exclude it) — never re-appears in its own list.
+    expect(awaitingPlayerNames.value.map((p) => p.name)).toEqual(['Ari', 'Sam']);
+    expect(awaitingPlayerSeats.value).toEqual([0, 2]);
+
+    // A co-decider (seat 0) also commits — only Sam remains.
+    flowState.value = {
+      awaitingPlayers: [
+        { playerIndex: 0, completed: true, availableActions: [] },
+        { playerIndex: 1, completed: true, availableActions: [] },
+        { playerIndex: 2, completed: false, availableActions: ['confirm'] },
+      ],
+    };
+    expect(awaitingPlayerNames.value.map((p) => p.name)).toEqual(['Sam']);
+    expect(awaitingPlayerSeats.value).toEqual([2]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Task 3: no-contradiction — action affordance and "waiting for you" status
+// are never simultaneously true for the viewer's own seat
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('D27 — no reachable simultaneous state shows both "act" and "waiting for you" (SIM-04)', () => {
+  it('NC-1: whenever the viewer can act (not completed), it never appears in its own waiting list', () => {
+    // Sweep every completed/not-completed combination across 3 seats; for
+    // EVERY combination, assert the invariant: if the viewer (seat 1) is
+    // not completed, ActionPanel shows the action affordance (isMyTurn is
+    // server-truth here and would be true), and — simultaneously — the
+    // viewer's own name is never present in its own waiting list. The two
+    // must never both be true for the same seat.
+    const combos: Array<[boolean, boolean, boolean]> = [
+      [false, false, false],
+      [true, false, false],
+      [false, true, false],
+      [false, false, true],
+      [true, true, false],
+      [true, false, true],
+      [false, true, true],
+      [true, true, true],
+    ];
+
+    for (const [c0, c1, c2] of combos) {
+      const { awaitingPlayerNames } = buildAwaitingHarness(
+        1,
+        {
+          awaitingPlayers: [
+            { playerIndex: 0, completed: c0, availableActions: c0 ? [] : ['confirm'] },
+            { playerIndex: 1, completed: c1, availableActions: c1 ? [] : ['confirm'] },
+            { playerIndex: 2, completed: c2, availableActions: c2 ? [] : ['confirm'] },
+          ],
+        },
+        [
+          { seat: 0, name: 'Ari' },
+          { seat: 1, name: 'You' },
+          { seat: 2, name: 'Sam' },
+        ],
+      );
+
+      // The viewer's own name/seat must NEVER appear in its own list,
+      // regardless of its own or anyone else's completed state.
+      expect(awaitingPlayerNames.value.map((p) => p.seat)).not.toContain(1);
+    }
+  });
 });
