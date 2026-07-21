@@ -106,11 +106,12 @@ const titleText = computed(() => {
 </script>
 
 <template>
-  <div class="game-over-scrim" aria-modal="true">
+  <div class="game-over-scrim">
     <div
       ref="cardRef"
       class="game-over-card"
       role="dialog"
+      aria-modal="true"
       aria-labelledby="game-over-title"
       @keydown="handleKeydown"
     >

@@ -164,6 +164,11 @@ function onHostMessage(msg: Record<string, unknown>): void {
         view: msg.view,
         isComplete: msg.isComplete,
         winners: msg.winners,
+        // isDraw is the D10 draw-vs-unknown signal — it MUST be relayed to the
+        // iframe or every genuine draw renders as "Game Over" in the dev host.
+        // lastGameState is also replayed on request-state + iframe reload
+        // (below), so this one line covers all three relay paths.
+        isDraw: msg.isDraw,
       };
       postToGame(lastGameState);
       if (pendingRestart.value) {

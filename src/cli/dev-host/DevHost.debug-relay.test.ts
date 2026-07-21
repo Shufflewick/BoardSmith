@@ -162,3 +162,50 @@ describe('DevHost — uiSwitch relay', () => {
     expect(uiSelectCalls[uiSelectCalls.length - 1][0]).toMatchObject({ name: 'custom' });
   });
 });
+
+// Review follow-up (157-REVIEW Critical): the D10 draw signal must survive the
+// DevHost -> iframe relay. Regression: a host game_state carrying isDraw:true
+// must reach the iframe as isDraw:true, or every draw renders "Game Over" in
+// `boardsmith dev`.
+describe('DevHost — game_state isDraw relay (D10)', () => {
+  it('relays isDraw:true from the host game_state through to the iframe', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    const postSpy = spyOnIframePostMessage(wrapper);
+
+    ws.simulateMessage({
+      type: 'game_state',
+      view: { some: 'state' },
+      isComplete: true,
+      winners: [],
+      isDraw: true,
+    });
+    await wrapper.vm.$nextTick();
+
+    const gameStateCalls = postSpy.mock.calls.filter(
+      (c) => (c[0] as { type?: string }).type === 'game_state',
+    );
+    expect(gameStateCalls.length).toBeGreaterThanOrEqual(1);
+    expect(gameStateCalls[gameStateCalls.length - 1][0]).toMatchObject({ isComplete: true, isDraw: true });
+  });
+
+  it('relays isDraw:false for a normal (non-draw) completion', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    const postSpy = spyOnIframePostMessage(wrapper);
+
+    ws.simulateMessage({
+      type: 'game_state',
+      view: { some: 'state' },
+      isComplete: true,
+      winners: [1],
+      isDraw: false,
+    });
+    await wrapper.vm.$nextTick();
+
+    const gameStateCalls = postSpy.mock.calls.filter(
+      (c) => (c[0] as { type?: string }).type === 'game_state',
+    );
+    expect(gameStateCalls[gameStateCalls.length - 1][0]).toMatchObject({ isDraw: false });
+  });
+});

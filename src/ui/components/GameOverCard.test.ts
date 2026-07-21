@@ -249,19 +249,23 @@ describe('GameOverCard — adversarial: degrade never fakes a draw (D10)', () =>
 });
 
 describe('GameOverCard — A11Y-07 modal semantics', () => {
-  it('has aria-modal="true" on the scrim', () => {
+  // Per WAI-ARIA APG, aria-modal belongs on the role="dialog" element, not the
+  // scrim (which has no role) — corrected in 157-REVIEW.
+  it('has aria-modal="true" on the role="dialog" element', () => {
     const wrapper = mount(GameOverCard, {
       props: { winnerSeats: [], players: PLAYERS },
     });
 
-    expect(wrapper.find('.game-over-scrim').attributes('aria-modal')).toBe('true');
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.attributes('aria-modal')).toBe('true');
   });
 
-  it('scrim does not have aria-modal="false"', () => {
+  it('dialog does not have aria-modal="false"', () => {
     const wrapper = mount(GameOverCard, {
       props: { winnerSeats: [], players: PLAYERS },
     });
 
-    expect(wrapper.find('.game-over-scrim').attributes('aria-modal')).not.toBe('false');
+    expect(wrapper.find('[role="dialog"]').attributes('aria-modal')).not.toBe('false');
   });
 });
