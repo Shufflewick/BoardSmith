@@ -248,6 +248,18 @@ describe('mergeGameOptionDefinitions (D13: gameDefinition.gameOptions merged wit
     expect(mergeGameOptionDefinitions(undefined, undefined)).toEqual({});
     expect(Object.keys(mergeGameOptionDefinitions({ a: { type: 'boolean', label: 'A' } }, undefined))).toEqual(['a']);
   });
+
+  it('adversarial: a game-definition-only option survives even when boardsmith.json declares a DIFFERENT set', () => {
+    // Regression for the old replace-not-merge spread (`...(gameOptions &&
+    // { gameOptions })`) at dev.ts:557 — a boardsmith.json declaring ANY
+    // gameOptions used to silently drop every gameDefinition-only option.
+    const merged = mergeGameOptionDefinitions(
+      { onlyInGameDef: { type: 'boolean', label: 'Only game-def', default: true } },
+      { onlyInConfig: { type: 'boolean', label: 'Only config', default: false } },
+    );
+    expect(merged.onlyInGameDef).toBeDefined();
+    expect(merged.onlyInConfig).toBeDefined();
+  });
 });
 
 describe('resolvePreset (D13: applying a preset returns its options bundle + optional player count)', () => {

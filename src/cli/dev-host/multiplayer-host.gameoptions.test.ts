@@ -117,3 +117,39 @@ describe('MultiplayerHost — gameOption/preset selection reaches the start op (
     expect(getStartOptions().difficulty).toBe('easy'); // unchanged, still the original default
   });
 });
+
+describe('MultiplayerHost — adversarial: preset bundle, override precedence, restart persistence (Task 3)', () => {
+  it('applying a preset sets EVERY option in its bundle AND its declared player count', async () => {
+    const { host, getStartOptions } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', preset: 'advanced' });
+    const opts = getStartOptions();
+    expect(opts.difficulty).toBe('hard');
+    expect(opts.rounds).toBe(7);
+    // The preset declares 3 players (`players: [...]` length 3) — its count
+    // reaches the start op's `playerCount` field without resizing `this.seats`.
+    expect(opts.playerCount).toBe(3);
+  });
+
+  it('a `--game-option`-equivalent selection OVERRIDES the preset value for the same key', async () => {
+    const { host, getStartOptions } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', {
+      type: 'configure',
+      preset: 'advanced', // sets difficulty=hard, rounds=7
+      gameOptions: { rounds: 2 }, // flag beats preset for the same key
+    });
+    const opts = getStartOptions();
+    expect(opts.difficulty).toBe('hard'); // from the preset, unchanged
+    expect(opts.rounds).toBe(2); // flag override wins
+  });
+
+  it('a selection PERSISTS across a subsequent restart (does not silently revert to `.default`)', async () => {
+    const { host, getStartOptions } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', gameOptions: { difficulty: 'hard' } });
+    expect(getStartOptions().difficulty).toBe('hard');
+    await host.handleMessage('A', { type: 'restart' });
+    expect(getStartOptions().difficulty).toBe('hard'); // still selected, not reverted to 'easy'
+  });
+});
