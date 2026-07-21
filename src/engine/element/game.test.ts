@@ -379,6 +379,103 @@ class HandlerlessRegistrationGame extends Game<HandlerlessRegistrationGame, Play
   }
 }
 
+// ============================================
+// SPACE-04/D25: class-name collision guard
+// ============================================
+
+/**
+ * Two distinct constructors forced to share the name `Hand` (a built-in
+ * framework class name — see BUILTIN_ELEMENT_CLASSES) via
+ * Object.defineProperty, simulating a game author accidentally naming a
+ * custom class the same as another already-registered custom class.
+ */
+class HandCollisionA extends Piece<CollisionGame> {}
+class HandCollisionB extends Piece<CollisionGame> {}
+Object.defineProperty(HandCollisionA, 'name', { value: 'Hand' });
+Object.defineProperty(HandCollisionB, 'name', { value: 'Hand' });
+
+/** Two distinct constructors sharing a single-char (minified-looking) name. */
+class MinifiedA extends Piece<CollisionGame> {}
+class MinifiedB extends Piece<CollisionGame> {}
+Object.defineProperty(MinifiedA, 'name', { value: 'H' });
+Object.defineProperty(MinifiedB, 'name', { value: 'H' });
+
+type CollisionMode =
+  | 'registerElements-collision'
+  | 'registerElements-idempotent'
+  | 'registerElements-builtin-override-only'
+  | 'create-collision'
+  | 'createElement-collision'
+  | 'minified-collision';
+
+class CollisionGame extends Game<CollisionGame, Player> {
+  constructor(options: GameOptions, mode: CollisionMode) {
+    super(options);
+    switch (mode) {
+      case 'registerElements-collision':
+        // First registration overrides the built-in `Hand` seed (legitimate,
+        // no throw). Second registration is a REAL collision: a different,
+        // non-builtin-seeded constructor already owns the name `Hand`.
+        this.registerElements([HandCollisionA]);
+        this.registerElements([HandCollisionB]);
+        break;
+      case 'registerElements-idempotent':
+        // Same constructor registered twice: no-op, must not throw.
+        this.registerElements([HandCollisionA]);
+        this.registerElements([HandCollisionA]);
+        break;
+      case 'registerElements-builtin-override-only':
+        // A single override of the built-in seed: legitimate, must not throw.
+        this.registerElements([HandCollisionA]);
+        break;
+      case 'create-collision':
+        // Lazy `create()` path (game-element.ts): first create() overrides
+        // the builtin seed; second create() with a DIFFERENT ctor sharing
+        // the same name is a real collision.
+        this.create(HandCollisionA, 'handA');
+        this.create(HandCollisionB, 'handB');
+        break;
+      case 'createElement-collision':
+        // Lazy `createElement()` path (game.ts, internal/no-tree-attach).
+        (this as any).createElement(HandCollisionA, 'handA');
+        (this as any).createElement(HandCollisionB, 'handB');
+        break;
+      case 'minified-collision':
+        // Two distinct classes collapsed to a single-char name (as a
+        // minifier legitimately would) must NOT throw regardless of mode.
+        this.create(MinifiedA, 'm1');
+        this.create(MinifiedB, 'm2');
+        break;
+    }
+  }
+}
+
+describe('SPACE-04/D25 class registry collision guard', () => {
+  it('throws an actionable error naming the class when registerElements registers a DIFFERENT constructor under an already-registered (non-builtin) name', () => {
+    expect(() => new CollisionGame(makeOptions(), 'registerElements-collision')).toThrowError(/Hand/);
+  });
+
+  it('does not throw when the SAME constructor is registered twice via registerElements (idempotent)', () => {
+    expect(() => new CollisionGame(makeOptions(), 'registerElements-idempotent')).not.toThrow();
+  });
+
+  it('does not throw when overriding a built-in seeded name with a game class (legitimate override)', () => {
+    expect(() => new CollisionGame(makeOptions(), 'registerElements-builtin-override-only')).not.toThrow();
+  });
+
+  it('throws when the lazy create() path (game-element.ts) registers a DIFFERENT constructor under an already-registered name', () => {
+    expect(() => new CollisionGame(makeOptions(), 'create-collision')).toThrowError(/Hand/);
+  });
+
+  it('throws when the lazy createElement() path (game.ts internal) registers a DIFFERENT constructor under an already-registered name', () => {
+    expect(() => new CollisionGame(makeOptions(), 'createElement-collision')).toThrowError(/Hand/);
+  });
+
+  it('does not throw for a minified/single-char name collision (production-bundle safety)', () => {
+    expect(() => new CollisionGame(makeOptions(), 'minified-collision')).not.toThrow();
+  });
+});
+
 describe('ENG-08 handler-less registration', () => {
   it('throws naming the action and pointing to .execute( when registering a .build()-terminated (handler-less) action, without ever calling startFlow()', () => {
     const game = new HandlerlessRegistrationGame(makeOptions());
