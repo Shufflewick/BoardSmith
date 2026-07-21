@@ -124,6 +124,15 @@ const LOCK_CLOCK_READ = 'date -u +%Y-%m-%dT%H:%M:%SZ';
 /** SKILLDEF-02: the live-symlink read-only-library marker, must appear alongside "read-only". */
 const NODE_MODULES_BOARDSMITH = 'node_modules/boardsmith';
 
+/** SKILLDEF-03: the LIBX-01 rename of the retired `suppressActionPanel` fenced escape hatch. */
+const ESCAPE_HATCH_PROP = 'platformActionPanelEscapeHatch';
+
+/** SKILLDEF-03: the only sanctioned per-action dock-hiding mechanism. */
+const SUPPRESS_FROM_DOCK = 'suppressFromDock';
+
+/** SKILLDEF-03: the retired name that must appear nowhere in build.md. */
+const RETIRED_SUPPRESS_ACTION_PANEL = 'suppressActionPanel';
+
 describe('BUILD-01 — resume routing', () => {
   it('build-chunk.md contains the full-ceremony step list verbatim', () => {
     const buildChunk = read('build-chunk.md');
@@ -918,6 +927,25 @@ describe('SKILLDEF-02 — game/library boundary', () => {
     const fa = read('build/final-acceptance.md');
     expect(fa).toMatch(/client/i);
     expect(fa).toMatch(/overrule|override/i);
+  });
+});
+
+describe('SKILLDEF-03 — fenced escape hatch', () => {
+  it('build.md forbids platformActionPanelEscapeHatch without the client', () => {
+    const build = read('build/build.md');
+    expect(build).toContain(ESCAPE_HATCH_PROP);
+    expect(build).toMatch(/without EXPLICIT client direction|without the client/i);
+  });
+
+  it('build.md names .suppressFromDock() as the only sanctioned per-action dock-hiding mechanism', () => {
+    const build = read('build/build.md');
+    expect(build).toContain(SUPPRESS_FROM_DOCK);
+    expect(build).toMatch(/ONLY sanctioned/i);
+  });
+
+  it('build.md never references the retired suppressActionPanel name', () => {
+    const build = read('build/build.md');
+    expect(build).not.toContain(RETIRED_SUPPRESS_ACTION_PANEL);
   });
 });
 

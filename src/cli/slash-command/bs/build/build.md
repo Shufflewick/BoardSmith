@@ -119,6 +119,16 @@ by convention every chunk's author has to remember. A bare asset `<img>` is not 
 discouraged — it is a `test`-step failure (see `build/test.md`'s asset-reachability gate), so the
 prohibition is enforced, not just advised.
 
+### Never fence the whole panel without the client
+
+Never set `platformActionPanelEscapeHatch` (the LIBX-01 rename of the now-retired whole-panel
+escape hatch) without EXPLICIT client direction. It fences off the entire built-in action
+panel, and switching it off without the client is exactly the never-suppress-built-in-UI violation
+named in "## Boundaries" above. If a specific action legitimately needs to be hidden from the
+dock — a game-design call, not a workaround — the ONLY sanctioned mechanism is the per-action
+`.suppressFromDock()` metadata field, applied to that one action; it is never a way to suppress the
+panel wholesale.
+
 ## Downstream Shape (cite, never restate)
 
 Once this chunk's files are all written (every Build Manifest row `written`) and the test script
