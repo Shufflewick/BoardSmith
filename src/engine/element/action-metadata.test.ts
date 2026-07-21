@@ -28,7 +28,7 @@ import {
   actionStep,
   type GameOptions,
 } from '../index.js';
-import { buildPickMetadata } from './action-metadata.js';
+import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import { resolveMultiSelect } from '../utils/resolve-multiselect.js';
 import { useActionController, type ActionMetadata } from '../../ui/composables/useActionController.js';
 import type { ChoiceSelection, ElementsSelection } from '../action/types.js';
@@ -264,6 +264,86 @@ describe('buildPickMetadata: function-valued multiSelect (AI-01 / C.2)', () => {
         values: [1],
       });
     });
+  });
+});
+
+// ============================================================================
+// LIBX-01 / D28: per-action suppressFromDock rides the actionMetadata channel
+// exactly like `manual` (163-... mirrors the manual precedent).
+// ============================================================================
+
+class DockSuppressionGame extends Game<DockSuppressionGame, Player> {
+  board!: Space<DockSuppressionGame>;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.board = this.create(Space<DockSuppressionGame>, 'board');
+
+    this.registerAction(
+      Action.create<DockSuppressionGame>('hiddenAction')
+        .suppressFromDock()
+        .execute(() => ({ success: true })),
+    );
+
+    this.registerAction(
+      Action.create<DockSuppressionGame>('visibleAction')
+        .execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          maxIterations: 5,
+          do: eachPlayer({
+            do: actionStep({ actions: ['hiddenAction', 'visibleAction'] }),
+          }),
+        }),
+      }),
+    );
+  }
+}
+
+describe('buildActionMetadata: suppressFromDock (LIBX-01, mirrors `manual`)', () => {
+  it('emits suppressFromDock:true for an action built with .suppressFromDock()', () => {
+    const game = new DockSuppressionGame({
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'dock-suppression-test',
+    });
+    game.startFlow();
+    const player = game.getPlayer(1)!;
+
+    const metadata = buildActionMetadata(game, player, ['hiddenAction', 'visibleAction']);
+
+    expect(metadata.hiddenAction.suppressFromDock).toBe(true);
+  });
+
+  it('omits suppressFromDock entirely for an action that did not call .suppressFromDock()', () => {
+    const game = new DockSuppressionGame({
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'dock-suppression-test',
+    });
+    game.startFlow();
+    const player = game.getPlayer(1)!;
+
+    const metadata = buildActionMetadata(game, player, ['hiddenAction', 'visibleAction']);
+
+    expect('suppressFromDock' in metadata.visibleAction).toBe(false);
+  });
+
+  it('does not remove the suppressed action from the action list (metadata-only, not availability)', () => {
+    const game = new DockSuppressionGame({
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'dock-suppression-test',
+    });
+    game.startFlow();
+    const player = game.getPlayer(1)!;
+
+    const metadata = buildActionMetadata(game, player, ['hiddenAction', 'visibleAction']);
+
+    expect(Object.keys(metadata).sort()).toEqual(['hiddenAction', 'visibleAction']);
   });
 });
 

@@ -167,6 +167,21 @@ export class Action<
   }
 
   /**
+   * Hide this action's dock button in the auto-UI ActionPanel. The action
+   * remains fully executable via the board / custom UI (useBoardInteraction) —
+   * this only suppresses the rendered dock button, it does not disable or
+   * unregister the action. Not a security control.
+   *
+   * Use for actions the game exposes exclusively through a custom board
+   * interaction (e.g. drag-drop, click-to-select) where a redundant dock
+   * button would clutter the panel.
+   */
+  suppressFromDock(): this {
+    this.definition.suppressFromDock = true;
+    return this;
+  }
+
+  /**
    * Add a choice selection from a list of values.
    *
    * Use this for string/number choices (e.g., ranks, colors, amounts).
