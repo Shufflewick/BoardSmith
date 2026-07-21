@@ -176,11 +176,12 @@ Plans:
 3. `PlayerToken` glyph ink is not hardcoded white; the chip renders on light seat colors (D30).
 4. The time-travel debug view no longer desyncs `#game-board` such that clicks commit against the live engine (D31).
 5. Each fix has a fail-on-pre-fix / pass-after test (PROC-01).
-**Plans** (suggested breakdown; finalized at plan-phase):
-- Per-action dock suppression + fence/remove `suppress-action-panel` (C.3-lib) [LIBX-01]
-- `loop()` unbounded valve + `maxIterations` observability [LIBX-02]
-- `PlayerToken` glyph-ink contrast fix [LIBX-03]
-- Time-travel debug-view `#game-board` desync fix [LIBX-04]
+**Plans:** 4 plans
+Plans:
+- [ ] 164-01-PLAN.md — `loop()` unbounded valve + `maxIterations` observability [LIBX-02, PROC-01] (wave 1)
+- [ ] 164-02-PLAN.md — `PlayerToken` glyph-ink WCAG contrast fix [LIBX-03, PROC-01] (wave 1)
+- [ ] 164-03-PLAN.md — Per-action dock suppression + fence `suppressActionPanel`→`platformActionPanelEscapeHatch` (C.3-lib) [LIBX-01, PROC-01] (wave 1)
+- [ ] 164-04-PLAN.md — Time-travel debug-view `#game-board` desync fix (displayedState + bridge history guard) [LIBX-04, PROC-01] (wave 2, depends 164-03)
 
 #### Phase 165: Platform Logging Hygiene
 **Goal**: The deployed platform no longer ships verbose `[DRAWDROP]` debug logging to the live production console.
@@ -266,7 +267,7 @@ Plans:
 | 161. Dev-Host Tooling | 0/? | Not started | — |
 | 162. Test-Tooling Ergonomics | 0/? | Not started | — |
 | 163. Engine Space Lifecycle & Element Integrity | 0/? | Not started | — |
-| 164. Library Misc — Action-Panel, Loop, Visual, Debug-View | 0/? | Not started | — |
+| 164. Library Misc — Action-Panel, Loop, Visual, Debug-View | 0/4 | Planned | 4 plans, 2 waves |
 | 165. Platform Logging Hygiene | 0/? | Not started | — |
 | 166. Skills Defects — Session-Lock + UI/Library Boundary | 0/? | Not started | — |
 | 167. Skills Autonomy Rewrite | 0/? | Not started | — |
