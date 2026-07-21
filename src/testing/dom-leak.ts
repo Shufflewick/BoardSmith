@@ -384,6 +384,40 @@ function deriveForbiddenMarkers(game: Game, seat: number): ForbiddenMarker[] {
 const IDENTITY_BEARING_ATTRS = ['aria-label', 'alt', 'title', 'aria-description', 'aria-roledescription'];
 
 /**
+ * A DOM surface string plus the id of the element it is ATTRIBUTED to (the
+ * nearest ancestor, inclusive, carrying `data-element-id` — the same anchor
+ * `useElementAnimation` reads). `undefined` means the surface could not be
+ * attributed to any specific element (no `data-element-id` ancestor at all)
+ * and must be checked conservatively against every marker (D20).
+ */
+interface SurfaceString {
+  value: string;
+  ownerId?: number;
+}
+
+/**
+ * Walk up from `el` (inclusive) to the nearest ancestor carrying
+ * `data-element-id`, returning its numeric value. This is what makes a
+ * scanned surface string attributable to a specific element (D20): every
+ * `AutoUI` renderer (CardRenderer, PieceRenderer, DieRenderer,
+ * SpaceRenderer, ...) stamps its element's own id onto `data-element-id`, so
+ * a `data-*`/aria/img-src/style surface INSIDE that subtree belongs to that
+ * element, not to a same-named sibling elsewhere in the tree.
+ */
+function findOwningElementId(el: Element): number | undefined {
+  let current: Element | null = el;
+  while (current) {
+    const raw = current.getAttribute('data-element-id');
+    if (raw !== null) {
+      const parsed = Number(raw);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    current = current.parentElement;
+  }
+  return undefined;
+}
+
+/**
  * Scan ONLY the surfaces a hidden identity value could realistically leak
  * through: `data-*` attribute values, `img[src]`, inline
  * `style="background-image: url(...)"` fragments (sprite-sheet rendering),
@@ -393,28 +427,34 @@ const IDENTITY_BEARING_ATTRS = ['aria-label', 'alt', 'title', 'aria-description'
  * Deliberately NOT a blind `wrapper.text()` substring search — a bare text
  * scan false-positives on short numeric ranks/suits colliding with visible
  * turn counters, scores, or player names (RESEARCH Pitfall 3).
+ *
+ * Each surface is attributed to its owning element id (D20 — see
+ * {@link findOwningElementId}) so symmetric-deck siblings sharing an
+ * identity `value` (e.g. two same-named cards) remain distinguishable by
+ * WHICH element actually rendered the surface.
  */
-function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): string[] {
+function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceString[] {
   const root = wrapper.element as HTMLElement;
-  const surfaces: string[] = [];
+  const surfaces: SurfaceString[] = [];
 
   const visit = (el: Element) => {
+    const ownerId = findOwningElementId(el);
     for (const attr of Array.from(el.attributes)) {
       if (attr.name.startsWith('data-')) {
-        surfaces.push(attr.value);
+        surfaces.push({ value: attr.value, ownerId });
       }
     }
     for (const attrName of IDENTITY_BEARING_ATTRS) {
       const value = el.getAttribute(attrName);
-      if (value) surfaces.push(value);
+      if (value) surfaces.push({ value, ownerId });
     }
     if (el.tagName === 'IMG') {
       const src = el.getAttribute('src');
-      if (src) surfaces.push(src);
+      if (src) surfaces.push({ value: src, ownerId });
     }
     const style = el.getAttribute('style');
     if (style && style.includes('background-image')) {
-      surfaces.push(style);
+      surfaces.push({ value: style, ownerId });
     }
   };
 
@@ -494,12 +534,19 @@ export async function assertNoHiddenInfoLeak<G extends Game>(
 
     for (const marker of activeMarkers) {
       for (const surface of surfaces) {
-        if (surface.includes(marker.value)) {
+        // D20: a surface attributed to a DIFFERENT element than the marker's
+        // owning element cannot be the marker's leak — it's a same-valued
+        // (e.g. same-named symmetric-deck) sibling's own legitimate
+        // identity. Un-attributed surfaces (no owning `data-element-id`
+        // found) are checked against every marker regardless — never drop a
+        // possible leak just because it couldn't be attributed.
+        if (surface.ownerId !== undefined && surface.ownerId !== marker.elementId) continue;
+        if (surface.value.includes(marker.value)) {
           throw new Error(
             `Hidden-info leak: "${marker.value}"` +
               `${marker.attribute ? ` (attribute "${marker.attribute}")` : ''} ` +
               `from ${marker.elementLabel} is visible in the DOM rendered for seat ${seat}. ` +
-              `Leaked via surface: ${surface.slice(0, 200)}`,
+              `Leaked via surface: ${surface.value.slice(0, 200)}`,
           );
         }
       }
