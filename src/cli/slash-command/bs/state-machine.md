@@ -41,7 +41,9 @@ proposal (proposal acceptance is the light path's ask-equivalent authorization g
 when the human confirms the playtest checklist. Because the light path has no `close` step,
 for light chunks the `playtest` step also performs `close`'s bookkeeping: it records the
 verified commit hash in CHUNK.md (the bisect anchor — see Git Protocol), updates the Status
-line (CHUNK.md first, SKETCH.md second, per Write Order), and rolls up decisions.
+line (CHUNK.md first, SKETCH.md second, per Write Order), rolls up decisions, and — as the
+terminal write — releases the session lock (`Session Lock: none`, see "Session Lock" above and
+`build/close.md` "Bookkeeping Sequence").
 
 ## Authority
 
@@ -59,6 +61,13 @@ This is the TMPL-03 authority rule.
 - Every write must leave the file valid for a cold resume:
   - Round entries (revise rounds, audit rounds) are **append-only** — never overwritten or renumbered.
   - The `Status:` line is updated **last**, after all other content for that write has landed. This means a session that crashes mid-write leaves a file whose `Status:` line still reflects the last fully-completed state, not a half-written one.
+- **`close`'s Bookkeeping Sequence is append-only end-to-end, and its lock release is the terminal
+  write.** Every CHUNK.md/SKETCH.md write `close` makes (the commit-hash record, the decision
+  rollup) is append-only — never a rewrite/overwrite of existing CHUNK.md content — and the very
+  last write of the sequence releases the session lock (see "Session Lock" above and
+  `build/close.md` "Bookkeeping Sequence"). This is the CHUNK.md-overwrite guard: a close that
+  crashes before the release leaves CHUNK.md intact (never half-overwritten) and a resumable lock,
+  never a corrupted state file.
 
 ## Cold-Resume Parse Contract
 
@@ -101,15 +110,29 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
 
 ## Session Lock
 
-- `SKETCH.md` carries a lightweight session lock note: which chunk is in progress, plus a timestamp.
+- `SKETCH.md` carries a lightweight session lock note: which chunk is in progress, plus a
+  session/chunk identity and a timestamp — the exact grammar lives in
+  `templates/SKETCH.template.md`'s `Session Lock:` line and its comment.
+- The timestamp is **always** produced by running `date -u +%Y-%m-%dT%H:%M:%SZ` at the moment the
+  lock is taken or refreshed. It is never fabricated, estimated, or typed from memory — this is
+  the only sanctioned source for the lock's ISO timestamp.
+- The lock line carries a **session/chunk identity** — `"<slug> @ <session-id> — locked at <ISO
+  timestamp>"` — so a lock unambiguously names both which chunk and which session holds it.
 - A second concurrent session, on entry, sees the lock note and **warns the user instead of silently clobbering** the in-progress session's work.
+- **Release:** a cleanly-closed chunk's terminal write sets `Session Lock: none` — see
+  `build/close.md` "Bookkeeping Sequence", whose final numbered step is exactly this release, and
+  this is the terminal write of that sequence. Because a clean close always releases to `none`, a
+  later same-day session that resumes a DIFFERENT next chunk finds no live lock at all and does
+  not warn — this is the root fix for the same-day false-alarm defect (SKILLDEF-01). `none` is the
+  released/no-lock value; only a non-`none` lock line is ever classified against the three
+  outcomes below.
 - **Staleness criterion** (evaluated by consistency-check item 4): a lock is **stale** when its
   timestamp is more than 24 hours old — a crashed or abandoned session, not a live one; the
   session reports it and the user confirms clearing it. A lock naming the same chunk the
   entering session is resuming is **not** stale and does not warn — the session refreshes the
-  lock's timestamp and continues (this is the normal resume path). Any other lock (less than
-  24 hours old, naming different work) is treated as a live concurrent session and triggers
-  the warning above.
+  lock's timestamp (a fresh `date -u +%Y-%m-%dT%H:%M:%SZ` read) and continues (this is the
+  normal resume path). Any other lock (less than 24 hours old, naming different work) is treated
+  as a live concurrent session and triggers the warning above.
 
 ## Git Protocol
 

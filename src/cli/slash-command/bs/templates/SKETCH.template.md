@@ -12,9 +12,19 @@
 Sketch Version: 1
 <!-- Bumped by /bs-insert-chunk on every structural change to the ordered chunk list below. -->
 
-Session Lock: <!-- none | "<slug> — locked at <ISO timestamp>" -->
+Session Lock: <!-- none | "<slug> @ <session-id> — locked at <ISO timestamp>" -->
 <!-- A second concurrent session sees this lock note on entry and warns the user instead of
-     silently clobbering the in-progress session's work. See state-machine.md "Session Lock". -->
+     silently clobbering the in-progress session's work. See state-machine.md "Session Lock".
+
+     The ISO timestamp is ALWAYS produced by running `date -u +%Y-%m-%dT%H:%M:%SZ` at the moment
+     the lock is taken or refreshed — never typed from memory, estimated, or otherwise fabricated;
+     this is the only sanctioned source for the timestamp. `<session-id>` names which session
+     holds the lock (any short session-scoped identifier generated once per session is fine) so
+     the lock unambiguously names both which chunk and which session holds it.
+
+     `none` is the released/no-lock value. A cleanly-closed chunk's `close` step sets this line
+     back to `none` as its terminal write (see build/close.md's "Bookkeeping Sequence") — so a
+     same-day session that later resumes a DIFFERENT next chunk finds no live lock here at all. -->
 
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: "Sketch Version:", "Session Lock:",
      "## Player Counts", "## UI Strategy", "## Ordered Chunk List", "## Variants (deferred)",

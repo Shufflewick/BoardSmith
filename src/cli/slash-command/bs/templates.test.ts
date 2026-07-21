@@ -68,6 +68,19 @@ const TEMPLATE_ENUM_LINE = [...STATUS_ENUM_VALUES, STALE_MARKER].join(' | ');
 /** The exact ASSETS.md ledger header row ("exactly these five columns, in this order"). */
 const ASSETS_HEADER_ROW = '| needed-by-chunk | requested | received | placeholder-in-use | file path |';
 
+/**
+ * SKILLDEF-01: the exact clock-read command that is the ONLY sanctioned source for the session
+ * lock's ISO timestamp — never fabricated. Byte-identical across SKETCH.template.md and
+ * state-machine.md's "Session Lock" spec.
+ */
+const LOCK_CLOCK_READ = 'date -u +%Y-%m-%dT%H:%M:%SZ';
+
+/** SKILLDEF-01: the session/chunk identity field the lock grammar carries. */
+const LOCK_SESSION_ID_MARKER = '@ <session-id>';
+
+/** SKILLDEF-01: the released/no-lock value a clean close writes as its terminal step. */
+const LOCK_RELEASED_VALUE = 'Session Lock: none';
+
 /** Extract a file's actual H2 headings, in document order. */
 function actualHeadings(content: string): string[] {
   return content.split('\n').filter((line) => line.startsWith('## '));
@@ -176,6 +189,32 @@ describe('TMPL-01 — exact step names & status enum', () => {
 
   it('SKETCH.template.md contains the "Variants (deferred)" heading', () => {
     expect(sketchTemplate).toContain('Variants (deferred)');
+  });
+});
+
+describe('SKILLDEF-01 — session lock: clock-read + session identity + release', () => {
+  const sketchTemplate = read('templates/SKETCH.template.md');
+  const stateMachine = read('state-machine.md');
+
+  it('SKETCH.template.md names the exact clock-read command as the only sanctioned timestamp source', () => {
+    expect(sketchTemplate).toContain(LOCK_CLOCK_READ);
+  });
+
+  it('state-machine.md Session Lock spec names the exact clock-read command', () => {
+    expect(stateMachine).toContain(LOCK_CLOCK_READ);
+  });
+
+  it('SKETCH.template.md lock grammar carries a session/chunk identity field', () => {
+    expect(sketchTemplate).toContain(LOCK_SESSION_ID_MARKER);
+  });
+
+  it('state-machine.md Session Lock section documents release-to-none on clean close', () => {
+    expect(stateMachine).toContain(LOCK_RELEASED_VALUE);
+    expect(stateMachine).toMatch(/same-day session that resumes a\s+DIFFERENT next chunk/i);
+  });
+
+  it('SKETCH.template.md keeps `none` as the released/no-lock alternative', () => {
+    expect(sketchTemplate).toMatch(/none \| "<slug> @ <session-id>/);
   });
 });
 
