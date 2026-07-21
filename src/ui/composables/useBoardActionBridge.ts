@@ -277,6 +277,17 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       void startAction(action.name);
     } else if (!skipNoSelections && actionMetadata.value) {
       autoEndArmed = false; // consumed: the sole no-selection action (endTurn) is firing
+      if (action.manual) {
+        // AUTOEXEC-01 (D7): a manual sole no-selection action is auto-STARTED
+        // (surfaced above) but never auto-EXECUTED — the player still takes the
+        // beat themselves (e.g. a draw is not silently played for them).
+        return;
+      }
+      devWarn(
+        `autoexec:manual-hint:${action.name}`,
+        `Action "${action.name}" is the only option and was auto-executed for the player. ` +
+          `If this action should require a deliberate tap (e.g. a draw), mark it .manual().`,
+      );
       void executeAction(action.name, {});
     }
   }

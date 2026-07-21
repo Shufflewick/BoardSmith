@@ -453,6 +453,15 @@ export interface ActionDefinition {
    */
   undoable?: boolean;
   /**
+   * When true, a sole no-selection action is still auto-STARTED (surfaced to the
+   * player) but is never auto-EXECUTED for them — the player must take the beat
+   * themselves (e.g. a draw). Default false preserves the roadmap-locked
+   * auto-execute default for a sole no-selection action. Set via `.manual()`.
+   * This is a human-UI hint only — it does not affect the AI seat, which still
+   * plays a sole legal move unconditionally.
+   */
+  manual?: boolean;
+  /**
    * Help text shown to players on hover/tap. Display-only; never used as a predicate.
    * Set via the `.help(text)` builder method. Propagates into ActionMetadata for both
    * initial and followUp actions.

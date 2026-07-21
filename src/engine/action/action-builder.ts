@@ -150,6 +150,18 @@ export class Action<
   }
 
   /**
+   * Mark this action as manual: when it is the sole no-selection action
+   * available, the shell still auto-STARTS it (surfaces its beat) but never
+   * auto-EXECUTES it for the player. Use for actions like a draw, where the
+   * player should take the beat themselves rather than have it silently
+   * played for them.
+   */
+  manual(): this {
+    this.definition.manual = true;
+    return this;
+  }
+
+  /**
    * Add a choice selection from a list of values.
    *
    * Use this for string/number choices (e.g., ranks, colors, amounts).

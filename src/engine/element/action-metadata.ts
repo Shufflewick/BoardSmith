@@ -71,6 +71,7 @@ export function buildActionMetadata(
       name: actionName,
       prompt: actionDef.prompt,
       help: actionDef.help,
+      ...(actionDef.manual ? { manual: true } : {}),
       selections: pickMetas,
     };
   }
