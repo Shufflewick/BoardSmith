@@ -25,7 +25,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [x] **Phase 160: Simultaneous-Step Correctness** — per-seat undo checkpointing, any-seat undo, `allDone` crash, seat-status/commit leak (D3, D4, D21, D27)
 - [x] **Phase 161: Dev-Host Tooling** — gameOption/preset selection, bare solo start, first-seat orphan race, color palette (D13, D14, D15, D16)
 - [x] **Phase 162: Test-Tooling Ergonomics** — asset-scan comment false-positive + export surface, module-scope `matchMedia`, symmetric-deck leak assert (D17, D18, D19, D20)
-- [ ] **Phase 163: Engine Space Lifecycle & Element Integrity** — sealed/append-only Space, Space removal/re-parent, hidden-count leak, class-name collision, metadata divergence (D22, D23, D24, D25, D26)
+- [x] **Phase 163: Engine Space Lifecycle & Element Integrity** — sealed/append-only Space, Space removal/re-parent, hidden-count leak, class-name collision, metadata divergence (D22, D23, D24, D25, D26)
 - [ ] **Phase 164: Library Misc — Action-Panel, Loop, Visual, Debug-View** — per-action dock suppression + fence `suppress-action-panel` (C.3-lib), unbounded `loop()`, token glyph ink, time-travel desync (D28, D29, D30, D31)
 - [ ] **Phase 165: Platform Logging Hygiene** — stop shipping `[DRAWDROP]` debug logging to the production console (D32)
 - [ ] **Phase 166: Skills Defects — Session-Lock + UI/Library Boundary** — fix the close-ceremony lock seam, fence the game/library boundary, tell the agent not to use the fenced suppress hatch (B.8 ×2, C.3-skills)
@@ -161,10 +161,10 @@ Plans:
 5. `availableActions` and `actionMetadata` cannot diverge into a `start()` "No metadata" board-stranding (D26).
 6. Each item is closed via fix + regression test + adversarial verify (PROC-01).
 **Plans**: 4 plans in 2 waves
-- [ ] 163-01-PLAN.md — Sealed/append-only Space + Space removal/re-parent (lift moveToInternal to GameElement) [SPACE-01, SPACE-02]
-- [ ] 163-02-PLAN.md — Hidden-Space child-count serializer suppression [SPACE-03]
-- [ ] 163-03-PLAN.md — Class-name-collision guard (replace silent registry clobber) [SPACE-04]
-- [ ] 163-04-PLAN.md — availableActions/actionMetadata single-source reconciliation + UI no-op [SPACE-05]
+- [x] 163-01-PLAN.md — Sealed/append-only Space + Space removal/re-parent (lift moveToInternal to GameElement) [SPACE-01, SPACE-02]
+- [x] 163-02-PLAN.md — Hidden-Space child-count serializer suppression [SPACE-03]
+- [x] 163-03-PLAN.md — Class-name-collision guard (replace silent registry clobber) [SPACE-04]
+- [x] 163-04-PLAN.md — availableActions/actionMetadata single-source reconciliation + UI no-op [SPACE-05]
 
 #### Phase 164: Library Misc — Action-Panel, Loop, Visual, Debug-View
 **Goal**: The remaining single-game library defects are fixed — per-action dock suppression (with the blunt `suppress-action-panel` prop fenced behind an explicit escape hatch, delivering feature C.3's library half), an unbounded-game `loop()` valve, a non-white token glyph ink, and a time-travel debug view that doesn't commit clicks against the live engine.

@@ -103,15 +103,15 @@ the fix holds → only then close.**
 
 ### SPACE — Engine Space lifecycle & element integrity (D22–D26) — Phase 163
 
-- [ ] **SPACE-01** (D22, Seven, Design): A sealed / append-only `Space` exists whose `onExit` is not
+- [x] **SPACE-01** (D22, Seven, Design): A sealed / append-only `Space` exists whose `onExit` is not
   bypassed on restore and does not corrupt on reject.
-- [ ] **SPACE-02** (D23, Doom, Limitation): A `Space` can be removed / re-parented so slots can be torn
+- [x] **SPACE-02** (D23, Doom, Limitation): A `Space` can be removed / re-parented so slots can be torn
   down (no forced slot-outlives-part model).
-- [ ] **SPACE-03** (D24, Seven, Correctness): A hidden `Space` no longer leaks its exact child count via
+- [x] **SPACE-03** (D24, Seven, Correctness): A hidden `Space` no longer leaks its exact child count via
   the serializer (retiring the `concealFromEverySeat` smell).
-- [ ] **SPACE-04** (D25, Seven, Pit-of-failure): An element class whose name collides with a library class
+- [x] **SPACE-04** (D25, Seven, Pit-of-failure): An element class whose name collides with a library class
   is not silently renamed (`Hand`→`Hand2`) — the collision is surfaced actionably.
-- [ ] **SPACE-05** (D26, Lanternfall, Med): `availableActions` and `actionMetadata` cannot diverge such
+- [x] **SPACE-05** (D26, Lanternfall, Med): `availableActions` and `actionMetadata` cannot diverge such
   that `start()` throws "No metadata" and strands the board.
 
 ### LIBX — Library misc: action-panel, loop, visual, debug-view (D28, D29, D30, D31 + C.3) — Phase 164

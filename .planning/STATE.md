@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: Phase 162 complete (verification passed 5/5; 2 review Criticals fixed) — next is Phase 163
-stopped_at: Completed Phase 162 (2 plans + critical-fix gap-closure, VERIFICATION passed)
-last_updated: "2026-07-21T07:00:00.000Z"
-last_activity: "2026-07-20 — Phase 159 (MCTS Soundness + Dynamic multiSelect) shipped: shared resolveMultiSelect helper makes function-valued multiSelect enumerate in MCTS AND panel-complete (C.2, single-source, fail-loud); MCTS bot now clones a per-seat REDACTED view (toJSONForPlayer, opt-in forSeat) at BOTH the root decision and the simulation clone, with a simultaneousBaseline pre-reveal snapshot preventing co-decider leaks (D9/AI-01, D8/AI-02). Deep review caught 2 real Criticals the verifier missed (root enumeration on full-truth; hidden-element flow-var corruption on restore) — both fixed RED-first incl. an hiddenIdRemap for flow-var relinking + a second deeper executeForEach instance. 2842 tests green; tsc 46 (below baseline). WR-01 + MCTS-undo limitation deferred (see backlog)."
+status: verifying
+stopped_at: context exhaustion at 75% (2026-07-21)
+last_updated: "2026-07-21T19:03:33.147Z"
+last_activity: "2026-07-21 — Phase 161 (Dev-Host Tooling) shipped: gameOption/preset selection via CLI flags (--game-option/--preset) + a DevHost lobby selector, host-authoritative validation with type coercion (D13); bare solo start defaults --players to minPlayers (D14); first-seat orphan race fixed by post-await seat reconciliation against connected clients, reclaimable-not-permanent (D15); GameDefinition.colorPalette as the canonical palette source with gameDefinition→boardsmith.json→engine fallback (D16). Deep review caught 2 real Blockers in the new D13 feature (typed-option coercion, preset player-count arrays) + fixed. 2923 tests green."
 progress:
   total_phases: 15
-  completed_phases: 8
-  total_plans: 21
-  completed_plans: 21
-  percent: 53
+  completed_phases: 9
+  total_plans: 25
+  completed_plans: 25
+  percent: 60
 ---
 
 # Project State
@@ -21,11 +21,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–162 shipped (verifications passed); next is Phase 163 (Engine Space Lifecycle & Element Integrity)
+**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–163 shipped (verifications passed); next is Phase 164 (Library Misc)
 
 ## Current Position
 
-Phase: 163 (Engine Space Lifecycle & Element Integrity) — next up. Phases 155–162 complete (8/15, 53%).
+Phase: 164 (Library Misc — Action-Panel, Loop, Visual, Debug-View) — next up. Phases 155–163 complete (9/15, 60%).
 Plan: —
 Status: Phase 161 verification passed (5/5); code review resolved (2 Blockers fixed: CR-01 preset player-count now resizes seat arrays consistently, CR-02 gameOption values coerced to declared type at the host validation boundary; WR-01/02/03 + IN-01 also fixed — WR-02 join-during-start covered by extending startGame's reinit loop, NOT a starting-guard reject, to preserve the D15 reclaim path)
 Last activity: 2026-07-21 — Phase 161 (Dev-Host Tooling) shipped: gameOption/preset selection via CLI flags (--game-option/--preset) + a DevHost lobby selector, host-authoritative validation with type coercion (D13); bare solo start defaults --players to minPlayers (D14); first-seat orphan race fixed by post-await seat reconciliation against connected clients, reclaimable-not-permanent (D15); GameDefinition.colorPalette as the canonical palette source with gameDefinition→boardsmith.json→engine fallback (D16). Deep review caught 2 real Blockers in the new D13 feature (typed-option coercion, preset player-count arrays) + fixed. 2923 tests green.
@@ -96,6 +96,7 @@ Carried forward from v4.0 (still deferred, separate repo): ShufflewickPub host s
 **Still deferred at v4.7 close (2026-07-06):** the same pre-existing open artifacts remain non-blocking backlog — `knowledge-base` (stale debug/reference file), and todos `dev-host-ai-open-seat-not-auto-playing`, `dev-host-debug-toggle-panel-not-opening`, `dev-standalone-shell-height-gap`, `v4-slate-token-and-a11y-polish`. None were in v4.7 scope (the milestone deferred the AI insta-acknowledge race and broader dev-host work by design). Note: the dev-host-ai-open-seat and standalone-shell-height todos are the same v4.0 carry-forwards listed above.
 
 **New backlog opened during v4.8 (2026-07-20):**
+
 - **v4.8-WR01 (Phase 159 code-review Warning, deferred):** `buildActionMetadata` doesn't thread accumulated selection args (`knownArgs` always `{}`), so a *function-valued* `multiSelect` that reads an *earlier sibling selection's* value resolves differently for the panel (`args:{}`) than for MCTS (real `currentArgs`) — a narrow C.2 parity gap. The explicitly-declared dependent case (`multiSelectByDependentValue`) already works; only function-valued-reading-prior-args diverges. Fixing it properly needs a panel dynamic-refresh of multiSelect on dependent-arg change (beyond Phase 159's metadata plumbing). Non-blocking; core C.2 delivered.
 - **v4.8-MCTS-UNDO (surfaced by Phase 159-03, out of scope there):** MCTS incremental `undoCommands` reverts only element-tree commands, NOT plain-property / flow-bookkeeping mutations — `game.finish()`'s `settings.winners`/`phase` and the flow engine's `awaitingPlayers[].completed`. So after a simulated branch that finishes a game or completes a simultaneous decider, that bookkeeping sticks and subsequent root-child re-expansions are wrongly rejected as no-ops. Worked around in 159 test fixtures (objective-checker + non-terminal loop). Phase 160 fixed the ENGINE/session undo side (D3 getState deep-copy); this MCTS `undoCommands` path remains — Phase 169 re-check.
 - **v4.8-SIM-LASTACTOR-UNDO (Phase 160 code-review Warning, deferred):** the seat whose action COMPLETES a simultaneous step loses its per-seat undo window one tick sooner than earlier co-deciders — on `allDone` the engine clears `awaitingPlayers` to `[]`, so `computeUndoEligibility` immediately falls back to the sequential branch for that last actor. This is entangled with the whole-step-undo semantics the user explicitly DECLINED (per-seat was chosen); "undo after the step already completed" bleeds into that declined territory. Asymmetric UX edge, not a correctness bug; no data loss. Revisit only if playtest surfaces it.
@@ -280,8 +281,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-06T16:18:40.577Z
-Stopped at: Completed 153-01-PLAN.md
+Last session: 2026-07-21T19:03:33.140Z
+Stopped at: context exhaustion at 75% (2026-07-21)
 Resume file: 
 None
 
