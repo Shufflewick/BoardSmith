@@ -40,7 +40,7 @@ the fix holds → only then close.**
 
 ### AUTOEXEC — Sole-option auto-execute (D7) — Phase 156
 
-- [ ] **AUTOEXEC-01** (D7, 3 games, Blocker): A sole/single-option action is auto-*started* but never
+- [x] **AUTOEXEC-01** (D7, 3 games, Blocker): A sole/single-option action is auto-*started* but never
   auto-*executed* — the shell never plays the game for the player (no silent auto-draws that delete the
   draw beat). Delivered as `ActionBuilder.manual()` (auto-start, never auto-execute).
 

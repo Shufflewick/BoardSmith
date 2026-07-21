@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: Phase 155 complete (verification passed 5/5) — next is Phase 156
-stopped_at: Completed Phase 155 (all 5 plans, VERIFICATION passed)
-last_updated: "2026-07-20T23:59:00.000Z"
-last_activity: "2026-07-20 — Phase 155 (Undo/Rewind Family Correctness) shipped: UNDO-01..04 + PROC-01, 5 plans, 193/193 files / 2756 tests green; 2 latent bugs found by adversarial pass (toJSON seq-loss, injected-vs-created animation-events site)"
+status: Phase 156 complete (verification passed 3/3) — next is Phase 157
+stopped_at: Completed Phase 156 (1 plan, VERIFICATION passed, review resolved)
+last_updated: "2026-07-21T00:30:00.000Z"
+last_activity: "2026-07-20 — Phase 156 (Sole-Option Auto-Execute) shipped: ActionBuilder.manual() suppresses silent auto-execute of a sole no-selection action (D7/AUTOEXEC-01), dev-warning honors Pit-of-Success on the un-manual() path, 2772 tests green; code review WR-01/WR-02 resolved"
 progress:
   total_phases: 15
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
-  percent: 7
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 6
+  percent: 13
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.8 Battery Post-Mortem Fixes — Phase 155 shipped (verification passed 5/5); next is Phase 156 (Sole-Option Auto-Execute)
+**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–156 shipped (verifications passed); next is Phase 157 (Game-Over UI + Forward Exits)
 
 ## Current Position
 
-Phase: 156 (Sole-Option Auto-Execute) — next up. Phase 155 complete.
+Phase: 157 (Game-Over UI + Forward Exits) — next up. Phases 155–156 complete.
 Plan: —
-Status: Phase 155 verification passed (5/5); code review in flight
-Last activity: 2026-07-20 — Phase 155 (Undo/Rewind Family Correctness) shipped end-to-end: shared server-side undo guard (`.notUndoable()` + `finished` fence at all 4 executor entry points), durable `executeBarrierIndex`, `moveCount` authoritative + branch-C fallback deleted ("one undo = one action-step"), server-monotonic animation seq + client watermark reset. 5 plans, 193/193 files / 2756 tests green.
+Status: Phase 156 verification passed (3/3); code review resolved (WR-01/WR-02)
+Last activity: 2026-07-20 — Phase 156 (Sole-Option Auto-Execute) shipped: `ActionBuilder.manual()` suppresses the silent auto-execute of a sole no-selection action (D7); metadata threaded through both builders; dev-mode one-time warning on the un-`manual()` path honors Pit-of-Success while keeping the roadmap-locked default. Deferred (pre-existing, not this phase): IN-01 `ActionMetadata` `help`-field drift between `protocol.ts` and `session/types.ts`.
 
 ## Milestones
 
