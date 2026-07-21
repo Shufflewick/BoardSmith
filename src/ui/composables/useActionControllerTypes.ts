@@ -223,6 +223,19 @@ export interface UseActionControllerOptions {
   actionMetadata: Ref<Record<string, ActionMetadata> | undefined>;
   /** Is it this player's turn. Accepts Ref with potentially undefined value for test compatibility. */
   isMyTurn: Ref<boolean | undefined> | Ref<boolean>;
+  /**
+   * The acting seat's OWN `completed` flag for the current simultaneous step
+   * (from `flowState.awaitingPlayers[playerSeat].completed`; `false`/`undefined`
+   * outside a simultaneous step). This is the SHARED chokepoint for the D27
+   * commit-leak gate (T-160-27 / BLOCKER-160): `execute()` and
+   * `executeCurrentAction()` both refuse once this is true, so every consumer —
+   * ActionPanel AND every custom/drag-drop UI routed through
+   * `useBoardActionBridge` — inherits the same guard from one source. A seat
+   * that already committed this step can never re-submit through either path,
+   * even if `isMyTurn`/`availableActions` are stale (haven't yet reflected the
+   * seat's own commit).
+   */
+  completed?: Ref<boolean | undefined> | ComputedRef<boolean | undefined>;
   /** Game view (for enriching validElements with full element data) */
   gameView?: Ref<GameElement | null | undefined>;
   /** Player seat (needed for fetching choices/repeating features) */

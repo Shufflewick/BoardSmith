@@ -145,6 +145,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     availableActions,
     actionMetadata,
     isMyTurn,
+    completed,
     gameView,
     playerSeat,
     autoFill: autoFillOption = true,
@@ -192,6 +193,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const getAutoExecute = (): boolean => {
     return typeof autoExecuteOption === 'boolean' ? autoExecuteOption : autoExecuteOption.value;
   };
+
+  // D27 commit-leak gate (T-160-27 / BLOCKER-160): the acting seat's own
+  // `completed` flag for the current simultaneous step, checked at the SHARED
+  // chokepoint below (execute() / executeCurrentAction()) so ActionPanel and
+  // every custom UI routed through useBoardActionBridge inherit the same
+  // refusal — no separate per-consumer gate to fall out of sync.
+  const isCommitted = (): boolean => !!completed?.value;
 
   // === State ===
   const currentAction = ref<string | null>(null);
@@ -995,6 +1003,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { success: false, error: 'Action already executing' };
     }
 
+    if (isCommitted()) {
+      return { success: false, error: 'You have already submitted your action for this step' };
+    }
+
     const actionName = currentAction.value;
     const args = buildServerArgs();
     const seq = actionStartSeq;
@@ -1040,6 +1052,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   async function execute(actionName: string, args: Record<string, unknown> = {}): Promise<ActionResult> {
     if (!isMyTurn.value) {
       return { success: false, error: 'Not your turn' };
+    }
+
+    if (isCommitted()) {
+      return { success: false, error: 'You have already submitted your action for this step' };
     }
 
     if (!availableActions.value?.includes(actionName)) {

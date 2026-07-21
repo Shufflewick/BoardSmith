@@ -536,6 +536,11 @@ const actionController = useActionController({
   availableActions,
   actionMetadata,
   isMyTurn,
+  // D27 commit-leak gate (T-160-27 / BLOCKER-160): shared chokepoint so
+  // ActionPanel AND every custom UI routed through useBoardActionBridge
+  // refuse a re-submit once this seat has committed this simultaneous step —
+  // see useActionController's `completed` option doc for the full rationale.
+  completed: myCompleted,
   gameView,
   playerSeat,
   // Use autoEndTurn ref for both autoFill and autoExecute

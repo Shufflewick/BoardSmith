@@ -533,10 +533,15 @@ export class FlowEngine<G extends Game = Game> {
       // incomplete and able to act. If that's because every awaiting seat
       // has already individually completed (or there are no awaiting seats
       // at all), there is nothing left to ever award this resume to -- the
-      // step must finalize here (consulting allDone same as the normal
-      // post-action path) rather than throw. This is the SOURCE fix: it
-      // closes the gap that produces the crash instead of merely guarding
-      // the throw below.
+      // step must finalize here rather than throw. This is the SOURCE fix:
+      // it closes the gap that produces the crash instead of merely
+      // guarding the throw below.
+      // W3 (160-REVIEW): this branch force-completes UNCONDITIONALLY --
+      // it does NOT consult `config.allDone`, unlike the normal post-action
+      // completion path (which checks allDone before finalizing). By the
+      // time every awaiting seat is individually `completed`, there is no
+      // remaining seat state for `allDone` to usefully evaluate against, so
+      // skipping it here is intentional, not an oversight.
       const noEligibleActor = this.awaitingPlayers.length === 0
         || this.awaitingPlayers.every(p => p.completed);
       if (noEligibleActor) {
@@ -662,8 +667,14 @@ export class FlowEngine<G extends Game = Game> {
       // snapshot.ts createActionCheckpoint) would otherwise see a LATER
       // seat's completion retroactively rewrite an EARLIER capture. Mirrors
       // the restore-side copy already at restoreFullState (below).
+      // W1 (160-REVIEW): also clone the nested `availableActions` array, not
+      // just the per-seat object shell -- `{ ...p }` alone still shares that
+      // array BY REFERENCE with the private `FlowEngine.awaitingPlayers`
+      // entry. Safe today only because every mutation site reassigns rather
+      // than `.push()`/`.splice()`s it in place; cloning here means a future
+      // in-place mutation can't silently reintroduce the D3 aliasing bug.
       awaitingPlayers: this.awaitingPlayers.length > 0
-        ? this.awaitingPlayers.map(p => ({ ...p }))
+        ? this.awaitingPlayers.map(p => ({ ...p, availableActions: [...p.availableActions] }))
         : undefined,
       currentPhase: this.currentPhase,
     };
@@ -810,9 +821,10 @@ export class FlowEngine<G extends Game = Game> {
 
     this.availableActions = state.availableActions ? [...state.availableActions] : [];
 
-    // Restore awaiting players for simultaneous actions
+    // Restore awaiting players for simultaneous actions. W1 (160-REVIEW): clone
+    // the nested `availableActions` array too -- mirrors the getState() copy.
     this.awaitingPlayers = state.awaitingPlayers
-      ? state.awaitingPlayers.map(p => ({ ...p }))
+      ? state.awaitingPlayers.map(p => ({ ...p, availableActions: [...p.availableActions] }))
       : [];
 
     // Restore phase
