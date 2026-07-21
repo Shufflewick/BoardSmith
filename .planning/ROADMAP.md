@@ -97,10 +97,10 @@ Plans:
 1. Function-valued / dynamic `multiSelect` enumerates in MCTS (no "No available moves" throw) AND completes through the action-panel auto-UI without falling back to single-select — closing run-003 BSR-12 and Doom BS-5, and delivering feature C.2 (panel-completable multi-element selection) natively (D9).
 2. An MCTS bot for a hidden-info game clones only a per-seat redacted view and does not sequentialize simultaneous reveals — verified as non-exploitable where the naive bot was (D8).
 3. Both fixes carry tests that fail on pre-fix code and pass after; the previously "un-enumerable so silently skipped" damage case now enumerates and is exercised (PROC-01 + fail-loud principle).
-**Plans** (suggested breakdown; finalized at plan-phase):
-- Dynamic `multiSelect` enumeration support (MCTS) + "un-enumerable silently skipped" fail-loud test [AI-01]
-- Panel-completable multi-element selection (auto-UI, `buildPickMetadata`) — delivers C.2 [AI-01]
-- Redacted-view MCTS clone + simultaneous-reveal soundness + exploitability test [AI-02]
+**Plans** (3 plans; wave 1 = 01+03 parallel, wave 2 = 02):
+- [ ] 159-01-PLAN.md — Dynamic `multiSelect` enumeration in MCTS + shared `resolveMultiSelect` helper + fail-loud test [AI-01, PROC-01] (wave 1)
+- [ ] 159-02-PLAN.md — Panel-completable multi-element selection via `buildPickMetadata` — delivers C.2 [AI-01, PROC-01] (wave 2, depends on 01's helper)
+- [ ] 159-03-PLAN.md — Redacted-view MCTS clone (`toJSONForPlayer`) + simultaneous-reveal soundness + exploitability test [AI-02, PROC-01] (wave 1)
 
 #### Phase 160: Simultaneous-Step Correctness
 **Goal**: Simultaneous steps — the battery's #2 structural weak point — are correct under undo and status display: per-seat `completed` is checkpointed, undo works for any seat, an empty `awaitingPlayers` with `allDone` doesn't crash, and the shell never shows a contradictory turn status or leaks a commit.
