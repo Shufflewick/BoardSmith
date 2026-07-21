@@ -122,6 +122,10 @@ export {
 // ActionBuilder — multi-step / dependent-selection builder (TEST-05)
 export { ActionBuilder } from './action-builder.js';
 
+// Asset-reachability build gate (TOOL-02) — additive re-export so games can
+// call the build/test gate without hand-rolling a second scanner.
+export { scanAssetReachability, type AssetViolation } from '../cli/lib/asset-scan.js';
+
 // Animation test-mode + trace (ANIM-01)
 export {
   enableAnimationTestMode,
