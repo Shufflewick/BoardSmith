@@ -73,9 +73,9 @@ Plans:
 1. A game can suppress/replace the shell `GameOverCard` via a `#game-over` slot / `providesOwnGameOverUI` flag, and the default card no longer mislabels a no-winner ending; the card is dismissable (D10, 3 games).
 2. Rematch / New Game / dev-restart from a finished game actually restart the game (D11, 2 games).
 3. Both are covered by tests that fail on pre-fix behavior (unsuppressable card; inert forward exit) and pass after (PROC-01).
-**Plans** (suggested breakdown; finalized at plan-phase):
-- `#game-over` slot / `providesOwnGameOverUI` flag + no-winner labeling + dismiss + tests [ENDGAME-01]
-- Forward-exit wiring (Rematch/New Game/dev-restart) + regression test [ENDGAME-02]
+**Plans** (2 plans):
+- [ ] 157-01-PLAN.md — `#game-over` slot + `providesOwnGameOverUI` + draw/unknown labeling + dismiss + isDraw threading (wave 1) [ENDGAME-01, PROC-01]
+- [ ] 157-02-PLAN.md — forward-exit routing (Rematch/New Game/dev-restart/DebugPanel) + relaxed restart guard + DevHost debug:restart handler (wave 2, depends 157-01) [ENDGAME-02, PROC-01]
 
 #### Phase 158: Auto-Zoom Re-Fit
 **Goal**: `useAutoZoom` keeps the board fitted as the layout changes — it re-fits on dock/board/region resize instead of fitting once against a stale layout and leaving regions unreachable.
