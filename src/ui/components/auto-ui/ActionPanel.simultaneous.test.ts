@@ -248,7 +248,7 @@ describe('ActionPanel executeAction — commit-leak gate on own completed flag (
     });
 
     // Confirm the pre-flip state genuinely can execute (sanity, not yet clicked).
-    expect(wrapper.get('[data-bs-action="confirm"]').exists()).toBe(true);
+    expect(wrapper.find('[data-bs-action="confirm"]').exists()).toBe(true);
 
     // Flip completed BEFORE the click lands (the race).
     await wrapper.setProps({ completed: true });
