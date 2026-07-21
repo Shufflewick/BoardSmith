@@ -84,9 +84,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
 1. When the dock lands on the board or a region resizes, `useAutoZoom` re-fits so all regions stay reachable (D12, 3 games) — no manual Fit button needed.
 2. A regression test (or deterministic layout-change harness) reproduces the stale-fit unreachable-region symptom pre-fix and passes after (PROC-01).
-**Plans** (suggested breakdown; finalized at plan-phase):
-- Re-fit-on-resize (dock/board/region observers) in `useAutoZoom` [ZOOM-01]
-- Layout-change regression test + adversarial verify [ZOOM-01, PROC-01]
+**Plans:** 1 plan
+
+Plans:
+- [ ] 158-01-PLAN.md — Persistent region-obs + dock-watch rAF-coalesced re-fit, `userControlled` guard, RED→GREEN→adversarial [ZOOM-01, PROC-01] (wave 1)
 
 #### Phase 159: MCTS Soundness + Dynamic multiSelect
 **Goal**: AI opponents are unblocked and sound — dynamic/function-valued `multiSelect` enumerates and drives through the panel natively (delivering feature C.2), and MCTS reasons over a per-seat redacted view rather than cloning un-redacted state and sequentializing simultaneous reveals.
