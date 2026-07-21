@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
 import {
   DevFlagError,
   parsePositiveInt,
@@ -9,6 +10,8 @@ import {
   multiplayerBannerLine,
   formatUnknownKeyWarnings,
   shouldOpenBrowser,
+  resolvePlayerCount,
+  resolveColorPalette,
 } from './dev.js';
 
 /**
@@ -155,6 +158,44 @@ describe('formatUnknownKeyWarnings (CLIX-02: dev startup warns loudly, does not 
   it('returns no warnings for a clean config with only allowed keys', () => {
     const warnings = formatUnknownKeyWarnings({ name: 'x', displayName: 'X', description: 'd' });
     expect(warnings).toEqual([]);
+  });
+});
+
+describe('resolvePlayerCount (D14/DEVHOST-02: default --players to gameDefinition.minPlayers, not a literal 2)', () => {
+  it('defaults to minPlayers=1 for a solo game when --players is unset (bare `dev` on minPlayers=1,maxPlayers=1 must NOT error)', () => {
+    expect(resolvePlayerCount(undefined, 1, 1)).toBe(1);
+  });
+
+  it('defaults to minPlayers=2 when --players is unset on a min=2 game', () => {
+    expect(resolvePlayerCount(undefined, 2, 4)).toBe(2);
+  });
+
+  it('still ERRORS naming the bound when an EXPLICIT --players is out of range (range-check not weakened)', () => {
+    expect(() => resolvePlayerCount('5', 1, 1)).toThrow(DevFlagError);
+    expect(() => resolvePlayerCount('5', 1, 1)).toThrow(/1/);
+  });
+});
+
+describe('resolveColorPalette (D16/DEVHOST-04: gameDefinition.colorPalette -> boardsmith.json -> engine default)', () => {
+  it('honors gameDefinition.colorPalette when config has none', () => {
+    const palette = resolveColorPalette(
+      { colorPalette: [{ id: 'a', hex: '#111111', label: 'A' }] },
+      {},
+    );
+    expect(palette).toEqual([{ value: '#111111', label: 'A' }]);
+  });
+
+  it('prefers gameDefinition.colorPalette over boardsmith.json config.colorPalette', () => {
+    const palette = resolveColorPalette(
+      { colorPalette: [{ id: 'a', hex: '#222222', label: 'A' }] },
+      { colorPalette: [{ value: '#999999', label: 'Config' }] },
+    );
+    expect(palette).toEqual([{ value: '#222222', label: 'A' }]);
+  });
+
+  it('falls back to the engine DEFAULT_COLOR_PALETTE when neither source declares a palette', () => {
+    const palette = resolveColorPalette({}, {});
+    expect(palette.map((p) => p.value)).toEqual([...DEFAULT_COLOR_PALETTE]);
   });
 });
 
