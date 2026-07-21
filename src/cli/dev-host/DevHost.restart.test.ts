@@ -76,6 +76,7 @@ const TEST_CONFIG: DevHostConfig = {
   aiLevel: '',
   gameOptions: [],
   playerOptions: [],
+  presets: [],
   colorPalette: [],
   gameUrl: 'http://localhost:3000/game',
 };

@@ -25,6 +25,8 @@ type RuntimeExecuteOp = (
   hostOptions?: { teachingDisabled?: boolean },
 ) => Promise<OpResult>;
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
+import { validateGameOptionSelection } from '../dev-host/config-types.js';
+import type { GameOptionDefinition, GamePreset } from '../../session/types.js';
 
 interface DevOptions {
   port: string;
@@ -37,6 +39,10 @@ interface DevOptions {
   lockTeaching?: boolean;
   /** Commander's negatable `--no-open` sets this to `false`; unset/true auto-opens. */
   open?: boolean;
+  /** D13/DEVHOST-01: repeatable `--game-option key=value`. */
+  gameOption?: string[];
+  /** D13/DEVHOST-01: `--preset name` applies a declared preset's whole bundle. */
+  preset?: string;
 }
 
 /** Thrown by the pure dev.ts flag/host validators below; `devCommand` catches
@@ -249,6 +255,65 @@ export function resolveColorPalette(
 }
 
 /**
+ * D13/DEVHOST-01: parse repeatable `--game-option key=value` flags into a flat
+ * record, splitting each entry on the FIRST "=" (a value may itself contain
+ * "="). Fail-loud (T-161-03) on an entry missing "=" instead of silently
+ * dropping it — matches the `parsePositiveInt`/`parseAiSeats` idiom.
+ */
+export function parseGameOptionFlags(raw: string[] | undefined): Record<string, string> {
+  if (!raw) return {};
+  const result: Record<string, string> = {};
+  for (const entry of raw) {
+    const eq = entry.indexOf('=');
+    if (eq === -1) {
+      throw new DevFlagError(
+        `Error: --game-option must be "key=value", got "${entry}" (missing "=").`,
+      );
+    }
+    result[entry.slice(0, eq)] = entry.slice(eq + 1);
+  }
+  return result;
+}
+
+/**
+ * D13/DEVHOST-01: merge `gameDefinition.gameOptions` with `boardsmith.json`'s
+ * `gameOptions` — gameDefinition is AUTHORITATIVE on a key conflict. Replaces
+ * the previous replace-not-merge spread (`...(gameOptions && { gameOptions })`)
+ * that silently dropped one source's options whenever the other declared any.
+ */
+export function mergeGameOptionDefinitions(
+  gameDefOptions: Record<string, GameOptionDefinition> | undefined,
+  configOptions: Record<string, GameOptionDefinition> | undefined,
+): Record<string, GameOptionDefinition> {
+  return { ...configOptions, ...gameDefOptions };
+}
+
+/** D13/DEVHOST-01: a preset's resolved options bundle + optional player count. */
+export interface ResolvedPreset {
+  options: Record<string, unknown>;
+  /** Present only when the preset declares `players` (its length is the count). */
+  playerCount?: number;
+}
+
+/**
+ * D13/DEVHOST-01: look up a preset by name (`--preset name` or the host
+ * `configure` message's `preset` field). Applying a preset is a shortcut for
+ * setting its underlying options — returns the WHOLE bundle (never a partial
+ * pick) plus the preset's player count when it declares `players`. Throws an
+ * actionable `DevFlagError` naming the unknown preset and the declared names.
+ */
+export function resolvePreset(presets: GamePreset[] | undefined, name: string): ResolvedPreset {
+  const preset = (presets ?? []).find((p) => p.name === name);
+  if (!preset) {
+    const known = (presets ?? []).map((p) => p.name).join(', ') || '(none declared)';
+    throw new DevFlagError(`Error: --preset "${name}" is not declared by this game. Declared presets: ${known}.`);
+  }
+  const resolved: ResolvedPreset = { options: { ...preset.options } };
+  if (preset.players?.length) resolved.playerCount = preset.players.length;
+  return resolved;
+}
+
+/**
  * Convert boardsmith.json array-format options to the object-keyed format
  * that GameDefinition uses. The array format uses { name, type, ... } entries,
  * while the object format uses { [name]: { type, ... } }.
@@ -441,6 +506,9 @@ function buildDevConfig(args: {
     aiLevel: args.aiLevel,
     gameOptions: optionRecordToList(gd.gameOptions),
     playerOptions: optionRecordToList(gd.playerOptions),
+    // D13/DEVHOST-01: gameDefinition.presets, surfaced for the first time so a
+    // browser selector (Plan 03) can render them and apply one via `configure`.
+    presets: gd.presets ?? [],
     colorPalette: args.colorPalette,
     gameUrl: GAME_IFRAME_PATH,
     teachingDisabled: args.teachingDisabled,
@@ -566,10 +634,16 @@ export async function devCommand(options: DevOptions): Promise<void> {
     minPlayers = gameDefinition.minPlayers;
     maxPlayers = gameDefinition.maxPlayers;
 
-    // boardsmith.json is the single source of truth for option definitions.
-    const gameOptions = config.gameOptions
-      ? configOptionsToRecord<import('../../session/types.js').GameOptionDefinition>(config.gameOptions)
+    // D13/DEVHOST-01: merge gameDefinition.gameOptions with boardsmith.json's
+    // gameOptions — gameDefinition is AUTHORITATIVE on a key conflict. This
+    // REPLACES the previous replace-not-merge spread, which silently dropped
+    // whichever source's options weren't chosen. gameDefinition.presets are
+    // read here for the first time (never read before).
+    const configGameOptions = config.gameOptions
+      ? configOptionsToRecord<GameOptionDefinition>(config.gameOptions)
       : undefined;
+    const gameOptions = mergeGameOptionDefinitions(gameDefinition.gameOptions, configGameOptions);
+    const presets: GamePreset[] = gameDefinition.presets ?? [];
 
     let playerOptions = config.playerOptions
       ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
@@ -588,7 +662,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
       ...gameDefinition,
       minPlayers,
       maxPlayers,
-      ...(gameOptions && { gameOptions }),
+      gameOptions,
+      presets,
       ...(playerOptions && { playerOptions }),
     };
 
@@ -598,12 +673,26 @@ export async function devCommand(options: DevOptions): Promise<void> {
     process.exit(1);
   }
 
+  // D13/DEVHOST-01: --game-option/--preset resolve into the SELECTED gameOptions
+  // (flag beats preset beats default). A preset's player count is honored only
+  // when --players was NOT explicitly passed (an explicit --players always wins).
+  const gameOptionFlags = exitOnDevFlagError(() => parseGameOptionFlags(options.gameOption));
+  const presetBundle =
+    options.preset !== undefined
+      ? exitOnDevFlagError(() => resolvePreset(gameDefinition.presets, options.preset as string))
+      : undefined;
+  const selectedGameOptions: Record<string, unknown> = { ...presetBundle?.options, ...gameOptionFlags };
+  exitOnDevFlagError(() =>
+    validateGameOptionSelection(optionRecordToList(gameDefinition.gameOptions), selectedGameOptions),
+  );
+  const rawPlayers = options.players ?? (presetBundle?.playerCount !== undefined ? String(presetBundle.playerCount) : undefined);
+
   // CLIX-06 / F34 (Pitfall 3): out-of-range --players now ERRORS (naming the
   // bound) instead of silently clamping, and --ai seats are validated against
   // this EFFECTIVE count, not the raw pre-clamp CLI value — both checks must
   // run here, after minPlayers/maxPlayers are known. D14: an UNSET --players
   // defaults to minPlayers instead of a hardcoded '2'.
-  const effectivePlayerCount = exitOnDevFlagError(() => resolvePlayerCount(options.players, minPlayers, maxPlayers));
+  const effectivePlayerCount = exitOnDevFlagError(() => resolvePlayerCount(rawPlayers, minPlayers, maxPlayers));
   exitOnDevFlagError(() => validateAiSeats(aiPlayers, effectivePlayerCount));
 
   const devConfig = buildDevConfig({
@@ -728,7 +817,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
       // Required so hint/heatmapToggle ops can run MCTS and extract board targets.
       ai: gameDefinition.ai,
     };
-    const baseGameOptions = Object.fromEntries(devConfig.gameOptions.map((o) => [o.id, o.default]));
+    // D13/DEVHOST-01: defaults, overlaid by the resolved --preset bundle, then
+    // by --game-option flags (flag beats preset beats default) — replaces the
+    // frozen `.default`-only computation.
+    const optionDefaults = Object.fromEntries(devConfig.gameOptions.map((o) => [o.id, o.default]));
+    const baseGameOptions = { ...optionDefaults, ...selectedGameOptions };
     const clients = new Map<string, WebSocket>();
     const mpHost = new MultiplayerHost({
       playerCount: effectivePlayerCount,
@@ -737,6 +830,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
       designatedAiSeats: aiPlayers,
       colorPalette,
       baseGameOptions,
+      // D13/DEVHOST-01: lets a host `configure` wire message (Plan 03's
+      // selector) validate and apply a selection after startup.
+      declaredGameOptions: devConfig.gameOptions,
+      presets: devConfig.presets,
       teachingDisabled,
       executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
         runExecuteOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),

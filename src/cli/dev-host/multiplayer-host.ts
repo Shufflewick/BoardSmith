@@ -16,8 +16,9 @@
  */
 
 import { createDevSession, type DevSession } from './bridge.js';
-import type { Op, OpResult } from '../../session/index.js';
+import type { Op, OpResult, GamePreset } from '../../session/index.js';
 import { dueSeats, type SeatActivityState } from '../../engine/index.js';
+import { validateGameOptionSelection, type DevOptionDef } from './config-types.js';
 
 /** A fresh random 32-bit seed for a new game. */
 function defaultSeed(): string {
@@ -77,7 +78,19 @@ export type ClientInbound =
   | { type: 'getState'; requestId?: string }
   | { type: 'getLobby'; requestId?: string }
   | { type: 'debugToggle' }
-  | { type: 'uiSwitch'; name: string };
+  | { type: 'uiSwitch'; name: string }
+  /**
+   * D13/DEVHOST-01: a pre-start (lobby) gameOption/preset selection. Either
+   * or both fields may be present; a `preset` applies its whole options
+   * bundle (+ player count if declared), then `gameOptions` (if present)
+   * overlays on top — a flag/selection beats a preset for the same key.
+   * Selected values REPLACE the frozen `.default`-only baseGameOptions in
+   * the (re)started `start` op. Every key is validated against the
+   * host's declared game options (T-161-02) — an undeclared key or an
+   * out-of-choices value is rejected with an `error` reply and never
+   * reaches the start op.
+   */
+  | { type: 'configure'; gameOptions?: Record<string, unknown>; preset?: string };
 
 export interface MultiplayerHostOptions {
   playerCount: number;
@@ -93,6 +106,20 @@ export interface MultiplayerHostOptions {
   colorPalette?: Array<{ value: string; label: string }>;
   /** Game-level options merged into the `start` op (the author's gameOptions). */
   baseGameOptions?: Record<string, unknown>;
+  /**
+   * The declared game-level option definitions (D13/DEVHOST-01) — used to
+   * validate an incoming `configure` selection (T-161-02): an undeclared key,
+   * or a `select` value not among its declared choices, is rejected and never
+   * reaches the start op.
+   */
+  declaredGameOptions?: DevOptionDef[];
+  /**
+   * Declared presets (D13/DEVHOST-01) — a `configure` message's `preset` name
+   * is looked up here; applying a preset sets every option in its bundle (and
+   * its player count, if declared, via the reserved `playerCount` key in the
+   * applied selection — see `applyConfigure`).
+   */
+  presets?: GamePreset[];
   /**
    * When true, teaching/assist features (hint, heatmap, demo, tutorial) are rejected
    * fail-loud for this session. Set by `boardsmith dev --lock-teaching`.
@@ -148,11 +175,24 @@ export class MultiplayerHost {
    * empty). Keyed by requestId; cleared when the response is delivered.
    */
   private requestOrigin = new Map<string, string>();
+  /**
+   * D13/DEVHOST-01: the currently applied gameOption selection, seeded from
+   * `opts.baseGameOptions` (the `.default`-only computation) and overlaid by
+   * each accepted `configure` message. `startGame` spreads THIS (not
+   * `opts.baseGameOptions` directly) into the start op, so a selection
+   * persists across a subsequent restart instead of reverting to defaults.
+   * May carry a reserved `playerCount` key (set when a preset declares
+   * `players`) which overrides the start op's `playerCount` field — see
+   * `startGameOptions` below; this does NOT touch seat reconciliation
+   * (`this.seats`), which is Plan 04/D15 territory.
+   */
+  private appliedGameOptions: Record<string, unknown>;
 
   constructor(private readonly opts: MultiplayerHostOptions) {
     for (let seat = 1; seat <= opts.playerCount; seat++) {
       this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
     }
+    this.appliedGameOptions = { ...opts.baseGameOptions };
   }
 
   // ── Connection lifecycle ──────────────────────────────────────────────────
@@ -256,6 +296,8 @@ export class MultiplayerHost {
         return this.handleDebugToggle();
       case 'uiSwitch':
         return this.handleUiSwitch(msg);
+      case 'configure':
+        return this.handleConfigure(clientId, msg);
     }
   }
 
@@ -278,6 +320,46 @@ export class MultiplayerHost {
       this.send(ex, { type: 'follow', enabled: false, seat: this.clientSeat.get(ex) ?? 0 });
     }
     // Rebuild the session with the same seats and a fresh seed.
+    await this.startGame();
+  }
+
+  /**
+   * D13/DEVHOST-01: apply a pre-start gameOption/preset selection, then
+   * (re)start via the existing `startGame()` — modeled on `handleRestart`
+   * ("a restart is a clean slate"). A preset applies wholesale (every option
+   * in its bundle, and its player count via the reserved `playerCount` key);
+   * an explicit `gameOptions` entry overlays on top of (overrides) the
+   * preset for the same key. Every selected key is validated (T-161-02)
+   * BEFORE anything is applied — an undeclared key or invalid choice value
+   * rejects the WHOLE selection with an actionable error and never reaches
+   * the start op.
+   */
+  private async handleConfigure(
+    clientId: string,
+    msg: Extract<ClientInbound, { type: 'configure' }>,
+  ): Promise<void> {
+    let bundle: Record<string, unknown> = {};
+    if (msg.preset !== undefined) {
+      const preset = this.opts.presets?.find((p) => p.name === msg.preset);
+      if (!preset) {
+        const known = (this.opts.presets ?? []).map((p) => p.name).join(', ') || '(none declared)';
+        this.send(clientId, { type: 'error', message: `Unknown preset "${msg.preset}" — declared presets are: ${known}.` });
+        return;
+      }
+      bundle = { ...preset.options };
+      if (preset.players?.length) bundle.playerCount = preset.players.length;
+    }
+    if (msg.gameOptions) bundle = { ...bundle, ...msg.gameOptions };
+
+    try {
+      validateGameOptionSelection(this.opts.declaredGameOptions ?? [], bundle);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid game option selection.';
+      this.send(clientId, { type: 'error', message });
+      return;
+    }
+
+    this.appliedGameOptions = { ...this.appliedGameOptions, ...bundle };
     await this.startGame();
   }
 
@@ -524,7 +606,15 @@ export class MultiplayerHost {
     const startGameOptions = {
       playerCount,
       seed: (this.opts.makeSeed ?? defaultSeed)(),
-      ...this.opts.baseGameOptions,
+      // D13/DEVHOST-01: the CURRENTLY APPLIED selection (defaults, overlaid by
+      // any accepted `configure` preset/gameOptions), not the frozen
+      // opts.baseGameOptions — so a selection persists across a restart. A
+      // reserved `playerCount` key here (set when a preset declares
+      // `players`) intentionally overrides the top-level `playerCount` field
+      // above via spread order; it does NOT resize `this.seats` (Plan 04/D15
+      // owns seat reconciliation) — it only changes what the game's `start`
+      // op reports as its player count.
+      ...this.appliedGameOptions,
       playerOptions: perSeatOptions,
       playerIsAI: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
       // Mirror the production lobby's playerConfigs (game-session.ts builds the

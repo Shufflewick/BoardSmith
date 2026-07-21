@@ -72,6 +72,7 @@ const TEST_CONFIG: DevHostConfig = {
     { id: 'speed', type: 'choice', label: 'Game Speed', default: 'normal', choices: [{ value: 'normal', label: 'Normal' }, { value: 'fast', label: 'Fast' }] },
   ],
   playerOptions: [],
+  presets: [],
   colorPalette: [],
   gameUrl: 'http://localhost:3000/game',
 };
