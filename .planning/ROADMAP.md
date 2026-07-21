@@ -202,10 +202,9 @@ Plans:
 2. The skills state both boundaries explicitly: the agent controls the game board only, `node_modules/boardsmith` (a live symlink) is read-only, built-in BoardSmith UI must not be suppressed, and library gaps are FILED not patched (SKILLDEF-02).
 3. The skills tell the agent not to use the fenced `suppress-action-panel` escape hatch (LIBX-01) without the client (SKILLDEF-03, C.3-skills).
 4. Skill-guidance changes are regression-tested (e.g. `build-chunk.test.ts` / `templates.test.ts` style) per PROC-01.
-**Plans** (suggested breakdown; finalized at plan-phase):
-- Close-ceremony lock/crash-consistency fix + CHUNK.md-overwrite guard + same-day-resume test [SKILLDEF-01]
-- Game/library boundary prose ("board only; library read-only; file gaps, never patch/suppress") + tests [SKILLDEF-02]
-- Fenced-suppress-hatch instruction (do not use without client) [SKILLDEF-03]
+**Plans** (2 plans, 2 waves — finalized at plan-phase; tests fold into each plan per PROC-01):
+- [ ] 166-01-PLAN.md — Session-lock/close ceremony: clock-read + session identity, terminal lock-RELEASE, append-only write order, Step 0 no-lock recognition [SKILLDEF-01, PROC-01] (wave 1)
+- [ ] 166-02-PLAN.md — Game/library boundary prose (board-only, read-only symlinked library, file-not-patch, never-suppress built-in UI) + fenced-escape-hatch don't (platformActionPanelEscapeHatch/.suppressFromDock) [SKILLDEF-02, SKILLDEF-03, PROC-01] (wave 2, depends on 166-01 via shared test file)
 
 #### Phase 167: Skills Autonomy Rewrite
 **Goal**: The `bs-skills` build as autonomously as possible while every human interruption stays meaningful — playtest-gate policy, question discipline, batched questions, run-while-away, auto-advance, a ≥50% context threshold with sub-agent offload, and loud completion — WITHOUT eroding any Part D discipline that kept provenance clean.
