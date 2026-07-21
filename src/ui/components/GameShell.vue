@@ -656,6 +656,14 @@ const actionController = useActionController({
       return { success: false, error: err instanceof Error ? err.message : 'Selection step failed' };
     }
   },
+  // LIBX-04/CR-01: single authoritative chokepoint for "never commit to the live
+  // engine while viewing history". useBoardActionBridge's four mutators already
+  // check this, but ActionPanel talks to the controller directly (fill/toggle/
+  // start), and the controller's own internal auto-execute watch can fire a
+  // commit with NO caller in the loop at all. Passing it here — rather than
+  // re-implementing the guard in every caller — is the one place every commit
+  // path (board clicks, ActionPanel, auto-execute) funnels through.
+  isViewingHistory,
 });
 
 // Read-only action args for display and slot props.

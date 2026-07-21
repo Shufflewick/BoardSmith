@@ -312,6 +312,16 @@ export interface UseActionControllerOptions {
    * Defaults to `undefined` (no tutorial active, default auto-fill behavior).
    */
   tutorialStep?: Ref<TutorialStepView | undefined>;
+  /**
+   * True while the debug panel is showing a historical (time-traveled) game
+   * state (LIBX-04/CR-01). This is the SHARED chokepoint: `fill()`,
+   * `toggleMultiSelect()`, `start()`, and the internal auto-execute watch all
+   * refuse (or no-op) while this is true, so NO commit path — board click,
+   * ActionPanel, or the controller's own auto-execute — can reach the live
+   * engine while the UI is displaying historical state. Defaults to `false`
+   * (never viewing history) for callers that don't wire time-travel.
+   */
+  isViewingHistory?: Ref<boolean>;
 }
 
 /** State for repeating selections */

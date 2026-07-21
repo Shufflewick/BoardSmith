@@ -151,7 +151,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     autoFill: autoFillOption = true,
     autoExecute: autoExecuteOption = true,
     onBeforeAutoExecute: initialBeforeAutoExecute,
+    isViewingHistory,
   } = options;
+
+  // LIBX-04/CR-01: single authoritative chokepoint. `false` when the caller
+  // doesn't wire time-travel at all (custom-UI callers, tests) so this guard
+  // is a no-op unless GameShell explicitly opts in.
+  const isViewingHistoryValue = (): boolean => isViewingHistory?.value ?? false;
 
   // Dev-only guard — mirrors GameShell.vue:174 pattern. Dead-code-eliminated by
   // Vite's production build when import.meta.env.DEV is false.
@@ -874,7 +880,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // When all selections are filled, auto-execute
   // Skip when pendingOnServer — server already handles execution via processSelectionStep
   watch(isReady, async (ready) => {
-    if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value) {
+    if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value
+        && !isViewingHistoryValue()) {
       // Call hooks before executing - allows capturing element positions for animations.
       // Sequential await (not Promise.all) so ordering is deterministic across hooks.
       // WR-02: each hook is isolated — with accumulation semantics, one consumer's
@@ -1005,6 +1012,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     if (isCommitted()) {
       return { success: false, error: 'You have already submitted your action for this step' };
+    }
+
+    // LIBX-04/CR-01: last-line-of-defense. fill()/start() already refuse
+    // upstream, but this is the actual send-to-server chokepoint — belt and
+    // suspenders against any future caller that reaches executeCurrentAction
+    // without going through fill()/start() first.
+    if (isViewingHistoryValue()) {
+      const error = 'Cannot execute an action while viewing historical state.';
+      setError(error);
+      return { success: false, error };
     }
 
     const actionName = currentAction.value;
@@ -1318,6 +1335,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const initialArgs = startOptions?.args ?? {};
     const prefillArgs = startOptions?.prefill ?? {};
 
+    // LIBX-04/CR-01: refuse to start a new action while the debug panel is
+    // showing historical state.
+    if (isViewingHistoryValue()) {
+      const error = 'Cannot start an action while viewing historical state.';
+      setError(error);
+      return { success: false, error };
+    }
+
     if (!availableActions.value?.includes(actionName)) {
       const error = `Action "${actionName}" is not available`;
       setError(error);
@@ -1404,6 +1429,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // and the user's click.
     if (!currentActionMeta.value) {
       const error = 'No action in progress';
+      setError(error);
+      return { valid: false, error };
+    }
+
+    // LIBX-04/CR-01: refuse to advance a selection while the debug panel is
+    // showing historical state — this is the chokepoint ActionPanel's
+    // setSelectionValue/toggleMultiSelectValue/confirmMultiSelect all funnel
+    // through, so it covers every ActionPanel commit path, not just the
+    // board-click bridge.
+    if (isViewingHistoryValue()) {
+      const error = 'Cannot select while viewing historical state.';
       setError(error);
       return { valid: false, error };
     }

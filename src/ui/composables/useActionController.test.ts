@@ -729,6 +729,107 @@ describe('useActionController', () => {
     });
   });
 
+  describe('isViewingHistory guard (LIBX-04/164-CR-01)', () => {
+    // Reproduces the reviewed gap: a pick started/continued while the debug
+    // panel is time-traveling must never commit to the live engine, whether
+    // through the controller's own auto-execute watch, fill(), or start() —
+    // not just the board-click bridge (useBoardActionBridge).
+    it('start() refuses to begin a new action while viewing history', async () => {
+      const isViewingHistory = ref(false);
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        isViewingHistory,
+      });
+
+      isViewingHistory.value = true;
+      const result = await controller.start('attack');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/historical state/i);
+      expect(controller.currentAction.value).toBe(null);
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('fill() refuses to advance an in-progress pick while viewing history, and the auto-execute watch never commits', async () => {
+      const isViewingHistory = ref(false);
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        isViewingHistory,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      // Start (and partially fill) the pick BEFORE entering history — mirrors
+      // the reviewed repro: a selection was already in progress when the
+      // developer opened the debug panel and time-traveled.
+      await controller.start('attack');
+      await controller.fill('attacker', 1);
+      expect(controller.currentArgs.value.attacker).toBe(1);
+
+      // Enter history mid-pick (nothing blocks this today).
+      isViewingHistory.value = true;
+
+      // Complete the last remaining selection — in the pre-fix code this
+      // flips isReady, which fires the controller's OWN auto-execute watch
+      // and calls executeCurrentAction() directly, bypassing every caller-side
+      // guard (ActionPanel's isMyTurn check, useBoardActionBridge's guards).
+      const fillResult = await controller.fill('target', 10);
+      await nextTick();
+      await nextTick();
+
+      expect(fillResult.valid).toBe(false);
+      expect(fillResult.error).toMatch(/historical state/i);
+      expect(sendAction).not.toHaveBeenCalled();
+      expect(controller.lastError.value).toMatch(/historical state/i);
+    });
+
+    it('auto-execute watch never fires executeCurrentAction while viewing history, even for a sole-choice action that would otherwise auto-fill+auto-execute in one tick', async () => {
+      const isViewingHistory = ref(true);
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        isViewingHistory,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      // start() itself refuses while viewing history (tested above), so this
+      // exercises the auto-execute watch's OWN guard directly: even if a
+      // caller bypassed start()'s guard (e.g. a future direct write to
+      // currentAction), the watch itself must never commit.
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick();
+
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('does not affect normal operation when isViewingHistory is not provided (default false)', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick();
+
+      expect(sendAction).toHaveBeenCalledWith('forcedPlay', { card: 42 });
+    });
+  });
+
   describe('errorTick (UIX-01, CR-01)', () => {
     it('bumps errorTick on EVERY failure — including a repeat of the identical error', async () => {
       const controller = useActionController({
