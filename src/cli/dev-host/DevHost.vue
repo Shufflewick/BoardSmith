@@ -63,6 +63,29 @@ const devtoolsSnapshot = ref<Record<string, unknown> | null>(null);
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
 
+// ── Lobby gameOption/preset selector (D13/DEVHOST-01) ─────────────────────────
+// Seeded from each declared option's `.default`; a chosen preset overlays its
+// `options` bundle on top (mirrors the colorInput precedent). Apply sends the
+// resolved selection to the host as a `configure` message — the host (Plan 02,
+// T-161-02) is the authoritative validator, this is advisory only.
+const optionSelection = ref<Record<string, unknown>>(
+  Object.fromEntries(cfg.gameOptions.map((o) => [o.id, o.default])),
+);
+const presetSelection = ref('');
+
+function onPresetSelect(): void {
+  const preset = cfg.presets.find((p) => p.name === presetSelection.value);
+  if (!preset) return;
+  optionSelection.value = { ...optionSelection.value, ...preset.options };
+}
+
+function applyLobbyOptions(): void {
+  errorMsg.value = null;
+  const message: Record<string, unknown> = { type: 'configure', gameOptions: { ...optionSelection.value } };
+  if (presetSelection.value) message.preset = presetSelection.value;
+  wsSend(message);
+}
+
 // ── Destructive restart confirm (DEV-07) ──────────────────────────────────────
 const toast = useToast();
 /** True while the "Confirm restart?" prompt is showing (first click armed it). */
@@ -502,6 +525,49 @@ onUnmounted(() => {
               @click="colorInput = c.value"
             ></button>
           </div>
+          <template v-if="cfg.gameOptions.length || cfg.presets.length">
+            <label
+              v-if="cfg.presets.length"
+              class="lobby__option"
+            >
+              <span class="dev-chrome__label">Preset</span>
+              <select
+                v-model="presetSelection"
+                class="dev-chrome__select"
+                data-testid="lobby-preset-picker"
+                @change="onPresetSelect"
+              >
+                <option value="">Custom</option>
+                <option v-for="p in cfg.presets" :key="p.name" :value="p.name">{{ p.name }}</option>
+              </select>
+            </label>
+            <label
+              v-for="opt in cfg.gameOptions"
+              :key="opt.id"
+              class="lobby__option"
+            >
+              <span class="dev-chrome__label">{{ opt.label || opt.id }}</span>
+              <select
+                v-if="opt.choices"
+                v-model="optionSelection[opt.id]"
+                class="dev-chrome__select"
+                :data-testid="`lobby-option-${opt.id}`"
+              >
+                <option v-for="c in opt.choices" :key="String(c.value)" :value="c.value">
+                  {{ c.label ?? String(c.value) }}
+                </option>
+              </select>
+              <input
+                v-else
+                v-model="optionSelection[opt.id]"
+                type="text"
+                :data-testid="`lobby-option-${opt.id}`"
+              />
+            </label>
+            <button type="button" class="btn" data-testid="lobby-apply-options" @click="applyLobbyOptions">
+              Apply
+            </button>
+          </template>
         </div>
 
         <div v-if="errorMsg" class="dev-chrome__error">{{ errorMsg }}</div>
@@ -849,6 +915,12 @@ onUnmounted(() => {
 }
 
 .lobby__colors {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lobby__option {
   display: inline-flex;
   align-items: center;
   gap: 6px;
