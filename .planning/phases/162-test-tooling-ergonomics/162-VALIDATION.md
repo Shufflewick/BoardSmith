@@ -2,7 +2,7 @@
 phase: 162
 slug: test-tooling-ergonomics
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-21
 ---
@@ -17,20 +17,20 @@ created: 2026-07-21
 
 | Property | Value |
 |----------|-------|
-| **Framework** | {pytest 7.x / jest 29.x / vitest / go test / other} |
-| **Config file** | {path or "none — Wave 0 installs"} |
-| **Quick run command** | `{quick command}` |
-| **Full suite command** | `{full command}` |
-| **Estimated runtime** | ~162 seconds |
+| **Framework** | vitest |
+| **Config file** | `vitest.config.ts` (repo root) |
+| **Quick run command** | `npx vitest run <changed test file(s)>` |
+| **Full suite command** | `npm test` |
+| **Estimated runtime** | ~120s full suite; per-file quick runs < 15s |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `{quick run command}`
-- **After every plan wave:** Run `{full suite command}`
+- **After every task commit:** Run the task's `npx vitest run <file>` quick command
+- **After every plan wave:** Run `npm test`
 - **Before `/gsd:verify-work`:** Full suite must be green
-- **Max feedback latency:** 162 seconds
+- **Max feedback latency:** 120 seconds
 
 ---
 
@@ -38,7 +38,12 @@ created: 2026-07-21
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 162-01-01 | 01 | 1 | REQ-{XX} | T-162-01 / — | {expected secure behavior or "N/A"} | unit | `{command}` | ✅ / ❌ W0 | ⬜ pending |
+| 162-01-01 | 01 | 1 | TOOL-01, TOOL-02, PROC-01 | T-162-02 / — | RED: commented `<img` false-FAILs + `boardsmith/testing` export unresolvable | unit (RED) | `npx vitest run src/cli/lib/asset-scan.test.ts src/testing/scan-asset-export.test.ts` | ❌ W0 (net-new) | ⬜ pending |
+| 162-01-02 | 01 | 1 | TOOL-01, TOOL-02 | T-162-01, T-162-02 | Comment-scoped strip; live `<img` still flagged; additive export | unit (GREEN) | `npx vitest run src/cli/lib/asset-scan.test.ts src/testing/scan-asset-export.test.ts` | ✅ | ⬜ pending |
+| 162-01-03 | 01 | 1 | TOOL-01, PROC-01 | T-162-01 | Over-strip cannot swallow live `<img`/string literals | unit (adversarial) | `npx vitest run src/cli/lib/asset-scan.test.ts && npm test` | ✅ | ⬜ pending |
+| 162-02-01 | 02 | 1 | TOOL-03, TOOL-04, PROC-01 | T-162-04, T-162-05 | RED: barrel import throws under jsdom; symmetric-deck assertion mis-fires | unit (RED) | `npx vitest run src/ui/composables/ui-barrel-import.test.ts src/testing/dom-leak.test.ts` | ❌ W0 (net-new) | ⬜ pending |
+| 162-02-02 | 02 | 1 | TOOL-03, TOOL-04 | T-162-05, T-162-06 | Side-effect-free import; elementId-keyed leak detection | unit (GREEN) | `npx vitest run src/ui/composables/ui-barrel-import.test.ts src/testing/dom-leak.test.ts` | ✅ | ⬜ pending |
+| 162-02-03 | 02 | 1 | TOOL-04, PROC-01 | T-162-04, T-162-06 | Real leak still caught (own id + un-attributed surface); stubbed UI suites unbroken | unit (adversarial) | `npx vitest run src/testing/dom-leak.test.ts src/ui/composables/useElementAnimation.test.ts src/ui/composables/useFLIP.test.ts && npm test` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -46,31 +51,30 @@ created: 2026-07-21
 
 ## Wave 0 Requirements
 
-- [ ] `{tests/test_file.py}` — stubs for REQ-{XX}
-- [ ] `{tests/conftest.py}` — shared fixtures
-- [ ] `{framework install}` — if no framework detected
+All net-new (RESEARCH.md "Wave 0 gaps") — created RED-first inside each plan's Task 1:
 
-*If none: "Existing infrastructure covers all phase requirements."*
+- [ ] `src/cli/lib/__fixtures__/asset-scan/commented-img/src/ui/CommentedImg.vue` — commented-`<img>` false-FAIL fixture (all three styles + multi-line block) — TOOL-01
+- [ ] `src/testing/scan-asset-export.test.ts` — `boardsmith/testing` export-surface import test — TOOL-02
+- [ ] `src/ui/composables/ui-barrel-import.test.ts` — no-stub `boardsmith/ui` barrel-import under jsdom — TOOL-03
+- [ ] symmetric-deck case added to `src/testing/dom-leak.test.ts` (two same-named cards, one hidden/one visible) — TOOL-04
+
+Framework already installed (vitest) — no install task.
 
 ---
 
 ## Manual-Only Verifications
 
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| {behavior} | REQ-{XX} | {reason} | {steps} |
-
-*If none: "All phase behaviors have automated verification."*
+*None. All phase behaviors have automated verification (static scan, module import, DOM-leak assertion — all runnable headlessly under vitest/jsdom).*
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 162s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (4 net-new artifacts above)
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** {pending / approved YYYY-MM-DD}
+**Approval:** pending

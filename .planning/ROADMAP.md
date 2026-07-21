@@ -145,10 +145,9 @@ Plans:
 3. `boardsmith/ui` no longer reads `window.matchMedia` at module scope; imports under jsdom without a shim (D19).
 4. `assertNoHiddenInfoLeak` works for symmetric decks (markers not name-based-only) (D20).
 5. Each has a test proving the old failure mode is gone (PROC-01).
-**Plans** (suggested breakdown; finalized at plan-phase):
-- Asset-scan comment-stripping + export-surface fix + fixtures [TOOL-01, TOOL-02]
-- `matchMedia` lazy/guarded access; jsdom import test [TOOL-03]
-- `assertNoHiddenInfoLeak` symmetric-deck marker strategy [TOOL-04]
+**Plans:** 2 plans
+- [ ] 162-01-PLAN.md — asset-scan comment-stripping + boardsmith/testing export [TOOL-01, TOOL-02]
+- [ ] 162-02-PLAN.md — side-effect-free boardsmith/ui import + elementId-keyed leak detection [TOOL-03, TOOL-04]
 
 #### Phase 163: Engine Space Lifecycle & Element Integrity
 **Goal**: The `Space`/element subsystem's structural gaps are closed — a sealed/append-only Space whose `onExit` survives restore, Space removal/re-parenting, no hidden-child-count leak, no silent class-name-collision rename, and no `availableActions`/`actionMetadata` divergence that strands the board.
