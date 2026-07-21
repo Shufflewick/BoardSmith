@@ -28,15 +28,68 @@ export interface DevOptionDef {
 export class GameOptionSelectionError extends Error {}
 
 /**
+ * CR-02 (D13/DEVHOST-01, T-161-02): coerce a raw incoming option value to its
+ * declared `type` — `--game-option`/lobby text-field values always arrive as
+ * strings, so without this a `number` option stays a string, a `boolean`
+ * option arrives JS-truthy for the literal string `"false"`, and a `select`
+ * option with non-string declared choice values (e.g. numeric difficulty
+ * levels) can never be matched at all. A value that is already non-string
+ * (a preset's own bundle, or a future typed input) passes through unchanged
+ * — this is coercion of the wire format, not a behavior override. Throws an
+ * actionable `GameOptionSelectionError` naming the option + expected type on
+ * an uncoercible value; never silently drops or guesses.
+ */
+export function coerceGameOptionValue(def: DevOptionDef, raw: unknown): unknown {
+  if (typeof raw !== 'string') return raw;
+  switch (def.type) {
+    case 'number': {
+      const n = Number(raw);
+      if (Number.isNaN(n)) {
+        throw new GameOptionSelectionError(
+          `Game option "${def.id}" must be a number, got "${raw}".`,
+        );
+      }
+      return n;
+    }
+    case 'boolean': {
+      if (raw !== 'true' && raw !== 'false') {
+        throw new GameOptionSelectionError(
+          `Game option "${def.id}" must be "true" or "false", got "${raw}".`,
+        );
+      }
+      return raw === 'true';
+    }
+    case 'select': {
+      // Match the string against each declared choice's value by string
+      // comparison, so a numeric (or otherwise non-string) choice value is
+      // still reachable from a CLI flag / plain-text lobby input. Validated
+      // for real declared membership right after this by the `select` branch
+      // below — this only resolves WHICH typed value the string refers to.
+      if (def.choices) {
+        const match = def.choices.find((c) => String(c.value) === raw);
+        if (match) return match.value;
+      }
+      return raw;
+    }
+    default:
+      return raw;
+  }
+}
+
+/**
  * T-161-02: validate a proposed gameOption selection (from a CLI
  * `--game-option` flag OR a host `configure` wire message) against the
  * DECLARED game options — reject an undeclared key, or a `select` value not
- * among its declared choices, with an actionable error. Never silently drop
- * or coerce an invalid selection into the start op.
+ * among its declared choices, with an actionable error. Coerces each value
+ * to its declared `type` (CR-02) IN PLACE before validating it, so both
+ * the CLI parser (`dev.ts`) and the wire-level host (`multiplayer-host.ts`)
+ * — the two callers of this function — get typed values from one shared
+ * source of truth. Never silently drop an invalid selection into the start
+ * op.
  *
  * `playerCount` is a host-level field (not a per-game option) that a preset
  * may also set (`GamePreset.players.length`) — it is intentionally exempt
- * from declared-option validation.
+ * from declared-option validation and coercion.
  */
 export function validateGameOptionSelection(
   declaredOptions: DevOptionDef[],
@@ -52,11 +105,13 @@ export function validateGameOptionSelection(
         `Unknown game option "${key}" — declared options are: ${known}.`,
       );
     }
+    const coerced = coerceGameOptionValue(def, value);
+    selection[key] = coerced;
     if (def.type === 'select' && def.choices) {
       const allowed = def.choices.map((c) => c.value);
-      if (!allowed.includes(value)) {
+      if (!allowed.includes(coerced)) {
         throw new GameOptionSelectionError(
-          `Invalid value ${JSON.stringify(value)} for game option "${key}" — must be one of: ${allowed.map((v) => JSON.stringify(v)).join(', ')}.`,
+          `Invalid value ${JSON.stringify(coerced)} for game option "${key}" — must be one of: ${allowed.map((v) => JSON.stringify(v)).join(', ')}.`,
         );
       }
     }

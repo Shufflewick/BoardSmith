@@ -183,8 +183,10 @@ export class MultiplayerHost {
    * persists across a subsequent restart instead of reverting to defaults.
    * May carry a reserved `playerCount` key (set when a preset declares
    * `players`) which overrides the start op's `playerCount` field — see
-   * `startGameOptions` below; this does NOT touch seat reconciliation
-   * (`this.seats`), which is Plan 04/D15 territory.
+   * `startGameOptions` below. `handleConfigure` calls `resizeSeats` (CR-01)
+   * BEFORE merging this key in, so the seat map is already consistent with
+   * the new count by the time it's applied — this field itself never
+   * triggers seat reconciliation, `resizeSeats` does.
    */
   private appliedGameOptions: Record<string, unknown>;
 
@@ -366,8 +368,56 @@ export class MultiplayerHost {
       return;
     }
 
+    // CR-01: a preset's declared player count (the reserved `playerCount` key
+    // set above when `preset.players.length` is present) must not diverge
+    // from the seat map / per-seat arrays `startGame` derives from
+    // `this.opts.playerCount`. Resize the seat map to match BEFORE applying
+    // and (re)starting, so `playerCount` and every playerCount-sized array
+    // (`playerOptions`/`playerIsAI`/`playerConfigs`) always agree.
+    if (typeof bundle.playerCount === 'number') {
+      const newPlayerCount = bundle.playerCount;
+      if (!Number.isInteger(newPlayerCount) || newPlayerCount < 1) {
+        this.send(clientId, {
+          type: 'error',
+          message: `Preset/configure playerCount must be a positive integer, got ${JSON.stringify(bundle.playerCount)}.`,
+        });
+        return;
+      }
+      this.resizeSeats(newPlayerCount);
+    }
+
     this.appliedGameOptions = { ...this.appliedGameOptions, ...bundle };
     await this.startGame();
+  }
+
+  /**
+   * CR-01 (D13/DEVHOST-01): resize the seat map to `newCount` so it stays
+   * consistent with a preset-declared (or otherwise configured) player count
+   * applied post-start via `configure`. Growing adds open (unclaimed) seats;
+   * shrinking releases and drops any seat beyond the new count (its client
+   * falls back to the seat-picker on the next lobby broadcast). Mutates
+   * `this.opts.playerCount` — the SAME field `startGame`, `buildPerSeatOptions`,
+   * `addAiSeat`, `rebuildAiSeats`, and `lobbyMessage` all already read — so
+   * there is exactly one source of truth for the player count after a resize,
+   * never two that can drift apart (the CR-01 defect: `playerCount` in the
+   * start op diverging from `playerOptions`/`playerIsAI`/`playerConfigs`
+   * length, which were built from the frozen constructor-time count).
+   */
+  private resizeSeats(newCount: number): void {
+    const current = this.seats.size;
+    if (newCount === current) return;
+    if (newCount > current) {
+      for (let seat = current + 1; seat <= newCount; seat++) {
+        this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
+      }
+    } else {
+      for (let seat = current; seat > newCount; seat--) {
+        const info = this.seats.get(seat);
+        if (info?.clientId) this.releaseSeat(info.clientId);
+        this.seats.delete(seat);
+      }
+    }
+    this.opts.playerCount = newCount;
   }
 
   /** Toggle "follow active seat" for a client (must be seated and in a game). */
@@ -618,9 +668,12 @@ export class MultiplayerHost {
       // opts.baseGameOptions — so a selection persists across a restart. A
       // reserved `playerCount` key here (set when a preset declares
       // `players`) intentionally overrides the top-level `playerCount` field
-      // above via spread order; it does NOT resize `this.seats` (Plan 04/D15
-      // owns seat reconciliation) — it only changes what the game's `start`
-      // op reports as its player count.
+      // above via spread order; the TOP-LEVEL `playerCount` here is already
+      // the resized value (CR-01: `handleConfigure` calls `resizeSeats` —
+      // which mutates `this.opts.playerCount` — BEFORE `startGame` reads it),
+      // so both sides of the spread agree and `playerOptions`/`playerIsAI`/
+      // `playerConfigs` below (all sized off this same `playerCount`) never
+      // diverge from the reported count.
       ...this.appliedGameOptions,
       playerOptions: perSeatOptions,
       playerIsAI: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
@@ -692,7 +745,20 @@ export class MultiplayerHost {
     await session.host.runAITurns();
 
     this.broadcastLobby();
-    for (const seat of humanSeats) {
+    // WR-02: reinit every CURRENTLY seated + connected client, not just the
+    // pre-await `humanSeats` snapshot. A `join` (handleJoin has no `starting`
+    // guard — it works mid-await by design, mirroring D15's own reclaim
+    // scenario) can land a client on a seat DURING `await session.start()`;
+    // that seat isn't in `humanSeats` (captured before the await), so without
+    // this it never receives `init`/`game_state` here — `handleJoin`'s own
+    // `if (this.phase === 'playing')` reinit check also reads false at join
+    // time (phase is still 'lobby' mid-await) — leaving the client seated
+    // with no UI content until an unrelated broadcast happens to fire.
+    const seatsToReinit = new Set(humanSeats);
+    for (const info of this.seats.values()) {
+      if (info.clientId && info.connected) seatsToReinit.add(info.seat);
+    }
+    for (const seat of seatsToReinit) {
       const clientId = this.seats.get(seat)?.clientId;
       if (clientId) this.reinitSeat(clientId, seat);
     }
