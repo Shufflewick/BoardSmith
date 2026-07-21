@@ -2750,7 +2750,7 @@ export class Game<
    *   `flow/engine.ts`. Individually-hidden single elements (the two branches above
    *   this comment) keep their real id already, so they need no remap entry.
    */
-  toJSONForPlayer(player: P | number | null, idRemap?: Map<number, number>): ElementJSON {
+  toJSONForPlayer(player: P | number | null, idRemap?: Map<number, number>): ReturnType<Game['toJSON']> {
     const playerSeat = player === null ? null : (typeof player === 'number' ? player : player.seat);
     // For visibility checks, spectators use -1 (no special access)
     const visibilityPosition = playerSeat ?? -1;
@@ -2962,7 +2962,13 @@ export class Game<
       filteredState = GameClass.playerView(filteredState, playerSeat, this);
     }
 
-    return filteredState;
+    // The game root is always visible to its own players, so `filterElement`
+    // takes the recursive (spread) path and preserves the top-level game fields
+    // (phase/isFinished/messages/settings/animation*) that `toJSON()` adds —
+    // it only strips CHILD elements. `filterElement`'s return is typed to the
+    // base `ElementJSON`, so re-assert the enriched shape the root always carries
+    // (this is what makes the redacted view a valid, restorable game state).
+    return filteredState as ReturnType<Game['toJSON']>;
   }
 
   /**
