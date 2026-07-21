@@ -16,7 +16,7 @@ import { createPlayerView } from '../engine/utils/snapshot.js';
 import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
 import { TutorialController } from './tutorial-controller.js';
-import { buildPlayerState } from './utils.js';
+import { buildPlayerState, buildActionMetadata, buildSingleActionMetadata } from './utils.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import { useActionController, type ActionMetadata } from '../ui/composables/useActionController.js';
 
@@ -629,3 +629,63 @@ describe('buildPlayerState - hasTutorial field', () => {
     expect(spectator.turnStartActionIndex).toBeUndefined();
   });
 });
+
+// ============================================
+// manual propagation (AUTOEXEC-01 / D7)
+// ============================================
+//
+// `manual` MUST reach the client through BOTH metadata builders — unlike
+// `undoable`, which is deliberately server-only. This is the drift detector
+// proving the followUp path (buildSingleActionMetadata) is not a silent gap.
+
+describe('manual propagation through session build functions (AUTOEXEC-01)', () => {
+  function makeManualPropagationGame(): { game: TestManualGame; player: Player } {
+    const game = new TestManualGame({ playerCount: 1 });
+
+    const drawAction = Action.create<TestManualGame>('draw')
+      .manual()
+      .execute(() => {});
+
+    const passAction = Action.create<TestManualGame>('pass')
+      .prompt('Pass')
+      .execute(() => {});
+
+    (game as any)._actions = new Map([
+      ['draw', drawAction],
+      ['pass', passAction],
+    ]);
+
+    const player = game.getPlayer(1)!;
+    return { game, player };
+  }
+
+  describe('buildActionMetadata (available-actions path)', () => {
+    it('carries manual: true for a .manual() action', () => {
+      const { game, player } = makeManualPropagationGame();
+      const metadata = buildActionMetadata(game, player, ['draw']);
+      expect(metadata['draw']?.manual).toBe(true);
+    });
+
+    it('omits manual for a plain action', () => {
+      const { game, player } = makeManualPropagationGame();
+      const metadata = buildActionMetadata(game, player, ['pass']);
+      expect(metadata['pass']?.manual).toBeUndefined();
+    });
+  });
+
+  describe('buildSingleActionMetadata (followUp path)', () => {
+    it('carries manual: true for a .manual() action reached as a followUp', () => {
+      const { game, player } = makeManualPropagationGame();
+      const metadata = buildSingleActionMetadata(game, player, 'draw');
+      expect(metadata?.manual).toBe(true);
+    });
+
+    it('omits manual for a plain action reached as a followUp', () => {
+      const { game, player } = makeManualPropagationGame();
+      const metadata = buildSingleActionMetadata(game, player, 'pass');
+      expect(metadata?.manual).toBeUndefined();
+    });
+  });
+});
+
+class TestManualGame extends Game<TestManualGame, Player> {}

@@ -11,10 +11,11 @@
  * These tests exercise the bridge directly against a real board-interaction
  * substrate and a fake controller — NO ActionPanel involved.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, computed, nextTick } from 'vue';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
+import { _clearShownWarnings } from '../../utils/dev.js';
 import type { UseActionControllerReturn, PickMetadata, ValidElement } from './useActionControllerTypes.js';
 
 /** Build a minimal fake action controller backed by real refs. */
@@ -361,6 +362,174 @@ describe('useBoardActionBridge', () => {
       await nextTick();
 
       expect(execute).toHaveBeenCalledWith('endTurn', {});
+    });
+  });
+
+  // Custom UI and Action Panel both consume the bridge through the SAME
+  // useBoardActionBridge wiring (CLAUDE.md parity rule: no separate code path
+  // per UI). These two tests exercise the identical bridge behavior under the
+  // two consumption framings to prove neither can auto-execute a manual() sole
+  // option — there is no divergent path to patch separately.
+  describe('Custom UI / Action Panel parity for manual() (AUTOEXEC-01)', () => {
+    it('Custom UI framing: does not auto-execute a manual sole no-selection action', async () => {
+      const board = createBoardInteraction();
+      const { controller, execute } = makeController({ pick: null, action: null });
+
+      // Custom UI consumes the bridge exactly like this — no separate wiring.
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
+        availableActions: ref(['draw']),
+      });
+
+      await nextTick();
+      await nextTick();
+
+      expect(execute).not.toHaveBeenCalledWith('draw', {});
+    });
+
+    it('Action Panel framing: does not auto-execute a manual sole no-selection action', async () => {
+      const board = createBoardInteraction();
+      const { controller, execute } = makeController({ pick: null, action: null });
+
+      // Action Panel consumes the SAME bridge wiring as Custom UI — asserting the
+      // single shared behavior twice, per the parity rule.
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
+        availableActions: ref(['draw']),
+      });
+
+      await nextTick();
+      await nextTick();
+
+      expect(execute).not.toHaveBeenCalledWith('draw', {});
+    });
+  });
+
+  // Adversarial: the end-turn coalescing / actionCompletedTick route must not
+  // defeat manual() even after the armed retry (pendingFollowUp settling) runs.
+  it('adversarial: actionCompletedTick + armed retry cannot defeat manual() suppression', async () => {
+    const board = createBoardInteraction();
+    const { controller, execute } = makeController({ pick: null, action: null });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
+      availableActions: ref(['endTurn']),
+    });
+
+    await nextTick();
+    execute.mockClear();
+
+    // Mirror the pendingFollowUp-still-true race from the existing adversarial
+    // capture-chain test, but with manual:true metadata.
+    controller.pendingFollowUp.value = true;
+    (controller.actionCompletedTick as { value: number }).value++;
+    await nextTick();
+    await nextTick();
+    expect(execute).not.toHaveBeenCalledWith('endTurn', {});
+
+    // The armed retry fires once pendingFollowUp clears — must still not
+    // auto-execute the manual action.
+    controller.pendingFollowUp.value = false;
+    await nextTick();
+    await nextTick();
+
+    expect(execute).not.toHaveBeenCalledWith('endTurn', {});
+  });
+
+  describe('dev warning on the un-manual() silent auto-execute path (AUTOEXEC-01)', () => {
+    beforeEach(() => {
+      _clearShownWarnings();
+    });
+
+    it('warns exactly once naming the action and mentioning .manual() for a non-manual sole option', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const board = createBoardInteraction();
+      const { controller } = makeController({ pick: null, action: null });
+
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
+        availableActions: ref(['endTurn']),
+      });
+
+      await nextTick();
+      await nextTick();
+
+      const relevantCalls = warnSpy.mock.calls.filter(call => String(call[0]).includes('endTurn'));
+      expect(relevantCalls.length).toBe(1);
+      expect(String(relevantCalls[0][0])).toContain('endTurn');
+      expect(String(relevantCalls[0][0])).toContain('.manual()');
+
+      warnSpy.mockRestore();
+    });
+
+    it('does NOT re-warn on a second identical trigger (once-per-action)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const board = createBoardInteraction();
+      const { controller, execute } = makeController({ pick: null, action: null });
+
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
+        availableActions: ref(['endTurn']),
+      });
+
+      await nextTick();
+      await nextTick();
+      const firstCount = warnSpy.mock.calls.filter(call => String(call[0]).includes('endTurn')).length;
+      expect(firstCount).toBe(1);
+
+      // Trigger the sole no-selection auto-execute branch a second time.
+      execute.mockClear();
+      (controller.actionCompletedTick as { value: number }).value++;
+      await nextTick();
+      await nextTick();
+
+      const secondCount = warnSpy.mock.calls.filter(call => String(call[0]).includes('endTurn')).length;
+      expect(secondCount).toBe(1); // still just the one warning — no re-warn
+
+      warnSpy.mockRestore();
+    });
+
+    it('never warns when the sole no-selection action is manual()', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const board = createBoardInteraction();
+      const { controller } = makeController({ pick: null, action: null });
+
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
+        availableActions: ref(['draw']),
+      });
+
+      await nextTick();
+      await nextTick();
+
+      const relevantCalls = warnSpy.mock.calls.filter(call => String(call[0]).includes('draw'));
+      expect(relevantCalls.length).toBe(0);
+
+      warnSpy.mockRestore();
     });
   });
 });
