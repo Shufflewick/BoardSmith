@@ -52,6 +52,7 @@ import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
 import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
 import type { ActionMetadata } from '../composables/useActionControllerTypes';
+import type { GameState } from '../../client/types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { toCloneablePayload } from './platformRequestClone.js';
 
@@ -492,6 +493,20 @@ const gameView = computed(() => {
     return timeTravelState.value.view as any;
   }
   return state.value?.state.view as any;
+});
+
+// LIBX-04 (D31): single source of truth for the board's displayed state. During
+// time-travel, timeTravelState is a raw PlayerGameState — ONE level shallower
+// than `state.value` (GameState = { flowState, state: PlayerState, ... }), the
+// exact same shape asymmetry gameView above already normalizes for `.view`.
+// Re-wrap the historical PlayerGameState into a GameState-shaped object here so
+// every :state consumer (board + sidebar-extra) gets a consistent shape whether
+// live or historical, with no shape-aware branching downstream.
+const displayedState = computed<GameState | null>(() => {
+  if (timeTravelState.value) {
+    return state.value ? { ...state.value, state: timeTravelState.value } : null;
+  }
+  return state.value;
 });
 
 // Platform mode: generic request/response bridge to the host (which relays to
@@ -2166,7 +2181,7 @@ if ((import.meta as any).hot) {
             </PlayersPanel>
 
             <slot name="sidebar-extra"
-              :state="state"
+              :state="displayedState"
               :game-view="gameView"
               :players="players"
             ></slot>
@@ -2336,7 +2351,7 @@ if ((import.meta as any).hot) {
             <component
               v-if="selectedUiComponent"
               :is="selectedUiComponent"
-              :state="state"
+              :state="displayedState"
               :game-view="gameView || null"
               :players="players"
               :my-player="myPlayer"
@@ -2356,7 +2371,7 @@ if ((import.meta as any).hot) {
             <slot
               v-else
               name="game-board"
-              :state="state"
+              :state="displayedState"
               :game-view="gameView"
               :players="players"
               :my-player="myPlayer"
