@@ -203,7 +203,7 @@ Plans:
 3. The skills tell the agent not to use the fenced `suppress-action-panel` escape hatch (LIBX-01) without the client (SKILLDEF-03, C.3-skills).
 4. Skill-guidance changes are regression-tested (e.g. `build-chunk.test.ts` / `templates.test.ts` style) per PROC-01.
 **Plans** (2 plans, 2 waves — finalized at plan-phase; tests fold into each plan per PROC-01):
-- [ ] 166-01-PLAN.md — Session-lock/close ceremony: clock-read + session identity, terminal lock-RELEASE, append-only write order, Step 0 no-lock recognition [SKILLDEF-01, PROC-01] (wave 1)
+- [x] 166-01-PLAN.md — Session-lock/close ceremony: clock-read + session identity, terminal lock-RELEASE, append-only write order, Step 0 no-lock recognition [SKILLDEF-01, PROC-01] (wave 1)
 - [ ] 166-02-PLAN.md — Game/library boundary prose (board-only, read-only symlinked library, file-not-patch, never-suppress built-in UI) + fenced-escape-hatch don't (platformActionPanelEscapeHatch/.suppressFromDock) [SKILLDEF-02, SKILLDEF-03, PROC-01] (wave 2, depends on 166-01 via shared test file)
 
 #### Phase 167: Skills Autonomy Rewrite
@@ -268,7 +268,7 @@ Plans:
 | 163. Engine Space Lifecycle & Element Integrity | 0/? | Not started | — |
 | 164. Library Misc — Action-Panel, Loop, Visual, Debug-View | 4/4 | Complete   | 2026-07-21 |
 | 165. Platform Logging Hygiene | 0/? | Not started | — |
-| 166. Skills Defects — Session-Lock + UI/Library Boundary | 0/? | Not started | — |
+| 166. Skills Defects — Session-Lock + UI/Library Boundary | 1/2 | In Progress|  |
 | 167. Skills Autonomy Rewrite | 0/? | Not started | — |
 | 168. Platform Feature Spike — Seed-to-State | 0/? | Not started | — |
 | 169. Post-Fix Game De-Workaround Sweep | 0/? | Not started | — |

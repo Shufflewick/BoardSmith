@@ -136,7 +136,7 @@ the fix holds → only then close.**
 
 ### SKILLDEF — Filed skills defects + UI/library boundary (B.8 + C.3-skills) — Phase 166
 
-- [ ] **SKILLDEF-01** (B.8, `bs-skills-session-lock-defect.md`): The `close` ceremony reliably releases
+- [x] **SKILLDEF-01** (B.8, `bs-skills-session-lock-defect.md`): The `close` ceremony reliably releases
   its lock, does not fabricate the lock timestamp, and can never overwrite CHUNK.md — the crash-consistency
   seam is fixed so a same-day resume does not false-alarm (which was training click-through).
 - [ ] **SKILLDEF-02** (B.8, `bs-skills-never-suppress-builtin-ui.md`): The skills fence the game/platform

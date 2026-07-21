@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: verifying
+status: executing
 stopped_at: Completed 164-04-PLAN.md
-last_updated: "2026-07-21T20:12:44.367Z"
+last_updated: "2026-07-21T21:19:32.958Z"
 last_activity: 2026-07-21
 progress:
   total_phases: 15
   completed_phases: 10
-  total_plans: 29
-  completed_plans: 29
+  total_plans: 31
+  completed_plans: 30
   percent: 67
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 164 — Library Misc — Action-Panel, Loop, Visual, Debug-View
+**Current focus:** Phase 166 — Skills Defects — Session-Lock + UI/Library Boundary
 
 ## Current Position
 
-Phase: 164 (Library Misc — Action-Panel, Loop, Visual, Debug-View) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 166 (Skills Defects — Session-Lock + UI/Library Boundary) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-07-21
 
 ## Milestones
@@ -275,6 +275,7 @@ Recent decisions affecting current work:
 - [Phase 164]: Plan 164-03 (LIBX-01): platformActionPanelEscapeHatch renamed+locked; suppressFromDock rides the actionMetadata channel exactly like manual
 - [Phase 164-04]: displayedState computed re-wraps the shallower timeTravelState PlayerGameState into the GameState shape at one declaration site (mirrors gameView), unifying board+sidebar-extra :state on a single source of truth
 - [Phase 164-04]: isViewingHistory guarded independently in all four useBoardActionBridge mutators (not composed with isMyTurn) since setSelectionValue/toggleMultiSelectValue never re-check isMyTurn mid-action
+- [Phase ?]: Session lock grammar extended to "<slug> @ <session-id> — locked at <ISO timestamp>"; Bookkeeping Sequence grew 3->4 items with terminal lock release (SKILLDEF-01)
 
 ### Pending Todos
 
@@ -286,7 +287,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-21T20:12:44.358Z
+Last session: 2026-07-21T21:18:27.346Z
 Stopped at: Completed 164-04-PLAN.md
 Resume file: 
 None
