@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CommitGame } from '../../session/testing/fixtures/simultaneous-fixture.js';
+import { Game, Player, Action, FlowEngine, defineFlow, simultaneousActionStep } from '../index.js';
 
 /**
  * SIM-03 / D21 regression: once every awaiting seat has individually
@@ -56,5 +57,67 @@ describe('SIM-03 / D21: allDone-on-empty awaitingPlayers', () => {
 
     expect(state.awaitingInput).toBe(false);
     expect(state.complete).toBe(true);
+  });
+});
+
+/**
+ * Task 3 adversarial: reach the same "no eligible actor, allDone
+ * unsatisfied" edge via a DIFFERENT route than the primary regression --
+ * the engine's own "no available actions left" auto-complete branch
+ * (`engine.ts` resumeSimultaneousAction, re-eval block) rather than an
+ * explicit `playerDone` callback -- to prove the fix isn't narrowly
+ * targeted at the primary reproduction.
+ */
+describe('SIM-03 / D21 adversarial: variant route via auto-completed availableActions', () => {
+  class VariantPlayer extends Player<VariantGame, VariantPlayer> {
+    committed = false;
+  }
+
+  class VariantGame extends Game<VariantGame, VariantPlayer> {
+    static PlayerClass = VariantPlayer;
+    roundClosed = false;
+  }
+
+  it('all seats auto-completed via re-evaluated availableActions (no playerDone) still completes cleanly, not just the primary reproduction', () => {
+    const game = new VariantGame({ playerCount: 2, seed: 't' });
+
+    game.registerAction(
+      Action.create('commit')
+        .condition({
+          'has not committed yet': (ctx) => !(ctx.player as VariantPlayer).committed,
+        })
+        .execute((_args, ctx) => {
+          (ctx.player as VariantPlayer).committed = true;
+          return { success: true };
+        }),
+    );
+
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        actions: ['commit'],
+        // Deliberately NO playerDone -- completion for each seat comes
+        // solely from the "no available actions left after re-eval" branch
+        // (engine.ts resumeSimultaneousAction, not the playerDone branch).
+        allDone: () => game.roundClosed,
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    const start = engine.start();
+    expect(start.awaitingPlayers).toHaveLength(2);
+
+    const afterSeat1 = engine.resume('commit', {}, 1);
+    expect(afterSeat1.awaitingInput).toBe(true);
+    const afterSeat2 = engine.resume('commit', {}, 2);
+    expect(afterSeat2.awaitingInput).toBe(true);
+    // Both seats auto-completed (their available actions re-evaluated to
+    // empty once committed), yet allDone (roundClosed) is still false.
+    expect(afterSeat2.awaitingPlayers?.every((p) => p.completed)).toBe(true);
+
+    // A stray resume with no eligible actor must complete cleanly, not
+    // throw -- via the auto-complete route this time.
+    const result = engine.resume('commit', {});
+    expect(result.awaitingInput).toBe(false);
+    expect(result.complete).toBe(true);
   });
 });

@@ -90,3 +90,70 @@ describe('SIM-01 / D3: getState() awaitingPlayers checkpoint aliasing', () => {
     expect(result.complete).toBe(true);
   });
 });
+
+/**
+ * Task 3 adversarial verification: re-trigger the original aliasing failure
+ * mode under variant conditions and prove it no longer occurs.
+ */
+describe('SIM-01 / D3 adversarial: multi-checkpoint + caller-isolation', () => {
+  it('several sequential checkpoints across multiple completed flips each retain the value live at their OWN capture', () => {
+    const game = new CommitGame({ playerCount: 3, seed: 't' });
+    game.startFlow();
+
+    // Checkpoint before anyone has committed.
+    const t0 = game.getFlowState();
+    expect(t0?.awaitingPlayers?.map((p) => p.completed)).toEqual([false, false, false]);
+
+    game.continueFlow('commit', {}, 1);
+    const t1 = game.getFlowState();
+    expect(
+      t1?.awaitingPlayers?.map((p) => [p.playerIndex, p.completed]),
+    ).toEqual([[1, true], [2, false], [3, false]]);
+
+    game.continueFlow('commit', {}, 2);
+    const t2 = game.getFlowState();
+    expect(
+      t2?.awaitingPlayers?.map((p) => [p.playerIndex, p.completed]),
+    ).toEqual([[1, true], [2, true], [3, false]]);
+
+    game.continueFlow('commit', {}, 3);
+    const t3 = game.getFlowState();
+    expect(
+      t3?.awaitingPlayers?.map((p) => [p.playerIndex, p.completed]),
+    ).toEqual([[1, true], [2, true], [3, true]]);
+
+    // The retroactive-overwrite bug this regression guards against: verify
+    // EACH earlier checkpoint still shows exactly what was live when IT was
+    // captured, unaffected by any of the later flips.
+    expect(t0?.awaitingPlayers?.map((p) => p.completed)).toEqual([false, false, false]);
+    expect(
+      t1?.awaitingPlayers?.map((p) => [p.playerIndex, p.completed]),
+    ).toEqual([[1, true], [2, false], [3, false]]);
+    expect(
+      t2?.awaitingPlayers?.map((p) => [p.playerIndex, p.completed]),
+    ).toEqual([[1, true], [2, true], [3, false]]);
+  });
+
+  it('a caller mutating the returned awaitingPlayers cannot corrupt the engine private array (one-directional isolation)', () => {
+    const game = new CommitGame({ playerCount: 2, seed: 't' });
+    game.startFlow();
+
+    const state = game.getFlowState();
+    const entry = state?.awaitingPlayers?.find((p) => p.playerIndex === 1);
+    expect(entry?.completed).toBe(false);
+
+    // A hostile/careless caller mutates the returned entry AND its array.
+    if (entry) entry.completed = true;
+    state?.awaitingPlayers?.push({ playerIndex: 99, availableActions: ['bogus'], completed: false });
+
+    // The engine's own live view must be unaffected by either mutation --
+    // seat 1 must still be able to commit normally, and no phantom seat 99
+    // should appear.
+    const freshState = game.getFlowState();
+    expect(freshState?.awaitingPlayers).toHaveLength(2);
+    expect(freshState?.awaitingPlayers?.find((p) => p.playerIndex === 1)?.completed).toBe(false);
+
+    const result = game.continueFlow('commit', {}, 1);
+    expect(result.actionError).toBeUndefined();
+  });
+});
