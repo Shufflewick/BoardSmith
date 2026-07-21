@@ -64,12 +64,24 @@ class CommitGame extends Game<CommitGame, CommitPlayer> {
         }),
     );
 
+    // Available to every awaiting seat regardless of its own `committed`
+    // flag -- lets a Plan 02 test reach `game.isFinished()` from WITHIN the
+    // simultaneous step (one seat ends the game while a co-decider has
+    // already committed), exercising Phase 155's finished-phase undo fence
+    // without inventing a second fixture or a `.notUndoable()` action.
+    this.registerAction(
+      Action.create('endGame').execute((_args, ctx) => {
+        ctx.game.finish();
+        return { success: true };
+      }),
+    );
+
     this.setFlow(
       defineFlow({
         root: simultaneousActionStep({
           name: 'commit-step',
           players: () => this.players,
-          actions: ['commit'],
+          actions: ['commit', 'endGame'],
           playerDone: (_ctx, p) => (p as CommitPlayer).committed,
           allDone: () => this.roundClosed,
         }),
