@@ -274,13 +274,26 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
     if (action.selections.length > 0) {
       autoEndArmed = false; // a selection action auto-started — the auto-end intent is moot
+      if (action.manual) {
+        // AUTOEXEC-01 (D7): `.manual()` only governs sole *no-selection* actions.
+        // A selection action already auto-*starts* (surfaces its first prompt)
+        // and is never auto-executed, so the flag does nothing here — warn the
+        // author rather than silently ignore it.
+        devWarn(
+          `autoexec:manual-noop:${action.name}`,
+          `Action "${action.name}" is marked .manual() but has selections, so .manual() has no effect. ` +
+            `Selection actions already surface their prompt and are never auto-executed; drop .manual() from this action.`,
+        );
+      }
       void startAction(action.name);
     } else if (!skipNoSelections && actionMetadata.value) {
       autoEndArmed = false; // consumed: the sole no-selection action (endTurn) is firing
       if (action.manual) {
-        // AUTOEXEC-01 (D7): a manual sole no-selection action is auto-STARTED
-        // (surfaced above) but never auto-EXECUTED — the player still takes the
-        // beat themselves (e.g. a draw is not silently played for them).
+        // AUTOEXEC-01 (D7): suppress the silent auto-execute of a sole
+        // no-selection action. The shell does NOT play it for the player — they
+        // take the beat themselves via the Action Panel button (default UI) or a
+        // control the game wires up in a custom board UI. There is no separate
+        // "start" step for a no-selection action, so this is a plain bail-out.
         return;
       }
       devWarn(

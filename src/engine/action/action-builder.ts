@@ -150,11 +150,16 @@ export class Action<
   }
 
   /**
-   * Mark this action as manual: when it is the sole no-selection action
-   * available, the shell still auto-STARTS it (surfaces its beat) but never
-   * auto-EXECUTES it for the player. Use for actions like a draw, where the
-   * player should take the beat themselves rather than have it silently
-   * played for them.
+   * Mark this action as manual: when it is the sole *no-selection* action
+   * available, the shell will NOT auto-execute it for the player. The player
+   * takes the beat themselves — by tapping the action's button in the default
+   * Action Panel, or a control the game wires up in a custom board UI. Use for
+   * actions like a draw, where the move should never be silently played.
+   *
+   * Note: `manual()` only affects a sole no-selection action. On an action that
+   * has selections it is a no-op (such actions already auto-*start* — surfacing
+   * their first prompt — and are never auto-executed), and the shell emits a
+   * dev-mode warning so the flag isn't silently ignored.
    */
   manual(): this {
     this.definition.manual = true;

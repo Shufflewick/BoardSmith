@@ -531,5 +531,37 @@ describe('useBoardActionBridge', () => {
 
       warnSpy.mockRestore();
     });
+
+    // Review follow-up (156-REVIEW WR-02): .manual() on an action that HAS
+    // selections is a no-op — surface that to the author instead of ignoring it.
+    it('warns once when .manual() is applied to a sole action that has selections', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const board = createBoardInteraction();
+      const { controller, start } = makeController({ pick: null, action: null });
+
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({
+          play: { name: 'play', selections: [{ name: 'card', type: 'chooseElement' }], manual: true },
+        }),
+        availableActions: ref(['play']),
+      });
+
+      await nextTick();
+      await nextTick();
+
+      const relevantCalls = warnSpy.mock.calls.filter(call => String(call[0]).includes('play'));
+      expect(relevantCalls.length).toBe(1);
+      expect(String(relevantCalls[0][0])).toContain('no effect');
+      // The selection action still auto-starts (surfaces its prompt) — the
+      // warning does not suppress it.
+      expect(start).toHaveBeenCalled();
+      expect(start.mock.calls[0][0]).toBe('play');
+
+      warnSpy.mockRestore();
+    });
   });
 });
