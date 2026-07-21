@@ -558,3 +558,106 @@ describe('MCTSBot flow-variable relinking on redacted restore (AI-02 / CR-02)', 
     expect(restored.lastGuess).toBe(1);
   });
 });
+
+// ----------------------------------------------------------------------------
+// WR-01 (163-REVIEW): D24's true-concealment `'hidden'` zone mode builds NO
+// synthetic placeholders and registers NOTHING in `idRemap` (deliberate --
+// registering one entry per hidden child would let the map's SIZE leak the
+// exact child count, defeating D24). But a flow variable that was bound to a
+// child of a `'hidden'`-mode zone BEFORE it went into that zone's redaction
+// still needs to resolve to *something* live on restore of a redacted clone
+// -- not the raw `{__flowElementId, className}` marker (CR-02/159's exact
+// failure mode). This exercises `HiddenFlowVarGame` with `contentsHidden()`
+// (not `contentsCountOnly()`) to reproduce the WR-01 regression specifically.
+// ----------------------------------------------------------------------------
+
+class TrueHiddenFlowVarGame extends Game<TrueHiddenFlowVarGame, Player> {
+  secretZone!: Space<TrueHiddenFlowVarGame>;
+  lastGuess?: number;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.secretZone = this.create(Space<TrueHiddenFlowVarGame>, 'secretZone');
+    this.secretZone.contentsHidden(); // D24: true concealment, no placeholders/idRemap
+    this.secretZone.create(FlowCard, 'card-a', { label: 'A' });
+    this.secretZone.create(FlowCard, 'card-b', { label: 'B' });
+
+    this.registerAction(
+      Action.create('guess')
+        .chooseFrom('guessedValue', {
+          prompt: 'Guess',
+          choices: [1, 2, 3],
+        })
+        .execute((args, ctx) => {
+          (ctx.game as TrueHiddenFlowVarGame).lastGuess = args.guessedValue as number;
+          return { success: true };
+        })
+    );
+
+    this.setFlow(defineFlow({
+      root: forEach({
+        collection: (ctx) => (ctx.game as TrueHiddenFlowVarGame).secretZone.all(FlowCard),
+        as: 'currentCard',
+        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)! }),
+      }),
+    }));
+  }
+}
+
+function createTrueHiddenFlowVarGame(seed: string) {
+  const game = new TrueHiddenFlowVarGame({
+    playerCount: 2,
+    playerNames: ['P1', 'P2'],
+    seed,
+  });
+  game.startFlow();
+  return game;
+}
+
+describe('MCTSBot flow-variable relinking over a TRUE-hidden zone (WR-01 / 163-REVIEW)', () => {
+  it('a forEach-bound flow variable over a `hidden`-mode zone relinks to a live element (the container), not a dead marker, on redacted restore', () => {
+    const game = createTrueHiddenFlowVarGame('wr01-1');
+    const bot: any = new MCTSBot(
+      game,
+      TrueHiddenFlowVarGame,
+      'true-hidden-flow-var',
+      1,
+      [],
+      { iterations: 5, playoutDepth: 0, seed: 'wr01-1', async: false, usePNS: false },
+    );
+
+    const snapshot = bot.captureSnapshot();
+
+    // D24 concealment guard: the redacted wire payload must carry NEITHER a
+    // `children` key NOR a `childCount` key for the hidden zone -- this must
+    // stay true both before and after the WR-01 fix.
+    const secretZoneJson = findById(snapshot.state as ElementJSON, game.secretZone.id)!;
+    expect(secretZoneJson).toBeDefined();
+    expect('children' in secretZoneJson).toBe(false);
+    expect('childCount' in secretZoneJson).toBe(false);
+
+    const restored = bot.restoreGame(snapshot) as TrueHiddenFlowVarGame;
+
+    // Sanity: the clone is still a valid, playable game.
+    const flowState = restored.getFlowState();
+    expect(flowState?.awaitingInput).toBe(true);
+    expect(flowState?.availableActions).toContain('guess');
+
+    const currentCard = (restored as any)._flowEngine.variables.currentCard;
+
+    // Pre-fix (WR-01): no idRemap entry exists for a 'hidden'-mode zone child,
+    // so relinkFlowVariables falls through to `return value` -- `currentCard`
+    // stays the raw `{__flowElementId, className}` marker, not a GameElement.
+    // Post-fix: it relinks to a live, already-disclosed element -- the hidden
+    // zone's own CONTAINER (`restored.secretZone`), never a per-child
+    // synthetic placeholder (there is none, and none may be manufactured
+    // without re-leaking the count).
+    expect(currentCard).toBeInstanceOf(GameElement);
+    expect(currentCard).toBe(restored.secretZone);
+
+    // The clone must also still be genuinely PLAYABLE.
+    restored.continueFlow('guess', { guessedValue: 1 }, 1);
+    expect(restored.lastGuess).toBe(1);
+  });
+});
