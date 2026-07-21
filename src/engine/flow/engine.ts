@@ -482,6 +482,18 @@ export class FlowEngine<G extends Game = Game> {
       return;
     }
 
+    // 160-02 (D4 step-window bound): a simultaneous-action-step frame has no
+    // `currentActionConfig` (that field is action-step-only), but it DOES
+    // carry its own per-frame `moveCount` (see `executeSimultaneousActionStep`
+    // / `resumeSimultaneousAction`) that must be rehydrated the same way, or
+    // every checkpoint restore mid-simultaneous-step would silently reset
+    // the step-window boundary to 0.
+    if (currentFrame?.node.type === 'simultaneous-action-step') {
+      this.currentActionConfig = undefined;
+      this.moveCount = (currentFrame.data?.moveCount as number) ?? 0;
+      return;
+    }
+
     this.currentActionConfig = undefined;
     this.moveCount = 0;
   }
@@ -572,6 +584,16 @@ export class FlowEngine<G extends Game = Game> {
     // Clear error on success (mirrors resume()'s success-path clear).
     this.actionError = undefined;
 
+    // 160-02 (D4 step-window bound): count this action toward the CURRENT
+    // simultaneous-step frame's move counter (mirrors
+    // `handleActionStepCompletion`'s sequential moveCount increment).
+    // `frame.data` is the durable, checkpoint-restorable copy;
+    // `this.moveCount` is the live mirror `getState()` publishes.
+    const currentFrameMoveCount = (frame.data?.moveCount as number) ?? 0;
+    const newFrameMoveCount = currentFrameMoveCount + 1;
+    frame.data = { ...frame.data, moveCount: newFrameMoveCount };
+    this.moveCount = newFrameMoveCount;
+
     // Everything below runs AFTER the action committed its state changes.
     // playerDone / actions re-eval / allDone are developer callbacks
     // evaluating live game state — the same failure class as switchOn's on()
@@ -653,12 +675,19 @@ export class FlowEngine<G extends Game = Game> {
     // reports moveCount is a step undo can never be offered for.
     // movesRemaining/movesRequired stay limits-gated below: they're
     // meaningless without minMoves/maxMoves.
-    if (this.currentActionConfig) {
+    //
+    // 160-02 (D4 step-window bound): also publish for an active simultaneous
+    // step (`this.awaitingPlayers.length > 0`) -- `currentActionConfig` is
+    // never set there (it's action-step-only), but the simultaneous step now
+    // tracks its own per-frame moveCount (see `executeSimultaneousActionStep`
+    // / `resumeSimultaneousAction`), which is the step-window lower bound
+    // `session/utils.ts`'s per-seat simultaneous undo boundary depends on.
+    if (this.currentActionConfig || this.awaitingPlayers.length > 0) {
       state.moveCount = this.moveCount;
-      if (this.currentActionConfig.maxMoves) {
+      if (this.currentActionConfig?.maxMoves) {
         state.movesRemaining = this.currentActionConfig.maxMoves - this.moveCount;
       }
-      if (this.currentActionConfig.minMoves) {
+      if (this.currentActionConfig?.minMoves) {
         state.movesRequired = Math.max(0, this.currentActionConfig.minMoves - this.moveCount);
       }
     }
@@ -1513,6 +1542,19 @@ export class FlowEngine<G extends Game = Game> {
 
     // Build awaiting state for each player
     this.awaitingPlayers = [];
+
+    // 160-02 (D4 step-window bound): reset the per-step move counter on
+    // fresh entry into THIS simultaneous-action-step frame -- the
+    // simultaneous analogue of `executeActionStep`'s per-frame `moveCount`.
+    // Without a step-scoped counter, `session/utils.ts`'s per-seat undo
+    // boundary has no way to distinguish "this seat acted earlier in the
+    // CURRENT step" from "this seat also acted in a PRIOR step/phase" when
+    // no other seat's action happens to fall between the two -- the
+    // simultaneous-step cross-phase trap. Stored in `frame.data` (not just
+    // the private field) so it survives the position round-trip exactly
+    // like `executeActionStep`'s moveCount (`getPosition`/`restore`).
+    frame.data = { ...frame.data, moveCount: 0 };
+    this.moveCount = 0;
 
     for (const player of players) {
       // Check if player should be skipped
