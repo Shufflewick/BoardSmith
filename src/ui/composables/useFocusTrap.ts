@@ -15,9 +15,9 @@
  * `inert` on background siblings is the only mechanism that prevents Tab from
  * escaping the dialog for keyboard-only users.
  *
- * GameOverCard usage:
- *   useFocusTrap(dialogRef, { escapeToClose: false, onClose: () => {} })
- *   → Tab stays trapped; Escape does nothing; user must click Rematch/New Game.
+ * GameOverCard usage (D10):
+ *   useFocusTrap(dialogRef, { escapeToClose: true, onClose: () => emit('dismiss') })
+ *   → Tab stays trapped; Escape dismisses the card (same as the close button).
  */
 import { nextTick, type Ref } from 'vue';
 

@@ -1,16 +1,20 @@
 <script setup lang="ts">
 /**
- * GameOverCard — Slate result overlay (IA-07)
+ * GameOverCard — Slate result overlay (IA-07, D10)
  *
  * Overlays the board inside .boardregion behind a Slate scrim when the game
- * is complete. Shows winners from the validated winnerSeats × players list,
- * or "Game Over" without names when no winners are known (dev-WS degrade).
+ * is complete. Shows winners from the validated winnerSeats × players list;
+ * a genuine draw (isDraw=true) labels "Draw"; winner data that is merely
+ * unavailable (dev-WS degrade, isDraw=false with no seats) stays "Game Over".
+ * The card never renders winner tokens when there are no winners (D10).
  *
  * Scrim is positioned absolute inside .boardregion — it cannot cover browser
  * chrome or the .actionbar (which is a sibling of .stage, not a child).
  *
- * Focus is trapped inside the card on mount (A11Y-07). Escape does NOT close:
- * the game is over and there is no dismiss — the user must click Rematch or New Game.
+ * Focus is trapped inside the card on mount (A11Y-07). The card is dismissable
+ * (D10): a close button and Escape both emit 'dismiss'. Dismissing does not
+ * restart or leave the game — the caller (GameShell) hides the card and
+ * returns focus to the board.
  */
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
@@ -21,22 +25,34 @@ export interface Player {
   color?: string;
 }
 
-const props = defineProps<{
-  /** Validated seat indices of the winners ([] in dev-WS degrade). */
+const props = withDefaults(defineProps<{
+  /** Validated seat indices of the winners ([] in dev-WS degrade or a draw). */
   winnerSeats: number[];
   /** All players in the game — used for name lookup. */
   players: Player[];
-}>();
+  /**
+   * Explicit signal that the game ended with zero winners (a genuine draw),
+   * as opposed to winner data merely being unavailable. Sourced from the
+   * session (isComplete && winners.length === 0) — never inferred from a
+   * bare empty winnerSeats array, which also occurs on the dev-WS degrade.
+   */
+  isDraw?: boolean;
+}>(), {
+  isDraw: false,
+});
 
 const emit = defineEmits<{
   rematch: [];
   'new-game': [];
+  /** Card dismissed via close button or Escape. Does not restart or leave. */
+  dismiss: [];
 }>();
 
 const cardRef = ref<HTMLElement | null>(null);
 
 const { open: openTrap, close: closeTrap, handleKeydown } = useFocusTrap(cardRef, {
-  escapeToClose: false,
+  escapeToClose: true,
+  onClose: () => emit('dismiss'),
 });
 
 onMounted(() => openTrap());
@@ -72,12 +88,20 @@ const winners = computed(() =>
     .filter((p): p is Player => p !== undefined)
 );
 
-/** h2 title text. */
+/**
+ * h2 title text — a pure function of winners + isDraw (UI-SPEC §1):
+ *   1 winner    → "{name} wins"
+ *   >1 winners  → "{names} win"
+ *   0 winners, isDraw   → "Draw"
+ *   0 winners, !isDraw  → "Game Over" (winner data unavailable, e.g. dev-WS degrade)
+ */
 const titleText = computed(() => {
-  if (winners.value.length === 0) return 'Game Over';
   if (winners.value.length === 1) return `${winners.value[0].name} wins`;
-  const names = winners.value.map(p => p.name).join(' & ');
-  return `${names} win`;
+  if (winners.value.length > 1) {
+    const names = winners.value.map(p => p.name).join(' & ');
+    return `${names} win`;
+  }
+  return props.isDraw ? 'Draw' : 'Game Over';
 });
 </script>
 
@@ -90,6 +114,12 @@ const titleText = computed(() => {
       aria-labelledby="game-over-title"
       @keydown="handleKeydown"
     >
+      <button
+        type="button"
+        class="goc-close"
+        aria-label="Close"
+        @click="emit('dismiss')"
+      >&times;</button>
       <h2 id="game-over-title" class="game-over-title">{{ titleText }}</h2>
 
       <!-- Winner tokens: only when winners are known (not in dev-WS degrade) -->
@@ -135,6 +165,7 @@ const titleText = computed(() => {
 }
 
 .game-over-card {
+  position: relative;
   background: var(--bsg-surface);
   border: 1px solid var(--bsg-line-2);
   border-radius: var(--bsg-r-lg);
@@ -147,6 +178,29 @@ const titleText = computed(() => {
   align-items: center;
   gap: var(--bsg-s4);
   text-align: center;
+}
+
+/* Close (dismiss) affordance — top-right, 44x44 CSS px min hit target (UI-SPEC §2). */
+.goc-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--bsg-ink);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--bsg-r-sm);
+}
+
+.goc-close:hover {
+  background: color-mix(in srgb, var(--bsg-ink) 10%, transparent);
 }
 
 .game-over-title {

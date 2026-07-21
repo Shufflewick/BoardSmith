@@ -26,7 +26,7 @@ export interface PersistenceErrorEntry {
 export interface SnapshotSessionAdapters {
   playerCount: number;
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
-  broadcast: (playerViews: unknown[], meta: { isComplete: boolean; winners: number[] }) => void;
+  broadcast: (playerViews: unknown[], meta: { isComplete: boolean; winners: number[]; isDraw: boolean }) => void;
   aiSeats?: Array<{ seat: number; level?: string }>;
   /**
    * When true, demoStart is rejected fail-loud and state.teachingDisabled is broadcast
@@ -277,7 +277,11 @@ export class SnapshotSessionHost {
    */
   broadcastCurrent(): void {
     const mergedViews = this.mergeTransientState(this.lastPlayerViews);
-    this.adapters.broadcast(mergedViews, { isComplete: this.isComplete, winners: this.winners });
+    this.adapters.broadcast(mergedViews, {
+      isComplete: this.isComplete,
+      winners: this.winners,
+      isDraw: this.isComplete && this.winners.length === 0,
+    });
   }
 
   private async apply(res: OpResult, seat?: number): Promise<void> {
@@ -297,7 +301,11 @@ export class SnapshotSessionHost {
     }
     this.lastPlayerViews = res.playerViews;
     const mergedViews = this.mergeTransientState(res.playerViews);
-    this.adapters.broadcast(mergedViews, { isComplete: res.isComplete, winners: res.winners });
+    this.adapters.broadcast(mergedViews, {
+      isComplete: res.isComplete,
+      winners: res.winners,
+      isDraw: res.isComplete && res.winners.length === 0,
+    });
     // Routed through persistSafely (ERR-03) — a persist() failure must never
     // throw out of apply() and must be observable via onPersistenceError /
     // lastPersistenceError / persistenceHealthy. No-op when no persist

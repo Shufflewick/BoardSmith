@@ -138,6 +138,13 @@ interface GameShellProps {
   defaultAIPlayers?: number[];
   /** Suppress the footer ActionPanel regardless of anchor state (D-02 escape hatch). Default: false. */
   suppressActionPanel?: boolean;
+  /**
+   * The game renders its own end-state UI inside its own board (D10/ENDGAME-01).
+   * When true, BOTH the default GameOverCard and any `#game-over` slot content
+   * are suppressed — the game is fully responsible for presenting the outcome.
+   * Default: false.
+   */
+  providesOwnGameOverUI?: boolean;
   /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */
   presentation?: PresentationOverlay;
   /**
@@ -168,6 +175,7 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   debugMode: true,
   showHistory: true,
   suppressActionPanel: false,
+  providesOwnGameOverUI: false,
 });
 
 // Platform mode: embedded inside a host platform's iframe (e.g., ShufflewickPub
@@ -306,6 +314,22 @@ let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 // Winner seats captured from the game_state postMessage (IA-07).
 // Validated as number[] on receipt; stays [] in dev-WS mode (graceful degrade).
 const winnerSeats = ref<number[]>([]);
+
+// Explicit draw signal captured from the game_state postMessage (D10/ENDGAME-01).
+// Sourced from the session (isComplete && winners.length === 0), threaded via
+// snapshot-session-host meta -> multiplayer-host game_state frame. Absent on
+// the frame (or platformMode not used) -> stays false ("unknown", not a draw) —
+// never inferred from a bare empty winnerSeats, which also occurs pre-completion.
+const isDraw = ref(false);
+
+// Game-over card/slot dismissed by the player (D10). Reset when a new game
+// starts (flowState.complete transitions back to false) so the next completion
+// shows the card again.
+const gameOverDismissed = ref(false);
+function dismissGameOver(): void {
+  gameOverDismissed.value = true;
+  nextTick(() => boardregionEl.value?.focus());
+}
 
 // Time travel state (for viewing historical game states)
 const timeTravelState = ref<any>(null);
@@ -587,6 +611,15 @@ const gameMessages = computed(() => {
 // Computed properties derived from game view
 const players = computed(() => state.value?.state.players || []);
 const myPlayer = computed(() => players.value.find(p => p.seat === playerSeat.value));
+
+// #game-over slot prop (D10): the winning Player objects, derived the same
+// way GameOverCard derives them internally — kept here so a game's custom
+// slot content doesn't need to re-implement the seat -> Player lookup.
+const gameOverWinners = computed(() =>
+  winnerSeats.value
+    .map((seat) => players.value.find((p: any) => p.seat === seat))
+    .filter((p: any): p is NonNullable<typeof p> => p !== undefined)
+);
 const opponentPlayers = computed(() => players.value.filter(p => p.seat !== playerSeat.value));
 
 // Per-seat live connection status for the players panel. The lobby slots are the
@@ -1149,6 +1182,10 @@ if (typeof window !== 'undefined' && window.parent !== window) {
         (data.winners as unknown[]).every((n: unknown) => typeof n === 'number')
           ? (data.winners as number[])
           : [];
+
+      // Explicit draw signal (D10/ENDGAME-01): absent/malformed on the frame
+      // -> false ("unknown"), never fabricated from the winners array above.
+      isDraw.value = data.isDraw === true;
     }
 
     // Heartbeat: host pings periodically to prove the connection is live (IA-01).
@@ -1772,17 +1809,33 @@ watch(connectionStatus, (newVal, oldVal) => {
   }
 }, { immediate: false });
 
+// A restart clears `complete` back to false — re-arm the dismissed card so
+// the NEXT completion shows it again (D10).
+watch(
+  () => (state.value?.flowState as any)?.complete,
+  (newComplete) => {
+    if (!newComplete) gameOverDismissed.value = false;
+  },
+  { immediate: false },
+);
+
 watch(
   () => (state.value?.flowState as any)?.complete,
   (newComplete, oldComplete) => {
     if (newComplete && !oldComplete) {
       const flowState = state.value?.flowState as any;
-      const winnerSeats: number[] = flowState?.winners ?? [];
+      // flowState.winners is a DEFINED array when complete (empty = a genuine
+      // draw) vs undefined when winner data could not be validated (dev-WS
+      // degrade) — see engine/utils/snapshot.ts. A bare `winnerSeats.length
+      // === 0` cannot distinguish the two; the definedness check can (D10).
+      const rawWinners: number[] | undefined = flowState?.winners;
+      const winnerSeats: number[] = rawWinners ?? [];
+      const isDraw = rawWinners !== undefined && rawWinners.length === 0;
       const winnerNames = winnerSeats.map((seat) => {
         const p = players.value.find((pl) => pl.seat === seat);
         return (p as any)?.name || `Player ${seat}`;
       });
-      const text = announceGameOver(winnerNames);
+      const text = announceGameOver(winnerNames, isDraw);
       announcer.announce(text, { assertive: true });
 
       // Stop any running AI demo when the game completes. isDemoRunning is
@@ -2069,7 +2122,7 @@ if ((import.meta as any).hot) {
         <!-- Board region: hero; ~zero chrome padding; container-query-sized.
              --dock-h carries the floating dock's measured height so the board has
              matching scroll room at the bottom (covered content stays reachable). -->
-        <main class="boardregion" id="main" role="main" ref="boardregionEl" :style="{ '--dock-h': dockHeight + 'px' }">
+        <main class="boardregion" id="main" role="main" ref="boardregionEl" tabindex="-1" :style="{ '--dock-h': dockHeight + 'px' }">
           <!-- Connection health dot: platform mode only, and only surfaced when there's
                something to say (stale/connecting). A healthy connection shows nothing —
                a persistent green dot over the board just reads as a mystery speck (IA-01).
@@ -2081,17 +2134,35 @@ if ((import.meta as any).hot) {
             :title="connectionHealth === 'stale' ? 'Connection lost — reconnecting…' : 'Connecting…'"
             aria-hidden="true"
           ></span>
-          <!-- Game Over result card: overlays the board behind a Slate scrim (IA-07).
+          <!-- Game Over result card: overlays the board behind a Slate scrim (IA-07, D10).
                Scrim is absolute inside .boardregion — cannot cover the .actionbar sibling
-               or browser chrome (T-100-06-02). winnerSeats degrades to [] in dev-WS mode.
+               or browser chrome (T-100-06-02). winnerSeats degrades to [] in dev-WS mode;
+               isDraw distinguishes that degrade from a genuine draw.
+               A filled #game-over slot replaces the default card entirely; providesOwnGameOverUI
+               suppresses BOTH (the game renders its own end state on its own board). Dismissing
+               (close button / Escape) reveals the board without restarting or leaving.
                @new-game → handleMenuItemClick goes back to lobby; @rematch → restarts same game. -->
-          <GameOverCard
-            v-if="state?.flowState?.complete"
-            :winner-seats="winnerSeats"
-            :players="players"
-            @new-game="handleMenuItemClick('new-game')"
-            @rematch="handleRestartGame"
-          />
+          <template v-if="state?.flowState?.complete && !props.providesOwnGameOverUI && !gameOverDismissed">
+            <slot
+              v-if="$slots['game-over']"
+              name="game-over"
+              :winners="gameOverWinners"
+              :players="players"
+              :is-draw="isDraw"
+              :rematch="handleRestartGame"
+              :new-game="() => handleMenuItemClick('new-game')"
+              :dismiss="dismissGameOver"
+            />
+            <GameOverCard
+              v-else
+              :winner-seats="winnerSeats"
+              :players="players"
+              :is-draw="isDraw"
+              @new-game="handleMenuItemClick('new-game')"
+              @rematch="handleRestartGame"
+              @dismiss="dismissGameOver"
+            />
+          </template>
           <!-- Tutorial annotation overlay: mounts once here so it appears over BOTH
                the #game-board slot (custom UI) and the dev UI-switcher <component>
                path. Position is absolute inside .boardregion (inset: 0, z-index: 20).

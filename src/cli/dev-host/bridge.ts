@@ -91,7 +91,7 @@ export interface DevSessionOptions {
   postGameState: (
     seat: number,
     view: unknown,
-    meta: { isComplete: boolean; winners: number[] },
+    meta: { isComplete: boolean; winners: number[]; isDraw: boolean },
   ) => void;
   /** Post a `server_response` frame to the requesting seat's iframe. */
   postServerResponse: (
@@ -119,7 +119,7 @@ export interface DevSession {
   /** The most recent per-seat view (for replaying state to a (re)loaded iframe). */
   viewForSeat(seat: number): unknown;
   /** Current terminal state for init/replay. */
-  meta(): { isComplete: boolean; winners: number[] };
+  meta(): { isComplete: boolean; winners: number[]; isDraw: boolean };
 }
 
 /** Translate a wire op + payload into the host's `Op` union (mirrors the DO). */
@@ -328,6 +328,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
   let lastPlayerViews: unknown[] | null = null;
   let isComplete = false;
   let winners: number[] = [];
+  let isDraw = false;
 
   const host = new SnapshotSessionHost({
     playerCount: opts.playerCount,
@@ -346,6 +347,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
       lastPlayerViews = playerViews;
       isComplete = meta.isComplete;
       winners = meta.winners;
+      isDraw = meta.isDraw;
       for (let seat = 1; seat <= opts.playerCount; seat++) {
         opts.postGameState(seat, playerViews[seat - 1], meta);
       }
@@ -397,6 +399,6 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     start: () => host.start(),
     handleServerRequest,
     viewForSeat: (seat: number) => lastPlayerViews?.[seat - 1],
-    meta: () => ({ isComplete, winners }),
+    meta: () => ({ isComplete, winners, isDraw }),
   };
 }

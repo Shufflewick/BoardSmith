@@ -9,11 +9,11 @@
  * logic for the `#game-over` slot / `providesOwnGameOverUI` prop, using the REAL
  * GameOverCard component so labeling/dismiss behavior is exercised for real.
  *
- * The harness template below mirrors CURRENT (pre-fix) GameShell.vue:2088-2094 —
- * unconditional default GameOverCard, no `#game-over` slot, no
- * `providesOwnGameOverUI` prop. It must be updated to mirror the post-fix
- * template in the GREEN commit, in lockstep with the real GameShell.vue change
- * (same discipline as the other GameShell.*.test.ts harnesses in this file).
+ * GREEN: the harness template now mirrors the post-fix GameShell.vue mount
+ * guard — `#game-over` slot (auto-suppresses the default card when filled)
+ * and `providesOwnGameOverUI` (suppresses both), kept in lockstep with the
+ * real GameShell.vue change (same discipline as the other GameShell.*.test.ts
+ * harnesses in this file).
  *
  * Behaviors under test (CONTEXT.md ENDGAME-01 / UI-SPEC §3):
  *   (a) Default card renders when neither slot nor flag is present.
@@ -35,9 +35,9 @@ const PLAYERS: Player[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// GameOverHarness — mirrors GameShell.vue's game-over mount guard.
-//
-// CURRENT (pre-fix) state: unconditional default card, no slot, no flag.
+// GameOverHarness — mirrors GameShell.vue's game-over mount guard (post-fix,
+// GameShell.vue's `<template v-if="state?.flowState?.complete &&
+// !providesOwnGameOverUI && !gameOverDismissed">` block).
 // ---------------------------------------------------------------------------
 const GameOverHarness = defineComponent({
   name: 'GameOverHarness',
@@ -46,22 +46,37 @@ const GameOverHarness = defineComponent({
     complete: { type: Boolean, default: true },
     winnerSeats: { type: Array as PropType<number[]>, default: () => [] },
     players: { type: Array as PropType<Player[]>, default: () => PLAYERS },
+    isDraw: { type: Boolean, default: false },
+    providesOwnGameOverUI: { type: Boolean, default: false },
     useCustomBoard: { type: Boolean, default: false },
   },
-  emits: ['new-game', 'rematch'],
+  emits: ['new-game', 'rematch', 'dismiss'],
   template: `
     <div class="boardregion">
       <div v-if="useCustomBoard" class="custom-board">Custom board UI</div>
       <div v-else class="empty-game-area">Add your game board in the #game-board slot</div>
 
-      <GameOverCard
-        v-if="complete"
-        class="game-over-card-harness-marker"
-        :winner-seats="winnerSeats"
-        :players="players"
-        @new-game="$emit('new-game')"
-        @rematch="$emit('rematch')"
-      />
+      <template v-if="complete && !providesOwnGameOverUI">
+        <slot
+          v-if="$slots['game-over']"
+          name="game-over"
+          :winners="winnerSeats.map(s => players.find(p => p.seat === s)).filter(Boolean)"
+          :players="players"
+          :is-draw="isDraw"
+          :rematch="() => $emit('rematch')"
+          :new-game="() => $emit('new-game')"
+          :dismiss="() => $emit('dismiss')"
+        />
+        <GameOverCard
+          v-else
+          :winner-seats="winnerSeats"
+          :players="players"
+          :is-draw="isDraw"
+          @new-game="$emit('new-game')"
+          @rematch="$emit('rematch')"
+          @dismiss="$emit('dismiss')"
+        />
+      </template>
     </div>
   `,
 });

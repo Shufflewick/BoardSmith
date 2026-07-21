@@ -53,6 +53,12 @@ export type HostOutbound =
       view: unknown;
       isComplete: boolean;
       winners: number[];
+      /**
+       * Explicit draw signal (D10/ENDGAME-01): isComplete && winners.length === 0.
+       * Absent/false does NOT mean "not a draw" — it means the field carries no
+       * claim either way; the client must not fabricate "Draw" from a bare [].
+       */
+      isDraw: boolean;
       requestId?: string | null;
     }
   | { type: 'server_response'; requestId: string | null; result: Record<string, unknown> }
@@ -403,6 +409,7 @@ export class MultiplayerHost {
       view,
       isComplete: meta.isComplete,
       winners: meta.winners,
+      isDraw: meta.isDraw,
       requestId: msg.requestId ?? null,
     });
   }
@@ -592,7 +599,7 @@ export class MultiplayerHost {
     const view = this.session?.viewForSeat(seat);
     if (view !== undefined && this.session) {
       const meta = this.session.meta();
-      this.send(clientId, { type: 'game_state', view, isComplete: meta.isComplete, winners: meta.winners });
+      this.send(clientId, { type: 'game_state', view, isComplete: meta.isComplete, winners: meta.winners, isDraw: meta.isDraw });
     }
   }
 
@@ -643,7 +650,7 @@ export class MultiplayerHost {
   private deliverGameState(
     seat: number,
     view: unknown,
-    meta: { isComplete: boolean; winners: number[] },
+    meta: { isComplete: boolean; winners: number[]; isDraw: boolean },
   ): void {
     const info = this.seats.get(seat);
     if (!info?.clientId || !info.connected) return;
@@ -659,6 +666,7 @@ export class MultiplayerHost {
         view: activeView ?? view,
         isComplete: meta.isComplete,
         winners: meta.winners,
+        isDraw: meta.isDraw,
       });
       return;
     }
@@ -667,6 +675,7 @@ export class MultiplayerHost {
       view,
       isComplete: meta.isComplete,
       winners: meta.winners,
+      isDraw: meta.isDraw,
     });
   }
 

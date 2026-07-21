@@ -33,9 +33,14 @@ export function announceConnectionChange(
 /**
  * Returns the game-over announcement for the assertive live region.
  * winnerNames should be the resolved display names of winning players.
+ *
+ * isDraw (D10/ENDGAME-01) distinguishes a genuine draw (game complete with
+ * explicit zero winners) from winner data that is merely unavailable (the
+ * dev-WS degrade). A bare empty winnerNames array is ambiguous between the
+ * two — callers must pass the explicit signal rather than relying on length.
  */
-export function announceGameOver(winnerNames: string[]): string {
-  if (winnerNames.length === 0) return 'Game over';
+export function announceGameOver(winnerNames: string[], isDraw = false): string {
+  if (winnerNames.length === 0) return isDraw ? 'Game over — Draw' : 'Game over';
   if (winnerNames.length === 1) return `Game over — ${winnerNames[0]} wins`;
   return `Game over — ${winnerNames.join(' and ')} win`;
 }
