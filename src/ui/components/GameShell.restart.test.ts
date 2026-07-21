@@ -11,10 +11,10 @@
  * GameShell.game-over.test.ts's note on the same constraint). Following the
  * established harness convention (GameShell.test.ts, GameShell.tutorial.test.ts,
  * GameShell.ia.test.ts), this test mirrors the PRODUCTION
- * `handleRestartGame`/`handleMenuItemClick` wiring (GameShell.vue:1724-1741,
- * :1760-1766) VERBATIM. If production changes, this harness must be updated to
- * match — the RED block below intentionally reproduces the CURRENT (pre-fix)
- * `handleMenuItemClick` body.
+ * `handleRestartGame`/`handleMenuItemClick` wiring (GameShell.vue:1724-1745,
+ * :1760-1770) VERBATIM, POST-FIX: `handleMenuItemClick('new-game')` now routes
+ * through `handleRestartGame()` instead of the inert `leaveGame()`. If
+ * production changes, this harness must be updated to match.
  */
 import { describe, it, expect, vi } from 'vitest';
 
@@ -23,7 +23,7 @@ function buildHarness(platformMode: boolean) {
   const leaveGame = vi.fn();
   const clientRestartGame = vi.fn(async () => {});
 
-  // ── Mirrors GameShell.vue handleRestartGame (:1724-1741) — unchanged by this plan ──
+  // ── Mirrors GameShell.vue handleRestartGame (:1724-1745) — unchanged by this plan ──
   async function handleRestartGame() {
     if (platformMode) {
       void platformRequest('debug:restart', {});
@@ -32,25 +32,35 @@ function buildHarness(platformMode: boolean) {
     await clientRestartGame();
   }
 
-  // ── Mirrors GameShell.vue handleMenuItemClick (:1760-1766) — PRE-FIX (current source) ──
+  // ── Mirrors GameShell.vue handleMenuItemClick (:1760-1770) — POST-FIX ─────
   function handleMenuItemClick(id: string) {
     if (id === 'leave') {
       leaveGame();
     } else if (id === 'new-game') {
-      leaveGame();
+      void handleRestartGame();
     }
   }
 
   return { handleMenuItemClick, handleRestartGame, platformRequest, leaveGame, clientRestartGame };
 }
 
-describe('GameShell — handleMenuItemClick("new-game") routing (D11 RED #2)', () => {
+describe('GameShell — handleMenuItemClick("new-game") routing (D11)', () => {
   it('platform mode: requests a restart via platformRequest("debug:restart"), NOT leaveGame()', () => {
     const { handleMenuItemClick, platformRequest, leaveGame } = buildHarness(true);
 
     handleMenuItemClick('new-game');
 
     expect(platformRequest).toHaveBeenCalledWith('debug:restart', {});
+    expect(leaveGame).not.toHaveBeenCalled();
+  });
+
+  it('non-platform mode: requests a restart via the HTTP client, NOT leaveGame() (parity)', async () => {
+    const { handleMenuItemClick, clientRestartGame, leaveGame } = buildHarness(false);
+
+    handleMenuItemClick('new-game');
+    await Promise.resolve(); // flush the async handleRestartGame() microtask
+
+    expect(clientRestartGame).toHaveBeenCalledTimes(1);
     expect(leaveGame).not.toHaveBeenCalled();
   });
 

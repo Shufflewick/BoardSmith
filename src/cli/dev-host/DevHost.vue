@@ -221,6 +221,15 @@ function onIframeLoad(): void {
 function onWindowMessage(event: MessageEvent): void {
   const data = event.data;
   if (!data || data.source !== 'shufflewick-game') return;
+  // D11 (ENDGAME-02): 'debug:restart' is a host-chrome op, not a game-server op
+  // — bridge.ts's comment says it's "handled in DevHost, not here". Route it to
+  // the SAME working restart the "New game" button uses, BEFORE the generic
+  // server_request forward below (which would otherwise ship it to the host as
+  // an unhandled op and silently drop it — the original D11 dead end).
+  if (data.type === 'server_request' && data.op === 'debug:restart') {
+    newGame();
+    return;
+  }
   if (data.type === 'server_request') {
     wsSend({
       type: 'server_request',

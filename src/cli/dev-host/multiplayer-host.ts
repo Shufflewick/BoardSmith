@@ -260,7 +260,12 @@ export class MultiplayerHost {
   }
 
   private async handleRestart(clientId: string): Promise<void> {
-    if (this.phase !== 'playing') {
+    // Defensive hardening only (T-157-06) — NOT the D11 fix. A FINISHED game
+    // already passes here: LobbyPhase has no 'complete' value, so completion
+    // never flips `phase` off 'playing'. The `|| !this.session` clause guards
+    // the genuinely no-game/mid-setup case (phase somehow 'playing' with no
+    // live session), which the bare phase check alone would not catch.
+    if (this.phase !== 'playing' || !this.session) {
       this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
       return;
     }

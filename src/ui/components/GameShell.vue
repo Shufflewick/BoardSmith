@@ -1761,7 +1761,11 @@ function handleMenuItemClick(id: string) {
   if (id === 'leave') {
     leaveGame();
   } else if (id === 'new-game') {
-    leaveGame();
+    // D11 (ENDGAME-02): "New Game" restarts via the same real restart path as
+    // Rematch — it used to call leaveGame(), which goes to a lobby that doesn't
+    // exist in dev/platform mode and never restarts. In dev there is no lobby to
+    // land in, so "leave" was a dead end; restart is the only real forward exit.
+    void handleRestartGame();
   }
 }
 
