@@ -12,6 +12,9 @@ import {
   shouldOpenBrowser,
   resolvePlayerCount,
   resolveColorPalette,
+  parseGameOptionFlags,
+  mergeGameOptionDefinitions,
+  resolvePreset,
 } from './dev.js';
 
 /**
@@ -196,6 +199,82 @@ describe('resolveColorPalette (D16/DEVHOST-04: gameDefinition.colorPalette -> bo
   it('falls back to the engine DEFAULT_COLOR_PALETTE when neither source declares a palette', () => {
     const palette = resolveColorPalette({}, {});
     expect(palette.map((p) => p.value)).toEqual([...DEFAULT_COLOR_PALETTE]);
+  });
+});
+
+describe('parseGameOptionFlags (D13/DEVHOST-01: repeatable `--game-option key=value`)', () => {
+  it('splits each entry on the FIRST "=" into a flat record', () => {
+    expect(parseGameOptionFlags(['difficulty=hard', 'rounds=5'])).toEqual({
+      difficulty: 'hard',
+      rounds: '5',
+    });
+  });
+
+  it('splits only on the first "=" (value may itself contain "=")', () => {
+    expect(parseGameOptionFlags(['note=a=b'])).toEqual({ note: 'a=b' });
+  });
+
+  it('throws an actionable DevFlagError on an entry missing "="', () => {
+    expect(() => parseGameOptionFlags(['difficulty'])).toThrow(DevFlagError);
+    expect(() => parseGameOptionFlags(['difficulty'])).toThrow(/--game-option/);
+    expect(() => parseGameOptionFlags(['difficulty'])).toThrow(/"difficulty"/);
+  });
+
+  it('returns an empty record when no flags were passed', () => {
+    expect(parseGameOptionFlags(undefined)).toEqual({});
+    expect(parseGameOptionFlags([])).toEqual({});
+  });
+});
+
+describe('mergeGameOptionDefinitions (D13: gameDefinition.gameOptions merged with boardsmith.json, gameDefinition authoritative)', () => {
+  it('keeps both keys when the two sources are disjoint', () => {
+    const merged = mergeGameOptionDefinitions(
+      { fromGameDef: { type: 'boolean', label: 'From Game Def', default: true } },
+      { fromConfig: { type: 'boolean', label: 'From Config', default: false } },
+    );
+    expect(Object.keys(merged).sort()).toEqual(['fromConfig', 'fromGameDef']);
+  });
+
+  it('the gameDefinition definition wins on a key conflict', () => {
+    const merged = mergeGameOptionDefinitions(
+      { difficulty: { type: 'select', label: 'GameDef', default: 'hard', choices: [{ value: 'hard', label: 'Hard' }] } },
+      { difficulty: { type: 'select', label: 'Config', default: 'easy', choices: [{ value: 'easy', label: 'Easy' }] } },
+    );
+    expect(merged.difficulty.label).toBe('GameDef');
+    expect(merged.difficulty.default).toBe('hard');
+  });
+
+  it('handles either source being undefined', () => {
+    expect(mergeGameOptionDefinitions(undefined, undefined)).toEqual({});
+    expect(Object.keys(mergeGameOptionDefinitions({ a: { type: 'boolean', label: 'A' } }, undefined))).toEqual(['a']);
+  });
+});
+
+describe('resolvePreset (D13: applying a preset returns its options bundle + optional player count)', () => {
+  const presets = [
+    { name: 'advanced', description: 'Advanced setup', options: { difficulty: 'hard', rounds: 5 }, players: [{ name: 'P1' }, { name: 'P2' }, { name: 'P3' }] },
+    { name: 'quick', options: { rounds: 1 } },
+  ];
+
+  it('returns the named preset\'s options bundle', () => {
+    expect(resolvePreset(presets, 'quick').options).toEqual({ rounds: 1 });
+  });
+
+  it('returns the preset\'s player count when it declares `players`', () => {
+    const resolved = resolvePreset(presets, 'advanced');
+    expect(resolved.options).toEqual({ difficulty: 'hard', rounds: 5 });
+    expect(resolved.playerCount).toBe(3);
+  });
+
+  it('omits playerCount when the preset does not declare `players`', () => {
+    expect(resolvePreset(presets, 'quick').playerCount).toBeUndefined();
+  });
+
+  it('throws an actionable DevFlagError naming the unknown preset and the declared names', () => {
+    expect(() => resolvePreset(presets, 'nope')).toThrow(DevFlagError);
+    expect(() => resolvePreset(presets, 'nope')).toThrow(/"nope"/);
+    expect(() => resolvePreset(presets, 'nope')).toThrow(/advanced/);
+    expect(() => resolvePreset(presets, 'nope')).toThrow(/quick/);
   });
 });
 
