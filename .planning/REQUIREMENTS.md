@@ -139,11 +139,11 @@ the fix holds → only then close.**
 - [x] **SKILLDEF-01** (B.8, `bs-skills-session-lock-defect.md`): The `close` ceremony reliably releases
   its lock, does not fabricate the lock timestamp, and can never overwrite CHUNK.md — the crash-consistency
   seam is fixed so a same-day resume does not false-alarm (which was training click-through).
-- [ ] **SKILLDEF-02** (B.8, `bs-skills-never-suppress-builtin-ui.md`): The skills fence the game/platform
+- [x] **SKILLDEF-02** (B.8, `bs-skills-never-suppress-builtin-ui.md`): The skills fence the game/platform
   boundary — the agent controls the game board only, the BoardSmith library is read-only
   (`node_modules/boardsmith` is a live symlink to the real checkout), built-in BoardSmith UI must not be
   suppressed, and library gaps are FILED, never patched or suppressed.
-- [ ] **SKILLDEF-03** (C.3-skills): The skills explicitly tell the agent not to use the fenced
+- [x] **SKILLDEF-03** (C.3-skills): The skills explicitly tell the agent not to use the fenced
   `suppress-action-panel` escape hatch (LIBX-01) without the client — the skills half of feature C.3.
 
 ### SKILLAUTO — Skills autonomy rewrite (Part B) — Phase 167

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: executing
+status: verifying
 stopped_at: Completed 164-04-PLAN.md
-last_updated: "2026-07-21T21:19:32.958Z"
+last_updated: "2026-07-21T21:25:30.658Z"
 last_activity: 2026-07-21
 progress:
   total_phases: 15
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 31
-  completed_plans: 30
-  percent: 67
+  completed_plans: 31
+  percent: 73
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 166 (Skills Defects — Session-Lock + UI/Library Boundary) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-21
 
 ## Milestones
@@ -276,6 +276,7 @@ Recent decisions affecting current work:
 - [Phase 164-04]: displayedState computed re-wraps the shallower timeTravelState PlayerGameState into the GameState shape at one declaration site (mirrors gameView), unifying board+sidebar-extra :state on a single source of truth
 - [Phase 164-04]: isViewingHistory guarded independently in all four useBoardActionBridge mutators (not composed with isMyTurn) since setSelectionValue/toggleMultiSelectValue never re-check isMyTurn mid-action
 - [Phase ?]: Session lock grammar extended to "<slug> @ <session-id> — locked at <ISO timestamp>"; Bookkeeping Sequence grew 3->4 items with terminal lock release (SKILLDEF-01)
+- [Phase 166]: SKILLDEF-02/03: build.md gained a game/library boundary section (board-only, read-only node_modules/boardsmith, file-not-patch, never-suppress built-in UI) and a never-without-client rule for platformActionPanelEscapeHatch
 
 ### Pending Todos
 
@@ -287,7 +288,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-21T21:18:27.346Z
+Last session: 2026-07-21T21:24:23.734Z
 Stopped at: Completed 164-04-PLAN.md
 Resume file: 
 None

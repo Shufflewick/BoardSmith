@@ -28,7 +28,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [x] **Phase 163: Engine Space Lifecycle & Element Integrity** — sealed/append-only Space, Space removal/re-parent, hidden-count leak, class-name collision, metadata divergence (D22, D23, D24, D25, D26)
 - [x] **Phase 164: Library Misc — Action-Panel, Loop, Visual, Debug-View** — per-action dock suppression + fence `suppress-action-panel` (C.3-lib), unbounded `loop()`, token glyph ink, time-travel desync (D28, D29, D30, D31) (completed 2026-07-21)
 - [~] **Phase 165: Platform Logging Hygiene** — DEFERRED TO PLATFORM TEAM (2026-07-21): `[DRAWDROP]`/`[DRAWDROP-SRV]` logging lives ONLY in the deployed platform (web front-end + Convex `pieces:*` mutations), proven absent from this library repo and all reachable game repos. Nothing to fix here; D32 stays "filed, not patched" per the lab finding `~/BoardSmithLab/findings/boardsmith-platform-drawdrop-debug-logging.md`. Re-scope to the platform repo when accessible. (D32)
-- [ ] **Phase 166: Skills Defects — Session-Lock + UI/Library Boundary** — fix the close-ceremony lock seam, fence the game/library boundary, tell the agent not to use the fenced suppress hatch (B.8 ×2, C.3-skills)
+- [x] **Phase 166: Skills Defects — Session-Lock + UI/Library Boundary** — fix the close-ceremony lock seam, fence the game/library boundary, tell the agent not to use the fenced suppress hatch (B.8 ×2, C.3-skills) (completed 2026-07-21)
 - [ ] **Phase 167: Skills Autonomy Rewrite** — playtest-gate, question discipline, batch, run-while-away, auto-advance, context ≥50% + sub-agent offload, loud completion, process lessons — preserving Part D disciplines (B.1–B.7, B.9)
 - [ ] **Phase 168: Platform Feature Spike — Seed-to-State** — scope/feasibility spike for seeding a game into a target playtest state (C.1)
 - [ ] **Phase 169: Post-Fix Game De-Workaround Sweep** — remove every now-unneeded workaround across the five game repos, gated on verified fixes + green suites; close BSR-12; reclassify BS-10 (Part E #6)
@@ -204,7 +204,7 @@ Plans:
 4. Skill-guidance changes are regression-tested (e.g. `build-chunk.test.ts` / `templates.test.ts` style) per PROC-01.
 **Plans** (2 plans, 2 waves — finalized at plan-phase; tests fold into each plan per PROC-01):
 - [x] 166-01-PLAN.md — Session-lock/close ceremony: clock-read + session identity, terminal lock-RELEASE, append-only write order, Step 0 no-lock recognition [SKILLDEF-01, PROC-01] (wave 1)
-- [ ] 166-02-PLAN.md — Game/library boundary prose (board-only, read-only symlinked library, file-not-patch, never-suppress built-in UI) + fenced-escape-hatch don't (platformActionPanelEscapeHatch/.suppressFromDock) [SKILLDEF-02, SKILLDEF-03, PROC-01] (wave 2, depends on 166-01 via shared test file)
+- [x] 166-02-PLAN.md — Game/library boundary prose (board-only, read-only symlinked library, file-not-patch, never-suppress built-in UI) + fenced-escape-hatch don't (platformActionPanelEscapeHatch/.suppressFromDock) [SKILLDEF-02, SKILLDEF-03, PROC-01] (wave 2, depends on 166-01 via shared test file)
 
 #### Phase 167: Skills Autonomy Rewrite
 **Goal**: The `bs-skills` build as autonomously as possible while every human interruption stays meaningful — playtest-gate policy, question discipline, batched questions, run-while-away, auto-advance, a ≥50% context threshold with sub-agent offload, and loud completion — WITHOUT eroding any Part D discipline that kept provenance clean.
@@ -268,7 +268,7 @@ Plans:
 | 163. Engine Space Lifecycle & Element Integrity | 0/? | Not started | — |
 | 164. Library Misc — Action-Panel, Loop, Visual, Debug-View | 4/4 | Complete   | 2026-07-21 |
 | 165. Platform Logging Hygiene | 0/? | Not started | — |
-| 166. Skills Defects — Session-Lock + UI/Library Boundary | 1/2 | In Progress|  |
+| 166. Skills Defects — Session-Lock + UI/Library Boundary | 2/2 | Complete   | 2026-07-21 |
 | 167. Skills Autonomy Rewrite | 0/? | Not started | — |
 | 168. Platform Feature Spike — Seed-to-State | 0/? | Not started | — |
 | 169. Post-Fix Game De-Workaround Sweep | 0/? | Not started | — |
