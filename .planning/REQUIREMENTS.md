@@ -82,12 +82,12 @@ the fix holds → only then close.**
 
 ### DEVHOST — Dev-host tooling (D13, D14, D15, D16) — Phase 161
 
-- [ ] **DEVHOST-01** (D13, Doom, Med): The dev host can select a declared `gameOption` / preset.
-- [ ] **DEVHOST-02** (D14, Doom, Med): `boardsmith dev` supports a bare solo start (no hardcoded
+- [x] **DEVHOST-01** (D13, Doom, Med): The dev host can select a declared `gameOption` / preset.
+- [x] **DEVHOST-02** (D14, Doom, Med): `boardsmith dev` supports a bare solo start (no hardcoded
   `--players 2`).
-- [ ] **DEVHOST-03** (D15, Seven-dlx, Med): The dev host no longer orphans its own first seat via a race,
+- [x] **DEVHOST-03** (D15, Seven-dlx, Med): The dev host no longer orphans its own first seat via a race,
   so the seat stays claimable and the loop is not blocked.
-- [ ] **DEVHOST-04** (D16, Seven, Low): `boardsmith dev` honors the game's color palette instead of
+- [x] **DEVHOST-04** (D16, Seven, Low): `boardsmith dev` honors the game's color palette instead of
   dropping it to red/blue/green in dev.
 
 ### TOOL — Test-tooling ergonomics (D17, D18, D19, D20) — Phase 162

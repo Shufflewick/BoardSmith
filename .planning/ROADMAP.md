@@ -23,7 +23,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [x] **Phase 158: Auto-Zoom Re-Fit** — `useAutoZoom` re-fits on dock/board/region resize instead of once against a stale layout (D12)
 - [x] **Phase 159: MCTS Soundness + Dynamic multiSelect** — dynamic/function-valued `multiSelect` in enumeration + panel (delivers C.2), redacted-view MCTS for hidden info (D9, D8)
 - [x] **Phase 160: Simultaneous-Step Correctness** — per-seat undo checkpointing, any-seat undo, `allDone` crash, seat-status/commit leak (D3, D4, D21, D27)
-- [ ] **Phase 161: Dev-Host Tooling** — gameOption/preset selection, bare solo start, first-seat orphan race, color palette (D13, D14, D15, D16)
+- [x] **Phase 161: Dev-Host Tooling** — gameOption/preset selection, bare solo start, first-seat orphan race, color palette (D13, D14, D15, D16)
 - [ ] **Phase 162: Test-Tooling Ergonomics** — asset-scan comment false-positive + export surface, module-scope `matchMedia`, symmetric-deck leak assert (D17, D18, D19, D20)
 - [ ] **Phase 163: Engine Space Lifecycle & Element Integrity** — sealed/append-only Space, Space removal/re-parent, hidden-count leak, class-name collision, metadata divergence (D22, D23, D24, D25, D26)
 - [ ] **Phase 164: Library Misc — Action-Panel, Loop, Visual, Debug-View** — per-action dock suppression + fence `suppress-action-panel` (C.3-lib), unbounded `loop()`, token glyph ink, time-travel desync (D28, D29, D30, D31)
@@ -130,10 +130,10 @@ Plans:
 5. Each fix has a regression test / scripted dev-host proof that fails pre-fix (PROC-01).
 **Plans:** 4 plans
 Plans:
-- [ ] 161-01-PLAN.md — Bare solo start (default `--players` to minPlayers) + canonical color-palette source [DEVHOST-02, DEVHOST-04]
-- [ ] 161-02-PLAN.md — gameOption/preset selection (CLI flags + host selection message) [DEVHOST-01]
-- [ ] 161-03-PLAN.md — Dev-host lobby gameOption/preset selector UI [DEVHOST-01]
-- [ ] 161-04-PLAN.md — First-seat orphan race fix (disconnect-mid-start reconciliation) [DEVHOST-03]
+- [x] 161-01-PLAN.md — Bare solo start (default `--players` to minPlayers) + canonical color-palette source [DEVHOST-02, DEVHOST-04]
+- [x] 161-02-PLAN.md — gameOption/preset selection (CLI flags + host selection message) [DEVHOST-01]
+- [x] 161-03-PLAN.md — Dev-host lobby gameOption/preset selector UI [DEVHOST-01]
+- [x] 161-04-PLAN.md — First-seat orphan race fix (disconnect-mid-start reconciliation) [DEVHOST-03]
 
 #### Phase 162: Test-Tooling Ergonomics
 **Goal**: The test/build tooling stops producing false FAILs and jsdom throws, and exposes the helpers games need — asset-scan ignores `<img` in comments and is exported, `boardsmith/ui` doesn't read `matchMedia` at module scope, and hidden-info leak assertion works for symmetric decks.

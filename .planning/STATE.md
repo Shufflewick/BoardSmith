@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: Phase 160 complete (verification passed 5/5; 1 review Blocker fixed) — next is Phase 161
-stopped_at: Completed Phase 160 (3 plans + blocker-fix gap-closure, VERIFICATION passed)
-last_updated: "2026-07-21T05:00:00.000Z"
+status: Phase 161 complete (verification passed 5/5; 2 review Blockers fixed) — next is Phase 162
+stopped_at: Completed Phase 161 (4 plans + blocker-fix gap-closure, VERIFICATION passed)
+last_updated: "2026-07-21T07:00:00.000Z"
 last_activity: "2026-07-20 — Phase 159 (MCTS Soundness + Dynamic multiSelect) shipped: shared resolveMultiSelect helper makes function-valued multiSelect enumerate in MCTS AND panel-complete (C.2, single-source, fail-loud); MCTS bot now clones a per-seat REDACTED view (toJSONForPlayer, opt-in forSeat) at BOTH the root decision and the simulation clone, with a simultaneousBaseline pre-reveal snapshot preventing co-decider leaks (D9/AI-01, D8/AI-02). Deep review caught 2 real Criticals the verifier missed (root enumeration on full-truth; hidden-element flow-var corruption on restore) — both fixed RED-first incl. an hiddenIdRemap for flow-var relinking + a second deeper executeForEach instance. 2842 tests green; tsc 46 (below baseline). WR-01 + MCTS-undo limitation deferred (see backlog)."
 progress:
   total_phases: 15
-  completed_phases: 6
-  total_plans: 15
-  completed_plans: 15
-  percent: 40
+  completed_phases: 7
+  total_plans: 19
+  completed_plans: 19
+  percent: 47
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–160 shipped (verifications passed); next is Phase 161 (Dev-Host Tooling)
+**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–161 shipped (verifications passed); next is Phase 162 (Test-Tooling Ergonomics)
 
 ## Current Position
 
-Phase: 161 (Dev-Host Tooling) — next up. Phases 155–160 complete.
+Phase: 162 (Test-Tooling Ergonomics) — next up. Phases 155–161 complete (7/15, 47%).
 Plan: —
-Status: Phase 160 verification passed (5/5); code review resolved (1 Blocker: commit-gate moved to the shared useActionController.execute chokepoint so custom-UI + ActionPanel both gate; W1 nested-availableActions deep-clone; W3 comment; W2 deferred to backlog v4.8-SIM-LASTACTOR-UNDO)
-Last activity: 2026-07-20 — Phase 160 (Simultaneous-Step Correctness) shipped: getState() deep-copies awaitingPlayers so per-seat `completed` survives checkpoints (D3); shared computeUndoEligibility gives any-seat simultaneous undo bounded to the current step's moveCount window without bypassing Phase 155's fences (D4); executeSimultaneousActionStep/resume complete cleanly on empty awaitingPlayers (D21); shell self-filters the waiting list + gates execute on the viewer's own `completed` at the shared chokepoint (D27). Executor died mid-160-02 (API drop) — recovered losslessly (tests were written+passing, orchestrator committed). Deep review caught a real Blocker (commit gate was ActionPanel-only, custom-UI bypassed) + fixed. 2871 tests green."
+Status: Phase 161 verification passed (5/5); code review resolved (2 Blockers fixed: CR-01 preset player-count now resizes seat arrays consistently, CR-02 gameOption values coerced to declared type at the host validation boundary; WR-01/02/03 + IN-01 also fixed — WR-02 join-during-start covered by extending startGame's reinit loop, NOT a starting-guard reject, to preserve the D15 reclaim path)
+Last activity: 2026-07-21 — Phase 161 (Dev-Host Tooling) shipped: gameOption/preset selection via CLI flags (--game-option/--preset) + a DevHost lobby selector, host-authoritative validation with type coercion (D13); bare solo start defaults --players to minPlayers (D14); first-seat orphan race fixed by post-await seat reconciliation against connected clients, reclaimable-not-permanent (D15); GameDefinition.colorPalette as the canonical palette source with gameDefinition→boardsmith.json→engine fallback (D16). Deep review caught 2 real Blockers in the new D13 feature (typed-option coercion, preset player-count arrays) + fixed. 2923 tests green.
 
 ## Milestones
 
