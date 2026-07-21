@@ -163,8 +163,11 @@ const actionsWithMetadata = computed(() => {
 // Actions to display in the UI
 // endTurn is always shown so users can manually end their turn
 // Auto-execute only happens when endTurn is the only available action
+// LIBX-01: actions declared with .suppressFromDock() are filtered out of the
+// rendered dock here ONLY -- they remain in actionsWithMetadata / the board
+// substrate (useBoardActionBridge) and stay fully executable there.
 const visibleActions = computed(() => {
-  return actionsWithMetadata.value;
+  return actionsWithMetadata.value.filter(a => !a.suppressFromDock);
 });
 
 // Current action metadata
