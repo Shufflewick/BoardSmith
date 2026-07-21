@@ -2145,7 +2145,8 @@ if ((import.meta as any).hot) {
                A filled #game-over slot replaces the default card entirely; providesOwnGameOverUI
                suppresses BOTH (the game renders its own end state on its own board). Dismissing
                (close button / Escape) reveals the board without restarting or leaving.
-               @new-game → handleMenuItemClick goes back to lobby; @rematch → restarts same game. -->
+               @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02);
+               @leave (menu-only) is the only forward exit that returns to the lobby. -->
           <template v-if="state?.flowState?.complete && !props.providesOwnGameOverUI && !gameOverDismissed">
             <slot
               v-if="$slots['game-over']"
