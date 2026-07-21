@@ -314,4 +314,154 @@ describe('useAutoZoom', () => {
       wrapper.unmount();
     });
   });
+
+  describe('adversarial: user zoom + content-growth guard (ZOOM-01)', () => {
+    it('a manual setZoom is NOT overridden by a subsequent dock or region change', async () => {
+      const board = fakeBoard(400, 300);
+      const boardEl = ref<HTMLElement | null>(board.el);
+      const region = fakeRegion(800, 700);
+      const regionEl = ref<HTMLElement | null>(region.el);
+      const dockHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      await nextTick();
+      flushRaf();
+      vi.advanceTimersByTime(SETTLE_MS);
+
+      api.setZoom(0.8);
+      expect(api.zoomLevel.value).toBe(0.8);
+
+      // Attempt to defeat the guard with the EXACT change that re-fits an
+      // un-controlled player (both dock and region).
+      dockHeight.value = 400;
+      region.setSize(400, 700);
+      observerFor(region.el)?.fire();
+      await nextTick();
+      flushRaf();
+
+      expect(api.zoomLevel.value).toBe(0.8); // unchanged — user zoom wins
+      wrapper.unmount();
+    });
+
+    it('fitZoom() re-arms auto-refit: a later dock/region change re-fits again', async () => {
+      const board = fakeBoard(400, 300);
+      const boardEl = ref<HTMLElement | null>(board.el);
+      const region = fakeRegion(800, 700);
+      const regionEl = ref<HTMLElement | null>(region.el);
+      const dockHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      await nextTick();
+      flushRaf();
+      vi.advanceTimersByTime(SETTLE_MS);
+
+      api.setZoom(0.8);
+      dockHeight.value = 400; // defeated by the guard, per the previous test
+      region.setSize(400, 700);
+      observerFor(region.el)?.fire();
+      await nextTick();
+      flushRaf();
+      expect(api.zoomLevel.value).toBe(0.8);
+
+      // Pressing Fit re-fits to the CURRENT space (400×700 region, dock 400 →
+      // avail 400×300) and clears the guard.
+      api.fitZoom();
+      expect(api.zoomLevel.value).toBe(1.0); // min(400/400, 300/300) = 1.0
+
+      // A later dock/region change now DOES re-fit (guard re-armed): widen the
+      // region and drop the dock back down → min(800/400, 700/300) = 2.0.
+      dockHeight.value = 0;
+      region.setSize(800, 700);
+      observerFor(region.el)?.fire();
+      await nextTick();
+      flushRaf();
+      expect(api.zoomLevel.value).toBe(2.0);
+      wrapper.unmount();
+    });
+
+    it('board CONTENT growth alone (no dock/region change) does not move the zoom', async () => {
+      const board = fakeBoard(400, 300);
+      const boardEl = ref<HTMLElement | null>(board.el);
+      const region = fakeRegion(800, 700);
+      const regionEl = ref<HTMLElement | null>(region.el);
+      const dockHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      await nextTick();
+      flushRaf();
+      vi.advanceTimersByTime(SETTLE_MS);
+      expect(api.zoomLevel.value).toBe(2.0);
+
+      // Board grows mid-game; the board is no longer observed post-startup,
+      // and neither the region observer nor the dock watch fires for it.
+      board.setSize(800, 900);
+      await nextTick();
+      flushRaf();
+
+      expect(api.zoomLevel.value).toBe(2.0); // unchanged
+      wrapper.unmount();
+    });
+
+    it('the persistent region observer is torn down on unmount — no leak, no re-fit after', async () => {
+      const board = fakeBoard(400, 300);
+      const boardEl = ref<HTMLElement | null>(board.el);
+      const region = fakeRegion(800, 700);
+      const regionEl = ref<HTMLElement | null>(region.el);
+      const dockHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      await nextTick();
+      flushRaf();
+      vi.advanceTimersByTime(SETTLE_MS);
+      expect(api.zoomLevel.value).toBe(2.0);
+
+      const regionObserver = observerFor(region.el)!;
+      expect(regionObserver.disconnected).toBe(false);
+
+      wrapper.unmount();
+      expect(regionObserver.disconnected).toBe(true);
+
+      // Post-unmount layout churn must not resurrect a re-fit.
+      dockHeight.value = 400;
+      region.setSize(200, 200);
+      regionObserver.fire(); // no-op: disconnected
+      await nextTick();
+      flushRaf();
+
+      expect(api.zoomLevel.value).toBe(2.0); // unchanged
+    });
+
+    it('a scrollbar-toggle-sized region change settles rather than oscillating', async () => {
+      const board = fakeBoard(400, 300);
+      const boardEl = ref<HTMLElement | null>(board.el);
+      const region = fakeRegion(800, 700);
+      const regionEl = ref<HTMLElement | null>(region.el);
+      const dockHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      await nextTick();
+      flushRaf();
+      vi.advanceTimersByTime(SETTLE_MS);
+      expect(api.zoomLevel.value).toBe(2.0);
+
+      const regionObserver = observerFor(region.el)!;
+
+      // Simulate a scrollbar showing up (~15px narrower) and hiding again,
+      // fired repeatedly — the fit must converge, not drift or oscillate.
+      region.setSize(785, 700);
+      regionObserver.fire();
+      flushRaf();
+      const afterFirst = api.zoomLevel.value;
+
+      region.setSize(800, 700);
+      regionObserver.fire();
+      flushRaf();
+      const afterSecond = api.zoomLevel.value;
+
+      region.setSize(785, 700);
+      regionObserver.fire();
+      flushRaf();
+      const afterThird = api.zoomLevel.value;
+
+      expect(Number.isFinite(afterFirst)).toBe(true);
+      expect(Number.isFinite(afterSecond)).toBe(true);
+      expect(afterThird).toBe(afterFirst); // settles back, does not drift
+      wrapper.unmount();
+    });
+  });
 });
