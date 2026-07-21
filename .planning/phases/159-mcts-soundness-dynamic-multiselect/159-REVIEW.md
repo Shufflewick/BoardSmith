@@ -14,7 +14,7 @@ findings:
   warning: 1
   info: 0
   total: 3
-status: critical_findings_fixed
+status: resolved (2 criticals fixed)
 gap_closure:
   date: 2026-07-20
   cr-01: fixed (commits d10f127e RED, f678360d GREEN)

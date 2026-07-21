@@ -21,7 +21,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [x] **Phase 156: Sole-Option Auto-Execute** — a single-option action auto-*starts* but never auto-*executes*; the shell stops playing for the player (D7)
 - [x] **Phase 157: Game-Over UI + Forward Exits** — suppressable/dismissable `GameOverCard` + working Rematch/New Game/dev-restart (D10, D11)
 - [x] **Phase 158: Auto-Zoom Re-Fit** — `useAutoZoom` re-fits on dock/board/region resize instead of once against a stale layout (D12)
-- [ ] **Phase 159: MCTS Soundness + Dynamic multiSelect** — dynamic/function-valued `multiSelect` in enumeration + panel (delivers C.2), redacted-view MCTS for hidden info (D9, D8)
+- [x] **Phase 159: MCTS Soundness + Dynamic multiSelect** — dynamic/function-valued `multiSelect` in enumeration + panel (delivers C.2), redacted-view MCTS for hidden info (D9, D8)
 - [ ] **Phase 160: Simultaneous-Step Correctness** — per-seat undo checkpointing, any-seat undo, `allDone` crash, seat-status/commit leak (D3, D4, D21, D27)
 - [ ] **Phase 161: Dev-Host Tooling** — gameOption/preset selection, bare solo start, first-seat orphan race, color palette (D13, D14, D15, D16)
 - [ ] **Phase 162: Test-Tooling Ergonomics** — asset-scan comment false-positive + export surface, module-scope `matchMedia`, symmetric-deck leak assert (D17, D18, D19, D20)
@@ -98,9 +98,9 @@ Plans:
 2. An MCTS bot for a hidden-info game clones only a per-seat redacted view and does not sequentialize simultaneous reveals — verified as non-exploitable where the naive bot was (D8).
 3. Both fixes carry tests that fail on pre-fix code and pass after; the previously "un-enumerable so silently skipped" damage case now enumerates and is exercised (PROC-01 + fail-loud principle).
 **Plans** (3 plans; wave 1 = 01+03 parallel, wave 2 = 02):
-- [ ] 159-01-PLAN.md — Dynamic `multiSelect` enumeration in MCTS + shared `resolveMultiSelect` helper + fail-loud test [AI-01, PROC-01] (wave 1)
-- [ ] 159-02-PLAN.md — Panel-completable multi-element selection via `buildPickMetadata` — delivers C.2 [AI-01, PROC-01] (wave 2, depends on 01's helper)
-- [ ] 159-03-PLAN.md — Redacted-view MCTS clone (`toJSONForPlayer`) + simultaneous-reveal soundness + exploitability test [AI-02, PROC-01] (wave 1)
+- [x] 159-01-PLAN.md — Dynamic `multiSelect` enumeration in MCTS + shared `resolveMultiSelect` helper + fail-loud test [AI-01, PROC-01] (wave 1)
+- [x] 159-02-PLAN.md — Panel-completable multi-element selection via `buildPickMetadata` — delivers C.2 [AI-01, PROC-01] (wave 2, depends on 01's helper)
+- [x] 159-03-PLAN.md — Redacted-view MCTS clone (`toJSONForPlayer`) + simultaneous-reveal soundness + exploitability test [AI-02, PROC-01] (wave 1)
 
 #### Phase 160: Simultaneous-Step Correctness
 **Goal**: Simultaneous steps — the battery's #2 structural weak point — are correct under undo and status display: per-seat `completed` is checkpointed, undo works for any seat, an empty `awaitingPlayers` with `allDone` doesn't crash, and the shell never shows a contradictory turn status or leaks a commit.

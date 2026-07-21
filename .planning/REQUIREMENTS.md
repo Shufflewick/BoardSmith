@@ -59,12 +59,12 @@ the fix holds → only then close.**
 
 ### AI — MCTS soundness + dynamic multiSelect (D9, D8) — Phase 159 (delivers C.2)
 
-- [ ] **AI-01** (D9, 2 games, High/Blocks-AI): Function-valued / dynamic `multiSelect` is supported in
+- [x] **AI-01** (D9, 2 games, High/Blocks-AI): Function-valued / dynamic `multiSelect` is supported in
   BOTH MCTS enumeration (no more "No available moves" throw) AND the action-panel auto-UI (no more
   fallback to single-select → "requires ≥2, got 1"). This closes the run-003 AI blocker (BSR-12) and the
   Doom multi-die panel error (BS-5), AND delivers feature **C.2** (panel-completable multi-element
   selection) natively so games stop reinventing the workaround.
-- [ ] **AI-02** (D8, OTP, High): MCTS no longer clones un-redacted game state or sequentializes
+- [x] **AI-02** (D8, OTP, High): MCTS no longer clones un-redacted game state or sequentializes
   simultaneous reveals — the bot reasons over a per-seat redacted view so hidden-info games get a sound,
   non-exploitable AI.
 

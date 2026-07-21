@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: Phase 158 complete (verification passed 8/8) — next is Phase 159
-stopped_at: Completed Phase 158 (1 plan, VERIFICATION passed, review clean)
-last_updated: "2026-07-21T02:00:00.000Z"
-last_activity: "2026-07-20 — Phase 158 (Auto-Zoom Re-Fit) shipped: useAutoZoom now re-fits on dock-height + region-resize (available-space) changes via a persistent regionEl ResizeObserver + watch(dockHeight) feeding one rAF-coalesced scheduleRefit, guarded by a userControlled flag (manual zoom wins; Fit re-arms); content-growth exclusion preserved; scrollbar-gutter:stable kills the RO feedback path (D12/ZOOM-01). Executor caught a real latent bug (untracked uncancellable rAF). 2817 tests green; code review clean."
+status: Phase 159 complete (verification passed 3/3; 2 review Criticals fixed) — next is Phase 160
+stopped_at: Completed Phase 159 (3 plans + critical-fix gap-closure, VERIFICATION passed)
+last_updated: "2026-07-21T03:00:00.000Z"
+last_activity: "2026-07-20 — Phase 159 (MCTS Soundness + Dynamic multiSelect) shipped: shared resolveMultiSelect helper makes function-valued multiSelect enumerate in MCTS AND panel-complete (C.2, single-source, fail-loud); MCTS bot now clones a per-seat REDACTED view (toJSONForPlayer, opt-in forSeat) at BOTH the root decision and the simulation clone, with a simultaneousBaseline pre-reveal snapshot preventing co-decider leaks (D9/AI-01, D8/AI-02). Deep review caught 2 real Criticals the verifier missed (root enumeration on full-truth; hidden-element flow-var corruption on restore) — both fixed RED-first incl. an hiddenIdRemap for flow-var relinking + a second deeper executeForEach instance. 2842 tests green; tsc 46 (below baseline). WR-01 + MCTS-undo limitation deferred (see backlog)."
 progress:
   total_phases: 15
-  completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
-  percent: 27
+  completed_phases: 5
+  total_plans: 12
+  completed_plans: 12
+  percent: 33
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–158 shipped (verifications passed); next is Phase 159 (MCTS Soundness + Dynamic multiSelect)
+**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–159 shipped (verifications passed); next is Phase 160 (Simultaneous-Step Correctness)
 
 ## Current Position
 
-Phase: 159 (MCTS Soundness + Dynamic multiSelect) — next up. Phases 155–158 complete.
+Phase: 160 (Simultaneous-Step Correctness) — next up. Phases 155–159 complete. NOTE: check the v4.8-MCTS-UNDO backlog item (flow-bookkeeping mutations not reverted by incremental undo) at 160's discuss — it borders on this phase's scope.
 Plan: —
-Status: Phase 158 verification passed (8/8); code review clean
+Status: Phase 159 verification passed (3/3); code review resolved (2 Criticals fixed: root-enumeration redaction + flow-var relink; 1 Warning WR-01 deferred)
 Last activity: 2026-07-20 — Phase 157 (Game-Over UI + Forward Exits) shipped. Methodology note: the plan-checker empirically disproved the "relax the phase guard" theory for D11 by writing a throwaway host test — the guard already admitted finished games (phase never leaves 'playing'); the real fix was routing (DevHost debug:restart handler + New Game → restart). Deferred (pre-existing, not this phase): IN-01 `ActionMetadata` `help`-field drift between `protocol.ts` and `session/types.ts`.
 
 ## Milestones
@@ -94,6 +94,10 @@ Backlog for a future cribbage (v2 CRIB) milestone: R-05 (suppress Undo during gu
 Carried forward from v4.0 (still deferred, separate repo): ShufflewickPub host skin (HOST-01..04).
 
 **Still deferred at v4.7 close (2026-07-06):** the same pre-existing open artifacts remain non-blocking backlog — `knowledge-base` (stale debug/reference file), and todos `dev-host-ai-open-seat-not-auto-playing`, `dev-host-debug-toggle-panel-not-opening`, `dev-standalone-shell-height-gap`, `v4-slate-token-and-a11y-polish`. None were in v4.7 scope (the milestone deferred the AI insta-acknowledge race and broader dev-host work by design). Note: the dev-host-ai-open-seat and standalone-shell-height todos are the same v4.0 carry-forwards listed above.
+
+**New backlog opened during v4.8 (2026-07-20):**
+- **v4.8-WR01 (Phase 159 code-review Warning, deferred):** `buildActionMetadata` doesn't thread accumulated selection args (`knownArgs` always `{}`), so a *function-valued* `multiSelect` that reads an *earlier sibling selection's* value resolves differently for the panel (`args:{}`) than for MCTS (real `currentArgs`) — a narrow C.2 parity gap. The explicitly-declared dependent case (`multiSelectByDependentValue`) already works; only function-valued-reading-prior-args diverges. Fixing it properly needs a panel dynamic-refresh of multiSelect on dependent-arg change (beyond Phase 159's metadata plumbing). Non-blocking; core C.2 delivered.
+- **v4.8-MCTS-UNDO (surfaced by Phase 159-03, out of scope there):** MCTS incremental `undoCommands` reverts only element-tree commands, NOT plain-property / flow-bookkeeping mutations — `game.finish()`'s `settings.winners`/`phase` and the flow engine's `awaitingPlayers[].completed`. So after a simulated branch that finishes a game or completes a simultaneous decider, that bookkeeping sticks and subsequent root-child re-expansions are wrongly rejected as no-ops. Worked around in 159 test fixtures (objective-checker + non-terminal loop). **RELEVANT TO PHASE 160** (simultaneous-step correctness under undo) — surface at 160's discuss.
 
 ## Accumulated Context
 
