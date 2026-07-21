@@ -12,6 +12,7 @@
 
 import { evaluateCondition } from '../action/action.js';
 import { devWarn } from '../../utils/dev.js';
+import { resolveMultiSelect } from '../utils/resolve-multiselect.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { Selection, ActionDefinition } from '../action/types.js';
@@ -145,18 +146,14 @@ export function buildPickMetadata(
         };
       }
 
-      // Include multiSelect config only if it's static (not function-based)
-      if (choiceSel.multiSelect !== undefined && typeof choiceSel.multiSelect !== 'function') {
-        if (typeof choiceSel.multiSelect === 'number') {
-          base.multiSelect = { min: 1, max: choiceSel.multiSelect };
-        } else {
-          base.multiSelect = {
-            min: choiceSel.multiSelect.min ?? 1,
-            max: choiceSel.multiSelect.max,
-          };
-        }
+      // Resolve multiSelect (static or function-valued) via the SAME shared
+      // helper enumeration uses, so the panel and MCTS never disagree
+      // (AI-01 / C.2). A concrete result emits base.multiSelect so the
+      // checkbox widget engages; undefined legitimately omits it.
+      const resolvedChoiceMultiSelect = resolveMultiSelect(selection, ctx);
+      if (resolvedChoiceMultiSelect !== undefined) {
+        base.multiSelect = resolvedChoiceMultiSelect;
       }
-      // Note: If multiSelect is a function, it will be evaluated when fetching choices
       break;
     }
 
@@ -199,18 +196,14 @@ export function buildPickMetadata(
         };
       }
 
-      // Include multiSelect config only if it's static (not function-based)
-      if (elementsSel.multiSelect !== undefined && typeof elementsSel.multiSelect !== 'function') {
-        if (typeof elementsSel.multiSelect === 'number') {
-          base.multiSelect = { min: 1, max: elementsSel.multiSelect };
-        } else {
-          base.multiSelect = {
-            min: elementsSel.multiSelect.min ?? 1,
-            max: elementsSel.multiSelect.max,
-          };
-        }
+      // Resolve multiSelect (static or function-valued) via the SAME shared
+      // helper enumeration uses, so the panel and MCTS never disagree
+      // (AI-01 / C.2). A concrete result emits base.multiSelect so the
+      // checkbox widget engages; undefined legitimately omits it.
+      const resolvedElementsMultiSelect = resolveMultiSelect(selection, ctx);
+      if (resolvedElementsMultiSelect !== undefined) {
+        base.multiSelect = resolvedElementsMultiSelect;
       }
-      // Note: If multiSelect is a function, it will be evaluated when fetching choices
       break;
     }
 
