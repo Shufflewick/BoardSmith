@@ -449,6 +449,18 @@ const allDockActionsSuppressed = computed(() => {
   return names.every((n) => meta[n]?.suppressFromDock === true);
 });
 
+// WR-01 (164 review): whether a pick is actively in progress on the shared
+// actionController. When true, ActionPanel's `currentActionMeta`/`currentPick`
+// computeds deliberately bypass the (possibly emptied) availableActions/
+// actionMetadata props and read `actionController` directly (ActionPanel.vue),
+// so its anchored-choices operable button list can still be showing choices
+// for a suppressFromDock action. Unmounting ActionPanel in that state would
+// drop the keyboard/SR safety net (A11Y C-2) for exactly the action it exists
+// to protect. Only suppresses the DOCK BUTTON LIST (already filtered by
+// ActionPanel itself, see its suppressFromDock filter); never re-adds a dock
+// button for a suppressed action.
+const hasInProgressPick = computed(() => actionController.currentAction.value !== null);
+
 // True while a simultaneous step is active (`awaitingPlayers` non-empty).
 // Single source for every D27 guard below: while true, status must never be
 // derived from a single `currentPlayer` (that identity is meaningless when
@@ -2462,22 +2474,31 @@ if ((import.meta as any).hot) {
           <!-- Turn strip: the fallback prompt surface. Shown when the ActionPanel is
                explicitly suppressed (the platform-only D-02 escape hatch) OR when
                every available action's dock button is suppressed via per-action
-               .suppressFromDock() (LIBX-01) — either way the prompt survives even
-               when no panel renders (IA-03, never a silent board / no turn indicator). -->
+               .suppressFromDock() (LIBX-01) AND no pick is in progress — either way
+               the prompt survives even when no panel renders (IA-03, never a silent
+               board / no turn indicator). WR-01: once a suppressFromDock action's
+               pick IS in progress, ActionPanel stays mounted instead (see below) so
+               its operable choice list remains available; the turn strip yields to it. -->
           <span
-            v-if="props.platformActionPanelEscapeHatch || allDockActionsSuppressed"
+            v-if="props.platformActionPanelEscapeHatch || (allDockActionsSuppressed && !hasInProgressPick)"
             class="turn"
           >
             <span class="pr">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
           </span>
-          <!-- Action panel: mounted whenever not explicitly suppressed and there is at
-               least one un-suppressed dock action — INCLUDING the all-board-anchored
-               case, where ActionPanel renders its anchored-choices operable button
-               list ("Select on board or choose here"). That focusable list is the
-               keyboard/SR safety net (A11Y C-2): the panel is never fully removed
-               while a pick has choices, so custom UIs whose board isn't
-               keyboard-operable still expose an operable control. -->
-          <template v-if="!props.platformActionPanelEscapeHatch && !allDockActionsSuppressed">
+          <!-- Action panel: mounted whenever not explicitly suppressed, AND there is
+               either an un-suppressed dock action OR a pick already in progress —
+               INCLUDING the all-board-anchored case, where ActionPanel renders its
+               anchored-choices operable button list ("Select on board or choose
+               here"). That focusable list is the keyboard/SR safety net (A11Y C-2):
+               the panel is never fully removed while a pick has choices, so custom
+               UIs whose board isn't keyboard-operable still expose an operable
+               control — including mid-pick on a suppressFromDock action (WR-01):
+               unmounting ActionPanel there would drop the safety net for exactly
+               the action it exists to protect, since ActionPanel's own
+               currentActionMeta/currentPick read actionController directly and
+               don't depend on the (possibly emptied) availableActions/
+               actionMetadata props. -->
+          <template v-if="!props.platformActionPanelEscapeHatch && (!allDockActionsSuppressed || hasInProgressPick)">
             <slot name="action-panel">
               <ActionPanel
                 :available-actions="isViewingHistory ? [] : availableActions"

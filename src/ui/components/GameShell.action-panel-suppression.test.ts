@@ -14,16 +14,24 @@
  *     if (!meta || names.length === 0) return false;
  *     return names.every((n) => meta[n]?.suppressFromDock === true);
  *   });
+ *   const hasInProgressPick = computed(() => actionController.currentAction.value !== null);
  *
- *   <span v-if="props.platformActionPanelEscapeHatch || allDockActionsSuppressed" class="turn">
- *   <template v-if="!props.platformActionPanelEscapeHatch && !allDockActionsSuppressed">
+ *   <span v-if="props.platformActionPanelEscapeHatch || (allDockActionsSuppressed && !hasInProgressPick)" class="turn">
+ *   <template v-if="!props.platformActionPanelEscapeHatch && (!allDockActionsSuppressed || hasInProgressPick)">
  *     <ActionPanel .../>
  *   </template>
  *
- * Pre-fix: the old passthrough prop name `suppressActionPanel` and a missing
- * allDockActionsSuppressed computed mean an all-suppressed availableActions set
- * still mounts the full ActionPanel (which itself renders zero buttons post-Task-2,
+ * Pre-fix (LIBX-01 rename): the old passthrough prop name `suppressActionPanel` and
+ * a missing allDockActionsSuppressed computed mean an all-suppressed availableActions
+ * set still mounts the full ActionPanel (which itself renders zero buttons post-Task-2,
  * leaving no turn indicator at all) — these tests fail pre-fix.
+ *
+ * Pre-fix (164-WR-01): `allDockActionsSuppressed` alone (without the `hasInProgressPick`
+ * escape hatch) fully unmounts ActionPanel — including its anchored-choices operable
+ * button list — the instant EVERY available action is suppressFromDock, even mid-pick
+ * on such an action. That drops the keyboard/SR safety net (A11Y C-2) for exactly the
+ * scenario it exists to protect (a suppressFromDock action whose board widget isn't
+ * itself keyboard-operable). Case (d) below fails pre-fix.
  */
 import { describe, it, expect } from 'vitest';
 import { defineComponent, computed } from 'vue';
@@ -42,6 +50,8 @@ const DockHarness = defineComponent({
       type: Object as () => Record<string, ActionMetaEntry> | undefined,
       default: undefined,
     },
+    // WR-01: mirrors `actionController.currentAction.value !== null`.
+    hasInProgressPick: { type: Boolean, default: false },
   },
   setup(props) {
     // Mirrors GameShell.vue's allDockActionsSuppressed computed exactly.
@@ -56,10 +66,10 @@ const DockHarness = defineComponent({
   },
   template: `
     <div class="actionbar">
-      <span v-if="platformActionPanelEscapeHatch || allDockActionsSuppressed" class="turn">
+      <span v-if="platformActionPanelEscapeHatch || (allDockActionsSuppressed && !hasInProgressPick)" class="turn">
         <span class="pr">turn prompt</span>
       </span>
-      <template v-if="!platformActionPanelEscapeHatch && !allDockActionsSuppressed">
+      <template v-if="!platformActionPanelEscapeHatch && (!allDockActionsSuppressed || hasInProgressPick)">
         <div class="action-panel-stub">action buttons</div>
       </template>
     </div>
@@ -137,6 +147,33 @@ describe('GameShell dock suppression (LIBX-01, 164-03)', () => {
     // And specifically it's the turn strip (ActionPanel is deliberately absent here).
     expect(wrapper.find('.turn').exists()).toBe(true);
   });
+
+  it('(d) all-suppressed BUT a pick is in progress: ActionPanel stays mounted (keyboard/SR safety net, WR-01), turn strip yields', () => {
+    const wrapper = mount(DockHarness, {
+      props: {
+        availableActionNames: ['hiddenA'],
+        actionMetadata: { hiddenA: { suppressFromDock: true } },
+        hasInProgressPick: true,
+      },
+    });
+
+    expect(wrapper.find('.action-panel-stub').exists()).toBe(true);
+    expect(wrapper.find('.turn').exists()).toBe(false);
+  });
+
+  it('(e) platformActionPanelEscapeHatch:true still fully suppresses even with a pick in progress (explicit escape hatch wins)', () => {
+    const wrapper = mount(DockHarness, {
+      props: {
+        platformActionPanelEscapeHatch: true,
+        availableActionNames: ['hiddenA'],
+        actionMetadata: { hiddenA: { suppressFromDock: true } },
+        hasInProgressPick: true,
+      },
+    });
+
+    expect(wrapper.find('.turn').exists()).toBe(true);
+    expect(wrapper.find('.action-panel-stub').exists()).toBe(false);
+  });
 });
 
 // ── Direct source assertions: confirm GameShell.vue itself carries the new
@@ -163,10 +200,17 @@ describe('GameShell.vue source: platformActionPanelEscapeHatch rename + allDockA
   it('defines the allDockActionsSuppressed computed used by both v-if gates', () => {
     expect(gameShellSource).toContain('allDockActionsSuppressed');
     expect(gameShellSource).toMatch(
-      /v-if="props\.platformActionPanelEscapeHatch \|\| allDockActionsSuppressed"/
+      /v-if="props\.platformActionPanelEscapeHatch \|\| \(allDockActionsSuppressed && !hasInProgressPick\)"/
     );
     expect(gameShellSource).toMatch(
-      /v-if="!props\.platformActionPanelEscapeHatch && !allDockActionsSuppressed"/
+      /v-if="!props\.platformActionPanelEscapeHatch && \(!allDockActionsSuppressed \|\| hasInProgressPick\)"/
+    );
+  });
+
+  it('defines the hasInProgressPick computed (WR-01: preserves the A11Y C-2 safety net mid-pick)', () => {
+    expect(gameShellSource).toContain('hasInProgressPick');
+    expect(gameShellSource).toMatch(
+      /hasInProgressPick = computed\(\(\) => actionController\.currentAction\.value !== null\)/
     );
   });
 });
