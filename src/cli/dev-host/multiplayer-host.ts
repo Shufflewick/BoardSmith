@@ -210,6 +210,13 @@ export class MultiplayerHost {
     if (existing !== undefined) {
       const info = this.seats.get(existing);
       if (info) info.connected = true;
+      // D15/DEVHOST-03: a reconnect always yields the seat back from any
+      // AI-cover the post-await reconciliation applied while this client was
+      // vanished (a no-op if the seat was never AI-covered — removeAiSeat is
+      // safe to call unconditionally). This is what makes the reconciliation
+      // reclaimable rather than permanent: the bot only drives the seat while
+      // the human is actually gone.
+      this.removeAiSeat(existing);
       if (this.phase === 'playing') {
         // A reconnecting follower (e.g. after a page reload / HMR) resumes
         // follow-mode: restore its button state and show it the ACTIVE seat,
@@ -664,6 +671,21 @@ export class MultiplayerHost {
     this.session = session;
     this.phase = 'playing';
     this.starting = false;
+
+    // D15/DEVHOST-03: reconcile against `this.connected` — a seat captured as
+    // human in `humanSeats` (above, BEFORE the await) whose client disconnected
+    // DURING `await session.start()` is not driven by anyone: `playerIsAI` in
+    // the start op was computed pre-await from the same stale `humanSeats`, so
+    // the game treats it as human, but the client that would act for it is
+    // gone. AI-cover it now so `runAITurns()` (next) has a driver and the flow
+    // loop cannot stall on a vanished human. The seat's `clientId` reservation
+    // is left untouched — this is a loop-driver-only cover, not a permanent
+    // conversion; `hello`'s reconnect branch removes it from `aiSeats` again
+    // the moment the client returns, so the bot yields (see `hello` below).
+    for (const seat of humanSeats) {
+      const info = this.seats.get(seat);
+      if (info && !info.connected) this.addAiSeat(seat);
+    }
 
     // The opening seat may belong to a bot (e.g. an AI dictator that acts first);
     // drive any AI turns before handing control to the humans, then send state.
