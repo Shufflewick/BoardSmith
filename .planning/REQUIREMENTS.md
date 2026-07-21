@@ -129,8 +129,10 @@ the fix holds → only then close.**
 
 ### PLATLOG — Platform logging hygiene (D32) — Phase 165
 
-- [ ] **PLATLOG-01** (D32, Doom, Minor, PLATFORM layer): The verbose `[DRAWDROP]` debug logging is not
-  shipped to the live production console.
+- [~] **PLATLOG-01** (D32, Doom, Minor, PLATFORM layer): DEFERRED TO PLATFORM TEAM (2026-07-21). The verbose
+  `[DRAWDROP]` debug logging is not shipped to the live production console. Proven to live ONLY in the deployed
+  platform (web front-end + Convex `pieces:*` mutations), absent from this library repo and all reachable game
+  repos — not actionable here. Tracked as "filed, not patched" for the platform team.
 
 ### SKILLDEF — Filed skills defects + UI/library boundary (B.8 + C.3-skills) — Phase 166
 
