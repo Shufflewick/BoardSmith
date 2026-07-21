@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, computed, nextTick } from 'vue';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
+import { useActionController } from './useActionController.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 import type { UseActionControllerReturn, PickMetadata, ValidElement } from './useActionControllerTypes.js';
 
@@ -562,6 +563,73 @@ describe('useBoardActionBridge', () => {
       expect(start.mock.calls[0][0]).toBe('play');
 
       warnSpy.mockRestore();
+    });
+  });
+
+  // T-160-BLOCKER (D27 commit-leak parity gap): ActionPanel.vue gates its OWN
+  // executeAction on `props.completed` (component-level), but every custom/
+  // drag-drop UI executes through THIS bridge, which historically checked only
+  // `isExecuting`/`isMyTurn` before calling `controller.execute()`. A seat that
+  // has already committed its simultaneous action can have a stale
+  // `availableActions`/`isMyTurn` (the broadcast reflecting its own commit lags
+  // behind the local optimistic state) — the bridge's own auto-retry-after-
+  // execution watcher then re-fires `executeAction` and re-submits.
+  //
+  // This uses the REAL useActionController (not the fake `makeController`)
+  // because the bug lives in the interaction between the bridge's watchers and
+  // the controller's own `isExecuting` transitions — a fake `execute()` never
+  // toggles `isExecuting`, so it can't reproduce the natural re-entry.
+  describe('D27 commit-leak parity: completed gate at the shared chokepoint (BLOCKER-160)', () => {
+    it('refuses a bridge-driven re-submit once the acting seat has committed, even though the bridge itself never checks `completed`', async () => {
+      const completed = ref(false);
+      let sendCallCount = 0;
+      // Simulates the server confirming the commit — in the real app this flips
+      // via the next state broadcast (GameShell's `myCompleted`), but
+      // `availableActions`/`isMyTurn` do NOT flip synchronously with it, which is
+      // exactly the staleness window the bridge's auto-retry watcher races into.
+      const sendAction = vi.fn().mockImplementation(async () => {
+        sendCallCount++;
+        if (sendCallCount === 1) {
+          completed.value = true;
+          return { success: true, data: {} };
+        }
+        // A second network call is the bug itself (the leaked re-commit). Never
+        // resolve it — this freezes `isExecuting` true, which naturally bounds
+        // the bridge's auto-retry watcher instead of letting an unbounded
+        // reactive re-trigger loop spin the Vue scheduler (and the test process).
+        return new Promise<never>(() => {});
+      });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions: ref(['commit']),
+        actionMetadata: ref({}), // no metadata for `commit` -> synthesized 0-selection meta
+        isMyTurn: ref(true), // stays true — the bug is that nothing ever re-checks this either
+        completed,
+      } as any);
+
+      const board = createBoardInteraction();
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({}),
+        availableActions: ref(['commit']),
+      });
+
+      // Initial mount auto-starts + auto-executes the sole no-selection action.
+      await nextTick();
+      await nextTick();
+      await nextTick();
+      // The isExecuting watcher's completion retry re-evaluates on the next
+      // flush(es) — availableActions never changed, so without a `completed`
+      // gate the sole action auto-executes AGAIN.
+      await nextTick();
+      await nextTick();
+      await nextTick();
+
+      expect(sendAction).toHaveBeenCalledTimes(1);
     });
   });
 });
