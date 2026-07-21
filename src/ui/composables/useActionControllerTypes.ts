@@ -104,6 +104,11 @@ export interface ActionMetadata {
   prompt?: string;
   /** Help text shown to players on hover/tap. Display-only; never a predicate. */
   help?: string;
+  /**
+   * When true, a sole no-selection action is auto-started but never auto-executed —
+   * see ActionBuilder.manual().
+   */
+  manual?: boolean;
   selections: PickMetadata[];
 }
 

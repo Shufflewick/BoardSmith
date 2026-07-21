@@ -636,6 +636,11 @@ export interface PickMetadata {
 export interface ActionMetadata {
   name: string;
   prompt?: string;
+  /**
+   * When true, a sole no-selection action is auto-started but never auto-executed —
+   * see ActionBuilder.manual().
+   */
+  manual?: boolean;
   selections: PickMetadata[];
 }
 

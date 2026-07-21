@@ -295,4 +295,72 @@ describe('useBoardActionBridge', () => {
 
     expect(execute).toHaveBeenCalledWith('endTurn', {});
   });
+
+  // AUTOEXEC-01 (D7): a sole no-selection action marked .manual() must be
+  // auto-STARTED (surfaced) but never auto-EXECUTED — the player still takes the
+  // beat (e.g. a draw is not silently played for them). Covers both auto-execute
+  // routes: the primary isMyTurn/actionsWithMetadata watcher and the end-turn
+  // actionCompletedTick coalescing path.
+  describe('manual() sole no-selection action (AUTOEXEC-01)', () => {
+    it('does NOT auto-execute a manual sole no-selection action via the primary watcher path', async () => {
+      const board = createBoardInteraction();
+      const { controller, execute } = makeController({ pick: null, action: null });
+
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
+        availableActions: ref(['endTurn']),
+      });
+
+      await nextTick();
+      await nextTick();
+
+      expect(execute).not.toHaveBeenCalledWith('endTurn', {});
+    });
+
+    it('does NOT auto-execute a manual sole no-selection action via the actionCompletedTick path', async () => {
+      const board = createBoardInteraction();
+      const { controller, execute } = makeController({ pick: null, action: null });
+
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
+        availableActions: ref(['endTurn']),
+      });
+
+      await nextTick();
+      execute.mockClear();
+
+      (controller.actionCompletedTick as { value: number }).value++;
+      await nextTick();
+      await nextTick();
+
+      expect(execute).not.toHaveBeenCalledWith('endTurn', {});
+    });
+
+    it('negative control: still auto-executes a sole no-selection action WITHOUT manual', async () => {
+      const board = createBoardInteraction();
+      const { controller, execute } = makeController({ pick: null, action: null });
+
+      useBoardActionBridge({
+        controller,
+        boardInteraction: board,
+        isMyTurn: ref(true),
+        autoEndTurn: ref(true),
+        actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
+        availableActions: ref(['endTurn']),
+      });
+
+      await nextTick();
+      await nextTick();
+
+      expect(execute).toHaveBeenCalledWith('endTurn', {});
+    });
+  });
 });
