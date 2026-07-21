@@ -91,6 +91,13 @@ export interface LoopConfig extends BaseFlowConfig {
   while?: (context: FlowContext) => boolean;
   /** Maximum iterations (safety limit) */
   maxIterations?: number;
+  /**
+   * Opt-in for a genuinely unbounded game — makes `maxIterations` optional.
+   * The high global whole-flow safety tripwire (DEFAULT_MAX_ITERATIONS) still
+   * applies even when this is set, so a genuinely stuck loop still fails loud
+   * instead of hanging the process.
+   */
+  unbounded?: boolean;
   /** Body of the loop */
   do: FlowNode;
 }

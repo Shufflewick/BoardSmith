@@ -1271,7 +1271,7 @@ export class FlowEngine<G extends Game = Game> {
     context: FlowContext
   ): FlowStepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
-    const maxIterations = config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
+    const maxIterations = config.maxIterations ?? (config.unbounded ? Infinity : DEFAULT_MAX_ITERATIONS);
     const loopName = config.name ?? 'unnamed';
 
     // Clean exit: the while condition became false. This is the ONLY correct
@@ -1296,7 +1296,9 @@ export class FlowEngine<G extends Game = Game> {
         `- A missing state update that should break the loop\n` +
         `- The condition references stale game state\n\n` +
         `Fix: Ensure the loop's 'while' condition becomes false before ${maxIterations} ` +
-        `iterations${config.name ? `, or raise maxIterations on loop "${loopName}" if the cap is genuinely too low` : ''}.`
+        `iterations${config.name ? `, or raise maxIterations on loop "${loopName}" if the cap is genuinely too low` : ''}. ` +
+        `If this game is genuinely unbounded, use loop({ unbounded: true, ... }) instead of an ` +
+        `arbitrary maxIterations cap — the global whole-flow safety tripwire still applies.`
       );
     }
 

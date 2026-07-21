@@ -80,19 +80,26 @@ export function loop(config: {
   name?: string;
   while?: (context: FlowContext) => boolean;
   maxIterations?: number;
+  /**
+   * Opt-in for a genuinely unbounded game — makes `maxIterations` optional.
+   * The global whole-flow safety tripwire still applies even when set.
+   */
+  unbounded?: boolean;
   do: FlowNode;
 }): FlowNode {
-  // Fail fast at construction time if no maxIterations is provided. A missing
-  // cap silently falls back to the engine's DEFAULT_MAX_ITERATIONS (10000),
+  // Fail fast at construction time unless the author has provided a numeric
+  // cap OR explicitly opted into `unbounded: true`. A missing cap with no
+  // opt-in silently falls back to the engine's DEFAULT_MAX_ITERATIONS (10000),
   // which turns an authoring mistake into a surprise runtime throw deep into
   // a game session instead of an actionable error at flow-definition time.
-  if (config.maxIterations === undefined) {
+  if (config.maxIterations === undefined && !config.unbounded) {
     throw new Error(
-      `loop(${config.name ? `'${config.name}'` : ''}) requires maxIterations.\n` +
-      `  Add an explicit safety limit:\n` +
-      `    loop({ maxIterations: 100, while: ..., do: ... })\n` +
-      `  Without it, the loop silently falls back to a 10000-iteration cap and\n` +
-      `  fails deep inside a running game instead of at flow-definition time.\n` +
+      `loop(${config.name ? `'${config.name}'` : ''}) requires maxIterations, or an explicit ` +
+      `unbounded: true opt-in for a genuinely unbounded game.\n` +
+      `  Bounded:   loop({ maxIterations: 100, while: ..., do: ... })\n` +
+      `  Unbounded: loop({ unbounded: true, while: ..., do: ... })\n` +
+      `  A high global safety tripwire (10000 whole-flow steps) still applies\n` +
+      `  even when unbounded.\n` +
       `  See: https://boardsmith.io/docs/common-pitfalls#loop-safety`
     );
   }
@@ -103,6 +110,7 @@ export function loop(config: {
       name: config.name,
       while: config.while,
       maxIterations: config.maxIterations,
+      unbounded: config.unbounded,
       do: config.do,
     },
   };
