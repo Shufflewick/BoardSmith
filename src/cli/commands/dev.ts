@@ -225,16 +225,35 @@ interface BoardSmithConfig {
 /**
  * Normalize colorPalette entries to {value, label} format.
  * Accepts plain hex strings, {value, label}, or {hex, label, id} objects.
+ *
+ * IN-01: an object entry missing all of `value`/`hex`/`color` is malformed
+ * (a typo'd field name, most often) — warn loudly (matches the
+ * `formatUnknownKeyWarnings` non-exiting pattern) and DROP the entry instead
+ * of emitting an invisible/unclickable empty-string swatch in the lobby
+ * color picker.
  */
 function normalizeColorPalette(
   palette: Array<string | Record<string, unknown>>
 ): Array<{ value: string; label: string }> {
-  return palette.map(entry => {
-    if (typeof entry === 'string') return { value: entry, label: entry };
+  const result: Array<{ value: string; label: string }> = [];
+  for (const entry of palette) {
+    if (typeof entry === 'string') {
+      result.push({ value: entry, label: entry });
+      continue;
+    }
     const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
-    const label = (entry.label ?? entry.name ?? hex) as string | undefined;
-    return { value: hex ?? '', label: label ?? '' };
-  });
+    if (hex === undefined) {
+      console.warn(
+        chalk.yellow(
+          `  Warning: colorPalette entry ${JSON.stringify(entry)} is missing "value"/"hex"/"color" — skipped (not rendered as a swatch).`,
+        ),
+      );
+      continue;
+    }
+    const label = (entry.label ?? entry.name ?? hex) as string;
+    result.push({ value: hex, label });
+  }
+  return result;
 }
 
 /**
