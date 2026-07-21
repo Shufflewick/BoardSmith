@@ -124,7 +124,7 @@ the fix holds → only then close.**
   valve, and the `maxIterations` exit is neither silent nor winnerless — it is documented and observable.
 - [x] **LIBX-03** (D30, Lanternfall, Med/visual): `PlayerToken` glyph ink is not hardcoded white, so the
   chip is not blank on light seat colors.
-- [ ] **LIBX-04** (D31, Lanternfall, Med/dev): The time-travel debug view no longer desyncs `#game-board`
+- [x] **LIBX-04** (D31, Lanternfall, Med/dev): The time-travel debug view no longer desyncs `#game-board`
   such that clicks commit against the live engine.
 
 ### PLATLOG — Platform logging hygiene (D32) — Phase 165

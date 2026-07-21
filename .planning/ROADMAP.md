@@ -26,7 +26,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [x] **Phase 161: Dev-Host Tooling** — gameOption/preset selection, bare solo start, first-seat orphan race, color palette (D13, D14, D15, D16)
 - [x] **Phase 162: Test-Tooling Ergonomics** — asset-scan comment false-positive + export surface, module-scope `matchMedia`, symmetric-deck leak assert (D17, D18, D19, D20)
 - [x] **Phase 163: Engine Space Lifecycle & Element Integrity** — sealed/append-only Space, Space removal/re-parent, hidden-count leak, class-name collision, metadata divergence (D22, D23, D24, D25, D26)
-- [ ] **Phase 164: Library Misc — Action-Panel, Loop, Visual, Debug-View** — per-action dock suppression + fence `suppress-action-panel` (C.3-lib), unbounded `loop()`, token glyph ink, time-travel desync (D28, D29, D30, D31)
+- [x] **Phase 164: Library Misc — Action-Panel, Loop, Visual, Debug-View** — per-action dock suppression + fence `suppress-action-panel` (C.3-lib), unbounded `loop()`, token glyph ink, time-travel desync (D28, D29, D30, D31) (completed 2026-07-21)
 - [ ] **Phase 165: Platform Logging Hygiene** — stop shipping `[DRAWDROP]` debug logging to the production console (D32)
 - [ ] **Phase 166: Skills Defects — Session-Lock + UI/Library Boundary** — fix the close-ceremony lock seam, fence the game/library boundary, tell the agent not to use the fenced suppress hatch (B.8 ×2, C.3-skills)
 - [ ] **Phase 167: Skills Autonomy Rewrite** — playtest-gate, question discipline, batch, run-while-away, auto-advance, context ≥50% + sub-agent offload, loud completion, process lessons — preserving Part D disciplines (B.1–B.7, B.9)
@@ -176,12 +176,12 @@ Plans:
 3. `PlayerToken` glyph ink is not hardcoded white; the chip renders on light seat colors (D30).
 4. The time-travel debug view no longer desyncs `#game-board` such that clicks commit against the live engine (D31).
 5. Each fix has a fail-on-pre-fix / pass-after test (PROC-01).
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [x] 164-01-PLAN.md — `loop()` unbounded valve + `maxIterations` observability [LIBX-02, PROC-01] (wave 1)
 - [x] 164-02-PLAN.md — `PlayerToken` glyph-ink WCAG contrast fix [LIBX-03, PROC-01] (wave 1)
 - [x] 164-03-PLAN.md — Per-action dock suppression + fence `suppressActionPanel`→`platformActionPanelEscapeHatch` (C.3-lib) [LIBX-01, PROC-01] (wave 1)
-- [ ] 164-04-PLAN.md — Time-travel debug-view `#game-board` desync fix (displayedState + bridge history guard) [LIBX-04, PROC-01] (wave 2, depends 164-03)
+- [x] 164-04-PLAN.md — Time-travel debug-view `#game-board` desync fix (displayedState + bridge history guard) [LIBX-04, PROC-01] (wave 2, depends 164-03)
 
 #### Phase 165: Platform Logging Hygiene
 **Goal**: The deployed platform no longer ships verbose `[DRAWDROP]` debug logging to the live production console.
@@ -267,7 +267,7 @@ Plans:
 | 161. Dev-Host Tooling | 0/? | Not started | — |
 | 162. Test-Tooling Ergonomics | 0/? | Not started | — |
 | 163. Engine Space Lifecycle & Element Integrity | 0/? | Not started | — |
-| 164. Library Misc — Action-Panel, Loop, Visual, Debug-View | 3/4 | In Progress|  |
+| 164. Library Misc — Action-Panel, Loop, Visual, Debug-View | 4/4 | Complete   | 2026-07-21 |
 | 165. Platform Logging Hygiene | 0/? | Not started | — |
 | 166. Skills Defects — Session-Lock + UI/Library Boundary | 0/? | Not started | — |
 | 167. Skills Autonomy Rewrite | 0/? | Not started | — |

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: executing
-stopped_at: Completed 164-03-PLAN.md
-last_updated: "2026-07-21T20:03:14.596Z"
+status: verifying
+stopped_at: Completed 164-04-PLAN.md
+last_updated: "2026-07-21T20:12:44.367Z"
 last_activity: 2026-07-21
 progress:
   total_phases: 15
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 29
-  completed_plans: 28
-  percent: 60
+  completed_plans: 29
+  percent: 67
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 164 (Library Misc — Action-Panel, Loop, Visual, Debug-View) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-21
 
 ## Milestones
@@ -273,6 +273,8 @@ Recent decisions affecting current work:
 - [Phase 164-01]: unbounded: true opt-in threaded on LoopConfig; global whole-flow tripwire retained unchanged — Lets a genuinely unbounded game express its loop without lying via an arbitrary maxIterations cap, while the engine's DEFAULT_MAX_ITERATIONS run() tripwire (independent of any single loop's counter) still catches a truly stuck loop
 - [Phase 164-02]: contrastInk implemented as a pure hex/#rgb/rgb()/rgba() parser (no Canvas/DOM) per the plan's locked LIBX-03 constraint, superseding RESEARCH.md's Canvas-normalization recommendation
 - [Phase 164]: Plan 164-03 (LIBX-01): platformActionPanelEscapeHatch renamed+locked; suppressFromDock rides the actionMetadata channel exactly like manual
+- [Phase 164-04]: displayedState computed re-wraps the shallower timeTravelState PlayerGameState into the GameState shape at one declaration site (mirrors gameView), unifying board+sidebar-extra :state on a single source of truth
+- [Phase 164-04]: isViewingHistory guarded independently in all four useBoardActionBridge mutators (not composed with isMyTurn) since setSelectionValue/toggleMultiSelectValue never re-check isMyTurn mid-action
 
 ### Pending Todos
 
@@ -284,8 +286,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-21T20:03:14.585Z
-Stopped at: Completed 164-03-PLAN.md
+Last session: 2026-07-21T20:12:44.358Z
+Stopped at: Completed 164-04-PLAN.md
 Resume file: 
 None
 
