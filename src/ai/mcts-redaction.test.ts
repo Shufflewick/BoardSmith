@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   Game,
+  GameElement,
   Player,
   Piece,
   Space,
@@ -8,6 +9,7 @@ import {
   defineFlow,
   actionStep,
   simultaneousActionStep,
+  forEach,
   loop,
   createSnapshot,
   type GameOptions,
@@ -65,9 +67,9 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
    *  out-of-scope limitation). */
   lastGuess?: number;
 
-  constructor(options: GameOptions & { secretValue: number; guesserSeat?: number }) {
+  constructor(options: GameOptions & { secretValue: number; guesserSeat?: number; choices?: number[] }) {
     super(options);
-    const { secretValue, guesserSeat = 1 } = options;
+    const { secretValue, guesserSeat = 1, choices = [1, 2, 3] } = options;
     const holderSeat = guesserSeat === 1 ? 2 : 1;
 
     this.opponentHand = this.create(Space<HiddenInfoGame>, 'opponentHand');
@@ -79,7 +81,7 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
       Action.create('guess')
         .chooseFrom('guessedValue', {
           prompt: 'Guess the hidden card value',
-          choices: [1, 2, 3],
+          choices,
         })
         .execute((args, ctx) => {
           (ctx.game as HiddenInfoGame).lastGuess = args.guessedValue as number;
@@ -99,14 +101,15 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
   }
 }
 
-function createHiddenInfoGame(secretValue: number, seed: string, guesserSeat = 1) {
+function createHiddenInfoGame(secretValue: number, seed: string, guesserSeat = 1, choices = [1, 2, 3]) {
   const game = new HiddenInfoGame({
     playerCount: 2,
     playerNames: ['P1', 'P2'],
     seed,
     secretValue,
     guesserSeat,
-  } as GameOptions & { secretValue: number; guesserSeat: number });
+    choices,
+  } as GameOptions & { secretValue: number; guesserSeat: number; choices: number[] });
   game.startFlow();
   return game;
 }
@@ -366,5 +369,183 @@ describe('MCTSBot simultaneous-step soundness (AI-02 / T-159-07)', () => {
     // identical (independent of seat 1's pick).
     expect(afterY).toEqual(afterX);
     expect(afterZ).toEqual(afterX);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// CR-01 (159-REVIEW): root move enumeration + game-supplied heuristic hooks
+// (threatResponseMoves / uctConstant) must run against the REDACTED clone,
+// not `this.game` (full truth). Reuses HiddenInfoGame -- the hooks receive a
+// live `Game` instance, so reading `secretCard.value` directly on the object
+// they were handed proves which view (full vs redacted) they saw.
+// ----------------------------------------------------------------------------
+
+describe('MCTSBot root-decision redaction (AI-02 / CR-01)', () => {
+  it('threatResponseMoves does not see the opponent\'s hidden card value at the ROOT', async () => {
+    let sawValue: number | undefined = 'unset' as unknown as number;
+    const secretValue = 2;
+    const game = createHiddenInfoGame(secretValue, 'cr01-threat-1');
+    const bot = new MCTSBot(
+      game,
+      HiddenInfoGame,
+      'hidden-info',
+      1, // bot plays the guesser seat
+      [],
+      { iterations: 5, playoutDepth: 0, seed: 'cr01-threat-1', async: false, usePNS: false },
+      {
+        threatResponseMoves: (g) => {
+          sawValue = (g as HiddenInfoGame).secretCard.value;
+          return { moves: [] };
+        },
+      },
+    );
+
+    await bot.play();
+
+    // Pre-fix: threatResponseMoves is called with `this.game` (full truth) --
+    // sawValue === secretValue (the real hidden value leaks into the root
+    // heuristic). Post-fix: it's called with the redacted searchGame, whose
+    // secretCard.value attribute was never populated (redacted away).
+    expect(sawValue).toBeUndefined();
+  });
+
+  it('uctConstant does not see the opponent\'s hidden card value, even on the allMoves.length===1 fast path', async () => {
+    let sawValue: number | undefined = 'unset' as unknown as number;
+    const secretValue = 3;
+    // Single choice -- forces the allMoves.length===1 fast path (mcts-bot.ts),
+    // which historically returned BEFORE the redacted searchGame was ever
+    // built. uctConstant is cached unconditionally at the top of runSearch,
+    // before that length check, so it is called on this path too.
+    const game = createHiddenInfoGame(secretValue, 'cr01-uct-1', 1, [secretValue]);
+    const bot = new MCTSBot(
+      game,
+      HiddenInfoGame,
+      'hidden-info',
+      1,
+      [],
+      { iterations: 5, playoutDepth: 0, seed: 'cr01-uct-1', async: false, usePNS: false },
+      {
+        uctConstant: (g) => {
+          sawValue = (g as HiddenInfoGame).secretCard.value;
+          return Math.sqrt(2);
+        },
+      },
+    );
+
+    await bot.play();
+
+    // Pre-fix: uctConstant(this.game, ...) -- sawValue === secretValue.
+    // Post-fix: uctConstant is called against the redacted searchGame (built
+    // unconditionally before the fast-path check), so the value is redacted.
+    expect(sawValue).toBeUndefined();
+  });
+});
+
+// ----------------------------------------------------------------------------
+// CR-02 (159-REVIEW): an element-typed flow variable pointing at a
+// FUNGIBLE hidden-zone child (anonymized to a synthetic negative id by
+// toJSONForPlayer) must relink to a live GameElement on restore of the
+// redacted clone, not degrade to a dead serialized marker object.
+//
+// Individually-hidden elements (`showOnlyTo`/`hideFrom`) keep their real,
+// stable id in the redacted view (game.ts, intentional for FLIP animation),
+// so they do NOT exercise this bug -- only a Space with zone-level
+// `contentsHidden()`/`contentsCountOnly()`/owner-zone visibility anonymizes
+// its children's ids, which is what this fixture uses.
+// ----------------------------------------------------------------------------
+
+class FlowCard extends Piece<HiddenFlowVarGame> {
+  label!: string;
+}
+
+class HiddenFlowVarGame extends Game<HiddenFlowVarGame, Player> {
+  secretZone!: Space<HiddenFlowVarGame>;
+  lastGuess?: number;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.secretZone = this.create(Space<HiddenFlowVarGame>, 'secretZone');
+    this.secretZone.contentsHidden(); // zone-level: children get synthetic ids
+    this.secretZone.create(FlowCard, 'card-a', { label: 'A' });
+    this.secretZone.create(FlowCard, 'card-b', { label: 'B' });
+
+    this.registerAction(
+      Action.create('guess')
+        .chooseFrom('guessedValue', {
+          prompt: 'Guess',
+          choices: [1, 2, 3],
+        })
+        .execute((args, ctx) => {
+          (ctx.game as HiddenFlowVarGame).lastGuess = args.guessedValue as number;
+          return { success: true };
+        })
+    );
+
+    // forEach binds `currentCard` (an element-typed flow variable) to each
+    // hidden-zone child in turn -- the exact pattern CR-02 flags as plausible
+    // for hidden-info games (e.g. "for each card in the opponent's hidden
+    // deck, do X"). The bot pauses on the first iteration's actionStep, so
+    // `currentCard` is live in the flow position the moment captureSnapshot()
+    // runs.
+    this.setFlow(defineFlow({
+      root: forEach({
+        collection: (ctx) => (ctx.game as HiddenFlowVarGame).secretZone.all(FlowCard),
+        as: 'currentCard',
+        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)! }),
+      }),
+    }));
+  }
+}
+
+function createHiddenFlowVarGame(seed: string) {
+  const game = new HiddenFlowVarGame({
+    playerCount: 2,
+    playerNames: ['P1', 'P2'],
+    seed,
+  });
+  game.startFlow();
+  return game;
+}
+
+describe('MCTSBot flow-variable relinking on redacted restore (AI-02 / CR-02)', () => {
+  it('a forEach-bound flow variable over a hidden zone relinks to a live element post-restore, not a dead marker', () => {
+    const game = createHiddenFlowVarGame('cr02-1');
+    const bot: any = new MCTSBot(
+      game,
+      HiddenFlowVarGame,
+      'hidden-flow-var',
+      1,
+      [],
+      { iterations: 5, playoutDepth: 0, seed: 'cr02-1', async: false, usePNS: false },
+    );
+
+    const snapshot = bot.captureSnapshot();
+    const restored = bot.restoreGame(snapshot) as HiddenFlowVarGame;
+
+    // Sanity: the clone is still a valid, playable game (locked requirement).
+    const flowState = restored.getFlowState();
+    expect(flowState?.awaitingInput).toBe(true);
+    expect(flowState?.availableActions).toContain('guess');
+
+    // Inspect what the forEach-bound flow variable resolved to on the
+    // RESTORED (redacted) clone. This reaches into the private flow-engine
+    // field the same way `bot.captureSnapshot()`/`bot.restoreGame()` are
+    // reached into above (mirrors mcts-restore.test.ts's established pattern
+    // for exercising internals no public API exposes).
+    const currentCard = (restored as any)._flowEngine.variables.currentCard;
+
+    // Pre-fix: `currentCard`'s original id no longer resolves in the redacted
+    // tree (its zone-level redaction anonymized it to a synthetic negative
+    // id) -- relinkFlowVariables leaves the raw `{__flowElementId,className}`
+    // marker object in place, so `currentCard` is a plain object, not a
+    // GameElement. Post-fix: the id remap relinks it to the correct redacted
+    // placeholder GameElement.
+    expect(currentCard).toBeInstanceOf(GameElement);
+
+    // The clone must also still be genuinely PLAYABLE: driving the action
+    // through to completion must not throw or corrupt state.
+    restored.continueFlow('guess', { guessedValue: 1 }, 1);
+    expect(restored.lastGuess).toBe(1);
   });
 });
