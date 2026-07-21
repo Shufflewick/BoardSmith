@@ -24,3 +24,26 @@ describe('loop() — PIT-01 construction-time maxIterations guard', () => {
     expect(config.maxIterations).toBe(5);
   });
 });
+
+describe('loop() — LIBX-02 unbounded valve', () => {
+  // Test A: `unbounded: true` makes maxIterations optional — construction must
+  // NOT throw. This is the fail-on-pre-fix case: today's construction guard
+  // throws unconditionally when maxIterations is undefined, regardless of an
+  // `unbounded` flag (which does not exist yet on the config type).
+  it('does NOT throw at construction when unbounded: true is provided without maxIterations', () => {
+    expect(() => loop({ unbounded: true, do: noop() })).not.toThrow();
+
+    const node = loop({ unbounded: true, do: noop() });
+    expect(node.type).toBe('loop');
+    expect((node.config as { unbounded?: boolean }).unbounded).toBe(true);
+    expect((node.config as { maxIterations?: number }).maxIterations).toBeUndefined();
+  });
+
+  // Test B (no-regression, RESEARCH Pitfall 2): omitting BOTH maxIterations and
+  // unbounded must still throw, and the message must name the unbounded valve
+  // too (not just maxIterations) so authors discover the correct fix.
+  it('still throws, naming both the bounded and unbounded valves, when neither is provided', () => {
+    expect(() => loop({ do: noop() })).toThrow(/maxIterations/);
+    expect(() => loop({ do: noop() })).toThrow(/unbounded/);
+  });
+});

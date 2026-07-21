@@ -258,6 +258,105 @@ describe('FlowEngine', () => {
       expect(count).toBe(3);
     });
 
+    // Test D (LIBX-02, no-regression): a bounded loop must still throw the loud
+    // "safety assertion" cap-hit error when it exceeds a numeric maxIterations,
+    // even after the unbounded valve is introduced.
+    it('still throws the loud safety-assertion error for a bounded loop that exceeds its numeric maxIterations', () => {
+      let count = 0;
+
+      const flow = defineFlow({
+        root: loop({
+          name: 'bounded-runaway-loop',
+          while: () => true,
+          maxIterations: 5,
+          do: execute(() => {
+            count++;
+          }),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+
+      expect(() => engine.start()).toThrow(/maxIterations safety cap/);
+      expect(count).toBeGreaterThanOrEqual(5);
+    });
+
+    // Test C (LIBX-02): an `unbounded: true` loop must be able to run past
+    // DEFAULT_MAX_ITERATIONS (10000) per-loop iterations without ever hitting
+    // the per-loop cap-hit throw, terminating only when its `while` condition
+    // flips false. Each iteration pauses on an actionStep and is driven forward
+    // by a separate engine.resume() call from the test — this resets run()'s
+    // own per-call iteration counter every time, so the *loop's own* cumulative
+    // iteration count (persisted in frame.data across resumes) can exceed 10000
+    // without the whole-flow run() tripwire (also gated at 10000) ever firing.
+    it('unbounded: true loop runs past DEFAULT_MAX_ITERATIONS per-loop iterations and exits cleanly on while-false', () => {
+      const ITERATIONS_PAST_CAP = 10001;
+      let count = 0;
+
+      game.registerAction(Action.create('tick').execute(() => ({ success: true })));
+
+      const flow = defineFlow({
+        root: loop({
+          name: 'unbounded-loop',
+          unbounded: true,
+          while: () => count <= ITERATIONS_PAST_CAP,
+          do: sequence(
+            execute(() => {
+              count++;
+            }),
+            actionStep({ actions: ['tick'] })
+          ),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      let state = engine.start();
+      expect(state.awaitingInput).toBe(true);
+
+      let resumes = 0;
+      while (!state.complete) {
+        state = engine.resume('tick', {});
+        resumes++;
+        // Guard against the test itself runaway-looping if something regresses.
+        if (resumes > ITERATIONS_PAST_CAP + 10) {
+          throw new Error('Test runaway: loop never completed via while-false');
+        }
+      }
+
+      expect(state.complete).toBe(true);
+      expect(count).toBeGreaterThan(10000);
+    });
+
+    // Test E (LIBX-02): the whole-flow tripwire in run() must still fire for a
+    // genuinely stuck `unbounded: true` loop whose `while` never flips false —
+    // driven entirely within a SINGLE continuous engine.start() call (no
+    // resuming), proving the global tripwire is not defeated by `unbounded`.
+    // Distinguished from Test D by asserting the run()-level message (not the
+    // per-loop cap-hit message), since an unbounded loop's own cap is Infinity.
+    it('the whole-flow run() tripwire still fires for a stuck unbounded loop (not the per-loop cap)', () => {
+      const flow = defineFlow({
+        root: loop({
+          name: 'stuck-unbounded-loop',
+          unbounded: true,
+          while: () => true,
+          do: execute(() => {}),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+
+      let caught: Error | undefined;
+      try {
+        engine.start();
+      } catch (e) {
+        caught = e as Error;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught!.message).toMatch(/exceeded 10000 iterations/);
+      expect(caught!.message).not.toMatch(/maxIterations safety cap/);
+    });
+
     it('should execute repeat fixed times', () => {
       let count = 0;
 
