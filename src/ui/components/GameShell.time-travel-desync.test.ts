@@ -52,12 +52,18 @@ interface FakeGameState {
 
 /**
  * Mirrors GameShell.vue's displayedState computed exactly:
- *   const displayedState = computed<GameState | null>(() => {
+ *   const displayedState = computed<DisplayedGameState | null>(() => {
  *     if (timeTravelState.value) {
- *       return state.value ? { ...state.value, state: timeTravelState.value } : null;
+ *       return state.value ? { ...state.value, state: timeTravelState.value, flowState: null } : null;
  *     }
  *     return state.value;
  *   });
+ *
+ * WR-02 (164 review): flowState is nulled out during time-travel -- there is no
+ * historical flowState to substitute (DebugPanel.vue's own internal state view
+ * has the identical constraint and nulls it out for the same reason), so a
+ * custom UI reading `state.flowState` sees the gap loudly instead of silently
+ * live data superimposed on a historical board.
  */
 function makeDisplayedState(
   state: Ref<FakeGameState | null>,
@@ -65,7 +71,7 @@ function makeDisplayedState(
 ) {
   return computed<FakeGameState | null>(() => {
     if (timeTravelState.value) {
-      return state.value ? { ...state.value, state: timeTravelState.value } : null;
+      return state.value ? { ...state.value, state: timeTravelState.value, flowState: null } : null;
     }
     return state.value;
   });
@@ -162,11 +168,38 @@ describe('GameShell displayedState (LIBX-04, 164-04)', () => {
     const displayedState = makeDisplayedState(state, timeTravelState);
 
     expect(displayedState.value).toEqual({
-      flowState: { turn: 1 },
+      // WR-02: nulled out during time-travel, NOT the live { turn: 1 } value --
+      // there is no historical flowState to substitute, so this must be loud
+      // (null), not silently wrong (stale live data).
+      flowState: null,
       state: { view: 'hist-view', marker: 'hist' },
       playerSeat: 2,
       isSpectator: false,
     });
+  });
+
+  it('WR-02: displayedState.flowState is null WHILE viewing history, and restored to live flowState after exiting history', async () => {
+    const state = ref<FakeGameState | null>({
+      flowState: { turn: 1, availableActions: ['endTurn'] },
+      state: { view: 'live-view', marker: 'live' },
+      playerSeat: 2,
+      isSpectator: false,
+    });
+    const timeTravelState = ref<{ view: string; marker: string } | null>(null);
+    const displayedState = makeDisplayedState(state, timeTravelState);
+
+    // Before time-travel: live flowState.
+    expect(displayedState.value?.flowState).toEqual({ turn: 1, availableActions: ['endTurn'] });
+
+    // Enter history: flowState must be null, not the live turn/availableActions.
+    timeTravelState.value = { view: 'hist-view', marker: 'hist' };
+    await nextTick();
+    expect(displayedState.value?.flowState).toBe(null);
+
+    // Exit history: flowState restored to live.
+    timeTravelState.value = null;
+    await nextTick();
+    expect(displayedState.value?.flowState).toEqual({ turn: 1, availableActions: ['endTurn'] });
   });
 });
 
@@ -197,6 +230,12 @@ describe('GameShell.vue source: displayedState wired at all three sites, DebugPa
     expect(idx).toBeGreaterThan(-1);
     const surrounding = gameShellSource.slice(Math.max(0, idx - 200), idx);
     expect(surrounding).toContain('DebugPanel');
+  });
+
+  it('WR-02: displayedState nulls out flowState during time-travel (no stale live turn/availableActions)', () => {
+    expect(gameShellSource).toMatch(
+      /state\.value \? \{ \.\.\.state\.value, state: timeTravelState\.value, flowState: null \} : null/
+    );
   });
 });
 

@@ -52,7 +52,7 @@ import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
 import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
 import type { ActionMetadata } from '../composables/useActionControllerTypes';
-import type { GameState } from '../../client/types.js';
+import type { GameState, FlowState } from '../../client/types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { toCloneablePayload } from './platformRequestClone.js';
 
@@ -514,9 +514,21 @@ const gameView = computed(() => {
 // Re-wrap the historical PlayerGameState into a GameState-shaped object here so
 // every :state consumer (board + sidebar-extra) gets a consistent shape whether
 // live or historical, with no shape-aware branching downstream.
-const displayedState = computed<GameState | null>(() => {
+//
+// WR-02 (164 review): `flowState` ("turn info, available actions" per
+// `GameState.flowState`'s own doc) is nulled out during time-travel rather
+// than left pointing at LIVE data superimposed on a historical board. There is
+// no historical flowState to substitute -- DebugPanel.vue's own internal state
+// view has the identical hard constraint and null's it out for the exact same
+// reason (`{ state: historicalState.value, flowState: null }`). A custom UI
+// that reads `props.state.flowState` directly (rather than the separately-
+// passed, correctly isViewingHistory-gated `availableActions`/`isMyTurn`
+// props GameShell already computes for the auto-UI ActionPanel) now sees the
+// gap loudly (null) instead of silently-wrong live data.
+type DisplayedGameState = Omit<GameState, 'flowState'> & { flowState: FlowState | null };
+const displayedState = computed<DisplayedGameState | null>(() => {
   if (timeTravelState.value) {
-    return state.value ? { ...state.value, state: timeTravelState.value } : null;
+    return state.value ? { ...state.value, state: timeTravelState.value, flowState: null } : null;
   }
   return state.value;
 });
