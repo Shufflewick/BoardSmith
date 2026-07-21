@@ -1,5 +1,5 @@
 import { Space, type ElementEventHandler } from './space.js';
-import { GameElement } from './game-element.js';
+import { GameElement, registerElementClass } from './game-element.js';
 import { Piece } from './piece.js';
 import { Card } from './card.js';
 import { Hand } from './hand.js';
@@ -776,13 +776,13 @@ export class Game<
   protected registerElements(
     classes: (new (...args: any[]) => GameElement)[]
   ): void {
-    // Unconditional set: an explicit game registration is authoritative and
-    // overrides the built-in default seed (see BUILTIN_ELEMENT_CLASSES). This
-    // lets a game register a custom class that happens to share a built-in name
-    // instead of being silently shadowed by the framework class.
+    // Routed through the shared SPACE-04/D25 collision guard: an explicit
+    // game registration still overrides a built-in default seed (see
+    // BUILTIN_ELEMENT_CLASSES), but a DIFFERENT class colliding with an
+    // already-registered CUSTOM name now throws instead of silently
+    // clobbering it.
     for (const cls of classes) {
-      this._ctx.classRegistry.set(cls.name, cls as ElementClass);
-      this._ctx._builtinSeededNames?.delete(cls.name);
+      registerElementClass(this._ctx, cls.name, cls as ElementClass);
     }
   }
 
@@ -797,14 +797,9 @@ export class Game<
     element.name = name;
     element.game = this as unknown as Game;
 
-    const className = elementClass.name;
-    // Register unless already registered as a non-builtin (custom) class. A
-    // built-in default seed is overridden by the class actually instantiated,
-    // so a custom class sharing a built-in name is not silently shadowed.
-    if (!this._ctx.classRegistry.has(className) || this._ctx._builtinSeededNames?.has(className)) {
-      this._ctx.classRegistry.set(className, elementClass);
-      this._ctx._builtinSeededNames?.delete(className);
-    }
+    // Routed through the shared SPACE-04/D25 collision guard — see
+    // `registerElementClass` (game-element.ts).
+    registerElementClass(this._ctx, elementClass.name, elementClass as ElementClass);
 
     return element;
   }

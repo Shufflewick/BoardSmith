@@ -29,6 +29,67 @@ function isElementClass<F extends GameElement>(value: unknown): value is Element
 }
 
 /**
+ * SPACE-04/D25: the ONE shared write path for `ctx.classRegistry`. Every
+ * site that registers an element constructor under a name (explicit
+ * `Game#registerElements`, the internal `Game#createElement`, and this
+ * file's own lazy `create()`) routes through this guard instead of a bare
+ * `Map.set`, so a name collision can never again be silently reintroduced.
+ *
+ * - Unregistered name: register, done.
+ * - Same constructor already registered under `name`: no-op (idempotent
+ *   re-registration — a game legitimately re-registering its own class).
+ * - Name currently owned by a built-in default seed (`_builtinSeededNames`):
+ *   a game class overriding a built-in name (e.g. its own `Hand`) is a
+ *   legitimate override, not a collision — register and un-seed the name.
+ * - Otherwise a DIFFERENT, non-builtin-seeded constructor already owns
+ *   `name`: a real collision. Dev-mode-gated (and skipped for
+ *   minified/mangled short names, since a minifier legitimately collapses
+ *   distinct class names to the same short identifier in production) —
+ *   throws an actionable error naming the class and telling the designer
+ *   to rename it; never leaks paths/line-numbers/stack traces.
+ */
+export function registerElementClass(
+  ctx: ElementContext,
+  name: string,
+  cls: ElementClass,
+): void {
+  const existing = ctx.classRegistry.get(name);
+
+  if (!existing) {
+    ctx.classRegistry.set(name, cls);
+    return;
+  }
+
+  if (existing === cls) {
+    return;
+  }
+
+  if (ctx._builtinSeededNames?.has(name)) {
+    ctx.classRegistry.set(name, cls);
+    ctx._builtinSeededNames.delete(name);
+    return;
+  }
+
+  // Real collision: two distinct constructors both claim `name`. A minifier
+  // legitimately collapses distinct class names to short/mangled
+  // identifiers in production, so a short name is not a trustworthy
+  // collision signal there — only throw when running in dev AND the name
+  // is long enough to be a genuine (non-minified) identifier.
+  const MINIFIED_NAME_MAX_LENGTH = 2;
+  const looksMinified = name.length <= MINIFIED_NAME_MAX_LENGTH;
+  if (isDevMode() && !looksMinified) {
+    throw new Error(
+      `Element class name collision: two different classes are both named "${name}". ` +
+      `Rename one of them so every registered element class has a unique name.`
+    );
+  }
+
+  // Minified/production bundle: preserve today's last-wins behavior
+  // silently, since the collapsed name is not a real design collision.
+  ctx.classRegistry.set(name, cls);
+}
+
+/**
  * PIT-02: record a class-typed finder arg into the per-game `_ctx` recorded
  * set, but only while recording is active (first `startFlow()` traversal).
  * No-op (single boolean check, no allocation) when recording is inactive —
@@ -357,14 +418,12 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // Add to tree
     this.addChild(element);
 
-    // Register class for deserialization (using Map). A built-in default seed
-    // is overridden by the class actually instantiated, so a custom class
-    // sharing a built-in name is not silently shadowed.
-    const className = elementClass.name;
-    if (!this._ctx.classRegistry.has(className) || this._ctx._builtinSeededNames?.has(className)) {
-      this._ctx.classRegistry.set(className, elementClass);
-      this._ctx._builtinSeededNames?.delete(className);
-    }
+    // Register class for deserialization. Routed through the shared
+    // SPACE-04/D25 collision guard (see `registerElementClass` above) — a
+    // built-in default seed is still overridden by the class actually
+    // instantiated, but a DIFFERENT custom class colliding with an
+    // already-registered custom name now throws instead of clobbering.
+    registerElementClass(this._ctx, elementClass.name, elementClass as ElementClass);
 
     return element;
   }
