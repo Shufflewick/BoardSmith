@@ -181,6 +181,31 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
     expect(aResp?.result?.success).toBe(true);
   });
 
+  it('WR-02: a `join` landing INSIDE the `await session.start()` window is reinitialized as part of startGame\'s own commit — no init/game_state until it, not waiting on an unrelated broadcast', async () => {
+    const gate = makeDeferred();
+    const { host, lastOfType } = makeRaceHost(gate);
+
+    // A auto-seats -> seat 1, gated mid-await (same interleave technique as
+    // the D15 tests above).
+    const helloPromise = host.handleMessage('A', { type: 'hello' });
+    // B joins seat 2 DURING the await — handleJoin has no `starting` guard by
+    // design (the D15 reclaim test above already relies on this working), so
+    // the seat assignment itself succeeds; the gap is that `startGame`'s own
+    // reinit loop (below) only iterated the PRE-await `humanSeats` snapshot,
+    // which does not include B (B joined after that snapshot was taken).
+    host.handleMessage('B', { type: 'join', seat: 2, name: 'B' });
+    gate.resolve();
+    await helloPromise;
+
+    // Pre-fix: B receives no `init`/`game_state` here — only a `joined` +
+    // `lobby` message from handleJoin itself (phase was still 'lobby' at
+    // join time, so handleJoin's own `if (phase==='playing') reinitSeat`
+    // check reads false). Post-fix: startGame's reinit pass covers every
+    // currently-seated connected client, not just the pre-await snapshot.
+    expect(lastOfType('B', 'init')).toBeTruthy();
+    expect(lastOfType('B', 'game_state')).toBeTruthy();
+  });
+
   it('a MID-GAME disconnect (not during startGame\'s await) still follows the existing pause-on-away path, NOT the D15 reconciliation', async () => {
     const { host, to } = makeRaceHost(null); // normal, un-raced start
     await host.handleMessage('A', { type: 'hello' }); // A -> seat 1, game starts normally

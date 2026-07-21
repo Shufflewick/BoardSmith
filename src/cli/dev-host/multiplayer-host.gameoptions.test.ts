@@ -48,6 +48,20 @@ const declaredGameOptions: DevOptionDef[] = [
     ],
   },
   { id: 'rounds', type: 'number', label: 'Rounds', default: 3, min: 1, max: 10 },
+  // CR-02: a boolean option — a raw string "false" must NOT arrive JS-truthy.
+  { id: 'hardMode', type: 'boolean', label: 'Hard mode', default: false },
+  // CR-02: a `select` option with NON-STRING declared choice values — a raw
+  // CLI-flag string ("4") must still match the numeric choice (4).
+  {
+    id: 'level',
+    type: 'select',
+    label: 'Level',
+    default: 1,
+    choices: [
+      { value: 1, label: 'Level 1' },
+      { value: 4, label: 'Level 4' },
+    ],
+  },
 ];
 
 const presets = [
@@ -127,8 +141,26 @@ describe('MultiplayerHost — adversarial: preset bundle, override precedence, r
     expect(opts.difficulty).toBe('hard');
     expect(opts.rounds).toBe(7);
     // The preset declares 3 players (`players: [...]` length 3) — its count
-    // reaches the start op's `playerCount` field without resizing `this.seats`.
+    // reaches the start op's `playerCount` field.
     expect(opts.playerCount).toBe(3);
+  });
+
+  it('CR-01: a preset-applied player count keeps playerOptions/playerIsAI/playerConfigs SIZED to match — no length mismatch reaches the game constructor', async () => {
+    // Host launched with 2 seats (CLI --players 2); the 'advanced' preset
+    // declares 3 players. Pre-fix: opts.playerCount === 3 but the per-seat
+    // arrays stay length 2 (built from the frozen constructor-time
+    // this.opts.playerCount) — the exact CR-01 defect. Post-fix: `configure`
+    // resizes the seat map first, so every array agrees with playerCount.
+    const { host, getStartOptions, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' }); // auto-seats A -> seat 1, 2-seat host
+    await host.handleMessage('A', { type: 'configure', preset: 'advanced' });
+    // No rejection — the configure must succeed and actually start the game.
+    expect(lastOfType('A', 'error')).toBeUndefined();
+    const opts = getStartOptions();
+    expect(opts.playerCount).toBe(3);
+    expect((opts.playerOptions as unknown[]).length).toBe(3);
+    expect((opts.playerIsAI as unknown[]).length).toBe(3);
+    expect((opts.playerConfigs as unknown[]).length).toBe(3);
   });
 
   it('a `--game-option`-equivalent selection OVERRIDES the preset value for the same key', async () => {
@@ -151,5 +183,53 @@ describe('MultiplayerHost — adversarial: preset bundle, override precedence, r
     expect(getStartOptions().difficulty).toBe('hard');
     await host.handleMessage('A', { type: 'restart' });
     expect(getStartOptions().difficulty).toBe('hard'); // still selected, not reverted to 'easy'
+  });
+});
+
+describe('MultiplayerHost — CR-02: configure values are coerced to their declared type before reaching the start op', () => {
+  it('a `number` option arrives as a real number, not the wire string', async () => {
+    const { host, getStartOptions } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', gameOptions: { rounds: '5' } });
+    const opts = getStartOptions();
+    expect(opts.rounds).toBe(5);
+    expect(typeof opts.rounds).toBe('number');
+  });
+
+  it('a `boolean` option string "false" arrives as boolean false, NOT JS-truthy', async () => {
+    const { host, getStartOptions } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', gameOptions: { hardMode: 'false' } });
+    const opts = getStartOptions();
+    expect(opts.hardMode).toBe(false);
+    expect(typeof opts.hardMode).toBe('boolean');
+  });
+
+  it('a `boolean` option string "true" arrives as boolean true', async () => {
+    const { host, getStartOptions } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', gameOptions: { hardMode: 'true' } });
+    expect(getStartOptions().hardMode).toBe(true);
+  });
+
+  it('a `select` option with NON-STRING declared choices is reachable from a raw CLI-flag string', async () => {
+    const { host, getStartOptions, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', gameOptions: { level: '4' } });
+    expect(lastOfType('A', 'error')).toBeUndefined(); // must NOT be rejected as "Invalid value"
+    const opts = getStartOptions();
+    expect(opts.level).toBe(4);
+    expect(typeof opts.level).toBe('number');
+  });
+
+  it('an uncoercible `number` value is rejected with an actionable error naming the option + expected type', async () => {
+    const { host, getStartOptions, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', gameOptions: { rounds: 'not-a-number' } });
+    const err = lastOfType('A', 'error') as Extract<HostOutbound, { type: 'error' }> | undefined;
+    expect(err).toBeTruthy();
+    expect(err?.message).toMatch(/"rounds"/);
+    expect(err?.message).toMatch(/number/);
+    expect(getStartOptions().rounds).toBe(3); // unchanged, still the original default
   });
 });
