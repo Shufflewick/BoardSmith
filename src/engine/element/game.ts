@@ -2864,8 +2864,27 @@ export class Game<
 
       // If zone has hidden or count-only visibility, handle children specially
       if (zoneVisibility) {
-        if (zoneVisibility.mode === 'hidden' || zoneVisibility.mode === 'count-only') {
-          // Hidden and count-only modes: create anonymized placeholders for children
+        if (zoneVisibility.mode === 'hidden') {
+          // D24/SPACE-03: true concealment. Unlike 'count-only' below, a
+          // 'hidden' zone must not leak even its exact child count to a
+          // non-owner -- no `children` key, no `childCount` key at all (not
+          // `childCount: 0`, which would still distinguish empty from full).
+          // No synthetic placeholders are built, so there is nothing to
+          // register in `idRemap` either -- an element-typed flow variable
+          // pointing into a 'hidden' zone has no redacted placeholder to
+          // relink to (CR-02/159 only applies where placeholders exist).
+          //
+          // ownJson (not json) still carries the container's own attributes,
+          // whitelist-redacted per CR-01 -- but ownJson.children is the RAW,
+          // unfiltered child array (json.children), so it must be explicitly
+          // destructured OUT here. Setting `children: undefined` is not
+          // enough: the `in` operator (and Object.keys) still sees an
+          // explicitly-undefined key, which the true-concealment contract
+          // (no `children` key at all) forbids.
+          const { children: _omittedRealChildren, ...concealedJson } = ownJson;
+          return concealedJson;
+        } else if (zoneVisibility.mode === 'count-only') {
+          // Count-only mode: create anonymized placeholders for children.
           // This allows the UI to render the correct number and type of elements
           // without revealing their identity (no real IDs or names that could be used to cheat)
           const hiddenChildren: ElementJSON[] = [];

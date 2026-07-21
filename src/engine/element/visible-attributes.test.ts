@@ -142,9 +142,11 @@ describe('static visibleAttributes filtering (SEC-02 / F2)', () => {
     expect(boardJson).toBeDefined();
     expect(boardJson.attributes.publicField).toBe('board-public');
     expect(boardJson.attributes.secretPlan).toBeUndefined();
-    // The zone branch still anonymizes children.
-    expect(boardJson.childCount).toBe(1);
-    expect(boardJson.children?.[0]?.attributes?.__hidden).toBe(true);
+    // SPACE-03/D24 (163-02): 'hidden' mode is true concealment -- the zone
+    // branch no longer anonymizes children into a placeholder array, it
+    // emits neither `children` nor `childCount` at all.
+    expect('childCount' in boardJson).toBe(false);
+    expect('children' in boardJson).toBe(false);
   });
 
   it('contentsCountOnly() zone: container attributes are still whitelist-redacted (count-only branch)', () => {

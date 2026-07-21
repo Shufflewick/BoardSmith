@@ -450,8 +450,17 @@ describe('MCTSBot root-decision redaction (AI-02 / CR-01)', () => {
 // Individually-hidden elements (`showOnlyTo`/`hideFrom`) keep their real,
 // stable id in the redacted view (game.ts, intentional for FLIP animation),
 // so they do NOT exercise this bug -- only a Space with zone-level
-// `contentsHidden()`/`contentsCountOnly()`/owner-zone visibility anonymizes
-// its children's ids, which is what this fixture uses.
+// `contentsCountOnly()`/owner-zone visibility anonymizes its children's ids,
+// which is what this fixture uses.
+//
+// NOTE (163-02 / SPACE-03/D24): this fixture previously used
+// `contentsHidden()`. D24 made 'hidden' mode true concealment -- it no
+// longer emits ANY per-child placeholder or synthetic id, so there is
+// nothing to relink to on that path (idRemap is never populated for
+// 'hidden'). CR-02 relinking is only meaningful where a redacted placeholder
+// actually exists, so this fixture now uses `contentsCountOnly()`, which
+// still anonymizes children to synthetic ids and populates idRemap exactly
+// as it did before.
 // ----------------------------------------------------------------------------
 
 class FlowCard extends Piece<HiddenFlowVarGame> {
@@ -466,7 +475,7 @@ class HiddenFlowVarGame extends Game<HiddenFlowVarGame, Player> {
     super(options);
 
     this.secretZone = this.create(Space<HiddenFlowVarGame>, 'secretZone');
-    this.secretZone.contentsHidden(); // zone-level: children get synthetic ids
+    this.secretZone.contentsCountOnly(); // zone-level: children get synthetic ids
     this.secretZone.create(FlowCard, 'card-a', { label: 'A' });
     this.secretZone.create(FlowCard, 'card-b', { label: 'B' });
 

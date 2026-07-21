@@ -89,11 +89,17 @@ describe('SEC-01: toJSONForPlayer must redact $images.face on hidden elements (R
   // Surface 1: contentsHidden() deck children
   // -------------------------------------------------------------------------
 
-  it('hidden deck child: $images.face must be absent; $images.back must survive', () => {
+  it('hidden deck: no child placeholder is emitted at all (SPACE-03/D24 supersedes per-child redaction)', () => {
+    // D24 (163-02): 'hidden' mode now means TRUE concealment -- no `children`
+    // key and no `childCount` key at all, so there is no per-child
+    // placeholder for $images.face/$image redaction to even apply to. This
+    // is a strictly stronger guarantee than the original SEC-01 fix (which
+    // only redacted the placeholder's image refs): a non-owner cannot learn
+    // there is even a single card in the deck, let alone its face/back art.
     const deck = game.create(Deck, 'draw-pile');
     // Deck defaults to contentsHidden(), but make it explicit for clarity.
     deck.contentsHidden();
-    const realCard = deck.create(TestCard, 'AS', {
+    deck.create(TestCard, 'AS', {
       rank: 'A',
       suit: 'S',
       $images: { face: '/cards/AS.svg', back: '/cards/back.svg' },
@@ -103,39 +109,8 @@ describe('SEC-01: toJSONForPlayer must redact $images.face on hidden elements (R
     const deckJson = findByName(view.children, 'draw-pile');
     expect(deckJson, 'draw-pile container must appear in player-2 view').toBeDefined();
 
-    const hiddenCard = deckJson!.children![0];
-    expect(hiddenCard, 'hidden deck must have at least one child placeholder').toBeDefined();
-
-    // Must be marked hidden so the UI knows not to render card details.
-    expect(hiddenCard.attributes.__hidden).toBe(true);
-
-    // CR-01 guard (WR-01): the placeholder id must be anonymized, never the
-    // card's real, stable id (which would let a non-owner correlate the card
-    // across moves/reveals). Anonymized zone ids are negative.
-    expect(
-      hiddenCard.id,
-      'hidden deck placeholder id must be anonymized (negative)'
-    ).toBeLessThan(0);
-    expect(
-      hiddenCard.id,
-      'hidden deck placeholder id must not equal the real card id'
-    ).not.toBe(realCard.id);
-
-    // RED: face is currently leaked via key.startsWith('$') — this assertion FAILS.
-    expect(
-      (hiddenCard.attributes.$images as Record<string, unknown> | undefined)?.face,
-      '$images.face must be undefined on a hidden deck card'
-    ).toBeUndefined();
-
-    // Back MUST survive so the renderer can draw a face-down card graphic.
-    // (A fix that drops ALL of $images would break back-of-card rendering — Pitfall 2.)
-    expect(
-      (hiddenCard.attributes.$images as Record<string, unknown> | undefined)?.back,
-      '$images.back must be preserved for hidden card rendering'
-    ).toBe('/cards/back.svg');
-
-    // $type must survive for AutoUI renderer dispatch.
-    expect(hiddenCard.attributes.$type).toBe('card');
+    expect('childCount' in deckJson!, 'a hidden deck must not expose childCount').toBe(false);
+    expect('children' in deckJson!, 'a hidden deck must not expose a children array').toBe(false);
   });
 
   // -------------------------------------------------------------------------
@@ -274,8 +249,13 @@ describe('SEC-02: unknown $-keys and $image must be fail-safe dropped on hidden 
   });
 
   it('safe layout keys survive; unknown $-key and $image are dropped on hidden elements', () => {
+    // D24 (163-02): 'hidden' mode no longer emits a per-child placeholder to
+    // redact at all (see the true-concealment test above), so this $-key
+    // sanitization check now exercises the same `redactHiddenElementAttrs`
+    // machinery via 'count-only' mode, whose placeholders still carry
+    // (redacted) attributes.
     const deck = game.create(Deck, 'mixed-deck');
-    deck.contentsHidden();
+    deck.contentsCountOnly();
 
     // Create a card carrying:
     //   • $type (safe — set by Card constructor)
@@ -326,7 +306,12 @@ describe('SEC-02: unknown $-keys and $image must be fail-safe dropped on hidden 
   // -------------------------------------------------------------------------
 
   it('regression guard: no $images.face or $image on ANY __hidden element in the full player view', () => {
-    // Build a fixture covering all three hidden surfaces so the guard sweeps all of them.
+    // Build a fixture covering the anonymized-placeholder surfaces so the
+    // guard sweeps all of them. D24 (163-02): a 'hidden' zone (guard-deck)
+    // now emits NO children/placeholders at all -- true concealment -- so it
+    // deliberately contributes ZERO nodes to this sweep (nothing to redact
+    // because nothing is ever serialized). It is still created here to prove
+    // its presence doesn't accidentally leak anything either.
     const deck = game.create(Deck, 'guard-deck');
     deck.contentsHidden();
     deck.create(TestCard, 'AS', {
@@ -358,8 +343,10 @@ describe('SEC-02: unknown $-keys and $image must be fail-safe dropped on hidden 
     const view = game.toJSONForPlayer(2);
     const allHiddenAttrs = collectAllHiddenAttrs(view);
 
-    // There must be at least one hidden element per fixture surface.
-    expect(allHiddenAttrs.length).toBeGreaterThanOrEqual(3);
+    // There must be at least one hidden element per remaining anonymized
+    // surface (hand + count-only). The 'hidden' deck contributes zero by
+    // design (D24) -- see fixture comment above.
+    expect(allHiddenAttrs.length).toBeGreaterThanOrEqual(2);
 
     for (const attrs of allHiddenAttrs) {
       const images = attrs.$images as Record<string, unknown> | undefined;
@@ -464,10 +451,13 @@ describe('WR-01: anonymized zone placeholders must never expose a real element i
   });
 
   it('cross-surface guard: every __hidden zone-child id in the full player view is anonymized (negative)', () => {
-    // Fixture covers all three anonymized-zone surfaces (hidden deck,
-    // owner-only hand, count-only zone). None of the CONTAINERS are __hidden —
-    // only their fungible children — so every __hidden node collected here is
-    // an anonymized placeholder and MUST carry a negative id.
+    // Fixture covers the anonymized-zone surfaces (owner-only hand,
+    // count-only zone). None of the CONTAINERS are __hidden — only their
+    // fungible children — so every __hidden node collected here is an
+    // anonymized placeholder and MUST carry a negative id. The 'hidden' deck
+    // (guard-deck) is included to prove it contributes ZERO ids: D24
+    // (163-02) makes 'hidden' mode emit no children/placeholders at all, so
+    // there is no id-anonymization surface left to guard there.
     const deck = game.create(Deck, 'guard-deck');
     deck.contentsHidden();
     deck.create(TestCard, 'AS', {
@@ -496,11 +486,12 @@ describe('WR-01: anonymized zone placeholders must never expose a real element i
     const view = game.toJSONForPlayer(2);
     const hiddenIds = collectHiddenIds(view);
 
-    // One placeholder per fixture surface.
+    // One placeholder per remaining anonymized-child surface (hand +
+    // count-only). The 'hidden' deck contributes zero (D24).
     expect(
       hiddenIds.length,
       'expected one __hidden placeholder per anonymized-zone surface'
-    ).toBeGreaterThanOrEqual(3);
+    ).toBeGreaterThanOrEqual(2);
 
     for (const id of hiddenIds) {
       expect(
