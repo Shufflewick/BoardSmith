@@ -29,7 +29,6 @@ Phase: 161 (Dev-Host Tooling) — next up. Phases 155–160 complete.
 Plan: —
 Status: Phase 160 verification passed (5/5); code review resolved (1 Blocker: commit-gate moved to the shared useActionController.execute chokepoint so custom-UI + ActionPanel both gate; W1 nested-availableActions deep-clone; W3 comment; W2 deferred to backlog v4.8-SIM-LASTACTOR-UNDO)
 Last activity: 2026-07-20 — Phase 160 (Simultaneous-Step Correctness) shipped: getState() deep-copies awaitingPlayers so per-seat `completed` survives checkpoints (D3); shared computeUndoEligibility gives any-seat simultaneous undo bounded to the current step's moveCount window without bypassing Phase 155's fences (D4); executeSimultaneousActionStep/resume complete cleanly on empty awaitingPlayers (D21); shell self-filters the waiting list + gates execute on the viewer's own `completed` at the shared chokepoint (D27). Executor died mid-160-02 (API drop) — recovered losslessly (tests were written+passing, orchestrator committed). Deep review caught a real Blocker (commit gate was ActionPanel-only, custom-UI bypassed) + fixed. 2871 tests green."
-Last activity: 2026-07-20 — Phase 157 (Game-Over UI + Forward Exits) shipped. Methodology note: the plan-checker empirically disproved the "relax the phase guard" theory for D11 by writing a throwaway host test — the guard already admitted finished games (phase never leaves 'playing'); the real fix was routing (DevHost debug:restart handler + New Game → restart). Deferred (pre-existing, not this phase): IN-01 `ActionMetadata` `help`-field drift between `protocol.ts` and `session/types.ts`.
 
 ## Milestones
 
@@ -73,7 +72,7 @@ Last activity: 2026-07-20 — Phase 157 (Game-Over UI + Forward Exits) shipped. 
 
 **In Progress:**
 
-- v4.8 Battery Post-Mortem Fixes (Phases 155-169) — roadmap created 2026-07-20, execution not yet started
+- v4.8 Battery Post-Mortem Fixes (Phases 155-169) — IN PROGRESS 2026-07-20; Phases 155–160 shipped (6/15, 40%), all verifications passed
 
 ## Deferred Items
 
