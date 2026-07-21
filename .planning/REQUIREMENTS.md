@@ -70,13 +70,13 @@ the fix holds → only then close.**
 
 ### SIM — Simultaneous-step correctness (D3, D4, D21, D27) — Phase 160
 
-- [ ] **SIM-01** (D3, 2 games, Med→Blocker/latent): Simultaneous-step undo checkpoints per-seat
+- [x] **SIM-01** (D3, 2 games, Med→Blocker/latent): Simultaneous-step undo checkpoints per-seat
   `completed` state so it no longer desyncs and hangs.
-- [ ] **SIM-02** (D4, 2 games, Correctness): Simultaneous-step undo works for any seat, not just seat-1 —
+- [x] **SIM-02** (D4, 2 games, Correctness): Simultaneous-step undo works for any seat, not just seat-1 —
   it is no longer gated on a pinned `currentPlayer`.
-- [ ] **SIM-03** (D21, OTP, Med): `simultaneousActionStep` honors `allDone` on an empty `awaitingPlayers`
+- [x] **SIM-03** (D21, OTP, Med): `simultaneousActionStep` honors `allDone` on an empty `awaitingPlayers`
   set instead of crashing.
-- [ ] **SIM-04** (D27, Seven, Correctness/leak): GameShell seat status/dock is correct during a
+- [x] **SIM-04** (D27, Seven, Correctness/leak): GameShell seat status/dock is correct during a
   simultaneous step — no "Your move" + "waiting" contradiction and no commit leak; status is not derived
   from turn-based assumptions.
 

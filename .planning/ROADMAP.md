@@ -22,7 +22,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [x] **Phase 157: Game-Over UI + Forward Exits** — suppressable/dismissable `GameOverCard` + working Rematch/New Game/dev-restart (D10, D11)
 - [x] **Phase 158: Auto-Zoom Re-Fit** — `useAutoZoom` re-fits on dock/board/region resize instead of once against a stale layout (D12)
 - [x] **Phase 159: MCTS Soundness + Dynamic multiSelect** — dynamic/function-valued `multiSelect` in enumeration + panel (delivers C.2), redacted-view MCTS for hidden info (D9, D8)
-- [ ] **Phase 160: Simultaneous-Step Correctness** — per-seat undo checkpointing, any-seat undo, `allDone` crash, seat-status/commit leak (D3, D4, D21, D27)
+- [x] **Phase 160: Simultaneous-Step Correctness** — per-seat undo checkpointing, any-seat undo, `allDone` crash, seat-status/commit leak (D3, D4, D21, D27)
 - [ ] **Phase 161: Dev-Host Tooling** — gameOption/preset selection, bare solo start, first-seat orphan race, color palette (D13, D14, D15, D16)
 - [ ] **Phase 162: Test-Tooling Ergonomics** — asset-scan comment false-positive + export surface, module-scope `matchMedia`, symmetric-deck leak assert (D17, D18, D19, D20)
 - [ ] **Phase 163: Engine Space Lifecycle & Element Integrity** — sealed/append-only Space, Space removal/re-parent, hidden-count leak, class-name collision, metadata divergence (D22, D23, D24, D25, D26)
@@ -114,9 +114,9 @@ Plans:
 5. Each item has a fail-on-pre-fix / pass-after test (PROC-01).
 **Plans:** 3 plans (D3+D21 combined at the engine layer; see plan-phase note)
 Plans:
-- [ ] 160-01-PLAN.md — Engine simultaneous-step correctness: getState deep-copy (D3/SIM-01) + allDone-on-empty (D21/SIM-03) + reusable simultaneous fixture
-- [ ] 160-02-PLAN.md — Per-seat (any-seat) simultaneous undo, boundary from own action, fences intact (D4/SIM-02)
-- [ ] 160-03-PLAN.md — Shell seat-status self-filter + commit-leak execute gate (D27/SIM-04)
+- [x] 160-01-PLAN.md — Engine simultaneous-step correctness: getState deep-copy (D3/SIM-01) + allDone-on-empty (D21/SIM-03) + reusable simultaneous fixture
+- [x] 160-02-PLAN.md — Per-seat (any-seat) simultaneous undo, boundary from own action, fences intact (D4/SIM-02)
+- [x] 160-03-PLAN.md — Shell seat-status self-filter + commit-leak execute gate (D27/SIM-04)
 
 #### Phase 161: Dev-Host Tooling
 **Goal**: The `boardsmith dev` host is fully usable for the games that hit its gaps — it can select a declared `gameOption`/preset, start a bare solo game, doesn't orphan its own first seat, and honors the game's color palette.

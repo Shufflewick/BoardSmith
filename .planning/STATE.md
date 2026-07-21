@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: Phase 159 complete (verification passed 3/3; 2 review Criticals fixed) — next is Phase 160
-stopped_at: Completed Phase 159 (3 plans + critical-fix gap-closure, VERIFICATION passed)
-last_updated: "2026-07-21T03:00:00.000Z"
+status: Phase 160 complete (verification passed 5/5; 1 review Blocker fixed) — next is Phase 161
+stopped_at: Completed Phase 160 (3 plans + blocker-fix gap-closure, VERIFICATION passed)
+last_updated: "2026-07-21T05:00:00.000Z"
 last_activity: "2026-07-20 — Phase 159 (MCTS Soundness + Dynamic multiSelect) shipped: shared resolveMultiSelect helper makes function-valued multiSelect enumerate in MCTS AND panel-complete (C.2, single-source, fail-loud); MCTS bot now clones a per-seat REDACTED view (toJSONForPlayer, opt-in forSeat) at BOTH the root decision and the simulation clone, with a simultaneousBaseline pre-reveal snapshot preventing co-decider leaks (D9/AI-01, D8/AI-02). Deep review caught 2 real Criticals the verifier missed (root enumeration on full-truth; hidden-element flow-var corruption on restore) — both fixed RED-first incl. an hiddenIdRemap for flow-var relinking + a second deeper executeForEach instance. 2842 tests green; tsc 46 (below baseline). WR-01 + MCTS-undo limitation deferred (see backlog)."
 progress:
   total_phases: 15
-  completed_phases: 5
-  total_plans: 12
-  completed_plans: 12
-  percent: 33
+  completed_phases: 6
+  total_plans: 15
+  completed_plans: 15
+  percent: 40
 ---
 
 # Project State
@@ -21,13 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–159 shipped (verifications passed); next is Phase 160 (Simultaneous-Step Correctness)
+**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–160 shipped (verifications passed); next is Phase 161 (Dev-Host Tooling)
 
 ## Current Position
 
-Phase: 160 (Simultaneous-Step Correctness) — next up. Phases 155–159 complete. NOTE: check the v4.8-MCTS-UNDO backlog item (flow-bookkeeping mutations not reverted by incremental undo) at 160's discuss — it borders on this phase's scope.
+Phase: 161 (Dev-Host Tooling) — next up. Phases 155–160 complete.
 Plan: —
-Status: Phase 159 verification passed (3/3); code review resolved (2 Criticals fixed: root-enumeration redaction + flow-var relink; 1 Warning WR-01 deferred)
+Status: Phase 160 verification passed (5/5); code review resolved (1 Blocker: commit-gate moved to the shared useActionController.execute chokepoint so custom-UI + ActionPanel both gate; W1 nested-availableActions deep-clone; W3 comment; W2 deferred to backlog v4.8-SIM-LASTACTOR-UNDO)
+Last activity: 2026-07-20 — Phase 160 (Simultaneous-Step Correctness) shipped: getState() deep-copies awaitingPlayers so per-seat `completed` survives checkpoints (D3); shared computeUndoEligibility gives any-seat simultaneous undo bounded to the current step's moveCount window without bypassing Phase 155's fences (D4); executeSimultaneousActionStep/resume complete cleanly on empty awaitingPlayers (D21); shell self-filters the waiting list + gates execute on the viewer's own `completed` at the shared chokepoint (D27). Executor died mid-160-02 (API drop) — recovered losslessly (tests were written+passing, orchestrator committed). Deep review caught a real Blocker (commit gate was ActionPanel-only, custom-UI bypassed) + fixed. 2871 tests green."
 Last activity: 2026-07-20 — Phase 157 (Game-Over UI + Forward Exits) shipped. Methodology note: the plan-checker empirically disproved the "relax the phase guard" theory for D11 by writing a throwaway host test — the guard already admitted finished games (phase never leaves 'playing'); the real fix was routing (DevHost debug:restart handler + New Game → restart). Deferred (pre-existing, not this phase): IN-01 `ActionMetadata` `help`-field drift between `protocol.ts` and `session/types.ts`.
 
 ## Milestones
@@ -97,7 +98,8 @@ Carried forward from v4.0 (still deferred, separate repo): ShufflewickPub host s
 
 **New backlog opened during v4.8 (2026-07-20):**
 - **v4.8-WR01 (Phase 159 code-review Warning, deferred):** `buildActionMetadata` doesn't thread accumulated selection args (`knownArgs` always `{}`), so a *function-valued* `multiSelect` that reads an *earlier sibling selection's* value resolves differently for the panel (`args:{}`) than for MCTS (real `currentArgs`) — a narrow C.2 parity gap. The explicitly-declared dependent case (`multiSelectByDependentValue`) already works; only function-valued-reading-prior-args diverges. Fixing it properly needs a panel dynamic-refresh of multiSelect on dependent-arg change (beyond Phase 159's metadata plumbing). Non-blocking; core C.2 delivered.
-- **v4.8-MCTS-UNDO (surfaced by Phase 159-03, out of scope there):** MCTS incremental `undoCommands` reverts only element-tree commands, NOT plain-property / flow-bookkeeping mutations — `game.finish()`'s `settings.winners`/`phase` and the flow engine's `awaitingPlayers[].completed`. So after a simulated branch that finishes a game or completes a simultaneous decider, that bookkeeping sticks and subsequent root-child re-expansions are wrongly rejected as no-ops. Worked around in 159 test fixtures (objective-checker + non-terminal loop). **RELEVANT TO PHASE 160** (simultaneous-step correctness under undo) — surface at 160's discuss.
+- **v4.8-MCTS-UNDO (surfaced by Phase 159-03, out of scope there):** MCTS incremental `undoCommands` reverts only element-tree commands, NOT plain-property / flow-bookkeeping mutations — `game.finish()`'s `settings.winners`/`phase` and the flow engine's `awaitingPlayers[].completed`. So after a simulated branch that finishes a game or completes a simultaneous decider, that bookkeeping sticks and subsequent root-child re-expansions are wrongly rejected as no-ops. Worked around in 159 test fixtures (objective-checker + non-terminal loop). Phase 160 fixed the ENGINE/session undo side (D3 getState deep-copy); this MCTS `undoCommands` path remains — Phase 169 re-check.
+- **v4.8-SIM-LASTACTOR-UNDO (Phase 160 code-review Warning, deferred):** the seat whose action COMPLETES a simultaneous step loses its per-seat undo window one tick sooner than earlier co-deciders — on `allDone` the engine clears `awaitingPlayers` to `[]`, so `computeUndoEligibility` immediately falls back to the sequential branch for that last actor. This is entangled with the whole-step-undo semantics the user explicitly DECLINED (per-seat was chosen); "undo after the step already completed" bleeds into that declined territory. Asymmetric UX edge, not a correctness bug; no data loss. Revisit only if playtest surfaces it.
 
 ## Accumulated Context
 
