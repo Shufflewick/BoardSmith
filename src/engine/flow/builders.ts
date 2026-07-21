@@ -104,6 +104,24 @@ export function loop(config: {
     );
   }
 
+  // IN-02 (164 review): `unbounded: true` combined with an explicit
+  // `maxIterations` silently resolves to the bounded behavior --
+  // `unbounded` becomes a no-op with no diagnostic. This is confusing enough
+  // to be worth failing fast rather than warning: it's ambiguous which the
+  // author actually wants (a common cause is leftover `maxIterations` from
+  // before adding `unbounded: true`, or vice versa), and BoardSmith's
+  // "fail fast at construction, not deep in a render/runtime path" pattern
+  // (used for the missing-cap case just above) applies equally here.
+  if (config.unbounded && config.maxIterations !== undefined) {
+    throw new Error(
+      `loop(${config.name ? `'${config.name}'` : ''}) cannot combine unbounded: true with an ` +
+      `explicit maxIterations: ${config.maxIterations} -- choose one.\n` +
+      `  Bounded:   loop({ maxIterations: ${config.maxIterations}, while: ..., do: ... })\n` +
+      `  Unbounded: loop({ unbounded: true, while: ..., do: ... })\n` +
+      `  See: https://boardsmith.io/docs/common-pitfalls#loop-safety`
+    );
+  }
+
   return {
     type: 'loop',
     config: {

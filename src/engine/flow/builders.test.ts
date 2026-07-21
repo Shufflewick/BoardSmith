@@ -47,3 +47,25 @@ describe('loop() — LIBX-02 unbounded valve', () => {
     expect(() => loop({ do: noop() })).toThrow(/unbounded/);
   });
 });
+
+describe('loop() — 164-IN-02 conflicting unbounded + maxIterations guard', () => {
+  // Pre-fix: unbounded:true + an explicit maxIterations silently resolves to
+  // the bounded behavior (maxIterations wins), with unbounded becoming a
+  // no-op nothing tells the author about -- a plausible authoring mistake
+  // (e.g. leftover maxIterations from before adding unbounded:true).
+  it('throws an actionable error when both unbounded:true and maxIterations are provided', () => {
+    expect(() => loop({ unbounded: true, maxIterations: 50, do: noop() })).toThrow(
+      /cannot combine unbounded: true with an explicit maxIterations/
+    );
+    expect(() => loop({ unbounded: true, maxIterations: 50, do: noop() })).toThrow(/50/);
+    expect(() => loop({ unbounded: true, maxIterations: 50, do: noop() })).toThrow(/choose one/);
+  });
+
+  it('does not throw for unbounded:true alone (no maxIterations)', () => {
+    expect(() => loop({ unbounded: true, do: noop() })).not.toThrow();
+  });
+
+  it('does not throw for maxIterations alone (no unbounded)', () => {
+    expect(() => loop({ maxIterations: 50, do: noop() })).not.toThrow();
+  });
+});
