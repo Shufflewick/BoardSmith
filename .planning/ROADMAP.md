@@ -128,11 +128,12 @@ Plans:
 3. The dev host no longer orphans its first seat via a race; the seat stays claimable (D15).
 4. `boardsmith dev` honors the game's color palette instead of red/blue/green (D16).
 5. Each fix has a regression test / scripted dev-host proof that fails pre-fix (PROC-01).
-**Plans** (suggested breakdown; finalized at plan-phase):
-- gameOption/preset selection in dev host [DEVHOST-01]
-- Bare solo start (remove hardcoded `--players 2`) [DEVHOST-02]
-- First-seat orphan race fix + regression test [DEVHOST-03]
-- Color-palette pass-through in dev [DEVHOST-04]
+**Plans:** 4 plans
+Plans:
+- [ ] 161-01-PLAN.md — Bare solo start (default `--players` to minPlayers) + canonical color-palette source [DEVHOST-02, DEVHOST-04]
+- [ ] 161-02-PLAN.md — gameOption/preset selection (CLI flags + host selection message) [DEVHOST-01]
+- [ ] 161-03-PLAN.md — Dev-host lobby gameOption/preset selector UI [DEVHOST-01]
+- [ ] 161-04-PLAN.md — First-seat orphan race fix (disconnect-mid-start reconciliation) [DEVHOST-03]
 
 #### Phase 162: Test-Tooling Ergonomics
 **Goal**: The test/build tooling stops producing false FAILs and jsdom throws, and exposes the helpers games need — asset-scan ignores `<img` in comments and is exported, `boardsmith/ui` doesn't read `matchMedia` at module scope, and hidden-info leak assertion works for symmetric decks.
