@@ -9,6 +9,7 @@ import {
   actionStep,
   simultaneousActionStep,
   loop,
+  createSnapshot,
   type GameOptions,
   type ElementJSON,
 } from '../engine/index.js';
@@ -64,14 +65,15 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
    *  out-of-scope limitation). */
   lastGuess?: number;
 
-  constructor(options: GameOptions & { secretValue: number }) {
+  constructor(options: GameOptions & { secretValue: number; guesserSeat?: number }) {
     super(options);
-    const { secretValue } = options;
+    const { secretValue, guesserSeat = 1 } = options;
+    const holderSeat = guesserSeat === 1 ? 2 : 1;
 
     this.opponentHand = this.create(Space<HiddenInfoGame>, 'opponentHand');
     this.secretCard = this.opponentHand.create(SecretCard, 'secretCard', { value: secretValue });
-    // Only the opponent (seat 2) can see the card; the bot (seat 1) must not.
-    this.secretCard.showOnlyTo(2);
+    // Only the holder can see the card; the guesser (the bot) must not.
+    this.secretCard.showOnlyTo(holderSeat);
 
     this.registerAction(
       Action.create('guess')
@@ -91,29 +93,30 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
     this.setFlow(defineFlow({
       root: loop({
         maxIterations: 20,
-        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)! }),
+        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(guesserSeat)! }),
       }),
     }));
   }
 }
 
-function createHiddenInfoGame(secretValue: number, seed: string) {
+function createHiddenInfoGame(secretValue: number, seed: string, guesserSeat = 1) {
   const game = new HiddenInfoGame({
     playerCount: 2,
-    playerNames: ['Bot', 'Opponent'],
+    playerNames: ['P1', 'P2'],
     seed,
     secretValue,
-  } as GameOptions & { secretValue: number });
+    guesserSeat,
+  } as GameOptions & { secretValue: number; guesserSeat: number });
   game.startFlow();
   return game;
 }
 
-function makeBot(game: HiddenInfoGame, seed: string) {
+function makeBot(game: HiddenInfoGame, seed: string, guesserSeat = 1) {
   return new MCTSBot(
     game,
     HiddenInfoGame,
     'hidden-info',
-    1, // bot plays seat 1
+    guesserSeat, // bot plays the guesser seat
     [],
     { iterations: 40, playoutDepth: 0, seed, async: false, usePNS: false },
     {
@@ -197,6 +200,53 @@ describe('MCTSBot redaction (AI-02 / T-159-06)', () => {
     // Post-fix: the bot's search has no informational edge; it must not
     // match the secret in every trial.
     expect(matches.every(Boolean)).toBe(false);
+  });
+
+  it('non-exploitability holds across seeds AND across which seat is the bot (adversarial)', async () => {
+    // Sweep secret values, several seeds per value, AND both possible bot
+    // seats (guesser=1 holder=2, and the mirror guesser=2 holder=1) -- not
+    // just the single seed/seat combination Task 1 proved. Pre-fix this
+    // fails identically to the Task 1 case (100% exploit, deterministic
+    // regardless of seed/seat); post-fix the bot has zero informational
+    // edge in any of these configurations.
+    const secretValues = [1, 2, 3];
+    const seedSuffixes = ['a', 'b', 'c'];
+    const guesserSeats = [1, 2];
+    const matches: boolean[] = [];
+
+    for (const guesserSeat of guesserSeats) {
+      for (const secretValue of secretValues) {
+        for (const suffix of seedSuffixes) {
+          const seed = `adversarial-${guesserSeat}-${secretValue}-${suffix}`;
+          const game = createHiddenInfoGame(secretValue, seed, guesserSeat);
+          const bot = makeBot(game, seed, guesserSeat);
+          const move = await bot.play();
+          matches.push(move.args.guessedValue === secretValue);
+        }
+      }
+    }
+
+    expect(matches.length).toBe(guesserSeats.length * secretValues.length * seedSuffixes.length);
+    // Not exploitable in ANY configuration -- the bot must not have found a
+    // way to peek at the hidden value regardless of seat or seed.
+    expect(matches.every(Boolean)).toBe(false);
+  });
+});
+
+describe('createSnapshot non-bot default (T-159-08 guard)', () => {
+  it('without `forSeat`, the snapshot stays FULL, un-redacted truth (runner.ts shape)', () => {
+    const game = createHiddenInfoGame(2, 'guard-1');
+
+    // The exact call shape runner.ts:527 uses -- no `opts` argument at all.
+    const snapshot = createSnapshot(game, 'hidden-info', [], 'guard-1');
+    const secretCardJson = findById(snapshot.state as ElementJSON, game.secretCard.id);
+
+    expect(secretCardJson).toBeDefined();
+    // The default path must NEVER redact -- only an explicit `forSeat` opts
+    // into the bot's per-seat view. A non-bot consumer (GameRunner, undo
+    // checkpoints, etc.) depends on this staying full truth.
+    expect(secretCardJson!.attributes.value).toBe(2);
+    expect(secretCardJson!.attributes.__hidden).toBeUndefined();
   });
 });
 
