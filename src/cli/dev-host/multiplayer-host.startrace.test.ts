@@ -122,4 +122,90 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
 
     expect((host as any).aiSeats.some((s: { seat: number }) => s.seat === 1)).toBe(false); // eslint-disable-line @typescript-eslint/no-explicit-any
   });
+
+  it('reclaim: a reconnecting human takes back the AI-covered seat — the bot yields, proven by the human successfully acting on the very NEXT round (not just static state)', async () => {
+    const gate = makeDeferred();
+    const { host, lastLobby, to } = makeRaceHost(gate);
+
+    const helloPromise = host.handleMessage('A', { type: 'hello' }); // A auto-seats -> seat 1, gated mid-await
+    host.disconnect('A'); // A vanishes mid-await (the D15 interleave)
+    // B claims seat 2 as a HUMAN (not AI) while still inside the gated await,
+    // so `runAITurns()` halts after round 1 seat 1 (AI-covered) instead of
+    // auto-completing the whole game — leaving it genuinely mid-play so the
+    // reclaim can be proven against a REAL upcoming turn, not just static state.
+    host.handleMessage('B', { type: 'join', seat: 2, name: 'B' });
+    gate.resolve();
+    await helloPromise;
+
+    // Round 1: seat 1 was AI-covered by the reconciliation and auto-played;
+    // seat 2 (human B, not AI) is now due — the pump halted waiting on B.
+    expect((host as any).aiSeats.some((s: { seat: number }) => s.seat === 1)).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    // The reservation was never released: A's clientId is still on seat 1.
+    const preReconnectLobby = lastLobby();
+    const seat1PreReconnect = preReconnectLobby?.seats.find((s) => s.seat === 1);
+    expect(seat1PreReconnect?.clientId).toBe('A');
+    expect(seat1PreReconnect?.connected).toBe(false);
+
+    // A reconnects: reclaims the seat AND yields the bot.
+    await host.handleMessage('A', { type: 'hello' });
+    expect((host as any).aiSeats.some((s: { seat: number }) => s.seat === 1)).toBe(false); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const postReconnectLobby = lastLobby();
+    const seat1PostReconnect = postReconnectLobby?.seats.find((s) => s.seat === 1);
+    expect(seat1PostReconnect?.clientId).toBe('A');
+    expect(seat1PostReconnect?.connected).toBe(true);
+
+    // B (still due for round 1) acts, advancing the flow into round 2 seat 1 —
+    // the AI pump fires after B's action but must NOT auto-play seat 1 anymore
+    // (it yielded on reconnect).
+    await host.handleMessage('B', {
+      type: 'server_request',
+      requestId: 'b1',
+      op: 'action',
+      payload: { actionName: 'pass', args: {} },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bResp = to('B').find((m) => m.type === 'server_response' && (m as any).requestId === 'b1') as any;
+    expect(bResp?.result?.success).toBe(true);
+
+    // Prove seat 1's round-2 turn is genuinely still open (not already
+    // consumed by the bot) by having A — the reclaimed human — act on it.
+    await host.handleMessage('A', {
+      type: 'server_request',
+      requestId: 'a2',
+      op: 'action',
+      payload: { actionName: 'pass', args: {} },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const aResp = to('A').find((m) => m.type === 'server_response' && (m as any).requestId === 'a2') as any;
+    expect(aResp?.result?.success).toBe(true);
+  });
+
+  it('a MID-GAME disconnect (not during startGame\'s await) still follows the existing pause-on-away path, NOT the D15 reconciliation', async () => {
+    const { host, to } = makeRaceHost(null); // normal, un-raced start
+    await host.handleMessage('A', { type: 'hello' }); // A -> seat 1, game starts normally
+    await host.handleMessage('B', { type: 'join', seat: 2, name: 'B' }); // B -> seat 2, human
+
+    // Seat 1 (round 1) is due; A disconnects mid-game — NOT during startGame's
+    // own await (the game already fully committed and is idling on A's input).
+    host.disconnect('A');
+
+    // The existing pause-on-away-turn behavior is unchanged: seat 1 stays
+    // reserved to A and is NOT AI-covered — the D15 reconciliation only runs
+    // once, inside `startGame`, immediately after ITS OWN await, not on every
+    // disconnect() call.
+    expect((host as any).aiSeats.some((s: { seat: number }) => s.seat === 1)).toBe(false); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    // Seat 1 must act first (round 1) — B acting out of turn fails, confirming
+    // the game is genuinely paused rather than silently reassigned to B or the bot.
+    await host.handleMessage('B', {
+      type: 'server_request',
+      requestId: 'b-mid',
+      op: 'action',
+      payload: { actionName: 'pass', args: {} },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bResp = to('B').find((m) => m.type === 'server_response' && (m as any).requestId === 'b-mid') as any;
+    expect(bResp?.result?.success).toBe(false);
+  });
 });
