@@ -2699,6 +2699,10 @@ if ((import.meta as any).hot) {
   align-items: flex-start;
   justify-content: flex-start;
   overflow: auto;
+  /* Reserve scrollbar space so a fit landing near the overflow boundary can't
+     toggle the scrollbar on/off, which would change clientWidth/clientHeight
+     and create a resize-observer feedback path into useAutoZoom's re-fit. */
+  scrollbar-gutter: stable;
   padding: var(--bsg-s1);
   padding-bottom: env(safe-area-inset-bottom);
 }

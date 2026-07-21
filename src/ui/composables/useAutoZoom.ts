@@ -1,15 +1,21 @@
 /**
- * useAutoZoom — one-shot startup fit for the board zoom.
+ * useAutoZoom — startup fit + persistent available-space re-fit for the board zoom.
  *
  * At startup the board renders at its natural (max-content) size inside the
- * scrollable board region. This composable watches the board ONLY while it is
+ * scrollable board region. This composable watches the board while it is
  * settling in (content arrives asynchronously over the session socket), fits
  * the zoom so the whole board fills the available region without scrolling
- * (clamped to the slider range), and then stops for good: once the board's
- * size has been stable for SETTLE_MS after a successful fit, the observer is
- * disconnected. Mid-game content growth, window resizes, etc. never move the
- * zoom — the user adjusts with the slider, or re-fits on demand via
- * `fitZoom()` (the header percent button / menu "Fit").
+ * (clamped to the slider range), and then stops watching the board itself
+ * once its size has been stable for SETTLE_MS — mid-game board CONTENT
+ * growth never moves the zoom on its own.
+ *
+ * Separately, and for the whole component lifetime, a persistent
+ * ResizeObserver on the region plus a watch on the dock's measured height
+ * re-fit the board whenever the AVAILABLE SPACE changes (the dock landing,
+ * a region resize) — this is what keeps a never-touched-zoom player's board
+ * reachable as the layout moves around it. A manual `setZoom` (the slider)
+ * takes control and this auto-refit stops; `fitZoom()` (the header/menu
+ * "Fit" button) re-fits once and re-arms it.
  *
  * Measurement notes:
  * - The board element carries CSS `zoom`, so its getBoundingClientRect() is
@@ -17,6 +23,9 @@
  *   (not the ref, which may not have flushed to the DOM yet).
  * - Available space is the region's client box minus its padding and the
  *   floating action dock's height, so a fitted board sits fully above the dock.
+ * - Re-fits triggered by the region observer / dock watch are rAF-coalesced
+ *   into a single `measureAndFit()` per frame, so a cascade of layout changes
+ *   (e.g. the dock's own ResizeObserver plus a window resize) never thrashes.
  */
 import { ref, watch, onUnmounted, type Ref } from 'vue';
 
@@ -24,7 +33,7 @@ export const ZOOM_MIN = 0.5;
 export const ZOOM_MAX = 2.0;
 
 /** How long the board's size must hold still after a successful fit before
- *  startup is considered over and the observer disconnects. */
+ *  startup is considered over and the startup board observer disconnects. */
 export const SETTLE_MS = 300;
 
 /** Largest zoom at which `natural` fits entirely inside `avail`, clamped to the
@@ -51,6 +60,10 @@ export function useAutoZoom(options: {
   const { boardEl, regionEl, dockHeight } = options;
 
   const zoomLevel = ref(1.0);
+
+  /** True once the user has manually zoomed (the slider). While true, the
+   *  persistent available-space re-fit is a no-op — `fitZoom()` clears it. */
+  let userControlled = false;
 
   /** Measure and apply the fitted zoom. Returns true when both boxes were
    *  measurable (a fit was computed), false when layout isn't ready yet. */
@@ -81,7 +94,7 @@ export function useAutoZoom(options: {
     return true;
   }
 
-  // --- Startup-only fitting -------------------------------------------------
+  // --- Startup fitting: follow the board while its own content settles ----
   let startupDone = false;
   let settleTimer: ReturnType<typeof setTimeout> | null = null;
   let boardObserver: ResizeObserver | null = null;
@@ -114,18 +127,70 @@ export function useAutoZoom(options: {
     }
   }, { immediate: true, flush: 'post' });
 
-  onUnmounted(endStartup);
+  // --- Persistent re-fit on available-space changes (component lifetime) --
+  // Only reads region/dock geometry and writes the board's zoom — never
+  // observes the board itself here, so this cannot feed back into its own
+  // trigger (the board-content-growth exclusion above holds by construction).
+  let pendingFrame: number | null = null;
 
-  /** Manual zoom from the slider — also cancels any in-flight startup fitting
-   *  so the user's choice is never stomped. */
+  function scheduleRefit() {
+    if (pendingFrame !== null) return; // already coalescing this frame
+    pendingFrame = requestAnimationFrame(() => {
+      pendingFrame = null;
+      if (!userControlled) measureAndFit();
+    });
+  }
+
+  let regionObserver: ResizeObserver | null = null;
+
+  function teardownRefit() {
+    regionObserver?.disconnect();
+    regionObserver = null;
+    if (pendingFrame !== null) {
+      cancelAnimationFrame(pendingFrame);
+      pendingFrame = null;
+    }
+  }
+
+  // Observe the region directly (it is already passed in — no `.closest`
+  // needed). Lives for the component lifetime; torn down on unmount only.
+  watch(regionEl, (el) => {
+    regionObserver?.disconnect();
+    regionObserver = null;
+    if (el && typeof ResizeObserver !== 'undefined') {
+      regionObserver = new ResizeObserver(scheduleRefit);
+      regionObserver.observe(el);
+    }
+    // Catch iframe/host resize that the RO may miss (useBoardSize precedent).
+    // Routed through the same coalescing scheduler (not a raw rAF) so
+    // teardownRefit's cancelAnimationFrame(pendingFrame) always covers it.
+    scheduleRefit();
+  }, { immediate: true, flush: 'post' });
+
+  // The dock's own ResizeObserver already writes fresh dockHeight
+  // (GameShell.vue) — just react to the ref, don't re-measure it here.
+  watch(dockHeight, scheduleRefit, { flush: 'post' });
+
+  onUnmounted(() => {
+    endStartup();
+    teardownRefit();
+  });
+
+  /** Manual zoom from the slider — cancels any in-flight startup fitting and
+   *  takes manual control, so neither startup nor the persistent
+   *  available-space re-fit ever stomps the user's choice. */
   function setZoom(value: number) {
     endStartup();
+    userControlled = true;
     zoomLevel.value = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
   }
 
-  /** One-shot re-fit on demand (header percent button / menu "Fit"). */
+  /** Re-fit once on demand (header percent button / menu "Fit") and re-arm
+   *  the persistent auto-refit — "Fit" means "fit to space and keep it
+   *  fitted" again. */
   function fitZoom() {
     endStartup();
+    userControlled = false;
     measureAndFit();
   }
 

@@ -187,6 +187,10 @@ describe('useAutoZoom', () => {
     const dockHeight = ref(0);
     const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
     await nextTick();
+    // Flush the mount-time region-wiring catch-up frame now (it fires within
+    // a frame of mount in practice) so it can't be mistaken later for a
+    // response to the mid-game content growth this test locks down.
+    flushRaf();
     const observer = observerFor(board.el)!;
 
     expect(api.zoomLevel.value).toBe(1.0); // nothing measurable yet
