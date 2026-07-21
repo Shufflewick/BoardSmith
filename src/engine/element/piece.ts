@@ -5,7 +5,6 @@ import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import type { VisibilityMode } from '../command/visibility.js';
 import { visibilityFromMode } from '../command/visibility.js';
-import { devWarn, isDevMode } from '../../utils/dev.js';
 
 /**
  * Movable game element. Pieces represent items that can be relocated during play.
@@ -75,98 +74,10 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
     this.moveToInternal(destination, options?.position);
   }
 
-  /**
-   * Internal move method called by command executor
-   */
-  moveToInternal(destination: GameElement, position?: 'first' | 'last'): void {
-    // ENG-01 (phase 132), ALL modes: reject a move onto this element's own
-    // descendant (or itself). Unlike WR-03 below (a dev-only diagnostic for
-    // detached destinations), this is real production tree corruption: an
-    // unconditional splice of `this` out of its current parent followed by
-    // reassigning `this._t.parent = destination` would leave `this` as both
-    // an ancestor and a descendant of `destination`, producing a detached
-    // cycle. Must run BEFORE any mutation below, in every environment.
-    if (destination === this) {
-      throw new Error(
-        `Cannot move "${this.name ?? this.constructor.name}" into itself ` +
-        `(an element is trivially its own descendant). ` +
-        `putInto() destination must not be the element being moved.`
-      );
-    }
-    for (let el: GameElement | undefined = destination._t.parent; el; el = el._t.parent) {
-      if (el === this) {
-        throw new Error(
-          `Cannot move "${this.name ?? this.constructor.name}" into its own descendant ` +
-          `"${destination.name ?? destination.constructor.name}". This would create a ` +
-          `detached cycle in the element tree.`
-        );
-      }
-    }
-
-    // WR-03 (phase 131), DEV-only: detect a move into a DETACHED tree. The
-    // classic cause is a restored onEnter/onExit handler whose closure
-    // captured a constructor-local element (`const scorePile = this.create(...)`):
-    // after a snapshot restore the closure still points at the DISCARDED
-    // pre-restore tree, so the moved element silently vanishes from the
-    // serialized game with no error. A detached destination has an ancestor
-    // whose recorded parent no longer contains it (the restore rebuilt the
-    // parent's children). `game.pile` is exempt by construction (no parent).
-    if (isDevMode()) {
-      for (let el: GameElement = destination; el._t.parent; el = el._t.parent) {
-        if (!el._t.parent._t.children.includes(el)) {
-          devWarn(
-            `detached-destination:${destination.name ?? destination.constructor.name}`,
-            `putInto() destination "${destination.name ?? destination.constructor.name}" is detached ` +
-            `from the live element tree — the moved element will NOT appear in the serialized game. ` +
-            `This usually means a restored onEnter/onExit handler is holding a stale reference to an ` +
-            `element from before a snapshot restore. Handlers must reach elements via game attributes ` +
-            `(this.scorePile) or queries (element.game.first(...)), never via captured local variables.`
-          );
-          break;
-        }
-      }
-    }
-
-    const oldParent = this._t.parent;
-
-    // Remove from current parent
-    if (oldParent) {
-      const index = oldParent._t.children.indexOf(this);
-      if (index !== -1) {
-        oldParent._t.children.splice(index, 1);
-      } else if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
-        // DEV: Element has a parent reference but isn't in parent's children array
-        // This indicates tree corruption - element may end up in multiple places
-        console.error(
-          `[BoardSmith] 🚨 TREE CORRUPTION in moveToInternal:\n` +
-          `  Element ${this.name ?? this.constructor.name} (id: ${this.id}) has parent reference to\n` +
-          `  "${oldParent.name ?? oldParent.constructor.name}" (id: ${oldParent.id})\n` +
-          `  but was NOT found in parent's children array!\n` +
-          `  This element will now exist in multiple places in the tree.`
-        );
-      }
-
-      // Trigger exit event if parent is a Space
-      if (oldParent instanceof Space) {
-        oldParent.triggerEvent('exit', this);
-      }
-    }
-
-    // Add to new parent
-    this._t.parent = destination;
-
-    const pos = position ?? (destination._t.order === 'stacking' ? 'first' : 'last');
-    if (pos === 'first') {
-      destination._t.children.unshift(this);
-    } else {
-      destination._t.children.push(this);
-    }
-
-    // Trigger enter event if moving to a Space
-    if (destination instanceof Space) {
-      destination.triggerEvent('enter', this);
-    }
-  }
+  // `moveToInternal` is inherited from `GameElement` (163-01/D22-D23 lift):
+  // Piece no longer owns the splice+exit+enter+cycle-guard body — see
+  // `GameElement.moveToInternal` for the (unchanged-in-ordering) logic,
+  // now shared with `Space.reparent`/`remove`.
 
   /**
    * Remove this piece from play.

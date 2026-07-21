@@ -122,8 +122,8 @@ describe('Space.sealed (SPACE-01/D22): append-only child removal guard', () => {
 
       constructor(options: GameOptions) {
         super(options);
-        this.sealedZone = this.create(Space, 'sealed-zone');
-        this.overflow = this.create(Space, 'overflow');
+        this.sealedZone = this.create<Space<MarkerGame>>(Space, 'sealed-zone');
+        this.overflow = this.create<Space<MarkerGame>>(Space, 'overflow');
         this.sealedZone.onExit(() => {
           this.exitCount += 1;
         });

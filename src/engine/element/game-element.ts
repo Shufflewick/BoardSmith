@@ -12,6 +12,7 @@ import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import type { VisibilityState } from '../command/visibility.js';
 import { DEFAULT_VISIBILITY, canPlayerSee, copyVisibilityState, resolveVisibility } from '../command/visibility.js';
+import { devWarn, isDevMode } from '../../utils/dev.js';
 
 /**
  * Check if a value is an ElementClass (a GameElement subclass constructor).
@@ -416,6 +417,126 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   setOrder(order: 'normal' | 'stacking'): void {
     this._t.order = order;
+  }
+
+  // ============================================
+  // Movement (shared by Piece.putInto/remove and Space.reparent/remove)
+  // ============================================
+
+  /**
+   * Internal move method shared by every element that can relocate in the
+   * tree (`Piece.putInto`/`remove`, `Space.reparent`/`remove`). Lifted
+   * verbatim from the former `Piece.moveToInternal` (163-01/D22-D23) so
+   * there is exactly ONE splice+exit+enter+cycle-guard path — the
+   * sealed-old-parent check below cannot be bypassed by a new caller.
+   */
+  moveToInternal(destination: GameElement, position?: 'first' | 'last'): void {
+    // ENG-01 (phase 132), ALL modes: reject a move onto this element's own
+    // descendant (or itself). Unlike WR-03 below (a dev-only diagnostic for
+    // detached destinations), this is real production tree corruption: an
+    // unconditional splice of `this` out of its current parent followed by
+    // reassigning `this._t.parent = destination` would leave `this` as both
+    // an ancestor and a descendant of `destination`, producing a detached
+    // cycle. Must run BEFORE any mutation below, in every environment.
+    if (destination === this) {
+      throw new Error(
+        `Cannot move "${this.name ?? this.constructor.name}" into itself ` +
+        `(an element is trivially its own descendant). ` +
+        `putInto() destination must not be the element being moved.`
+      );
+    }
+    for (let el: GameElement | undefined = destination._t.parent; el; el = el._t.parent) {
+      if (el === this) {
+        throw new Error(
+          `Cannot move "${this.name ?? this.constructor.name}" into its own descendant ` +
+          `"${destination.name ?? destination.constructor.name}". This would create a ` +
+          `detached cycle in the element tree.`
+        );
+      }
+    }
+
+    // WR-03 (phase 131), DEV-only: detect a move into a DETACHED tree. The
+    // classic cause is a restored onEnter/onExit handler whose closure
+    // captured a constructor-local element (`const scorePile = this.create(...)`):
+    // after a snapshot restore the closure still points at the DISCARDED
+    // pre-restore tree, so the moved element silently vanishes from the
+    // serialized game with no error. A detached destination has an ancestor
+    // whose recorded parent no longer contains it (the restore rebuilt the
+    // parent's children). `game.pile` is exempt by construction (no parent).
+    if (isDevMode()) {
+      for (let el: GameElement = destination; el._t.parent; el = el._t.parent) {
+        if (!el._t.parent._t.children.includes(el)) {
+          devWarn(
+            `detached-destination:${destination.name ?? destination.constructor.name}`,
+            `putInto() destination "${destination.name ?? destination.constructor.name}" is detached ` +
+            `from the live element tree — the moved element will NOT appear in the serialized game. ` +
+            `This usually means a restored onEnter/onExit handler is holding a stale reference to an ` +
+            `element from before a snapshot restore. Handlers must reach elements via game attributes ` +
+            `(this.scorePile) or queries (element.game.first(...)), never via captured local variables.`
+          );
+          break;
+        }
+      }
+    }
+
+    const oldParent = this._t.parent;
+
+    // D22 (163-01): a sealed Space rejects a child being spliced OUT of it.
+    // Must run BEFORE the splice below — a rejected removal must leave
+    // `_t.children`/`_t.parent` byte-identical to before the call
+    // (no corrupt-on-reject). Adding INTO a sealed Space (sealed is the
+    // DESTINATION, not oldParent) is unaffected — append-only, not frozen.
+    if (oldParent && 'sealed' in oldParent && (oldParent as unknown as { sealed?: boolean }).sealed) {
+      throw new Error(
+        `Cannot remove "${this.name ?? this.constructor.name}" from "${oldParent.name ?? oldParent.constructor.name}": ` +
+        `this Space is sealed (append-only) and does not allow elements to be removed from it. ` +
+        `Elements may still be added to a sealed Space.`
+      );
+    }
+
+    // Remove from current parent
+    if (oldParent) {
+      const index = oldParent._t.children.indexOf(this);
+      if (index !== -1) {
+        oldParent._t.children.splice(index, 1);
+      } else if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+        // DEV: Element has a parent reference but isn't in parent's children array
+        // This indicates tree corruption - element may end up in multiple places
+        console.error(
+          `[BoardSmith] 🚨 TREE CORRUPTION in moveToInternal:\n` +
+          `  Element ${this.name ?? this.constructor.name} (id: ${this.id}) has parent reference to\n` +
+          `  "${oldParent.name ?? oldParent.constructor.name}" (id: ${oldParent.id})\n` +
+          `  but was NOT found in parent's children array!\n` +
+          `  This element will now exist in multiple places in the tree.`
+        );
+      }
+
+      // Trigger exit event if parent is a Space. Duck-typed (rather than
+      // `instanceof Space`) to avoid a circular import between
+      // game-element.ts and space.ts (Space extends GameElement) — mirrors
+      // `getParentZoneVisibility`'s duck-typed `getZoneVisibility` check
+      // above and `fromJSON`'s duck-typed `_restoreZoneVisibility` call.
+      const oldTrigger = (oldParent as unknown as { triggerEvent?: (type: 'exit' | 'enter', el: GameElement) => void }).triggerEvent;
+      if (typeof oldTrigger === 'function') {
+        oldTrigger.call(oldParent, 'exit', this);
+      }
+    }
+
+    // Add to new parent
+    this._t.parent = destination;
+
+    const pos = position ?? (destination._t.order === 'stacking' ? 'first' : 'last');
+    if (pos === 'first') {
+      destination._t.children.unshift(this);
+    } else {
+      destination._t.children.push(this);
+    }
+
+    // Trigger enter event if moving to a Space (duck-typed, see above).
+    const newTrigger = (destination as unknown as { triggerEvent?: (type: 'exit' | 'enter', el: GameElement) => void }).triggerEvent;
+    if (typeof newTrigger === 'function') {
+      newTrigger.call(destination, 'enter', this);
+    }
   }
 
   // ============================================

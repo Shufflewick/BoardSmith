@@ -99,6 +99,31 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
   $align?: LayoutAlignment;
 
   // ============================================
+  // Sealing (SPACE-01/D22)
+  // ============================================
+
+  /**
+   * Append-only guard: when `true`, elements may still be ADDED to this
+   * Space, but attempting to remove/relocate an existing child (via the
+   * shared `GameElement.moveToInternal`) throws an actionable Error and
+   * leaves the tree untouched. A PLAIN public field (not `_`-prefixed) so it
+   * rides the generic attribute-serialization loop in
+   * `GameElement.toJSON`/`resolveElementReferences` and survives every
+   * restore path without a dedicated `_restore*` hook. Restore itself never
+   * runs the seal check — `GameElement.fromJSON` rebuilds children via
+   * `addChild`, not `moveToInternal`.
+   * @default false
+   */
+  sealed = false;
+
+  /**
+   * Convenience for `this.sealed = true`.
+   */
+  seal(): void {
+    this.sealed = true;
+  }
+
+  // ============================================
   // Internal State
   // ============================================
 
