@@ -41,6 +41,19 @@ const DEFAULT_MAX_ITERATIONS = 10000;
 interface SerializedFlowElement {
   __flowElementId: number;
   className: string;
+  /**
+   * WR-01 (163-REVIEW): the id of the element's immediate CONTAINER at
+   * serialize time, present ONLY when that container is a zone-`'hidden'`
+   * Space (D24 true concealment). `'hidden'` mode deliberately builds no
+   * per-child placeholder and registers nothing in `idRemap` (an entry per
+   * hidden child would let the map's SIZE leak the exact count) -- so this
+   * marker carries the ONE piece of already-disclosed information needed to
+   * relink safely on redacted-clone restore: the container itself, which is
+   * always visible to every viewer (only its children are concealed). This
+   * is a single scalar per flow-variable marker, not a structure that scales
+   * with hidden-zone child count, so it cannot re-leak the count.
+   */
+  __hiddenContainerId?: number;
 }
 
 /**
@@ -51,8 +64,25 @@ interface SerializedFlowElement {
  * JSON-plain for checkpoint/restore.
  */
 type ForEachSnapshotItem =
-  | { elementId: number }
+  | { elementId: number; hiddenContainerId?: number }
   | { value: string | number | boolean | null };
+
+/** WR-01 (163-REVIEW): the id of `element`'s immediate container, but ONLY
+ *  when that container is a zone-`'hidden'` Space (D24 true concealment).
+ *  Shared by `serializeFlowVariables` and `executeForEach`'s snapshot so both
+ *  relink paths degrade the same way on a redacted-clone restore -- to the
+ *  (already-disclosed) container, never a per-child structure whose size
+ *  would leak the hidden zone's exact child count. */
+function hiddenContainerIdOf(element: GameElement): number | undefined {
+  const container = element.parent as unknown;
+  if (container && typeof (container as { getZoneVisibility?: unknown }).getZoneVisibility === 'function') {
+    const zoneVisibility = (container as { getZoneVisibility: () => { mode?: string } | undefined }).getZoneVisibility();
+    if (zoneVisibility?.mode === 'hidden') {
+      return (container as GameElement).id;
+    }
+  }
+  return undefined;
+}
 
 function isSerializedFlowElement(value: unknown): value is SerializedFlowElement {
   return (
@@ -67,7 +97,16 @@ function isSerializedFlowElement(value: unknown): value is SerializedFlowElement
  *  structured-cloneable marker. Non-element values pass through unchanged. */
 function serializeFlowVariables(value: unknown): unknown {
   if (value instanceof GameElement) {
-    return { __flowElementId: value.id, className: value.constructor.name } satisfies SerializedFlowElement;
+    const marker: SerializedFlowElement = { __flowElementId: value.id, className: value.constructor.name };
+    // WR-01: record the immediate container's real id when it is a
+    // zone-`'hidden'` Space, so a redacted-clone restore can relink this
+    // marker to that (already-disclosed) container instead of leaving a
+    // dead marker in place.
+    const hiddenContainerId = hiddenContainerIdOf(value);
+    if (hiddenContainerId !== undefined) {
+      marker.__hiddenContainerId = hiddenContainerId;
+    }
+    return marker satisfies SerializedFlowElement;
   }
   if (value === null || typeof value !== 'object') {
     return value;
@@ -112,6 +151,18 @@ function relinkFlowVariables(value: unknown, game: Game, idRemap?: Map<number, n
       const redactedPlaceholder = game.getElementById(syntheticId);
       if (redactedPlaceholder) {
         return redactedPlaceholder;
+      }
+    }
+    // WR-01 (163-REVIEW): no idRemap entry (zone-`'hidden'` mode registers
+    // none, by design -- see D24). Fall back to the marker's own recorded
+    // container id, if any: the container is a live, already-disclosed
+    // element (only its children are concealed), so relinking to it reveals
+    // no new information and keeps the flow variable resolvable instead of
+    // leaving a dead marker in place.
+    if (value.__hiddenContainerId !== undefined) {
+      const container = game.getElementById(value.__hiddenContainerId);
+      if (container) {
+        return container;
       }
     }
     return value;
@@ -1365,7 +1416,10 @@ export class FlowEngine<G extends Game = Game> {
 
       const snapshot = items.map((item): ForEachSnapshotItem => {
         if (item instanceof GameElement) {
-          return { elementId: item.id };
+          const hiddenContainerId = hiddenContainerIdOf(item);
+          return hiddenContainerId !== undefined
+            ? { elementId: item.id, hiddenContainerId }
+            : { elementId: item.id };
         }
         const type = typeof item;
         if (type === 'string' || type === 'number' || type === 'boolean' || item === null) {
@@ -1407,6 +1461,13 @@ export class FlowEngine<G extends Game = Game> {
         if (syntheticId !== undefined) {
           element = this.game.getElementById(syntheticId);
         }
+      }
+      // WR-01 (163-REVIEW): no idRemap entry for a zone-`'hidden'` item
+      // (none is ever registered -- see D24/hiddenContainerIdOf). Fall back
+      // to the snapshot's own recorded container id: a live, already-
+      // disclosed element, so relinking to it reveals nothing new.
+      if (!element && rawItem.hiddenContainerId !== undefined) {
+        element = this.game.getElementById(rawItem.hiddenContainerId);
       }
       if (!element) {
         throw new Error(
