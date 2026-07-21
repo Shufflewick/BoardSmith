@@ -81,7 +81,17 @@ function onPresetSelect(): void {
 
 function applyLobbyOptions(): void {
   errorMsg.value = null;
-  const message: Record<string, unknown> = { type: 'configure', gameOptions: { ...optionSelection.value } };
+  // WR-01: only send keys the user actually set (or that have a declared
+  // `.default`, so untouched-but-defaulted options still apply) — an option
+  // with NO default seeds `optionSelection` as `undefined`; sending that
+  // unconditionally either fails validation outright (a `select` option:
+  // "Invalid value undefined") or silently propagates `undefined` into the
+  // start op (a non-`select` option) the very first time Apply is clicked,
+  // even for a field the user never touched.
+  const gameOptions = Object.fromEntries(
+    Object.entries(optionSelection.value).filter(([, value]) => value !== undefined),
+  );
+  const message: Record<string, unknown> = { type: 'configure', gameOptions };
   if (presetSelection.value) message.preset = presetSelection.value;
   wsSend(message);
 }
@@ -557,6 +567,24 @@ onUnmounted(() => {
                   {{ c.label ?? String(c.value) }}
                 </option>
               </select>
+              <!-- WR-03: a real checkbox for `boolean` — no free-text
+                   true/false typing, and `v-model` on a checkbox with no
+                   true-value/false-value produces a genuine boolean, closing
+                   CR-02's client-side gap for this control directly. -->
+              <input
+                v-else-if="opt.type === 'boolean'"
+                v-model="optionSelection[opt.id]"
+                type="checkbox"
+                :data-testid="`lobby-option-${opt.id}`"
+              />
+              <input
+                v-else-if="opt.type === 'number'"
+                v-model.number="optionSelection[opt.id]"
+                type="number"
+                :min="opt.min"
+                :max="opt.max"
+                :data-testid="`lobby-option-${opt.id}`"
+              />
               <input
                 v-else
                 v-model="optionSelection[opt.id]"
