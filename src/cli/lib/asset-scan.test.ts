@@ -78,4 +78,25 @@ describe('scanAssetReachability', () => {
     expect(violations.length).toBe(1);
     expect(violations[0].file).toContain('legacy/AssetImage.vue');
   });
+
+  // D17 — commented-out <img> tags (JS line, JS block, Vue HTML, and a multi-line
+  // block comment) must NOT be reported as violations. This is a real false-FAIL
+  // repro: pre-fix, all four commented occurrences wrongly flag.
+  it('does NOT flag <img> tags that only appear inside comments (JS line, JS block, Vue HTML, multi-line block)', () => {
+    const violations = scanAssetReachability(join(FIXTURES, 'commented-img'));
+    const commentedLines = [2, 9, 12, 16];
+    for (const line of commentedLines) {
+      expect(violations.find((v) => v.line === line)).toBeUndefined();
+    }
+  });
+
+  // Negative control: a genuinely-live <img> in the SAME fixture file (outside any
+  // comment) IS still reported — proves the strip is comment-scoped, not a blanket
+  // disable of the detector.
+  it('still flags a genuinely-live <img> in a file that also contains commented-out <img> tags', () => {
+    const violations = scanAssetReachability(join(FIXTURES, 'commented-img'));
+    expect(violations.length).toBe(1);
+    expect(violations[0].line).toBe(4);
+    expect(violations[0].file.endsWith('src/ui/CommentedImg.vue')).toBe(true);
+  });
 });
