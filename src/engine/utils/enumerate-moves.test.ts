@@ -171,3 +171,66 @@ describe('enumerateLegalMoves', () => {
     expect(moves).toHaveLength(0);
   });
 });
+
+// ============================================================================
+// Function-valued multiSelect resolution (AI-01 / D9).
+//
+// Pre-fix: `_enumerateRecursive` treats ANY function-valued `multiSelect` as
+// "cannot be statically enumerated" and unconditionally skips it (devWarn,
+// then skip-if-optional / `[]`-if-required) WITHOUT ever invoking the
+// function. Post-fix it routes through the shared `resolveMultiSelect`
+// helper into the existing `generateCombinations` machinery.
+// ============================================================================
+
+class DynamicMultiSelectGame extends Game<DynamicMultiSelectGame, Player> {
+  board!: Space<DynamicMultiSelectGame>;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.board = this.create(Space<DynamicMultiSelectGame>, 'board');
+    this.board.create(Piece<DynamicMultiSelectGame>, 'token-a');
+    this.board.create(Piece<DynamicMultiSelectGame>, 'token-b');
+    this.board.create(Piece<DynamicMultiSelectGame>, 'token-c');
+
+    this.registerAction(
+      Action.create<DynamicMultiSelectGame>('pick')
+        .chooseElements('items', {
+          prompt: 'Choose two tokens',
+          elements: (ctx) => [...(ctx.game as DynamicMultiSelectGame).board.all(Piece)],
+          multiSelect: () => ({ min: 2, max: 2 }),
+        })
+        .execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          maxIterations: 10,
+          do: eachPlayer({
+            do: actionStep({ actions: ['pick'] }),
+          }),
+        }),
+      }),
+    );
+  }
+}
+
+describe('enumerateLegalMoves: function-valued multiSelect', () => {
+  it('routes a function multiSelect resolving to a concrete config into generateCombinations (C(3,2) = 3 combos)', () => {
+    const game = new DynamicMultiSelectGame({
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'dynamic-multiselect-test',
+    });
+    game.startFlow();
+
+    const moves = enumerateLegalMoves(game, 1);
+
+    expect(moves).toHaveLength(3);
+    for (const move of moves) {
+      expect(move.action).toBe('pick');
+      expect(Array.isArray(move.args.items)).toBe(true);
+      expect((move.args.items as unknown[]).length).toBe(2);
+    }
+  });
+});
