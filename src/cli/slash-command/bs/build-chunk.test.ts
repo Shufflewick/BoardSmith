@@ -121,6 +121,9 @@ const SESSION_LOCK_NONE = 'Session Lock: none';
 /** SKILLDEF-01: the exact clock-read command — the only sanctioned lock-timestamp source. */
 const LOCK_CLOCK_READ = 'date -u +%Y-%m-%dT%H:%M:%SZ';
 
+/** SKILLDEF-02: the live-symlink read-only-library marker, must appear alongside "read-only". */
+const NODE_MODULES_BOARDSMITH = 'node_modules/boardsmith';
+
 describe('BUILD-01 — resume routing', () => {
   it('build-chunk.md contains the full-ceremony step list verbatim', () => {
     const buildChunk = read('build-chunk.md');
@@ -872,6 +875,49 @@ describe('SKILLDEF-01 — close releases the session lock (terminal, append-only
     const buildChunk = read('build-chunk.md');
     expect(stateMachine).toMatch(/same-day session that resumes a\s+DIFFERENT next chunk/i);
     expect(buildChunk).toMatch(/same-day false alarm after a clean close/i);
+  });
+});
+
+describe('SKILLDEF-02 — game/library boundary', () => {
+  it('build.md contains a "## Boundaries" section', () => {
+    const build = read('build/build.md');
+    expect(build).toContain('## Boundaries');
+  });
+
+  it('build.md states node_modules/boardsmith is a read-only live symlink', () => {
+    const build = read('build/build.md');
+    expect(build).toContain(NODE_MODULES_BOARDSMITH);
+    expect(build).toMatch(/read-only/i);
+    expect(build).toMatch(/symlink/i);
+  });
+
+  it('build.md states a library gap is FILED, never patched', () => {
+    const build = read('build/build.md');
+    expect(build).toMatch(/\bfile\b/i);
+    expect(build).toMatch(/never patch(ed)?/i);
+  });
+
+  it('build.md states built-in BoardSmith UI must never be suppressed', () => {
+    const build = read('build/build.md');
+    expect(build).toMatch(/suppress/i);
+    expect(build).toMatch(/built-in/i);
+  });
+
+  it('build.md states the agent controls the game board only', () => {
+    const build = read('build/build.md');
+    expect(build).toMatch(/controls? the game board only/i);
+  });
+
+  it('investigate.md Required Reading points at the read-only-library boundary', () => {
+    const investigate = read('build/investigate.md');
+    expect(investigate).toContain(NODE_MODULES_BOARDSMITH);
+    expect(investigate).toMatch(/## Boundaries/i);
+  });
+
+  it('final-acceptance.md forbids overriding an explicit client instruction', () => {
+    const fa = read('build/final-acceptance.md');
+    expect(fa).toMatch(/client/i);
+    expect(fa).toMatch(/overrule|override/i);
   });
 });
 

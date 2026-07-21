@@ -119,6 +119,14 @@ Return exactly: a list of { findingId, lens: 'final-acceptance', description, ci
 lenses use.
 ```
 
+## Never Override an Explicit Client Instruction
+
+When the client has directed a design choice, the agent does not silently overrule it on its own
+design judgment — not here, not anywhere in the pipeline. Findings triage (below) can propose a
+fix, defer it, or refute it on the merits, but it never routes around or reverses something the
+client explicitly instructed. If a finding conflicts with an explicit prior client instruction,
+that conflict is reported back to the client as its own finding, not resolved unilaterally.
+
 ## Findings Destination
 
 Route every finding — from the dispatched agent's five checks or the human's two narrated

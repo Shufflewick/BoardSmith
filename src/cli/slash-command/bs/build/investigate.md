@@ -44,6 +44,11 @@ names, by exact filename, the docs relevant to this chunk:
   first UI chunk's `ask` writes it, which is why `ingest/scaffold.md` could not name it —
   investigate is the first step downstream of that write.)
 
+Also carry `build/build.md`'s "## Boundaries" rule forward into this chunk's interpretation:
+`node_modules/boardsmith` is a live symlink to the client's real BoardSmith checkout — READ-ONLY,
+never patched. Any interpretation this step writes stays inside the game's own project source; it
+never proposes a fix that lives under `node_modules/boardsmith`.
+
 ## Inputs to Read
 
 A fresh-context Task-tool subagent reads, for this chunk:
