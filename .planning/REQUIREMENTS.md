@@ -116,7 +116,7 @@ the fix holds → only then close.**
 
 ### LIBX — Library misc: action-panel, loop, visual, debug-view (D28, D29, D30, D31 + C.3) — Phase 164
 
-- [ ] **LIBX-01** (D28 + C.3, Seven, UX): Action-panel/dock suppression is per-action, not all-or-nothing,
+- [x] **LIBX-01** (D28 + C.3, Seven, UX): Action-panel/dock suppression is per-action, not all-or-nothing,
   AND the blunt `suppress-action-panel` prop is fenced/removed from the ordinary scaffold surface (gated
   behind an explicit platform escape hatch the agent is told not to use without the client). Delivers the
   library half of feature **C.3**; the skills half is SKILLDEF-03.

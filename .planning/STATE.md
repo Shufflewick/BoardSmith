@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
 status: executing
-stopped_at: Completed 164-02-PLAN.md
-last_updated: "2026-07-21T19:55:22.387Z"
+stopped_at: Completed 164-03-PLAN.md
+last_updated: "2026-07-21T20:03:14.596Z"
 last_activity: 2026-07-21
 progress:
   total_phases: 15
   completed_phases: 9
   total_plans: 29
-  completed_plans: 27
+  completed_plans: 28
   percent: 60
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 164 (Library Misc — Action-Panel, Loop, Visual, Debug-View) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-21
 
@@ -272,6 +272,7 @@ Recent decisions affecting current work:
 - [Phase 155-04]: `animationSeqFloor` option on `Game.loadSerializedState`, supplied only by `GameRunner.fromCheckpoint` (derived from the ENCLOSING live snapshot, not the historical checkpoint) — keeps undo/rewind checkpoint restore monotonic without any of the four undo/rewind call sites needing to change; restored buffered events re-stamped above the floor. Adversarial testing surfaced and fixed a related latent bug: `Game.toJSON()` only serialized `animationEventSeq` when the current buffer was non-empty, so the seq silently reset to 0 on any snapshot round-trip through an empty-buffer op (not just undo) — now serialized whenever nonzero, independent of buffer state.
 - [Phase 164-01]: unbounded: true opt-in threaded on LoopConfig; global whole-flow tripwire retained unchanged — Lets a genuinely unbounded game express its loop without lying via an arbitrary maxIterations cap, while the engine's DEFAULT_MAX_ITERATIONS run() tripwire (independent of any single loop's counter) still catches a truly stuck loop
 - [Phase 164-02]: contrastInk implemented as a pure hex/#rgb/rgb()/rgba() parser (no Canvas/DOM) per the plan's locked LIBX-03 constraint, superseding RESEARCH.md's Canvas-normalization recommendation
+- [Phase 164]: Plan 164-03 (LIBX-01): platformActionPanelEscapeHatch renamed+locked; suppressFromDock rides the actionMetadata channel exactly like manual
 
 ### Pending Todos
 
@@ -283,8 +284,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-21T19:55:22.377Z
-Stopped at: Completed 164-02-PLAN.md
+Last session: 2026-07-21T20:03:14.585Z
+Stopped at: Completed 164-03-PLAN.md
 Resume file: 
 None
 
