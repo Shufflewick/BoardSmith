@@ -517,6 +517,22 @@ export class FlowEngine<G extends Game = Game> {
     }
 
     if (actingPlayerIndex === undefined) {
+      // D21/SIM-03: no explicit playerIndex was given AND no seat is both
+      // incomplete and able to act. If that's because every awaiting seat
+      // has already individually completed (or there are no awaiting seats
+      // at all), there is nothing left to ever award this resume to -- the
+      // step must finalize here (consulting allDone same as the normal
+      // post-action path) rather than throw. This is the SOURCE fix: it
+      // closes the gap that produces the crash instead of merely guarding
+      // the throw below.
+      const noEligibleActor = this.awaitingPlayers.length === 0
+        || this.awaitingPlayers.every(p => p.completed);
+      if (noEligibleActor) {
+        this.awaitingInput = false;
+        this.awaitingPlayers = [];
+        frame.completed = true;
+        return this.run();
+      }
       throw new Error('No player specified and no awaiting players found');
     }
 
@@ -616,7 +632,17 @@ export class FlowEngine<G extends Game = Game> {
       awaitingInput: this.awaitingInput,
       currentPlayer: this.currentPlayer?.seat,
       availableActions: this.awaitingInput ? this.availableActions : undefined,
-      awaitingPlayers: this.awaitingPlayers.length > 0 ? this.awaitingPlayers : undefined,
+      // D3/SIM-01: return a deep-copied value, never the live private array.
+      // `completed` lives ONLY here (excluded from FlowPosition) and is
+      // mutated in place by resumeSimultaneousAction -- every prior caller
+      // that captured this array by reference (including every
+      // ActionCheckpoint, which stores getState()'s return un-cloned; see
+      // snapshot.ts createActionCheckpoint) would otherwise see a LATER
+      // seat's completion retroactively rewrite an EARLIER capture. Mirrors
+      // the restore-side copy already at restoreFullState (below).
+      awaitingPlayers: this.awaitingPlayers.length > 0
+        ? this.awaitingPlayers.map(p => ({ ...p }))
+        : undefined,
       currentPhase: this.currentPhase,
     };
 
@@ -1530,15 +1556,18 @@ export class FlowEngine<G extends Game = Game> {
       }
     }
 
-    // If no players need to act, complete immediately
-    if (this.awaitingPlayers.length === 0) {
+    // D21/SIM-03: consult allDone BEFORE the empty-guard so an empty
+    // awaiting set is decided through the SAME allDone-aware path as every
+    // other completion, rather than short-circuiting past it.
+    if (config.allDone?.(context)) {
+      this.awaitingPlayers = [];
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
 
-    // Check if allDone already returns true
-    if (config.allDone?.(context)) {
-      this.awaitingPlayers = [];
+    // If no players need to act, complete immediately -- nobody is left who
+    // could ever satisfy allDone, so there is nothing to usefully await.
+    if (this.awaitingPlayers.length === 0) {
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
