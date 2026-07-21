@@ -404,7 +404,7 @@ describe('useActionController', () => {
       expect(warnSpy.mock.calls[0][0]).toContain("start('invalidAction')");
     });
 
-    it('start() resolves to a failure ActionResult for an action with no metadata', async () => {
+    it('start() resolves to a failure ActionResult for an action with no metadata (D26/SPACE-05 defense-in-depth: no-op, not a hard error)', async () => {
       availableActions.value = [...(availableActions.value ?? []), 'actionWithNoMetadata'];
 
       const controller = useActionController({
@@ -418,7 +418,9 @@ describe('useActionController', () => {
       const result = await controller.start('actionWithNoMetadata');
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('No metadata');
+      expect(result.error).toContain('not ready to start yet');
+      // The board stays interactive -- no wizard-mode action got pinned in place.
+      expect(controller.currentAction.value).toBeNull();
     });
 
     it('start() resolves to a success acknowledgment that wizard mode began (not the eventual server outcome)', async () => {

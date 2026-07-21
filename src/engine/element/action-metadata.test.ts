@@ -292,7 +292,7 @@ class DivergenceGame extends Game<DivergenceGame, Player> {
 
     this.registerAction(
       Action.create<DivergenceGame>('conditional')
-        .condition((ctx) => (ctx.game as DivergenceGame).conditionOpen)
+        .condition({ 'condition open': (ctx) => (ctx.game as DivergenceGame).conditionOpen })
         .execute(() => ({ success: true })),
     );
 

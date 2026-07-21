@@ -503,11 +503,30 @@ export function buildPlayerState(
     return { name: player.name ?? `Player ${player.seat}`, seat: player.seat };
   });
 
+  // D26/SPACE-05: `availableActions` (raw, from the flow's action-step
+  // snapshot -- see comment above) and `actionMetadata` (condition-checked
+  // at broadcast time) must be the SAME set for a real seat, or the client
+  // can be offered an action it cannot start ("No metadata for action",
+  // stranding the panel). Reconcile here: when metadata is built for a real
+  // seat, `state.availableActions` is derived from the metadata's own keys
+  // -- the condition-checked set -- rather than the raw snapshot. Spectators
+  // (position 0) and the no-metadata-requested path keep the raw list; they
+  // never receive metadata and so cannot strand a panel on it.
+  let reconciledAvailableActions = availableActions;
+  let actionMetadata: Record<string, ActionMetadata> | undefined;
+  if (options?.includeActionMetadata && availableActions.length > 0 && playerPosition > 0) {
+    const player = runner.game.getPlayer(playerPosition);
+    if (player) {
+      actionMetadata = buildActionMetadata(runner.game, player, availableActions);
+      reconciledAvailableActions = Object.keys(actionMetadata);
+    }
+  }
+
   const state: PlayerGameState = {
     phase: runner.game.phase,
     players: fullPlayerData,
     currentPlayer: flowState?.currentPlayer,
-    availableActions,
+    availableActions: reconciledAvailableActions,
     isMyTurn,
     view: truthView,
     canUndo,
@@ -522,13 +541,10 @@ export function buildPlayerState(
     actionCount: runner.actionHistory.length,
   };
 
-  // Optionally include action metadata for auto-UI
-  // Skip for spectators (position 0) - they don't need action metadata and getPlayer(0) is invalid
-  if (options?.includeActionMetadata && availableActions.length > 0 && playerPosition > 0) {
-    const player = runner.game.getPlayer(playerPosition);
-    if (player) {
-      state.actionMetadata = buildActionMetadata(runner.game, player, availableActions);
-    }
+  // Action metadata was built above (single-source reconciliation with
+  // availableActions, D26/SPACE-05) -- attach it here if present.
+  if (actionMetadata) {
+    state.actionMetadata = actionMetadata;
   }
 
   // Optionally include custom debug data

@@ -1332,8 +1332,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Get metadata (only needed at start time)
     const meta = getActionMetadata(actionName);
     if (!meta) {
-      const error = `No metadata for action "${actionName}"`;
-      setError(error);
+      // D26/SPACE-05 defense-in-depth: `availableActions` and
+      // `actionMetadata` are reconciled at the source (buildPlayerState), so
+      // this should never happen -- but if a transient divergence ever slips
+      // through, don't strand the board with a hard error. Log and no-op;
+      // the next state broadcast reconciles and the board stays interactive.
+      const error = `Action "${actionName}" is not ready to start yet`;
+      devWarn(
+        `start-missing-metadata:${actionName}`,
+        `start('${actionName}') was ignored: no action metadata is available for it yet. ` +
+          `This resolves itself on the next state broadcast; the board remains interactive.`
+      );
       return { success: false, error };
     }
 
