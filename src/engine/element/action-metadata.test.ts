@@ -14,7 +14,8 @@
  * helper Plan 01 created for MCTS enumeration — panel and MCTS can never
  * disagree about whether a selection is multi-select in the current state.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { ref } from 'vue';
 import {
   Game,
   Player,
@@ -28,6 +29,8 @@ import {
   type GameOptions,
 } from '../index.js';
 import { buildPickMetadata } from './action-metadata.js';
+import { resolveMultiSelect } from '../utils/resolve-multiselect.js';
+import { useActionController, type ActionMetadata } from '../../ui/composables/useActionController.js';
 import type { ChoiceSelection, ElementsSelection } from '../action/types.js';
 
 // ============================================================================
@@ -180,5 +183,84 @@ describe('buildPickMetadata: function-valued multiSelect (AI-01 / C.2)', () => {
     const meta = buildPickMetadata(game, player, selection);
 
     expect(meta.multiSelect).toEqual({ min: 1, max: 2 });
+  });
+
+  // ==========================================================================
+  // C.2 single-source-of-truth: panel and MCTS resolve the SAME multiSelect
+  // config through the SAME resolveMultiSelect helper (CONTEXT D-01).
+  // ==========================================================================
+
+  it('parity: buildPickMetadata (panel) and resolveMultiSelect (enumeration) agree on the resolved config', () => {
+    const { game, player } = makeGame();
+    const selection = getSelection(game, 'pickElements');
+    const ctx = { game, player, args: {} };
+
+    const panelResolved = buildPickMetadata(game, player, selection).multiSelect;
+    const enumerationResolved = resolveMultiSelect(selection, ctx);
+
+    expect(panelResolved).toEqual(enumerationResolved);
+    expect(panelResolved).toEqual({ min: 1, max: 3 });
+  });
+
+  it('parity holds for a choice selection too', () => {
+    const { game, player } = makeGame();
+    const selection = getSelection(game, 'pickChoice');
+    const ctx = { game, player, args: {} };
+
+    const panelResolved = buildPickMetadata(game, player, selection).multiSelect;
+    const enumerationResolved = resolveMultiSelect(selection, ctx);
+
+    expect(panelResolved).toEqual(enumerationResolved);
+    expect(panelResolved).toEqual({ min: 2, max: 2 });
+  });
+
+  // ==========================================================================
+  // C.2 panel-completable: once metadata carries the resolved config, the
+  // controller's checkbox-multiSelect seam (toggleMultiSelect ->
+  // resolveMultiSelectConfig -> selection.multiSelect) engages natively — no
+  // ActionPanel.vue / useActionController.ts source change required.
+  // ==========================================================================
+
+  describe('panel completion (C.2): the controller drives a dynamic multiSelect natively', () => {
+    it('toggleMultiSelect accepts values for a dynamic-multiSelect pick instead of falling back to single-select', async () => {
+      const { game, player } = makeGame();
+      const selection = getSelection(game, 'pickElements');
+      const pickMeta = buildPickMetadata(game, player, selection);
+
+      // Resolved metadata carries a concrete multiSelect config (proven above) —
+      // this is exactly what a real server response would send to the client.
+      expect(pickMeta.multiSelect).toEqual({ min: 1, max: 3 });
+
+      const actionMetadata = ref<Record<string, ActionMetadata> | undefined>({
+        pickElements: {
+          name: 'pickElements',
+          prompt: 'Choose one to three tokens',
+          selections: [pickMeta],
+        },
+      });
+      const availableActions = ref<string[]>(['pickElements']);
+      const isMyTurn = ref(true);
+      const sendAction = vi.fn().mockResolvedValue({ success: true });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('pickElements');
+      await controller.toggleMultiSelect('items', 1);
+
+      // If the panel had fallen back to single-select (the pre-fix bug), this
+      // would be a no-op devWarn and the draft would stay null — the exact
+      // "requires >=2, got 1" dead end (Doom BS-5). Post-fix the checkbox
+      // widget's toggle path engages and records the draft.
+      expect(controller.multiSelectDraft.value).toEqual({
+        selectionName: 'items',
+        values: [1],
+      });
+    });
   });
 });
