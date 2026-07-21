@@ -17,7 +17,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 
 ### Phases
 
-- [ ] **Phase 155: Undo / Rewind Family Correctness** — enforce `.notUndoable()` server-side, fence undo at flow-node/`finished` boundaries, stop solo-undo wipe, fix animation-id rewind (D1, D2, D5, D6)
+- [x] **Phase 155: Undo / Rewind Family Correctness** — enforce `.notUndoable()` server-side, fence undo at flow-node/`finished` boundaries, stop solo-undo wipe, fix animation-id rewind (D1, D2, D5, D6)
 - [x] **Phase 156: Sole-Option Auto-Execute** — a single-option action auto-*starts* but never auto-*executes*; the shell stops playing for the player (D7)
 - [x] **Phase 157: Game-Over UI + Forward Exits** — suppressable/dismissable `GameOverCard` + working Rematch/New Game/dev-restart (D10, D11)
 - [x] **Phase 158: Auto-Zoom Re-Fit** — `useAutoZoom` re-fits on dock/board/region resize instead of once against a stale layout (D12)
