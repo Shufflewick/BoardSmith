@@ -47,6 +47,15 @@ const props = defineProps<{
   actionMetadata?: Record<string, ActionMetadata>;
   playerSeat: number;
   isMyTurn: boolean;
+  /**
+   * The viewer's OWN `completed` flag for the current simultaneous step
+   * (from `flowState.awaitingPlayers[playerSeat].completed`; `false`/
+   * `undefined` outside a simultaneous step). D27 (T-160-27): a seat that
+   * already committed this step must never be able to re-submit — gated
+   * in `executeAction` in addition to `isMyTurn`, since `isMyTurn` alone
+   * is not a contractual guarantee against a stale/optimistic prop value.
+   */
+  completed?: boolean;
   canUndo?: boolean;
   /**
    * Auto mode: streamlines UX by reducing unnecessary clicks (default: true)
@@ -724,6 +733,15 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
 
   // Extra safeguard: don't execute if it's not our turn
   if (!props.isMyTurn) {
+    return;
+  }
+
+  // D27 commit-leak gate (T-160-27): a seat that already committed this
+  // simultaneous step can never re-submit, even if `isMyTurn` is (still,
+  // or again) true. Checked in addition to — not instead of — isMyTurn:
+  // this is the honest guard for the case `isMyTurn` was designed to
+  // cover but a stale/optimistic prop value defeats.
+  if (props.completed) {
     return;
   }
 

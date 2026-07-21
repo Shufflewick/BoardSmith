@@ -431,6 +431,30 @@ const availableActions = computed(() => {
   return flowState.availableActions || [];
 });
 
+// True while a simultaneous step is active (`awaitingPlayers` non-empty).
+// Single source for every D27 guard below: while true, status must never be
+// derived from a single `currentPlayer` (that identity is meaningless when
+// multiple seats are deciding independently).
+const isSimultaneous = computed(() => {
+  const flowState = state.value?.flowState as any;
+  return (flowState?.awaitingPlayers?.length ?? 0) > 0;
+});
+
+// The viewer's OWN completed flag during a simultaneous step (T-160-27 /
+// D27 commit-leak fix). `false` outside a simultaneous step — the concept
+// doesn't apply to turn-based actions. Fed to ActionPanel so its execute
+// guard can reject a seat that already committed this step, independent of
+// (and in addition to) `isMyTurn` — defense in depth against a stale/
+// optimistic `isMyTurn=true` prop after the seat has already committed.
+const myCompleted = computed(() => {
+  const flowState = state.value?.flowState as any;
+  if (!flowState?.awaitingPlayers?.length) return false;
+  const myPlayerState = flowState.awaitingPlayers.find(
+    (p: { playerIndex: number }) => p.playerIndex === playerSeat.value
+  );
+  return !!myPlayerState?.completed;
+});
+
 // Whether the "Show action help" toggle has anything to reveal: true when any
 // currently-available action carries help text or a disabled reason — mirrors
 // the exact condition ActionPanel uses to render the per-action "?" affordance
@@ -636,37 +660,50 @@ const playersWithConnection = computed(() => {
     return connected === undefined ? p : { ...p, connected };
   });
 });
+// D27: never derive a single-player "It is X's turn" identity while a
+// simultaneous step is active — multiple seats are deciding independently,
+// so `currentPlayer` (which may still hold a stale/unrelated value) does
+// not represent "whose turn it is" the way it does in a turn-based step.
 const currentPlayerName = computed(() => {
+  if (isSimultaneous.value) return '';
   const currentPos = state.value?.state?.currentPlayer;
   if (currentPos === undefined) return '';
   const player = players.value.find(p => p.seat === currentPos);
   return player?.name || `Player ${currentPos + 1}`;
 });
-// Awaiting player seats during simultaneous action steps
+// Awaiting player seats during simultaneous action steps — EXCLUDES the
+// viewer's own seat (D27 self-filter, T-160-28): the viewer's own
+// awaiting/not-completed status is already surfaced via `availableActions`
+// (action buttons render), so listing it here too produces the "Your move"
+// + "waiting" contradiction. This list names only co-deciders.
 const awaitingPlayerSeats = computed(() => {
   const flowState = state.value?.flowState as any;
   if (!flowState?.awaitingPlayers?.length) return [];
   return flowState.awaitingPlayers
-    .filter((p: any) => !p.completed && p.availableActions.length > 0)
+    .filter((p: any) => !p.completed && p.availableActions.length > 0 && p.playerIndex !== playerSeat.value)
     .map((p: any) => p.playerIndex);
 });
 
 // Awaiting player info for ActionPanel (names + colors for waiting message)
+// — same self-filter as awaitingPlayerSeats above (D27).
 const awaitingPlayerNames = computed(() => {
   const flowState = state.value?.flowState as any;
   if (!flowState?.awaitingPlayers?.length) return [];
   return flowState.awaitingPlayers
-    .filter((p: any) => !p.completed && p.availableActions.length > 0)
+    .filter((p: any) => !p.completed && p.availableActions.length > 0 && p.playerIndex !== playerSeat.value)
     .map((p: any) => {
       const player = players.value.find(pl => pl.seat === p.playerIndex);
       return { seat: p.playerIndex, name: player?.name || `Player ${p.playerIndex}`, color: typeof (player as any)?.color === 'string' ? (player as any).color : undefined };
     });
 });
 
-// Active player (whose turn it is, or first awaiting) for the action-bar turn
-// token. index → token shape; matches the PlayersPanel ordering.
+// Active player (whose turn it is) for the action-bar turn token. D27:
+// suppressed during a simultaneous step — a single PlayerToken cannot
+// represent "multiple seats deciding independently" without itself being
+// the misleading single-identity status this fix removes.
 const activePlayer = computed(() => {
-  const seat = state.value?.state?.currentPlayer ?? awaitingPlayerSeats.value[0];
+  if (isSimultaneous.value) return null;
+  const seat = state.value?.state?.currentPlayer;
   if (seat === undefined) return null;
   const index = players.value.findIndex(p => p.seat === seat);
   if (index < 0) return null;
@@ -2401,6 +2438,7 @@ if ((import.meta as any).hot) {
                 :players="players"
                 :player-seat="playerSeat"
                 :is-my-turn="isMyTurn && !isViewingHistory"
+                :completed="myCompleted"
                 :can-undo="canUndo && !isViewingHistory"
                 :auto-end-turn="autoEndTurn"
                 :messages="gameMessages"

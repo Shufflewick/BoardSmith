@@ -66,12 +66,14 @@ interface PlayerLike {
 
 /**
  * Mirrors `GameShell.vue`'s `awaitingPlayerSeats` / `awaitingPlayerNames`
- * computeds AS THEY EXIST ON DISK RIGHT NOW (pre-D27-fix): both filter on
- * `!p.completed && p.availableActions.length > 0` only — no exclusion of
- * the viewer's own seat (`playerSeat`). This is the exact bug: the viewer
- * appears in its own "Waiting for: ..." list.
+ * computeds AS FIXED (D27, Plan 03 Task 2): both filter on
+ * `!p.completed && p.availableActions.length > 0 && p.playerIndex !==
+ * playerSeat` — the viewer's own seat is excluded from its own "Waiting
+ * for: ..." list. If GameShell's computed changes, this harness must be
+ * updated to match (same convention as the `showHintProp` harness above in
+ * this file's sibling `GameShell.test.ts`).
  */
-function buildAwaitingHarnessCurrent(
+function buildAwaitingHarness(
   playerSeatValue: number,
   flowStateValue: FlowStateLike,
   playersValue: PlayerLike[],
@@ -84,7 +86,7 @@ function buildAwaitingHarnessCurrent(
     const fs = flowState.value;
     if (!fs?.awaitingPlayers?.length) return [];
     return fs.awaitingPlayers
-      .filter((p) => !p.completed && p.availableActions.length > 0)
+      .filter((p) => !p.completed && p.availableActions.length > 0 && p.playerIndex !== playerSeat.value)
       .map((p) => p.playerIndex);
   });
 
@@ -92,7 +94,7 @@ function buildAwaitingHarnessCurrent(
     const fs = flowState.value;
     if (!fs?.awaitingPlayers?.length) return [];
     return fs.awaitingPlayers
-      .filter((p) => !p.completed && p.availableActions.length > 0)
+      .filter((p) => !p.completed && p.availableActions.length > 0 && p.playerIndex !== playerSeat.value)
       .map((p) => {
         const player = players.value.find((pl) => pl.seat === p.playerIndex);
         return {
@@ -107,9 +109,9 @@ function buildAwaitingHarnessCurrent(
 }
 
 describe('GameShell awaitingPlayerNames/awaitingPlayerSeats — self-filter (D27, SIM-04)', () => {
-  it('SF-1 (RED pre-fix): the viewer\'s OWN seat appears in its own "Waiting for" list', () => {
+  it('SF-1: the viewer\'s OWN seat never appears in its own "Waiting for" list', () => {
     // Viewer is seat 0; both seat 0 and seat 1 are awaiting and not completed.
-    const { awaitingPlayerNames, awaitingPlayerSeats } = buildAwaitingHarnessCurrent(
+    const { awaitingPlayerNames, awaitingPlayerSeats } = buildAwaitingHarness(
       0,
       {
         awaitingPlayers: [
@@ -123,12 +125,10 @@ describe('GameShell awaitingPlayerNames/awaitingPlayerSeats — self-filter (D27
       ],
     );
 
-    // Desired (post-fix) behavior: the viewer's own name/seat is EXCLUDED.
-    // Pre-fix this assertion fails — 'You' IS in the list (the bug).
     expect(awaitingPlayerNames.value.map((p) => p.name)).not.toContain('You');
     expect(awaitingPlayerSeats.value).not.toContain(0);
 
-    // Co-decider must still be present either way (negative control).
+    // Co-decider must still be present (negative control).
     expect(awaitingPlayerNames.value.map((p) => p.name)).toContain('Ari');
     expect(awaitingPlayerSeats.value).toContain(1);
   });
@@ -172,10 +172,6 @@ function mountConfirmPanel(opts: { completed: boolean; sendAction: ReturnType<ty
       availableActions: ['confirm'],
       playerSeat: 0,
       isMyTurn: true,
-      // Not yet a real prop pre-fix — passed anyway so the RED assertion
-      // proves the CURRENT source ignores it, and the GREEN assertion (Task
-      // 2) proves the fixed source honors it. Extra unknown props are
-      // harmless on a Vue SFC (fall through as attrs).
       completed: opts.completed,
     } as Record<string, unknown>,
   });
@@ -184,7 +180,7 @@ function mountConfirmPanel(opts: { completed: boolean; sendAction: ReturnType<ty
 }
 
 describe('ActionPanel executeAction — commit-leak gate on own completed flag (D27, SIM-04)', () => {
-  it('CL-1 (RED pre-fix): a completed seat can still trigger executeAction (the leak)', async () => {
+  it('CL-1: a completed seat cannot trigger executeAction (the leak is closed)', async () => {
     const sendAction = vi.fn().mockResolvedValue({ success: true });
     const { wrapper } = mountConfirmPanel({ completed: true, sendAction });
 
@@ -193,8 +189,6 @@ describe('ActionPanel executeAction — commit-leak gate on own completed flag (
     await nextTick();
     await nextTick();
 
-    // Desired (post-fix) behavior: a completed seat's click never reaches
-    // sendAction. Pre-fix this assertion fails — sendAction WAS called.
     expect(sendAction).not.toHaveBeenCalled();
   });
 
