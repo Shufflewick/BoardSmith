@@ -26,7 +26,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, type PropType } from 'vue';
+import { defineComponent, nextTick, type PropType } from 'vue';
 import GameOverCard, { type Player } from './GameOverCard.vue';
 
 const PLAYERS: Player[] = [
@@ -51,12 +51,25 @@ const GameOverHarness = defineComponent({
     useCustomBoard: { type: Boolean, default: false },
   },
   emits: ['new-game', 'rematch', 'dismiss'],
+  data() {
+    return { dismissed: false };
+  },
+  methods: {
+    // Mirrors GameShell.vue's dismissGameOver(): hide the card/slot, return
+    // focus to .boardregion, and emit 'dismiss' for the parent to observe —
+    // does NOT touch rematch/new-game.
+    onDismiss() {
+      this.dismissed = true;
+      this.$emit('dismiss');
+      (this.$refs.boardregion as HTMLElement | undefined)?.focus();
+    },
+  },
   template: `
-    <div class="boardregion">
+    <div class="boardregion" ref="boardregion" tabindex="-1">
       <div v-if="useCustomBoard" class="custom-board">Custom board UI</div>
       <div v-else class="empty-game-area">Add your game board in the #game-board slot</div>
 
-      <template v-if="complete && !providesOwnGameOverUI">
+      <template v-if="complete && !providesOwnGameOverUI && !dismissed">
         <slot
           v-if="$slots['game-over']"
           name="game-over"
@@ -65,7 +78,7 @@ const GameOverHarness = defineComponent({
           :is-draw="isDraw"
           :rematch="() => $emit('rematch')"
           :new-game="() => $emit('new-game')"
-          :dismiss="() => $emit('dismiss')"
+          :dismiss="onDismiss"
         />
         <GameOverCard
           v-else
@@ -74,7 +87,7 @@ const GameOverHarness = defineComponent({
           :is-draw="isDraw"
           @new-game="$emit('new-game')"
           @rematch="$emit('rematch')"
-          @dismiss="$emit('dismiss')"
+          @dismiss="onDismiss"
         />
       </template>
     </div>
@@ -126,5 +139,95 @@ describe.each([
 
     expect(wrapper.find('.game-over-card').exists()).toBe(false);
     expect(wrapper.find('.custom-game-over').exists()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3 — adversarial + parity (D10/ENDGAME-01):
+//   - Suppression is REAL DOM removal (not display:none/v-show) under both
+//     paths, parity-checked under both board modes.
+//   - The dev-WS degrade never fabricates "Draw" from a bare [] (GameOverCard
+//     side — see GameOverCard.test.ts for the labeling adversarial case).
+//   - Dismiss never fires rematch/new-game/restart and leaves the board
+//     reachable/focusable; the mounted game state (winnerSeats/players props)
+//     is untouched.
+// ---------------------------------------------------------------------------
+describe.each([
+  ['default board', false],
+  ['custom #game-board UI', true],
+] as const)('GameShell game-over — adversarial: suppression is real DOM removal (%s)', (_label, useCustomBoard) => {
+  it('the default card markup is entirely absent from wrapper.html() when #game-over slot is filled', () => {
+    const wrapper = mountHarness(
+      { complete: true, useCustomBoard },
+      { 'game-over': '<div class="custom-game-over">Custom result UI</div>' },
+    );
+
+    // Query the rendered HTML directly (not just .find().exists()) to rule out
+    // a display:none/v-show suppression masquerading as removal.
+    expect(wrapper.html()).not.toContain('game-over-card');
+    expect(wrapper.html()).not.toContain('game-over-title');
+  });
+
+  it('the default card markup is entirely absent from wrapper.html() when providesOwnGameOverUI=true', () => {
+    const wrapper = mountHarness({ complete: true, useCustomBoard, providesOwnGameOverUI: true });
+
+    expect(wrapper.html()).not.toContain('game-over-card');
+    expect(wrapper.html()).not.toContain('game-over-title');
+  });
+
+  it('neither the card nor the slot render when providesOwnGameOverUI=true even with a slot supplied', () => {
+    const wrapper = mountHarness(
+      { complete: true, useCustomBoard, providesOwnGameOverUI: true },
+      { 'game-over': '<div class="custom-game-over">Custom result UI</div>' },
+    );
+
+    expect(wrapper.html()).not.toContain('custom-game-over');
+  });
+});
+
+describe('GameShell game-over — adversarial: dismiss has no restart/leave side effect', () => {
+  it('clicking the close control emits ONLY "dismiss" — never "rematch" or "new-game"', async () => {
+    const wrapper = mountHarness({ complete: true, winnerSeats: [0] });
+
+    await wrapper.find('[aria-label="Close"]').trigger('click');
+
+    expect(wrapper.emitted('dismiss')).toHaveLength(1);
+    expect(wrapper.emitted('rematch')).toBeUndefined();
+    expect(wrapper.emitted('new-game')).toBeUndefined();
+  });
+
+  it('pressing Escape emits ONLY "dismiss" — never "rematch" or "new-game"', async () => {
+    const wrapper = mountHarness({ complete: true, winnerSeats: [0] });
+
+    await wrapper.find('.game-over-card').trigger('keydown', { key: 'Escape' });
+
+    expect(wrapper.emitted('dismiss')).toHaveLength(1);
+    expect(wrapper.emitted('rematch')).toBeUndefined();
+    expect(wrapper.emitted('new-game')).toBeUndefined();
+  });
+
+  it('after dismiss, the card is removed and the board region is present and focusable', async () => {
+    const wrapper = mountHarness({ complete: true, winnerSeats: [0] });
+
+    expect(wrapper.find('.game-over-card').exists()).toBe(true);
+
+    await wrapper.find('[aria-label="Close"]').trigger('click');
+    await nextTick();
+
+    expect(wrapper.find('.game-over-card').exists()).toBe(false);
+    const boardregion = wrapper.find('.boardregion');
+    expect(boardregion.exists()).toBe(true);
+    expect(boardregion.attributes('tabindex')).toBe('-1');
+  });
+
+  it('dismiss does not mutate the mounted game-state props (winnerSeats/players untouched)', async () => {
+    const winnerSeats = [0];
+    const wrapper = mountHarness({ complete: true, winnerSeats });
+
+    await wrapper.find('[aria-label="Close"]').trigger('click');
+
+    // The props passed in are the same reference/values post-dismiss — dismiss
+    // is presentation-only, it never touches game state (no restart/leave op).
+    expect(wrapper.props('winnerSeats')).toEqual(winnerSeats);
   });
 });

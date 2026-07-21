@@ -225,6 +225,29 @@ describe('GameOverCard — dismiss affordance (D10)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Task 3 — adversarial: the dev-WS degrade must NEVER fabricate "Draw" from a
+// bare empty winnerSeats array. Proves the empty-array-is-not-a-draw
+// invariant survives the fix (isDraw is the only thing that can produce "Draw").
+// ---------------------------------------------------------------------------
+describe('GameOverCard — adversarial: degrade never fakes a draw (D10)', () => {
+  it('renders exactly "Game Over" (never "Draw") when isDraw=false and winnerSeats=[]', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS, isDraw: false },
+    });
+
+    expect(wrapper.find('#game-over-title').text()).toBe('Game Over');
+  });
+
+  it('renders exactly "Game Over" (never "Draw") when isDraw is omitted entirely (defaults false)', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS },
+    });
+
+    expect(wrapper.find('#game-over-title').text()).toBe('Game Over');
+  });
+});
+
 describe('GameOverCard — A11Y-07 modal semantics', () => {
   it('has aria-modal="true" on the scrim', () => {
     const wrapper = mount(GameOverCard, {
