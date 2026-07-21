@@ -182,6 +182,9 @@ export function useAutoZoom(options: {
   function setZoom(value: number) {
     endStartup();
     userControlled = true;
+    // A frame already queued by a prior scheduleRefit is intentionally left to
+    // fire — its callback re-checks `userControlled` at fire-time (:140) and
+    // self-no-ops now that we've set it, so there's nothing to cancel here.
     zoomLevel.value = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
   }
 
