@@ -32,6 +32,8 @@ import { buildPickMetadata } from './action-metadata.js';
 import { resolveMultiSelect } from '../utils/resolve-multiselect.js';
 import { useActionController, type ActionMetadata } from '../../ui/composables/useActionController.js';
 import type { ChoiceSelection, ElementsSelection } from '../action/types.js';
+import { GameRunner } from '../../runtime/index.js';
+import { buildPlayerState } from '../../session/utils.js';
 
 // ============================================================================
 // Test game: registers one action per case (choice/elements x
@@ -262,5 +264,127 @@ describe('buildPickMetadata: function-valued multiSelect (AI-01 / C.2)', () => {
         values: [1],
       });
     });
+  });
+});
+
+// ============================================================================
+// SPACE-05 / D26: availableActions vs actionMetadata divergence (163-04)
+//
+// Root cause: `flowState.availableActions` (consumed via `availableActionsForSeat`
+// in `buildPlayerState`, utils.ts:453) is a SNAPSHOT computed once when the
+// action-step is entered (engine.ts:1494 `this.game.getAvailableActions(player)`).
+// `state.actionMetadata` (utils.ts:530 `buildActionMetadata`) re-checks each
+// action's `condition` LIVE at broadcast time and drops any action whose
+// condition is now false. If the condition flips false between step-entry and
+// broadcast (without the flow itself advancing), `availableActions` keeps the
+// stale entry while `actionMetadata` drops it -- the client offers an action it
+// cannot start, and `useActionController.start()` throws "No metadata for
+// action", stranding the panel.
+// ============================================================================
+
+class DivergenceGame extends Game<DivergenceGame, Player> {
+  board!: Space<DivergenceGame>;
+  conditionOpen = true;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.board = this.create(Space<DivergenceGame>, 'board');
+
+    this.registerAction(
+      Action.create<DivergenceGame>('conditional')
+        .condition((ctx) => (ctx.game as DivergenceGame).conditionOpen)
+        .execute(() => ({ success: true })),
+    );
+
+    this.registerAction(
+      Action.create<DivergenceGame>('always')
+        .execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          maxIterations: 5,
+          do: eachPlayer({
+            do: actionStep({ actions: ['conditional', 'always'] }),
+          }),
+        }),
+      }),
+    );
+  }
+}
+
+function makeDivergenceRunner(): GameRunner<DivergenceGame> {
+  const runner = new GameRunner<DivergenceGame>({
+    GameClass: DivergenceGame,
+    gameType: 'divergence-test',
+    gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'divergence-test' },
+  });
+  runner.start();
+  return runner;
+}
+
+describe('SPACE-05 (D26): availableActions and actionMetadata cannot diverge', () => {
+  it('drops a now-false-condition action from BOTH availableActions and actionMetadata (no divergence)', () => {
+    const runner = makeDivergenceRunner();
+
+    // Confirm the action-step snapshot captured 'conditional' while the
+    // condition was still true.
+    const preFlip = runner.getFlowState();
+    expect(preFlip?.availableActions).toContain('conditional');
+
+    // Flip the condition false WITHOUT advancing the flow -- this is the
+    // mid-step state mutation that produces the stale snapshot.
+    runner.game.conditionOpen = false;
+
+    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1, { includeActionMetadata: true });
+
+    const metadataKeys = Object.keys(state.actionMetadata ?? {});
+
+    // The two sets must agree -- neither contains the now-unavailable action.
+    expect(state.availableActions).not.toContain('conditional');
+    expect(metadataKeys).not.toContain('conditional');
+    expect(state.availableActions.slice().sort()).toEqual(metadataKeys.slice().sort());
+  });
+
+  it('negative control: a condition-true action appears in both sets', () => {
+    const runner = makeDivergenceRunner();
+
+    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1, { includeActionMetadata: true });
+    const metadataKeys = Object.keys(state.actionMetadata ?? {});
+
+    expect(state.availableActions).toContain('conditional');
+    expect(metadataKeys).toContain('conditional');
+    expect(state.availableActions).toContain('always');
+    expect(metadataKeys).toContain('always');
+    expect(state.availableActions.slice().sort()).toEqual(metadataKeys.slice().sort());
+  });
+
+  it('UI defense-in-depth: start() on a metadata-missing action does not throw and does not strand the board', async () => {
+    const actionMetadata = ref<Record<string, ActionMetadata> | undefined>({});
+    const availableActions = ref<string[]>(['ghostAction']);
+    const isMyTurn = ref(true);
+    const sendAction = vi.fn().mockResolvedValue({ success: true });
+
+    const controller = useActionController({
+      sendAction,
+      availableActions,
+      actionMetadata,
+      isMyTurn,
+      autoExecute: false,
+    });
+
+    let thrown: unknown = null;
+    let result: { success: boolean; error?: string } | undefined;
+    try {
+      result = await controller.start('ghostAction');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeNull();
+    expect(result?.success).toBe(false);
+    // The board stays interactive -- no wizard-mode action got pinned in place.
+    expect(controller.currentAction.value).toBeNull();
   });
 });
