@@ -40,7 +40,16 @@ On entry, before any other work, run the consistency check described in `${CLAUD
 ("Consistency Check"). Use literal `ls <file>` checks in the current directory, never
 `**/glob` patterns that search subfolders.
 
-Then resolve the session lock (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Lock"). Outcomes 1 and 2 below
+Then resolve the session lock (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Lock"). **First, check for the released/no-lock
+state:** if the lock line reads `Session Lock: none`, there is no live lock to classify — a
+cleanly-closed chunk's terminal `close` write always leaves it there
+(`${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md` "Bookkeeping Sequence"). Take the lock silently — write this session's
+identity and a fresh `date -u +%Y-%m-%dT%H:%M:%SZ` clock-read — and continue; do NOT warn. This is
+what stops the same-day false alarm after a clean close: a later same-day session resuming a
+DIFFERENT next chunk finds `Session Lock: none`, not a stale-but-different lock, and never enters
+the three outcomes below.
+
+If the lock is NOT `none`, outcomes 1 and 2 below
 compare the lock against **the chunk this session is about to resume**, so identify that target
 first: from `SKETCH.md`'s ordered chunk list (a read the consistency check above already
 performs), the resume target is the first chunk whose status is neither `verified` nor
@@ -49,7 +58,8 @@ in hand can the lock be classified. Implement ALL THREE outcomes literally, neve
 into one branch:
 
 1. **Same chunk resume** — the lock names the same chunk this session is about to resume.
-   This is NOT stale and does not warn. Refresh the lock's timestamp silently and continue.
+   This is NOT stale and does not warn. Refresh the lock's timestamp (a fresh `date -u
+   +%Y-%m-%dT%H:%M:%SZ` read) silently and continue.
 2. **Different, live lock** — the lock is less than 24 hours old and names different work than
    this session is about to touch. This is a live concurrent session: warn the user instead of
    silently clobbering it, and stop for their decision before proceeding.
@@ -199,9 +209,10 @@ Light-path status transitions (cite `state-machine.md` "Step Names (exact, light
 restate the transition rule beyond this pointer): the light path has no `ask` step, so
 `approved` is **unreachable** for light chunks — a light chunk moves `proposed → built` directly
 when the user accepts the proposal and `build` + `test` complete. Because the light path has no
-`close` step, `playtest` performs `close`'s bookkeeping for light chunks — the **three-item**
+`close` step, `playtest` performs `close`'s bookkeeping for light chunks — the **four-item**
 sequence `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Step Names (exact, light path — trivial chunks)" lists: bisect-anchor commit hash,
-Status line update CHUNK.md-then-SKETCH.md, and decision rollup (see `${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md`'s
+Status line update CHUNK.md-then-SKETCH.md, decision rollup, and the terminal session-lock
+release to `Session Lock: none` (see `${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md`'s
 `## Bookkeeping Sequence`, the exact sequence a light-path chunk runs on its own behalf). A
 light-path chunk does **not** detail the sketch tail or propose the next chunk from inside
 `playtest`: tail re-derivation is `close`'s user-gated `## Sketch-Tail Delta Gate`, which the

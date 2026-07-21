@@ -22,13 +22,13 @@ section BY NAME — a light-path chunk (`build, test, playtest`, no `close` step
 this exact sequence from inside its own `playtest` step, on this chunk's behalf, once its
 Verified Checklist is confirmed.
 
-The light path reuses **only** this three-item sequence. It does NOT run the `## Sketch-Tail
+The light path reuses **only** this four-item sequence. It does NOT run the `## Sketch-Tail
 Delta Gate` or `## Propose the Next Chunk` sections below — both are user-gated duties of a full
 `close`. A light-path chunk therefore defers sketch-tail re-derivation and the next-chunk
 proposal to `build-chunk.md` Step 2's lazy tail-entry detailing (which derives any undetailed
 tail entry when routing next reaches it) or to the next full chunk's `close`; it never silently
 details the tail from inside `playtest`. This matches `state-machine.md` "Step Names (exact, light
-path — trivial chunks)", which lists exactly these three light-path bookkeeping items and no tail
+path — trivial chunks)", which lists exactly these four light-path bookkeeping items and no tail
 detailing.
 
 1. **Status already landed; this step's own duty starts after.** `playtest` already wrote
@@ -53,6 +53,17 @@ detailing.
    revise-round resolutions into `DECISIONS.md`'s append-only ledger, one entry per decision, so
    a future session (or `/bs-check-status`) can see what this chunk actually settled without
    re-reading its whole CHUNK.md.
+
+4. **Release the lock.** The FINAL write of this Bookkeeping Sequence: set SKETCH.md's
+   `Session Lock:` line back to `Session Lock: none` (`templates/SKETCH.template.md`), so a
+   cleanly-closed chunk leaves NO live lock behind — cite `state-machine.md` "Session Lock" for
+   the release semantics. This release is the terminal write of the sequence: every
+   CHUNK.md/SKETCH.md write above (the Status write already landed by `playtest`, the commit hash,
+   the decision rollup) is append-only — never a rewrite/overwrite of existing CHUNK.md content,
+   cite `state-machine.md` "Write Order" — and the lock release is the last thing written. Because
+   this section is reused BY NAME from `playtest.md`'s light path (see above), the light path runs
+   this release too: a verified terminal chunk closed on the light path also ends with
+   `Session Lock: none`.
 
 ## Sketch-Tail Delta Gate
 

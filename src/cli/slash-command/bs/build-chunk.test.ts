@@ -115,6 +115,12 @@ const REFERENCED_PATHS = [
 /** Phase 146 forward-reference stub marker build-chunk.md's routing table must carry. */
 const FORWARD_REFERENCE_MARKERS = ['authored in Phase 146'] as const;
 
+/** SKILLDEF-01: the released/no-lock value a clean close writes as its terminal write. */
+const SESSION_LOCK_NONE = 'Session Lock: none';
+
+/** SKILLDEF-01: the exact clock-read command — the only sanctioned lock-timestamp source. */
+const LOCK_CLOCK_READ = 'date -u +%Y-%m-%dT%H:%M:%SZ';
+
 describe('BUILD-01 — resume routing', () => {
   it('build-chunk.md contains the full-ceremony step list verbatim', () => {
     const buildChunk = read('build-chunk.md');
@@ -713,7 +719,7 @@ describe('UIQ-05 — final-acceptance router coherence (146-REVIEW CR/WR fixes, 
     expect(fa).toMatch(/still applies/i);
   });
 
-  it('CR-03: light-path close bookkeeping is the 3-item sequence, with NO false sketch-tail-detailing citation', () => {
+  it('CR-03: light-path close bookkeeping is the 4-item sequence (incl. lock release), with NO false sketch-tail-detailing citation', () => {
     const buildChunk = read('build-chunk.md');
     const playtest = read('build/playtest.md');
     // The false "detail the next 2-3 sketch-tail entries" citation must be gone from both files.
@@ -722,9 +728,10 @@ describe('UIQ-05 — final-acceptance router coherence (146-REVIEW CR/WR fixes, 
     // Both must route light-path tail handling to Step 2's lazy detailing and cite the delta gate as NOT run.
     expect(buildChunk).toMatch(/lazy tail-entry detailing/i);
     expect(playtest).toContain('## Sketch-Tail Delta Gate');
-    // close.md must state the light path reuses ONLY the three-item Bookkeeping Sequence.
+    // close.md must state the light path reuses ONLY the four-item Bookkeeping Sequence
+    // (SKILLDEF-01 added the terminal lock-release step as item 4).
     const close = read('build/close.md');
-    expect(close).toMatch(/light path reuses \*\*only\*\* this three-item sequence/i);
+    expect(close).toMatch(/light path reuses \*\*only\*\* this four-item sequence/i);
   });
 
   it('WR-01: build-chunk.md calls final-acceptance a 7-point check, never 6-point', () => {
@@ -823,6 +830,48 @@ describe('UIQ-05 — final-acceptance coherent-cluster fixes (146-REVIEW iter-2 
     }
     // The label must match state-machine.md's actual heading byte-for-byte.
     expect(read('state-machine.md')).toContain(`## ${LABEL}`);
+  });
+});
+
+describe('SKILLDEF-01 — close releases the session lock (terminal, append-only)', () => {
+  it('close.md contains a terminal "Release the lock" step and sets Session Lock: none', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/release the lock/i);
+    expect(close).toContain(SESSION_LOCK_NONE);
+  });
+
+  it('close.md states the release is the terminal write and every write in the sequence is append-only', () => {
+    const close = read('build/close.md');
+    expect(close).toContain('terminal write');
+    expect(close).toMatch(/append-only/i);
+  });
+
+  it('state-machine.md Write Order documents the append-only-close / terminal-release invariant', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/append-only end-to-end/i);
+    expect(stateMachine).toContain('terminal write');
+    expect(stateMachine).toContain(SESSION_LOCK_NONE);
+  });
+
+  it('build-chunk.md Step 0 recognizes a released/no-lock (Session Lock: none) state and does not warn', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toContain(SESSION_LOCK_NONE);
+    expect(buildChunk).toMatch(/released\/no-lock/i);
+    expect(buildChunk).toContain('do NOT warn');
+  });
+
+  it('build-chunk.md and state-machine.md both name the clock-read command for lock take/refresh', () => {
+    const buildChunk = read('build-chunk.md');
+    const stateMachine = read('state-machine.md');
+    expect(buildChunk).toContain(LOCK_CLOCK_READ);
+    expect(stateMachine).toContain(LOCK_CLOCK_READ);
+  });
+
+  it('a same-day resume of a different next chunk after a clean close does not warn (spec text, close→Step0)', () => {
+    const stateMachine = read('state-machine.md');
+    const buildChunk = read('build-chunk.md');
+    expect(stateMachine).toMatch(/same-day session that resumes a\s+DIFFERENT next chunk/i);
+    expect(buildChunk).toMatch(/same-day false alarm after a clean close/i);
   });
 });
 
