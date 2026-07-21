@@ -68,6 +68,22 @@ describe('announceGameOver', () => {
   });
 });
 
+// ── Phase 157 (D10/ENDGAME-01): draw vs unknown announcement ────────────────
+// PROC-01: written against CURRENT source. announceGameOver has no isDraw
+// parameter yet, so a genuine draw (winners=[], isDraw=true) collapses into
+// the same "Game over" text as the unknown/degrade case — the RED failure.
+describe('announceGameOver — draw vs unknown (D10)', () => {
+  it('announces "Draw" for a genuine draw (winners=[], isDraw=true)', () => {
+    expect(announceGameOver([], true)).toContain('Draw');
+    expect(announceGameOver([], true)).not.toBe('Game over');
+  });
+
+  it('still announces "Game over" (not "Draw") when winner data is unavailable (isDraw=false)', () => {
+    // Negative control: must pass today and keep passing post-fix.
+    expect(announceGameOver([], false)).toBe('Game over');
+  });
+});
+
 // ── awaitingPlayers → polite region (opponent turn) ──────────────────────────
 
 describe('announceOpponentTurn', () => {

@@ -130,6 +130,101 @@ describe('GameOverCard — structure', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Phase 157 (D10/ENDGAME-01): draw vs unknown labeling, no-winner-token
+// invariant, and the dismiss affordance (close button + Escape).
+//
+// PROC-01: these are written against CURRENT source and must RED for the
+// reason a player would report — "it said Game Over but it was a draw",
+// "nothing happens when I press Escape / there is no way to close it".
+// ---------------------------------------------------------------------------
+describe('GameOverCard — draw vs unknown labeling (D10)', () => {
+  it('labels a genuine draw "Draw" when isDraw=true and winnerSeats=[]', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS, isDraw: true },
+    });
+
+    // Pre-fix: the component has no isDraw prop at all — Vue silently drops
+    // the extra prop and titleText falls back to the current "Game Over"
+    // behavior. This must read "Draw", not "Game Over".
+    expect(wrapper.find('#game-over-title').text()).toBe('Draw');
+  });
+
+  it('does not render any winner tokens for a draw', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS, isDraw: true },
+    });
+
+    expect(wrapper.find('.winners').exists()).toBe(false);
+  });
+
+  it('stays "Game Over" (not "Draw") when isDraw=false and winnerSeats=[] — the unknown/degrade case', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS, isDraw: false },
+    });
+
+    // Negative control: this must already pass today (no regression) and
+    // must keep passing post-fix — proves the fix doesn't flip degrade to "Draw".
+    expect(wrapper.find('#game-over-title').text()).toBe('Game Over');
+  });
+
+  it('a single winner still reads "{name} wins" regardless of isDraw default (negative control)', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [0], players: PLAYERS },
+    });
+
+    expect(wrapper.find('#game-over-title').text()).toBe('Alice wins');
+  });
+});
+
+describe('GameOverCard — dismiss affordance (D10)', () => {
+  it('renders a close control with aria-label="Close"', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS },
+    });
+
+    // Pre-fix: no close control exists at all.
+    expect(wrapper.find('[aria-label="Close"]').exists()).toBe(true);
+  });
+
+  it('the close control is a real hit target (not decorative)', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS },
+    });
+
+    const closeControl = wrapper.find('[aria-label="Close"]');
+    expect(closeControl.exists()).toBe(true);
+    expect(closeControl.element?.tagName).toBe('BUTTON');
+  });
+
+  it('clicking the close control emits "dismiss"', async () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS },
+    });
+
+    const closeControl = wrapper.find('[aria-label="Close"]');
+    if (closeControl.exists()) {
+      await closeControl.trigger('click');
+    }
+
+    // Pre-fix: no close control → nothing ever emits 'dismiss'.
+    expect(wrapper.emitted('dismiss')).toBeTruthy();
+  });
+
+  it('pressing Escape on the card emits "dismiss"', async () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS },
+    });
+
+    await wrapper.find('.game-over-card').trigger('keydown', { key: 'Escape' });
+
+    // Pre-fix: useFocusTrap is configured with escapeToClose:false, so Escape
+    // is swallowed and no 'dismiss' is ever emitted (the doc comment says so
+    // explicitly: "Escape does NOT close").
+    expect(wrapper.emitted('dismiss')).toBeTruthy();
+  });
+});
+
 describe('GameOverCard — A11Y-07 modal semantics', () => {
   it('has aria-modal="true" on the scrim', () => {
     const wrapper = mount(GameOverCard, {
