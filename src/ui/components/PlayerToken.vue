@@ -13,6 +13,7 @@
  */
 import { computed } from 'vue';
 import { contrastInk } from '../utils/color-contrast';
+import { devWarn } from '../../utils/dev.js';
 
 const SHAPES = [
   'sh-circle',
@@ -60,7 +61,29 @@ function initial(): string {
 // loud on a color we were actually given).
 const DEFAULT_INK = { ink: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,.5)' } as const;
 
-const ink = computed(() => (props.color ? contrastInk(props.color) : DEFAULT_INK));
+// CR-02: `contrastInk()` is deliberately fail-loud for a color it can't parse
+// (see its own docstring), but `props.color` is a plain `string` at the
+// public `createColorOption()` API boundary — no format is enforced there, so
+// any legal CSS color contrastInk doesn't recognize would otherwise throw
+// INSIDE this computed, crashing the whole players panel/rail/turn indicator
+// render, not just degrading contrast. Render paths must fail visible, not
+// fatal: catch the throw, degrade to DEFAULT_INK, and warn once (per
+// offending color string) so the game author sees an actionable diagnostic
+// instead of a silent wrong-contrast guess.
+const ink = computed(() => {
+  if (!props.color) return DEFAULT_INK;
+  try {
+    return contrastInk(props.color);
+  } catch (err) {
+    devWarn(
+      `player-token-unparseable-color:${props.color}`,
+      `PlayerToken received a color ("${props.color}") that contrastInk() can't parse — ` +
+        `falling back to the default ink instead of crashing. ` +
+        `${err instanceof Error ? err.message : String(err)}`
+    );
+    return DEFAULT_INK;
+  }
+});
 </script>
 
 <template>
