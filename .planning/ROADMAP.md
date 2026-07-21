@@ -160,12 +160,11 @@ Plans:
 4. A library-class name collision (`Hand`) is surfaced actionably, not silently renamed to `Hand2` (D25).
 5. `availableActions` and `actionMetadata` cannot diverge into a `start()` "No metadata" board-stranding (D26).
 6. Each item is closed via fix + regression test + adversarial verify (PROC-01).
-**Plans** (suggested breakdown; finalized at plan-phase):
-- Sealed/append-only Space + restore-safe `onExit` [SPACE-01]
-- Space removal / re-parenting [SPACE-02]
-- Hidden-Space child-count serializer fix [SPACE-03]
-- Class-name-collision surfacing (replace silent rename) [SPACE-04]
-- `availableActions`/`actionMetadata` consistency guard [SPACE-05]
+**Plans**: 4 plans in 2 waves
+- [ ] 163-01-PLAN.md — Sealed/append-only Space + Space removal/re-parent (lift moveToInternal to GameElement) [SPACE-01, SPACE-02]
+- [ ] 163-02-PLAN.md — Hidden-Space child-count serializer suppression [SPACE-03]
+- [ ] 163-03-PLAN.md — Class-name-collision guard (replace silent registry clobber) [SPACE-04]
+- [ ] 163-04-PLAN.md — availableActions/actionMetadata single-source reconciliation + UI no-op [SPACE-05]
 
 #### Phase 164: Library Misc — Action-Panel, Loop, Visual, Debug-View
 **Goal**: The remaining single-game library defects are fixed — per-action dock suppression (with the blunt `suppress-action-panel` prop fenced behind an explicit escape hatch, delivering feature C.3's library half), an unbounded-game `loop()` valve, a non-white token glyph ink, and a time-travel debug view that doesn't commit clicks against the live engine.
