@@ -122,7 +122,7 @@ the fix holds → only then close.**
   library half of feature **C.3**; the skills half is SKILLDEF-03.
 - [x] **LIBX-02** (D29, Lanternfall, Minor): `loop()` can express an unbounded game via an explicit
   valve, and the `maxIterations` exit is neither silent nor winnerless — it is documented and observable.
-- [ ] **LIBX-03** (D30, Lanternfall, Med/visual): `PlayerToken` glyph ink is not hardcoded white, so the
+- [x] **LIBX-03** (D30, Lanternfall, Med/visual): `PlayerToken` glyph ink is not hardcoded white, so the
   chip is not blank on light seat colors.
 - [ ] **LIBX-04** (D31, Lanternfall, Med/dev): The time-travel debug view no longer desyncs `#game-board`
   such that clicks commit against the live engine.
