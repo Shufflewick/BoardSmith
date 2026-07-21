@@ -22,6 +22,9 @@ import {
   Hand,
   Space,
   Card,
+  Piece,
+  HexGrid,
+  HexCell,
   Action,
   defineFlow,
   loop,
@@ -576,5 +579,101 @@ describe('assertNoHiddenInfoLeak — Task 3 adversarial: elementId-keying cannot
     p1Card.rank = String(p2Hand.id);
 
     await expect(assertNoHiddenInfoLeak(tg, 2)).rejects.toThrow(/hidden-info leak/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CR-01: AGGREGATION — a hidden PIECE's identity leaks not through its OWN
+// surface but through an ANCESTOR's aggregated markup (HexBoardRenderer.vue's
+// hexCellAriaLabel/<title> fold occupant piece names into the CELL's
+// aria-label and each piece's own <title>). The cell (and everything inside
+// the hex board) carries no `data-element-id` of its own -- only the
+// enclosing top-level Space does (SpaceRenderer.vue) -- so a surface deep
+// inside the hex board gets attributed (via findOwningElementId's ancestor
+// walk) to that ENCLOSING SPACE's id, never to the piece's own id. A matcher
+// that blanket-skips "surface owner != marker.elementId" treats that as a
+// same-valued sibling's own legitimate identity and drops the check --
+// exactly the false negative CR-01 describes. The fix must still catch this
+// because the enclosing Space's OWN legitimate identity (its own name) does
+// not explain the piece's name appearing on that surface.
+// ---------------------------------------------------------------------------
+
+class AggregationPiece extends Piece<HexAggregationGame> {}
+
+class AggregationHexCell extends HexCell<HexAggregationGame> {
+  q!: number;
+  r!: number;
+}
+
+class HexAggregationGame extends Game<HexAggregationGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([AggregationPiece, AggregationHexCell]);
+
+    // Top-level, all-visible Space wrapping the hex board -- this is the ONLY
+    // element in the subtree that ends up with `data-element-id` (SpaceRenderer
+    // stamps it on the Space container; HexBoardRenderer's cells/pieces never
+    // carry `data-element-id`, only `data-bs-el-id` via anchorAttrs).
+    const boardSpace = this.create(Space, 'board-space');
+    boardSpace.contentsVisible();
+
+    const hexGrid = boardSpace.create(HexGrid, 'hex-grid');
+    hexGrid.contentsVisible();
+
+    const cell = hexGrid.create(AggregationHexCell, 'cell-0-0', { q: 0, r: 0 });
+    cell.contentsVisible();
+
+    // The occupant piece is individually hidden from seat 2 (showOnlyTo keeps
+    // a stable placeholder id -- game.ts's FLIP-animation branch -- with
+    // `name` dropped from the redacted node).
+    const piece = cell.create(AggregationPiece, 'SecretScout');
+    piece.showOnlyTo(1);
+
+    this.registerAction(
+      Action.create<HexAggregationGame>('pass').execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: () => false,
+          maxIterations: 10,
+          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+        }),
+      }),
+    );
+  }
+}
+
+function makeHexAggregationGame(): TestGame<HexAggregationGame> {
+  return TestGame.create(HexAggregationGame, { playerCount: 2, seed: 'dom-leak-hex-agg-01' });
+}
+
+describe('assertNoHiddenInfoLeak — CR-01 regression: aggregation leak (hidden piece name folded into an ancestor cell/Space surface)', () => {
+  it('does NOT throw on the correctly-redacted view (piece name absent from the hidden placeholder)', async () => {
+    const tg = makeHexAggregationGame();
+    await expect(assertNoHiddenInfoLeak(tg, 2)).resolves.not.toThrow();
+  });
+
+  it('THROWS when the hidden piece leaks its name ONLY via the aggregating cell/Space surface (aria-label/title), not via its own owned surface', async () => {
+    const tg = makeHexAggregationGame();
+    const piece = tg.game.first(AggregationPiece, { name: 'SecretScout' })!;
+
+    // Simulate a redaction bug: start from the correctly-redacted seat-2 view
+    // (name absent from the hidden placeholder) and re-inject the real name
+    // onto the hidden piece's OWN node id -- exactly what a renderer
+    // computing hexCellAriaLabel/<title> from a source that bypasses
+    // redaction would produce. The resulting leak surfaces on the CELL's
+    // aria-label and the piece's own <title>, neither of which carries
+    // `data-element-id` -- only the enclosing Space does.
+    const leaky = cloneJson(tg.getPlayerView(2).state) as unknown as ElementJSON;
+    const node = findNodeById(leaky, piece.id);
+    expect(node).toBeDefined();
+    expect(node!.attributes?.__hidden).toBe(true);
+    node!.name = piece.name;
+
+    await expect(
+      assertNoHiddenInfoLeak(tg, 2, { gameViewOverride: leaky as unknown as HiddenInfoGameView }),
+    ).rejects.toThrow(/hidden-info leak/i);
   });
 });

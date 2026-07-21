@@ -326,17 +326,34 @@ function collectSurvivingValues(node: ElementJSON): Set<string> {
   return values;
 }
 
+/** Result of {@link deriveLeakDetectionData}: forbidden markers plus, for every
+ * VISIBLE element, the set of values that are that element's OWN legitimate
+ * rendered identity (name/attributes it is actually allowed to show). */
+interface LeakDetectionData {
+  markers: ForbiddenMarker[];
+  /** elementId -> the element's own surviving (legitimate) identity values. */
+  ownValuesById: Map<number, Set<string>>;
+}
+
 /**
- * Derive the forbidden-marker set for `seat`: for every live element, compare
+ * Derive the forbidden-marker set for `seat` (for every live element, compare
  * its FULL unfiltered identity against what survives into seat N's FINAL
- * per-seat tree (`game.toJSONForPlayer(seat)`, post-`playerView`).
+ * per-seat tree — `game.toJSONForPlayer(seat)`, post-`playerView`) AND, for
+ * every element that IS visible, its own surviving identity values.
+ *
+ * The `ownValuesById` map is what makes the D20/CR-01 exemption precise (see
+ * {@link assertNoHiddenInfoLeak}): a surface attributed to an ancestor/owner
+ * element can only be exempted from a marker check when the collision is
+ * fully explained by THAT owner's own legitimate content — never merely
+ * because the owner's id differs from the marker's element id.
  */
-function deriveForbiddenMarkers(game: Game, seat: number): ForbiddenMarker[] {
+function deriveLeakDetectionData(game: Game, seat: number): LeakDetectionData {
   const finalTree = game.toJSONForPlayer(seat) as ElementJSON;
   const nodesById = new Map<number, ElementJSON>();
   indexNodesById(finalTree, nodesById);
 
   const markers: ForbiddenMarker[] = [];
+  const ownValuesById = new Map<number, Set<string>>();
 
   for (const element of game.all(GameElement)) {
     const unfiltered = element.toJSON();
@@ -356,8 +373,10 @@ function deriveForbiddenMarkers(game: Game, seat: number): ForbiddenMarker[] {
     } else {
       // Element is visible in the final tree — only candidates the final tree
       // did NOT preserve (stripped by redaction OR a `static playerView` hook)
-      // are forbidden.
+      // are forbidden. The full surviving set is this element's OWN
+      // legitimate identity, recorded for the surface-exemption check.
       const surviving = collectSurvivingValues(node);
+      ownValuesById.set(element.id, surviving);
       for (const c of candidates) {
         if (!surviving.has(c.value)) {
           markers.push({ value: c.value, attribute: c.attribute, elementId: element.id, elementLabel });
@@ -367,7 +386,7 @@ function deriveForbiddenMarkers(game: Game, seat: number): ForbiddenMarker[] {
   }
 
   // Never treat an empty string as a marker — every value would trivially match.
-  return markers.filter((m) => m.value.length > 0);
+  return { markers: markers.filter((m) => m.value.length > 0), ownValuesById };
 }
 
 /**
@@ -431,7 +450,13 @@ function findOwningElementId(el: Element): number | undefined {
  * Each surface is attributed to its owning element id (D20 — see
  * {@link findOwningElementId}) so symmetric-deck siblings sharing an
  * identity `value` (e.g. two same-named cards) remain distinguishable by
- * WHICH element actually rendered the surface.
+ * WHICH element actually rendered the surface. The owner is only the
+ * NEAREST ancestor carrying `data-element-id` — it may be a container that
+ * merely happens to enclose the surface (e.g. an aggregating cell, or the
+ * enclosing Space when nothing closer stamps its own id), not necessarily
+ * the element whose identity the surface displays. See {@link
+ * assertNoHiddenInfoLeak}'s exemption logic (CR-01) for how that distinction
+ * is enforced.
  */
 function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceString[] {
   const root = wrapper.element as HTMLElement;
@@ -500,7 +525,7 @@ export async function assertNoHiddenInfoLeak<G extends Game>(
   seat: number,
   options: AssertNoHiddenInfoLeakOptions = {},
 ): Promise<void> {
-  const markers = deriveForbiddenMarkers(testGame.game, seat);
+  const { markers, ownValuesById } = deriveLeakDetectionData(testGame.game, seat);
   const { allow } = options;
   const activeMarkers = allow
     ? markers.filter(
@@ -534,13 +559,25 @@ export async function assertNoHiddenInfoLeak<G extends Game>(
 
     for (const marker of activeMarkers) {
       for (const surface of surfaces) {
-        // D20: a surface attributed to a DIFFERENT element than the marker's
-        // owning element cannot be the marker's leak — it's a same-valued
-        // (e.g. same-named symmetric-deck) sibling's own legitimate
-        // identity. Un-attributed surfaces (no owning `data-element-id`
-        // found) are checked against every marker regardless — never drop a
-        // possible leak just because it couldn't be attributed.
-        if (surface.ownerId !== undefined && surface.ownerId !== marker.elementId) continue;
+        // D20/CR-01: a surface attributed to a DIFFERENT element than the
+        // marker's owning element is exempted ONLY when that owner's OWN
+        // legitimate rendered identity (ownValuesById) already explains the
+        // collision — e.g. a same-named symmetric-deck sibling showing its
+        // own name. It is NOT exempted merely because the ids differ: an
+        // ancestor that AGGREGATES a hidden descendant's identity into its
+        // own surface (HexBoardRenderer's cell aria-label/<title> folding in
+        // occupant piece names — CR-01) is not explained by the owner's own
+        // identity and must still be checked. Un-attributed surfaces (no
+        // owning `data-element-id` found) are always checked against every
+        // marker — never drop a possible leak just because it couldn't be
+        // attributed.
+        if (
+          surface.ownerId !== undefined &&
+          surface.ownerId !== marker.elementId &&
+          ownValuesById.get(surface.ownerId)?.has(marker.value)
+        ) {
+          continue;
+        }
         if (surface.value.includes(marker.value)) {
           throw new Error(
             `Hidden-info leak: "${marker.value}"` +
