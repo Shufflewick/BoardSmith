@@ -124,6 +124,41 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
   }
 
   // ============================================
+  // Re-parent / remove (SPACE-02/D23)
+  // ============================================
+
+  /**
+   * Re-parent this Space under a new destination, reusing the shared
+   * `GameElement.moveToInternal` (163-01) so the cycle guards, this Space's
+   * OWN `onExit` (fired on the parent it leaves), and the destination's
+   * `onEnter` (if it is a Space) all fire exactly as they do for a Piece.
+   *
+   * This Space's children are NOT re-parented individually — they remain
+   * children of `this` (only `this._t.parent` changes), so they fire NO
+   * exit/enter events of their own.
+   *
+   * A sealed Space can still be re-parented: `sealed` fences REMOVAL OF A
+   * CHILD from this Space (D22), not this Space's own relocation (D23) —
+   * when this Space itself is moved, `oldParent` in `moveToInternal` is the
+   * grandparent (not this sealed Space), so the D22 guard is correctly inert
+   * here.
+   */
+  reparent(destination: GameElement, position?: 'first' | 'last'): void {
+    this.moveToInternal(destination, position);
+  }
+
+  /**
+   * Remove this Space from play, moving it to `game.pile` (mirrors
+   * `Piece.remove()`). Its own `onExit` fires on the parent it leaves; its
+   * children ride along unchanged.
+   */
+  remove(): void {
+    if (this.game.pile) {
+      this.reparent(this.game.pile);
+    }
+  }
+
+  // ============================================
   // Internal State
   // ============================================
 
