@@ -413,3 +413,76 @@ describe('assertNoHiddenInfoLeak — IN-01: over-broad allowlist that masks ever
     ).rejects.toThrow(/allowlist masked every marker/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// TOOL-04 (D20): symmetric-deck leak detection. `assertNoHiddenInfoLeak`
+// derives markers carrying `elementId` (`deriveForbiddenMarkers`) but, prior
+// to the fix, matches them by a bare `surface.includes(marker.value)`
+// substring test that ignores `elementId` entirely — so two elements sharing
+// the same `name` are indistinguishable. A hidden card and a legitimately
+// visible SAME-NAMED sibling collide: the visible sibling's own rendered
+// identity false-positives as a "leak" of the hidden card's identity.
+// ---------------------------------------------------------------------------
+
+class SymmetricCard extends Card<SymmetricDeckGame> {}
+
+class SymmetricDeckGame extends Game<SymmetricDeckGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([SymmetricCard]);
+
+    // Visible sibling: an all-visible table card named "Ace" — legitimately
+    // on screen for every seat.
+    const table = this.create(Space, 'table');
+    table.contentsVisible();
+    table.create(SymmetricCard, 'Ace');
+
+    // Hidden sibling: seat 2's own-hand card, ALSO named "Ace" (symmetric
+    // deck — identical name, different identity/element).
+    const player2 = this.all(Player).find((p) => p.seat === 2)!;
+    const hand2 = this.create(Hand, 'hand-2');
+    hand2.player = player2;
+    hand2.create(SymmetricCard, 'Ace');
+
+    this.registerAction(
+      Action.create<SymmetricDeckGame>('pass').execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: () => false,
+          maxIterations: 10,
+          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+        }),
+      }),
+    );
+  }
+}
+
+function makeSymmetricDeckGame(): TestGame<SymmetricDeckGame> {
+  return TestGame.create(SymmetricDeckGame, { playerCount: 2, seed: 'dom-leak-symmetric-01' });
+}
+
+describe('assertNoHiddenInfoLeak — TOOL-04 (D20): symmetric-deck (identical-named) siblings', () => {
+  it('does NOT false-positive on the visible sibling when only its own "Ace" is on screen', async () => {
+    const tg = makeSymmetricDeckGame();
+    // Seat 1 sees the table's visible "Ace" (its own identity) and seat 2's
+    // hand is correctly redacted (hidden "Ace" absent from the rendered
+    // tree). A name-only matcher can't tell the visible "Ace" apart from the
+    // hidden "Ace" marker and mis-fires; an elementId-keyed matcher must not.
+    await expect(assertNoHiddenInfoLeak(tg, 1)).resolves.not.toThrow();
+  });
+
+  it('still reports a leak when the hidden "Ace" itself is actually rendered', async () => {
+    const tg = makeSymmetricDeckGame();
+    // Deliberately bypass toJSONForPlayer's redaction — the raw, unfiltered
+    // state renders BOTH "Ace" cards, including the real hidden one under
+    // its own element id.
+    const unfilteredView = tg.game.toJSON() as unknown as HiddenInfoGameView;
+
+    await expect(
+      assertNoHiddenInfoLeak(tg, 1, { gameViewOverride: unfilteredView }),
+    ).rejects.toThrow(/hidden-info leak/i);
+  });
+});
