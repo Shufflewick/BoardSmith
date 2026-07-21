@@ -486,3 +486,95 @@ describe('assertNoHiddenInfoLeak — TOOL-04 (D20): symmetric-deck (identical-na
     ).rejects.toThrow(/hidden-info leak/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 3 adversarial: try to DEFEAT the D20 elementId-keyed fix. Proves
+// elementId-keying is not a blanket "same value elsewhere is fine" hole —
+// a real leak owned by the HIDDEN element's own id must still throw, and a
+// leak surface that can't be attributed to any specific element (no
+// `data-element-id` ancestor at all) must still throw via the conservative
+// fallback (T-162-04).
+// ---------------------------------------------------------------------------
+
+class AdversarialCard extends Card<AdversarialSymmetricGame> {}
+
+class AdversarialSymmetricGame extends Game<AdversarialSymmetricGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([AdversarialCard]);
+
+    // Two same-named "Ace" cards in the SAME all-visible zone: one stays
+    // genuinely visible to every seat; the other is individually hidden
+    // from seat 1 via `showOnlyTo` (which keeps a STABLE placeholder id in
+    // the redacted tree, per game.ts's FLIP-animation branch) — the
+    // precondition for injecting a leak under the hidden card's own id.
+    const table = this.create(Space, 'adversarial-table');
+    table.contentsVisible();
+    table.create(AdversarialCard, 'Ace');
+    const secret = table.create(AdversarialCard, 'Ace');
+    secret.showOnlyTo(2);
+
+    this.registerAction(
+      Action.create<AdversarialSymmetricGame>('pass').execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: () => false,
+          maxIterations: 10,
+          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+        }),
+      }),
+    );
+  }
+}
+
+function makeAdversarialSymmetricGame(): TestGame<AdversarialSymmetricGame> {
+  return TestGame.create(AdversarialSymmetricGame, {
+    playerCount: 2,
+    seed: 'dom-leak-adversarial-01',
+  });
+}
+
+describe('assertNoHiddenInfoLeak — Task 3 adversarial: elementId-keying cannot be defeated', () => {
+  it('a real leak forced into a surface owned by the HIDDEN card\'s own element id STILL throws', async () => {
+    const tg = makeAdversarialSymmetricGame();
+    const cards = tg.game.all(AdversarialCard);
+    const secret = cards.find((c) => !c.isVisibleTo(1))!;
+    expect(secret).toBeDefined();
+
+    // Start from the correctly-redacted seat-1 view (name absent from the
+    // hidden placeholder), then re-inject the real name onto the hidden
+    // card's OWN node id — exactly what a renderer bug that bypasses
+    // redaction would produce.
+    const leaky = cloneJson(tg.getPlayerView(1).state) as unknown as ElementJSON;
+    const node = findNodeById(leaky, secret.id);
+    expect(node).toBeDefined();
+    expect(node!.attributes?.__hidden).toBe(true);
+    node!.name = secret.name;
+
+    await expect(
+      assertNoHiddenInfoLeak(tg, 1, { gameViewOverride: leaky as unknown as HiddenInfoGameView }),
+    ).rejects.toThrow(/hidden-info leak/i);
+  });
+
+  it('a leak surface that cannot be attributed to any element (no data-element-id ancestor) STILL throws via the conservative fallback', async () => {
+    const tg = makeCardLeakGame();
+    const p1Card = tg.game.first(FixtureCard, { name: '1-secret-card' })!;
+    const p2Hand = tg.game.first(Hand, { name: 'hand-2' })!;
+
+    // `Hand` containers render `data-bs-el-id` (anchorAttrs) but NEVER their
+    // own `data-element-id` (only CardRenderer/PieceRenderer/DieRenderer/
+    // SpaceRenderer do), and a Hand created directly under the game root has
+    // no `data-element-id` ancestor either — so this collision surface is
+    // genuinely un-attributed. Forcing player 1's hidden rank to collide
+    // with player 2's visible Hand container id proves the fallback still
+    // scans un-attributed surfaces against every marker rather than
+    // silently dropping them (an elementId-scoped-only matcher with no
+    // fallback would miss this).
+    p1Card.rank = String(p2Hand.id);
+
+    await expect(assertNoHiddenInfoLeak(tg, 2)).rejects.toThrow(/hidden-info leak/i);
+  });
+});
