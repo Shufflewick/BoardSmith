@@ -33,7 +33,7 @@ program
   .option('-p, --port <port>', 'Dev host server port', '5173')
   .option('--host <host>', 'Host to bind the server to (default: 127.0.0.1, local-only; pass 0.0.0.0 or --lan to serve to your whole network; cannot be combined with --lan)')
   .option('--lan', 'Shorthand for --host 0.0.0.0 -- serves to your whole network (cannot be combined with --host)')
-  .option('--players <count>', 'Initial number of players', '2')
+  .option('--players <count>', 'Initial number of players (default: the game\'s minPlayers)')
   .option('--ai <players...>', 'Player positions to be AI (e.g., --ai 1 or --ai 2 4)')
   .option('--ai-level <level>', 'AI difficulty: easy, medium, hard, expert, or iteration count', 'medium')
   .option('--lock-teaching', 'Disable AI hint, move-quality heatmap, AI-vs-AI demo, and tutorial (action help stays enabled)')

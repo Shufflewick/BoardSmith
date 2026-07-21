@@ -29,7 +29,8 @@ interface DevOptions {
   port: string;
   host?: string;
   lan?: boolean;
-  players: string;
+  /** Unset when `--players` is not passed (D14: defaults to the game's minPlayers, resolved once it's known). */
+  players?: string;
   ai?: string[];
   aiLevel?: string;
   lockTeaching?: boolean;
@@ -89,6 +90,19 @@ export function resolveEffectivePlayerCount(playerCount: number, minPlayers: num
     );
   }
   return playerCount;
+}
+
+/**
+ * D14/DEVHOST-02: `--players` defaults to the game's `minPlayers` (not a
+ * hardcoded '2') so a bare `boardsmith dev` on a solo game (minPlayers=1,
+ * maxPlayers=1) starts instead of erroring (default 2 > max 1). An EXPLICIT
+ * `--players` is unaffected: it still runs through `parsePositiveInt` +
+ * `resolveEffectivePlayerCount`, which still throws on an out-of-range value
+ * naming the bound — this only changes what happens when the flag is unset.
+ */
+export function resolvePlayerCount(rawPlayers: string | undefined, minPlayers: number, maxPlayers: number): number {
+  if (rawPlayers === undefined) return minPlayers;
+  return resolveEffectivePlayerCount(parsePositiveInt('players', rawPlayers), minPlayers, maxPlayers);
 }
 
 /**
@@ -437,8 +451,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // Fail-fast on non-numeric --port/--players/--ai (CLIX-06) — actionable
   // errors before any server work, matching simulate.ts's Number.isInteger idiom.
   const port = exitOnDevFlagError(() => parsePositiveInt('port', options.port));
-  const playerCount = exitOnDevFlagError(() => parsePositiveInt('players', options.players));
   const aiPlayers = exitOnDevFlagError(() => parseAiSeats(options.ai));
+  // NOTE: --players is resolved AFTER gameDefinition loads (D14) — its default
+  // is the game's minPlayers, not a literal, so it cannot be parsed this early.
 
   // CLIX-04: default 127.0.0.1 (local-only); --lan / --host 0.0.0.0 opts into
   // LAN exposure. This REVERSES the previous LAN-by-default (0.0.0.0) per the
@@ -567,8 +582,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // CLIX-06 / F34 (Pitfall 3): out-of-range --players now ERRORS (naming the
   // bound) instead of silently clamping, and --ai seats are validated against
   // this EFFECTIVE count, not the raw pre-clamp CLI value — both checks must
-  // run here, after minPlayers/maxPlayers are known.
-  const effectivePlayerCount = exitOnDevFlagError(() => resolveEffectivePlayerCount(playerCount, minPlayers, maxPlayers));
+  // run here, after minPlayers/maxPlayers are known. D14: an UNSET --players
+  // defaults to minPlayers instead of a hardcoded '2'.
+  const effectivePlayerCount = exitOnDevFlagError(() => resolvePlayerCount(options.players, minPlayers, maxPlayers));
   exitOnDevFlagError(() => validateAiSeats(aiPlayers, effectivePlayerCount));
 
   const devConfig = buildDevConfig({
