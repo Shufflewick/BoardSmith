@@ -301,14 +301,16 @@ loop({
 ### `loop()` now throws at construction if `maxIterations` is missing
 
 As of v4.3, `loop()` **fails immediately when you define your flow** — not
-later, deep inside a running game — if you omit `maxIterations`:
+later, deep inside a running game — if you omit `maxIterations` (and, as of
+v4.8/LIBX-02, haven't opted into `unbounded: true` either):
 
 ```
-Error: loop() requires maxIterations.
-  Add an explicit safety limit:
-    loop({ maxIterations: 100, while: ..., do: ... })
-  Without it, the loop silently falls back to a 10000-iteration cap and
-  fails deep inside a running game instead of at flow-definition time.
+Error: loop() requires maxIterations, or an explicit unbounded: true opt-in
+  for a genuinely unbounded game.
+  Bounded:   loop({ maxIterations: 100, while: ..., do: ... })
+  Unbounded: loop({ unbounded: true, while: ..., do: ... })
+  A high global safety tripwire (10000 whole-flow steps) still applies
+  even when unbounded.
   See: https://boardsmith.io/docs/common-pitfalls#loop-safety
 ```
 
@@ -316,13 +318,22 @@ Error: loop() requires maxIterations.
 silent `devWarn` and an internal 10000-iteration default — a mistake that
 only surfaced as a confusing failure mid-playtest, often after many turns.
 That silent fallback is gone. There is no way to construct a `loop()`
-without an explicit cap; you must set one every time.
+without an explicit cap or an explicit `unbounded: true` opt-in; you must
+choose one every time.
+
+### `maxIterations` is a safety assertion, NOT a terminator
+
+Hitting `maxIterations` throws a loud error — it does not silently end the
+loop. If you see the "safety cap" error, it means your `while` condition
+never became false; the cap caught a runaway loop, it wasn't supposed to be
+your game's actual exit condition. Raising `maxIterations` to "make the
+error go away" without fixing the `while` condition just delays the crash.
 
 ### The Solution
 
-Always pass `maxIterations`, and still make sure your condition can
-eventually become false — the cap is a safety net, not your primary exit
-condition:
+For a loop with a genuine, finite iteration bound, pass `maxIterations` and
+still make sure your condition can eventually become false — the cap is a
+safety net, not your primary exit condition:
 
 ```typescript
 // CORRECT - explicit maxIterations required by the constructor
@@ -347,6 +358,41 @@ loop({
 `maxIterations` to `100` if you don't pass one, so they don't throw — but an
 explicit value tuned to your game's actual turn structure is still
 recommended.
+
+### Genuinely unbounded games: use `unbounded: true`, not an arbitrary cap
+
+Some games have no natural per-loop iteration bound (e.g. a game that runs
+until a resource pool empties, with no fixed round count). Reaching for a
+huge `maxIterations` (e.g. `1_000_000`) to "make it effectively unbounded" is
+a lie — it will still throw the safety-cap error mid-game if the loop runs
+long enough, and it obscures the fact that the loop is intentionally
+open-ended. Use the explicit `unbounded: true` opt-in instead:
+
+```typescript
+// CORRECT - explicit opt-in for a genuinely unbounded game
+loop({
+  unbounded: true,
+  while: (ctx) => !ctx.game.isFinished(),
+  do: eachPlayer({ do: playerTurn })
+})
+```
+
+`unbounded: true` makes `maxIterations` optional and removes the per-loop
+cap-hit throw entirely — the loop can only exit via its `while` condition
+becoming false. It is greppable and self-documenting: a reviewer scanning
+the flow definition immediately sees which loops are intentionally
+open-ended versus which have a real numeric bound.
+
+**The global whole-flow safety tripwire still applies even when unbounded.**
+The flow engine's own runaway-loop guard (`DEFAULT_MAX_ITERATIONS`, currently
+10000 total flow-step executions across the entire flow, not any single
+loop's iteration count) is independent of any one loop's `maxIterations`
+configuration. A genuinely stuck `unbounded: true` loop (one whose `while`
+never flips false, driven continuously with no player input in between)
+still fails loud with the flow-exceeded-iterations error — it does not hang
+the process. This is the intended defense-in-depth: `unbounded: true` frees
+a loop from an artificial per-loop cap, but does not disable the engine's
+own infinite-loop detection.
 
 ---
 

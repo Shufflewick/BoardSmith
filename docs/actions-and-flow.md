@@ -766,6 +766,33 @@ loop({
 })
 ```
 
+`maxIterations` is required unless you opt into `unbounded: true` (see
+below) — `loop()` throws at construction time otherwise. Hitting
+`maxIterations` throws a loud "safety cap" error; it is the observable exit
+signal telling you the `while` condition never became false. It is a safety
+assertion, not a way to intentionally end a loop.
+
+For a game with no natural per-loop iteration bound, use `unbounded: true`
+instead of an arbitrary huge cap:
+
+```typescript
+loop({
+  name: 'resource-drain-loop',
+  unbounded: true,
+  while: (ctx) => !ctx.game.pool.isEmpty(),
+  do: /* flow node */,
+})
+```
+
+`unbounded: true` makes `maxIterations` optional and removes the per-loop
+cap-hit throw — the loop exits only via `while` becoming false. The engine's
+own global whole-flow safety tripwire (a fixed cap on total flow-step
+executions across the entire flow, independent of any single loop's
+iteration count) still applies even when a loop is `unbounded: true`, so a
+genuinely stuck unbounded loop still fails loud instead of hanging the
+process. See [Common Pitfalls #6](common-pitfalls.md#6-flow-loop-conditions-maxiterations-is-required)
+for the full construction-guard error text and more examples.
+
 #### `repeat` - Fixed number of iterations
 
 ```typescript
