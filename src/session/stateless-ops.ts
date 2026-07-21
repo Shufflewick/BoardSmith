@@ -21,7 +21,7 @@ import { PickHandler } from './pick-handler.js';
 import {
   buildSingleActionMetadata,
   buildPlayerState,
-  computeUndoInfo,
+  computeUndoEligibility,
   buildActionTraces,
   computeElementDiff,
   serializeFlowDebugInfo,
@@ -464,19 +464,20 @@ function handleUndo(
   }
 
   const flowState = runner.getFlowState() as AIFlowState | undefined;
-  if (flowState?.currentPlayer !== op.player) {
+
+  // Awaiting-aware eligibility (D4/SIM-02): sequential steps keep the EXACT
+  // `currentPlayer` contract; a simultaneous step allows any seat that is
+  // (or was) awaiting THIS step, with the boundary computed from that
+  // seat's OWN action(s) -- not the turn-wide moveCount. Shared with the
+  // stateful twin (state-history.ts) -- parity, T-160-* drift guard.
+  const { eligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
+    runner.actionHistory,
+    flowState,
+    op.player,
+  );
+  if (!eligible) {
     return errorResult("It's not your turn", 'bundle', ErrorCode.NOT_YOUR_TURN);
   }
-
-  // Pass flowState.moveCount so undo uses the SAME authoritative turn boundary
-  // the client was shown (buildPlayerState computes canUndo/turnStartActionIndex
-  // with moveCount). Without it the backward-scan fallback can rewind past a
-  // phase boundary and silently discard a prior turn's committed actions.
-  const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(
-    runner.actionHistory,
-    op.player,
-    flowState.moveCount,
-  );
   if (actionsThisTurn === 0) {
     return errorResult('No actions to undo', 'bundle', ErrorCode.NO_ACTIONS_TO_UNDO);
   }

@@ -19,7 +19,7 @@ import {
 } from './types.js';
 import {
   buildPlayerState,
-  computeUndoInfo,
+  computeUndoEligibility,
   buildActionTraces,
   computeElementDiff,
   assertUndoAllowed,
@@ -276,21 +276,20 @@ export class StateHistory<G extends Game = Game> {
 
     const runner = this.#getRunner();
 
-    // Check if it's this player's turn
+    // Awaiting-aware eligibility (D4/SIM-02): sequential steps keep the
+    // EXACT `currentPlayer` contract; a simultaneous step allows any seat
+    // that is (or was) awaiting THIS step, with the boundary computed from
+    // that seat's OWN action(s) -- not the turn-wide moveCount. Both
+    // executors share this single decision (parity, T-160-* drift guard).
     const flowState = runner.getFlowState();
-    if (flowState?.currentPlayer !== playerPosition) {
+    const { eligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
+      this.#storedState.actionHistory,
+      flowState,
+      playerPosition
+    );
+    if (!eligible) {
       return { success: false, error: "It's not your turn", errorCode: ErrorCode.NOT_YOUR_TURN };
     }
-
-    // Compute where the turn started. Pass flowState.moveCount so undo uses the
-    // SAME authoritative turn boundary that buildPlayerState surfaced to the
-    // client as turnStartActionIndex/canUndo. Without it, the backward-scan
-    // fallback can rewind past a phase boundary and discard a prior turn's work.
-    const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(
-      this.#storedState.actionHistory,
-      flowState.currentPlayer,
-      flowState.moveCount
-    );
 
     // Check if there's anything to undo
     if (actionsThisTurn === 0) {

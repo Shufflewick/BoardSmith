@@ -106,12 +106,12 @@ describe('simultaneous undo (D4/SIM-02): non-currentPlayer seat can undo its own
     const session = newStatelessSession();
     await session.start();
 
-    const c1 = await session.send(1, { type: 'action', actionName: 'commit', player: 1, args: {} });
-    expect(c1.success).toBe(true);
-    // Seat-2 ends the game from within the same simultaneous step instead of
-    // committing -- reaches game.isFinished() without ever hand-mutating
-    // game.phase (mirrors undo-fence-fixture's endGame pattern).
-    const end = await session.send(2, { type: 'action', actionName: 'endGame', player: 2, args: {} });
+    // Seat-1 ends the game from within the simultaneous step (no prior
+    // commit -- isolates the finished-phase fence from the T-160-04
+    // co-decider boundary: nothing else is in history yet) instead of
+    // hand-mutating game.phase (mirrors undo-fence-fixture's endGame
+    // pattern).
+    const end = await session.send(1, { type: 'action', actionName: 'endGame', player: 1, args: {} });
     expect(end.success).toBe(true);
 
     const undo = await session.send(1, { type: 'undo', player: 1 } as Op);

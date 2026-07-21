@@ -196,6 +196,154 @@ export function computeUndoInfo(
 }
 
 /**
+ * The minimal `FlowState` shape {@link computeUndoEligibility} reads. Kept
+ * structural (not the concrete engine `FlowState`) so both executors --
+ * `state-history.ts` (real `FlowState`) and `stateless-ops.ts` (its own
+ * narrower `AIFlowState`) -- can pass their own flow-state type without a
+ * cast, the same way `seat-activity.ts`'s `SeatActivityState` does.
+ */
+export interface UndoFlowState {
+  currentPlayer?: number;
+  moveCount?: number;
+  awaitingPlayers?: Array<{ playerIndex: number; completed: boolean; availableActions?: string[] }>;
+}
+
+/**
+ * Whether `seat` is a participant of the CURRENT simultaneous step --
+ * present in `awaitingPlayers`, regardless of its own `completed` flag.
+ * Deliberately NOT `canSeatAct`/`dueSeats` (`engine/flow/seat-activity.ts`):
+ * those answer "can seat N act RIGHT NOW", which is false the instant a
+ * seat commits -- exactly the seat whose OWN undo we need to allow (D4:
+ * "allow undo for any seat that... was awaiting and has committed this
+ * step").
+ */
+function isSimultaneousParticipant(flowState: UndoFlowState | undefined, seat: number): boolean {
+  return !!flowState?.awaitingPlayers?.some((p) => p.playerIndex === seat);
+}
+
+/**
+ * Per-seat rewind boundary for a simultaneous-step undo (D4). Unlike
+ * {@link computeUndoInfo} (sequential, single-actor turn boundary), a
+ * simultaneous step can have MULTIPLE seats acting independently within the
+ * same step -- the boundary must come from the REQUESTING seat's own
+ * action(s) in history, never from `moveCount` directly (moveCount is the
+ * step-wide total across every seat, not this seat's own scope).
+ *
+ * **Step-window bound (load-bearing, D4 plan-check WARNING -- the
+ * simultaneous analogue of the MERC same-player-across-phases guard
+ * `computeUndoInfo`'s doc comment calls out for the sequential path):** the
+ * search for the seat's own action is bounded to
+ * `[actionHistory.length - moveCount, actionHistory.length)` -- the CURRENT
+ * simultaneous step's action window (160-02 taught `FlowState.moveCount` to
+ * also publish for an active simultaneous step, engine.ts
+ * `executeSimultaneousActionStep`/`resumeSimultaneousAction`) -- and never
+ * scans further back into a PRIOR step/phase where the same seat may also
+ * have acted. Without this bound, a seat that acted once in an EARLIER
+ * step and once in the CURRENT one -- with no OTHER seat's action between
+ * them -- would have its undo silently reach back and discard the earlier
+ * step's action too.
+ *
+ * **Co-decider boundary (T-160-04, elevation-of-privilege mitigation):** if
+ * ANY other seat's action falls AFTER the requesting seat's own action
+ * within the window, honoring the request would ALSO discard that later
+ * co-decider action from history when the checkpoint restores (the
+ * restore target is a single linear point in `actionHistory`, not a
+ * per-seat diff) -- refused (`undefined`) rather than silently reaching
+ * past the requester's own scope.
+ */
+export function simultaneousUndoBoundary(
+  actionHistory: Array<{ player: number }>,
+  moveCount: number | undefined,
+  seat: number,
+): { turnStartActionIndex: number; actionsThisTurn: number } | undefined {
+  if (moveCount === undefined || actionHistory.length === 0) return undefined;
+
+  const windowStart = Math.max(0, actionHistory.length - moveCount);
+
+  let ownIndex: number | undefined;
+  for (let i = windowStart; i < actionHistory.length; i++) {
+    if (actionHistory[i].player === seat) {
+      ownIndex = i;
+      break;
+    }
+  }
+  if (ownIndex === undefined) return undefined;
+
+  for (let i = ownIndex + 1; i < actionHistory.length; i++) {
+    if (actionHistory[i].player !== seat) return undefined;
+  }
+
+  return { turnStartActionIndex: ownIndex, actionsThisTurn: actionHistory.length - ownIndex };
+}
+
+/**
+ * Single shared "may `seat` undo right now, and if so from where?" answer
+ * (D4), consumed by BOTH executors (`state-history.ts`'s `undoToTurnStart`
+ * and `stateless-ops.ts`'s `handleUndo`) plus `buildPlayerState`'s advisory
+ * `canUndo` -- the parity contract this repo enforces (a change to one
+ * executor without its twin is the drift bug T-160-* guards against).
+ *
+ * Branches on whether the flow is CURRENTLY in a simultaneous step
+ * (`flowState.awaitingPlayers?.length > 0`): sequential undo keeps its
+ * EXACT existing `computeUndoInfo`/`currentPlayer` contract (UNDO-03) --
+ * this function does not change sequential behavior at all -- while a
+ * simultaneous step routes through {@link isSimultaneousParticipant} +
+ * {@link simultaneousUndoBoundary} instead of the `currentPlayer` pin.
+ *
+ * `eligible` is deliberately the SEAT-IDENTITY check only (sequential:
+ * `currentPlayer === seat`; simultaneous: seat is a participant of the
+ * current step) -- NOT folded together with `actionsThisTurn > 0`. Callers
+ * (`undoToTurnStart`/`handleUndo`) check these as two SEPARATE gates with
+ * two DIFFERENT refusal messages ("It's not your turn" vs "No actions to
+ * undo") -- the same two-step shape those callers have always had. Folding
+ * them into one boolean would report "not your turn" for a seat that IS
+ * eligible but simply hasn't acted yet.
+ */
+export function computeUndoEligibility(
+  actionHistory: Array<{ player: number; undoable?: boolean }>,
+  flowState: UndoFlowState | undefined,
+  seat: number,
+): { eligible: boolean; turnStartActionIndex: number; actionsThisTurn: number; hasNonUndoableAction: boolean } {
+  const isSimultaneousStep = (flowState?.awaitingPlayers?.length ?? 0) > 0;
+
+  if (isSimultaneousStep) {
+    if (!isSimultaneousParticipant(flowState, seat)) {
+      return { eligible: false, turnStartActionIndex: actionHistory.length, actionsThisTurn: 0, hasNonUndoableAction: false };
+    }
+
+    // Participant, but either hasn't acted yet this step OR its own action
+    // is not undo-safe (a co-decider acted afterward, T-160-04) -- reported
+    // as "no actions to undo" (actionsThisTurn 0), NOT "not your turn": the
+    // seat unambiguously IS part of this step.
+    const boundary = simultaneousUndoBoundary(actionHistory, flowState?.moveCount, seat);
+    if (!boundary) {
+      return { eligible: true, turnStartActionIndex: actionHistory.length, actionsThisTurn: 0, hasNonUndoableAction: false };
+    }
+
+    let hasNonUndoableAction = false;
+    for (let i = boundary.turnStartActionIndex; i < actionHistory.length; i++) {
+      if (actionHistory[i].undoable === false) {
+        hasNonUndoableAction = true;
+        break;
+      }
+    }
+
+    return { eligible: true, ...boundary, hasNonUndoableAction };
+  }
+
+  // Sequential (UNCHANGED contract, UNDO-03): the same computation
+  // `buildPlayerState` has always used, with the seat-identity check kept
+  // separate from `actionsThisTurn` exactly as it always was.
+  const { turnStartActionIndex, actionsThisTurn, hasNonUndoableAction } = computeUndoInfo(
+    actionHistory,
+    flowState?.currentPlayer,
+    flowState?.moveCount,
+  );
+  const eligible = flowState?.currentPlayer === seat;
+  return { eligible, turnStartActionIndex, actionsThisTurn, hasNonUndoableAction };
+}
+
+/**
  * Thrown by {@link assertUndoAllowed} when a server-side undo/rewind fence
  * refuses the operation. Never a silent no-op (D-02 / T-155-04): every
  * refusal carries an actionable message naming why, and the two undo
@@ -304,17 +452,21 @@ export function buildPlayerState(
   // clients from prematurely starting actions during another player's turn.
   const availableActions = availableActionsForSeat(flowState, playerPosition);
 
-  // Compute undo info - pass moveCount from FlowState for accurate turn boundary detection
-  // This fixes issues with games where the same player acts at the end of one phase
-  // and start of the next (e.g., MERC)
-  const { turnStartActionIndex, actionsThisTurn, hasNonUndoableAction } = computeUndoInfo(
+  // Compute undo eligibility -- awaiting-aware (D4/SIM-02): a sequential
+  // step keeps the exact `computeUndoInfo`/`currentPlayer` contract
+  // (UNDO-03); a simultaneous step allows any awaiting-or-completed-this-
+  // step seat, with the boundary from THAT seat's own action(s), not the
+  // turn-wide moveCount. See computeUndoEligibility's doc comment.
+  const { eligible: canUndoEligible, turnStartActionIndex, actionsThisTurn, hasNonUndoableAction } = computeUndoEligibility(
     runner.actionHistory,
-    flowState?.currentPlayer,
-    flowState?.moveCount
+    flowState,
+    playerPosition
   );
 
-  // Can undo if: it's my turn AND I've made at least one action this turn AND no non-undoable action was taken
-  const canUndo = isMyTurn && actionsThisTurn > 0 && flowState?.currentPlayer === playerPosition && !hasNonUndoableAction;
+  // Can undo if: eligible (my turn, sequential; or my own committed
+  // simultaneous action, bounded per-seat) AND no non-undoable action was
+  // taken within that boundary.
+  const canUndo = canUndoEligible && actionsThisTurn > 0 && !hasNonUndoableAction;
 
   // Get the full player data including custom properties (abilities, score, etc.)
   // for the UI.
@@ -359,8 +511,12 @@ export function buildPlayerState(
     isMyTurn,
     view: truthView,
     canUndo,
-    actionsThisTurn: isMyTurn ? actionsThisTurn : 0,
-    turnStartActionIndex: isMyTurn ? turnStartActionIndex : undefined,
+    // Gated on `canUndoEligible`, not `isMyTurn` (D4/SIM-02): a seat that
+    // has already committed its simultaneous action is no longer "due"
+    // (`isMyTurn`/`canSeatAct` is false the instant it commits) but IS
+    // still eligible to see/undo its own turnStartActionIndex.
+    actionsThisTurn: canUndoEligible ? actionsThisTurn : 0,
+    turnStartActionIndex: canUndoEligible ? turnStartActionIndex : undefined,
     messages: playerView.messages.length > 0 ? playerView.messages : undefined,
     // Unconditional, unlike turnStartActionIndex -- see PlayerGameState.actionCount doc.
     actionCount: runner.actionHistory.length,
