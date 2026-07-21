@@ -112,11 +112,11 @@ Plans:
 3. `simultaneousActionStep` honors `allDone` on an empty `awaitingPlayers` instead of crashing (D21).
 4. During a simultaneous step the shell shows correct seat status (no "Your move" + "waiting" contradiction) and leaks no commit (D27).
 5. Each item has a fail-on-pre-fix / pass-after test (PROC-01).
-**Plans** (suggested breakdown; finalized at plan-phase):
-- Per-seat `completed` checkpointing for simultaneous undo + hang regression test [SIM-01]
-- Any-seat simultaneous undo (remove `currentPlayer` gate) [SIM-02]
-- `allDone` on empty `awaitingPlayers` crash fix [SIM-03]
-- GameShell simultaneous seat-status + commit-leak fix + test [SIM-04]
+**Plans:** 3 plans (D3+D21 combined at the engine layer; see plan-phase note)
+Plans:
+- [ ] 160-01-PLAN.md — Engine simultaneous-step correctness: getState deep-copy (D3/SIM-01) + allDone-on-empty (D21/SIM-03) + reusable simultaneous fixture
+- [ ] 160-02-PLAN.md — Per-seat (any-seat) simultaneous undo, boundary from own action, fences intact (D4/SIM-02)
+- [ ] 160-03-PLAN.md — Shell seat-status self-filter + commit-leak execute gate (D27/SIM-04)
 
 #### Phase 161: Dev-Host Tooling
 **Goal**: The `boardsmith dev` host is fully usable for the games that hit its gaps — it can select a declared `gameOption`/preset, start a bare solo game, doesn't orphan its own first seat, and honors the game's color palette.
