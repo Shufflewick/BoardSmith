@@ -120,7 +120,7 @@ the fix holds → only then close.**
   AND the blunt `suppress-action-panel` prop is fenced/removed from the ordinary scaffold surface (gated
   behind an explicit platform escape hatch the agent is told not to use without the client). Delivers the
   library half of feature **C.3**; the skills half is SKILLDEF-03.
-- [ ] **LIBX-02** (D29, Lanternfall, Minor): `loop()` can express an unbounded game via an explicit
+- [x] **LIBX-02** (D29, Lanternfall, Minor): `loop()` can express an unbounded game via an explicit
   valve, and the `maxIterations` exit is neither silent nor winnerless — it is documented and observable.
 - [ ] **LIBX-03** (D30, Lanternfall, Med/visual): `PlayerToken` glyph ink is not hardcoded white, so the
   chip is not blank on light seat colors.

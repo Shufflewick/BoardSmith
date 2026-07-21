@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: verifying
-stopped_at: context exhaustion at 75% (2026-07-21)
-last_updated: "2026-07-21T19:03:33.147Z"
-last_activity: "2026-07-21 — Phase 161 (Dev-Host Tooling) shipped: gameOption/preset selection via CLI flags (--game-option/--preset) + a DevHost lobby selector, host-authoritative validation with type coercion (D13); bare solo start defaults --players to minPlayers (D14); first-seat orphan race fixed by post-await seat reconciliation against connected clients, reclaimable-not-permanent (D15); GameDefinition.colorPalette as the canonical palette source with gameDefinition→boardsmith.json→engine fallback (D16). Deep review caught 2 real Blockers in the new D13 feature (typed-option coercion, preset player-count arrays) + fixed. 2923 tests green."
+status: executing
+stopped_at: Completed 164-01-PLAN.md
+last_updated: "2026-07-21T19:49:49.537Z"
+last_activity: 2026-07-21
 progress:
   total_phases: 15
   completed_phases: 9
-  total_plans: 25
-  completed_plans: 25
+  total_plans: 29
+  completed_plans: 26
   percent: 60
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–163 shipped (verifications passed); next is Phase 164 (Library Misc)
+**Current focus:** Phase 164 — Library Misc — Action-Panel, Loop, Visual, Debug-View
 
 ## Current Position
 
-Phase: 164 (Library Misc — Action-Panel, Loop, Visual, Debug-View) — next up. Phases 155–163 complete (9/15, 60%).
-Plan: —
-Status: Phase 161 verification passed (5/5); code review resolved (2 Blockers fixed: CR-01 preset player-count now resizes seat arrays consistently, CR-02 gameOption values coerced to declared type at the host validation boundary; WR-01/02/03 + IN-01 also fixed — WR-02 join-during-start covered by extending startGame's reinit loop, NOT a starting-guard reject, to preserve the D15 reclaim path)
-Last activity: 2026-07-21 — Phase 161 (Dev-Host Tooling) shipped: gameOption/preset selection via CLI flags (--game-option/--preset) + a DevHost lobby selector, host-authoritative validation with type coercion (D13); bare solo start defaults --players to minPlayers (D14); first-seat orphan race fixed by post-await seat reconciliation against connected clients, reclaimable-not-permanent (D15); GameDefinition.colorPalette as the canonical palette source with gameDefinition→boardsmith.json→engine fallback (D16). Deep review caught 2 real Blockers in the new D13 feature (typed-option coercion, preset player-count arrays) + fixed. 2923 tests green.
+Phase: 164 (Library Misc — Action-Panel, Loop, Visual, Debug-View) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-07-21
 
 ## Milestones
 
@@ -270,6 +270,7 @@ Recent decisions affecting current work:
 - [Phase 153]: 153-01: Fix scoped exactly to dev.ts's WS close handler (socket-identity guard) — no changes to MultiplayerHost/SnapshotSessionHost/handleServerRequest, per RESEARCH.md's proven root cause and explicit anti-patterns
 - [Phase 155-01]: Shared `assertUndoAllowed`/`UndoRefusedError` guard in `session/utils.ts`, wired into all four undo/rewind entry points (`handleUndo`, `handleDebugRewind`, `undoToTurnStart`, `rewindToAction`) — single source of truth for the `.notUndoable()` fence and the `finished`-phase fence
 - [Phase 155-04]: `animationSeqFloor` option on `Game.loadSerializedState`, supplied only by `GameRunner.fromCheckpoint` (derived from the ENCLOSING live snapshot, not the historical checkpoint) — keeps undo/rewind checkpoint restore monotonic without any of the four undo/rewind call sites needing to change; restored buffered events re-stamped above the floor. Adversarial testing surfaced and fixed a related latent bug: `Game.toJSON()` only serialized `animationEventSeq` when the current buffer was non-empty, so the seq silently reset to 0 on any snapshot round-trip through an empty-buffer op (not just undo) — now serialized whenever nonzero, independent of buffer state.
+- [Phase 164-01]: unbounded: true opt-in threaded on LoopConfig; global whole-flow tripwire retained unchanged — Lets a genuinely unbounded game express its loop without lying via an arbitrary maxIterations cap, while the engine's DEFAULT_MAX_ITERATIONS run() tripwire (independent of any single loop's counter) still catches a truly stuck loop
 
 ### Pending Todos
 
@@ -281,8 +282,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-21T19:03:33.140Z
-Stopped at: context exhaustion at 75% (2026-07-21)
+Last session: 2026-07-21T19:49:49.528Z
+Stopped at: Completed 164-01-PLAN.md
 Resume file: 
 None
 
