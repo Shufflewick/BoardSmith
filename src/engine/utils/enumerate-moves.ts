@@ -11,7 +11,7 @@
 
 import type { Game, Player, ActionDefinition, Selection } from '../index.js';
 import { availableActionsForSeat } from '../index.js';
-import { devWarn } from '../../utils/dev.js';
+import { resolveMultiSelect } from './resolve-multiselect.js';
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -187,26 +187,14 @@ function _enumerateRecursive(
 
   const results: Record<string, unknown>[] = [];
 
-  // Dynamic multiSelect (function-based) cannot be statically enumerated.
-  // Treat it like an unenumerable selection: skip if optional, block if required.
-  // (buildPickMetadata already acknowledges this case for the metadata path.)
-  const multiSelect = (selection as any).multiSelect;
-  if (typeof multiSelect === 'function') {
-    devWarn(
-      `enumerate-moves:dynamic-multiselect:${actionDef.name}:${selection.name}`,
-      `enumerateLegalMoves: selection "${selection.name}" on action "${actionDef.name}" ` +
-      `uses a function-based multiSelect which cannot be statically enumerated. ` +
-      `This selection will be skipped during enumeration. ` +
-      `Consider using a static multiSelect config, or handle this action via the /selection-choices endpoint.`,
-    );
-    if (selection.optional) {
-      return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs);
-    }
-    return [];
-  }
+  // Resolve static OR function-valued multiSelect through the single shared
+  // helper (AI-01 / D9). Concrete config -> real combinations; `undefined`
+  // -> single-select below; a thrown error propagates (fail loud, never a
+  // silent skip).
+  const resolved = resolveMultiSelect(selection, { game, player, args: currentArgs });
 
-  if (multiSelect) {
-    const { min, max } = parseMultiSelect(multiSelect);
+  if (resolved) {
+    const { min, max } = resolved;
     const combinations = generateCombinations(choices, min, max);
 
     for (const combo of combinations) {
