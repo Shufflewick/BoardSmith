@@ -124,6 +124,17 @@ export { ActionBuilder } from './action-builder.js';
 
 // Asset-reachability build gate (TOOL-02) — additive re-export so games can
 // call the build/test gate without hand-rolling a second scanner.
+//
+// WR-02: this couples `boardsmith/testing`'s public export surface to
+// `cli/lib`'s internal file layout. `asset-scan.ts` is otherwise dependency-
+// free (only `node:fs`/`node:path`) and was deliberately left in `cli/lib`
+// rather than moved into `src/testing/` because it also has a relative-path
+// importer OUTSIDE this package's type-checked source graph (the
+// `bs-build-chunk` skill's `build/test.md`, which resolves the file by a
+// hardcoded relative path — see 162-CONTEXT.md D18/code_context) — moving it
+// would silently break that importer with no compiler signal. If `cli/lib`
+// ever relocates or renames `asset-scan.ts`, update this import AND
+// `src/cli/slash-command/bs/build/test.md`'s reference together.
 export { scanAssetReachability, type AssetViolation } from '../cli/lib/asset-scan.js';
 
 // Animation test-mode + trace (ANIM-01)
