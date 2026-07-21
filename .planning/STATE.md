@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: Phase 157 complete (verification passed 3/3) — next is Phase 158
-stopped_at: Completed Phase 157 (2 plans, VERIFICATION passed, review resolved incl. a real Critical)
-last_updated: "2026-07-21T01:15:00.000Z"
-last_activity: "2026-07-20 — Phase 157 (Game-Over UI + Forward Exits) shipped: #game-over slot + providesOwnGameOverUI + draw/unknown labeling + dismissable GameOverCard (D10); all forward exits routed to the one real restart via DevHost debug:restart handler + New Game (D11 — plan-check EMPIRICALLY disproved the guard-relaxation theory; fix is routing). 2810 tests green; code review caught a real Critical (isDraw dropped at the DevHost relay hop) + fixed."
+status: Phase 158 complete (verification passed 8/8) — next is Phase 159
+stopped_at: Completed Phase 158 (1 plan, VERIFICATION passed, review clean)
+last_updated: "2026-07-21T02:00:00.000Z"
+last_activity: "2026-07-20 — Phase 158 (Auto-Zoom Re-Fit) shipped: useAutoZoom now re-fits on dock-height + region-resize (available-space) changes via a persistent regionEl ResizeObserver + watch(dockHeight) feeding one rAF-coalesced scheduleRefit, guarded by a userControlled flag (manual zoom wins; Fit re-arms); content-growth exclusion preserved; scrollbar-gutter:stable kills the RO feedback path (D12/ZOOM-01). Executor caught a real latent bug (untracked uncancellable rAF). 2817 tests green; code review clean."
 progress:
   total_phases: 15
-  completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
-  percent: 20
+  completed_phases: 4
+  total_plans: 9
+  completed_plans: 9
+  percent: 27
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–157 shipped (verifications passed); next is Phase 158 (Auto-Zoom Re-Fit)
+**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–158 shipped (verifications passed); next is Phase 159 (MCTS Soundness + Dynamic multiSelect)
 
 ## Current Position
 
-Phase: 158 (Auto-Zoom Re-Fit) — next up. Phases 155–157 complete.
+Phase: 159 (MCTS Soundness + Dynamic multiSelect) — next up. Phases 155–158 complete.
 Plan: —
-Status: Phase 157 verification passed (3/3); code review resolved (1 Critical: isDraw relay hop; 1 Warning: aria-modal placement)
+Status: Phase 158 verification passed (8/8); code review clean
 Last activity: 2026-07-20 — Phase 157 (Game-Over UI + Forward Exits) shipped. Methodology note: the plan-checker empirically disproved the "relax the phase guard" theory for D11 by writing a throwaway host test — the guard already admitted finished games (phase never leaves 'playing'); the real fix was routing (DevHost debug:restart handler + New Game → restart). Deferred (pre-existing, not this phase): IN-01 `ActionMetadata` `help`-field drift between `protocol.ts` and `session/types.ts`.
 
 ## Milestones

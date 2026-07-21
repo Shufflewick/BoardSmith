@@ -54,7 +54,7 @@ the fix holds → only then close.**
 
 ### ZOOM — Auto-zoom re-fit (D12) — Phase 158
 
-- [ ] **ZOOM-01** (D12, 3 games, Major): `useAutoZoom` re-fits when the layout changes (dock/board/region
+- [x] **ZOOM-01** (D12, 3 games, Major): `useAutoZoom` re-fits when the layout changes (dock/board/region
   resize) instead of fitting once against a stale layout and never re-fitting — regions stay reachable.
 
 ### AI — MCTS soundness + dynamic multiSelect (D9, D8) — Phase 159 (delivers C.2)

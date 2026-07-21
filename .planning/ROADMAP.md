@@ -20,7 +20,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [ ] **Phase 155: Undo / Rewind Family Correctness** — enforce `.notUndoable()` server-side, fence undo at flow-node/`finished` boundaries, stop solo-undo wipe, fix animation-id rewind (D1, D2, D5, D6)
 - [x] **Phase 156: Sole-Option Auto-Execute** — a single-option action auto-*starts* but never auto-*executes*; the shell stops playing for the player (D7)
 - [x] **Phase 157: Game-Over UI + Forward Exits** — suppressable/dismissable `GameOverCard` + working Rematch/New Game/dev-restart (D10, D11)
-- [ ] **Phase 158: Auto-Zoom Re-Fit** — `useAutoZoom` re-fits on dock/board/region resize instead of once against a stale layout (D12)
+- [x] **Phase 158: Auto-Zoom Re-Fit** — `useAutoZoom` re-fits on dock/board/region resize instead of once against a stale layout (D12)
 - [ ] **Phase 159: MCTS Soundness + Dynamic multiSelect** — dynamic/function-valued `multiSelect` in enumeration + panel (delivers C.2), redacted-view MCTS for hidden info (D9, D8)
 - [ ] **Phase 160: Simultaneous-Step Correctness** — per-seat undo checkpointing, any-seat undo, `allDone` crash, seat-status/commit leak (D3, D4, D21, D27)
 - [ ] **Phase 161: Dev-Host Tooling** — gameOption/preset selection, bare solo start, first-seat orphan race, color palette (D13, D14, D15, D16)
@@ -87,7 +87,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 158-01-PLAN.md — Persistent region-obs + dock-watch rAF-coalesced re-fit, `userControlled` guard, RED→GREEN→adversarial [ZOOM-01, PROC-01] (wave 1)
+- [x] 158-01-PLAN.md — Persistent region-obs + dock-watch rAF-coalesced re-fit, `userControlled` guard, RED→GREEN→adversarial [ZOOM-01, PROC-01] (wave 1)
 
 #### Phase 159: MCTS Soundness + Dynamic multiSelect
 **Goal**: AI opponents are unblocked and sound — dynamic/function-valued `multiSelect` enumerates and drives through the panel natively (delivering feature C.2), and MCTS reasons over a per-seat redacted view rather than cloning un-redacted state and sequentializing simultaneous reveals.
