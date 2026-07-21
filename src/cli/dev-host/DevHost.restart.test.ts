@@ -238,3 +238,63 @@ describe('DevHost — broadcast toast on restart', () => {
     expect(toasts.value.length).toBe(countBefore);
   });
 });
+
+// ── debug:restart postMessage routing (D11 / ENDGAME-02 — the real RED) ──────
+//
+// GameShell's GameOverCard "Rematch" (and, after the GameShell fix, "New Game")
+// posts `{source:'shufflewick-game', type:'server_request', op:'debug:restart'}`
+// to the iframe's parent window. `bridge.ts:42-43` claims "handled in DevHost,
+// not here" — but pre-fix, DevHost's `onWindowMessage` has NO branch for this
+// host-chrome op: it falls into the generic `server_request` forward, which
+// ships an unhandled `{type:'server_request', op:'debug:restart', ...}` frame
+// to the host (which has no handler for that op either) instead of the
+// `{type:'restart'}` the working `newGame()` path sends. The op round-trips to
+// nothing — this IS D11's primary crux.
+describe('DevHost — debug:restart postMessage routing (D11 RED #1)', () => {
+  it('a server_request postMessage with op:"debug:restart" results in {type:"restart"} being sent on the wire', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    ws.send.mockClear();
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: 'shufflewick-game',
+          type: 'server_request',
+          requestId: 'req-0',
+          op: 'debug:restart',
+          payload: {},
+        },
+      }),
+    );
+    await wrapper.vm.$nextTick();
+
+    const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames.find((f) => f.type === 'restart')).toBeDefined();
+  });
+
+  it('does NOT forward debug:restart to the host as a generic unhandled server_request', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    ws.send.mockClear();
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: 'shufflewick-game',
+          type: 'server_request',
+          requestId: 'req-1',
+          op: 'debug:restart',
+          payload: {},
+        },
+      }),
+    );
+    await wrapper.vm.$nextTick();
+
+    const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    const forwarded = frames.find(
+      (f) => f.type === 'server_request' && f.op === 'debug:restart',
+    );
+    expect(forwarded).toBeUndefined();
+  });
+});

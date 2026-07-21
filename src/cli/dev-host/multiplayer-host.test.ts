@@ -579,3 +579,95 @@ describe('MultiplayerHost — debugToggle/uiSwitch relay', () => {
     expect(lastOfType('A', 'error')).toBeUndefined();
   });
 });
+
+// ── D11 (ENDGAME-02): restart from a finished game ──────────────────────────
+// The real restart path (`{type:'restart'}` → handleRestart → startGame()) is
+// NOT guard-gated against a finished game — `LobbyPhase` has no 'complete'
+// value, so completion never flips `phase` off 'playing'. The tests below are
+// CHARACTERIZATION/ADVERSARIAL: they document that the host-level restart
+// already works and already rejects mid-setup — they are expected to PASS on
+// CURRENT (pre-fix) source. D11's actual bug is the DevHost/GameShell ROUTING
+// gaps covered in DevHost.restart.test.ts and GameShell.restart.test.ts.
+describe('MultiplayerHost — restart from a finished game (D11 characterization + adversarial)', () => {
+  function makeAltHostWithSeedCapture() {
+    const seeds: string[] = [];
+    let seedCounter = 0;
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 2,
+      makeSeed: () => `seed-${seedCounter++}`,
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start') seeds.push((gameOptions as { seed?: string }).seed ?? '');
+        return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: (clientId, msg) => sent.push({ clientId, msg }),
+    });
+    const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
+    const lastOfType = (clientId: string, type: HostOutbound['type']) =>
+      [...to(clientId)].reverse().find((m) => m.type === type) as any;
+    const pass = (clientId: string, requestId: string) =>
+      host.handleMessage(clientId, {
+        type: 'server_request',
+        requestId,
+        op: 'action',
+        payload: { actionName: 'pass', args: {} },
+      });
+    return { host, sent, to, lastOfType, pass, seeds, clear: () => (sent.length = 0) };
+  }
+
+  it("CHARACTERIZATION (already passes pre-fix): a {type:'restart'} sent to a FINISHED game restarts with a fresh runner+seed (the guard never rejected this)", async () => {
+    const { host, lastOfType, pass, seeds } = makeAltHostWithSeedCapture();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = AI
+    await pass('A', 'r1'); // A passes seat 1 → AI passes seat 2 → flow completes
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+    expect(seeds).toHaveLength(1);
+
+    await host.handleMessage('A', { type: 'restart' });
+
+    // Fresh runner+seed: a SECOND 'start' op fired with a DIFFERENT seed.
+    expect(seeds).toHaveLength(2);
+    expect(seeds[1]).not.toBe(seeds[0]);
+    // isComplete is cleared, not carried over from the finished game.
+    expect(lastOfType('A', 'game_state').isComplete).toBe(false);
+  });
+
+  it('ADVERSARIAL: the restarted game is genuinely playable from move 0 (not the stale finished runner), and a second restart loops', async () => {
+    const { host, lastOfType, pass, seeds } = makeAltHostWithSeedCapture();
+    await host.handleMessage('A', { type: 'hello' });
+    await pass('A', 'r1');
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+
+    await host.handleMessage('A', { type: 'restart' });
+    expect(lastOfType('A', 'game_state').isComplete).toBe(false);
+
+    // Acting in the restarted game must succeed and complete it again — proves
+    // the runner is a genuinely fresh instance, not the finished one replaying
+    // a completed flow (which would reject the action or stay complete).
+    await pass('A', 'r2');
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+
+    // Second restart-from-finished: the multi-game-format loop repeats.
+    await host.handleMessage('A', { type: 'restart' });
+    expect(lastOfType('A', 'game_state').isComplete).toBe(false);
+    expect(seeds).toHaveLength(3);
+    expect(new Set(seeds).size).toBe(3); // three distinct seeds across two restarts
+  });
+
+  it('CHARACTERIZATION (already passes pre-fix): a restart with no live session (never started) is still rejected', async () => {
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 2,
+      makeSeed: () => 'never-started',
+      executeOp: (gameOptions, snap, pend, op, hostOptions) =>
+        executeOp(altDef, gameOptions, snap, pend, op, hostOptions),
+      send: (clientId, msg) => sent.push({ clientId, msg }),
+    });
+    // No 'hello' — the host is never told a client connected, so it never
+    // auto-starts. Bypass the happy path entirely: send restart cold.
+    await host.handleMessage('A', { type: 'restart' });
+    const err = sent.find((e) => e.msg.type === 'error');
+    expect(err?.msg).toMatchObject({ message: 'No game in progress to restart.' });
+  });
+});
