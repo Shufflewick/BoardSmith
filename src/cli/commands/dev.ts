@@ -9,6 +9,7 @@ import chalk from 'chalk';
 import open from 'open';
 
 import type { GameDefinition, Op, OpResult } from '../../session/index.js';
+import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
 import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
@@ -228,6 +229,23 @@ function normalizeColorPalette(
     const label = (entry.label ?? entry.name ?? hex) as string | undefined;
     return { value: hex ?? '', label: label ?? '' };
   });
+}
+
+/**
+ * D16/DEVHOST-04: ordered dev color-palette resolver — a game's
+ * code-declared `GameDefinition.colorPalette` is honored ahead of
+ * `boardsmith.json`'s `colorPalette`, which is honored ahead of the engine's
+ * `DEFAULT_COLOR_PALETTE`. Reuses `normalizeColorPalette` (already coerces
+ * plain hex strings, `{value,label}`, and `{id,hex,label}` objects) — no new
+ * normalizer, no new palette shape.
+ */
+export function resolveColorPalette(
+  gameDefinition: { colorPalette?: Array<{ id: string; hex: string; label: string }> },
+  config: { colorPalette?: Array<string | Record<string, unknown>> },
+): Array<{ value: string; label: string }> {
+  if (gameDefinition.colorPalette) return normalizeColorPalette(gameDefinition.colorPalette);
+  if (config.colorPalette) return normalizeColorPalette(config.colorPalette);
+  return normalizeColorPalette([...DEFAULT_COLOR_PALETTE]);
 }
 
 /**
@@ -557,13 +575,14 @@ export async function devCommand(options: DevOptions): Promise<void> {
       ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
       : undefined;
 
-    if (config.colorPalette) {
-      colorPalette = normalizeColorPalette(config.colorPalette);
-      playerOptions = {
-        ...playerOptions,
-        color: { type: 'color' as const, label: 'Color', choices: colorPalette },
-      };
-    }
+    // D16/DEVHOST-04: gameDefinition.colorPalette -> boardsmith.json
+    // colorPalette -> engine DEFAULT_COLOR_PALETTE. Always resolves to a
+    // non-empty palette, so the `color` playerOption is always offered.
+    colorPalette = resolveColorPalette(gameDefinition, config);
+    playerOptions = {
+      ...playerOptions,
+      color: { type: 'color' as const, label: 'Color', choices: colorPalette },
+    };
 
     gameDefinition = {
       ...gameDefinition,
