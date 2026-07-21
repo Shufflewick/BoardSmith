@@ -139,11 +139,47 @@ describe('scanAssetReachability', () => {
   // Adversarial (T3): an unterminated block comment must not crash and must not
   // produce a spurious violation for anything after the open — every following
   // line stays stripped since the comment never closes.
-  it('handles an unterminated block comment without crashing, stripping every subsequent line', () => {
+  // WR-01: an unterminated block comment silently swallows the rest of the
+  // file (every <img> after it goes unscanned). Rather than a silent PASS,
+  // this must surface a loud, actionable violation of its own naming the
+  // line the comment opened on -- a malformed source file must not silently
+  // disable the gate for everything after it.
+  it('surfaces a loud violation for an unterminated block comment instead of silently passing (WR-01)', () => {
     const violations = scanWith({
       'src/ui/components/GameTable.vue':
         '<script setup lang="ts">\n/* unterminated\n<img src="/cards/never-closes.svg" />\nstill inside, another <img tag here\n</script>',
     });
-    expect(violations).toEqual([]);
+    expect(violations.length).toBe(1);
+    expect(violations[0].line).toBe(2);
+    expect(violations[0].message).toMatch(/unterminated/i);
+  });
+
+  // CR-02: a `//` inside a quoted attribute value (a protocol-relative URL,
+  // e.g. `href="//example.com"`) is NOT a comment opener. Pre-fix, the
+  // detector only guards `https://`-style `:`-prefixed URLs, so this bare
+  // `//` gets treated as a line-comment opener and blanks the rest of the
+  // line -- silently swallowing a genuine bare <img> tag later on the SAME
+  // line and defeating the ASSET-02 build gate.
+  it('still flags a live <img> on the same line as a protocol-relative URL attribute value (CR-02: quote-aware // detection)', () => {
+    const violations = scanWith({
+      'src/ui/components/GameTable.vue':
+        '<template>\n  <a href="//example.com"><img src="x.png"></a>\n</template>',
+    });
+    expect(violations.length).toBe(1);
+    expect(violations[0].line).toBe(2);
+  });
+
+  // CR-02: a live `//` inside a JS string literal must not be treated as a
+  // comment opener either -- a bare <img> that follows the string (but
+  // precedes a REAL trailing `//` comment) on the same line must still be
+  // flagged, while the real comment further right on that line still blanks
+  // correctly.
+  it('does not treat a `//` inside a JS string literal as a comment opener (a live <img> between the string and the real trailing comment is still flagged)', () => {
+    const violations = scanWith({
+      'src/ui/components/GameTable.vue':
+        '<script setup lang="ts">\nconst x = "a // b"; <img src="x.png"> // real comment\n</script>',
+    });
+    expect(violations.length).toBe(1);
+    expect(violations[0].line).toBe(2);
   });
 });

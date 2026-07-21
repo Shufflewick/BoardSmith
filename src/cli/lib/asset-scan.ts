@@ -13,6 +13,12 @@
  * caller (see build/test.md); any future CLI wiring (`boardsmith build`/`lint`)
  * should delegate here too rather than growing a second, subtly different regex
  * scanner — the single-source-of-truth pattern `sandbox-scan.ts` established.
+ *
+ * WR-02: this module is re-exported from `boardsmith/testing`
+ * (`src/testing/index.ts`) so games can call the gate directly. It is ALSO
+ * imported by a hardcoded relative path from the `bs-build-chunk` skill's
+ * `build/test.md`. If you move or rename this file, update BOTH of those
+ * importers — neither is caught by this package's own type-check.
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -62,13 +68,37 @@ const ASSET_IMAGE_RELATIVE_PATH = join('src', 'ui', 'components', 'AssetImage.vu
  * state is tracked ACROSS line boundaries (a `/* *\/` or `<!-- -->` can span many
  * lines). Only comment content is stripped — live markup and string literals are
  * left untouched (D17 fix is comment-scoped only, not a second/looser detector).
+ *
+ * CR-02: comment-opener detection is quote-aware WITHIN each line — a `//`,
+ * `/*`, or `<!--` sequence that appears INSIDE a live single/double/backtick
+ * quoted span (an HTML attribute value like `href="//example.com"`, or a JS
+ * string literal like `"a // b"`) is never treated as a comment opener. A
+ * naive scanner that only special-cases `https://`-style `:`-prefixed URLs
+ * blanks the rest of the line on any OTHER live `//` — including a bare
+ * `<img>` tag later on that same line — silently defeating the ASSET-02
+ * build gate. Quote state resets at the start of each live (non-comment)
+ * segment scanned and does not persist across lines (multi-line JS template
+ * literals are out of scope — see 162-CONTEXT.md D17 discretion).
  */
-function stripComments(lines: string[]): string[] {
+interface StripCommentsResult {
+  lines: string[];
+  /**
+   * WR-01: set when a block/HTML comment opener is never closed by EOF —
+   * everything after it was silently blanked (treated as commented-out) and
+   * NOT scanned for bare `<img>` tags. `line` is the 1-based line the
+   * comment opened on; `kind` distinguishes `/* *\/` from `<!-- -->`.
+   */
+  unterminated?: { line: number; kind: 'block' | 'html' };
+}
+
+function stripComments(lines: string[]): StripCommentsResult {
   const stripped: string[] = [];
   // Which multi-line comment kind (if any) is open going INTO this line.
   let openKind: 'block' | 'html' | null = null;
+  let openedAtLine: number | undefined;
 
-  for (const line of lines) {
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const line = lines[lineIdx];
     let out = '';
     let i = 0;
 
@@ -98,54 +128,84 @@ function stripComments(lines: string[]): string[] {
         continue;
       }
 
-      // Not currently inside a comment — look for the nearest comment opener.
-      // A `//` immediately preceded by `:` is a URL scheme separator (e.g.
-      // `https://...`), not a line comment — skip past it and keep scanning.
-      let lineOpen = -1;
-      for (let search = i; ; ) {
-        const found = line.indexOf('//', search);
-        if (found === -1) {
-          lineOpen = -1;
-          break;
-        }
-        if (line[found - 1] === ':') {
-          search = found + 2;
+      // Not currently inside a comment — scan forward char-by-char, tracking
+      // live quote state, to find the nearest comment opener that is NOT
+      // inside a quoted string/attribute value (CR-02). A `//` immediately
+      // preceded by `:` and not inside a quote is a URL scheme separator
+      // (e.g. `https://...`), not a line comment.
+      let quote: string | null = null;
+      let openerIdx = -1;
+      let openerKind: 'line' | 'block' | 'html' | null = null;
+      let j = i;
+      while (j < line.length) {
+        const ch = line[j];
+        if (quote) {
+          if (ch === '\\' && quote !== '`') {
+            j += 2;
+            continue;
+          }
+          if (ch === quote) quote = null;
+          j++;
           continue;
         }
-        lineOpen = found;
-        break;
+        if (ch === '"' || ch === "'" || ch === '`') {
+          quote = ch;
+          j++;
+          continue;
+        }
+        if (ch === '/' && line[j + 1] === '/') {
+          if (line[j - 1] === ':') {
+            j += 2;
+            continue;
+          }
+          openerIdx = j;
+          openerKind = 'line';
+          break;
+        }
+        if (ch === '/' && line[j + 1] === '*') {
+          openerIdx = j;
+          openerKind = 'block';
+          break;
+        }
+        if (ch === '<' && line.startsWith('<!--', j)) {
+          openerIdx = j;
+          openerKind = 'html';
+          break;
+        }
+        j++;
       }
-      const blockOpen = line.indexOf('/*', i);
-      const htmlOpen = line.indexOf('<!--', i);
 
-      const candidates = [lineOpen, blockOpen, htmlOpen].filter((idx) => idx !== -1);
-      if (candidates.length === 0) {
+      if (openerIdx === -1) {
         out += line.slice(i);
         i = line.length;
         continue;
       }
 
-      const next = Math.min(...candidates);
-      out += line.slice(i, next);
+      out += line.slice(i, openerIdx);
 
-      if (next === lineOpen) {
-        out += ' '.repeat(line.length - next);
+      if (openerKind === 'line') {
+        out += ' '.repeat(line.length - openerIdx);
         i = line.length;
-      } else if (next === blockOpen) {
+      } else if (openerKind === 'block') {
         out += ' '.repeat(2);
-        i = next + 2;
+        i = openerIdx + 2;
         openKind = 'block';
+        openedAtLine = lineIdx + 1;
       } else {
         out += ' '.repeat(4);
-        i = next + 4;
+        i = openerIdx + 4;
         openKind = 'html';
+        openedAtLine = lineIdx + 1;
       }
     }
 
     stripped.push(out);
   }
 
-  return stripped;
+  return {
+    lines: stripped,
+    unterminated: openKind ? { line: openedAtLine!, kind: openKind } : undefined,
+  };
 }
 
 /**
@@ -166,7 +226,7 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
 
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
-    const scanLines = stripComments(lines);
+    const { lines: scanLines, unterminated } = stripComments(lines);
     for (let i = 0; i < lines.length; i++) {
       if (BARE_IMG_TAG.test(scanLines[i])) {
         violations.push({
@@ -175,6 +235,18 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
           message: `${relPath}:${i + 1} uses a bare <img> tag. Route art through <AssetImage :src=... kind="..." /> instead so missing assets fall back cleanly rather than shipping a broken image.`,
         });
       }
+    }
+
+    // WR-01: a comment that never closes silently blanks everything after
+    // it (including any real <img> tags) -- fail loud with an actionable
+    // violation instead of a false PASS.
+    if (unterminated) {
+      const commentLabel = unterminated.kind === 'block' ? '/* block' : '<!-- HTML';
+      violations.push({
+        file: relPath,
+        line: unterminated.line,
+        message: `${relPath}:${unterminated.line} has an unterminated ${commentLabel} comment that is never closed. Everything after it was NOT scanned for bare <img> tags, so this is a false PASS risk -- close the comment (or remove the stray opener).`,
+      });
     }
   }
 
