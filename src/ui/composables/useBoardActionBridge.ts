@@ -12,8 +12,12 @@
  *
  * This composable lifts that sync OUT of the view layer into GameShell, where it
  * runs unconditionally — independent of whether the footer ActionPanel, a
- * `#action-panel` slot, or `suppressActionPanel` is in play. The ActionPanel is
- * now purely presentational; the board substrate is fed from here.
+ * `#action-panel` slot, or the platform-only `platformActionPanelEscapeHatch`
+ * prop is in play (that prop is a platform escape hatch, not an ordinary
+ * author-facing option — see GameShell's prop doc; games should suppress an
+ * individual action's dock button via `.suppressFromDock()` on the action
+ * definition instead). The ActionPanel is now purely presentational; the
+ * board substrate is fed from here.
  *
  * Pit of Success: there is exactly ONE place that feeds board interaction. The
  * panel cannot fall out of sync with the board because the panel no longer feeds

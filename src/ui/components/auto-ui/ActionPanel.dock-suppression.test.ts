@@ -113,7 +113,11 @@ describe('ActionPanel dock suppression (LIBX-01)', () => {
 
     // ...but the panel received it unmodified via props -- suppression is a
     // render-only filter, not an availability mutation.
-    expect(wrapper.props('availableActions')).toEqual(['hiddenAction']);
-    expect(wrapper.props('actionMetadata')?.hiddenAction.suppressFromDock).toBe(true);
+    const receivedProps = wrapper.props() as {
+      availableActions: string[];
+      actionMetadata: Record<string, { suppressFromDock?: boolean }>;
+    };
+    expect(receivedProps.availableActions).toEqual(['hiddenAction']);
+    expect(receivedProps.actionMetadata.hiddenAction.suppressFromDock).toBe(true);
   });
 });

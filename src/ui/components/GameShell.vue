@@ -136,8 +136,14 @@ interface GameShellProps {
   showHistory?: boolean;
   /** Player positions that should be AI by default (1-indexed). E.g., [2] makes player 2 AI */
   defaultAIPlayers?: number[];
-  /** Suppress the footer ActionPanel regardless of anchor state (D-02 escape hatch). Default: false. */
-  suppressActionPanel?: boolean;
+  /**
+   * Platform-only escape hatch that suppresses the entire action dock
+   * (D-02 escape hatch, LIBX-01). Do NOT use from a game's own
+   * scaffold/bridge — use per-action `.suppressFromDock()` on the action
+   * definition instead. Referenced by the platform client and Phase 166
+   * SKILLDEF-03. Default: false.
+   */
+  platformActionPanelEscapeHatch?: boolean;
   /**
    * The game renders its own end-state UI inside its own board (D10/ENDGAME-01).
    * When true, BOTH the default GameOverCard and any `#game-over` slot content
@@ -174,7 +180,7 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   playerCount: 2,
   debugMode: true,
   showHistory: true,
-  suppressActionPanel: false,
+  platformActionPanelEscapeHatch: false,
   providesOwnGameOverUI: false,
 });
 
@@ -429,6 +435,17 @@ const availableActions = computed(() => {
   }
 
   return flowState.availableActions || [];
+});
+
+// LIBX-01: true when every currently-available action has metadata.suppressFromDock
+// -- i.e. there are no dock buttons left to show. No metadata / empty
+// availableActions means the default unsuppressed rendering (false), not a
+// vacuous "all suppressed" (an empty every() would otherwise return true).
+const allDockActionsSuppressed = computed(() => {
+  const meta = actionMetadata.value;
+  const names = availableActions.value as string[];
+  if (!meta || names.length === 0) return false;
+  return names.every((n) => meta[n]?.suppressFromDock === true);
 });
 
 // True while a simultaneous step is active (`awaitingPlayers` non-empty).
@@ -2418,22 +2435,25 @@ if ((import.meta as any).hot) {
             :color="activePlayer.color"
             :size="30"
           />
-          <!-- Turn strip: the fallback prompt surface. Shown ONLY when the ActionPanel
-               is explicitly suppressed (the D-02 escape hatch) — that way the prompt
-               survives even when no panel renders (IA-03, never a silent board). -->
+          <!-- Turn strip: the fallback prompt surface. Shown when the ActionPanel is
+               explicitly suppressed (the platform-only D-02 escape hatch) OR when
+               every available action's dock button is suppressed via per-action
+               .suppressFromDock() (LIBX-01) — either way the prompt survives even
+               when no panel renders (IA-03, never a silent board / no turn indicator). -->
           <span
-            v-if="props.suppressActionPanel"
+            v-if="props.platformActionPanelEscapeHatch || allDockActionsSuppressed"
             class="turn"
           >
             <span class="pr">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
           </span>
-          <!-- Action panel: mounted whenever not explicitly suppressed — INCLUDING the
-               all-board-anchored case, where ActionPanel renders its anchored-choices
-               operable button list ("Select on board or choose here"). That focusable
-               list is the keyboard/SR safety net (A11Y C-2): the panel is never fully
-               removed while a pick has choices, so custom UIs whose board isn't
+          <!-- Action panel: mounted whenever not explicitly suppressed and there is at
+               least one un-suppressed dock action — INCLUDING the all-board-anchored
+               case, where ActionPanel renders its anchored-choices operable button
+               list ("Select on board or choose here"). That focusable list is the
+               keyboard/SR safety net (A11Y C-2): the panel is never fully removed
+               while a pick has choices, so custom UIs whose board isn't
                keyboard-operable still expose an operable control. -->
-          <template v-if="!props.suppressActionPanel">
+          <template v-if="!props.platformActionPanelEscapeHatch && !allDockActionsSuppressed">
             <slot name="action-panel">
               <ActionPanel
                 :available-actions="isViewingHistory ? [] : availableActions"
