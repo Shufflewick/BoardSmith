@@ -6,7 +6,14 @@
  * and the action-bar turn indicator (IA-06). Seat index → shape keeps players
  * visually distinct even when two share an initial. Sizes via the `size` prop
  * (px); the letter scales with it.
+ *
+ * Glyph ink (LIBX-03/D30) is luminance-adaptive: black on light seat colors,
+ * white on dark, via `contrastInk`. The `text-shadow` halo is derived
+ * opposite the chosen ink so it never fights legibility.
  */
+import { computed } from 'vue';
+import { contrastInk } from '../utils/color-contrast';
+
 const SHAPES = [
   'sh-circle',
   'sh-square',
@@ -45,6 +52,15 @@ function initial(): string {
   if (generic) return generic[1];
   return (trimmed[0] ?? '?').toUpperCase();
 }
+
+// Safe default when `color` is absent (falls back to the accent token, whose
+// exact rendered value we don't have here to measure contrast against) —
+// matches the previous hardcoded white-ink appearance. Never call the
+// throwing parser with an undefined/unknown value (Pit of Success: only fail
+// loud on a color we were actually given).
+const DEFAULT_INK = { ink: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,.5)' } as const;
+
+const ink = computed(() => (props.color ? contrastInk(props.color) : DEFAULT_INK));
 </script>
 
 <template>
@@ -60,7 +76,10 @@ function initial(): string {
     aria-hidden="true"
   >
     <span class="shape"></span>
-    <span class="ini">{{ initial() }}</span>
+    <span
+      class="ini"
+      :style="{ color: ink.ink, textShadow: ink.textShadow }"
+    >{{ initial() }}</span>
   </span>
 </template>
 
@@ -83,8 +102,6 @@ function initial(): string {
   font-size: inherit;
   font-weight: 800;
   line-height: 1;
-  color: rgba(255, 255, 255, .95);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
   font-family: var(--bsg-font);
 }
 
