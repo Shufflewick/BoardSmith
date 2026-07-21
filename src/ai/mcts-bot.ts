@@ -53,6 +53,19 @@ export class MCTSBot<G extends Game = Game> {
   private rootCommandCount: number = 0;
   /** Root snapshot for fallback recovery */
   private rootSnapshot: GameStateSnapshot | null = null;
+  /**
+   * T-159-07 (AI-02): pre-reveal baseline clone of searchGame, captured the
+   * moment a fresh simultaneous step begins (before any co-decider's action
+   * mutates the shared searchGame). `resumeSimultaneousAction` applies each
+   * co-decider's action to the LIVE game immediately (no deferred reveal),
+   * so without this baseline a later co-decider's move enumeration would
+   * read an earlier co-decider's already-committed effects. All co-decider
+   * enumeration within one simultaneous step reads from this frozen clone
+   * instead of the mutating searchGame. Cleared once the step fully
+   * resolves (no awaitingPlayers left) so it never leaks into unrelated
+   * future steps.
+   */
+  private simultaneousBaseline?: G;
   /** Transposition table for caching position evaluations */
   private transpositionTable: Map<string, { value: number; visits: number }> = new Map();
   /** RAVE table for move value estimation across all playouts */
@@ -547,6 +560,12 @@ export class MCTSBot<G extends Game = Game> {
       return node;
     }
 
+    // T-159-07: if `node.flowState` is the start of a fresh simultaneous step
+    // (no co-decider has acted yet), snapshot searchGame now -- BEFORE this
+    // move mutates it -- so later co-deciders' enumeration in this step
+    // reads the pre-reveal state, not this move's committed effects.
+    this.maybeCaptureSimultaneousBaseline(node.flowState);
+
     // Pick first untried move (ordering determined at node creation by moveOrdering hook)
     const move = node.untriedMoves.shift()!;
 
@@ -600,6 +619,10 @@ export class MCTSBot<G extends Game = Game> {
     let depth = 0;
 
     while (!flowState.complete && depth < this.config.playoutDepth) {
+      // T-159-07: same pre-reveal baseline capture as expandIncremental --
+      // must run before this iteration's move mutates searchGame.
+      this.maybeCaptureSimultaneousBaseline(flowState);
+
       // Get available moves for the current player (whoever's turn it is)
       const moves = this.enumerateMovesForSimulation(this.searchGame, flowState);
       if (moves.length === 0) {
@@ -858,6 +881,16 @@ export class MCTSBot<G extends Game = Game> {
   private enumerateMovesForSimulation(game: G, flowState: FlowState): BotMove[] {
     const moves: BotMove[] = [];
 
+    // T-159-07: within a simultaneous step, enumerate against the pre-reveal
+    // baseline (if one was captured) instead of the live, possibly-mutated
+    // `game` -- a co-decider's move set must not depend on an earlier
+    // co-decider's already-committed pick. Outside a simultaneous step (or
+    // before any baseline exists), `game` is used unchanged.
+    const enumerationGame: G =
+      flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0 && this.simultaneousBaseline
+        ? this.simultaneousBaseline
+        : game;
+
     // Get the current player from flow state
     let currentPlayerIndex = flowState.currentPlayer;
     let actions: string[] = flowState.availableActions ?? [];
@@ -875,23 +908,58 @@ export class MCTSBot<G extends Game = Game> {
       return moves;
     }
 
-    const player = game.getPlayer(currentPlayerIndex);
+    // Read the player/actionDef from the SAME game instance we enumerate
+    // against -- actionDef closures (chooseFrom choices, filters) are bound
+    // to their owning game instance, so mixing instances would enumerate
+    // against the wrong element graph.
+    const player = enumerationGame.getPlayer(currentPlayerIndex);
     if (!player) {
       return moves;
     }
 
     for (const actionName of actions) {
-      const actionDef = game.getAction(actionName);
+      const actionDef = enumerationGame.getAction(actionName);
       if (!actionDef) continue;
 
       // Generate all valid argument combinations
-      const argCombos = this.enumerateSelections(game, actionDef, player);
+      const argCombos = this.enumerateSelections(enumerationGame, actionDef, player);
       for (const args of argCombos) {
         moves.push({ action: actionName, args });
       }
     }
 
     return moves;
+  }
+
+  /**
+   * T-159-07: detect the start of a fresh simultaneous step and snapshot
+   * searchGame BEFORE any co-decider's move mutates it. A step is "fresh"
+   * when every awaiting player is still not-completed (nobody has acted
+   * yet). Mid-step (some completed, some not) the existing baseline is kept
+   * unchanged. Outside a simultaneous step, any stale baseline is cleared so
+   * it can't leak into an unrelated future step.
+   */
+  private maybeCaptureSimultaneousBaseline(flowState: FlowState): void {
+    const awaiting = flowState.awaitingPlayers;
+    if (!awaiting || awaiting.length === 0) {
+      this.simultaneousBaseline = undefined;
+      return;
+    }
+    if (awaiting.every(p => !p.completed) && this.searchGame) {
+      this.simultaneousBaseline = this.cloneSearchGame(this.searchGame);
+    }
+  }
+
+  /**
+   * Clone the given game's CURRENT state into an independent Game instance.
+   * Used to freeze the T-159-07 pre-reveal baseline. No redaction is applied
+   * here -- `game` is already the bot's own redacted search sandbox (cloned
+   * from `toJSONForPlayer(botSeat)` at the root), so this just needs a plain
+   * state-authoritative copy, reusing the same restore path as the root.
+   */
+  private cloneSearchGame(game: G): G {
+    const snapshot = createSnapshot(game, this.gameType, [], this.seed);
+    return this.restoreGame(snapshot) as G;
   }
 
   /**
@@ -1061,10 +1129,15 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Capture current game state as snapshot
+   * Capture current game state as snapshot.
+   *
+   * T-159-06 (AI-02): passes `forSeat: this.playerIndex` so `createSnapshot`
+   * clones the bot's per-seat REDACTED view (`toJSONForPlayer`) instead of
+   * the full un-redacted truth. The search sandbox must never see opponents'
+   * hidden info -- reusing the existing redaction, not inventing one.
    */
   private captureSnapshot(): GameStateSnapshot {
-    return createSnapshot(this.game, this.gameType, this.actionHistory, this.seed);
+    return createSnapshot(this.game, this.gameType, this.actionHistory, this.seed, { forSeat: this.playerIndex });
   }
 
   /**

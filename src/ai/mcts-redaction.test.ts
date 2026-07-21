@@ -24,12 +24,16 @@ import { MCTSBot } from './mcts-bot.js';
 // ============================================================================
 
 /**
- * Walk a serialized element tree and find the first element matching `name`.
+ * Walk a serialized element tree and find the element with the given `id`.
+ * A single individually-hidden element (`showOnlyTo`/`hideFrom`) keeps its
+ * real, stable id in the redacted view (game.ts: intentional for FLIP
+ * animation correlation) but DROPS `name` -- so hidden-element lookups must
+ * key off `id`, not `name`.
  */
-function findByName(json: ElementJSON, name: string): ElementJSON | undefined {
-  if (json.name === name) return json;
+function findById(json: ElementJSON, id: number): ElementJSON | undefined {
+  if (json.id === id) return json;
   for (const child of json.children ?? []) {
-    const found = findByName(child, name);
+    const found = findById(child, id);
     if (found) return found;
   }
   return undefined;
@@ -137,7 +141,7 @@ describe('MCTSBot redaction (AI-02 / T-159-06)', () => {
     // Reach into the bot's private capture path directly (mirrors
     // mcts-restore.test.ts's use of `(bot as any).restoreGame`).
     const snapshot = (bot as any).captureSnapshot();
-    const secretCardJson = findByName(snapshot.state as ElementJSON, 'secretCard');
+    const secretCardJson = findById(snapshot.state as ElementJSON, game.secretCard.id);
 
     expect(secretCardJson).toBeDefined();
     // Pre-fix: captureSnapshot clones game.toJSON() (full truth) -- the

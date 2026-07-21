@@ -174,14 +174,22 @@ export function createSnapshot(
   game: Game,
   gameType: string,
   actionHistory: SerializedAction[] = [],
-  seed?: string
+  seed?: string,
+  opts?: { forSeat?: number }
 ): GameStateSnapshot {
   const flowState = game.getFlowState();
 
   return {
     version: 1,
     gameType,
-    state: game.toJSON(),
+    // Default: full un-redacted truth (existing callers, e.g. GameRunner, must
+    // keep seeing the authoritative tree). Opt-in `forSeat` (AI-02): callers
+    // that need a per-seat REDACTED clone (the MCTS bot's search sandbox) pass
+    // their seat and get `toJSONForPlayer`'s existing redaction instead of
+    // inventing a new one. Never flip this default for all callers.
+    state: opts?.forSeat !== undefined
+      ? game.toJSONForPlayer(opts.forSeat)
+      : game.toJSON(),
     flowState: flowState ?? undefined,
     actionHistory: [...actionHistory],
     seed,
