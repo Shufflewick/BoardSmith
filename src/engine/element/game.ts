@@ -1855,14 +1855,21 @@ export class Game<
    * Restore full flow state including awaiting state.
    * Used for HMR where we want to restore exactly where we were.
    * Throws if the position is invalid (e.g., flow structure changed).
+   *
+   * @param idRemap - CR-02 (159): optional `originalId -> syntheticId` map (produced
+   *   by `toJSONForPlayer`) for callers restoring a REDACTED clone. Lets an
+   *   element-typed flow variable that pointed at a now-anonymized hidden-zone
+   *   child relink to its correct redacted placeholder instead of being left as a
+   *   dead serialized marker. Absent for the default (un-redacted) restore path —
+   *   behavior there is unchanged.
    */
-  restoreFlowState(state: FlowState): void {
+  restoreFlowState(state: FlowState, idRemap?: Map<number, number>): void {
     if (!this._flowDefinition) {
       throw new Error('No flow definition set');
     }
 
     this._flowEngine = new FlowEngine(this, this._flowDefinition);
-    const result = this._flowEngine.restoreFullState(state);
+    const result = this._flowEngine.restoreFullState(state, idRemap);
 
     if (!result.success) {
       throw new Error(
@@ -2734,8 +2741,16 @@ export class Game<
    * Get the game state from the perspective of a specific player
    * (hides elements that player shouldn't see based on zone visibility)
    * @param player - Player, player seat, or null for spectator view
+   * @param idRemap - CR-02 (159): optional out-param. When supplied, populated with
+   *   `originalId -> syntheticId` for every fungible hidden-zone child that gets an
+   *   anonymized negative id (the `hidden`/`count-only`/`owner`-zone branches below).
+   *   Lets a caller that also holds the ORIGINAL (un-redacted) flow state relink an
+   *   element-typed flow variable pointing at a now-hidden element to its correct
+   *   redacted placeholder instead of losing it — see `relinkFlowVariables` in
+   *   `flow/engine.ts`. Individually-hidden single elements (the two branches above
+   *   this comment) keep their real id already, so they need no remap entry.
    */
-  toJSONForPlayer(player: P | number | null): ElementJSON {
+  toJSONForPlayer(player: P | number | null, idRemap?: Map<number, number>): ElementJSON {
     const playerSeat = player === null ? null : (typeof player === 'number' ? player : player.seat);
     // For visibility checks, spectators use -1 (no special access)
     const visibilityPosition = playerSeat ?? -1;
@@ -2860,10 +2875,18 @@ export class Game<
               // Redact identity-bearing image refs; keep only safe layout $-keys.
               // __hidden is seeded here (not in the helper) so the count-only
               // container branch keeps its distinct shape (no __hidden, has childCount).
+              const syntheticId = -(element._t.id * 1000 + i);
+              // CR-02 (159): record original -> synthetic id so an element-typed
+              // flow variable pointing at this now-anonymized child can still be
+              // relinked to its (redacted) placeholder on restore.
+              const childElement = element._t.children[i];
+              if (idRemap && childElement) {
+                idRemap.set(childElement.id, syntheticId);
+              }
               hiddenChildren.push({
                 className: childJson.className,
                 // Use negative index-based IDs to prevent correlation with real element IDs
-                id: -(element._t.id * 1000 + i),
+                id: syntheticId,
                 attributes: { __hidden: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
                 // Don't include name - could reveal card identity
               });
@@ -2888,9 +2911,15 @@ export class Game<
               // element IDs (matches the hidden/count-only branch above). Leaking
               // the real, stable id lets a non-owner track a face-down card across
               // zones and reveals.
+              const syntheticId = -(element._t.id * 1000 + i);
+              // CR-02 (159): see remap comment in the hidden/count-only branch above.
+              const childElement = element._t.children[i];
+              if (idRemap && childElement) {
+                idRemap.set(childElement.id, syntheticId);
+              }
               hiddenChildren.push({
                 className: childJson.className,
-                id: -(element._t.id * 1000 + i),
+                id: syntheticId,
                 attributes: { __hidden: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
                 // Don't include name - could reveal card identity
               });

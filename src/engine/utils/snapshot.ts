@@ -89,6 +89,18 @@ export interface GameStateSnapshot {
    * shim (project no-back-compat rule).
    */
   executeBarrierIndex?: number;
+
+  /**
+   * CR-02 (159): `originalId -> syntheticId` remap for fungible hidden-zone
+   * children anonymized by `toJSONForPlayer` (populated only when `state` was
+   * built via the `opts.forSeat` redacted path below). Carried alongside
+   * `state`/`flowState` so `restoreGame`/`restoreFlowState` can relink an
+   * element-typed flow variable that pointed at a now-hidden element to its
+   * correct redacted placeholder instead of leaving a dead serialized marker.
+   * Always absent on the default (un-redacted) `createSnapshot` path — those
+   * callers keep real ids throughout, so no remap is ever needed.
+   */
+  hiddenIdRemap?: Map<number, number>;
 }
 
 /**
@@ -179,6 +191,13 @@ export function createSnapshot(
 ): GameStateSnapshot {
   const flowState = game.getFlowState();
 
+  // CR-02 (159): only populated on the `forSeat` redacted path — collects the
+  // originalId -> syntheticId remap `toJSONForPlayer` produces for anonymized
+  // hidden-zone children, so a caller restoring this snapshot can relink an
+  // element-typed flow variable pointing at a now-hidden element (see
+  // `hiddenIdRemap`'s doc on `GameStateSnapshot`).
+  const hiddenIdRemap = opts?.forSeat !== undefined ? new Map<number, number>() : undefined;
+
   return {
     version: 1,
     gameType,
@@ -188,7 +207,7 @@ export function createSnapshot(
     // their seat and get `toJSONForPlayer`'s existing redaction instead of
     // inventing a new one. Never flip this default for all callers.
     state: opts?.forSeat !== undefined
-      ? game.toJSONForPlayer(opts.forSeat)
+      ? game.toJSONForPlayer(opts.forSeat, hiddenIdRemap)
       : game.toJSON(),
     flowState: flowState ?? undefined,
     actionHistory: [...actionHistory],
@@ -196,6 +215,7 @@ export function createSnapshot(
     sequence: game._ctx.sequence,
     randomState: game.getRandomState(),
     gameOptions: game.getConstructorOptions(),
+    ...(hiddenIdRemap && hiddenIdRemap.size > 0 && { hiddenIdRemap }),
   };
 }
 

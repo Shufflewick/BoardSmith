@@ -210,23 +210,41 @@ export class MCTSBot<G extends Game = Game> {
    * Called by both play() and playWithStats().
    */
   private async runSearch(): Promise<{ move: BotMove; root: MCTSNode }> {
-    // Cache UCT constant once per move (not per selectChild call)
-    this.cachedUctC = this.uctConstant?.(this.game, this.playerIndex)
-      ?? this.config.uctC
-      ?? Math.sqrt(2);
-
-    const flowState = this.game.getFlowState();
-    if (!flowState?.awaitingInput) {
+    // Turn-legality checks read only structural flow state (awaitingInput /
+    // currentPlayer / awaitingPlayers), never opponent hidden attributes, so
+    // checking them against the live `this.game` before the redacted clone
+    // exists is safe.
+    const liveFlowState = this.game.getFlowState();
+    if (!liveFlowState?.awaitingInput) {
       throw new Error('Game is not awaiting input');
     }
 
     // Check if this is our turn (either currentPlayer matches or we're in awaitingPlayers)
-    if (!this.canBotAct(flowState)) {
+    if (!this.canBotAct(liveFlowState)) {
       throw new Error(`Not bot's turn (player ${this.playerIndex})`);
     }
 
+    // CR-01 (159): build the redacted search sandbox FIRST, then enumerate/
+    // threat-check/UCT-weight from it -- never from `this.game` (full truth).
+    // `enumerateAllMoves` -> `getSelectionChoices` and the game-supplied
+    // `threatResponseMoves`/`uctConstant` hooks can read arbitrary game state;
+    // running them against `this.game` would leak opponents' hidden info into
+    // the bot's ROOT decision even though the search tree below it was
+    // redacted. Doing this unconditionally (including the allMoves.length===1
+    // fast path below) closes that leak for every code path, not just the
+    // full-search one. For perfect-information games (no hidden zones) the
+    // redacted view is byte-identical to the full view, so this is a no-op.
+    this.rootSnapshot = this.captureSnapshot();
+    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
+    const flowState = this.searchGame.getFlowState() ?? liveFlowState;
+
+    // Cache UCT constant once per move (not per selectChild call)
+    this.cachedUctC = this.uctConstant?.(this.searchGame, this.playerIndex)
+      ?? this.config.uctC
+      ?? Math.sqrt(2);
+
     // Get ALL available moves first (without sampling) for threat response analysis
-    const allMoves = this.enumerateAllMoves(this.game, flowState);
+    const allMoves = this.enumerateAllMoves(this.searchGame, flowState);
     if (allMoves.length === 0) {
       throw new Error('No available moves');
     }
@@ -244,7 +262,7 @@ export class MCTSBot<G extends Game = Game> {
     let moves: BotMove[];
 
     if (this.threatResponseMoves) {
-      const threatResponse = this.threatResponseMoves(this.game, this.playerIndex, allMoves);
+      const threatResponse = this.threatResponseMoves(this.searchGame, this.playerIndex, allMoves);
       if (threatResponse.moves.length > 0) {
         // FORCE blocking when threat is detected - no half measures!
         // If threat response finds blocking moves, the bot MUST use them
@@ -262,13 +280,9 @@ export class MCTSBot<G extends Game = Game> {
     this.transpositionTable.clear();
     this.raveTable.clear();
 
-    // Initialize incremental state management:
-    // Clone game once and track root command count for undo. Authoritative
-    // restore reproduces the live awaiting-input position exactly (the search
-    // root was validated awaitingInput above), so there is no replay-divergence
-    // case to guard against here.
-    this.rootSnapshot = this.captureSnapshot();
-    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
+    // rootCommandCount tracks the command baseline on `searchGame` (built
+    // above) for undo -- recomputed here since threat-response/sampling ran
+    // between the clone and this point but never mutated `searchGame`.
     this.rootCommandCount = this.searchGame.commandHistory.length;
 
     // Create root node with moves (blocking-only when threatened, sampled otherwise)
@@ -1185,9 +1199,26 @@ export class MCTSBot<G extends Game = Game> {
 
     // Restore the authoritative flow position. Element-valued flow variables were
     // serialized to markers by getPosition; restoreFlowState relinks them to the
-    // freshly loaded tree internally.
+    // freshly loaded tree internally. `hiddenIdRemap` (CR-02, 159) is only ever
+    // present on a redacted (`forSeat`) snapshot — it lets a flow variable that
+    // pointed at a now-anonymized hidden-zone child relink to its correct
+    // redacted placeholder instead of being left as a dead serialized marker.
+    //
+    // `snapshot.hiddenIdRemap ?? this.rootSnapshot?.hiddenIdRemap`: a
+    // DESCENDANT clone of an already-redacted searchGame (`cloneSearchGame`'s
+    // T-159-07 simultaneous baseline) calls `createSnapshot` WITHOUT `forSeat`
+    // (the source game is already redacted, so `toJSON()` is correct and no
+    // fresh remap is collected) -- but `frame.data.forEachItems` entries
+    // referencing an ORIGINAL (pre-redaction) id are copied forward verbatim
+    // through every subsequent position serialize/restore cycle for as long
+    // as that forEach loop is active, so those descendants still need the
+    // SAME remap the root redaction produced. The remap is a static snapshot
+    // of "which original id got anonymized to which synthetic id at root
+    // capture time" and stays valid for the whole search: nothing after root
+    // capture ever introduces a NEW original-id reference (all further
+    // mutation happens on already-redacted/synthetic ids).
     if (snapshot.flowState) {
-      game.restoreFlowState(snapshot.flowState);
+      game.restoreFlowState(snapshot.flowState, snapshot.hiddenIdRemap ?? this.rootSnapshot?.hiddenIdRemap);
     }
 
     return game;
