@@ -76,12 +76,27 @@ class CommitGame extends Game<CommitGame, CommitPlayer> {
       }),
     );
 
+    // `.notUndoable()` variant of `commit` -- lets a Plan 02 test exercise
+    // Phase 155's non-undoable fence (UNDO-01) from WITHIN a simultaneous
+    // step, per-seat, without a second fixture.
+    this.registerAction(
+      Action.create('lockCommit')
+        .notUndoable()
+        .condition({
+          'has not committed yet': (ctx) => !(ctx.player as CommitPlayer).committed,
+        })
+        .execute((_args, ctx) => {
+          (ctx.player as CommitPlayer).committed = true;
+          return { success: true };
+        }),
+    );
+
     this.setFlow(
       defineFlow({
         root: simultaneousActionStep({
           name: 'commit-step',
           players: () => this.players,
-          actions: ['commit', 'endGame'],
+          actions: ['commit', 'endGame', 'lockCommit'],
           playerDone: (_ctx, p) => (p as CommitPlayer).committed,
           allDone: () => this.roundClosed,
         }),
