@@ -826,6 +826,7 @@ useBoardActionBridge({
   autoEndTurn,
   actionMetadata,
   availableActions,
+  isViewingHistory,
 });
 
 // ── DEV-02: devtools postMessage bridge ──────────────────────────────────────

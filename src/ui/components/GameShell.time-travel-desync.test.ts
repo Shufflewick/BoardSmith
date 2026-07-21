@@ -27,7 +27,7 @@
  * exactly like the existing useBoardActionBridge.test.ts does.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { defineComponent, ref, computed, h, nextTick } from 'vue';
+import { defineComponent, ref, computed, h, nextTick, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,8 +60,8 @@ interface FakeGameState {
  *   });
  */
 function makeDisplayedState(
-  state: ReturnType<typeof ref<FakeGameState | null>>,
-  timeTravelState: ReturnType<typeof ref<{ view: string; marker: string } | null>>
+  state: Ref<FakeGameState | null>,
+  timeTravelState: Ref<{ view: string; marker: string } | null>
 ) {
   return computed<FakeGameState | null>(() => {
     if (timeTravelState.value) {
@@ -105,9 +105,9 @@ const BoardBranchHarness = defineComponent({
     // (`v-if="selectedUiComponent"` dynamic-component vs. `v-else` slot), both
     // fixed with the SAME displayedState computed (Pitfall 3).
     if (this.useDynamicComponent) {
-      return h(this.BoardStub, { class: 'game-board-dynamic', state: this.displayedState });
+      return h(this.BoardStub, { class: 'game-board-dynamic', state: this.displayedState } as Record<string, unknown>);
     }
-    return h(this.BoardStub, { class: 'game-board-slot', state: this.displayedState });
+    return h(this.BoardStub, { class: 'game-board-slot', state: this.displayedState } as Record<string, unknown>);
   },
 });
 

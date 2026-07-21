@@ -46,6 +46,15 @@ export interface BoardActionBridgeOptions {
   actionMetadata: Ref<Record<string, ActionMetadata> | undefined> | ComputedRef<Record<string, ActionMetadata> | undefined>;
   /** Reactive: available action names for the current player. */
   availableActions: Ref<string[]> | ComputedRef<string[]>;
+  /**
+   * Reactive: true while the debug panel shows historical state (time-travel).
+   * Board clicks must never commit to the live engine while this is true —
+   * LIBX-04 (D31). Guarded independently in all four mutating functions
+   * (startAction, executeAction, setSelectionValue, toggleMultiSelectValue)
+   * rather than derived from isMyTurn, since a pick already in progress does
+   * not re-check isMyTurn mid-action.
+   */
+  isViewingHistory: Ref<boolean> | ComputedRef<boolean>;
 }
 
 function formatActionName(name: string): string {
@@ -74,7 +83,7 @@ function elementClickRef(ve: ValidElement): ElementRef {
  * lifetime. No-op when boardInteraction is undefined.
  */
 export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
-  const { controller, boardInteraction, isMyTurn, autoEndTurn, actionMetadata, availableActions } = opts;
+  const { controller, boardInteraction, isMyTurn, autoEndTurn, actionMetadata, availableActions, isViewingHistory } = opts;
 
   // Without a board substrate there is nothing to feed. (Should not happen inside GameShell.)
   if (!boardInteraction) return;
@@ -175,6 +184,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // ── Action lifecycle helpers (controller delegation) ─────────────────────────
 
   async function startAction(actionName: string, options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }) {
+    if (isViewingHistory.value) return;
     const meta = actionsWithMetadata.value.find(a => a.name === actionName);
     if (!meta || meta.selections.length === 0) {
       await executeAction(actionName, {});
@@ -191,6 +201,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   }
 
   async function executeAction(actionName: string, args: Record<string, unknown>) {
+    if (isViewingHistory.value) return;
     if (isExecuting.value) return;
     if (!isMyTurn.value) return;
     const filteredArgs: Record<string, unknown> = {};
@@ -206,6 +217,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   }
 
   async function setSelectionValue(name: string, value: unknown) {
+    if (isViewingHistory.value) return;
     const selection = currentPick.value;
     // Capture choices BEFORE fill() — fill() advances the pick state so
     // choicesForBoard.value would return the NEXT pick's choices after the await.
@@ -228,6 +240,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   }
 
   async function toggleMultiSelectValue(selectionName: string, value: unknown) {
+    if (isViewingHistory.value) return;
     await controller.toggleMultiSelect(selectionName, value);
     updateMultiSelectBoardHighlights();
   }

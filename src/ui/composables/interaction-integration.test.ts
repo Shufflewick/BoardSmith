@@ -168,6 +168,7 @@ describe('Board + controller interaction integration', () => {
       autoEndTurn,
       actionMetadata,
       availableActions,
+      isViewingHistory: ref(false),
     });
 
     // Flush: auto-start → controller.start('move') → fetchChoicesForPick('piece')
@@ -279,7 +280,7 @@ describe('Board + controller interaction integration', () => {
       autoFill: false, autoExecute: false, fetchPickChoices,
     });
     const board = createBoardInteraction();
-    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions });
+    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, isViewingHistory: ref(false) });
     return { isMyTurn, autoEndTurn, availableActions, actionMetadata, sendAction, controller, board };
   }
 
@@ -360,7 +361,7 @@ describe('Board + controller interaction integration', () => {
       fetchPickChoices: vi.fn(async () => ({ success: false, error: 'n/a' })),
     });
     const board = createBoardInteraction();
-    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions });
+    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, isViewingHistory: ref(false) });
     await flush();
 
     // It becomes my turn with a sole no-selection action available.
@@ -411,6 +412,7 @@ describe('Board + controller interaction integration', () => {
       autoEndTurn,
       actionMetadata,
       availableActions,
+      isViewingHistory: ref(false),
     });
 
     // Flush: auto-start 'place' → fetchChoicesForPick('hex') → board shows hexes

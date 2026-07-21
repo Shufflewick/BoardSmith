@@ -90,6 +90,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      isViewingHistory: ref(false),
     });
 
     // The board cell (client identity has no notation — getter not serialized)
@@ -113,6 +114,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      isViewingHistory: ref(false),
     });
 
     board.triggerElementSelect({ id: 5, name: 'A1' });
@@ -135,6 +137,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ move: { name: 'move', selections: [cellPick] } }),
       availableActions: ref(['move']),
+      isViewingHistory: ref(false),
     });
 
     // The rendered square (its own id is 7, notation 'd4') is selectable by notation.
@@ -165,6 +168,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ move: { name: 'move', selections: [destPick] } }),
       availableActions: ref(['move']),
+      isViewingHistory: ref(false),
     });
 
     expect(board.isSelectableElement({ id: 21, name: 'e5', notation: 'e5' })).toBe(true);
@@ -189,6 +193,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ move: { name: 'move', selections: [destPick] } }),
       availableActions: ref(['move']),
+      isViewingHistory: ref(false),
     });
 
     // Before the fetch lands, the destination square is NOT selectable.
@@ -214,6 +219,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      isViewingHistory: ref(false),
     });
 
     // Auto-start is coalesced onto a settled-state nextTick (see scheduleAutoStart),
@@ -241,6 +247,7 @@ describe('useBoardActionBridge', () => {
       // no selections — so it should auto-execute (commit the turn).
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
       availableActions: ref(['endTurn']),
+      isViewingHistory: ref(false),
     });
 
     await nextTick(); // settle the initial auto-start evaluation
@@ -273,6 +280,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
       availableActions: ref(['endTurn']),
+      isViewingHistory: ref(false),
     });
 
     await nextTick();
@@ -315,6 +323,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
         availableActions: ref(['endTurn']),
+        isViewingHistory: ref(false),
       });
 
       await nextTick();
@@ -334,6 +343,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
         availableActions: ref(['endTurn']),
+        isViewingHistory: ref(false),
       });
 
       await nextTick();
@@ -357,6 +367,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
         availableActions: ref(['endTurn']),
+        isViewingHistory: ref(false),
       });
 
       await nextTick();
@@ -384,6 +395,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
         availableActions: ref(['draw']),
+        isViewingHistory: ref(false),
       });
 
       await nextTick();
@@ -405,6 +417,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
         availableActions: ref(['draw']),
+        isViewingHistory: ref(false),
       });
 
       await nextTick();
@@ -427,6 +440,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
       availableActions: ref(['endTurn']),
+      isViewingHistory: ref(false),
     });
 
     await nextTick();
@@ -466,6 +480,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
         availableActions: ref(['endTurn']),
+        isViewingHistory: ref(false),
       });
 
       await nextTick();
@@ -491,6 +506,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
         availableActions: ref(['endTurn']),
+        isViewingHistory: ref(false),
       });
 
       await nextTick();
@@ -522,6 +538,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
         availableActions: ref(['draw']),
+        isViewingHistory: ref(false),
       });
 
       await nextTick();
@@ -549,6 +566,7 @@ describe('useBoardActionBridge', () => {
           play: { name: 'play', selections: [{ name: 'card', type: 'chooseElement' }], manual: true },
         }),
         availableActions: ref(['play']),
+        isViewingHistory: ref(false),
       });
 
       await nextTick();
@@ -603,6 +621,7 @@ describe('useBoardActionBridge', () => {
       const controller = useActionController({
         sendAction,
         availableActions: ref(['commit']),
+        isViewingHistory: ref(false),
         actionMetadata: ref({}), // no metadata for `commit` -> synthesized 0-selection meta
         isMyTurn: ref(true), // stays true — the bug is that nothing ever re-checks this either
         completed,
@@ -616,6 +635,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({}),
         availableActions: ref(['commit']),
+        isViewingHistory: ref(false),
       });
 
       // Initial mount auto-starts + auto-executes the sole no-selection action.
