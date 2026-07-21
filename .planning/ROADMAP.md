@@ -19,7 +19,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 
 - [ ] **Phase 155: Undo / Rewind Family Correctness** — enforce `.notUndoable()` server-side, fence undo at flow-node/`finished` boundaries, stop solo-undo wipe, fix animation-id rewind (D1, D2, D5, D6)
 - [x] **Phase 156: Sole-Option Auto-Execute** — a single-option action auto-*starts* but never auto-*executes*; the shell stops playing for the player (D7)
-- [ ] **Phase 157: Game-Over UI + Forward Exits** — suppressable/dismissable `GameOverCard` + working Rematch/New Game/dev-restart (D10, D11)
+- [x] **Phase 157: Game-Over UI + Forward Exits** — suppressable/dismissable `GameOverCard` + working Rematch/New Game/dev-restart (D10, D11)
 - [ ] **Phase 158: Auto-Zoom Re-Fit** — `useAutoZoom` re-fits on dock/board/region resize instead of once against a stale layout (D12)
 - [ ] **Phase 159: MCTS Soundness + Dynamic multiSelect** — dynamic/function-valued `multiSelect` in enumeration + panel (delivers C.2), redacted-view MCTS for hidden info (D9, D8)
 - [ ] **Phase 160: Simultaneous-Step Correctness** — per-seat undo checkpointing, any-seat undo, `allDone` crash, seat-status/commit leak (D3, D4, D21, D27)
@@ -74,8 +74,8 @@ Plans:
 2. Rematch / New Game / dev-restart from a finished game actually restart the game (D11, 2 games).
 3. Both are covered by tests that fail on pre-fix behavior (unsuppressable card; inert forward exit) and pass after (PROC-01).
 **Plans** (2 plans):
-- [ ] 157-01-PLAN.md — `#game-over` slot + `providesOwnGameOverUI` + draw/unknown labeling + dismiss + isDraw threading (wave 1) [ENDGAME-01, PROC-01]
-- [ ] 157-02-PLAN.md — forward-exit routing (Rematch/New Game/dev-restart/DebugPanel) + relaxed restart guard + DevHost debug:restart handler (wave 2, depends 157-01) [ENDGAME-02, PROC-01]
+- [x] 157-01-PLAN.md — `#game-over` slot + `providesOwnGameOverUI` + draw/unknown labeling + dismiss + isDraw threading (wave 1) [ENDGAME-01, PROC-01]
+- [x] 157-02-PLAN.md — forward-exit routing (Rematch/New Game/dev-restart/DebugPanel) + DevHost routing (guard already admitted finished games) + DevHost debug:restart handler (wave 2, depends 157-01) [ENDGAME-02, PROC-01]
 
 #### Phase 158: Auto-Zoom Re-Fit
 **Goal**: `useAutoZoom` keeps the board fitted as the layout changes — it re-fits on dock/board/region resize instead of fitting once against a stale layout and leaving regions unreachable.

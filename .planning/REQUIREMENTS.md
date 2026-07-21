@@ -46,10 +46,10 @@ the fix holds → only then close.**
 
 ### ENDGAME — Game-over UI + forward exits (D10, D11) — Phase 157
 
-- [ ] **ENDGAME-01** (D10, 3 games, Major/Blocker): The shell `GameOverCard` is suppressable and
+- [x] **ENDGAME-01** (D10, 3 games, Major/Blocker): The shell `GameOverCard` is suppressable and
   dismissable and never mislabels a no-winner ending — via a `#game-over` slot / `providesOwnGameOverUI`
   flag so a game can present its own end state.
-- [ ] **ENDGAME-02** (D11, 2 games, Blocker): Every forward exit from a finished game works — Rematch /
+- [x] **ENDGAME-02** (D11, 2 games, Blocker): Every forward exit from a finished game works — Rematch /
   New Game / dev-restart actually restart, unblocking multi-game formats.
 
 ### ZOOM — Auto-zoom re-fit (D12) — Phase 158

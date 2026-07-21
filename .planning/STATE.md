@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: Phase 156 complete (verification passed 3/3) — next is Phase 157
-stopped_at: Completed Phase 156 (1 plan, VERIFICATION passed, review resolved)
-last_updated: "2026-07-21T00:30:00.000Z"
-last_activity: "2026-07-20 — Phase 156 (Sole-Option Auto-Execute) shipped: ActionBuilder.manual() suppresses silent auto-execute of a sole no-selection action (D7/AUTOEXEC-01), dev-warning honors Pit-of-Success on the un-manual() path, 2772 tests green; code review WR-01/WR-02 resolved"
+status: Phase 157 complete (verification passed 3/3) — next is Phase 158
+stopped_at: Completed Phase 157 (2 plans, VERIFICATION passed, review resolved incl. a real Critical)
+last_updated: "2026-07-21T01:15:00.000Z"
+last_activity: "2026-07-20 — Phase 157 (Game-Over UI + Forward Exits) shipped: #game-over slot + providesOwnGameOverUI + draw/unknown labeling + dismissable GameOverCard (D10); all forward exits routed to the one real restart via DevHost debug:restart handler + New Game (D11 — plan-check EMPIRICALLY disproved the guard-relaxation theory; fix is routing). 2810 tests green; code review caught a real Critical (isDraw dropped at the DevHost relay hop) + fixed."
 progress:
   total_phases: 15
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 13
+  completed_phases: 3
+  total_plans: 8
+  completed_plans: 8
+  percent: 20
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–156 shipped (verifications passed); next is Phase 157 (Game-Over UI + Forward Exits)
+**Current focus:** v4.8 Battery Post-Mortem Fixes — Phases 155–157 shipped (verifications passed); next is Phase 158 (Auto-Zoom Re-Fit)
 
 ## Current Position
 
-Phase: 157 (Game-Over UI + Forward Exits) — next up. Phases 155–156 complete.
+Phase: 158 (Auto-Zoom Re-Fit) — next up. Phases 155–157 complete.
 Plan: —
-Status: Phase 156 verification passed (3/3); code review resolved (WR-01/WR-02)
-Last activity: 2026-07-20 — Phase 156 (Sole-Option Auto-Execute) shipped: `ActionBuilder.manual()` suppresses the silent auto-execute of a sole no-selection action (D7); metadata threaded through both builders; dev-mode one-time warning on the un-`manual()` path honors Pit-of-Success while keeping the roadmap-locked default. Deferred (pre-existing, not this phase): IN-01 `ActionMetadata` `help`-field drift between `protocol.ts` and `session/types.ts`.
+Status: Phase 157 verification passed (3/3); code review resolved (1 Critical: isDraw relay hop; 1 Warning: aria-modal placement)
+Last activity: 2026-07-20 — Phase 157 (Game-Over UI + Forward Exits) shipped. Methodology note: the plan-checker empirically disproved the "relax the phase guard" theory for D11 by writing a throwaway host test — the guard already admitted finished games (phase never leaves 'playing'); the real fix was routing (DevHost debug:restart handler + New Game → restart). Deferred (pre-existing, not this phase): IN-01 `ActionMetadata` `help`-field drift between `protocol.ts` and `session/types.ts`.
 
 ## Milestones
 
