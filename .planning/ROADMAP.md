@@ -24,7 +24,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [x] **Phase 159: MCTS Soundness + Dynamic multiSelect** — dynamic/function-valued `multiSelect` in enumeration + panel (delivers C.2), redacted-view MCTS for hidden info (D9, D8)
 - [x] **Phase 160: Simultaneous-Step Correctness** — per-seat undo checkpointing, any-seat undo, `allDone` crash, seat-status/commit leak (D3, D4, D21, D27)
 - [x] **Phase 161: Dev-Host Tooling** — gameOption/preset selection, bare solo start, first-seat orphan race, color palette (D13, D14, D15, D16)
-- [ ] **Phase 162: Test-Tooling Ergonomics** — asset-scan comment false-positive + export surface, module-scope `matchMedia`, symmetric-deck leak assert (D17, D18, D19, D20)
+- [x] **Phase 162: Test-Tooling Ergonomics** — asset-scan comment false-positive + export surface, module-scope `matchMedia`, symmetric-deck leak assert (D17, D18, D19, D20)
 - [ ] **Phase 163: Engine Space Lifecycle & Element Integrity** — sealed/append-only Space, Space removal/re-parent, hidden-count leak, class-name collision, metadata divergence (D22, D23, D24, D25, D26)
 - [ ] **Phase 164: Library Misc — Action-Panel, Loop, Visual, Debug-View** — per-action dock suppression + fence `suppress-action-panel` (C.3-lib), unbounded `loop()`, token glyph ink, time-travel desync (D28, D29, D30, D31)
 - [ ] **Phase 165: Platform Logging Hygiene** — stop shipping `[DRAWDROP]` debug logging to the production console (D32)
@@ -146,8 +146,8 @@ Plans:
 4. `assertNoHiddenInfoLeak` works for symmetric decks (markers not name-based-only) (D20).
 5. Each has a test proving the old failure mode is gone (PROC-01).
 **Plans:** 2 plans
-- [ ] 162-01-PLAN.md — asset-scan comment-stripping + boardsmith/testing export [TOOL-01, TOOL-02]
-- [ ] 162-02-PLAN.md — side-effect-free boardsmith/ui import + elementId-keyed leak detection [TOOL-03, TOOL-04]
+- [x] 162-01-PLAN.md — asset-scan comment-stripping + boardsmith/testing export [TOOL-01, TOOL-02]
+- [x] 162-02-PLAN.md — side-effect-free boardsmith/ui import + elementId-keyed leak detection [TOOL-03, TOOL-04]
 
 #### Phase 163: Engine Space Lifecycle & Element Integrity
 **Goal**: The `Space`/element subsystem's structural gaps are closed — a sealed/append-only Space whose `onExit` survives restore, Space removal/re-parenting, no hidden-child-count leak, no silent class-name-collision rename, and no `availableActions`/`actionMetadata` divergence that strands the board.

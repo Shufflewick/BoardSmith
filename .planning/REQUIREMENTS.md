@@ -92,13 +92,13 @@ the fix holds → only then close.**
 
 ### TOOL — Test-tooling ergonomics (D17, D18, D19, D20) — Phase 162
 
-- [ ] **TOOL-01** (D17, Lanternfall, Med): `scanAssetReachability` no longer matches `<img` inside code
+- [x] **TOOL-01** (D17, Lanternfall, Med): `scanAssetReachability` no longer matches `<img` inside code
   comments (which produced a false build FAIL).
-- [ ] **TOOL-02** (D18, OTP, Med): `scanAssetReachability` is on the published export surface so games can
+- [x] **TOOL-02** (D18, OTP, Med): `scanAssetReachability` is on the published export surface so games can
   call it without hand-rolling.
-- [ ] **TOOL-03** (D19, OTP, Blocking): `boardsmith/ui` no longer reads `window.matchMedia` at module
+- [x] **TOOL-03** (D19, OTP, Blocking): `boardsmith/ui` no longer reads `window.matchMedia` at module
   scope (which threw under jsdom) — no test shim required.
-- [ ] **TOOL-04** (D20, OTP, Med): `assertNoHiddenInfoLeak` is usable for symmetric decks — markers are
+- [x] **TOOL-04** (D20, OTP, Med): `assertNoHiddenInfoLeak` is usable for symmetric decks — markers are
   not name-based-only.
 
 ### SPACE — Engine Space lifecycle & element integrity (D22–D26) — Phase 163

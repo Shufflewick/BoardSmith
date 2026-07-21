@@ -14,7 +14,7 @@ findings:
   warning: 2
   info: 1
   total: 5
-status: resolved
+status: resolved (2 criticals fixed)
 ---
 
 # Phase 162: Code Review Report
