@@ -1571,6 +1571,82 @@ describe('useActionController picks', () => {
       expect(meta!.selections[0].multiSelect).toEqual({ min: 2, max: 3 });
     });
 
+    describe('function-valued multiSelect reading a prior sibling selection (v4.8-WR01)', () => {
+      it('uses the server-resolved snapshot (real prior args) instead of the stale metadata baked with knownArgs={}', async () => {
+        // Static metadata for 'items' is baked at buildActionMetadata() time
+        // with knownArgs: {} — a function-valued multiSelect reading 'count'
+        // has no 'count' yet, so it resolves (deliberately, in this test) to
+        // the WRONG bound { min: 1, max: 1 }. The real per-step server fetch
+        // (mocked below) resolves against the REAL 'count' value once it's
+        // known, matching what MCTS enumeration would see.
+        const pickByCountMeta: Record<string, ActionMetadata> = {
+          pickByCount: {
+            name: 'pickByCount',
+            prompt: 'Pick items by count',
+            selections: [
+              {
+                name: 'count',
+                type: 'choice',
+                prompt: 'How many?',
+                choices: [
+                  { value: 1, display: 'One' },
+                  { value: 3, display: 'Three' },
+                ],
+              },
+              {
+                name: 'items',
+                type: 'elements',
+                prompt: 'Select items',
+                multiSelect: { min: 1, max: 1 }, // stale — resolved with knownArgs: {}
+                validElements: [{ id: 1 }, { id: 2 }, { id: 3 }],
+              },
+            ],
+          },
+        };
+
+        actionMetadata.value = { ...createTestMetadata(), ...pickByCountMeta };
+        availableActions.value = [...(availableActions.value ?? []), 'pickByCount'];
+
+        const fetchPickChoices = vi.fn().mockImplementation(
+          async (_actionName: string, selectionName: string, _player: number, currentArgs: Record<string, unknown>): Promise<PickChoicesResult> => {
+            if (selectionName === 'items') {
+              // Mirrors PickHandler.getPickChoices(): resolves multiSelect
+              // against the REAL accumulated currentArgs, exactly like MCTS
+              // enumeration does.
+              return {
+                success: true,
+                validElements: [{ id: 1 }, { id: 2 }, { id: 3 }],
+                multiSelect: { min: 1, max: currentArgs.count as number },
+              };
+            }
+            return { success: true, choices: [{ value: 1, display: 'One' }, { value: 3, display: 'Three' }] };
+          }
+        );
+
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoExecute: false,
+          autoFill: false,
+          playerSeat: ref(0),
+          fetchPickChoices,
+        });
+
+        await controller.start('pickByCount');
+        await controller.fill('count', 3);
+
+        // The panel/custom-UI toggle path must respect the REAL max (3),
+        // not the stale static metadata max (1) baked with knownArgs: {}.
+        await controller.toggleMultiSelect('items', 1);
+        await controller.toggleMultiSelect('items', 2);
+        await controller.toggleMultiSelect('items', 3);
+
+        expect(controller.multiSelectDraft.value?.values).toEqual([1, 2, 3]);
+      });
+    });
+
     describe('fill() rejects a scalar for a multiSelect pick (UIX-02)', () => {
       it('rejects a scalar with the UI-SPEC error and does not mutate state or forward to the server', async () => {
         const controller = useActionController({

@@ -5,11 +5,59 @@
  * They handle development warnings, value display extraction, and action analysis.
  */
 
-import type { ActionMetadata, PickMetadata } from './useActionControllerTypes.js';
+import type { ActionMetadata, PickMetadata, PickSnapshot } from './useActionControllerTypes.js';
 import { isDevMode, devWarn } from '../../utils/dev.js';
 
 // Re-export for backwards compatibility during transition
 export { isDevMode, devWarn };
+
+// ============================================
+// MultiSelect Resolution (Pit of Success — single source of truth)
+// ============================================
+
+/**
+ * Resolve the EFFECTIVE multiSelect config for a selection — the one shared
+ * helper `useActionController` (fill/toggleMultiSelect), `ActionPanel.vue`,
+ * and `useBoardActionBridge.ts` all call, so the panel and custom UIs can
+ * never disagree (mirrors the engine-side AI-01/D9 guarantee that
+ * `resolveMultiSelect` gives enumeration and metadata).
+ *
+ * Resolution order:
+ * 1. `dependsOn` + `multiSelectByDependentValue` — an explicitly declared
+ *    dependent config, looked up from the current value of the dependent
+ *    selection. Purely client-side; already correct.
+ * 2. The fetched `pickSnapshot.multiSelect` — resolved server-side by
+ *    `PickHandler.getPickChoices()` against the REAL accumulated
+ *    `currentArgs` for this selection step (v4.8-WR01). This is what a
+ *    *function-valued* `multiSelect` that reads an earlier sibling
+ *    selection's value must use — the static `selection.multiSelect` on
+ *    `PickMetadata` was resolved once at `buildActionMetadata()` time with
+ *    `knownArgs: {}`, so it's stale for anything but the very first step.
+ *    A snapshot entry (even one whose `multiSelect` is `undefined`) means
+ *    the server has already answered for THIS state — trust it.
+ * 3. The static `selection.multiSelect` from metadata — fallback for when
+ *    no snapshot has been fetched yet (e.g. `execute()` / tests that skip
+ *    the fetch round-trip).
+ */
+export function resolveMultiSelectConfig(
+  selection: PickMetadata,
+  currentArgs: Record<string, unknown>,
+  pickSnapshot?: PickSnapshot
+): { min?: number; max?: number } | undefined {
+  if (selection.dependsOn && selection.multiSelectByDependentValue) {
+    const depValue = currentArgs[selection.dependsOn];
+    if (depValue !== undefined) {
+      return selection.multiSelectByDependentValue[String(depValue)];
+    }
+    return undefined;
+  }
+
+  if (pickSnapshot) {
+    return pickSnapshot.multiSelect;
+  }
+
+  return selection.multiSelect;
+}
 
 // ============================================
 // Value Display Extraction

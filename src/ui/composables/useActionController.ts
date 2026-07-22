@@ -94,7 +94,7 @@
  */
 
 import { ref, readonly, computed, watch, inject, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode } from './actionControllerHelpers.js';
+import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { useBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 
@@ -1838,22 +1838,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // === Multi-select draft methods ===
 
   /**
-   * Resolve the multiSelect config for a selection, handling dependsOn-based configs.
-   * Mirrors ActionPanel's `currentMultiSelect` computed: for selections with
-   * dependsOn + multiSelectByDependentValue, looks up the config from the current
-   * value of the dependent selection; otherwise returns the static `multiSelect`.
+   * Resolve the multiSelect config for a selection. Delegates to the shared
+   * `resolveMultiSelectConfig` helper (`actionControllerHelpers.ts`) — the
+   * single source of truth also used by `ActionPanel.vue` and
+   * `useBoardActionBridge.ts` — so this composable, the auto ActionPanel,
+   * and custom UIs can never disagree (v4.8-WR01).
    */
   function resolveMultiSelectConfig(
     selection: PickMetadata
   ): { min?: number; max?: number } | undefined {
-    if (selection.dependsOn && selection.multiSelectByDependentValue) {
-      const depValue = currentArgs.value[selection.dependsOn];
-      if (depValue !== undefined) {
-        return selection.multiSelectByDependentValue[String(depValue)];
-      }
-      return undefined;
-    }
-    return selection.multiSelect;
+    const pickSnapshot = actionSnapshot.value?.pickSnapshots.get(selection.name);
+    return resolveEffectiveMultiSelect(selection, currentArgs.value, pickSnapshot);
   }
 
   /**

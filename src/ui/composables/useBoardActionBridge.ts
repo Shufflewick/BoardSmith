@@ -32,7 +32,7 @@ import type {
   ChoiceWithRefs,
   ValidElement,
 } from './useActionControllerTypes.js';
-import { devWarn } from './actionControllerHelpers.js';
+import { devWarn, resolveMultiSelectConfig } from './actionControllerHelpers.js';
 
 export interface BoardActionBridgeOptions {
   controller: UseActionControllerReturn;
@@ -118,15 +118,16 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     return actionsWithMetadata.value.find(a => a.name === currentAction.value) ?? null;
   });
 
+  // Delegates to the shared `resolveMultiSelectConfig` helper — the single
+  // source of truth also used by `useActionController` and `ActionPanel.vue`
+  // — so custom UIs prefer the per-step server-resolved snapshot value (real
+  // accumulated args) over the static metadata baked in at action-start time
+  // (v4.8-WR01).
   const currentMultiSelect = computed(() => {
     const sel = currentPick.value;
     if (!sel) return undefined;
-    if (sel.dependsOn && sel.multiSelectByDependentValue) {
-      const depValue = currentArgs.value[sel.dependsOn];
-      if (depValue !== undefined) return sel.multiSelectByDependentValue[String(depValue)];
-      return undefined;
-    }
-    return sel.multiSelect;
+    const pickSnapshot = controller.actionSnapshot?.value?.pickSnapshots.get(sel.name);
+    return resolveMultiSelectConfig(sel, currentArgs.value, pickSnapshot);
   });
 
   // Choices for the current pick, with already-selected choice values removed

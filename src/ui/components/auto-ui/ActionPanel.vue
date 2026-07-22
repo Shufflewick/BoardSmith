@@ -16,6 +16,7 @@
 import { ref, computed, watch, inject } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
+import { resolveMultiSelectConfig } from '../../composables/actionControllerHelpers.js';
 import type {
   UseActionControllerReturn,
   PickMetadata,
@@ -192,26 +193,18 @@ const currentPick = computed(() => actionController.currentPick.value);
 // Note: Auto-fill is handled by the controller's internal watch
 
 /**
- * Get the current multiSelect config, resolving dependsOn-based configs.
- * For selections with dependsOn + multiSelectByDependentValue, looks up the config
- * based on the current value of the dependent selection.
+ * Get the current multiSelect config. Delegates to the shared
+ * `resolveMultiSelectConfig` helper (single source of truth also used by
+ * `useActionController` and `useBoardActionBridge`) so the panel prefers the
+ * per-step server-resolved snapshot value (real accumulated args) over the
+ * static metadata baked in at action-start time (v4.8-WR01).
  */
 const currentMultiSelect = computed(() => {
   const sel = currentPick.value;
   if (!sel) return undefined;
 
-  // If selection has dependsOn and multiSelectByDependentValue, resolve it
-  if (sel.dependsOn && sel.multiSelectByDependentValue) {
-    const depValue = currentArgs.value[sel.dependsOn];
-    if (depValue !== undefined) {
-      const key = String(depValue);
-      return sel.multiSelectByDependentValue[key];
-    }
-    return undefined;
-  }
-
-  // Otherwise use static multiSelect
-  return sel.multiSelect;
+  const pickSnapshot = actionController.actionSnapshot.value?.pickSnapshots.get(sel.name);
+  return resolveMultiSelectConfig(sel, currentArgs.value, pickSnapshot);
 });
 
 // Filter args for display - exclude current multiSelect selection
