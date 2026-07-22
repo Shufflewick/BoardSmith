@@ -5,6 +5,7 @@
 import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
+import { devWarn } from '../utils/dev.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 import type { ElementJSON } from '../engine/index.js';
@@ -525,6 +526,36 @@ export function buildPlayerState(
     if (player) {
       actionMetadata = buildActionMetadata(runner.game, player, availableActions);
       reconciledAvailableActions = Object.keys(actionMetadata);
+
+      // F-10/SPACE-05: the reconciliation above silently narrows the flow's
+      // offered `availableActions` to the condition-checked set. That narrowing
+      // hides a real game bug — the flow's actionStep offered an action whose
+      // own conditions are false — so surface it loudly instead (fail fast and
+      // loud). devWarn dedups per key, so this is one line per offending set.
+      const dropped = availableActions.filter((a) => !(a in actionMetadata!));
+      if (dropped.length > 0) {
+        if (reconciledAvailableActions.length === 0 && isMyTurn) {
+          // Every offered action failed its conditions AND it is this seat's
+          // turn: the board is STRANDED (isMyTurn with no startable action, the
+          // flow still awaiting it). This never resolves on its own.
+          devWarn(
+            `stranded-seat-no-startable-action:${playerPosition}:${dropped.sort().join(',')}`,
+            `Seat ${playerPosition} is on-turn but EVERY action the flow offered ` +
+            `(${dropped.join(', ')}) fails its own condition() — the seat has no startable ` +
+            `action and the flow is still awaiting it, stranding the board. An actionStep must ` +
+            `only offer actions whose conditions can currently be satisfied (gate the actionStep, ` +
+            `or fix the action conditions).`,
+          );
+        } else {
+          devWarn(
+            `condition-false-action-offered:${dropped.sort().join(',')}`,
+            `The flow offered action(s) [${dropped.join(', ')}] to seat ${playerPosition}, but ` +
+            `their condition() returned false, so they were dropped from the broadcast. This ` +
+            `silent narrowing hides a game bug: an actionStep should not offer an action whose ` +
+            `conditions are currently unsatisfiable. Gate the actionStep or fix the condition.`,
+          );
+        }
+      }
     }
   }
 
