@@ -1,25 +1,35 @@
 # Deferred items (out of scope for the 169-0x sweeps)
 
-## seven — `refuses a published-discard undo from every seat EXCEPT seat 1 staging last — and does so for engine reasons, not .notUndoable()` (tests/game.test.ts)
+## seven — `refuses a published-discard undo from every seat EXCEPT seat 1 staging last — and does so for engine reasons, not .notUndoable()` (tests/game.test.ts) — RESOLVED
 
-**Discovered during:** 169-03 Task 1, baseline `npx vitest run` on `~/BoardSmithGames/seven` BEFORE any
-sweep edits (pre-existing failure, not caused by this sweep).
+**RESOLVED (2026-07-22):** proven STALE TEST, not a library bug. Full investigation in
+`.planning/debug/resolved/seven-undo-message.md`.
 
-**Symptom:** seats 2 and 3's forged `{type:'undo'}` after a published discard barrier now get
-`"No actions to undo"` instead of the test's expected `/not your turn/`.
+**Proof:** instrumented the test to dump `session.host.snapshot.flowState` and the `actionHistory`
+tail right before the forged undo calls. At that point the flow had already advanced PAST the
+discard barrier — `src/rules/flow.ts`'s `execute((ctx)=>publishPendingDiscards())` runs synchronously
+once all 3 seats discard, and the enclosing `loop` immediately re-enters `sequence(draw, discard,
+execute)` for round 2 — landing all three seats in a BRAND NEW `draw` simultaneousActionStep
+(`awaitingPlayers` lists seats 1, 2, 3; `moveCount: 0`) before the test's undo calls ever run.
+`computeUndoEligibility` (`src/session/utils.ts`) correctly reports `eligible:true,
+actionsThisTurn:0` for all three seats identically (nobody has acted in the fresh step), so
+`handleUndo` correctly returns "No actions to undo" for every seat, not just seat 1.
 
-**Root cause (not investigated further — out of scope):** the test's own title says it is testing
-"engine reasons, not `.notUndoable()`" — i.e. general simultaneous-step undo-eligibility semantics
-(`computeUndoEligibility` in `session/utils.ts`, the D4/SIM-02 family), NOT the D1/UNDO-01 or
-D24/SPACE-03 targets this sweep is gated on. BSR-7/BSR-8 (seven's own SIM-family filings) are marked
-"out-of-scope for this crosswalk's fix-present checklist" in 169-CROSSWALK.md Section 1 — this failure
-is in the same family.
+The test's expectation of `/not your turn/` for seats 2/3 was written against the PRE-Phase-160
+behavior filed as **BSR-7** (`flowState.currentPlayer` pinned at 1 for the whole simultaneous step,
+so `handleUndo` rejected every non-seat-1 op with "It's not your turn" regardless of actual
+participation). D4/SIM-02 (Phase 160) fixed BSR-7 exactly as its own "What we'd like" section
+requested — undo eligibility is now `awaitingPlayers`-participant-based, not `currentPlayer`-pinned —
+so "It's not your turn" is no longer reachable for a seat that genuinely is a participant of the
+current step.
 
-**Disposition:** left failing, unmodified. Not a regression (same failure on the untouched baseline).
-Recommend a future SIM-family-specific plan (analogous scope to BSR-7/BSR-8) investigate whether
-`"No actions to undo"` is now the CORRECT message for a simultaneous-step participant that has acted
-but is not the tail-of-history seat, in which case the test's own expectation is stale and should be
-updated — or whether this is a genuine regression in `computeUndoEligibility`'s message selection.
+**Fix:** updated seven's test (`tests/game.test.ts`) to assert `/No actions to undo/` for all three
+seats, with a comment explaining the barrier-then-round-2-advance mechanism. Also marked BSR-7
+RESOLVED in seven's `BOARDSMITH-REQUESTS.md` (mirrors the BSR-1/5/12 resolution style from the
+169-03 sweep). No library change was needed — `computeUndoEligibility` already behaves correctly per
+its own D4/SIM-02 doc comment.
+
+**Verification:** `cd ~/BoardSmithGames/seven && npx vitest run` — 205/205 passed (was 204/205).
 
 ## doom-machine — 6 pre-existing deck-secrecy / anonymous-entry test failures (baseline, not green)
 
