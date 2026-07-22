@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
 status: executing
-stopped_at: Completed 164-04-PLAN.md
-last_updated: "2026-07-22T01:24:15.943Z"
+stopped_at: Completed 167-03-PLAN.md
+last_updated: "2026-07-22T01:30:49.660Z"
 last_activity: 2026-07-22
 progress:
   total_phases: 15
   completed_phases: 11
   total_plans: 36
-  completed_plans: 33
+  completed_plans: 34
   percent: 73
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 167 (Skills Autonomy Rewrite) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-22
 
@@ -281,6 +281,7 @@ Recent decisions affecting current work:
 - [Phase 167]: SKILLAUTO-01: non-milestone/UI-less chunks write Status: verified off automated test/sim pass rather than skipping verification
 - [Phase ?]: Ask triple-gate (undetermined AND load-bearing AND no reasonable default, else proceed and record) codified in build/ask.md
 - [Phase ?]: Cross-chunk continuation reframed as run-while-away + auto-advance; printed resume command is a crash fallback only, never the default end-of-close signal
+- [Phase 167]: ≥50% context wind-down floor added beneath the unchanged 60% ceiling; sub-agent offload of research/audits/large reads/repairs codified as the lever; game-completion gets a loud banner + summary card, chunks get a lighter completion line
 
 ### Pending Todos
 
@@ -292,8 +293,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-22T01:23:10.568Z
-Stopped at: Completed 164-04-PLAN.md
+Last session: 2026-07-22T01:30:49.648Z
+Stopped at: Completed 167-03-PLAN.md
 Resume file: 
 None
 

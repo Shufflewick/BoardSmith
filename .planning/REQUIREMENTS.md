@@ -162,10 +162,10 @@ the fix holds → only then close.**
   reasonable defaults and only parks on a batched question queue, so walking away does not stall the build.
 - [x] **SKILLAUTO-05** (B.5): Auto-advance to the next logical step (e.g. generate the AI opponent, then
   final acceptance) without the human kicking it off; the only human gates are B.1's three milestones.
-- [ ] **SKILLAUTO-06** (B.6): Context management — do not wind down before at least 50% context consumed,
+- [x] **SKILLAUTO-06** (B.6): Context management — do not wind down before at least 50% context consumed,
   and offload heavy work (research, audits, large reads, repairs) to sub-agents so the main thread fills
   slowly and long autonomous runs are possible.
-- [ ] **SKILLAUTO-07** (B.7): Completion is unmistakable — finishing a game is a loud, unambiguous event
+- [x] **SKILLAUTO-07** (B.7): Completion is unmistakable — finishing a game is a loud, unambiguous event
   (banner + clean final summary card: what shipped, test count, deferred items), never buried in a wall
   of text.
 - [ ] **SKILLAUTO-08** (B.9): The three recurring process gaps are closed — (a) close-time ledger
