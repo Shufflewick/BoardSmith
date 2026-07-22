@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: verifying
-stopped_at: Completed 167-05-PLAN.md
-last_updated: "2026-07-22T01:44:58.941Z"
+status: executing
+stopped_at: Completed 168-01-PLAN.md
+last_updated: "2026-07-22T03:18:35.313Z"
 last_activity: 2026-07-22
 progress:
   total_phases: 15
   completed_phases: 12
-  total_plans: 36
-  completed_plans: 36
+  total_plans: 38
+  completed_plans: 37
   percent: 80
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 167 — Skills Autonomy Rewrite
+**Current focus:** Phase 168 — Platform Feature Spike — Seed-to-State
 
 ## Current Position
 
-Phase: 167 (Skills Autonomy Rewrite) — COMPLETE (5/5 plans)
-Plan: 5 of 5
-Status: Phase complete — ready for verification
+Phase: 168 (Platform Feature Spike — Seed-to-State) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-07-22
 
 ## Milestones
@@ -286,6 +286,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 167-04]: fail-loud sim-exercised assertion implemented via action-level execute() counter instrumentation, not a fabricated SimulationResults coverage field
 - [Phase 167]: [Phase 167-05]: state-machine.md's Autonomy Scope: How, Never What (PROC-02) section placed as its own top-level section before Session Handoff Seams
 - [Phase 167]: [Phase 167-05]: PROC-02 Part D survives regression net — all six disciplines verified intact after Plans 01-04, zero restoration needed
+- [Phase 168-01]: Seed file convention: seeds/<scenario>.json holding a raw GameStateSnapshot; ship raw snapshot format, defer scenario DSL until proven too low-level
 
 ### Pending Todos
 
@@ -297,8 +298,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-22T01:43:50.452Z
-Stopped at: Completed 167-03-PLAN.md
+Last session: 2026-07-22T03:18:35.303Z
+Stopped at: Completed 168-01-PLAN.md
 Resume file: 
 None
 

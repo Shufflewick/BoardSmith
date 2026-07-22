@@ -233,7 +233,7 @@ Plans:
 2. If a thin proof-of-concept is built, it loads a game into a declared target state deterministically; if deferred to a follow-up build, the spike says so explicitly with rationale (surface-don't-overreach).
 3. Note: feature C.2 (panel multi-select) is delivered by Phase 159 (AI-01), NOT here — this phase is C.1 only.
 **Plans** (2 plans, 2 waves — 01 doc-only, 02 touches src/; 02 depends on 01 so the PoC references the documented design):
-- [ ] 168-01-PLAN.md — Seed-to-state design + feasibility spike doc (mechanism, load path, authoring surface, pipeline request API, cost/shape recommendation, proven-vs-deferred) [FEAT-01] (wave 1)
+- [x] 168-01-PLAN.md — Seed-to-state design + feasibility spike doc (mechanism, load path, authoring surface, pipeline request API, cost/shape recommendation, proven-vs-deferred) [FEAT-01] (wave 1)
 - [ ] 168-02-PLAN.md — Thin PoC: `--seed <file>` dev-host flag (seeds handleStart's initial snapshot via existing fromSnapshot path) + record-from-play deterministic-load integration test (fail-without/pass-with + load-twice-identical) [FEAT-01, PROC-01] (wave 2, depends 168-01)
 
 #### Phase 169: Post-Fix Game De-Workaround Sweep
@@ -270,5 +270,5 @@ Plans:
 | 165. Platform Logging Hygiene | 0/? | Not started | — |
 | 166. Skills Defects — Session-Lock + UI/Library Boundary | 2/2 | Complete   | 2026-07-21 |
 | 167. Skills Autonomy Rewrite | 5/5 | Complete   | 2026-07-22 |
-| 168. Platform Feature Spike — Seed-to-State | 0/? | Not started | — |
+| 168. Platform Feature Spike — Seed-to-State | 1/2 | In Progress|  |
 | 169. Post-Fix Game De-Workaround Sweep | 0/? | Not started | — |
