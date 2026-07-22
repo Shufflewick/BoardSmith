@@ -1,4 +1,4 @@
-import type { Game, FlowState, ElementRef } from '../engine/index.js';
+import type { Game, FlowState, ElementRef, GamePhase } from '../engine/index.js';
 
 /**
  * Configuration options for the MCTS bot
@@ -71,6 +71,21 @@ export interface BotMoveStats {
 export interface MCTSNode {
   /** Flow state at this node (small, kept as snapshot) */
   flowState: FlowState;
+  /**
+   * `searchGame.phase` captured at this node's creation (v4.8-MCTS-UNDO).
+   * `game.finish()` / `continueFlow`'s terminal-completion path set `phase`
+   * as a plain property mutation, OUTSIDE the command system that
+   * `undoCommands` reverts -- so it is captured per-node here and resynced
+   * to the root node's value after every `backpropagateWithUndo` call
+   * (see `restoreNodeBookkeeping`), instead of leaking forward across
+   * search iterations.
+   */
+  phase: GamePhase;
+  /**
+   * `searchGame.settings.winners` captured at this node's creation. Same
+   * rationale as `phase` -- `game.finish()` sets it as a plain property.
+   */
+  winners: number[] | undefined;
   /** Parent node (null for root) */
   parent: MCTSNode | null;
   /** Move that led to this node from parent */

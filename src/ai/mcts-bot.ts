@@ -738,6 +738,7 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Now backpropagate up the tree, undoing each node's commands
+    let rootNode: MCTSNode | null = null;
     while (node !== null) {
       node.visits++;
       // Value is from perspective of player who just moved to reach this node
@@ -763,8 +764,48 @@ export class MCTSBot<G extends Game = Game> {
         }
       }
 
+      if (node.parent === null) {
+        rootNode = node;
+      }
       node = node.parent;
     }
+
+    // v4.8-MCTS-UNDO: `undoCommands` above only reverts commands recorded in
+    // `commandHistory` -- it never restores the flow engine's own private
+    // bookkeeping (`awaitingPlayers[].completed`, mutated in place by
+    // `resumeSimultaneousAction`) or the plain-property mutations
+    // `game.finish()`/`continueFlow`'s terminal path makes (`phase`,
+    // `settings.winners`). Left uncorrected, that bookkeeping sticks after a
+    // simulated branch that completes a simultaneous decider or finishes the
+    // game, and the NEXT EXPAND of a root sibling is wrongly rejected as a
+    // no-op (the decider "already completed" / the game "already finished").
+    //
+    // Every future EXPAND this search performs starts from `searchGame`
+    // positioned at the ROOT (selectWithPath always walks down FROM root,
+    // replaying each step's real action via `continueFlow` -- it never reads
+    // an intermediate node's bookkeeping directly). So it is sufficient, and
+    // far cheaper than a full per-node snapshot restore, to resync
+    // `searchGame`'s flow engine + phase/winners to the ROOT node's captured
+    // state ONCE per backpropagation, reusing `restoreFlowState` (the same
+    // state-authoritative machinery `restoreGame`/`recoverFromUndoFailure`
+    // already rely on) rather than hand-rolling a bookkeeping revert.
+    if (rootNode) {
+      this.restoreNodeBookkeeping(rootNode);
+    }
+  }
+
+  /**
+   * Resync `searchGame`'s flow engine + phase/winners to the given node's
+   * captured bookkeeping (v4.8-MCTS-UNDO). See the doc on `MCTSNode.phase`/
+   * `.winners` and the call site in `backpropagateWithUndo` for why this is
+   * needed in addition to `undoCommands`.
+   */
+  private restoreNodeBookkeeping(node: MCTSNode): void {
+    if (!this.searchGame) return;
+    this.searchGame.restoreFlowState(node.flowState, this.rootSnapshot?.hiddenIdRemap);
+    this.searchGame.phase = node.phase;
+    (this.searchGame as unknown as { settings: { winners?: number[] } }).settings.winners =
+      node.winners ? [...node.winners] : undefined;
   }
 
   /**
@@ -1279,8 +1320,17 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
 
+    // v4.8-MCTS-UNDO: capture the plain-property bookkeeping `undoCommands`
+    // can never revert (see MCTSNode.phase/.winners doc). Read from
+    // `this.searchGame` (the live sandbox), which is already positioned at
+    // this node's state by the caller (expandIncremental / runSearch).
+    const nodeWinners = (this.searchGame as unknown as { settings?: { winners?: number[] } } | null)
+      ?.settings?.winners;
+
     return {
       flowState,
+      phase: this.searchGame?.phase ?? 'started',
+      winners: nodeWinners ? [...nodeWinners] : undefined,
       parent,
       parentMove,
       commandCount,
