@@ -60,11 +60,13 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
   secretCard!: SecretCard;
   /** Bot's most recent guess -- a plain (non-element) property, read by the
    *  `objectives` checker below so scoring is a pure state READ with no
-   *  mutation to undo (game.finish()'s settings.winners mutation is a plain
-   *  field outside the command system and is NOT reverted by MCTS's
-   *  incremental undoCommands -- see MEMORY.md testing notes. Avoiding
-   *  finish() entirely keeps this fixture from tripping that pre-existing,
-   *  out-of-scope limitation). */
+   *  mutation to undo. (Originally chosen to also dodge v4.8-MCTS-UNDO --
+   *  `game.finish()`'s `settings.winners`/`phase` mutation used to leak
+   *  across simulated branches because `undoCommands` never reverted it.
+   *  That is now fixed in `backpropagateWithUndo` (resyncs bookkeeping to
+   *  the root node every backpropagation), so this fixture could call
+   *  `finish()` too -- kept non-terminal anyway since that's the simplest
+   *  way to exercise the `objectives` scoring hook this suite is about.) */
   lastGuess?: number;
 
   constructor(options: GameOptions & { secretValue: number; guesserSeat?: number; choices?: number[] }) {
@@ -323,15 +325,22 @@ function createSimultaneousGame(seed: string) {
 
 describe('MCTSBot simultaneous-step soundness (AI-02 / T-159-07)', () => {
   /**
-   * Drive the bot's low-level search primitives directly (bypassing the tree
-   * SELECT/EXPAND machinery, whose incremental undo does not revert the flow
-   * engine's own `awaitingPlayers[].completed` bookkeeping across sibling
-   * root branches -- an unrelated, pre-existing limitation orthogonal to
-   * T-159-07). This isolates exactly the leak vector under test: seat 1
-   * commits a pick on the shared searchGame, then seat 2's moves are
-   * enumerated. `maybeCaptureSimultaneousBaseline` is the hook the fix adds
-   * (mcts-bot.ts) -- called optionally so this test is genuinely RED before
-   * the fix exists (no such method) and exercises it once added.
+   * Drive the bot's low-level search primitives directly (bypassing the full
+   * tree SELECT/EXPAND/BACKPROPAGATE loop) to isolate exactly the leak
+   * vector under test: seat 1 commits a pick on the shared searchGame, then
+   * seat 2's moves are enumerated. `maybeCaptureSimultaneousBaseline` is the
+   * hook the fix adds (mcts-bot.ts) -- called optionally so this test is
+   * genuinely RED before the fix exists (no such method) and exercises it
+   * once added.
+   *
+   * (v4.8-MCTS-UNDO, fixed: this used to ALSO have to dodge a second, unrelated
+   * leak -- `backpropagateWithUndo`'s incremental undo never reverted the
+   * flow engine's own `awaitingPlayers[].completed` bookkeeping across
+   * sibling root branches, in a full tree search. That is now fixed
+   * (`restoreNodeBookkeeping` resyncs it to root every backpropagation); this
+   * fixture still drives the low-level primitives directly because that's
+   * the narrowest way to reproduce T-159-07's specific pre-reveal-leak vector,
+   * not because of the undo bug.)
    */
   function seat2ChoicesAfterSeat1Picks(pick: string): Set<string> {
     const game = createSimultaneousGame(`sim-${pick}`);
