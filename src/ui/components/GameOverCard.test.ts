@@ -75,6 +75,26 @@ describe('GameOverCard — dev-mode graceful degrade (winnerSeats=[])', () => {
   });
 });
 
+describe('GameOverCard — winner glyph contrast ink (F-17 / LIBX-03)', () => {
+  it('uses white ink on a dark seat color (not the hardcoded --bsg-bg)', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [0], players: [{ seat: 0, name: 'Navy', color: '#000080' }] },
+    });
+    const ini = wrapper.find('.ini');
+    const style = ini.attributes('style') ?? '';
+    // contrastInk('#000080') -> white ink, applied inline (overrides --bsg-bg).
+    expect(style.replace(/\s/g, '')).toMatch(/color:(#fff|#ffffff|rgb\(255,255,255\))/i);
+  });
+
+  it('uses black ink on a pale seat color', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [0], players: [{ seat: 0, name: 'Pale', color: '#ffff99' }] },
+    });
+    const style = wrapper.find('.ini').attributes('style') ?? '';
+    expect(style.replace(/\s/g, '')).toMatch(/color:(#000|#000000|rgb\(0,0,0\))/i);
+  });
+});
+
 describe('GameOverCard — emits on button clicks', () => {
   it('emits "rematch" when Rematch is clicked', async () => {
     const wrapper = mount(GameOverCard, {
