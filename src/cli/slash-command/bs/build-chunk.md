@@ -395,8 +395,11 @@ end-of-session handoff.
 
 **≥50% floor (SKILLAUTO-06).** Below 60% is necessary but not sufficient: the session must also
 have consumed **at least 50%** of the context window before it winds down — never stop early
-because a chunk "feels big" at 40%. The lever that keeps the main thread's own usage climbing
-slowly enough to clear that 50% floor before the 60% ceiling forces a stop is **sub-agent
+because a chunk "feels big" at 40%. A real harness context-low warning always wins, though: if the
+harness itself signals below 50%, obey it immediately — the floor governs only the session's own
+self-assessed "feels big" judgment, never an authoritative harness signal. The lever that keeps the
+main thread's own usage climbing slowly enough to clear that 50% floor before the 60% ceiling forces
+a stop is **sub-agent
 offload**: research (rulebook slices, docs), audits, large reads, and repairs are dispatched to
 sub-agents rather than performed inline, per this file's own "Context-Economics Hard Rule" above
 ("the orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself") — that

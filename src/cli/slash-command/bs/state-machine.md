@@ -311,6 +311,12 @@ the next persisted checkpoint once crossed. The one thing that IS a real capabil
 reading the harness's own context-usage signal against the 50% floor and the 60% ceiling; a
 session must not stop on a generic "this feels long" guess that ignores the actual percentage.
 
+**Precedence — a real harness warning always wins.** If the harness itself surfaces a context-low
+warning *below* the 50% floor, obey it immediately: finish the current step, persist, commit, and
+stop at that cold-resume checkpoint. The ≥50% floor governs only the session's OWN self-assessed
+wind-down judgment (the unreliable "feels big" hunch it forbids); it never overrides an actual
+harness signal. Authoritative harness signal beats the floor; the floor beats self-assessment.
+
 **Sub-agent offload is the substantive lever that keeps the main thread under the 60% ceiling
 while still clearing the 50% floor.** Heavy work classes — research, audits, large reads, and
 repairs — are dispatched to sub-agents rather than performed inline by the orchestrator, so the

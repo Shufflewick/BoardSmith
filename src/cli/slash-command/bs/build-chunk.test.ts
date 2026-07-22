@@ -1188,6 +1188,16 @@ describe('SKILLAUTO-06 — context floor + offload', () => {
     expect(stateMachine).toMatch(/main thread.s (own )?context fills slowly/i);
     expect(stateMachine).toMatch(/long autonomous run/i);
   });
+
+  it('resolves floor-vs-harness-warning precedence: a real harness signal below the floor always wins (both files)', () => {
+    const stateMachine = read('state-machine.md');
+    const buildChunk = read('build-chunk.md');
+    // state-machine.md gives explicit precedence for a harness warning firing below the 50% floor.
+    expect(stateMachine).toMatch(/harness warning always wins|harness signal.*(beats|overrides).*floor|obey it immediately/i);
+    expect(stateMachine).toMatch(/below\W+the 50% floor|below the floor|below 50%/i);
+    // build-chunk.md carries the same precedence so the two mirrored sections cannot diverge.
+    expect(buildChunk).toMatch(/harness context-low warning always wins|below 50%.*obey it immediately|floor governs only/i);
+  });
 });
 
 describe('SKILLAUTO-07 — loud completion', () => {
