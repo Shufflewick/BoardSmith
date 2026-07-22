@@ -27,6 +27,7 @@ import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand, undoCommand } from '../command/executor.js';
 import { createInverseCommand } from '../command/inverse.js';
+import { canPlayerSee } from '../command/visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
@@ -2857,8 +2858,21 @@ export class Game<
       // Check zone visibility for children (if this is a Space)
       const zoneVisibility = (element as any).getZoneVisibility?.();
 
+      // SPACE-03 / F-09: a per-seat visibility GRANT (`addZoneVisibleTo`, i.e.
+      // `zoneVisibility.addPlayers`) must reveal the zone's real contents to the
+      // granted seat even on a hidden/count-only/owner zone — `canPlayerSee`
+      // already encodes exceptPlayers/addPlayers/mode precedence, so consult it
+      // rather than branching on `mode` alone (which made `addZoneVisibleTo`
+      // dead API on hidden zones and even hid contents from the granted seat).
+      // When the seat CAN see, we fall through to normal child serialization
+      // below (real children, each still subject to its own visibility).
+      const zoneOwnerSeat = (element as GameElement).getEffectiveOwner?.()?.seat;
+      const seatCanSeeZone = zoneVisibility
+        ? canPlayerSee(zoneVisibility, visibilityPosition, zoneOwnerSeat)
+        : true;
+
       // If zone has hidden or count-only visibility, handle children specially
-      if (zoneVisibility) {
+      if (zoneVisibility && !seatCanSeeZone) {
         if (zoneVisibility.mode === 'hidden') {
           // D24/SPACE-03: true concealment. Unlike 'count-only' below, a
           // 'hidden' zone must not leak even its exact child count to a
