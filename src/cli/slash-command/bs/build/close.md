@@ -22,13 +22,14 @@ section BY NAME — a light-path chunk (`build, test, playtest`, no `close` step
 this exact sequence from inside its own `playtest` step, on this chunk's behalf, once its
 Verified Checklist is confirmed.
 
-The light path reuses **only** this four-item sequence. It does NOT run the `## Sketch-Tail
+The light path reuses **only** this five-item sequence. It does NOT run the `## Sketch-Tail
 Delta Gate` or `## Propose the Next Chunk` sections below — both are user-gated duties of a full
 `close`. A light-path chunk therefore defers sketch-tail re-derivation and the next-chunk
 proposal to `build-chunk.md` Step 2's lazy tail-entry detailing (which derives any undetailed
 tail entry when routing next reaches it) or to the next full chunk's `close`; it never silently
 details the tail from inside `playtest`. This matches `state-machine.md` "Step Names (exact, light
-path — trivial chunks)", which lists exactly these four light-path bookkeeping items and no tail
+path — trivial chunks)", which lists exactly these five light-path bookkeeping items (status
+already landed, commit hash, decision rollup, ledger reconciliation, lock release) and no tail
 detailing.
 
 1. **Status already landed; this step's own duty starts after.** `playtest` already wrote
@@ -54,16 +55,39 @@ detailing.
    a future session (or `/bs-check-status`) can see what this chunk actually settled without
    re-reading its whole CHUNK.md.
 
-4. **Release the lock.** The FINAL write of this Bookkeeping Sequence: set SKETCH.md's
+4. **Reconcile the paperwork ledgers (SKILLAUTO-08).** Before the lock is released, audit the
+   paperwork, not just the code: reconcile, against what this chunk actually changed, the three
+   ledgers this pipeline keeps —
+   - the **filings / library-gap ledger** — `build/build.md` "Boundaries" `## 3` (a library gap is
+     FILED, never patched) — did this chunk file any new gap, and does an EARLIER filing this
+     chunk's own fix touched still read accurately?
+   - the **asset-debt ledger** — `check-status.md` item 5, "Outstanding asset debts" (reads
+     `ASSETS.md`'s `## Ledger`) — did this chunk receive an asset that was previously a debt row?
+   - the **waived-chunk ledger** — `check-status.md` item 4, "Waived verifications" — did this
+     chunk's own work (a fix, a revise round) touch a chunk that is still `verified (user-waived)`
+     and now deserves a real playtest instead of remaining waived?
+
+   These three ledgers are exactly the ones `check-status.md` surfaces (cite it by name, do not
+   re-derive the scan logic here — `check-status.md` remains the single read-only reader of
+   `ASSETS.md`'s `## Ledger` and the `## Ordered Chunk List` waived scan). This step's job is
+   narrower and different from `check-status.md`'s: it is not a report, it is the point where a
+   fix this chunk landed **re-touches** the filing or ruling it resolved or advanced — mark a
+   closed library-gap filing resolved, update an advanced one, and do not leave the paperwork
+   stale once the code that made it stale has already landed. If nothing this chunk did changes
+   any of the three ledgers, record that explicitly ("no ledger changes this chunk") rather than
+   omitting the step — a reconciliation that never appears is indistinguishable from one that
+   never ran.
+
+5. **Release the lock.** The FINAL write of this Bookkeeping Sequence: set SKETCH.md's
    `Session Lock:` line back to `Session Lock: none` (`templates/SKETCH.template.md`), so a
    cleanly-closed chunk leaves NO live lock behind — cite `state-machine.md` "Session Lock" for
    the release semantics. This release is the terminal write of the sequence: every
    CHUNK.md/SKETCH.md write above (the Status write already landed by `playtest`, the commit hash,
-   the decision rollup) is append-only — never a rewrite/overwrite of existing CHUNK.md content,
-   cite `state-machine.md` "Write Order" — and the lock release is the last thing written. Because
-   this section is reused BY NAME from `playtest.md`'s light path (see above), the light path runs
-   this release too: a verified terminal chunk closed on the light path also ends with
-   `Session Lock: none`.
+   the decision rollup, the ledger reconciliation) is append-only — never a rewrite/overwrite of
+   existing CHUNK.md content, cite `state-machine.md` "Write Order" — and the lock release is the
+   last thing written. Because this section is reused BY NAME from `playtest.md`'s light path (see
+   above), the light path runs this release too: a verified terminal chunk closed on the light
+   path also ends with `Session Lock: none`.
 
 ## Sketch-Tail Delta Gate
 

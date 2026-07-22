@@ -740,10 +740,11 @@ describe('UIQ-05 — final-acceptance router coherence (146-REVIEW CR/WR fixes, 
     // Both must route light-path tail handling to Step 2's lazy detailing and cite the delta gate as NOT run.
     expect(buildChunk).toMatch(/lazy tail-entry detailing/i);
     expect(playtest).toContain('## Sketch-Tail Delta Gate');
-    // close.md must state the light path reuses ONLY the four-item Bookkeeping Sequence
-    // (SKILLDEF-01 added the terminal lock-release step as item 4).
+    // close.md must state the light path reuses ONLY the Bookkeeping Sequence in full
+    // (SKILLDEF-01 added the terminal lock-release step; SKILLAUTO-08/167-04 added the
+    // ledger-reconciliation step before it, making the sequence five items).
     const close = read('build/close.md');
-    expect(close).toMatch(/light path reuses \*\*only\*\* this four-item sequence/i);
+    expect(close).toMatch(/light path reuses \*\*only\*\* this five-item sequence/i);
   });
 
   it('WR-01: build-chunk.md calls final-acceptance a 7-point check, never 6-point', () => {
@@ -1219,5 +1220,53 @@ describe('SKILLAUTO-07 — loud completion', () => {
     const close = read('build/close.md');
     expect(close).toMatch(/distinct from the loud game-level banner/i);
     expect(close).toMatch(/does not itself stop the session/i);
+  });
+});
+
+describe('SKILLAUTO-08 — close-time reconciliation + RULINGS re-touch', () => {
+  it('build/close.md\'s Bookkeeping Sequence contains a reconciliation step naming all three ledgers', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/reconcil/i);
+    expect(close).toMatch(/filings? \/ library-gap ledger|library-gap ledger/i);
+    expect(close).toMatch(/asset-debt ledger/i);
+    expect(close).toMatch(/waived-chunk ledger/i);
+    expect(close).toMatch(/audit\s+the\s+paperwork,\s+not\s+just\s+the\s+code/i);
+  });
+
+  it('build/close.md\'s reconciliation step re-touches a filing when a fix lands, and the lock release stays terminal', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/re-touch/i);
+    // The reconciliation step must be numbered BEFORE "Release the lock", and the lock
+    // release text must still say it is the terminal write of the sequence.
+    const reconcileIndex = close.search(/Reconcile the paperwork ledgers/i);
+    const releaseIndex = close.search(/Release the lock/i);
+    expect(reconcileIndex).toBeGreaterThan(-1);
+    expect(releaseIndex).toBeGreaterThan(-1);
+    expect(reconcileIndex).toBeLessThan(releaseIndex);
+    expect(close).toMatch(/terminal write of the sequence/i);
+  });
+
+  it('build/close.md cites check-status.md\'s ledger-surfacing items and build/build.md\'s filings by name (citation, not restatement)', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/check-status\.md/);
+    expect(close).toMatch(/build\/build\.md/);
+  });
+
+  it('state-machine.md\'s "Rulings Outrank Rulebook" is strengthened with a close-time re-touch obligation', () => {
+    const stateMachine = read('state-machine.md');
+    const section = stateMachine.slice(stateMachine.indexOf('## Rulings Outrank Rulebook'));
+    expect(section).toMatch(/re-touch/i);
+    expect(section).toMatch(/SKILLAUTO-08/);
+    expect(section).toMatch(/shared,\s*\n?cross-session, per-game store|cross-session,\s*\n?per-game/i);
+  });
+
+  it('state-machine.md\'s light-path bookkeeping description names the ledger reconciliation as part of the light path', () => {
+    const stateMachine = read('state-machine.md');
+    const lightPathSection = stateMachine.slice(
+      stateMachine.indexOf('## Step Names (exact, light path — trivial chunks)'),
+      stateMachine.indexOf('## Authority'),
+    );
+    expect(lightPathSection).toMatch(/reconcil/i);
+    expect(lightPathSection).toMatch(/SKILLAUTO-08/);
   });
 });

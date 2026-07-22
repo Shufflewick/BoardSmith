@@ -74,13 +74,19 @@ not restate the enum). List every waived chunk found. If two or more accumulate,
 playtest covering all of them in one sitting — this is the surfacing mechanism
 `build-chunk.md`'s "playtest" step defers to this skill (`.planning/bs-skills-plan.md` "8.
 playtest": "check-status surfaces accumulated waived chunks and proposes a batch playtest"). If
-there are zero or one waived chunks, report the count and skip the batch proposal.
+there are zero or one waived chunks, report the count and skip the batch proposal. This is also
+the **waived-chunk ledger** `build/close.md`'s Bookkeeping Sequence ledger-reconciliation step
+(SKILLAUTO-08) reads at each chunk's close — this scan is the source of truth that reconciliation
+step reconciles against, cited by name, never re-derived.
 
 **5. Outstanding asset debts.** Read `ASSETS.md`'s `## Ledger`. An asset debt is any row where
 `requested = yes` AND `received = no`. List each such row's `needed-by-chunk` and `file path`.
 This is informational, never blocking — a missing asset never blocks a chunk (see
 `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md`'s placeholder policy note); report it as a debt to keep visible,
-not as something to fix here.
+not as something to fix here. This is also the **asset-debt ledger**
+`build/close.md`'s Bookkeeping Sequence ledger-reconciliation step (SKILLAUTO-08) reads at each
+chunk's close — this scan is the source of truth that reconciliation step reconciles against,
+cited by name, never re-derived.
 
 **6. Ideas backlog size.** Read `SKETCH.md`'s `## Ideas Backlog` and report the count of entries.
 

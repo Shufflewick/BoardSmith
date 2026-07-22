@@ -171,6 +171,35 @@ describe('STAT-01 — check-status.md read-only status reader', () => {
   });
 });
 
+describe('SKILLAUTO-08 — ledgers surfaced for close reconciliation', () => {
+  it('item 4 (waived verifications) is framed as the waived-chunk ledger close reconciliation reads', () => {
+    const checkStatus = read('check-status.md');
+    const item4 = checkStatus.slice(
+      checkStatus.indexOf('**4. Waived verifications.**'),
+      checkStatus.indexOf('**5. Outstanding asset debts.**'),
+    );
+    expect(item4).toMatch(/waived-chunk ledger/i);
+    expect(item4).toMatch(/build\/close\.md/);
+    expect(item4).toMatch(/SKILLAUTO-08/);
+  });
+
+  it('item 5 (outstanding asset debts) is framed as the asset-debt ledger close reconciliation reads', () => {
+    const checkStatus = read('check-status.md');
+    const item5 = checkStatus.slice(
+      checkStatus.indexOf('**5. Outstanding asset debts.**'),
+      checkStatus.indexOf('**6. Ideas backlog size.**'),
+    );
+    expect(item5).toMatch(/asset-debt ledger/i);
+    expect(item5).toMatch(/build\/close\.md/);
+    expect(item5).toMatch(/SKILLAUTO-08/);
+  });
+
+  it('both ledger cross-references cite close.md\'s reconciliation step, never re-deriving the scan logic', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).toMatch(/cited by name, never re-derived/i);
+  });
+});
+
 describe('STAT-02 — insert-chunk.md sketch editor', () => {
   it('insert-chunk.md exists and is full, non-thin-pointer content', () => {
     const insertChunk = read('insert-chunk.md');

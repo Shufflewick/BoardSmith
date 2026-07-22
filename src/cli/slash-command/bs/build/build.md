@@ -63,7 +63,11 @@ the wrong move (patch or suppress) is always out of bounds:
 3. **A shortfall in the library is a library gap, and a library gap is FILED, never patched.** If
    this chunk's design needs something the library does not do, the correct action is to file the
    gap (report it, concretely, as a finding) and build the chunk around the gap — never reach into
-   `node_modules/boardsmith` to add or change the missing behavior yourself.
+   `node_modules/boardsmith` to add or change the missing behavior yourself. Every filing made
+   here is a durable ledger entry, not a one-off note: `build/close.md`'s Bookkeeping Sequence
+   (SKILLAUTO-08) reconciles this filings/library-gap ledger against what each chunk actually
+   changed and re-touches a filing when a later fix resolves or advances it — a filing recorded
+   here is expected to stay accurate, not go stale once the code around it changes.
 4. **Built-in BoardSmith UI must NEVER be suppressed.** If a built-in surface cannot drive this
    chunk's game the way the design needs, that is a library gap to FILE, not a feature to switch
    off. Turning off, hiding, or fencing a built-in surface to route around a real limitation hides

@@ -41,7 +41,9 @@ proposal (proposal acceptance is the light path's ask-equivalent authorization g
 when the human confirms the playtest checklist. Because the light path has no `close` step,
 for light chunks the `playtest` step also performs `close`'s bookkeeping: it records the
 verified commit hash in CHUNK.md (the bisect anchor — see Git Protocol), updates the Status
-line (CHUNK.md first, SKETCH.md second, per Write Order), rolls up decisions, and — as the
+line (CHUNK.md first, SKETCH.md second, per Write Order), rolls up decisions, reconciles the
+filings/library-gap, asset-debt, and waived-chunk ledgers against what this chunk changed
+(SKILLAUTO-08, see `build/close.md` "Bookkeeping Sequence" item 4), and — as the
 terminal write — releases the session lock (`Session Lock: none`, see "Session Lock" above and
 `build/close.md` "Bookkeeping Sequence").
 
@@ -103,6 +105,17 @@ Any problems found are reported to the user, who confirms how to proceed, before
 ## Rulings Outrank Rulebook
 
 Every agent that reads a rulebook slice — `investigate`, `redteam`, `audit` — also reads `RULINGS.md`. The rulebook plus `RULINGS.md` together form the composite source of truth. This is what stops an audit agent from "fixing" a deliberate house rule or adaptation back to the printed rule.
+
+**Close-time re-touch (SKILLAUTO-08).** `RULINGS.md` is not a write-once log — it is a shared,
+cross-session, per-game store every future chunk's `investigate`/`redteam`/`audit` reads. When a
+fix lands during this chunk's work (a `revise` round, a `repair` cycle, or a build-time
+correction) that resolves, supersedes, or narrows a ruling already recorded in `RULINGS.md`,
+`build/close.md`'s ledger-reconciliation step (Bookkeeping Sequence item 4) re-touches that
+ruling entry — updates it to reflect the outcome — rather than leaving `RULINGS.md` describing a
+house rule the code no longer actually implements. A ruling entry that silently drifts from what
+the code does is exactly the "paperwork lagging the code" failure this re-touch exists to
+prevent; the same rulebook-plus-`RULINGS.md` composite-source-of-truth guarantee above only holds
+if `RULINGS.md` itself stays current.
 
 ## Restyle/Cutover Rule
 
