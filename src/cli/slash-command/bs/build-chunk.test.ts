@@ -1329,3 +1329,57 @@ describe('PROC-02 — autonomy is how-not-what', () => {
     expect(bc).toMatch(/Autonomy Scope: How, Never What/);
   });
 });
+
+describe('PROC-02 — Part D survives the autonomy rewrite', () => {
+  it('escalate-don\'t-hack / file-don\'t-workaround survives (build/build.md Boundaries + never-fence-panel)', () => {
+    const build = read('build/build.md');
+    expect(build).toMatch(new RegExp(NODE_MODULES_BOARDSMITH.replace(/\//g, '\\/')));
+    expect(build).toMatch(/READ-ONLY and is NEVER patched or edited/);
+    expect(build).toMatch(/A shortfall in the library is a library gap, and a library gap is FILED, never patched/);
+    expect(build).toMatch(/Never fence the whole panel without the client/);
+    expect(build).toMatch(new RegExp(ESCAPE_HATCH_PROP));
+  });
+
+  it('reuse-not-rebuild survives (build/test.md hand-rolled sim + build/build.md Extends, Never Restructures)', () => {
+    const test = read('build/test.md');
+    const build = read('build/build.md');
+    expect(test).toMatch(/do not reimplement a hand-rolled\s*\n?\s*random-play loop|do not reimplement a hand-rolled random-play loop/);
+    expect(build).toMatch(/Extends, Never Restructures/);
+    expect(build).toMatch(/does not restructure verified\s*\n?\s*code|does not restructure verified code/);
+  });
+
+  it('honest-derived labeling survives (state-machine.md verified (user-waived) + Cold-Resume Parse Contract)', () => {
+    const sm = read('state-machine.md');
+    for (const value of STATUS_ENUM_VALUES) {
+      expect(sm).toContain(value);
+    }
+    expect(sm).toMatch(/recorded honestly rather than silently marked `verified`/);
+    expect(sm).toMatch(/Cold-Resume Parse Contract/);
+  });
+
+  it('surface-don\'t-fabricate survives (state-machine.md STOP-and-ask + build/build.md file-the-gap)', () => {
+    const sm = read('state-machine.md');
+    const build = read('build/build.md');
+    expect(sm).toMatch(/the session STOPS and asks the user\. It never guesses the intended state\./);
+    expect(build).toMatch(/design layered on top of the raw slice, never a replacement for/);
+    expect(build).toMatch(/the right move \(file the gap\) is always the easy move/);
+  });
+
+  it('in-process redteam survives (state-machine.md Redteam Escalation + build/redteam.md adversarial-subagent shape)', () => {
+    const sm = read('state-machine.md');
+    const redteam = read('build/redteam.md');
+    expect(sm).toMatch(/## Redteam Escalation/);
+    expect(sm).toMatch(/Disputes go to the human, never to more agents\./);
+    expect(redteam).toMatch(/3 fresh-context adversarial agents/);
+    expect(redteam).toMatch(/2 refuters \+ 1 coverage adversary/);
+  });
+
+  it('build-literally survives (build/build.md Fresh-Context Exception + build/playtest.md numbered outcome-based script)', () => {
+    const build = read('build/build.md');
+    const playtest = read('build/playtest.md');
+    expect(build).toMatch(/## Fresh-Context Exception/);
+    expect(build).toMatch(/reads\s*\n?\s*this chunk's cited raw rulebook slices directly/);
+    expect(playtest).toMatch(/## The Numbered Click-By-Click Test Script/);
+    expect(playtest).toMatch(/observable, outcome-based "expect:" clause/);
+  });
+});
