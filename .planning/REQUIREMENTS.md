@@ -148,7 +148,7 @@ the fix holds → only then close.**
 
 ### SKILLAUTO — Skills autonomy rewrite (Part B) — Phase 167
 
-- [ ] **SKILLAUTO-01** (B.1): The playtest-gate rule is a skills default — pause for a client playtest
+- [x] **SKILLAUTO-01** (B.1): The playtest-gate rule is a skills default — pause for a client playtest
   only at (1) core play loop complete, (2) scoring/endgame complete, (3) final acceptance; still stop any
   time for a rules adjudication / open question. All internal per-chunk steps (tests, audit,
   self-playtest) are unchanged.

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: verifying
+status: executing
 stopped_at: Completed 164-04-PLAN.md
-last_updated: "2026-07-21T21:25:30.658Z"
-last_activity: 2026-07-21
+last_updated: "2026-07-22T01:17:38.754Z"
+last_activity: 2026-07-22
 progress:
   total_phases: 15
   completed_phases: 11
-  total_plans: 31
-  completed_plans: 31
+  total_plans: 36
+  completed_plans: 32
   percent: 73
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 166 — Skills Defects — Session-Lock + UI/Library Boundary
+**Current focus:** Phase 167 — Skills Autonomy Rewrite
 
 ## Current Position
 
-Phase: 166 (Skills Defects — Session-Lock + UI/Library Boundary) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
-Last activity: 2026-07-21
+Phase: 167 (Skills Autonomy Rewrite) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-07-22
 
 ## Milestones
 
@@ -277,6 +277,8 @@ Recent decisions affecting current work:
 - [Phase 164-04]: isViewingHistory guarded independently in all four useBoardActionBridge mutators (not composed with isMyTurn) since setSelectionValue/toggleMultiSelectValue never re-check isMyTurn mid-action
 - [Phase ?]: Session lock grammar extended to "<slug> @ <session-id> — locked at <ISO timestamp>"; Bookkeeping Sequence grew 3->4 items with terminal lock release (SKILLDEF-01)
 - [Phase 166]: SKILLDEF-02/03: build.md gained a game/library boundary section (board-only, read-only node_modules/boardsmith, file-not-patch, never-suppress built-in UI) and a never-without-client rule for platformActionPanelEscapeHatch
+- [Phase 167]: SKILLAUTO-01: Milestone: field (none|core-loop|scoring|final-acceptance) set at sketch-derivation time, never inferred at runtime
+- [Phase 167]: SKILLAUTO-01: non-milestone/UI-less chunks write Status: verified off automated test/sim pass rather than skipping verification
 
 ### Pending Todos
 
@@ -288,7 +290,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-21T21:24:23.734Z
+Last session: 2026-07-22T01:17:28.096Z
 Stopped at: Completed 164-04-PLAN.md
 Resume file: 
 None
