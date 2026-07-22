@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
 status: verifying
-stopped_at: Completed 169-04-PLAN.md
-last_updated: "2026-07-22T05:19:31.607Z"
-last_activity: 2026-07-22
+stopped_at: Milestone audit (tech_debt) → tech-debt fix pass complete; ready to complete/archive
+last_updated: "2026-07-22T13:00:00.000Z"
+last_activity: 2026-07-22 — Post-audit tech-debt fix pass: game-side hidden-zone D24/SPACE-03 migration (doom .contentsHidden→.contentsCountOnly 405/405, BoardSmithGames2/seven mess 374/374), seven BSR-7 stale-test corrected (205/205), library v4.8-WR01 + v4.8-MCTS-UNDO both RESOLVED (suite 3141). Deliberately kept deferred: v4.8-SIM-LASTACTOR-UNDO (declined whole-step-undo territory), doom D9 native-multiSelect rewrite (risky), lanternfall AI WIP (uncommitted, not owned by this run).
 progress:
   total_phases: 15
   completed_phases: 14
