@@ -95,6 +95,15 @@ export type ClientInbound =
 export interface MultiplayerHostOptions {
   playerCount: number;
   minPlayers: number;
+  /**
+   * DEVHOST-01 / F-18: the game's declared max player count. Used to validate a
+   * `configure` preset/gameOptions `playerCount` against the game's real
+   * [minPlayers, maxPlayers] range BEFORE resizing/starting — otherwise a
+   * 6-player preset on a 2–4 game is accepted and blows up in the engine.
+   * Optional for backward-compat construction; when absent, only the
+   * positive-integer check applies.
+   */
+  maxPlayers?: number;
   /** Default AI level for unclaimed (bot) seats when the game starts. */
   aiLevel?: string;
   /**
@@ -388,6 +397,18 @@ export class MultiplayerHost {
         this.send(clientId, {
           type: 'error',
           message: `Preset/configure playerCount must be a positive integer, got ${JSON.stringify(bundle.playerCount)}.`,
+        });
+        return;
+      }
+      // F-18/DEVHOST-01: validate against the game's declared player range so an
+      // out-of-range preset (e.g. a 6-player preset on a 2–4 game) is rejected
+      // here with an actionable message rather than blowing up in the engine.
+      const max = this.opts.maxPlayers;
+      if (newPlayerCount < this.opts.minPlayers || (max !== undefined && newPlayerCount > max)) {
+        const range = max !== undefined ? `${this.opts.minPlayers}–${max}` : `at least ${this.opts.minPlayers}`;
+        this.send(clientId, {
+          type: 'error',
+          message: `Preset/configure playerCount ${newPlayerCount} is out of range for this game (must be ${range}).`,
         });
         return;
       }

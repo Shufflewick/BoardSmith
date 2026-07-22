@@ -882,6 +882,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     const mpHost = new MultiplayerHost({
       playerCount: effectivePlayerCount,
       minPlayers,
+      maxPlayers,
       aiLevel,
       designatedAiSeats: aiPlayers,
       colorPalette,

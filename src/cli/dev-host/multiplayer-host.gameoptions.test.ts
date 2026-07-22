@@ -80,6 +80,7 @@ function makeHost(overrides: { baseGameOptions?: Record<string, unknown> } = {})
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: 1,
+    maxPlayers: def.maxPlayers,
     makeSeed: () => 'go',
     baseGameOptions: overrides.baseGameOptions ?? Object.fromEntries(declaredGameOptions.map((o) => [o.id, o.default])),
     declaredGameOptions,
@@ -129,6 +130,21 @@ describe('MultiplayerHost — gameOption/preset selection reaches the start op (
     // The bogus key must never have reached the start op.
     expect(getStartOptions().notARealOption).toBeUndefined();
     expect(getStartOptions().difficulty).toBe('easy'); // unchanged, still the original default
+  });
+
+  // F-18/DEVHOST-01: a configure playerCount outside the game's declared range
+  // (here maxPlayers=4) must be rejected with an actionable error, not accepted
+  // and blown up in the engine on start.
+  it('rejects a configure playerCount above the game maxPlayers', async () => {
+    const { host, getStartOptions, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    const startBefore = getStartOptions();
+    await host.handleMessage('A', { type: 'configure', gameOptions: { playerCount: 6 } });
+    const err = lastOfType('A', 'error');
+    expect(err).toBeTruthy();
+    expect((err as Extract<HostOutbound, { type: 'error' }>).message).toMatch(/out of range/i);
+    // No restart with the out-of-range count occurred (start op unchanged).
+    expect(getStartOptions()).toBe(startBefore);
   });
 });
 
