@@ -4,13 +4,13 @@ milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
 status: executing
 stopped_at: Completed 169-04-PLAN.md
-last_updated: "2026-07-22T04:48:58.094Z"
+last_updated: "2026-07-22T04:57:46.466Z"
 last_activity: 2026-07-22
 progress:
   total_phases: 15
   completed_phases: 13
   total_plans: 44
-  completed_plans: 42
+  completed_plans: 43
   percent: 87
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 169 (Post-Fix Game De-Workaround Sweep) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-07-22
 
@@ -295,6 +295,7 @@ Recent decisions affecting current work:
 - [Phase 169]: seven sweep (169-03): removed redundant setVisibilityInternal(hidden) call from Mess.concealFromEverySeat() now that D24/SPACE-03 suppresses childCount at the zone-visibility level alone; converted 5 self-cancelling it.fails tripwires to plain it() (BSR-5 x4/D1, BSR-3 x1) after discovering baseline suite was actually red (196/205), not green
 - [Phase 169-04]: one-two-punch's assertPlanLockHolds() (BUG 3/D1) kept, not removed: empirically proven load-bearing beyond BUG 3 via a red-test removal probe
 - [Phase 169-04]: one-two-punch BUG 8/BSR-12 CLOSED: MCTS AI re-verified sound against AI-02 redacted-view + pre-reveal simultaneous baseline
+- [Phase 169]: doom-machine 169-05: D9/BS-5 rewrite deferred (comment-only); D12/D23 kept-and-noted (load-bearing beyond workaround); BS-10 reclassified as game-side fix already handled (commit 6949fde)
 
 ### Pending Todos
 
@@ -306,7 +307,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-22T04:48:58.084Z
+Last session: 2026-07-22T04:56:28.217Z
 Stopped at: Completed 169-04-PLAN.md
 Resume file: 
 None
