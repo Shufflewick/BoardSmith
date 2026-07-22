@@ -20,3 +20,11 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Files changed:** src/cli/commands/dev.ts, src/cli/commands/dev.test.ts, src/cli/cli.ts
 ---
 
+## seven-undo-message — seven's "published-discard undo" test asserted stale pre-BSR-7 message for seats 2/3
+- **Date:** 2026-07-22
+- **Error patterns:** No actions to undo, not your turn, computeUndoEligibility, undo, simultaneousActionStep, awaitingPlayers, currentPlayer, BSR-7, D4, SIM-02, published-discard, publication barrier
+- **Root cause:** Not a library bug. The failing test in a downstream game (seven) was written against BSR-7's pre-fix behavior (`flowState.currentPlayer` pinned at 1 for a whole simultaneous step, so `handleUndo` refused every non-seat-1 op with "It's not your turn" regardless of real participation). BoardSmith Phase 160 (D4/SIM-02) fixed BSR-7 exactly as its own filing requested: `computeUndoEligibility` now authorizes per-seat from `flowState.awaitingPlayers` participation, not `currentPlayer`. By the time the test's forged undo runs, the discard barrier has already auto-published (a synchronous `execute()` flow node) and the round loop has advanced into a brand-new simultaneous step where every seat equally has zero actions taken — "No actions to undo" is therefore the objectively correct message for every seat, not just seat 1.
+- **Fix:** No library change. Updated the downstream game's test assertion (was asserting stale BSR-7 pre-fix behavior) and marked BSR-7 RESOLVED in that game's BOARDSMITH-REQUESTS.md filing.
+- **Files changed:** ~/BoardSmithGames/seven/tests/game.test.ts, ~/BoardSmithGames/seven/BOARDSMITH-REQUESTS.md (downstream repo, not BoardSmith itself)
+---
+
