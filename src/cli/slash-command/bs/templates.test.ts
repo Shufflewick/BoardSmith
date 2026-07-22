@@ -347,6 +347,30 @@ describe('TMPL-02 — each template declares its parse contract', () => {
   });
 });
 
+describe('SKILLAUTO-01 — SKETCH milestone flag', () => {
+  const sketchTemplate = read('templates/SKETCH.template.md');
+
+  it('the Ordered Chunk List entry shape declares a Milestone field', () => {
+    expect(sketchTemplate).toMatch(/Milestone: *<!--[^>]*none[^>]*core-loop[^>]*scoring[^>]*final-acceptance/);
+  });
+
+  it('the tail-entry shape also carries the Milestone field', () => {
+    const tailBlockMatch = sketchTemplate.match(
+      /### <!-- slug \(tail entry, sketch-level only\) -->[\s\S]*?(?=\n## )/
+    );
+    expect(tailBlockMatch, 'tail-entry block must exist').not.toBeNull();
+    expect(tailBlockMatch![0]).toContain('Milestone:');
+  });
+
+  it('Mandated Chunks names the core-loop, scoring/endgame, and final-acceptance chunks as the three milestone anchors', () => {
+    const mandatedSection = sketchTemplate.slice(sketchTemplate.indexOf('## Mandated Chunks'));
+    expect(mandatedSection).toContain('milestone anchor');
+    expect(mandatedSection).toMatch(/core-loop/);
+    expect(mandatedSection).toMatch(/scoring/i);
+    expect(mandatedSection).toMatch(/final-acceptance/);
+  });
+});
+
 describe('TMPL-02 — parse-contract heading lists match each template\'s actual headings', () => {
   // The exact H2 headings each template ships, in order. A template's PARSE
   // CONTRACT comment must enumerate exactly these, and the file body must

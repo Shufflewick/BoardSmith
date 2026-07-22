@@ -58,20 +58,30 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
      chunks/<slug>/ directory references. Only the next 2-3 chunks need full sketch-level detail;
      the tail stays at a coarser sketch-level description and is re-derived as a delta at each
      chunk's close gate. Each entry: what it builds, cited rulebook sections, a `ui:` tag
-     (none|touches|major), a derived status pointer (copy chunks/<slug>/CHUNK.md's Status line —
-     do not re-decide it here), and an outcome-based human test script (state outcomes, not
-     gestures — "move a pawn one space; the board reflects it", not "click the pawn twice").
+     (none|touches|major), a `Milestone:` flag (see below), a derived status pointer (copy
+     chunks/<slug>/CHUNK.md's Status line — do not re-decide it here), and an outcome-based human
+     test script (state outcomes, not gestures — "move a pawn one space; the board reflects it",
+     not "click the pawn twice").
 
      Status-line grammar (exactly two forms, machine-distinguishable — see state-machine.md
      "Cold-Resume Parse Contract"):
      - Detailed entry: "- Status (derived from chunks/<slug>/CHUNK.md): <enum-value>"
      - Tail entry:     "- Status: proposed (sketch-level — no CHUNK.md yet)"
-     No other Status-line form is valid in this file. -->
+     No other Status-line form is valid in this file.
+
+     Milestone-flag grammar (SKILLAUTO-01): every chunk entry — detailed or tail — carries a
+     `Milestone:` line with exactly one of `none | core-loop | scoring | final-acceptance`. This
+     flag is what state-machine.md's human-gate list and build/playtest.md's Verified Gate read
+     to decide whether a chunk gets the human client-playtest stop — it is set explicitly HERE,
+     at sketch-derivation time (see ingest/sketch-derivation.md), never inferred at runtime. Only
+     the three milestone anchors named in "## Mandated Chunks" below ever carry a non-`none`
+     value; every other chunk (including every tail entry) is `Milestone: none`. -->
 
 ### <!-- slug -->
 - What it builds: <!-- one-line description -->
 - Citations: <!-- rulebook section(s) -->
 - ui: <!-- none | touches | major -->
+- Milestone: <!-- none | core-loop | scoring | final-acceptance -->
 - Status (derived from chunks/<!-- slug -->/CHUNK.md): <!-- proposed | approved | built | verified | verified (user-waived) | stale — re-derive before build -->
 - Test script (outcome-based): <!-- "move a pawn one space; the board reflects it" style description -->
 
@@ -81,11 +91,12 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
      its Status line uses exactly the sketch-level marker below, which exempts it from
      consistency-check item 1 (see state-machine.md "Consistency Check"). When the entry is
      detailed at a close gate, its directory + CHUNK.md are created and this Status line is
-     rewritten to the derived form used above. -->
+     rewritten to the derived form used above. Its Milestone flag carries forward unchanged. -->
 
 ### <!-- slug (tail entry, sketch-level only) -->
 - What it builds: <!-- one-line description -->
 - ui: <!-- none | touches | major -->
+- Milestone: <!-- none | core-loop | scoring | final-acceptance -->
 - Status: proposed (sketch-level — no CHUNK.md yet)
 
 ## Variants (deferred)
@@ -108,3 +119,10 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
 - The sketch must contain a final-acceptance chunk: the full game played start-to-finish, a
   coverage check confirming every non-variant rulebook slice was built, plus the design-QA/a11y
   audit (gated by any chunk tagged `ui: touches` or `ui: major`).
+
+These three chunks — core event loop, game-end/scoring, final-acceptance — are the sketch's
+three **milestone anchors** (SKILLAUTO-01): the ONLY chunks that ever carry a non-`none`
+`Milestone:` value (`core-loop`, `scoring`, and `final-acceptance` respectively, matching their
+Milestone-flag value one-to-one). Every other chunk entry's `Milestone:` line MUST be `none`.
+These are the only chunks where a human client-playtest stop occurs by default — see
+state-machine.md's human-gate list and build/playtest.md's Verified Gate.

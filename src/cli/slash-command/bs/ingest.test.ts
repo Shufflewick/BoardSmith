@@ -201,6 +201,31 @@ const RETURN_SHAPE_FIELDS = [
   'variants[]',
 ] as const;
 
+describe('SKILLAUTO-01 — milestone-chunk mandates', () => {
+  it('sketch-derivation.md instructs setting the milestone flag on the core-loop chunk at sketch time', () => {
+    const sketchDerivation = read('ingest/sketch-derivation.md');
+    expect(sketchDerivation).toMatch(/milestone/i);
+    expect(sketchDerivation).toMatch(/set the milestone flag/i);
+  });
+
+  it('sketch-derivation.md instructs setting the milestone flag on the scoring/endgame and final-acceptance anchor chunks', () => {
+    const sketchDerivation = read('ingest/sketch-derivation.md');
+    expect(sketchDerivation).toContain('Milestone: scoring');
+    expect(sketchDerivation).toContain('Milestone: final-acceptance');
+    expect(sketchDerivation).toContain('sketch-derivation time');
+  });
+
+  it('sketch-derivation.md cites SKETCH.template.md\'s Milestone field by name', () => {
+    const sketchDerivation = read('ingest/sketch-derivation.md');
+    expect(sketchDerivation).toContain('Milestone');
+  });
+
+  it('sketch-derivation.md assigns `none` as the milestone value for non-milestone chunks', () => {
+    const sketchDerivation = read('ingest/sketch-derivation.md');
+    expect(sketchDerivation).toMatch(/`none`/);
+  });
+});
+
 describe('return-shape field names — pinned across the file set (WR-07)', () => {
   it('transcription.md defines every return-shape field', () => {
     const transcription = read('ingest/transcription.md');

@@ -30,6 +30,15 @@ is a screen, not a turn. Pair that first render with the single simplest real ac
 that is cheapest to make correct) so the result is a genuine, observable core-loop turn — render
 **plus one simple action**, never render-plus-every-action.
 
+**Milestone flag (SKILLAUTO-01):** set the milestone flag on this chunk — SKETCH.template.md's
+`Milestone:` field, on the Ordered Chunk List entry — to `core-loop` at sketch-derivation time.
+This is an explicit sketch-time assignment, never inferred at runtime: write the value into this
+chunk's entry the moment it is placed in the Ordered Chunk List, so a resuming session never has
+to guess which chunk is the core-loop milestone. This is one of the sketch's three milestone
+anchors (see Section 3 and `templates/SKETCH.template.md`'s "## Mandated Chunks"); it is where the
+human client-playtest stop occurs (state-machine.md's human-gate list, `build/playtest.md`'s
+Verified Gate) — not on every chunk.
+
 ## 2. Prefer Many Small, Single-Behavior Chunks — Split Families of Similar Mechanics
 
 A chunk should deliver **one observable behavior a human can verify in isolation** — the smallest
@@ -76,6 +85,17 @@ Per the same "## Mandated Chunks" section, the sketch MUST also contain:
 
 Do not treat either of these as optional or "implied by the last chunk" — each must appear as its
 own explicit entry in the Ordered Chunk List.
+
+**Milestone flags (SKILLAUTO-01):** set the milestone flag — SKETCH.template.md's `Milestone:`
+field — on these two chunks at sketch-derivation time, the same explicit sketch-time assignment
+described in Section 1: the game-end/scoring/winner-determination chunk gets `Milestone: scoring`,
+and the final-acceptance chunk gets `Milestone: final-acceptance`. Together with the core-loop
+chunk (Section 1, `Milestone: core-loop`) these are the sketch's three milestone anchors, exactly
+matching `templates/SKETCH.template.md`'s "## Mandated Chunks" list. **Every other chunk in the
+Ordered Chunk List — every non-anchor chunk, including every tail entry — gets `Milestone: none`.**
+This flag is never inferred at runtime; the human client-playtest stop is scoped to these three
+milestones plus a genuine rules-adjudication escalation (see state-machine.md's human-gate list),
+so getting the flag right here is load-bearing for the whole autonomous run.
 
 ## 4. The `ui:` Tag
 
