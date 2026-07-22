@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: verifying
+status: executing
 stopped_at: Completed 168-01-PLAN.md
-last_updated: "2026-07-22T03:29:00.637Z"
+last_updated: "2026-07-22T04:02:47.097Z"
 last_activity: 2026-07-22
 progress:
   total_phases: 15
   completed_phases: 13
-  total_plans: 38
-  completed_plans: 38
+  total_plans: 44
+  completed_plans: 39
   percent: 87
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 168 — Platform Feature Spike — Seed-to-State
+**Current focus:** Phase 169 — Post-Fix Game De-Workaround Sweep
 
 ## Current Position
 
-Phase: 168 (Platform Feature Spike — Seed-to-State) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
+Phase: 169 (Post-Fix Game De-Workaround Sweep) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
 Last activity: 2026-07-22
 
 ## Milestones
@@ -288,6 +288,7 @@ Recent decisions affecting current work:
 - [Phase 167]: [Phase 167-05]: PROC-02 Part D survives regression net — all six disciplines verified intact after Plans 01-04, zero restoration needed
 - [Phase 168-01]: Seed file convention: seeds/<scenario>.json holding a raw GameStateSnapshot; ship raw snapshot format, defer scenario DSL until proven too low-level
 - [Phase 168]: Seed rides on hostOptions.seedSnapshot, never gameOptions — mirrors the teachingDisabled WR-04/D-01 pattern so a seed never persists into a game's own snapshot.gameOptions.
+- [Phase 169]: D32 recorded ABSENT by design (platform-side); crosswalk built per-filing from all 5 repos' own ledgers, gating all downstream removals
 
 ### Pending Todos
 
@@ -299,7 +300,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-22T03:27:51.255Z
+Last session: 2026-07-22T04:01:31.771Z
 Stopped at: Completed 168-01-PLAN.md
 Resume file: 
 None

@@ -182,7 +182,7 @@ the fix holds → only then close.**
 
 ### SWEEP — Post-fix game de-workaround sweep (Part E #6) — Phase 169
 
-- [ ] **SWEEP-01**: After the library/platform/skills fixes land, an agent sweeps all five game repos
+- [x] **SWEEP-01**: After the library/platform/skills fixes land, an agent sweeps all five game repos
   (`~/BoardSmithGames/{lanternfall,seven,one-two-punch,doom-machine}`, `~/BoardSmithGames2/seven`) and
   removes every workaround/deferment that existed only because of a now-fixed bug — game-side undo-hole
   mitigations (D1/D5), `actionStep({maxMoves})` + single-element-pick D9 workarounds, the manual Fit
