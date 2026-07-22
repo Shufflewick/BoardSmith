@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: executing
-stopped_at: Completed 167-03-PLAN.md
-last_updated: "2026-07-22T01:38:28.961Z"
+status: verifying
+stopped_at: Completed 167-05-PLAN.md
+last_updated: "2026-07-22T01:44:58.941Z"
 last_activity: 2026-07-22
 progress:
   total_phases: 15
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 36
-  completed_plans: 35
-  percent: 73
+  completed_plans: 36
+  percent: 80
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 167 (Skills Autonomy Rewrite) — EXECUTING
+Phase: 167 (Skills Autonomy Rewrite) — COMPLETE (5/5 plans)
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-22
 
 ## Milestones
@@ -284,6 +284,8 @@ Recent decisions affecting current work:
 - [Phase 167]: ≥50% context wind-down floor added beneath the unchanged 60% ceiling; sub-agent offload of research/audits/large reads/repairs codified as the lever; game-completion gets a loud banner + summary card, chunks get a lighter completion line
 - [Phase ?]: [Phase 167-04]: SKILLAUTO-08 ledger-reconciliation step inserted before the terminal lock release; reconciles filings/library-gap, asset-debt, and waived-chunk ledgers and re-touches a filing/ruling when a fix lands
 - [Phase ?]: [Phase 167-04]: fail-loud sim-exercised assertion implemented via action-level execute() counter instrumentation, not a fabricated SimulationResults coverage field
+- [Phase 167]: [Phase 167-05]: state-machine.md's Autonomy Scope: How, Never What (PROC-02) section placed as its own top-level section before Session Handoff Seams
+- [Phase 167]: [Phase 167-05]: PROC-02 Part D survives regression net — all six disciplines verified intact after Plans 01-04, zero restoration needed
 
 ### Pending Todos
 
@@ -295,7 +297,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-22T01:38:25.126Z
+Last session: 2026-07-22T01:43:50.452Z
 Stopped at: Completed 167-03-PLAN.md
 Resume file: 
 None

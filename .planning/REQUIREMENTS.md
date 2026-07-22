@@ -18,7 +18,7 @@ the fix holds → only then close.**
   regression test that fails on pre-fix code and passes on post-fix code, and (c) an adversarial
   verification that the fix actually holds under the conditions that produced the original filing. No
   defect is marked closed on a green build alone. (Post-mortem Part A closing note + Part E #3.)
-- [ ] **PROC-02**: The skills autonomy rewrite (SKILLAUTO-*) preserves every Part D discipline that kept
+- [x] **PROC-02**: The skills autonomy rewrite (SKILLAUTO-*) preserves every Part D discipline that kept
   provenance clean — escalate-don't-hack / file-don't-workaround, reuse-not-rebuild, honest-derived
   provenance labeling, surface-don't-fabricate on load-bearing rule holes, in-process redteam, and
   build-literally-when-under-determined. Autonomy applies to *how to build*, never to *what the rules

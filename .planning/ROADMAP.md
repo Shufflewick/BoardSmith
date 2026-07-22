@@ -29,7 +29,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [x] **Phase 164: Library Misc — Action-Panel, Loop, Visual, Debug-View** — per-action dock suppression + fence `suppress-action-panel` (C.3-lib), unbounded `loop()`, token glyph ink, time-travel desync (D28, D29, D30, D31) (completed 2026-07-21)
 - [~] **Phase 165: Platform Logging Hygiene** — DEFERRED TO PLATFORM TEAM (2026-07-21): `[DRAWDROP]`/`[DRAWDROP-SRV]` logging lives ONLY in the deployed platform (web front-end + Convex `pieces:*` mutations), proven absent from this library repo and all reachable game repos. Nothing to fix here; D32 stays "filed, not patched" per the lab finding `~/BoardSmithLab/findings/boardsmith-platform-drawdrop-debug-logging.md`. Re-scope to the platform repo when accessible. (D32)
 - [x] **Phase 166: Skills Defects — Session-Lock + UI/Library Boundary** — fix the close-ceremony lock seam, fence the game/library boundary, tell the agent not to use the fenced suppress hatch (B.8 ×2, C.3-skills) (completed 2026-07-21)
-- [ ] **Phase 167: Skills Autonomy Rewrite** — playtest-gate, question discipline, batch, run-while-away, auto-advance, context ≥50% + sub-agent offload, loud completion, process lessons — preserving Part D disciplines (B.1–B.7, B.9)
+- [x] **Phase 167: Skills Autonomy Rewrite** — playtest-gate, question discipline, batch, run-while-away, auto-advance, context ≥50% + sub-agent offload, loud completion, process lessons — preserving Part D disciplines (B.1–B.7, B.9) (completed 2026-07-22)
 - [ ] **Phase 168: Platform Feature Spike — Seed-to-State** — scope/feasibility spike for seeding a game into a target playtest state (C.1)
 - [ ] **Phase 169: Post-Fix Game De-Workaround Sweep** — remove every now-unneeded workaround across the five game repos, gated on verified fixes + green suites; close BSR-12; reclassify BS-10 (Part E #6)
 
@@ -222,7 +222,7 @@ Plans:
 - [x] 167-02-PLAN.md — SKILLAUTO-02/03/04/05: ask discipline + batched queue + run-while-away + auto-advance (remove print-and-handoff stop) [wave 2]
 - [x] 167-03-PLAN.md — SKILLAUTO-06/07: ≥50% context floor + sub-agent offload + loud game/chunk completion [wave 3]
 - [x] 167-04-PLAN.md — SKILLAUTO-08: close-time ledger reconciliation + RULINGS re-touch + fail-loud sims [wave 4]
-- [ ] 167-05-PLAN.md — PROC-02: autonomy=how-not-what statement + "Part D survives" regression net (final gate) [wave 5]
+- [x] 167-05-PLAN.md — PROC-02: autonomy=how-not-what statement + "Part D survives" regression net (final gate) [wave 5]
 
 #### Phase 168: Platform Feature Spike — Seed-to-State
 **Goal**: Scope and prove feasibility of "seed a game into a target playtest state" — a scenario/seed the platform can load directly so the pipeline can put a game into the exact state it wants a human to test, bringing the human in not-already-annoyed.
@@ -269,6 +269,6 @@ Plans:
 | 164. Library Misc — Action-Panel, Loop, Visual, Debug-View | 4/4 | Complete   | 2026-07-21 |
 | 165. Platform Logging Hygiene | 0/? | Not started | — |
 | 166. Skills Defects — Session-Lock + UI/Library Boundary | 2/2 | Complete   | 2026-07-21 |
-| 167. Skills Autonomy Rewrite | 4/5 | In Progress|  |
+| 167. Skills Autonomy Rewrite | 5/5 | Complete   | 2026-07-22 |
 | 168. Platform Feature Spike — Seed-to-State | 0/? | Not started | — |
 | 169. Post-Fix Game De-Workaround Sweep | 0/? | Not started | — |
