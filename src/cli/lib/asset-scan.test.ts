@@ -182,4 +182,29 @@ describe('scanAssetReachability', () => {
     expect(violations.length).toBe(1);
     expect(violations[0].line).toBe(2);
   });
+
+  // F-11 (v4.8): stripComments must NOT apply JS `//` line-comment lexing to
+  // Vue TEMPLATE text. `//` in template text (e.g. "score // bonus") is literal
+  // content, not a comment — treating it as one blanks the rest of the line
+  // including a genuine bare <img>, defeating the gate.
+  it('F-11: a `//` in template text is NOT a comment and does not swallow a following live <img>', () => {
+    const violations = scanWith({
+      'src/ui/components/GameTable.vue':
+        '<template>\n  <div>score // bonus</div><img src="/x.png" />\n</template>',
+    });
+    expect(violations.length).toBe(1);
+    expect(violations[0].line).toBe(2);
+  });
+
+  // F-11 (v4.8): an apostrophe in TEMPLATE text ("Player's hand") must NOT open
+  // JS string-quote state. Pre-fix it did, so a following genuine
+  // `<!-- <img> -->` HTML comment on the same line was not recognized and its
+  // <img> was flagged (a spurious FAIL retriggerable by ordinary English).
+  it('F-11: an apostrophe in template text does not phantom-quote a following HTML comment (no false FAIL)', () => {
+    const violations = scanWith({
+      'src/ui/components/GameTable.vue':
+        "<template>\n  <div>Player's hand <!-- <img src=\"/old.svg\" /> --></div>\n</template>",
+    });
+    expect(violations).toEqual([]);
+  });
 });
