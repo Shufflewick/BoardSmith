@@ -1150,3 +1150,41 @@ describe('SKILLAUTO-05 — auto-advance', () => {
     expect(buildChunk).not.toMatch(/telling the user to re-invoke `\/bs-build-chunk` —\s*\n\s*only when a stop condition fires/i);
   });
 });
+
+describe('SKILLAUTO-06 — context floor + offload', () => {
+  it('state-machine.md states a >=50% wind-down floor beneath the existing 60% ceiling (both numbers present)', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/50%/);
+    expect(stateMachine).toMatch(/60%/);
+    expect(stateMachine).toMatch(/never winds? down before/i);
+  });
+
+  it('state-machine.md frames stopping before the floor as the same premature bail the ceiling forbids', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/floor/i);
+    expect(stateMachine).toMatch(/premature\s+bail/i);
+  });
+
+  it('state-machine.md and build-chunk.md name sub-agent offload of research, audits, large reads, and repairs', () => {
+    const stateMachine = read('state-machine.md');
+    const buildChunk = read('build-chunk.md');
+    expect(stateMachine).toMatch(/sub-agent\s+offload/i);
+    expect(stateMachine).toMatch(/research/i);
+    expect(stateMachine).toMatch(/audits/i);
+    expect(stateMachine).toMatch(/large reads/i);
+    expect(stateMachine).toMatch(/repairs/i);
+    expect(buildChunk).toMatch(/sub-agent\s+offload|dispatched to\s+\n?sub-agents/i);
+  });
+
+  it('build-chunk.md still preserves the Context-Economics Hard Rule — orchestrator never reads the big stuff', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toContain('## Context-Economics Hard Rule');
+    expect(buildChunk).toMatch(/orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself/i);
+  });
+
+  it('state-machine.md cites the 50% floor as the mechanism that makes long autonomous runs possible', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/main thread.s (own )?context fills slowly/i);
+    expect(stateMachine).toMatch(/long autonomous run/i);
+  });
+});

@@ -260,18 +260,31 @@ always sees what is coming (and can say "stop") before that chunk's first gate; 
 condition *does* fire at this boundary — it is never the default end-of-close signal, and silence
 from the user means auto-advance, not a wait for re-invocation.
 
-**Context-low escape hatch.** "Context-low" has a concrete threshold: **60% of the context
-window used.** Below 60%, the session keeps going — it does NOT stop, wrap up, or suggest a
-`/clear` on a vaguer hunch that it is "getting long" (stopping at 40% because the work feels large
-is exactly the premature bail this threshold exists to forbid). At or above ~60% used (or the
-moment the harness surfaces a context warning earlier than that, whichever comes first), the
-session finishes the step it is on, lets that step persist to `CHUNK.md` under the cold-resume
+**Context floor + ceiling (SKILLAUTO-06).** Two numbers govern context, and both must hold at
+once: a **≥50% wind-down FLOOR** and the existing **60% "obey-the-harness-warning" CEILING**. The
+floor comes first — **the session never winds down before at least 50% of the context window is
+consumed.** Stopping earlier (e.g. at 40% because the work "feels big") is exactly the premature
+bail this floor forbids, regardless of how the work "feels." Below 60%, the session keeps
+going — it does NOT stop, wrap up, or suggest a `/clear` on a vaguer hunch that it is "getting
+long" (the same premature-bail hunch the 50% floor forbids on the low end). At or above ~60% used
+(or the moment the harness surfaces a context warning earlier than that, whichever comes first),
+the session finishes the step it is on, lets that step persist to `CHUNK.md` under the cold-resume
 parse contract and commit per the git protocol, and then stops at that cold-resume checkpoint —
 telling the user to run `/clear` and re-invoke `/bs-build-chunk`, which picks up at the first
 incomplete step exactly where this one stopped. The 60% figure is a low-water mark, not a hard
 interrupt: never abandon a step mid-write to hit it, and never blow far past it either — stop at
 the next persisted checkpoint once crossed. The one thing that IS a real capability here is
-reading the harness's own context-usage signal against this 60% line; a session must not stop on a
-generic "this feels long" guess that ignores the actual percentage.
+reading the harness's own context-usage signal against the 50% floor and the 60% ceiling; a
+session must not stop on a generic "this feels long" guess that ignores the actual percentage.
+
+**Sub-agent offload is the substantive lever that keeps the main thread under the 60% ceiling
+while still clearing the 50% floor.** Heavy work classes — research, audits, large reads, and
+repairs — are dispatched to sub-agents rather than performed inline by the orchestrator, so the
+main thread's own context fills slowly across a long autonomous run instead of spiking on any one
+step. This is the same mechanism `build-chunk.md`'s Context-Economics Hard Rule already codifies
+("the orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself") —
+that rule is what makes sub-agent offload possible in the first place, and it is preserved here
+unchanged: the orchestrator reads structured return-shapes and chunk state, never the big stuff
+behind them.
 
 **Final-acceptance chunk exception.** The sketch's one mandated final-acceptance chunk (`templates/SKETCH.template.md` "## Mandated Chunks") has a fixed 4-item Step Checklist `[final-acceptance, playtest, revise, close]` (`build-chunk.md` "Final-acceptance chunk target"). Its leading `final-acceptance` content step — a coverage check plus a 7-point design-QA pass with a fresh-context agent dispatch and two human-narrated checks — is by far the heaviest single step in the skill. The seam between `final-acceptance` and `playtest` is therefore a first-class **resume checkpoint**: because that content step is so heavy it is the most likely place a context-low warning fires, and its sub-parts persist individually so a resume re-enters mid-pass rather than re-running the whole step. It is NOT a mandatory auto-stop — if context holds, the same session flows from `final-acceptance` straight into the `{playtest, revise, close}` group and stops at the human `playtest` gate that follows, exactly like any other chunk. See `build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the sub-part persistence that keeps a mid-pass crash resumable.

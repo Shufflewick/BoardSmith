@@ -276,6 +276,11 @@ saved in the game folder, then **continue in this same session into group 2** (`
 no handoff, no "run `/bs-build-chunk` again" prompt. Only a harness context-low warning interrupts
 that continuation, in which case persist (already guaranteed) and tell the user to `/clear` and
 re-invoke `/bs-build-chunk` to resume (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams").
+This continuation is exactly what the **≥50% wind-down floor** (SKILLAUTO-06,
+`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Context floor + ceiling") protects: the group-2 dispatches below
+(research the rulebook, audit findings, large reads, repairs) go to sub-agents rather than being
+read inline by the orchestrator, so the main thread's own context fills slowly enough to clear the
+50% floor before the 60% ceiling ever forces a stop.
 If the redteam step hit a refuted-twice escalation earlier in this group, that is its own
 human-input gate — the session stops there for the user's ruling before reaching `ask`.
 
@@ -374,7 +379,7 @@ that chunk's `ask`, per `state-machine.md` "Session Handoff Seams" → "Cross-ch
 and stops only at a human-input gate (`ask` approval, a redteam refuted-twice escalation, the
 `playtest` gate, a repair round-3 triage, or `close`'s delta gate), when an automated step hits an
 unrecoverable/stuck state, or when context crosses the **60%-used** low-water mark (see
-`state-machine.md` "Session Handoff Seams" → "Context-low escape hatch" for the exact threshold
+`state-machine.md` "Session Handoff Seams" → "Context floor + ceiling" for the exact threshold
 rule). This is the run-while-away model (SKILLAUTO-04): below 60% the session keeps going — it does
 NOT stop early because the work feels large — and auto-advances into the next chunk and the next
 logical step without the human re-invoking (SKILLAUTO-05). At/above ~60% used (or an earlier harness
@@ -382,6 +387,16 @@ context warning, or a stuck automated step), it finishes and persists the curren
 at that cold-resume checkpoint and tells the user to `/clear` and re-invoke `/bs-build-chunk` to
 resume — this printed re-invocation is the crash/context-fallback resume path, not a routine
 end-of-session handoff.
+
+**≥50% floor (SKILLAUTO-06).** Below 60% is necessary but not sufficient: the session must also
+have consumed **at least 50%** of the context window before it winds down — never stop early
+because a chunk "feels big" at 40%. The lever that keeps the main thread's own usage climbing
+slowly enough to clear that 50% floor before the 60% ceiling forces a stop is **sub-agent
+offload**: research (rulebook slices, docs), audits, large reads, and repairs are dispatched to
+sub-agents rather than performed inline, per this file's own "Context-Economics Hard Rule" above
+("the orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself") — that
+rule is the mechanism the offload rides on, and it is unchanged by this floor. See
+`state-machine.md` "Session Handoff Seams" → "Context floor + ceiling" for the full framing.
 
 Example one-line progress narration (style guide, not a script — one or two per group):
 
