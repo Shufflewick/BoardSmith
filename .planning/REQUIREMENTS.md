@@ -168,7 +168,7 @@ the fix holds → only then close.**
 - [x] **SKILLAUTO-07** (B.7): Completion is unmistakable — finishing a game is a loud, unambiguous event
   (banner + clean final summary card: what shipped, test count, deferred items), never buried in a wall
   of text.
-- [ ] **SKILLAUTO-08** (B.9): The three recurring process gaps are closed — (a) close-time ledger
+- [x] **SKILLAUTO-08** (B.9): The three recurring process gaps are closed — (a) close-time ledger
   reconciliation ("audit the paperwork, not just the code"; re-touch the relevant filing when a fix
   lands), (b) a shared cross-session ruling authority store (not per-session memory — autonomy makes
   divergence worse), (c) tests/sims that stop exercising their target must FAIL LOUD, not pass quietly.
