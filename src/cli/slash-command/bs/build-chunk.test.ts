@@ -1071,3 +1071,39 @@ describe('SKILLAUTO-01 — milestone playtest gates', () => {
     expect(buildChunk).toMatch(/skips the\s*\n?\s*human stop entirely/i);
   });
 });
+
+describe('SKILLAUTO-02 — ask discipline', () => {
+  it('build/ask.md states the ask triple-gate: undetermined AND load-bearing AND no reasonable default, else proceed and record the assumption', () => {
+    const ask = read('build/ask.md');
+    expect(ask).toMatch(/undetermined/i);
+    expect(ask).toMatch(/load-bearing/i);
+    expect(ask).toMatch(/reasonable default/i);
+    expect(ask).toMatch(/proceed and record the assumption/i);
+  });
+
+  it('build/ask.md states already-granted approval is never re-asked', () => {
+    const ask = read('build/ask.md');
+    expect(ask).toMatch(/never re-ask/i);
+    expect(ask).toMatch(/already[- ]granted approval/i);
+  });
+
+  it('build/ask.md never routes a UI-less chunk to a human playtest', () => {
+    const ask = read('build/ask.md');
+    expect(ask).toMatch(/never route a human playtest/i);
+    expect(ask).toMatch(/no visible UI/i);
+  });
+});
+
+describe('SKILLAUTO-03 — batched question queue', () => {
+  it('state-machine.md describes an accumulate-into-a-queue model for open questions', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/queue/i);
+    expect(stateMachine).toMatch(/batch/i);
+  });
+
+  it('state-machine.md states unblocked work continues while questions are queued, surfacing the batch at the next human gate/milestone', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/unblocked work continues/i);
+    expect(stateMachine).toMatch(/surfaces?\s+at the next human gate/i);
+  });
+});

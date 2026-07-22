@@ -41,6 +41,42 @@ escalated to the user directly (`state-machine.md` "Redteam Escalation" — refu
 go to the human, never to more agents), is surfaced as a part (b) question below; a ruling
 already recorded in RULINGS.md may already answer it.
 
+## Ask Triple-Gate (SKILLAUTO-02) — ask only when all three hold
+
+Not every open item earns a question. Before any part (b) ambiguity reaches the user, it must
+clear all three gates:
+
+1. **Genuinely undetermined by rules + prior answers.** The rulebook, `RULINGS.md`, and this
+   chunk's already-settled interpretation do not decide the question between them.
+2. **Load-bearing.** The answer actually changes what gets built for this chunk — a cosmetic or
+   inconsequential choice does not qualify, no matter how undetermined it technically is.
+3. **No reasonable default exists.** There is no sensible, low-risk assumption a competent
+   designer would make without asking.
+
+**If all three hold, ask** — as a part (b) question, per the Fixed 4-Part Presentation Format
+below. **If any one gate fails, do NOT ask: proceed and record the assumption.** Write the
+assumption as a `DECISIONS.md` entry the moment it is made (cite `build/build.md` "Decisions —
+Append to DECISIONS.md" — same append-as-made precedent, applied here to a design assumption
+instead of a data-model choice), naming what was assumed and why no question was needed. A
+genuine rules ambiguity that does clear the triple-gate is recorded in `RULINGS.md` instead (see
+"House-Rule / Adaptation Choices" below), never fabricated as if the rulebook had settled it.
+
+**Never re-ask an already-granted approval.** If the user already approved a choice — at this
+chunk's own earlier redteam escalation, at a prior chunk's `ask`, or as a standing `RULINGS.md`
+entry — that approval stands; re-presenting it as a fresh question wastes the user's attention and
+implies their prior answer didn't count.
+
+**Never route a human playtest for a chunk with no visible UI.** A `ui: none` chunk has nothing
+for a human to click through — this ask step never proposes or implies a client-playtest stop for
+it (see `state-machine.md` "Session Handoff Seams" — the milestone/UI-gated `playtest` stop,
+SKILLAUTO-01 — this ask step never overrides or second-guesses that gating).
+
+Open questions that clear the triple-gate but are not blocking THIS chunk's own progress —
+because they concern a later chunk, or a cross-cutting design choice this chunk doesn't need
+settled to proceed — accumulate into the batched queue instead of stopping this chunk cold; see
+`state-machine.md`'s batched-queue model. A question that genuinely blocks this chunk's own design
+still gates this ask as described below.
+
 ## The Fixed 4-Part Presentation Format
 
 Present the chunk's design to the user in exactly these four parts, in this order. This shape is

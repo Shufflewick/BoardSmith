@@ -218,6 +218,20 @@ recorded disposition) also closes the chunk — marking it verified, recording t
 hash, and rolling up decisions. The group name's `revise` denotes that whole loop, not a hard cap
 of one revision.
 
+**Batched-question queue (SKILLAUTO-03 — the GSD-autonomous model).** Not every open item is a
+human-input gate. An item that clears `build/ask.md`'s ask triple-gate (SKILLAUTO-02 —
+genuinely undetermined AND load-bearing AND no reasonable default) but does not block THIS
+chunk's own progress — because it concerns a later chunk, or a cross-cutting design choice this
+chunk doesn't need settled to proceed — is appended to an open-questions queue instead of
+stopping the session. **Unblocked work continues**: the session keeps building whatever chunks
+and steps do not depend on the queued item's answer, exactly as it would if the item didn't
+exist. The queue is not read one item at a time as it accrues; instead the whole batch **surfaces
+at the next human gate/milestone** — the next `ask` approval presentation, the next milestone
+`playtest` stop, or `close`'s sketch-tail delta gate, whichever comes first — presented together
+rather than as a string of one-off interruptions. This is distinct from a **blocking** question: a
+question this chunk's own design cannot proceed without still gates that chunk's `ask` directly
+(`build/ask.md` "Ask Triple-Gate"), it is never queued past the chunk that needs it answered.
+
 **Cross-chunk continuation (the chunk→chunk seam).** The boundary between one chunk's `close` and
 the next chunk's `investigate` is itself a seam the session flows across, exactly like the four
 intra-chunk group boundaries — it is NOT a session terminus. When `close` finishes (its bookkeeping

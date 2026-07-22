@@ -37,6 +37,15 @@ and why the chunk cannot proceed without it, and get explicit approval before ma
 Do not make architectural calls unilaterally mid-build; a build session that discovers it needs to
 restructure something is exactly the situation this gate exists for.
 
+The same surface-don't-fabricate posture applies to a load-bearing **rules** ambiguity discovered
+mid-build (as opposed to an architectural one): if writing this chunk's code exposes a genuine gap
+the rulebook and `RULINGS.md` do not settle, it is surfaced (queued per `state-machine.md`'s
+batched-question model — see `build/ask.md` "Ask Triple-Gate (SKILLAUTO-02)"), never quietly
+decided by the build step itself. `build` writes code from the interpretation `ask` already
+gated; it does not re-litigate or unilaterally patch that interpretation when a fresh ambiguity
+surfaces — the same "surface, don't unilaterally decide" boundary the restructuring gate above
+enforces for code shape applies here to rules meaning.
+
 ## Boundaries — the agent controls the game board only
 
 `build` writes the game's own source under this project — the board, its rules, its UI. It does
