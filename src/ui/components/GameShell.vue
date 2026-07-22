@@ -802,6 +802,16 @@ function setBoardPrompt(prompt: string | null): void {
 
 // Undo actions back to turn start (called by ActionPanel)
 async function handleUndo(): Promise<void> {
+  // LIBX-04 / F-15: undo is a state-committing operation and MUST honor the
+  // time-travel guard, exactly like every action path (guarded at the
+  // controller chokepoints). The `can-undo` prop handed to custom UIs is only
+  // advisory — a custom UI that calls the `undo` slot prop while viewing
+  // history would otherwise commit an undo against the LIVE engine. Refuse here
+  // so the guard cannot be bypassed from any UI.
+  if (isViewingHistory.value) {
+    toast.error('Return to the current position before undoing.');
+    return;
+  }
   if (platformMode.value) {
     const result = await platformRequest('undo', { player: playerSeat.value });
     if (!result.success) {
