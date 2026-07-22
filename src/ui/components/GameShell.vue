@@ -299,6 +299,28 @@ const dockHeight = ref<number>(68);
 let dockResizeObserver: ResizeObserver | null = null;
 const actionbarEl = ref<HTMLElement | null>(null);
 
+// ZOOM-01 / F-14: (re)attach the dock-height ResizeObserver to the actionbar
+// whenever it appears — the actionbar is v-if'd on the game screen, so a
+// lobby-first mount or a game→lobby→game remount would otherwise leave the RO
+// on a detached element (or never attach it), freezing dockHeight at its
+// default and letting the board sit under the dock. Idempotent: disconnects any
+// prior observer first.
+function attachDockObserver(el: HTMLElement | null): void {
+  dockResizeObserver?.disconnect();
+  dockResizeObserver = null;
+  if (!el || typeof ResizeObserver === 'undefined') return;
+  dockResizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0];
+    // BORDER-box height (full on-screen footprint incl. padding) + a small
+    // buffer so revealed content clears the dock edge; contentRect excludes
+    // padding and would leave the board's bottom slightly under the dock.
+    const h = entry?.borderBoxSize?.[0]?.blockSize ?? entry?.target.getBoundingClientRect().height;
+    if (h != null) dockHeight.value = Math.round(h) + 8;
+  });
+  dockResizeObserver.observe(el);
+}
+watch(actionbarEl, (el) => attachDockObserver(el));
+
 // Startup zoom fit: when a game (re)mounts, the board is zoomed once to fill
 // the board region (clamped to the 0.5–2.0 slider range) and then left alone —
 // mid-game content growth and window resizes never move the zoom. The user
@@ -1166,19 +1188,14 @@ onMounted(async () => {
   updateCompact(compactQuery);
   compactQuery.addEventListener('change', updateCompact);
 
-  // Track the floating dock's height so the board reserves matching scroll room at
-  // the bottom — covered board content can then always be scrolled into view.
-  if (actionbarEl.value && typeof ResizeObserver !== 'undefined') {
-    dockResizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      // Use the BORDER-box height (the dock's full on-screen footprint incl. padding),
-      // plus a small buffer so revealed content clears the dock edge. contentRect
-      // excludes padding and would leave the board's bottom slightly under the dock.
-      const h = entry?.borderBoxSize?.[0]?.blockSize ?? entry?.target.getBoundingClientRect().height;
-      if (h != null) dockHeight.value = Math.round(h) + 8;
-    });
-    dockResizeObserver.observe(actionbarEl.value);
-  }
+  // Track the floating dock's height so the board reserves matching scroll room
+  // at the bottom — covered board content can then always be scrolled into view.
+  // ZOOM-01 / F-14: the actionbar only exists under v-if="currentScreen==='game'",
+  // so on a lobby-first (or remounted) mount it is ABSENT here and a one-shot
+  // attach would leave dockHeight frozen at its default (board sits under the
+  // dock). `attachDockObserver` is (re)driven by the watch below whenever the
+  // actionbar element appears/disappears, so every mount path rewires it.
+  attachDockObserver(actionbarEl.value);
 
   if (platformMode.value) return;
 
