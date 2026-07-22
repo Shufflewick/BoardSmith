@@ -561,6 +561,42 @@ export class FlowEngine<G extends Game = Game> {
    *
    * Continues awaiting input until all players are done or allDone returns true.
    */
+  /**
+   * F-06/SIM-03: warn (dev-only, deduped) when a simultaneous step is in the
+   * "no eligible actor yet allDone is false" deadlock shape -- every awaiting
+   * seat has already individually `completed` (or there are none) AND the
+   * step-wide `allDone` gate returned false, so the step will NOT finalize on
+   * its own.
+   *
+   * Option C keeps `allDone` authoritative: the step legitimately stays open
+   * because something outside this action pipeline is expected to move it
+   * forward (an external `resume()`, or a game-state change that flips
+   * `allDone()` to true). But that same state is indistinguishable from a
+   * deadlock bug where `allDone()` can NEVER become true -- in which case the
+   * step hangs forever with no eligible actor. This is a dev diagnostic ONLY:
+   * emitting a production throw or force-complete here would break the
+   * legitimate external-gate pattern, so we only warn.
+   */
+  private warnIfDeadlockedSimultaneousStep(
+    config: SimultaneousActionStepConfig
+  ): void {
+    const noEligibleActor =
+      this.awaitingPlayers.length === 0 || this.awaitingPlayers.every(p => p.completed);
+    if (!noEligibleActor) return;
+
+    const stepName = config.name ?? 'simultaneous-action-step';
+    devWarn(
+      `simultaneous-deadlock:${stepName}`,
+      `Simultaneous step "${stepName}": every awaiting seat has completed but ` +
+        `allDone() returned false, so this step will not finalize on its own. ` +
+        `This step is either (a) intentionally held open for an external resume() ` +
+        `or a game-state change that flips allDone() to true, or (b) a deadlock bug ` +
+        `where allDone() can never become true -- in which case this step hangs forever. ` +
+        `Next step: ensure something resumes this step, or that allDone() eventually ` +
+        `returns true for the current game state.`
+    );
+  }
+
   private resumeSimultaneousAction(
     actionName: string,
     args: Record<string, unknown>,
@@ -593,6 +629,18 @@ export class FlowEngine<G extends Game = Game> {
       // time every awaiting seat is individually `completed`, there is no
       // remaining seat state for `allDone` to usefully evaluate against, so
       // skipping it here is intentional, not an oversight.
+      //
+      // F-06/SIM-03 (residual inconsistency, deliberately retained): the
+      // post-action path (below) treats `allDone` as authoritative and, when a
+      // CUSTOM `allDone` returns false with no eligible actor, stays open and
+      // dev-warns via `warnIfDeadlockedSimultaneousStep`. This resume path does
+      // NOT -- it still force-completes. Unifying the two (making this branch
+      // also consult `allDone`) was attempted and reverted: it breaks the D21
+      // resume-crash regression tests (`simultaneous-alldone-empty.test.ts`),
+      // which encode the documented design position that a stray no-seat resume
+      // after every seat is done must complete cleanly rather than hang. That is
+      // a deliberate, load-bearing behavior for the resume entrypoint, not the
+      // buggy shape F-06 targets, so the paths remain intentionally divergent.
       const noEligibleActor = this.awaitingPlayers.length === 0
         || this.awaitingPlayers.every(p => p.completed);
       if (noEligibleActor) {
@@ -691,6 +739,14 @@ export class FlowEngine<G extends Game = Game> {
         frame.completed = true;
         return this.run();
       }
+
+      // F-06/SIM-03: allDone returned false. If NO seat can still act (every
+      // awaiting seat has already individually completed, or there are none),
+      // this step will not finalize on its own -- Option C keeps allDone
+      // authoritative, so it legitimately stays open, but this is exactly the
+      // shape of a silent permanent hang. Fail loud in dev so a genuine
+      // deadlock is visible instead of hanging forever.
+      this.warnIfDeadlockedSimultaneousStep(config);
 
       // Still awaiting other players
       return this.getState();
