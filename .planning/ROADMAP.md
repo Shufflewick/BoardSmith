@@ -217,12 +217,12 @@ Plans:
 4. The context threshold is ≥50% before winding down, with heavy work offloaded to sub-agents (SKILLAUTO-06); completion is a loud, unambiguous banner + summary card (SKILLAUTO-07).
 5. The three B.9 process gaps are closed — close-time ledger reconciliation, a shared cross-session ruling authority store, and fail-loud tests/sims (SKILLAUTO-08).
 6. **PROC-02**: The rewrite preserves every Part D discipline (escalate-don't-hack, reuse-not-rebuild, honest-derived labeling, surface-don't-fabricate, in-process redteam, build-literally) — autonomy applies to *how to build*, never to *what the rules are*; genuine rule ambiguity is still surfaced (batched), never fabricated.
-**Plans** (suggested breakdown; finalized at plan-phase):
-- Playtest-gate policy + question discipline (B.1/B.2) [SKILLAUTO-01, 02]
-- Batch-questions + run-while-away + auto-advance (B.3/B.4/B.5) [SKILLAUTO-03, 04, 05]
-- Context threshold ≥50% + sub-agent offload + loud completion (B.6/B.7) [SKILLAUTO-06, 07]
-- B.9 process gaps: ledger reconciliation, shared ruling store, fail-loud tests [SKILLAUTO-08]
-- Part D preservation guardrails woven through all of the above [PROC-02]
+**Plans** (5 plans, sequential waves 1-5 — shared-file safety: all plans touch state-machine.md / build-chunk.md / build/close.md / build-chunk.test.ts, so no two run concurrently):
+- [ ] 167-01-PLAN.md — SKILLAUTO-01: milestone playtest gates (SKETCH milestone flag + milestone/UI-gated human stop) [wave 1]
+- [ ] 167-02-PLAN.md — SKILLAUTO-02/03/04/05: ask discipline + batched queue + run-while-away + auto-advance (remove print-and-handoff stop) [wave 2]
+- [ ] 167-03-PLAN.md — SKILLAUTO-06/07: ≥50% context floor + sub-agent offload + loud game/chunk completion [wave 3]
+- [ ] 167-04-PLAN.md — SKILLAUTO-08: close-time ledger reconciliation + RULINGS re-touch + fail-loud sims [wave 4]
+- [ ] 167-05-PLAN.md — PROC-02: autonomy=how-not-what statement + "Part D survives" regression net (final gate) [wave 5]
 
 #### Phase 168: Platform Feature Spike — Seed-to-State
 **Goal**: Scope and prove feasibility of "seed a game into a target playtest state" — a scenario/seed the platform can load directly so the pipeline can put a game into the exact state it wants a human to test, bringing the human in not-already-annoyed.
