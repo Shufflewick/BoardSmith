@@ -1188,3 +1188,36 @@ describe('SKILLAUTO-06 — context floor + offload', () => {
     expect(stateMachine).toMatch(/long autonomous run/i);
   });
 });
+
+describe('SKILLAUTO-07 — loud completion', () => {
+  it('build/final-acceptance.md emits a loud, unambiguous game-completion banner', () => {
+    const finalAcceptance = read('build/final-acceptance.md');
+    expect(finalAcceptance).toMatch(/GAME COMPLETE/);
+    expect(finalAcceptance).toMatch(/loud, unambiguous/i);
+  });
+
+  it('build/final-acceptance.md\'s summary card names shipped, test count, and deferred', () => {
+    const finalAcceptance = read('build/final-acceptance.md');
+    expect(finalAcceptance).toMatch(/summary card/i);
+    expect(finalAcceptance).toMatch(/\*\*Shipped\*\*/);
+    expect(finalAcceptance).toMatch(/\*\*Test count\*\*/i);
+    expect(finalAcceptance).toMatch(/\*\*Deferred\*\*/);
+  });
+
+  it('build/final-acceptance.md never buries the game-completion terminus in a wall of text', () => {
+    const finalAcceptance = read('build/final-acceptance.md');
+    expect(finalAcceptance).toMatch(/never buried in a wall of text|never buried in the routine/i);
+  });
+
+  it('build/close.md emits a lighter chunk-level completion line at each chunk close', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/chunk-level completion line/i);
+    expect(close).toMatch(/chunk '<slug>' complete/i);
+  });
+
+  it('build/close.md distinguishes the chunk-level line from the game-level banner and does not stop the session', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/distinct from the loud game-level banner/i);
+    expect(close).toMatch(/does not itself stop the session/i);
+  });
+});

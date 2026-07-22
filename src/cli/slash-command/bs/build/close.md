@@ -102,6 +102,21 @@ user pushes back on the delta, negotiate the same way `ask.md`'s Gate-Before-Wri
 answer wins unless a hard rulebook dependency is violated, in which case name the dependency
 concretely and propose the minimal resolution.
 
+## Chunk-Complete Line (SKILLAUTO-07)
+
+Immediately after this chunk's `Status` is written `verified` (or `verified (user-waived)`) and
+before the next-chunk proposal below, emit a single **lighter, chunk-level completion line** —
+distinct from the loud game-level banner `build/final-acceptance.md` "Game-Complete Banner +
+Summary Card" emits only once, at the game's own terminus. This line is one-per-chunk, every
+chunk, plain narration rather than a delimited block:
+
+`chunk '<slug>' complete — verified` (or `— verified (user-waived)` for a waived chunk)
+
+This line does not itself stop the session or wait for acknowledgment — it is purely a progress
+marker inside the same auto-advance narration this file's "Then auto-advance" section already
+produces; the auto-advance framing below governs whether the session continues, this line does
+not change that.
+
 ## Propose the Next Chunk
 
 Once the delta is approved and written, propose the next chunk in the (possibly newly-updated)

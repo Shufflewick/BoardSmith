@@ -176,3 +176,37 @@ refuted), this chunk still runs the standard `{playtest, revise, close}` semanti
 content — the human plays the finished game start-to-finish as this chunk's own playtest script,
 any issues route to `build/revise.md`, and `build/close.md` closes it exactly like any other
 chunk. This file does not restate that group's structure.
+
+## Game-Complete Banner + Summary Card (SKILLAUTO-07)
+
+Once THIS chunk (the sketch's one mandated `final-acceptance` chunk) reaches `close` — every
+finding on its Findings Ledger triaged, the human's start-to-finish playtest confirmed clean, and
+`Status: verified`/`verified (user-waived)` written — the GAME itself is done, not just a chunk.
+That terminus gets a **loud, unambiguous** completion output, never buried in the routine
+close-out narration `build/close.md` already produces for every other chunk. Emit it as its own
+visually-distinct block, delimited top and bottom so it cannot be mistaken for ordinary
+progress narration:
+
+```
+================================================================
+ GAME COMPLETE
+================================================================
+```
+
+Immediately beneath the banner, emit a **summary card** with exactly three named fields — do not
+add unrelated fields to this card, and do not omit one because it is empty (an empty field is
+still reported, e.g. "Deferred: none"):
+
+- **Shipped** — the ordered list of chunks/behaviors that reached `verified` (or
+  `verified (user-waived)`), read from SKETCH.md's `## Ordered Chunk List`.
+- **Test count** — the accumulated automated-suite total (unit + sim/self-playtest) across every
+  chunk, as last reported by `build/test.md`'s own run.
+- **Deferred** — every item any chunk's `## Revision Rounds` disposed as "future scope," every
+  `## Findings Ledger` entry disposed as "deferred," and every waived
+  (`verified (user-waived)`) chunk, named by slug — the ideas-backlog the human still owns.
+
+This banner + card is emitted exactly once, at this chunk's `close`, and is additional to — never
+a replacement for — the ordinary bookkeeping `build/close.md` "Bookkeeping Sequence" performs for
+every chunk including this one. Field layout and exact wording are at the author's discretion,
+consistent with the skill's voice, so long as the banner is visually loud and the three named
+fields (shipped / test count / deferred) are all present.
