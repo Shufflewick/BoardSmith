@@ -152,15 +152,15 @@ the fix holds → only then close.**
   only at (1) core play loop complete, (2) scoring/endgame complete, (3) final acceptance; still stop any
   time for a rules adjudication / open question. All internal per-chunk steps (tests, audit,
   self-playtest) are unchanged.
-- [ ] **SKILLAUTO-02** (B.2): Question discipline — ask only when the answer is genuinely undetermined by
+- [x] **SKILLAUTO-02** (B.2): Question discipline — ask only when the answer is genuinely undetermined by
   rules + prior answers AND the choice is load-bearing AND no reasonable default exists; never re-ask for
   already-granted approval; never route a human playtest for a chunk with no visible UI. Otherwise proceed
   and record the assumption.
-- [ ] **SKILLAUTO-03** (B.3): Batch questions — save up open questions and ask them all at once; keep
+- [x] **SKILLAUTO-03** (B.3): Batch questions — save up open questions and ask them all at once; keep
   working on everything not blocked between batches (GSD autonomous-mode model).
-- [ ] **SKILLAUTO-04** (B.4): Run-while-away — the pipeline keeps making progress autonomously on
+- [x] **SKILLAUTO-04** (B.4): Run-while-away — the pipeline keeps making progress autonomously on
   reasonable defaults and only parks on a batched question queue, so walking away does not stall the build.
-- [ ] **SKILLAUTO-05** (B.5): Auto-advance to the next logical step (e.g. generate the AI opponent, then
+- [x] **SKILLAUTO-05** (B.5): Auto-advance to the next logical step (e.g. generate the AI opponent, then
   final acceptance) without the human kicking it off; the only human gates are B.1's three milestones.
 - [ ] **SKILLAUTO-06** (B.6): Context management — do not wind down before at least 50% context consumed,
   and offload heavy work (research, audits, large reads, repairs) to sub-agents so the main thread fills

@@ -4,13 +4,13 @@ milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
 status: executing
 stopped_at: Completed 164-04-PLAN.md
-last_updated: "2026-07-22T01:17:38.754Z"
+last_updated: "2026-07-22T01:24:15.943Z"
 last_activity: 2026-07-22
 progress:
   total_phases: 15
   completed_phases: 11
   total_plans: 36
-  completed_plans: 32
+  completed_plans: 33
   percent: 73
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 167 (Skills Autonomy Rewrite) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-22
 
@@ -279,6 +279,8 @@ Recent decisions affecting current work:
 - [Phase 166]: SKILLDEF-02/03: build.md gained a game/library boundary section (board-only, read-only node_modules/boardsmith, file-not-patch, never-suppress built-in UI) and a never-without-client rule for platformActionPanelEscapeHatch
 - [Phase 167]: SKILLAUTO-01: Milestone: field (none|core-loop|scoring|final-acceptance) set at sketch-derivation time, never inferred at runtime
 - [Phase 167]: SKILLAUTO-01: non-milestone/UI-less chunks write Status: verified off automated test/sim pass rather than skipping verification
+- [Phase ?]: Ask triple-gate (undetermined AND load-bearing AND no reasonable default, else proceed and record) codified in build/ask.md
+- [Phase ?]: Cross-chunk continuation reframed as run-while-away + auto-advance; printed resume command is a crash fallback only, never the default end-of-close signal
 
 ### Pending Todos
 
@@ -290,7 +292,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-22T01:17:28.096Z
+Last session: 2026-07-22T01:23:10.568Z
 Stopped at: Completed 164-04-PLAN.md
 Resume file: 
 None
