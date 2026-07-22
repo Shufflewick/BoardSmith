@@ -17,7 +17,7 @@
 
 import { createDevSession, type DevSession } from './bridge.js';
 import type { Op, OpResult, GamePreset } from '../../session/index.js';
-import { dueSeats, type SeatActivityState } from '../../engine/index.js';
+import { dueSeats, type SeatActivityState, type GameStateSnapshot } from '../../engine/index.js';
 import { validateGameOptionSelection, type DevOptionDef } from './config-types.js';
 
 /** A fresh random 32-bit seed for a new game. */
@@ -131,19 +131,27 @@ export interface MultiplayerHostOptions {
    */
   teachingDisabled?: boolean;
   /**
+   * FEAT-01/168-02: when set, the FIRST started state is this seed's state —
+   * threaded through the `start` op's `hostOptions.seedSnapshot` (never
+   * `gameOptions`, same WR-04/D-01 rationale as `teachingDisabled`) so
+   * `handleStart` returns `runnerFromSnapshot(seedSnapshot, def)`'s envelope
+   * instead of a freshly-started game. Set by `boardsmith dev --seed <file>`.
+   */
+  seedSnapshot?: GameStateSnapshot;
+  /**
    * Run one op against a snapshot for the given gameOptions, bound to the
    * author's gameDefinition: `(gameOptions, snapshot, pendingState, op, hostOptions) =>
    * executeOp(def, gameOptions, …, hostOptions)`. The host computes the start
    * gameOptions (seed, per-seat colors, playerIsAI) from lobby state, so it
    * must own them. `hostOptions` carries host-level session policy
-   * (`teachingDisabled`) separately from the game's own options.
+   * (`teachingDisabled`, `seedSnapshot`) separately from the game's own options.
    */
   executeOp: (
     gameOptions: { playerCount: number; [key: string]: unknown },
     snapshot: unknown,
     pendingState: Record<string, unknown> | null,
     op: Op,
-    hostOptions?: { teachingDisabled?: boolean },
+    hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot },
   ) => Promise<OpResult>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
   send: (clientId: string, message: HostOutbound) => void;
@@ -695,7 +703,9 @@ export class MultiplayerHost {
     // gameOptions is handed to the Game constructor on `start` and persists
     // into snapshot.gameOptions, and a game may legitimately define its own
     // `teachingDisabled` game option that must not collide with this flag.
-    const hostOptions = { teachingDisabled: this.opts.teachingDisabled };
+    // FEAT-01/168-02: seedSnapshot rides here too (never gameOptions) so a
+    // `--seed` restart still starts from the seed, not a fresh game.
+    const hostOptions = { teachingDisabled: this.opts.teachingDisabled, seedSnapshot: this.opts.seedSnapshot };
     const executeOp = (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) =>
       this.opts.executeOp(op.type === 'start' ? startGameOptions : baseOptions, snapshot, pendingState, op, hostOptions);
 

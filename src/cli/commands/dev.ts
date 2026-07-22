@@ -9,7 +9,7 @@ import chalk from 'chalk';
 import open from 'open';
 
 import type { GameDefinition, Op, OpResult } from '../../session/index.js';
-import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
+import { DEFAULT_COLOR_PALETTE, type GameStateSnapshot } from '../../engine/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
 import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
@@ -22,7 +22,7 @@ type RuntimeExecuteOp = (
   snapshot: unknown,
   pendingState: Record<string, unknown> | null,
   op: Op,
-  hostOptions?: { teachingDisabled?: boolean },
+  hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot },
 ) => Promise<OpResult>;
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 import { validateGameOptionSelection } from '../dev-host/config-types.js';
@@ -43,6 +43,8 @@ interface DevOptions {
   gameOption?: string[];
   /** D13/DEVHOST-01: `--preset name` applies a declared preset's whole bundle. */
   preset?: string;
+  /** FEAT-01/168-02: path to a recorded GameStateSnapshot JSON file to seed the initial state from. */
+  seed?: string;
 }
 
 /** Thrown by the pure dev.ts flag/host validators below; `devCommand` catches
@@ -62,6 +64,34 @@ export function parsePositiveInt(flagName: string, raw: string): number {
     throw new DevFlagError(`Error: --${flagName} must be a positive integer, got "${raw}"`);
   }
   return value;
+}
+
+/**
+ * Fail-fast `--seed <file>` parser (FEAT-01/168-02). Reads and parses a
+ * recorded `GameStateSnapshot` JSON file so `--seed` can thread it into the
+ * host's `start` op instead of a fresh start. Fails LOUD — naming the exact
+ * path and reason — on a missing file or invalid JSON; there is deliberately
+ * NO silent fallback to a fresh start (CLAUDE.md hard rule: no fallbacks that
+ * mask real problems). Pure (no process.exit) so it is directly unit-testable,
+ * mirroring `parsePositiveInt`/`parseAiSeats`.
+ */
+export function parseSeedFile(path: string): GameStateSnapshot {
+  if (!existsSync(path)) {
+    throw new DevFlagError(`Error: --seed file not found: ${path}`);
+  }
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf-8');
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new DevFlagError(`Error: --seed file could not be read at ${path}: ${reason}`);
+  }
+  try {
+    return JSON.parse(raw) as GameStateSnapshot;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new DevFlagError(`Error: --seed file at ${path} is not valid JSON: ${reason}`);
+  }
 }
 
 /**
@@ -579,6 +609,13 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // DevHost.vue init postMessage → GameShell).
   const teachingDisabled = options.lockTeaching === true;
 
+  // FEAT-01/168-02: --seed reads + parses the file up front (fail loud before
+  // any server work, mirroring the other flag validators above) and threads
+  // the resulting GameStateSnapshot into MultiplayerHost below.
+  const seedSnapshot = options.seed !== undefined
+    ? exitOnDevFlagError(() => parseSeedFile(resolve(process.cwd(), options.seed as string)))
+    : undefined;
+
   // NOTE: --ai seat validation is intentionally NOT done here (Pitfall 3 /
   // F34) — it must run against the EFFECTIVE post-resolution player count,
   // which is only known once gameDefinition's minPlayers/maxPlayers are
@@ -854,6 +891,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       declaredGameOptions: devConfig.gameOptions,
       presets: devConfig.presets,
       teachingDisabled,
+      seedSnapshot,
       executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
         runExecuteOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),
       send: (clientId, message) => {
@@ -913,6 +951,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
     console.log(chalk.cyan(`  Seats: ${effectivePlayerCount} (open seats play as AI${aiPlayers.length ? `; --ai ${aiPlayers.join(',')} pre-marked` : ''}, level ${aiLevel}).`));
     if (teachingDisabled) {
       console.log(chalk.yellow(`  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
+    }
+    if (seedSnapshot) {
+      console.log(chalk.cyan(`  Seeded start (--seed ${options.seed}): initial state loaded from the recorded snapshot instead of a fresh start.`));
     }
 
     if (shouldOpenBrowser(options)) {

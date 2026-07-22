@@ -291,7 +291,22 @@ function selectDueAISeat(
 function handleStart(
   def: GameDefinitionLike,
   gameOptions: { playerCount: number; [key: string]: unknown },
+  seedSnapshot?: GameStateSnapshot,
 ): OpResult {
+  // Seed plug-in point (FEAT-01/168-02): when a seed snapshot rides in via
+  // hostOptions (NEVER gameOptions — same WR-04/D-01 rationale as
+  // teachingDisabled: gameOptions persists into snapshot.gameOptions and
+  // would leak this transient host directive into game state), the first
+  // started state IS the seed's state — restored via the SAME
+  // runnerFromSnapshot + stateEnvelope primitives every other op uses, not
+  // a rebuilt load path. No seed => unchanged fresh-start behavior below.
+  if (seedSnapshot) {
+    return {
+      success: true,
+      ...stateEnvelope(runnerFromSnapshot(seedSnapshot, def), gameOptions.playerCount),
+    };
+  }
+
   // Thread tutorial definition un-serialized (mirrors game-session.ts create()).
   // The game constructor strips `tutorial` from _constructorOptions so it is not
   // persisted in the snapshot; runnerFromSnapshot re-supplies it on restore.
@@ -1073,6 +1088,9 @@ function handleDebugCommand(
  *                       `_constructorOptions` → `snapshot.gameOptions`, which
  *                       would persist a transient host flag inside game state.
  *                       Mirrors how `pendingState` is threaded positionally.
+ *                       `seedSnapshot` (FEAT-01/168-02) follows the same
+ *                       rule: a `start` op with a seed threaded here returns
+ *                       that seed's state envelope instead of a fresh start.
  */
 export async function executeOp(
   def: GameDefinitionLike,
@@ -1080,7 +1098,7 @@ export async function executeOp(
   snapshot: unknown,
   pendingState: Record<string, unknown> | null,
   op: Op,
-  hostOptions?: { teachingDisabled?: boolean } | null,
+  hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot } | null,
 ): Promise<OpResult> {
   try {
     const teachingDisabled = hostOptions?.teachingDisabled ?? false;
@@ -1093,7 +1111,7 @@ export async function executeOp(
     }
 
     if (op.type === 'start') {
-      return handleStart(def, gameOptions);
+      return handleStart(def, gameOptions, hostOptions?.seedSnapshot);
     }
 
     // All ops below require an existing snapshot
