@@ -550,9 +550,11 @@ describe('useBoardActionBridge', () => {
       warnSpy.mockRestore();
     });
 
-    // Review follow-up (156-REVIEW WR-02): .manual() on an action that HAS
-    // selections is a no-op — surface that to the author instead of ignoring it.
-    it('warns once when .manual() is applied to a sole action that has selections', async () => {
+    // F-02 (v4.8, AUTOEXEC-01): .manual() on an action that HAS selections is
+    // now MEANINGFUL — the action still auto-starts (surfaces its prompt) but
+    // the controller suppresses auto-fill of a single enabled choice so it never
+    // silently auto-executes. No "no effect" warning is emitted anymore.
+    it('auto-starts a .manual() selection action without warning it away', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const board = createBoardInteraction();
       const { controller, start } = makeController({ pick: null, action: null });
@@ -572,11 +574,10 @@ describe('useBoardActionBridge', () => {
       await nextTick();
       await nextTick();
 
+      // No "no effect" warning — .manual() now has a real effect on selection actions.
       const relevantCalls = warnSpy.mock.calls.filter(call => String(call[0]).includes('play'));
-      expect(relevantCalls.length).toBe(1);
-      expect(String(relevantCalls[0][0])).toContain('no effect');
-      // The selection action still auto-starts (surfaces its prompt) — the
-      // warning does not suppress it.
+      expect(relevantCalls.length).toBe(0);
+      // The selection action still auto-starts (surfaces its prompt).
       expect(start).toHaveBeenCalled();
       expect(start.mock.calls[0][0]).toBe('play');
 
