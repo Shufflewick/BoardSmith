@@ -71,6 +71,35 @@ here.
    `timedOut` or `exceededMaxActions`. This is the real API — do not reimplement a hand-rolled
    random-play loop in its place.
 
+   **Fail-loud: the sim must have EXERCISED this chunk's new actions (SKILLAUTO-08).** The four
+   zero-checks above prove the run didn't crash, stall, or run away — they do NOT prove the run
+   ever actually reached this chunk's new action(s). Passing all four zero-checks while never once
+   invoking the chunk's target action is a silent-coverage failure this assertion exists to catch,
+   not a passing test: a chunk whose action is unreachable (a wiring bug, a rules-flow regression
+   that routes around it) can produce a perfectly clean `SimulationResults` and still be broken.
+   `SimulationResults` (`src/testing/random-simulation.ts`) has no built-in per-action-name
+   coverage field — do not invent one. Instead, instrument this chunk's own action(s) for the
+   duration of the sim call: wrap or extend the new action's `.execute()` callback with a
+   test-local counter (increment it inside `execute`, the same callback the action already runs)
+   and assert, after `simulateRandomGames` resolves, that the counter for EACH new action this
+   chunk introduced is greater than zero:
+
+   ```typescript
+   let auctionBidCount = 0;
+   // ... within the game's action definition for this chunk's new action:
+   //   .execute(({ game, player, args }) => { auctionBidCount++; /* existing behavior */ })
+
+   const results = await simulateRandomGames(MyGame, { count: 50, playerCounts: [2, 3, 4] });
+   expect(results.crashed).toBe(0);
+   // ...existing zero-checks...
+   expect(auctionBidCount).toBeGreaterThan(0); // fails loud if the sim never exercised it
+   ```
+
+   This is a required, hard gate for every chunk with at least one new action — never optional
+   advice, and never satisfied by the four zero-checks alone. A chunk with zero new actions (a
+   pure refactor or asset-only chunk) is exempt; name that exemption explicitly in the test file's
+   comment rather than silently omitting the assertion.
+
 6. **Asset-reachability gate (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md
    `## ui:` tag is `touches` or `major`, run `scanAssetReachability(cwd)` from
    `src/cli/lib/asset-scan.ts` against the generated project. A `ui: none` chunk skips this item

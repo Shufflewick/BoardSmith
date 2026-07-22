@@ -1270,3 +1270,33 @@ describe('SKILLAUTO-08 — close-time reconciliation + RULINGS re-touch', () => 
     expect(lightPathSection).toMatch(/SKILLAUTO-08/);
   });
 });
+
+describe('SKILLAUTO-08 — fail-loud sims (sim exercised this chunk\'s new actions)', () => {
+  it('build/test.md requires an "exercised" assertion for this chunk\'s new actions alongside the four zero-checks', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(/EXERCISED/);
+    expect(test).toMatch(/silent-coverage failure/i);
+    expect(test).toMatch(/SKILLAUTO-08/);
+  });
+
+  it('build/test.md frames the exercised-assertion as a required hard gate, not optional advice, with an explicit exemption for zero-new-action chunks', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(/hard gate/i);
+    expect(test).toMatch(/never\s+optional\s+advice/i);
+    expect(test).toMatch(/zero new actions/i);
+    expect(test).toMatch(/exempt/i);
+  });
+
+  it('build/test.md verifies the assertion against the real SimulationResults shape, never inventing a fake coverage API', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(/src\/testing\/random-simulation\.ts/);
+    expect(test).toMatch(/do not invent one/i);
+  });
+
+  it('build/playtest.md\'s freshness guard is reinforced against a stale/non-exercising human playtest run', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toMatch(/Freshness guard reinforced/i);
+    expect(playtest).toMatch(/SKILLAUTO-08/);
+    expect(playtest).toMatch(/never exercised its\s*\n?target|never\s+exercised\s+its\s+target/i);
+  });
+});

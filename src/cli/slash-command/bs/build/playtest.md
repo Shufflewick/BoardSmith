@@ -96,6 +96,20 @@ Cmd+R / Ctrl+R, or closing and reopening the tab) after this chunk's build and t
 completed, before starting the numbered script above. Do not tell the user to "check the build
 stamp on screen" — there is nothing to check there.
 
+**Freshness guard reinforced against a non-exercising run (SKILLAUTO-08).** A stale tab is one
+failure mode this hard-reload instruction already catches; a second, distinct failure mode is a
+human playtest that LOOKS complete but never actually reached this chunk's new behavior — the
+human clicked through the numbered script on a stale build that silently fell back to prior-chunk
+behavior, or a script step was skipped/misread so the new action was never triggered. This is the
+human-playtest analog of `build/test.md`'s fail-loud "sim exercised this chunk" assertion (item 5
+of the Ordered Sequence): the freshness guard above (fresh tab, fresh module graph) plus the
+Verified Checklist's item-by-item confirmation (`## The Verified Gate` below — never a whole-script
+"looks good") together are what prevent a quietly-passing playtest that never exercised its
+target. If the human's confirmed script does not include at least one step that exercises this
+chunk's new action, that is itself a script-authoring gap — go back and correct the numbered
+script before treating any confirmation as valid, rather than accepting a clean run that tested
+nothing new.
+
 ## Regression Check and Taste Check
 
 Fill the template's standing one-line regression check ("does everything that worked in prior
