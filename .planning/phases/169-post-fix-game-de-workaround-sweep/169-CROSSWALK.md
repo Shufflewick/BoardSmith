@@ -27,8 +27,17 @@ removal actually happens.
 | BUG 3 | `scanAssetReachability()` false-positives on `<img` inside comments/prose | — (tooling defect, not in D1-D32 list; a build-gate script bug, not a runtime library defect) | n/a | n/a (not part of v4.8 D1-D32 battery) | n/a | out-of-scope for this phase's Dxx crosswalk (asset-gate tooling, not a game-side workaround) |
 | BUG 4 | `PlayerToken` glyph ink hard-coded white — blank chip on light seat color | D30 | LIBX-03 | 164 | n/a (no lanternfall PlayerToken override identified in CONTEXT inventory) | no-op (verify fix; no lanternfall removal target identified) |
 | BUG 5 | auto-fill cannot be suppressed for a single pick by a game | — (not in D1-D32 battery; filed but not part of this sweep's defect list) | n/a | n/a | n/a | out-of-scope (not a v4.8 Dxx defect) |
-| BUG 6 | `loop()` cannot express a genuinely unbounded game | D29 | LIBX-02 | 164 | `src/rules/flow.ts:60` `maxIterations: ENGINE_SAFETY_VALVE_ROUNDS` | removable-if-verified, but CONTEXT decisions mark this **conservative: comment-refresh only** — the `maxIterations` tripwire is legit and switching to `unbounded:true` is deferred (not trivially safe) |
-| BUG 7 | `availableActions`/`actionMetadata` divergence — `start(action)` fails "No metadata" | D26 | SPACE-05 | 163 | `src/ui/components/GardenBoard.vue:546-548` metadata guard | removable-if-verified |
+| BUG 6 | `loop()` cannot express a genuinely unbounded game | D29 | LIBX-02 | 164 | `src/rules/flow.ts:60` `maxIterations: ENGINE_SAFETY_VALVE_ROUNDS` | **169-02 OUTCOME: comment refreshed, valve KEPT.** D29 confirmed PRESENT (`unbounded` opt-in in `engine/flow/builders.ts`). Stale docblock in `flow.ts` updated to record the fix and explain why the `maxIterations` tripwire stays (harmless, no test coverage to prove `unbounded:true` swap is safe). BUG 6 closed as fixed-upstream in the game's own ledger. Suite green (214/214) before and after. |
+| BUG 7 | `availableActions`/`actionMetadata` divergence — `start(action)` fails "No metadata" | D26 | SPACE-05 | 163 | `src/ui/components/GardenBoard.vue:546-548` metadata guard | **169-02 OUTCOME: kept-and-noted, NOT removed.** D26 confirmed PRESENT (server-side reconciliation in `session/utils.ts` + client defense-in-depth in `useActionController.ts`). Removal was attempted per the gated protocol and turned `tests/a11y.test.ts` RED (the guard's own regression test mocks `getActionMetadata()` to `undefined` directly, independent of server-side timing) — reverted immediately. Guard is genuinely defensive against a client-side broadcast-timing race, not solely a compensating workaround for the now-fixed server divergence; documented in `BOARDSMITH-BUGS.md`. |
+
+**BSR-12 (AI, D9/AI-01 + D8/AI-02) — lanternfall status:** `src/rules/ai.ts` and `tests/ai-smoke.test.ts`
+are pre-existing **untracked WIP** in the lanternfall repo (not committed by this sweep, per the plan's
+explicit instruction). Read and run only: `npx tsc --noEmit -p .` is clean (AI module type-checks), and
+`tests/ai-smoke.test.ts` passes as part of the full `npx vitest run` (5 files / 214 tests green). The AI
+implementation wires all five MCTS hooks (objectives, threat response, playout policy, move ordering, UCT
+constant) against the game's own public geometry, with no visible workaround language for D9/D8 in the
+file. **Verdict for 169-06 Task 3: lanternfall's AI builds + passes; present as untracked WIP, not yet
+committed to the repo by any BoardSmith-repo process.**
 
 ### seven (`~/BoardSmithGames/seven/BOARDSMITH-REQUESTS.md`)
 

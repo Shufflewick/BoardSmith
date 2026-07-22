@@ -4,13 +4,13 @@ milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
 status: executing
 stopped_at: Completed 168-01-PLAN.md
-last_updated: "2026-07-22T04:02:47.097Z"
+last_updated: "2026-07-22T04:20:36.421Z"
 last_activity: 2026-07-22
 progress:
   total_phases: 15
   completed_phases: 13
   total_plans: 44
-  completed_plans: 39
+  completed_plans: 40
   percent: 87
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 169 (Post-Fix Game De-Workaround Sweep) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-22
 
@@ -289,6 +289,9 @@ Recent decisions affecting current work:
 - [Phase 168-01]: Seed file convention: seeds/<scenario>.json holding a raw GameStateSnapshot; ship raw snapshot format, defer scenario DSL until proven too low-level
 - [Phase 168]: Seed rides on hostOptions.seedSnapshot, never gameOptions — mirrors the teachingDisabled WR-04/D-01 pattern so a seed never persists into a game's own snapshot.gameOptions.
 - [Phase 169]: D32 recorded ABSENT by design (platform-side); crosswalk built per-filing from all 5 repos' own ledgers, gating all downstream removals
+- [Phase ?]: lanternfall BUG 6/D29: comment-refresh only, valve kept
+- [Phase ?]: lanternfall BUG 7/D26: removal attempted+reverted (suite went red), guard kept-and-noted
+- [Phase ?]: lanternfall BSR-12: AI read/run only, left untracked, not committed by sweep
 
 ### Pending Todos
 
@@ -300,7 +303,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-22T04:01:31.771Z
+Last session: 2026-07-22T04:19:03.297Z
 Stopped at: Completed 168-01-PLAN.md
 Resume file: 
 None
