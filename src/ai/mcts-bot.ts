@@ -551,6 +551,16 @@ export class MCTSBot<G extends Game = Game> {
   private applyMoveToSearchGame(node: MCTSNode): void {
     if (!node.parentMove || !this.searchGame || !node.parent) return;
 
+    // T-159-07 / F-07: capture the pre-reveal simultaneous baseline during
+    // SELECT descent too (not only in expand/playout). `searchGame` is currently
+    // at `node.parent`'s state; if that is the START of a fresh simultaneous
+    // step (nobody completed), snapshot it BEFORE this move commits a co-decider
+    // pick. Without this, descending past 2+ already-committed co-deciders left
+    // the baseline undefined, so the 3rd+ co-decider re-enumerated against the
+    // live (reveal-leaking) state — the sequentialized-reveal defect for ≥3
+    // co-deciders. The `every(!completed)` guard makes it idempotent mid-step.
+    this.maybeCaptureSimultaneousBaseline(node.parent.flowState);
+
     const currentPlayer = this.getCurrentPlayerFromFlowState(node.parent.flowState);
     try {
       this.searchGame.continueFlow(node.parentMove.action, this.rebindArgs(node.parentMove.args), currentPlayer);
@@ -781,6 +791,10 @@ export class MCTSBot<G extends Game = Game> {
     this.searchGame = this.restoreGame(this.rootSnapshot) as G;
     this.searchGame.setRandomState(rngState);
     this.rootCommandCount = this.searchGame.commandHistory.length;
+    // F-07: drop any baseline captured last iteration — it was cloned from the
+    // now-discarded searchGame instance. It is re-captured fresh during this
+    // iteration's descent/expand when a fresh simultaneous step is reached.
+    this.simultaneousBaseline = undefined;
   }
 
   /**
