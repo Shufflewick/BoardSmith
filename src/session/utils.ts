@@ -243,13 +243,16 @@ function isSimultaneousParticipant(flowState: UndoFlowState | undefined, seat: n
  * them -- would have its undo silently reach back and discard the earlier
  * step's action too.
  *
- * **Co-decider boundary (T-160-04, elevation-of-privilege mitigation):** if
- * ANY other seat's action falls AFTER the requesting seat's own action
- * within the window, honoring the request would ALSO discard that later
- * co-decider action from history when the checkpoint restores (the
- * restore target is a single linear point in `actionHistory`, not a
- * per-seat diff) -- refused (`undefined`) rather than silently reaching
- * past the requester's own scope.
+ * **Co-decider boundary (T-160-04, elevation-of-privilege mitigation; F-05
+ * fix):** the boundary is the START OF THE TRAILING RUN of the requesting
+ * seat's OWN actions -- i.e. only the seat that acted LAST may undo, and it
+ * rewinds exactly its own contiguous actions at the end of history. Because
+ * that run extends to the end, restoring to it discards no co-decider action
+ * (the restore target is a single linear point in `actionHistory`, not a
+ * per-seat diff). A seat that is not the last actor is refused (`undefined`).
+ * Anchoring on the seat's FIRST action instead (the pre-F-05 bug) refused
+ * every seat on common interleavings like `[A, B, A]`, leaving nobody able to
+ * undo.
  */
 export function simultaneousUndoBoundary(
   actionHistory: Array<{ player: number }>,
@@ -260,20 +263,23 @@ export function simultaneousUndoBoundary(
 
   const windowStart = Math.max(0, actionHistory.length - moveCount);
 
-  let ownIndex: number | undefined;
-  for (let i = windowStart; i < actionHistory.length; i++) {
-    if (actionHistory[i].player === seat) {
-      ownIndex = i;
-      break;
-    }
-  }
-  if (ownIndex === undefined) return undefined;
+  // F-05 (SIM-02): anchor on the START OF THE TRAILING RUN of this seat's own
+  // actions, not its FIRST action in the window. The checkpoint restore target
+  // is a single linear point in `actionHistory`, so undo must not reach past a
+  // co-decider's action. Only the seat that acted LAST can undo (its own
+  // trailing run extends to the end of history, so nothing else is discarded).
+  // With `[A, B, A]` the old first-action anchor saw `B` after `A₁` and refused
+  // for BOTH seats — leaving nobody able to undo. The trailing run of A is just
+  // `A₂`, which A may soundly undo.
+  const last = actionHistory.length - 1;
+  if (actionHistory[last].player !== seat) return undefined;
 
-  for (let i = ownIndex + 1; i < actionHistory.length; i++) {
-    if (actionHistory[i].player !== seat) return undefined;
+  let runStart = last;
+  while (runStart - 1 >= windowStart && actionHistory[runStart - 1].player === seat) {
+    runStart -= 1;
   }
 
-  return { turnStartActionIndex: ownIndex, actionsThisTurn: actionHistory.length - ownIndex };
+  return { turnStartActionIndex: runStart, actionsThisTurn: actionHistory.length - runStart };
 }
 
 /**
