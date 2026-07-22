@@ -27,6 +27,7 @@ import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand, undoCommand } from '../command/executor.js';
 import { createInverseCommand } from '../command/inverse.js';
+import { canPlayerSee } from '../command/visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
@@ -2857,8 +2858,21 @@ export class Game<
       // Check zone visibility for children (if this is a Space)
       const zoneVisibility = (element as any).getZoneVisibility?.();
 
+      // SPACE-03 / F-09: a per-seat visibility GRANT (`addZoneVisibleTo`, i.e.
+      // `zoneVisibility.addPlayers`) must reveal the zone's real contents to the
+      // granted seat even on a hidden/count-only/owner zone — `canPlayerSee`
+      // already encodes exceptPlayers/addPlayers/mode precedence, so consult it
+      // rather than branching on `mode` alone (which made `addZoneVisibleTo`
+      // dead API on hidden zones and even hid contents from the granted seat).
+      // When the seat CAN see, we fall through to normal child serialization
+      // below (real children, each still subject to its own visibility).
+      const zoneOwnerSeat = (element as GameElement).getEffectiveOwner?.()?.seat;
+      const seatCanSeeZone = zoneVisibility
+        ? canPlayerSee(zoneVisibility, visibilityPosition, zoneOwnerSeat)
+        : true;
+
       // If zone has hidden or count-only visibility, handle children specially
-      if (zoneVisibility) {
+      if (zoneVisibility && !seatCanSeeZone) {
         if (zoneVisibility.mode === 'hidden') {
           // D24/SPACE-03: true concealment. Unlike 'count-only' below, a
           // 'hidden' zone must not leak even its exact child count to a
@@ -3069,44 +3083,25 @@ export class Game<
     // but that also means the rebuilt tree below starts with zero handlers
     // unless we explicitly re-bind them here.
     //
-    // WR-02 (iteration 2): the key is class name + element name + SPACE-ONLY
-    // index path — NOT `branch()`. `branch()` indexes among ALL siblings
-    // including Pieces, and pieces move during play: a snapshot taken after a
-    // piece left a container would shift every subsequent Space's branch
-    // index, silently cross-wiring handlers between same-class sibling Spaces
-    // (seat 1's scoring trigger firing on seat 2's zone). Spaces are
-    // structural — the constructor creates them at fixed positions — so an
-    // index computed over Space siblings only, plus the constructor-assigned
-    // name, is stable across piece movement.
+    // F-03 (v4.8, SPACE-02): key handlers by the Space's STABLE ELEMENT ID, not
+    // by tree position. A positional key (Space-sibling index + ancestor path)
+    // is invalidated by the SPACE-02 mobility APIs: `reparent()`/`remove()`
+    // change the moved Space's ancestor path AND every later sibling's index.
+    // Capture runs on the freshly-constructed tree (constructor positions);
+    // match runs on the rebuilt snapshot tree (post-mobility positions) — so a
+    // reparented/removed Space (and its shifted siblings) got a divergent key
+    // and its onEnter/onExit handlers were silently dropped across every restore
+    // path (undo, action-reject rollback, reconnect, cold restore).
     //
-    // WR-05 (iteration 2): NON-Space ancestors need a real discriminator —
-    // `spaceSiblings.indexOf(el)` returns `-1` for a Player or any other
-    // non-Space ancestor, collapsing every such ancestor at the same depth
-    // into one identical segment. That silently cross-wired the natural
-    // per-player pattern `player.create(Hand, 'hand')`: both hands keyed
-    // identically, so after restore a card entering player 1's hand fired
-    // player 2's onEnter. Players are discriminated by seat (the documented
-    // stable cross-restore identity — names can duplicate via
-    // `gameOptions.playerNames`); other non-Space ancestors by class +
-    // constructor-assigned name. (Pieces cannot contain Spaces — see
-    // `Piece.create` — so a moving non-Space ancestor is not a concern.)
-    const spaceHandlerKey = (space: Space): string => {
-      const path: string[] = [];
-      let el: GameElement = space;
-      while (el._t.parent) {
-        if (el instanceof Space) {
-          const spaceSiblings: GameElement[] = el._t.parent._t.children.filter((c) => c instanceof Space);
-          path.unshift(String(spaceSiblings.indexOf(el)));
-        } else if ('seat' in el) {
-          // Player ancestor (same seat duck-typing as serializeValue/getPlayer).
-          path.unshift(`${el.constructor.name}[seat:${(el as unknown as { seat: number }).seat}]`);
-        } else {
-          path.unshift(`${el.constructor.name}[${el.name ?? ''}]`);
-        }
-        el = el._t.parent;
-      }
-      return `${space.constructor.name}:${space.name ?? ''}:${path.join('/')}`;
-    };
+    // The element `id` is assigned deterministically in constructor order and is
+    // PRESERVED verbatim across serialize/restore, so a constructor-created
+    // Space has the same id on the constructor tree and the rebuilt tree
+    // regardless of any mobility that happened in between. Ids are globally
+    // unique, so this also makes the WR-05 ambiguous-key case impossible.
+    // (Handlers are constructor-registered closures; only constructor-created
+    // Spaces ever have handlers to capture, and those are exactly the Spaces
+    // whose ids round-trip.)
+    const spaceHandlerKey = (space: Space): string => String(space.id);
     type CapturedHandlers = { enter: ElementEventHandler<GameElement>[]; exit: ElementEventHandler<GameElement>[] };
     const capturedHandlers = new Map<string, CapturedHandlers>();
     // WR-05: if two handler-bearing Spaces produce the SAME key, re-binding

@@ -999,6 +999,78 @@ describe('useActionController picks', () => {
     });
   });
 
+  describe('.manual() selection actions (AUTOEXEC-01 / F-02)', () => {
+    // A sole selection action with a single enabled choice must NOT silently
+    // auto-execute when marked .manual() — the D7 auto-draw. .manual() suppresses
+    // auto-fill of the single choice so the player picks deliberately.
+    function makeDrawMeta(name: string, manual: boolean): Record<string, ActionMetadata> {
+      return {
+        [name]: {
+          name,
+          prompt: 'Draw',
+          manual,
+          selections: [
+            {
+              name: 'source',
+              type: 'choice',
+              prompt: 'Pick a source',
+              choices: [{ value: 'deck', display: 'Deck' }],
+            },
+          ],
+        },
+      };
+    }
+
+    it('does NOT auto-fill/auto-execute a single-choice .manual() action', async () => {
+      actionMetadata.value = { ...createTestMetadata(), ...makeDrawMeta('drawManual', true) };
+      availableActions.value = [...(availableActions.value ?? []), 'drawManual'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: true,
+        playerSeat: ref(1),
+      });
+
+      await controller.start('drawManual');
+      await nextTick();
+
+      // The single choice was NOT auto-filled and the action did NOT execute.
+      expect(sendAction).not.toHaveBeenCalled();
+      expect(controller.currentArgs.value.source).toBeUndefined();
+      expect(controller.currentAction.value).toBe('drawManual');
+
+      // A deliberate pick completes it.
+      await controller.fill('source', 'deck');
+      await nextTick();
+      expect(sendAction).toHaveBeenCalledWith('drawManual', { source: 'deck' });
+    });
+
+    it('negative control: a NON-manual single-choice action DOES auto-execute', async () => {
+      actionMetadata.value = { ...createTestMetadata(), ...makeDrawMeta('drawAuto', false) };
+      availableActions.value = [...(availableActions.value ?? []), 'drawAuto'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: true,
+        playerSeat: ref(1),
+      });
+
+      await controller.start('drawAuto');
+      await nextTick();
+
+      // The single choice auto-filled and the action auto-executed.
+      expect(sendAction).toHaveBeenCalledWith('drawAuto', { source: 'deck' });
+    });
+  });
+
   describe('followUp auto-fill submission (R-04)', () => {
     // Regression tests for the multi-jump hang bug:
     // When a followUp action's remaining selections are ALL auto-filled to a single legal

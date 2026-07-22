@@ -95,6 +95,15 @@ export type ClientInbound =
 export interface MultiplayerHostOptions {
   playerCount: number;
   minPlayers: number;
+  /**
+   * DEVHOST-01 / F-18: the game's declared max player count. Used to validate a
+   * `configure` preset/gameOptions `playerCount` against the game's real
+   * [minPlayers, maxPlayers] range BEFORE resizing/starting — otherwise a
+   * 6-player preset on a 2–4 game is accepted and blows up in the engine.
+   * Optional for backward-compat construction; when absent, only the
+   * positive-integer check applies.
+   */
+  maxPlayers?: number;
   /** Default AI level for unclaimed (bot) seats when the game starts. */
   aiLevel?: string;
   /**
@@ -391,6 +400,18 @@ export class MultiplayerHost {
         });
         return;
       }
+      // F-18/DEVHOST-01: validate against the game's declared player range so an
+      // out-of-range preset (e.g. a 6-player preset on a 2–4 game) is rejected
+      // here with an actionable message rather than blowing up in the engine.
+      const max = this.opts.maxPlayers;
+      if (newPlayerCount < this.opts.minPlayers || (max !== undefined && newPlayerCount > max)) {
+        const range = max !== undefined ? `${this.opts.minPlayers}–${max}` : `at least ${this.opts.minPlayers}`;
+        this.send(clientId, {
+          type: 'error',
+          message: `Preset/configure playerCount ${newPlayerCount} is out of range for this game (must be ${range}).`,
+        });
+        return;
+      }
       this.resizeSeats(newPlayerCount);
     }
 
@@ -652,7 +673,17 @@ export class MultiplayerHost {
   // ── Game start ────────────────────────────────────────────────────────────
 
   private async startGame(): Promise<void> {
+    // ENDGAME-02 / F-12: single-chokepoint concurrency guard. Two near-
+    // simultaneous (re)start triggers (restart + configure, or two restarts)
+    // would otherwise each build a live session and both broadcast — the loser
+    // never stopped. Ignore a racing trigger while a start is already in flight.
+    if (this.starting) return;
     this.starting = true;
+    // F-12: dispose the outgoing session BEFORE building the new one so its
+    // fire-and-forget demo loop and any late `complete`/state broadcasts cannot
+    // leak stale frames onto (and resurrect the GameOverCard over) the fresh
+    // game. Safe on the first start (no session yet).
+    this.session?.dispose();
     const { playerCount } = this.opts;
     const humanSeats = new Set(
       [...this.seats.values()].filter((s) => s.clientId).map((s) => s.seat),
@@ -683,6 +714,10 @@ export class MultiplayerHost {
       // `playerConfigs` below (all sized off this same `playerCount`) never
       // diverge from the reported count.
       ...this.appliedGameOptions,
+      // DEVHOST-04 / F-04: top-level `colors`/`colorLabels` are what the engine
+      // reads to set `player.color`. Placed after appliedGameOptions so lobby
+      // color selections win, mirroring the production per-seat override.
+      ...this.buildColorGameOptions(),
       playerOptions: perSeatOptions,
       playerIsAI: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
       // Mirror the production lobby's playerConfigs (game-session.ts builds the
@@ -785,6 +820,34 @@ export class MultiplayerHost {
       if (color !== undefined) perSeat.color = color;
       return perSeat;
     });
+  }
+
+  /**
+   * DEVHOST-04 / F-04: engine game options that actually deliver the palette to
+   * `player.color`. The `Game` constructor assigns `player.color = colors[i]`
+   * from a TOP-LEVEL `colors` array (and `colorLabel` from `colorLabels`) — it
+   * never reads `playerOptions[i].color`. The production `game-session.ts` path
+   * threads exactly this. We build `colors` from each seat's chosen/default
+   * color so both the palette AND any lobby color choices reach the engine.
+   * Returns `{}` (engine keeps its DEFAULT_COLOR_PALETTE) unless EVERY seat has
+   * a resolved color — a partial array would misalign seats.
+   */
+  private buildColorGameOptions(): { colors?: string[]; colorLabels?: Record<string, string> } {
+    const colors = Array.from({ length: this.opts.playerCount }, (_, i) => {
+      const seat = this.seats.get(i + 1);
+      return seat?.color ?? this.opts.colorPalette?.[i]?.value;
+    });
+    if (colors.some((c) => c === undefined)) return {};
+
+    const result: { colors?: string[]; colorLabels?: Record<string, string> } = {
+      colors: colors as string[],
+    };
+    if (this.opts.colorPalette && this.opts.colorPalette.length > 0) {
+      result.colorLabels = Object.fromEntries(
+        this.opts.colorPalette.map((c) => [c.value, c.label]),
+      );
+    }
+    return result;
   }
 
   private reinitSeat(clientId: string, seat: number): void {

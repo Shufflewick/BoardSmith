@@ -12,6 +12,7 @@
 import type { Game, Player, ActionDefinition, Selection } from '../index.js';
 import { availableActionsForSeat } from '../index.js';
 import { resolveMultiSelect } from './resolve-multiselect.js';
+import { devWarn } from '../../utils/dev.js';
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -110,20 +111,37 @@ export function parseMultiSelect(multiSelect: unknown): { min: number; max: numb
 }
 
 /**
+ * AI-01 / F-08: hard ceiling on how many multiSelect combinations enumeration
+ * will ever MATERIALIZE. An unbounded/dynamic multiSelect (e.g.
+ * `multiSelect: { min: 1 }`, max defaulting to Infinity) over an N-item choice
+ * set is 2^N−1 combinations — N=25 is 33M objects (multi-GB), N=30 hangs/OOMs.
+ * The bot samples down to a handful of moves per node ANYWAY, so materializing
+ * the full power set first is both a DoS and pointless. Callers that hit the
+ * cap get a bounded prefix (and should warn — see `_enumerateRecursive`).
+ */
+export const MAX_MULTISELECT_COMBINATIONS = 10000;
+
+/**
  * Generate all combinations of `choices` with count in [min, max].
+ *
+ * `limit` bounds the number of combinations materialized (F-08 combinatorics
+ * guard); generation stops as soon as `limit` is reached, returning a bounded
+ * prefix rather than exploding on an unbounded multiSelect.
  */
 export function generateCombinations(
   choices: unknown[],
   min: number,
   max: number,
+  limit: number = MAX_MULTISELECT_COMBINATIONS,
 ): unknown[][] {
   const results: unknown[][] = [];
 
   if (min === max) {
-    combinationsOfSize(choices, min, [], 0, results);
+    combinationsOfSize(choices, min, [], 0, results, limit);
   } else {
     for (let size = min; size <= Math.min(max, choices.length); size++) {
-      combinationsOfSize(choices, size, [], 0, results);
+      if (results.length >= limit) break;
+      combinationsOfSize(choices, size, [], 0, results, limit);
     }
   }
 
@@ -131,7 +149,8 @@ export function generateCombinations(
 }
 
 /**
- * Recursive helper: generate all combinations of exactly `size` items from `choices`.
+ * Recursive helper: generate all combinations of exactly `size` items from
+ * `choices`, stopping once `results` reaches `limit` (F-08).
  */
 export function combinationsOfSize(
   choices: unknown[],
@@ -139,7 +158,9 @@ export function combinationsOfSize(
   current: unknown[],
   startIndex: number,
   results: unknown[][],
+  limit: number = MAX_MULTISELECT_COMBINATIONS,
 ): void {
+  if (results.length >= limit) return;
   if (current.length === size) {
     // Keep element objects as-is — no serialization here
     results.push([...current]);
@@ -147,8 +168,9 @@ export function combinationsOfSize(
   }
 
   for (let i = startIndex; i < choices.length; i++) {
+    if (results.length >= limit) return;
     current.push(choices[i]);
-    combinationsOfSize(choices, size, current, i + 1, results);
+    combinationsOfSize(choices, size, current, i + 1, results, limit);
     current.pop();
   }
 }
@@ -195,7 +217,21 @@ function _enumerateRecursive(
 
   if (resolved) {
     const { min, max } = resolved;
-    const combinations = generateCombinations(choices, min, max);
+    const combinations = generateCombinations(choices, min, max, MAX_MULTISELECT_COMBINATIONS);
+
+    // F-08: surface the truncation loudly rather than silently searching a
+    // partial move set. Hitting the cap means the multiSelect's combinatorics
+    // are unbounded/huge relative to the choice set — the game likely wants a
+    // tighter `max` so the AI (and UI) enumerate a tractable space.
+    if (combinations.length >= MAX_MULTISELECT_COMBINATIONS) {
+      devWarn(
+        `multiselect-enumeration-capped:${actionDef.name}:${selection.name}`,
+        `Enumerating multiSelect "${selection.name}" of action "${actionDef.name}" over ` +
+          `${choices.length} choices hit the ${MAX_MULTISELECT_COMBINATIONS}-combination safety cap ` +
+          `and was truncated. An unbounded multiSelect (no max, or a very large one) explodes as ` +
+          `2^N combinations. Set a tighter multiSelect max so enumeration stays tractable.`,
+      );
+    }
 
     for (const combo of combinations) {
       const newArgs = { ...currentArgs, [selection.name]: combo };

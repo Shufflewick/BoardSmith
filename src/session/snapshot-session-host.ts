@@ -98,6 +98,27 @@ export class SnapshotSessionHost {
   narrationText: string | null = null;
   private lastPlayerViews: unknown[] = [];
 
+  // ENDGAME-02 / F-12: once disposed, this host is a DEAD session — it must
+  // never broadcast again (a stale `complete`/demo frame from a restarted-away
+  // game could resurrect the GameOverCard on the fresh game, or two overlapping
+  // sessions could both broadcast). `dispose()` aborts any in-flight demo loop
+  // (clearing its timer) and latches this flag so every broadcast path no-ops.
+  private disposed = false;
+
+  /**
+   * Tear down this session: abort the fire-and-forget demo loop (clearing its
+   * pending timer per the CLAUDE.md no-leaked-timers rule) and latch `disposed`
+   * so no further state is broadcast from this dead game (F-12).
+   */
+  dispose(): void {
+    this.disposed = true;
+    this.demoAbort = true;
+    this.narrationText = null;
+    // Wake the demo pace-gate synchronously so its timer is cleared and the
+    // loop's finally runs without waiting — no timer survives disposal.
+    this.wakeDemo();
+  }
+
   // Flow-debug snapshot (FLOW-01/03): computed by the pure executor's
   // stateEnvelope() (shared serializeFlowDebugInfo — same wire shape as
   // GameSession.broadcast() and the debug:flow-state op) and carried forward
@@ -276,6 +297,7 @@ export class SnapshotSessionHost {
    * transient changes without re-running an op through executeOp.
    */
   broadcastCurrent(): void {
+    if (this.disposed) return; // F-12: a dead session never broadcasts.
     const mergedViews = this.mergeTransientState(this.lastPlayerViews);
     this.adapters.broadcast(mergedViews, {
       isComplete: this.isComplete,
@@ -300,6 +322,7 @@ export class SnapshotSessionHost {
       else this.pendingStates.delete(seat);
     }
     this.lastPlayerViews = res.playerViews;
+    if (this.disposed) return; // F-12: a dead session never broadcasts.
     const mergedViews = this.mergeTransientState(res.playerViews);
     this.adapters.broadcast(mergedViews, {
       isComplete: res.isComplete,

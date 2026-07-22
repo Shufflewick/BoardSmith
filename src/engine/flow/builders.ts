@@ -546,8 +546,16 @@ export function turnLoop(config: {
   actions: string[] | ((context: FlowContext) => string[]);
   /** Continue looping while this returns true. Game.isFinished() is checked automatically. */
   while?: (context: FlowContext) => boolean;
-  /** Safety limit to prevent infinite loops (default: 100) */
+  /** Safety limit to prevent infinite loops (default: 100 unless `unbounded`) */
   maxIterations?: number;
+  /**
+   * LIBX-02 / F-16: opt-in for a genuinely unbounded game, forwarded to
+   * `loop()` so the valve is reachable from this convenience builder (not just
+   * raw `loop()`). Omits the default 100 cap; the global whole-flow tripwire
+   * still applies. Cannot be combined with an explicit `maxIterations`
+   * (`loop()` fails fast on that).
+   */
+  unbounded?: boolean;
 }): FlowNode {
   return loop({
     name: config.name,
@@ -561,7 +569,10 @@ export function turnLoop(config: {
       // Default: continue forever (until endTurn action or game ends)
       return true;
     },
-    maxIterations: config.maxIterations ?? 100,
+    // F-16: only apply the default cap when NOT unbounded — loop() throws if
+    // `unbounded` is combined with a defined `maxIterations`.
+    maxIterations: config.unbounded ? config.maxIterations : (config.maxIterations ?? 100),
+    unbounded: config.unbounded,
     do: actionStep({
       actions: config.actions,
     }),
@@ -618,8 +629,15 @@ export function stateAwareLoop(config: {
    * This ensures async game state (like combat) is resolved before the loop exits.
    */
   pendingStates?: (context: FlowContext) => unknown[];
-  /** Safety limit to prevent infinite loops (default: 100) */
+  /** Safety limit to prevent infinite loops (default: 100 unless `unbounded`) */
   maxIterations?: number;
+  /**
+   * LIBX-02 / F-16: opt-in for a genuinely unbounded game, forwarded to
+   * `loop()` (the valve is otherwise unreachable from this convenience
+   * builder). Omits the default 100 cap; the global whole-flow tripwire still
+   * applies. Cannot be combined with an explicit `maxIterations`.
+   */
+  unbounded?: boolean;
 }): FlowNode {
   return loop({
     name: config.name,
@@ -643,7 +661,9 @@ export function stateAwareLoop(config: {
       // Default: continue forever (until endTurn action or game ends)
       return true;
     },
-    maxIterations: config.maxIterations ?? 100,
+    // F-16: only apply the default cap when NOT unbounded (see turnLoop).
+    maxIterations: config.unbounded ? config.maxIterations : (config.maxIterations ?? 100),
+    unbounded: config.unbounded,
     do: actionStep({
       actions: config.actions,
     }),

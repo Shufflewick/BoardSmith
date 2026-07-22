@@ -511,8 +511,13 @@ class AmbiguousGame extends Game<AmbiguousGame, Player> {
   }
 }
 
-describe('WR-05 guard: colliding handler keys fail loud and refuse to re-bind', () => {
-  it('devWarns about the ambiguous identity and drops BOTH handler sets instead of cross-wiring', () => {
+describe('handler re-bind: same-name Spaces are disambiguated by stable id (F-03)', () => {
+  it('re-binds BOTH same-name slots correctly with no ambiguity warning', () => {
+    // F-03 (v4.8): handler re-binding now keys on the Space's stable element id
+    // instead of tree position. Two same-class/same-name slots under two
+    // same-class/same-name boxes -- which the old positional key could not tell
+    // apart (it dropped both handlers) -- have DISTINCT ids, so both handlers
+    // survive restore and fire on their own slot. No ambiguity is possible.
     const runner = new GameRunner<AmbiguousGame>({
       GameClass: AmbiguousGame,
       gameType: 'ambiguous-key-test',
@@ -526,12 +531,12 @@ describe('WR-05 guard: colliding handler keys fail loud and refuse to re-bind', 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const restored = GameRunner.fromSnapshot<AmbiguousGame>(snapshot, AmbiguousGame);
 
-    // Loud: the ambiguity is reported at restore time...
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ambiguous'));
+    // No ambiguity is reported — ids are unique.
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('ambiguous'));
     warnSpy.mockRestore();
 
-    // ...and neither slot got a (possibly wrong) handler bound.
+    // The first box's slot fired its own onEnter after restore.
     expect(restored.performAction('stash', 1, {}).success).toBe(true);
-    expect(restored.game.slotEnter).toBe(0);
+    expect(restored.game.slotEnter).toBe(1);
   });
 });

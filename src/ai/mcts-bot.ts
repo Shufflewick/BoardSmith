@@ -551,9 +551,19 @@ export class MCTSBot<G extends Game = Game> {
   private applyMoveToSearchGame(node: MCTSNode): void {
     if (!node.parentMove || !this.searchGame || !node.parent) return;
 
+    // T-159-07 / F-07: capture the pre-reveal simultaneous baseline during
+    // SELECT descent too (not only in expand/playout). `searchGame` is currently
+    // at `node.parent`'s state; if that is the START of a fresh simultaneous
+    // step (nobody completed), snapshot it BEFORE this move commits a co-decider
+    // pick. Without this, descending past 2+ already-committed co-deciders left
+    // the baseline undefined, so the 3rd+ co-decider re-enumerated against the
+    // live (reveal-leaking) state — the sequentialized-reveal defect for ≥3
+    // co-deciders. The `every(!completed)` guard makes it idempotent mid-step.
+    this.maybeCaptureSimultaneousBaseline(node.parent.flowState);
+
     const currentPlayer = this.getCurrentPlayerFromFlowState(node.parent.flowState);
     try {
-      this.searchGame.continueFlow(node.parentMove.action, node.parentMove.args, currentPlayer);
+      this.searchGame.continueFlow(node.parentMove.action, this.rebindArgs(node.parentMove.args), currentPlayer);
     } catch (error) {
       // Move failed - this shouldn't happen for already-explored nodes
       // but handle gracefully
@@ -592,7 +602,7 @@ export class MCTSBot<G extends Game = Game> {
     // Try to apply the move
     let flowState: FlowState;
     try {
-      flowState = this.searchGame.continueFlow(move.action, move.args, currentPlayer);
+      flowState = this.searchGame.continueFlow(move.action, this.rebindArgs(move.args), currentPlayer);
     } catch (error) {
       // Move failed during simulation - return current node
       return node;
@@ -660,7 +670,7 @@ export class MCTSBot<G extends Game = Game> {
 
       // Try to apply the move - if it fails, stop the playout
       try {
-        flowState = this.searchGame.continueFlow(move.action, move.args, currentPlayer);
+        flowState = this.searchGame.continueFlow(move.action, this.rebindArgs(move.args), currentPlayer);
       } catch (error) {
         // Move failed during simulation - stop playout and evaluate current state
         break;
@@ -719,26 +729,10 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
 
-    // First, undo playout moves to return to the node's state
-    // (playout commands are everything beyond the tree path)
-    const totalCommands = this.searchGame.commandHistory.length - this.rootCommandCount;
-    const nodeDepthCommands = this.getNodeCommandDepth(node);
-    const playoutCommands = totalCommands - nodeDepthCommands;
-
-    if (playoutCommands > 0) {
-      const success = this.searchGame.undoCommands(playoutCommands);
-      if (!success) {
-        // Undo failed (e.g., a non-invertible command appeared mid-playout)
-        // Recover by restoring from root snapshot
-        this.recoverFromUndoFailure();
-        // Still update statistics
-        this.backpropagateStats(node, result);
-        return;
-      }
-    }
-
-    // Now backpropagate up the tree, undoing each node's commands
-    let rootNode: MCTSNode | null = null;
+    // Backpropagate up the tree, updating pure node bookkeeping (visits, value,
+    // proof numbers). NOTE: this loop must NOT touch `searchGame` -- the game is
+    // reset to root state below via a full authoritative restore, not via
+    // per-node `undoCommands`. See the block after the loop for why.
     while (node !== null) {
       node.visits++;
       // Value is from perspective of player who just moved to reach this node
@@ -753,84 +747,82 @@ export class MCTSBot<G extends Game = Game> {
         this.updateProofNumbers(node);
       }
 
-      // Undo this node's commands to return to parent state
-      if (node.commandCount > 0 && node.parent !== null) {
-        const success = this.searchGame.undoCommands(node.commandCount);
-        if (!success) {
-          // Undo failed - recover and continue stats update only
-          this.recoverFromUndoFailure();
-          this.backpropagateStats(node.parent, result);
-          return;
-        }
-      }
-
-      if (node.parent === null) {
-        rootNode = node;
-      }
       node = node.parent;
     }
 
-    // v4.8-MCTS-UNDO: `undoCommands` above only reverts commands recorded in
-    // `commandHistory` -- it never restores the flow engine's own private
-    // bookkeeping (`awaitingPlayers[].completed`, mutated in place by
-    // `resumeSimultaneousAction`) or the plain-property mutations
-    // `game.finish()`/`continueFlow`'s terminal path makes (`phase`,
-    // `settings.winners`). Left uncorrected, that bookkeeping sticks after a
-    // simulated branch that completes a simultaneous decider or finishes the
-    // game, and the NEXT EXPAND of a root sibling is wrongly rejected as a
-    // no-op (the decider "already completed" / the game "already finished").
+    // v4.8 F-01 (AI-02): reset `searchGame` to the ROOT position via a full
+    // authoritative restore rather than incremental `undoCommands`.
     //
-    // Every future EXPAND this search performs starts from `searchGame`
-    // positioned at the ROOT (selectWithPath always walks down FROM root,
-    // replaying each step's real action via `continueFlow` -- it never reads
-    // an intermediate node's bookkeeping directly). So it is sufficient, and
-    // far cheaper than a full per-node snapshot restore, to resync
-    // `searchGame`'s flow engine + phase/winners to the ROOT node's captured
-    // state ONCE per backpropagation, reusing `restoreFlowState` (the same
-    // state-authoritative machinery `restoreGame`/`recoverFromUndoFailure`
-    // already rely on) rather than hand-rolling a bookkeeping revert.
-    if (rootNode) {
-      this.restoreNodeBookkeeping(rootNode);
-    }
+    // Incremental undo was fundamentally unsound: the ONLY engine call that
+    // records a command is `game.execute()` (an ANIMATE event). Every element
+    // move -- `Piece.putInto` -> `moveToInternal` -- splices `_t.children`
+    // directly and records NOTHING, and plain custom-property mutations aren't
+    // commands either. So for any real game whose actions move elements or
+    // mutate custom state (cards, checkers, Seven, OTP...), `node.commandCount`
+    // is 0, `undoCommands` is a no-op, and every EXPAND + playout permanently
+    // corrupted the search game -- from iteration 2 the tree was replayed onto
+    // progressively fictional state.
+    //
+    // A full restore is state-authoritative (adopts the serialized element
+    // tree, flow position, phase/winners, sequence), so it correctly rolls back
+    // element-tree AND custom-property mutations that `undoCommands` never
+    // could. The stored tree-node move args resolve by element id
+    // (`resolveArgs` -> `getElementById`), and ids are stable across restore, so
+    // replaying the tree path on the fresh instance is sound.
+    //
+    // TRADEOFF: this is O(tree size) per iteration instead of O(commands
+    // undone). We deliberately choose correctness over the cheaper-but-broken
+    // incremental undo. RNG advancement is preserved across iterations (below)
+    // so playouts stay varied -- a naive restore would reset the RNG and make
+    // every iteration's playout identical.
+    this.restoreSearchGameToRoot();
   }
 
   /**
-   * Resync `searchGame`'s flow engine + phase/winners to the given node's
-   * captured bookkeeping (v4.8-MCTS-UNDO). See the doc on `MCTSNode.phase`/
-   * `.winners` and the call site in `backpropagateWithUndo` for why this is
-   * needed in addition to `undoCommands`.
+   * Reset `searchGame` to the ROOT snapshot's authoritative state while
+   * PRESERVING the RNG position, so successive iterations produce varied
+   * playouts. See the call site in `backpropagateWithUndo` (v4.8 F-01).
    */
-  private restoreNodeBookkeeping(node: MCTSNode): void {
-    if (!this.searchGame) return;
-    this.searchGame.restoreFlowState(node.flowState, this.rootSnapshot?.hiddenIdRemap);
-    this.searchGame.phase = node.phase;
-    (this.searchGame as unknown as { settings: { winners?: number[] } }).settings.winners =
-      node.winners ? [...node.winners] : undefined;
+  private restoreSearchGameToRoot(): void {
+    if (!this.rootSnapshot || !this.searchGame) return;
+    // Carry the advanced RNG position forward across the restore so playouts do
+    // not repeat. Everything else (tree, flow, phase, winners) resets to root.
+    const rngState = this.searchGame.getRandomState();
+    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
+    this.searchGame.setRandomState(rngState);
+    this.rootCommandCount = this.searchGame.commandHistory.length;
+    // F-07: drop any baseline captured last iteration — it was cloned from the
+    // now-discarded searchGame instance. It is re-captured fresh during this
+    // iteration's descent/expand when a fresh simultaneous step is reached.
+    this.simultaneousBaseline = undefined;
   }
 
   /**
-   * Get total command depth from root to a node (sum of all commandCounts in path)
+   * Re-resolve any element-valued args to the CURRENT `searchGame`'s live
+   * element objects by id (v4.8 F-01). Tree-node moves store in-process element
+   * OBJECTS captured on a PRIOR searchGame instance; because
+   * `restoreSearchGameToRoot` rebuilds the tree each iteration, those stored
+   * objects go stale. Feeding a stale (foreign-tree) element into
+   * `continueFlow` -> `Piece.putInto` would splice a wrong-instance object into
+   * the live tree and duplicate its id. Element ids are stable across restore,
+   * so we canonicalize by id here. Non-element args (scalars, `{value,label}`
+   * choices without a numeric `id`) pass through untouched; already-live
+   * objects resolve to themselves (no-op).
    */
-  private getNodeCommandDepth(node: MCTSNode | null): number {
-    let depth = 0;
-    while (node !== null) {
-      depth += node.commandCount;
-      node = node.parent;
+  private rebindArgs(args: Record<string, unknown>): Record<string, unknown> {
+    const game = this.searchGame;
+    if (!game) return args;
+    const rebindOne = (v: unknown): unknown => {
+      if (v && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'number') {
+        return game.getElementById((v as { id: number }).id) ?? v;
+      }
+      return v;
+    };
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(args)) {
+      out[k] = Array.isArray(v) ? v.map(rebindOne) : rebindOne(v);
     }
-    return depth;
-  }
-
-  /**
-   * Update statistics only (no undo) - used after recovery
-   */
-  private backpropagateStats(node: MCTSNode | null, result: number): void {
-    while (node !== null) {
-      node.visits++;
-      const isOurPerspective = node.parent === null ||
-        node.parent.currentPlayer === this.playerIndex;
-      node.value += isOurPerspective ? result : (1 - result);
-      node = node.parent;
-    }
+    return out;
   }
 
   // ============================================================================
@@ -1263,18 +1255,6 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     return game;
-  }
-
-  /**
-   * Recover from undo failure by restoring searchGame from root snapshot.
-   * Called when undoCommands returns false (e.g., a non-invertible command like
-   * CREATE/CREATE_MANY or ADD_VISIBLE_TO appears mid-playout).
-   */
-  private recoverFromUndoFailure(): void {
-    if (!this.rootSnapshot) return;
-
-    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
-    this.rootCommandCount = this.searchGame.commandHistory.length;
   }
 
   /**

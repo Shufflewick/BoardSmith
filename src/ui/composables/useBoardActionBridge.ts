@@ -292,17 +292,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
     if (action.selections.length > 0) {
       autoEndArmed = false; // a selection action auto-started — the auto-end intent is moot
-      if (action.manual) {
-        // AUTOEXEC-01 (D7): `.manual()` only governs sole *no-selection* actions.
-        // A selection action already auto-*starts* (surfaces its first prompt)
-        // and is never auto-executed, so the flag does nothing here — warn the
-        // author rather than silently ignore it.
-        devWarn(
-          `autoexec:manual-noop:${action.name}`,
-          `Action "${action.name}" is marked .manual() but has selections, so .manual() has no effect. ` +
-            `Selection actions already surface their prompt and are never auto-executed; drop .manual() from this action.`,
-        );
-      }
+      // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` selection action still
+      // auto-STARTS (surfaces its prompt), but the controller suppresses
+      // auto-fill of a single enabled choice so the action never silently
+      // auto-executes (the D7 auto-draw). The player picks deliberately.
       void startAction(action.name);
     } else if (!skipNoSelections && actionMetadata.value) {
       autoEndArmed = false; // consumed: the sole no-selection action (endTurn) is firing

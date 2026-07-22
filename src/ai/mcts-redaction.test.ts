@@ -382,6 +382,67 @@ describe('MCTSBot simultaneous-step soundness (AI-02 / T-159-07)', () => {
 });
 
 // ----------------------------------------------------------------------------
+// F-07 (v4.8): with 3+ co-deciders, the pre-reveal baseline must be captured
+// during SELECT DESCENT too — not only in expand/playout. Descending past two
+// already-committed co-deciders (seats 1 and 2) left the baseline undefined, so
+// seat 3's enumeration ran against the live state carrying seats 1 & 2's picks
+// (a reveal leak). The fix captures the baseline in applyMoveToSearchGame.
+// ----------------------------------------------------------------------------
+describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => {
+  function seat3ChoicesAfterDescent(pick1: string, pick2: string): Set<string> {
+    const game = new SimultaneousGame({
+      playerCount: 3,
+      playerNames: ['Bot', 'Opp1', 'Opp2'],
+      seed: `sim3-${pick1}${pick2}`,
+    });
+    game.startFlow();
+
+    const bot: any = new MCTSBot(game, SimultaneousGame, 'simultaneous', 1, [], {
+      iterations: 1,
+      playoutDepth: 0,
+      seed: `sim3-${pick1}${pick2}`,
+      async: false,
+    });
+
+    bot.rootSnapshot = bot.captureSnapshot();
+    bot.searchGame = bot.restoreGame(bot.rootSnapshot);
+    // NOTE: deliberately do NOT call maybeCaptureSimultaneousBaseline manually —
+    // the descent (applyMoveToSearchGame) must capture it. Pre-fix it did not.
+
+    const rootFlow = bot.searchGame.getFlowState();
+    const root = bot.createNode(rootFlow, null, null, [], 0);
+
+    // Descend seat 1's pick. applyMoveToSearchGame reads child.parent.flowState
+    // (root, fresh) to capture the pre-reveal baseline, then applies the move.
+    const child1 = bot.createNode(rootFlow, root, { action: 'pick', args: { choice: pick1 } }, [], 0);
+    bot.applyMoveToSearchGame(child1);
+    // child1's OWN state is post-seat1 (seat 1 completed) — mirror what
+    // expandIncremental stores (the continueFlow result), so child2's descent
+    // sees a mid-step (not fresh) parent and does NOT re-capture the baseline.
+    child1.flowState = bot.searchGame.getFlowState();
+
+    // Descend seat 2's pick (step now mid; baseline must persist from root).
+    const child2 = bot.createNode(child1.flowState, child1, { action: 'pick', args: { choice: pick2 } }, [], 0);
+    bot.applyMoveToSearchGame(child2);
+    child2.flowState = bot.searchGame.getFlowState();
+
+    // Enumerate seat 3's moves — must be reveal-blind (pre-reveal baseline).
+    const seat3Moves = bot.enumerateMovesForSimulation(bot.searchGame, child2.flowState);
+    return new Set((seat3Moves as Array<{ args: { choice: string } }>).map((m) => m.args.choice));
+  }
+
+  it("seat 3's enumerated moves do not depend on seats 1 & 2's committed picks", () => {
+    const a = seat3ChoicesAfterDescent('x', 'y');
+    const b = seat3ChoicesAfterDescent('y', 'z');
+    const c = seat3ChoicesAfterDescent('z', 'x');
+    // Reveal-blind: every set is the full pre-reveal choice set.
+    expect(a).toEqual(new Set(['x', 'y', 'z']));
+    expect(b).toEqual(a);
+    expect(c).toEqual(a);
+  });
+});
+
+// ----------------------------------------------------------------------------
 // CR-01 (159-REVIEW): root move enumeration + game-supplied heuristic hooks
 // (threatResponseMoves / uctConstant) must run against the REDACTED clone,
 // not `this.game` (full truth). Reuses HiddenInfoGame -- the hooks receive a

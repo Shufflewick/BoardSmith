@@ -14,6 +14,7 @@ import {
   announceConnectionChange,
   announceGameOver,
   announceOpponentTurn,
+  deriveWinnerState,
 } from '../composables/liveRegionAnnouncer.js';
 
 // ── isMyTurn → polite region ─────────────────────────────────────────────────
@@ -110,5 +111,33 @@ describe('mount-time invariant', () => {
     // Simulates initial watcher call if it were immediate (it is not — this
     // proves the empty-at-mount requirement cannot be violated by logic).
     expect(announceTurnChange(false)).toBe('');
+  });
+});
+
+// ── deriveWinnerState (ENDGAME-01 / F-13) ────────────────────────────────────
+// The GameOverCard's winnerSeats/isDraw and the assertive announcer must derive
+// from the SAME flowState.winners source, so the card and the announcement can
+// never disagree (pre-fix the card stayed "Game Over" in non-platform mode
+// while the announcer said "Alice wins").
+describe('deriveWinnerState', () => {
+  it('maps a winners array to winnerSeats with isDraw=false', () => {
+    expect(deriveWinnerState([1])).toEqual({ winnerSeats: [1], isDraw: false });
+    expect(deriveWinnerState([0, 2])).toEqual({ winnerSeats: [0, 2], isDraw: false });
+  });
+
+  it('maps an EMPTY (defined) winners array to a genuine draw', () => {
+    expect(deriveWinnerState([])).toEqual({ winnerSeats: [], isDraw: true });
+  });
+
+  it('maps undefined (winner data unavailable) to neither winners nor draw', () => {
+    expect(deriveWinnerState(undefined)).toEqual({ winnerSeats: [], isDraw: false });
+  });
+
+  it('agrees with the announcement for the same source', () => {
+    const { winnerSeats, isDraw } = deriveWinnerState([]);
+    // A defined-empty winners array is a draw in BOTH the card and the announce.
+    expect(isDraw).toBe(true);
+    expect(winnerSeats).toEqual([]);
+    expect(announceGameOver([], isDraw)).toBe('Game over — Draw');
   });
 });

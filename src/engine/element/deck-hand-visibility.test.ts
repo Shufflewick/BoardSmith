@@ -142,3 +142,51 @@ describe('SPACE-03/D24: hidden-mode child-count no longer leaks (count-only unaf
     }
   });
 });
+
+describe('SPACE-03/F-09: addZoneVisibleTo grants reveal a hidden zone to the granted seat', () => {
+  class SecretSpace extends Space<TestGame> {}
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 3 });
+  });
+
+  it('a seat granted via addZoneVisibleTo sees the REAL children of a hidden zone', () => {
+    const zone = game.create(SecretSpace, 'secret-zone');
+    zone.contentsHidden();
+    zone.addZoneVisibleTo(1); // grant seat 1 vision
+    zone.createMany(3, Card, 'card', (i) => ({ suit: 'S', rank: String(i + 1) }));
+
+    // Granted seat 1: real children, real attributes.
+    const grantedView = game.toJSONForPlayer(1);
+    const grantedZone = findByName(grantedView.children, 'secret-zone');
+    const grantedCards = grantedZone.children ?? [];
+    expect(grantedCards.length).toBe(3);
+    for (const card of grantedCards) {
+      expect(card.attributes.__hidden).toBeUndefined();
+      expect(card.attributes.suit).toBe('S');
+      expect(card.id).toBeGreaterThan(0); // real id, not an anonymized placeholder
+    }
+
+    // Non-granted seat 2: still fully concealed (no children/childCount).
+    const otherView = game.toJSONForPlayer(2);
+    const otherZone = findByName(otherView.children, 'secret-zone');
+    expect('children' in otherZone).toBe(false);
+    expect('childCount' in otherZone).toBe(false);
+  });
+
+  it('a seat granted on a count-only zone sees real children (grant overrides count-only)', () => {
+    const zone = game.create(SecretSpace, 'counted-zone');
+    zone.contentsCountOnly();
+    zone.addZoneVisibleTo(1);
+    zone.createMany(2, Card, 'card', (i) => ({ suit: 'D', rank: String(i + 1) }));
+
+    const grantedZone = findByName(game.toJSONForPlayer(1).children, 'counted-zone');
+    const cards = grantedZone.children ?? [];
+    expect(cards.length).toBe(2);
+    for (const card of cards) {
+      expect(card.attributes.suit).toBe('D');
+      expect(card.attributes.__hidden).toBeUndefined();
+    }
+  });
+});

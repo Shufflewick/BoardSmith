@@ -120,6 +120,11 @@ export interface DevSession {
   viewForSeat(seat: number): unknown;
   /** Current terminal state for init/replay. */
   meta(): { isComplete: boolean; winners: number[]; isDraw: boolean };
+  /**
+   * F-12: tear down this session (abort its demo loop, stop all broadcasts) so a
+   * restarted-away game cannot keep broadcasting stale frames.
+   */
+  dispose(): void;
 }
 
 /** Translate a wire op + payload into the host's `Op` union (mirrors the DO). */
@@ -400,5 +405,6 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     handleServerRequest,
     viewForSeat: (seat: number) => lastPlayerViews?.[seat - 1],
     meta: () => ({ isComplete, winners, isDraw }),
+    dispose: () => host.dispose(),
   };
 }

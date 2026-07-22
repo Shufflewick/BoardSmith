@@ -15,6 +15,7 @@ import {
   announceTurnChange,
   announceConnectionChange,
   announceGameOver,
+  deriveWinnerState,
   announceOpponentTurn,
 } from '../composables/liveRegionAnnouncer.js';
 import { MeepleClient, MeepleClientError, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
@@ -297,6 +298,28 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
 const dockHeight = ref<number>(68);
 let dockResizeObserver: ResizeObserver | null = null;
 const actionbarEl = ref<HTMLElement | null>(null);
+
+// ZOOM-01 / F-14: (re)attach the dock-height ResizeObserver to the actionbar
+// whenever it appears — the actionbar is v-if'd on the game screen, so a
+// lobby-first mount or a game→lobby→game remount would otherwise leave the RO
+// on a detached element (or never attach it), freezing dockHeight at its
+// default and letting the board sit under the dock. Idempotent: disconnects any
+// prior observer first.
+function attachDockObserver(el: HTMLElement | null): void {
+  dockResizeObserver?.disconnect();
+  dockResizeObserver = null;
+  if (!el || typeof ResizeObserver === 'undefined') return;
+  dockResizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0];
+    // BORDER-box height (full on-screen footprint incl. padding) + a small
+    // buffer so revealed content clears the dock edge; contentRect excludes
+    // padding and would leave the board's bottom slightly under the dock.
+    const h = entry?.borderBoxSize?.[0]?.blockSize ?? entry?.target.getBoundingClientRect().height;
+    if (h != null) dockHeight.value = Math.round(h) + 8;
+  });
+  dockResizeObserver.observe(el);
+}
+watch(actionbarEl, (el) => attachDockObserver(el));
 
 // Startup zoom fit: when a game (re)mounts, the board is zoomed once to fill
 // the board region (clamped to the 0.5–2.0 slider range) and then left alone —
@@ -802,6 +825,16 @@ function setBoardPrompt(prompt: string | null): void {
 
 // Undo actions back to turn start (called by ActionPanel)
 async function handleUndo(): Promise<void> {
+  // LIBX-04 / F-15: undo is a state-committing operation and MUST honor the
+  // time-travel guard, exactly like every action path (guarded at the
+  // controller chokepoints). The `can-undo` prop handed to custom UIs is only
+  // advisory — a custom UI that calls the `undo` slot prop while viewing
+  // history would otherwise commit an undo against the LIVE engine. Refuse here
+  // so the guard cannot be bypassed from any UI.
+  if (isViewingHistory.value) {
+    toast.error('Return to the current position before undoing.');
+    return;
+  }
   if (platformMode.value) {
     const result = await platformRequest('undo', { player: playerSeat.value });
     if (!result.success) {
@@ -1155,19 +1188,14 @@ onMounted(async () => {
   updateCompact(compactQuery);
   compactQuery.addEventListener('change', updateCompact);
 
-  // Track the floating dock's height so the board reserves matching scroll room at
-  // the bottom — covered board content can then always be scrolled into view.
-  if (actionbarEl.value && typeof ResizeObserver !== 'undefined') {
-    dockResizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      // Use the BORDER-box height (the dock's full on-screen footprint incl. padding),
-      // plus a small buffer so revealed content clears the dock edge. contentRect
-      // excludes padding and would leave the board's bottom slightly under the dock.
-      const h = entry?.borderBoxSize?.[0]?.blockSize ?? entry?.target.getBoundingClientRect().height;
-      if (h != null) dockHeight.value = Math.round(h) + 8;
-    });
-    dockResizeObserver.observe(actionbarEl.value);
-  }
+  // Track the floating dock's height so the board reserves matching scroll room
+  // at the bottom — covered board content can then always be scrolled into view.
+  // ZOOM-01 / F-14: the actionbar only exists under v-if="currentScreen==='game'",
+  // so on a lobby-first (or remounted) mount it is ABSENT here and a one-shot
+  // attach would leave dockHeight frozen at its default (board sits under the
+  // dock). `attachDockObserver` is (re)driven by the watch below whenever the
+  // actionbar element appears/disappears, so every mount path rewires it.
+  attachDockObserver(actionbarEl.value);
 
   if (platformMode.value) return;
 
@@ -1940,13 +1968,20 @@ watch(
       // degrade) — see engine/utils/snapshot.ts. A bare `winnerSeats.length
       // === 0` cannot distinguish the two; the definedness check can (D10).
       const rawWinners: number[] | undefined = flowState?.winners;
-      const winnerSeats: number[] = rawWinners ?? [];
-      const isDraw = rawWinners !== undefined && rawWinners.length === 0;
-      const winnerNames = winnerSeats.map((seat) => {
+      const derived = deriveWinnerState(rawWinners);
+      // ENDGAME-01 / F-13: keep the GameOverCard's refs in sync with the SAME
+      // flowState.winners source the announcer uses, in NON-platform mode. In
+      // platform mode the validated `data.winners`/`data.isDraw` frame (captured
+      // in the game_state handler) is authoritative, so don't overwrite it here.
+      if (!platformMode.value) {
+        winnerSeats.value = derived.winnerSeats;
+        isDraw.value = derived.isDraw;
+      }
+      const winnerNames = derived.winnerSeats.map((seat) => {
         const p = players.value.find((pl) => pl.seat === seat);
         return (p as any)?.name || `Player ${seat}`;
       });
-      const text = announceGameOver(winnerNames, isDraw);
+      const text = announceGameOver(winnerNames, derived.isDraw);
       announcer.announce(text, { assertive: true });
 
       // Stop any running AI demo when the game completes. isDemoRunning is

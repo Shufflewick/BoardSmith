@@ -96,107 +96,85 @@ function stripComments(lines: string[]): StripCommentsResult {
   // Which multi-line comment kind (if any) is open going INTO this line.
   let openKind: 'block' | 'html' | null = null;
   let openedAtLine: number | undefined;
+  // F-11: a `.vue` file mixes regions with DIFFERENT comment/quote grammars.
+  // JS `//` line comments, `/* */` block comments and string-quote tracking are
+  // valid ONLY inside `<script>`; `<style>` has `/* */` + quotes but no `//`;
+  // the TEMPLATE region has ONLY `<!-- -->` HTML comments — apostrophes and
+  // `//` there are literal text. Applying JS lexing to template text both
+  // defeated the gate (a `//` blanked a following real <img>) and produced
+  // false FAILs (an apostrophe phantom-quoted a following `<!-- <img> -->`).
+  // Track the region so each grammar applies only where it is valid. The region
+  // persists across lines (script/style blocks span lines); the file is scanned
+  // fresh per call so no cross-file leakage.
+  let region: 'template' | 'script' | 'style' = 'template';
 
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
     let out = '';
     let i = 0;
+    // Quote state is intentionally per-line (multi-line template literals are
+    // out of scope — see the interface doc).
+    let quote: string | null = null;
 
     while (i < line.length) {
+      // Inside a multi-line comment: consume until its closer.
       if (openKind === 'block') {
         const close = line.indexOf('*/', i);
-        if (close === -1) {
-          out += ' '.repeat(line.length - i);
-          i = line.length;
-        } else {
-          out += ' '.repeat(close + 2 - i);
-          i = close + 2;
-          openKind = null;
-        }
+        if (close === -1) { out += ' '.repeat(line.length - i); i = line.length; }
+        else { out += ' '.repeat(close + 2 - i); i = close + 2; openKind = null; }
         continue;
       }
       if (openKind === 'html') {
         const close = line.indexOf('-->', i);
-        if (close === -1) {
-          out += ' '.repeat(line.length - i);
-          i = line.length;
-        } else {
-          out += ' '.repeat(close + 3 - i);
-          i = close + 3;
-          openKind = null;
-        }
+        if (close === -1) { out += ' '.repeat(line.length - i); i = line.length; }
+        else { out += ' '.repeat(close + 3 - i); i = close + 3; openKind = null; }
         continue;
       }
 
-      // Not currently inside a comment — scan forward char-by-char, tracking
-      // live quote state, to find the nearest comment opener that is NOT
-      // inside a quoted string/attribute value (CR-02). A `//` immediately
-      // preceded by `:` and not inside a quote is a URL scheme separator
-      // (e.g. `https://...`), not a line comment.
-      let quote: string | null = null;
-      let openerIdx = -1;
-      let openerKind: 'line' | 'block' | 'html' | null = null;
-      let j = i;
-      while (j < line.length) {
-        const ch = line[j];
-        if (quote) {
-          if (ch === '\\' && quote !== '`') {
-            j += 2;
-            continue;
-          }
-          if (ch === quote) quote = null;
-          j++;
-          continue;
-        }
-        if (ch === '"' || ch === "'" || ch === '`') {
-          quote = ch;
-          j++;
-          continue;
-        }
-        if (ch === '/' && line[j + 1] === '/') {
-          if (line[j - 1] === ':') {
-            j += 2;
-            continue;
-          }
-          openerIdx = j;
-          openerKind = 'line';
-          break;
-        }
-        if (ch === '/' && line[j + 1] === '*') {
-          openerIdx = j;
-          openerKind = 'block';
-          break;
-        }
-        if (ch === '<' && line.startsWith('<!--', j)) {
-          openerIdx = j;
-          openerKind = 'html';
-          break;
-        }
-        j++;
-      }
+      const ch = line[i];
 
-      if (openerIdx === -1) {
-        out += line.slice(i);
-        i = line.length;
+      // Inside a string literal (script/style only — template never enters one).
+      if (quote) {
+        if (ch === '\\' && quote !== '`') { out += line.slice(i, i + 2); i += 2; continue; }
+        if (ch === quote) quote = null;
+        out += ch;
+        i++;
         continue;
       }
 
-      out += line.slice(i, openerIdx);
+      // Region EXIT: `</script>` / `</style>` returns to template.
+      if (region === 'script' && line.startsWith('</script', i)) { region = 'template'; out += ch; i++; continue; }
+      if (region === 'style' && line.startsWith('</style', i)) { region = 'template'; out += ch; i++; continue; }
 
-      if (openerKind === 'line') {
-        out += ' '.repeat(line.length - openerIdx);
-        i = line.length;
-      } else if (openerKind === 'block') {
-        out += ' '.repeat(2);
-        i = openerIdx + 2;
-        openKind = 'block';
-        openedAtLine = lineIdx + 1;
-      } else {
-        out += ' '.repeat(4);
-        i = openerIdx + 4;
-        openKind = 'html';
-        openedAtLine = lineIdx + 1;
+      if (region === 'template') {
+        // Region ENTER: `<script`/`<style` switch grammar for what follows.
+        if (line.startsWith('<script', i)) { region = 'script'; out += ch; i++; continue; }
+        if (line.startsWith('<style', i)) { region = 'style'; out += ch; i++; continue; }
+        // The ONLY comment in template is the HTML comment.
+        if (line.startsWith('<!--', i)) { out += '    '; i += 4; openKind = 'html'; openedAtLine = lineIdx + 1; continue; }
+        // Everything else (including `'`, `"`, `//`, `/*`) is literal text.
+        out += ch;
+        i++;
+        continue;
       }
+
+      // region is 'script' or 'style' — apply the relevant lexing.
+      // String literals: JS uses ' " ` ; CSS uses ' " .
+      if (ch === '"' || ch === "'" || (region === 'script' && ch === '`')) { quote = ch; out += ch; i++; continue; }
+      // Line comments: JS only. A `//` preceded by `:` is a URL scheme separator.
+      if (region === 'script' && ch === '/' && line[i + 1] === '/') {
+        if (line[i - 1] === ':') { out += '//'; i += 2; continue; }
+        out += ' '.repeat(line.length - i);
+        i = line.length;
+        continue;
+      }
+      // Block comments: JS and CSS.
+      if (ch === '/' && line[i + 1] === '*') { out += '  '; i += 2; openKind = 'block'; openedAtLine = lineIdx + 1; continue; }
+      // HTML comments can legally appear even inside <script> in a .vue SFC's
+      // raw text in rare cases, but bare <img> never lives in script/style, so
+      // no HTML-comment handling is needed here — treat as literal.
+      out += ch;
+      i++;
     }
 
     stripped.push(out);

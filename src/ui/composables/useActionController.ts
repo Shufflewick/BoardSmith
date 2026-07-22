@@ -576,6 +576,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   function tryAutoFillSelection(selection: PickMetadata): boolean {
     if (!getAutoFill() || isExecuting.value) return false;
 
+    // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` action must never resolve a
+    // selection for the player. Auto-filling a single enabled choice would flip
+    // `isReady` true with no player input and the auto-execute watcher would
+    // then silently play the action (the D7 silent auto-draw). For a manual
+    // action the player picks every choice deliberately; their final pick is
+    // what flips `isReady` and executes. Suppressing auto-fill here (not
+    // auto-execute) keeps that single deliberate tap and preserves custom-UI ↔
+    // ActionPanel parity — both funnel through this one controller.
+    if (currentActionMeta.value?.manual) return false;
+
     // Tutorial auto-fill suppression: when a step wants the learner to perform
     // the click, preserve the teaching interaction instead of auto-resolving.
     // The global `getAutoFill()` knob is separate; this is an additional,
