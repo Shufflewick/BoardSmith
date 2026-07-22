@@ -52,6 +52,35 @@ demonstration/refinement gate (DEMO-01); and a host-gated teaching lockout (LOCK
 - Phase 111 (lockout) executed fully autonomously (discuss→plan→execute) with a single
   human gate; Wave 1+2 plans each ~5–7 min on the main tree (worktrees disabled).
 
+## Milestone: v4.8 — Battery Post-Mortem Fixes
+
+**Shipped:** 2026-07-22 | **Phases:** 14/15 (165 deferred-to-platform) | **Plans:** 44
+
+### What Was Built
+The full 5-game build-battery post-mortem closeout — 31 library/engine/dev-host/tooling defects, the two `bs-skills` defects + a complete autonomy rewrite, a seed-to-state feasibility spike (+ `--seed` PoC), and a conservative fix-gated de-workaround sweep across all 5 game repos. Ran end-to-end via `/gsd-autonomous`.
+
+### What Worked
+- **Scout-before-discuss on every phase.** A read-only Explore/general scout mapping exact file:line targets before the grey-area discuss made the smart-discuss proposals concrete and the planner prompts precise — near-zero re-work at plan time.
+- **Adversarial verify caught real defects the green bar missed, repeatedly.** Phase 164 code-review surfaced 2 Criticals (LIBX-04 guard incomplete at the true chokepoint; contrastInk crashing on valid CSS colors). Phase 167's coherence verify caught a floor-vs-harness precedence contradiction. Phase 168's verify caught a false "proven against go-fish" doc claim. Each was a genuine gap behind a passing suite.
+- **The de-workaround gate proved itself.** Two removals (lanternfall BUG 7, one-two-punch BUG 3) turned suites red and were reverted-and-noted — "kept + note is a valid success" prevented forcing cleanliness over correctness on shipped games.
+- **Prove-before-fix on the tech-debt pass.** The "3 game repos failing hidden-zone" scare was diagnosed (not guessed) to a deliberate D24/SPACE-03 API split the games never migrated — a 2-file game-side call-site swap, not a library regression. Guessing would have "fixed" the library and broken the intentional contract.
+
+### What Was Inefficient
+- **Baselines assumed green that weren't.** Three game repos had pre-existing red suites (seven 204/205, doom 399/405, BSG2/seven) that plans described as "green baseline." The executors handled it honestly (logged to deferred-items.md, no masking), but the plans should have captured the real baseline first.
+- **Phase 165 was roadmapped into a repo it couldn't touch.** A quick "is the target even here?" grep at roadmap time would have flagged D32 as platform-only before it became a mid-run blocker.
+
+### Patterns Established
+- **Fix-present crosswalk as an explicit gate artifact** (169-CROSSWALK.md): grep-verify each library fix is PRESENT with file:line before any downstream removal cites it. Made the cross-repo sweep auditable.
+- **File-scoped commits with `git show --stat` self-proof** when sweeping repos with pre-existing dirty trees — the audit trail distinguishes swept changes from unrelated WIP.
+
+### Key Lessons
+- A "3 repos broke" signal is more often one shared upstream contract change than three independent regressions — trace the common surface before touching any of them.
+- When a milestone phase targets code, verify the code is reachable from this repo at roadmap time, not execution time.
+
+### Cost Observations
+- Model mix: orchestrator opus; planners opus; researchers/scouts/executors/verifiers/checkers sonnet.
+- Long single autonomous session; ~50+ subagent dispatches. Sequential main-tree execution (worktrees disabled) — external game-repo sweeps ran ~15–55 min each.
+
 ## Milestone: v4.7 — Playtest Follow-Up Fixes
 
 **Shipped:** 2026-07-06
