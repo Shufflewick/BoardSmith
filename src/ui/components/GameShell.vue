@@ -15,6 +15,7 @@ import {
   announceTurnChange,
   announceConnectionChange,
   announceGameOver,
+  deriveWinnerState,
   announceOpponentTurn,
 } from '../composables/liveRegionAnnouncer.js';
 import { MeepleClient, MeepleClientError, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
@@ -1950,13 +1951,20 @@ watch(
       // degrade) — see engine/utils/snapshot.ts. A bare `winnerSeats.length
       // === 0` cannot distinguish the two; the definedness check can (D10).
       const rawWinners: number[] | undefined = flowState?.winners;
-      const winnerSeats: number[] = rawWinners ?? [];
-      const isDraw = rawWinners !== undefined && rawWinners.length === 0;
-      const winnerNames = winnerSeats.map((seat) => {
+      const derived = deriveWinnerState(rawWinners);
+      // ENDGAME-01 / F-13: keep the GameOverCard's refs in sync with the SAME
+      // flowState.winners source the announcer uses, in NON-platform mode. In
+      // platform mode the validated `data.winners`/`data.isDraw` frame (captured
+      // in the game_state handler) is authoritative, so don't overwrite it here.
+      if (!platformMode.value) {
+        winnerSeats.value = derived.winnerSeats;
+        isDraw.value = derived.isDraw;
+      }
+      const winnerNames = derived.winnerSeats.map((seat) => {
         const p = players.value.find((pl) => pl.seat === seat);
         return (p as any)?.name || `Player ${seat}`;
       });
-      const text = announceGameOver(winnerNames, isDraw);
+      const text = announceGameOver(winnerNames, derived.isDraw);
       announcer.announce(text, { assertive: true });
 
       // Stop any running AI demo when the game completes. isDemoRunning is

@@ -46,6 +46,28 @@ export function announceGameOver(winnerNames: string[], isDraw = false): string 
 }
 
 /**
+ * ENDGAME-01 / F-13: single source of truth for winner/draw state, derived
+ * from the authoritative `flowState.winners`. The GameOverCard and the assertive
+ * announcer MUST agree — pre-fix the card's `winnerSeats`/`isDraw` were only
+ * populated in the platform-mode `game_state` handler, so a standalone/lobby
+ * game announced "Alice wins" while the visible card showed a bare "Game Over"
+ * (and a real draw was announced but never displayed).
+ *
+ * `rawWinners` is a DEFINED array when the game is complete (empty = a genuine
+ * draw) and `undefined` only when winner data could not be validated (the
+ * dev-WS degrade) — that definedness is what distinguishes a draw from
+ * "unavailable", which a bare empty array cannot.
+ */
+export function deriveWinnerState(
+  rawWinners: number[] | undefined,
+): { winnerSeats: number[]; isDraw: boolean } {
+  return {
+    winnerSeats: rawWinners ?? [],
+    isDraw: rawWinners !== undefined && rawWinners.length === 0,
+  };
+}
+
+/**
  * Returns the polite announcement when it becomes an opponent's turn.
  * awaitingNames are the display names of players waiting to act.
  */
