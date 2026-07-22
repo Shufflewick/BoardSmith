@@ -1,5 +1,58 @@
 # Project Milestones: BoardSmith
 
+## v4.8 Battery Post-Mortem Fixes (Shipped: 2026-07-22)
+
+**Phases completed:** 14 phases, 44 plans, 44 tasks
+
+**Key accomplishments:**
+
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- Added an explicit `unbounded: true` opt-in on `loop()` that makes `maxIterations` optional for genuinely unbounded games, while keeping the bounded per-loop cap-hit as a loud safety assertion and the whole-flow runaway tripwire fully intact — verified with five new PROC-01 tests, two of which demonstrably failed against the pre-fix source.
+- Added a pure, DOM-free WCAG relative-luminance `contrastInk` helper and wired it into `PlayerToken` so the identity-letter ink is black on light seat colors and white on dark, with the halo `text-shadow` derived opposite the chosen ink — replacing the previously hardcoded white ink that was invisible on light seats like the standard "White" (`#ecf0f1`) palette entry.
+- Per-action `.suppressFromDock()` rides the existing `actionMetadata` channel (mirroring `manual` exactly) to hide one action's dock button while it stays fully board-executable; the blunt `suppressActionPanel` prop is renamed to the loud, platform-only `platformActionPanelEscapeHatch`, and GameShell now falls back to the bare turn-prompt strip whenever every available action's dock button is suppressed — never a silent zero-indicator board.
+- Unified GameShell's board + sidebar-extra `:state` slots on a single `displayedState` computed (historical during time-travel, live otherwise) and gated all four `useBoardActionBridge` mutating functions on `isViewingHistory`, so a board click during time-travel is now a defense-in-depth inert no-op instead of a possible live-engine mutation.
+- Fixed the `bs-build-chunk` close ceremony to release its session lock (root-fixing the run-004 same-day false-alarm), sourcing the lock timestamp only from an explicit `date -u` clock-read and adding a session/chunk identity to the lock grammar — verified by 10 new failing-first drift assertions across two vitest suites.
+- Fenced the game/library boundary into the `bs-build` skill: a new "## Boundaries" section in build.md forbids patching or suppressing anything under `node_modules/boardsmith` (a read-only live symlink) and mandates filing library gaps instead, `investigate.md` carries the read-only rule forward before any fix is proposed, `final-acceptance.md` forbids overruling an explicit client instruction, and build.md's UI section now forbids the fenced `platformActionPanelEscapeHatch` without the client while naming `.suppressFromDock()` as the only sanctioned per-action dock-hiding mechanism — all verified by 10 new failing-first drift assertions.
+- Moved the human client-playtest stop from every chunk to exactly three sketch-time-flagged milestone chunks (core-loop, scoring/endgame, final-acceptance) plus an always-stop for genuine rules adjudication — the highest-leverage autonomy lever in the phase.
+- Codified the ask triple-gate (undetermined + load-bearing + no reasonable default, else proceed and record) with a batched open-questions queue, and retired the residual print-and-hand-off stop so cross-chunk continuation — including generate-AI → final-acceptance — auto-advances by default with the printed resume command surviving only as a crash fallback.
+- Added an explicit >=50% context wind-down floor beneath the existing 60% harness-warning ceiling, codified sub-agent offload of research/audits/large reads/repairs as the lever that keeps the main thread under the ceiling while still clearing the floor, and gave the game's actual finish a loud delimited banner + three-field summary card distinct from a new lighter per-chunk completion line.
+- Closed the three B.9 "green but wrong" process gaps: a close-time step that reconciles the filings/asset-debt/waived-chunk ledgers against what each chunk actually changed and re-touches stale paperwork on a fix, a strengthened RULINGS.md re-touch obligation, and a fail-loud assertion that a random-sim (and, by extension, a human playtest) actually exercised this chunk's new actions rather than passing on the four zero-checks alone.
+- Wove an explicit "autonomy = how-not-what; surfaced never fabricated" statement into state-machine.md's top-level prose (mirrored in build-chunk.md), then added a six-discipline "Part D survives the autonomy rewrite" regression describe block that verified — with zero restoration needed — every Part D provenance discipline (escalate-don't-hack, reuse-not-rebuild, honest-derived labeling, surface-don't-fabricate, in-process redteam, build-literally) survived Plans 01-04's autonomy rewrite intact; closed the phase with a green full-suite gate (317 bs tests, 3110 project-wide).
+- Wrote docs/seed-to-state.md establishing that loading a game into an exact playtest state is already solved via the existing GameRunner.fromSnapshot state-authoritative restore — the only new work is a record-from-play authoring recipe and a small `--seed` dev-host wiring flag — backed by a citation-existence guard test that verifies every cited source file against the real codebase.
+- Wired a `--seed <file>` dev-host flag that seeds `boardsmith dev`'s initial game state from a recorded `GameStateSnapshot` via the EXISTING `runnerFromSnapshot`/`stateEnvelope` load path (no rebuilt load machinery), proven by a record→seed→load→assert integration test with four legs: distinct-mid-game RECORD, exact-state PASS-WITH, differs-without FAIL-WITHOUT, and byte-identical LOAD-TWICE-IDENTICAL.
+- Built the grep-verified SC-5/PROC-01 removal gate: a per-filing crosswalk from all 5 game repos' own bug ledgers (lanternfall BUG 1-7, seven BSR-1..12, one-two-punch BUG 1-8, doom-machine BS-1..11, BoardSmithGames2/seven BUG-01..05) to their v4.8 Dxx defects, paired with a PRESENT/ABSENT verdict for each fix's exact code anchor in this library repo's live source.
+- Conservative gated sweep of lanternfall: BUG 6's stale loop-valve comment refreshed (D29 confirmed PRESENT, valve kept), BUG 7's metadata guard removal attempted-and-reverted after proving it turns the suite red (D26 confirmed PRESENT but guard is genuinely defensive, not dead weight), lanternfall's AI recorded as untracked-but-passing for BSR-12.
+- Removed seven's now-redundant `.notUndoable()` re-guard docs (BSR-5/D1) and `concealFromEverySeat` element-hide compensating call (BSR-1/D24); flipped 5 self-cancelling undo tripwires + 1 unrelated ActionBuilder.manual() tripwire from `it.fails` to passing; re-verified BSR-12/D9 AI closed via a scratch repro — suite went from a previously-unnoticed 196/205 to 204/205, with the 1 residual failure an unrelated pre-existing SIM-family issue.
+- Kept the reimplemented undo guard after empirically proving it load-bearing beyond BUG 3, and closed BSR-12 (BUG 8) by confirming the upstream MCTS now uses a redacted per-seat clone plus a pre-reveal simultaneous baseline.
+- Deferred the risky D9/BS-5 native-multiSelect rewrite with comment-only refresh, kept D12/D23 targets as load-bearing (not pure workarounds), and reclassified BS-10 as a game-side art-path fix already handled — one file-scoped commit on `sweep/v4.8-dework`, doom-machine's suite unchanged at 399/405.
+- Closed BOARDSMITH-BUG-02 (its own repo's `.notUndoable()` filing) by flipping the pinned-defect test block to assert the now-correct refused-undo behavior, verified BSR-12 via a scratch AI repro that plays a full game to completion, and rendered the phase's final aggregated BSR-12 CLOSED verdict plus complete 5-repo ledger reconciliation.
+
+---
+
 ## v4.7 Playtest Follow-Up Fixes (Shipped: 2026-07-06)
 
 **Delivered:** Closed the three tracked follow-ups from v4.6's human playtest — DEF-A (generated-game asset completeness), DEF-C (dev-host multi-client reconnect turn-desync), and DEF-B propagation to MERC — hardening the `bs-` pipeline's output and the dev host, then proving it all reaches the most complex vendored consumer.

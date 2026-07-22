@@ -8,6 +8,12 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
+## Previous: v4.8 Shipped
+
+**Shipped:** 2026-07-22. 14/15 phases (155–169); Phase 165/D32 deferred-to-platform (audit `milestones/v4.8-MILESTONE-AUDIT.md`, status tech_debt → fixable debt resolved same session). Library suite 3141 green; all 5 game repos green.
+
+Battery Post-Mortem Fixes — closed everything the 5-game build-battery post-mortem surfaced. **Library/engine (D1–D31):** server-side `.notUndoable()` enforcement + undo fencing, sole-option auto-*start*-not-*execute*, suppressable GameOverCard + working forward-exits, `useAutoZoom` re-fit, function-valued `multiSelect` in panel+MCTS (C.2) + redacted-view MCTS, per-seat simultaneous-step undo, dev-host gameOption/preset/solo/palette, test-tooling ergonomics, Space lifecycle/hidden-count-concealment/class-collision/metadata integrity, per-action `.suppressFromDock()` + fenced `platformActionPanelEscapeHatch`, `loop({unbounded})`, WCAG `contrastInk`, time-travel `displayedState`. **Skills:** the two filed `bs-skills` defects (session-lock release, game/library boundary fence) + a full autonomy rewrite (3-milestone playtest gates, batched questions, run-while-away, auto-advance, ≥50% context floor + sub-agent offload, loud completion, B.9 ledger reconciliation) preserving every Part D discipline. **Platform spike:** proved seed-to-state is mostly-already-possible (`GameRunner.fromSnapshot`) + shipped a thin `--seed` dev-host PoC. **Cross-repo sweep:** conservative fix-verified de-workaround across all 5 game repos (BSR-12 AI closed against the redacted-view MCTS; BS-10 reclassified game-side), each removal gated on a verified library fix + green suite, on per-repo sweep branches. **Post-audit tech-debt pass:** game-side hidden-zone D24/SPACE-03 API migration (`.contentsHidden()`→`.contentsCountOnly()`), seven BSR-7 stale test, and the two carried code-review warnings (v4.8-WR01 multiSelect single-source-of-truth, v4.8-MCTS-UNDO backprop bookkeeping resync). Ran fully autonomously via `/gsd-autonomous` — smart-discuss grey-area gates, plan-checker gates, and adversarial verify/code-review loops caught real defects at every phase (two removals were reverted-on-red, proving the gate).
+
 ## Previous: v4.7 Shipped
 
 **Shipped:** 2026-07-06. 5/5 requirements, 3 phases (152–154), audit passed (`milestones/v4.7-MILESTONE-AUDIT.md`). BoardSmith suite 2677 green; MERC 738/7 green.
@@ -435,4 +441,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-06 — after v4.7 Playtest Follow-Up Fixes milestone (DEF-A/DEF-C/DEF-B-propagation shipped, 5/5 reqs, audit passed)*
+*Last updated: 2026-07-22 — after v4.8 Battery Post-Mortem Fixes milestone (14/15 phases; 165 deferred-to-platform; library 3141 green, all 5 game repos green; audit passed as tech_debt with fixable debt resolved)*

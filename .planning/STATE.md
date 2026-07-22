@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: verifying
-stopped_at: Milestone audit (tech_debt) → tech-debt fix pass complete; ready to complete/archive
-last_updated: "2026-07-22T13:00:00.000Z"
-last_activity: 2026-07-22 — Post-audit tech-debt fix pass: game-side hidden-zone D24/SPACE-03 migration (doom .contentsHidden→.contentsCountOnly 405/405, BoardSmithGames2/seven mess 374/374), seven BSR-7 stale-test corrected (205/205), library v4.8-WR01 + v4.8-MCTS-UNDO both RESOLVED (suite 3141). Deliberately kept deferred: v4.8-SIM-LASTACTOR-UNDO (declined whole-step-undo territory), doom D9 native-multiSelect rewrite (risky), lanternfall AI WIP (uncommitted, not owned by this run).
+status: Awaiting next milestone
+stopped_at: Completed 169-04-PLAN.md
+last_updated: "2026-07-22T18:33:32.606Z"
+last_activity: 2026-07-22 — Milestone v4.8 completed and archived
 progress:
   total_phases: 15
   completed_phases: 14
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 169 — Post-Fix Game De-Workaround Sweep
+**Current focus:** Planning next milestone (v4.8 shipped 2026-07-22)
 
 ## Current Position
 
-Phase: 169 (Post-Fix Game De-Workaround Sweep) — EXECUTING
-Plan: 6 of 6
-Status: Phase complete — ready for verification
-Last activity: 2026-07-22
+Phase: Milestone v4.8 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-22 — Milestone v4.8 completed and archived
 
 ## Milestones
 
@@ -69,12 +69,27 @@ Last activity: 2026-07-22
 
 - v4.6 BS Skills (Rulebook-Driven Game Building) (Phases 140-151) -- shipped 2026-07-05 (playtest follow-up re-closed same day, `v4.6.1`)
 - v4.7 Playtest Follow-Up Fixes (Phases 152-154) -- shipped 2026-07-06
-
-**In Progress:**
-
-- v4.8 Battery Post-Mortem Fixes (Phases 155-169) — IN PROGRESS 2026-07-20; Phases 155–160 shipped (6/15, 40%), all verifications passed
+- v4.8 Battery Post-Mortem Fixes (Phases 155-169) -- shipped 2026-07-22 (14/15 phases; Phase 165/D32 deferred-to-platform). Closed the 5-game build-battery post-mortem (D1–D31 + skills defects + autonomy rewrite + seed-to-state spike + cross-repo de-workaround sweep). Library 3141 green; all 5 game repos green. Tech-debt pass resolved hidden-zone D24 game migration + v4.8-WR01 + v4.8-MCTS-UNDO.
 
 ## Deferred Items
+
+Items acknowledged and deferred at **v4.8** milestone close on 2026-07-22:
+
+| Category | Item | Status | Note |
+|----------|------|--------|------|
+| phase | Phase 165 / PLATLOG-01 (D32) | deferred-to-platform | `[DRAWDROP]` logging proven absent from this library repo AND all 5 game repos (grep=0); lives only in the deployed platform (web front-end + Convex `pieces:*`). "Filed, not patched" per the lab finding. Re-scope to the platform repo. |
+| review-warning | v4.8-SIM-LASTACTOR-UNDO | deferred | Last-actor of a simultaneous step loses its per-seat undo window one tick early; bleeds into the whole-step-undo semantics the user explicitly DECLINED. UX edge, no data loss. Revisit only if playtest surfaces it. |
+| game-rewrite | doom-machine D9 native-multiSelect | deferred | The single-select-enumeration workaround works; rewriting to native panel multiSelect is a risky game-logic change. Deferred by design (conservative sweep). |
+| game-wip | lanternfall AI (untracked) | not-owned | `src/rules/ai.ts` + `ai-smoke.test.ts` are uncommitted pre-existing WIP on lanternfall master; type-checks + smoke passes, but committing/finishing them is not this run's to own. |
+| todo | dev-host-ai-open-seat-not-auto-playing | open | Pre-existing carry-forward (non-blocking) |
+| todo | dev-host-debug-toggle-panel-not-opening | open | Pre-existing carry-forward (non-blocking) |
+| todo | dev-standalone-shell-height-gap | open | Pre-existing carry-forward (non-blocking) |
+| todo | v4-slate-token-and-a11y-polish | open | Pre-existing carry-forward (non-blocking) |
+| debug | knowledge-base | reference | Debug knowledge-base file, not an active session |
+
+Resolved this session's post-audit tech-debt pass (NOT deferred): game-side hidden-zone D24/SPACE-03 migration (doom 405/405, BoardSmithGames2/seven 374/374), seven BSR-7 stale test (205/205), library v4.8-WR01 + v4.8-MCTS-UNDO (suite 3141). All 6 repos fully green.
+
+---
 
 Items acknowledged and deferred at v4.1 milestone close on 2026-06-30:
 
@@ -316,7 +331,7 @@ None
 
 ## Operator Next Steps
 
-- Plan the first v4.8 phase with `/gsd:plan-phase 155`, then `/gsd:execute-phase 155` (or `/gsd-autonomous`).
+- Start the next milestone with /gsd-new-milestone
 
 ## Deferred Items
 
