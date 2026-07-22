@@ -194,6 +194,109 @@ describe('Space re-parent (SPACE-02/D23): a Space can be removed/re-parented', (
     expect(childExitCount).toBe(0);
   });
 
+  it('F-03 (SPACE-02): onEnter survives a Space remove() + snapshot restore (sibling re-indexing)', () => {
+    class MobilityGame extends Game<MobilityGame, Player> {
+      annex!: Space<MobilityGame>;
+      slotA!: Space<MobilityGame>;
+      slotB!: Space<MobilityGame>;
+      slotC!: Space<MobilityGame>;
+      token!: Token;
+      cEnter = 0;
+
+      constructor(options: GameOptions) {
+        super(options);
+        this.annex = this.create<Space<MobilityGame>>(Space, 'annex');
+        this.slotA = this.create<Space<MobilityGame>>(Space, 'slot-a');
+        this.slotB = this.create<Space<MobilityGame>>(Space, 'slot-b');
+        this.slotC = this.create<Space<MobilityGame>>(Space, 'slot-c');
+        this.slotC.onEnter(() => {
+          this.cEnter += 1;
+        });
+        this.token = this.annex.create(Token, 'token', { label: 't' });
+
+        this.registerAction(Action.create('noop').execute(() => ({ success: true })));
+        this.setFlow(
+          defineFlow({
+            root: actionStep({
+              actions: ['noop'],
+              player: (ctx) => ctx.game.getPlayer(1)!,
+              repeatUntil: () => false,
+              maxMoves: 10,
+            }),
+          })
+        );
+      }
+    }
+
+    const runner = new GameRunner<MobilityGame>({
+      GameClass: MobilityGame,
+      gameType: 'mobility-remove-test',
+      gameOptions: { playerCount: 2, seed: 'mobility-remove' },
+    });
+    runner.start();
+
+    // Remove slot-b -> slot-c's Space-sibling index shifts. Its onEnter must
+    // still fire after a restore keyed by stable identity, not tree position.
+    runner.game.slotB.remove();
+
+    const snapshot = roundTripJson(runner.getSnapshot());
+    const restored = GameRunner.fromSnapshot<MobilityGame>(snapshot, MobilityGame);
+
+    restored.game.token.putInto(restored.game.slotC);
+    expect(restored.game.slotC.first(Token)).toBeDefined();
+    expect(restored.game.cEnter).toBe(1);
+  });
+
+  it('F-03 (SPACE-02): onEnter survives a Space reparent() + snapshot restore', () => {
+    class MobilityGame extends Game<MobilityGame, Player> {
+      annex!: Space<MobilityGame>;
+      slotA!: Space<MobilityGame>;
+      slotB!: Space<MobilityGame>;
+      token!: Token;
+      aEnter = 0;
+
+      constructor(options: GameOptions) {
+        super(options);
+        this.annex = this.create<Space<MobilityGame>>(Space, 'annex');
+        this.slotA = this.create<Space<MobilityGame>>(Space, 'slot-a');
+        this.slotB = this.create<Space<MobilityGame>>(Space, 'slot-b');
+        this.slotA.onEnter(() => {
+          this.aEnter += 1;
+        });
+        this.token = this.slotB.create(Token, 'token', { label: 't' });
+
+        this.registerAction(Action.create('noop').execute(() => ({ success: true })));
+        this.setFlow(
+          defineFlow({
+            root: actionStep({
+              actions: ['noop'],
+              player: (ctx) => ctx.game.getPlayer(1)!,
+              repeatUntil: () => false,
+              maxMoves: 10,
+            }),
+          })
+        );
+      }
+    }
+
+    const runner = new GameRunner<MobilityGame>({
+      GameClass: MobilityGame,
+      gameType: 'mobility-reparent-test',
+      gameOptions: { playerCount: 2, seed: 'mobility-reparent' },
+    });
+    runner.start();
+
+    // Reparent slot-a under annex -> its ancestor path changes. onEnter must
+    // still fire after restore.
+    runner.game.slotA.reparent(runner.game.annex);
+
+    const snapshot = roundTripJson(runner.getSnapshot());
+    const restored = GameRunner.fromSnapshot<MobilityGame>(snapshot, MobilityGame);
+
+    restored.game.token.putInto(restored.game.slotA);
+    expect(restored.game.aEnter).toBe(1);
+  });
+
   it('a sealed Space can still be re-parented (seal fences child removal, not the Space itself)', () => {
     const game = new TestGame({ playerCount: 2, seed: 'reparent-sealed-1' });
     const parentA = game.create(Space, 'parent-a');
