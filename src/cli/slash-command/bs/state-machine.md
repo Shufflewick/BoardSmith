@@ -166,6 +166,27 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
 - **Refuted twice:** that is by definition an ambiguity. Escalate to the user as a plain-language question; the ruling is recorded in `RULINGS.md`.
 - Disputes go to the human, never to more agents.
 
+## Autonomy Scope: How, Never What (PROC-02)
+
+Every autonomy behavior this file and `build-chunk.md` describe — run-while-away, auto-advance,
+the batched-question queue, the context floor/ceiling — governs **HOW** the game gets built: which
+step runs next, when a session persists and stops, how open items get queued and surfaced. None of
+it EVER governs **WHAT the rules of the game ARE.** Autonomy is a building-process lever, not a
+rules-authorship license.
+
+A genuine rules ambiguity — any point where the rulebook plus `RULINGS.md` do not determine the
+answer, and (per `build/ask.md`'s Ask Triple-Gate) the choice is load-bearing with no reasonable
+default — is always **surfaced** to the user: batched into the open-questions queue and presented
+at the next human gate/milestone (see "Batched-question queue" below), or raised immediately if it
+blocks the current chunk. It is **never fabricated** — no step, subagent, or orchestrator invents a
+rule, guesses at a rules interpretation, or silently decides the rulebook's meaning on the human's
+behalf, no matter how much unblocked work there is to keep moving on. This is the same
+surface-don't-fabricate boundary the Cold-Resume Parse Contract enforces for state files ("the
+session STOPS and asks the user... it never guesses the intended state") and the Redteam Escalation
+enforces for adversarially-contested claims ("Disputes go to the human, never to more agents") —
+autonomy widens *when* a session keeps going, it never widens *what* it is allowed to decide about
+the rules.
+
 ## Session Handoff Seams (cold-resume checkpoints, not mandatory stops)
 
 The four step groups are:

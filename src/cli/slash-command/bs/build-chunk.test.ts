@@ -1300,3 +1300,32 @@ describe('SKILLAUTO-08 — fail-loud sims (sim exercised this chunk\'s new actio
     expect(playtest).toMatch(/never exercised its\s*\n?target|never\s+exercised\s+its\s+target/i);
   });
 });
+
+describe('PROC-02 — autonomy is how-not-what', () => {
+  it('state-machine.md states explicitly that autonomy governs HOW to build, never WHAT the rules are', () => {
+    const sm = read('state-machine.md');
+    expect(sm).toMatch(/Autonomy Scope: How, Never What/);
+    expect(sm).toMatch(/PROC-02/);
+    expect(sm).toMatch(/govern[s]?\s+\*{0,2}HOW\*{0,2}/i);
+    expect(sm).toMatch(/EVER\s+govern[s]?\s+\*{0,2}WHAT\*{0,2}\s+the\s+rules/i);
+  });
+
+  it('state-machine.md states genuine rule ambiguity is surfaced (batched) and never fabricated', () => {
+    const sm = read('state-machine.md');
+    expect(sm).toMatch(/surfaced/i);
+    expect(sm).toMatch(/never\s+fabricated/i);
+    expect(sm).toMatch(/batched/i);
+  });
+
+  it('state-machine.md ties the how-not-what boundary to the Cold-Resume Parse Contract and Redteam Escalation', () => {
+    const sm = read('state-machine.md');
+    expect(sm).toMatch(/it never guesses the intended state/i);
+    expect(sm).toMatch(/Disputes go to the human, never to more agents/);
+  });
+
+  it('build-chunk.md carries a mirrored cross-reference to the how-not-what statement', () => {
+    const bc = read('build-chunk.md');
+    expect(bc).toMatch(/Autonomy is how, never what \(PROC-02\)/);
+    expect(bc).toMatch(/Autonomy Scope: How, Never What/);
+  });
+});

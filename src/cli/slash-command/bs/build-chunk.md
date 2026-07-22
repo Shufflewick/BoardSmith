@@ -371,6 +371,11 @@ crossed the 60% low-water mark, or an automated step is stuck/unrecoverable.
 
 ## Session Handoff Seams
 
+**Autonomy is how, never what (PROC-02).** Everything below governs how this router keeps moving
+— which step runs next, when a session stops and resumes. It never governs what the rulebook says:
+a genuine rules ambiguity is always surfaced (batched, per the queue below) and never fabricated.
+See `state-machine.md` "Autonomy Scope: How, Never What" for the full statement.
+
 Cite `state-machine.md` "Session Handoff Seams" for the four group boundaries and the stopping
 policy — do not restate them here. In short: the boundaries are cold-resume/persistence
 checkpoints, not mandatory stops; a single session runs continuously across them — and across chunk
