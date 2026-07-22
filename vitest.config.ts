@@ -9,6 +9,7 @@ export default defineConfig({
     environment: 'node',
     include: [
       'src/**/*.test.ts',
+      'docs/**/*.test.ts',
       'scripts/**/*.test.mjs',
     ],
     exclude: [
