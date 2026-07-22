@@ -174,17 +174,35 @@ to answer a question or to test/playtest something — (b) the harness surfaces 
 cannot resolve on its own (a gate that keeps failing and `repair` cannot fix, a subagent that dies
 on a terminal error, a typecheck that will not go green) — which it surfaces to the user rather than
 looping or plowing ahead. Between those points it flows straight through: after `ask` approval it
-runs `build → test → audit → repair` and stops at `playtest`; after `playtest` (and any `revise`
-loop) it runs `close`, stops at close's sketch-tail delta gate **only if that gate needs approval**,
-and then — see "Cross-chunk continuation" below — rolls straight into the next chunk rather than
-ending the session.
+runs `build → test → audit → repair` into `playtest`, where it stops for the human client-playtest
+gate ONLY if this chunk is one of the three milestone chunks with visible UI (see the `playtest`
+bullet below, SKILLAUTO-01) — a non-milestone or UI-less chunk runs its internal `playtest`
+verification (test/self-sim) and flows straight through into `revise`/`close` with no human stop.
+After a human playtest stop (and any `revise` loop) it runs `close`, stops at close's sketch-tail
+delta gate **only if that gate needs approval**, and then — see "Cross-chunk continuation" below —
+rolls straight into the next chunk rather than ending the session.
 
 **Human-input gates that DO stop the session:**
 
 - The `ask` approval gate — the full 4-part presentation ceremony; the user approves the
   interpretation before `Status: approved` is written and `build` begins.
-- The `playtest` human-verification gate — the human plays the numbered test script and confirms it
-  item-by-item; no subagent can stand in for this.
+- The `playtest` human-verification gate — **scoped to milestone chunks, not every chunk**
+  (SKILLAUTO-01). SKETCH.md's `Milestone:` flag (`templates/SKETCH.template.md`'s "## Mandated
+  Chunks", set at sketch-derivation time — see `ingest/sketch-derivation.md`) names exactly three
+  milestone chunks: `core-loop`, `scoring` (game-end/scoring/winner-determination), and
+  `final-acceptance`. Only a chunk whose `Milestone:` flag is non-`none` AND which has visible UI
+  (its `ui:` tag is `touches` or `major`) routes to the human client-playtest stop — the human
+  plays the numbered test script and confirms it item-by-item; no subagent can stand in for this.
+  A chunk with no visible UI (`ui: none`) is NEVER routed to a human playtest, milestone or not.
+  Every non-milestone chunk keeps all of its internal steps unchanged — `test`, `audit`, and its
+  self-playtest/sim pass in `playtest` all still run exactly as before — only the *human*
+  client-playtest stop moves off of it; the chunk auto-advances through `playtest` into `revise`/
+  `close` without waiting on a human (see "Session Handoff Seams" and "Cross-chunk continuation"
+  below). This gate ALWAYS fires regardless of milestone/UI status for a genuine rules
+  adjudication / open question surfaced during that chunk's work — see the next bullet.
+- A **genuine rules adjudication / open-question escalation** — always stops the session
+  regardless of milestone status, whenever the rules themselves (not the build approach) are
+  genuinely undetermined; recorded in `RULINGS.md`.
 - A **redteam refuted-twice escalation** — a claim refuted twice is by definition an ambiguity,
   raised to the user as a plain-language question and recorded in `RULINGS.md` (see "Redteam
   Escalation").

@@ -322,10 +322,17 @@ re-enters mid-pass rather than re-dispatching the whole step (`${CLAUDE_SKILL_DI
 Handoff Seam Before `playtest`" for that per-sub-part persistence). An ordinary chunk has no
 `final-acceptance` item on its Step Checklist and skips this step entirely.
 
-**playtest:** Delegate the entire human-verification gate to `${CLAUDE_SKILL_DIR}/../bs-shared/build/playtest.md` — no subagent,
-the orchestrator narrates the numbered click-by-click test script directly to the human and
-records their item-by-item confirmation. If the human confirms the whole script clean, this group
-proceeds to `close`. If the human reports any issue, this group proceeds to `revise` instead.
+**playtest:** Delegate to `${CLAUDE_SKILL_DIR}/../bs-shared/build/playtest.md`, which routes on its own Milestone/UI
+Gate (SKILLAUTO-01): only a **milestone chunk with visible UI** (SKETCH.md's `Milestone:` flag is
+`core-loop`/`scoring`/`final-acceptance` AND `ui:` is `touches`/`major`) gets the human-verification
+gate — no subagent, the orchestrator narrates the numbered click-by-click test script directly to
+the human and records their item-by-item confirmation. A non-milestone or UI-less chunk skips the
+human stop entirely: `playtest.md` writes `Status: verified` off of `build/test.md`'s automated
+test/sim pass and this group flows straight through to `close` with no session pause. If the human
+confirms the whole milestone script clean, this group proceeds to `close`. If the human reports any
+issue, this group proceeds to `revise` instead. A genuine rules-adjudication / open-question
+escalation surfaced during this chunk's work always stops the session regardless of milestone/UI
+status (`state-machine.md`'s human-gate list).
 
 **revise (only if playtest surfaced an issue):** Delegate the 4-category triage to
 `${CLAUDE_SKILL_DIR}/../bs-shared/build/revise.md` — every feedback item the human reported gets exactly one of the four

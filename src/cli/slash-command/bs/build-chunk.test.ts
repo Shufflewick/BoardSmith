@@ -1023,3 +1023,51 @@ describe('cross-file consistency — every current-phase referenced path resolve
     }
   });
 });
+
+describe('SKILLAUTO-01 — milestone playtest gates', () => {
+  it('state-machine.md scopes the playtest human-verification gate to milestone chunks, not every chunk', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/playtest.*human-verification gate.*scoped to milestone chunks/i);
+    expect(stateMachine).toContain('core-loop');
+    expect(stateMachine).toContain('final-acceptance');
+  });
+
+  it('state-machine.md still lists a rules-adjudication / open-question escalation as an always-stop regardless of milestone', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/genuine rules adjudication \/ open-question escalation/i);
+    expect(stateMachine).toMatch(/always stops the session\s+regardless of milestone/i);
+  });
+
+  it('state-machine.md never routes a human playtest for a UI-less chunk', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/never routed to a human playtest/i);
+  });
+
+  it('build/playtest.md gates its human stop on milestone flag AND visible ui: presence', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toMatch(/Milestone\/UI Gate/);
+    expect(playtest).toContain('core-loop');
+    expect(playtest).toContain('scoring');
+    expect(playtest).toContain('final-acceptance');
+    expect(playtest).toMatch(/ui:.*is.*touches.*or.*major/i);
+  });
+
+  it('build/playtest.md keeps the numbered script and Verified Gate machinery intact for milestone chunks', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toContain('## Verified Checklist');
+    expect(playtest).toContain('The Numbered Click-By-Click Test Script');
+    expect(playtest).toContain('verified (user-waived)');
+  });
+
+  it('build/playtest.md still runs internal verification (test/sim) for non-milestone or UI-less chunks', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toMatch(/random-sim\/self-playtest/i);
+    expect(playtest).toContain('Status: verified');
+  });
+
+  it('build-chunk.md Step Group 4 dispatch routes the human playtest only for milestone/UI chunks', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toMatch(/milestone chunk with visible UI/i);
+    expect(buildChunk).toMatch(/skips the\s*\n?\s*human stop entirely/i);
+  });
+});

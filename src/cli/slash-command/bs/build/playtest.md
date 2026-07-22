@@ -1,13 +1,40 @@
 # Playtest — The Human-Verification Gate (BUILD-09)
 
 Referenced by `build-chunk.md` Step 8 (`playtest`, first of the `{playtest, revise, close}`
-session step group — see `state-machine.md` "Session Handoff Seams"). This is the
-human-verification boundary: the point where the chunk's actual, running behavior is confirmed
-by a human playing it, not just described. This step has **no subagent** — the orchestrator
-narrates the numbered test script to the human directly, in the main session, and records their
-answers itself; it never dispatches a Task-tool agent for this step. Mirrors `build/ask.md`'s
-no-subagent shape exactly, not `build/redteam.md`'s or `build/audit.md`'s Dispatch Template
-pattern — playtest has no dispatch prompt of its own.
+session step group — see `state-machine.md` "Session Handoff Seams"). For a **milestone chunk
+with visible UI**, this is the human-verification boundary: the point where the chunk's actual,
+running behavior is confirmed by a human playing it, not just described. This step has **no
+subagent** — the orchestrator narrates the numbered test script to the human directly, in the
+main session, and records their answers itself; it never dispatches a Task-tool agent for this
+step. Mirrors `build/ask.md`'s no-subagent shape exactly, not `build/redteam.md`'s or
+`build/audit.md`'s Dispatch Template pattern — playtest has no dispatch prompt of its own.
+
+## Milestone/UI Gate (SKILLAUTO-01)
+
+The human client-playtest stop below — "The Numbered Click-By-Click Test Script" through "The
+Verified Gate" — runs ONLY when BOTH are true for this chunk:
+
+1. Its SKETCH.md entry's `Milestone:` flag (`templates/SKETCH.template.md`, set at
+   sketch-derivation time — see `ingest/sketch-derivation.md`) is one of the three milestone
+   values: `core-loop`, `scoring`, `final-acceptance`.
+2. Its `ui:` tag is `touches` or `major` — a chunk with no visible UI (`ui: none`) is never
+   routed to a human playtest, milestone or not.
+
+`state-machine.md`'s "Human-input gates that DO stop the session" is the authority for this
+scoping; this file implements it. When either condition is false, this step's human stop is
+skipped entirely — but its content is NOT skipped: `build/test.md`'s random-sim/self-playtest
+pass already exercised the chunk's new behavior at `test`, and that automated result is what
+`Status: built → verified` relies on for a non-milestone or UI-less chunk. Write
+`Status: verified` to CHUNK.md (citing the automated test/sim pass that stands in for a human
+playtest here — never silently reuse the `verified` wording used for a human-confirmed chunk
+without this citation), update SKETCH.md's derived-status pointer to match (CHUNK.md first, then
+SKETCH.md second — "Write Order"), and flow straight through to `close`/the next chunk per
+`state-machine.md` "Session Handoff Seams" — no session stop here. A genuine rules-adjudication /
+open-question escalation discovered during this chunk's work is the one exception: it always
+stops the session regardless of milestone/UI status (see `state-machine.md`'s human-gate list).
+
+The remainder of this file (numbered script, Verified Gate, etc.) describes the milestone-chunk
+path — read it as conditioned on the gate above.
 
 ## The User Owns the Server
 
@@ -90,7 +117,9 @@ dedicated leak-inspector panel in the dev host, only the seat switcher plus look
 renders. For chunks with no hidden information, fill this line with "n/a — no hidden info in
 this chunk" instead of omitting the line entirely.
 
-## The Verified Gate (mirror `ask.md`'s Gate-Before-Write)
+## The Verified Gate (mirror `ask.md`'s Gate-Before-Write) — milestone chunks only
+
+This gate applies to a milestone chunk with visible UI, per the "Milestone/UI Gate" above.
 
 Present the numbered script, the human plays it and answers item by item as they go — this is
 not a vibe check, it is an explicit item-by-item checklist confirmed one at a time. Fill
