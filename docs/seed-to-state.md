@@ -215,12 +215,17 @@ is.
 ## Proven vs deferred
 
 **Proven by the Phase 168 PoC (plan 168-02):** a deterministic
-record → seed → load → assert cycle against go-fish (the reference card
-game) — capture a mid-game `GameStateSnapshot` via `TestGame.getSnapshot()`,
-write it as a seed fixture, load it through the dev-host's new `--seed`
-flag, and assert the game deterministically renders/continues at that exact
-state (including a load-twice-identical check, proving the mechanism has no
-hidden non-determinism beyond `seed`/`randomState`).
+record → seed → load → assert cycle against an in-repo `CounterGame` test
+fixture (see `src/session/seed-to-state.test.ts`) — capture a mid-game
+`GameStateSnapshot` via `TestGame.getSnapshot()`, write it as a seed
+fixture, load it through the dev-host's new `--seed` flag, and assert the
+game deterministically renders/continues at that exact state (including a
+load-twice-identical check, proving the mechanism has no hidden
+non-determinism beyond `seed`/`randomState`). An in-repo fixture game was
+used rather than go-fish because the sibling example games
+(`~/BoardSmithGames/*`) are not importable from this repo's vitest runner;
+the deterministic-load capability being proven is game-agnostic, so the
+fixture choice does not narrow the result.
 
 **Deferred (not built in Phase 168):**
 
