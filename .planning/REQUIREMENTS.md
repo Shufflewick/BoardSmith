@@ -175,7 +175,7 @@ the fix holds → only then close.**
 
 ### FEAT — Platform feature spike (C.1) — Phase 168
 
-- [ ] **FEAT-01** (C.1): Spike "seed a game into a target playtest state" — a scenario/seed the platform
+- [x] **FEAT-01** (C.1): Spike "seed a game into a target playtest state" — a scenario/seed the platform
   can load directly so the pipeline can set the game into the exact state it wants a human to test
   (bringing the human into the test not-already-annoyed). Scope + feasibility spike; substantial new
   platform feature. (C.2 is delivered by AI-01/Phase 159, not here.)

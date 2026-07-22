@@ -30,7 +30,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [~] **Phase 165: Platform Logging Hygiene** — DEFERRED TO PLATFORM TEAM (2026-07-21): `[DRAWDROP]`/`[DRAWDROP-SRV]` logging lives ONLY in the deployed platform (web front-end + Convex `pieces:*` mutations), proven absent from this library repo and all reachable game repos. Nothing to fix here; D32 stays "filed, not patched" per the lab finding `~/BoardSmithLab/findings/boardsmith-platform-drawdrop-debug-logging.md`. Re-scope to the platform repo when accessible. (D32)
 - [x] **Phase 166: Skills Defects — Session-Lock + UI/Library Boundary** — fix the close-ceremony lock seam, fence the game/library boundary, tell the agent not to use the fenced suppress hatch (B.8 ×2, C.3-skills) (completed 2026-07-21)
 - [x] **Phase 167: Skills Autonomy Rewrite** — playtest-gate, question discipline, batch, run-while-away, auto-advance, context ≥50% + sub-agent offload, loud completion, process lessons — preserving Part D disciplines (B.1–B.7, B.9) (completed 2026-07-22)
-- [ ] **Phase 168: Platform Feature Spike — Seed-to-State** — scope/feasibility spike for seeding a game into a target playtest state (C.1)
+- [x] **Phase 168: Platform Feature Spike — Seed-to-State** — scope/feasibility spike for seeding a game into a target playtest state (C.1) (completed 2026-07-22)
 - [ ] **Phase 169: Post-Fix Game De-Workaround Sweep** — remove every now-unneeded workaround across the five game repos, gated on verified fixes + green suites; close BSR-12; reclassify BS-10 (Part E #6)
 
 ### Phase Details
@@ -234,7 +234,7 @@ Plans:
 3. Note: feature C.2 (panel multi-select) is delivered by Phase 159 (AI-01), NOT here — this phase is C.1 only.
 **Plans** (2 plans, 2 waves — 01 doc-only, 02 touches src/; 02 depends on 01 so the PoC references the documented design):
 - [x] 168-01-PLAN.md — Seed-to-state design + feasibility spike doc (mechanism, load path, authoring surface, pipeline request API, cost/shape recommendation, proven-vs-deferred) [FEAT-01] (wave 1)
-- [ ] 168-02-PLAN.md — Thin PoC: `--seed <file>` dev-host flag (seeds handleStart's initial snapshot via existing fromSnapshot path) + record-from-play deterministic-load integration test (fail-without/pass-with + load-twice-identical) [FEAT-01, PROC-01] (wave 2, depends 168-01)
+- [x] 168-02-PLAN.md — Thin PoC: `--seed <file>` dev-host flag (seeds handleStart's initial snapshot via existing fromSnapshot path) + record-from-play deterministic-load integration test (fail-without/pass-with + load-twice-identical) [FEAT-01, PROC-01] (wave 2, depends 168-01)
 
 #### Phase 169: Post-Fix Game De-Workaround Sweep
 **Goal**: Once the library/platform/skills fixes have landed and are verified, every workaround and deferment that existed *only* because of a now-fixed bug is removed across all five game repos, each removal gated on its specific fix being verified in the shipped library and each game's suite staying green; the deferred AI opponents are re-verified and closed, and the stale Doom BS-10 filing is reclassified.
@@ -270,5 +270,5 @@ Plans:
 | 165. Platform Logging Hygiene | 0/? | Not started | — |
 | 166. Skills Defects — Session-Lock + UI/Library Boundary | 2/2 | Complete   | 2026-07-21 |
 | 167. Skills Autonomy Rewrite | 5/5 | Complete   | 2026-07-22 |
-| 168. Platform Feature Spike — Seed-to-State | 1/2 | In Progress|  |
+| 168. Platform Feature Spike — Seed-to-State | 2/2 | Complete   | 2026-07-22 |
 | 169. Post-Fix Game De-Workaround Sweep | 0/? | Not started | — |

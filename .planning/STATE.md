@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.8
 milestone_name: Battery Post-Mortem Fixes
-status: executing
+status: verifying
 stopped_at: Completed 168-01-PLAN.md
-last_updated: "2026-07-22T03:18:35.313Z"
+last_updated: "2026-07-22T03:29:00.637Z"
 last_activity: 2026-07-22
 progress:
   total_phases: 15
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 38
-  completed_plans: 37
-  percent: 80
+  completed_plans: 38
+  percent: 87
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 168 (Platform Feature Spike — Seed-to-State) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-22
 
 ## Milestones
@@ -287,6 +287,7 @@ Recent decisions affecting current work:
 - [Phase 167]: [Phase 167-05]: state-machine.md's Autonomy Scope: How, Never What (PROC-02) section placed as its own top-level section before Session Handoff Seams
 - [Phase 167]: [Phase 167-05]: PROC-02 Part D survives regression net — all six disciplines verified intact after Plans 01-04, zero restoration needed
 - [Phase 168-01]: Seed file convention: seeds/<scenario>.json holding a raw GameStateSnapshot; ship raw snapshot format, defer scenario DSL until proven too low-level
+- [Phase 168]: Seed rides on hostOptions.seedSnapshot, never gameOptions — mirrors the teachingDisabled WR-04/D-01 pattern so a seed never persists into a game's own snapshot.gameOptions.
 
 ### Pending Todos
 
@@ -298,7 +299,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-22T03:18:35.303Z
+Last session: 2026-07-22T03:27:51.255Z
 Stopped at: Completed 168-01-PLAN.md
 Resume file: 
 None
