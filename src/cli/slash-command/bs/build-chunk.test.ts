@@ -1107,3 +1107,46 @@ describe('SKILLAUTO-03 — batched question queue', () => {
     expect(stateMachine).toMatch(/surfaces?\s+at the next human gate/i);
   });
 });
+
+describe('SKILLAUTO-04 — run-while-away', () => {
+  it('state-machine.md states the pipeline keeps making progress on reasonable defaults while the human is away', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/run-while-away/i);
+    expect(stateMachine).toMatch(/keeps making progress on reasonable defaults/i);
+  });
+
+  it('state-machine.md states progress is bounded only by the milestone gates + rules adjudication + context\\/stuck-state', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toMatch(/bounded\s+only by/i);
+    expect(stateMachine).toMatch(/milestone gates/i);
+    expect(stateMachine).toMatch(/rules adjudication/i);
+  });
+});
+
+describe('SKILLAUTO-05 — auto-advance', () => {
+  it('build/close.md frames the printed resume command as a cold-resume\\/crash fallback, not the default end-of-close signal', () => {
+    const close = read('build/close.md');
+    expect(close).toMatch(/crash fallback/i);
+    expect(close).toMatch(/never the default end-of-close signal/i);
+  });
+
+  it('build-chunk.md frames the printed re-invocation as the crash\\/context-fallback resume, not the default stop', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toMatch(/crash\/context-fallback resume/i);
+  });
+
+  it('state-machine.md and build/close.md state the session auto-advances into the next chunk and the next logical step (generate-AI → final-acceptance)', () => {
+    const stateMachine = read('state-machine.md');
+    const close = read('build/close.md');
+    expect(stateMachine).toMatch(/auto-advance/i);
+    expect(stateMachine).toMatch(/generate-ai\s*(→|->)\s*final-acceptance/i);
+    expect(close).toMatch(/auto-advance/i);
+  });
+
+  it('the residual default-stop-and-handoff framing at the chunk boundary is gone from build\\/close.md and build-chunk.md', () => {
+    const close = read('build/close.md');
+    const buildChunk = read('build-chunk.md');
+    expect(close).not.toMatch(/is NOT the end of the session by default/i);
+    expect(buildChunk).not.toMatch(/telling the user to re-invoke `\/bs-build-chunk` —\s*\n\s*only when a stop condition fires/i);
+  });
+});

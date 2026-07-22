@@ -355,28 +355,33 @@ there is one to approve). Confirm everything written so far (Verified Checklist,
 Rounds` entries if any, `## Verified Commit Hash`, `DECISIONS.md` rollup, the approved sketch-tail
 delta, `Status: verified`/`verified (user-waived)`, SKETCH.md's updated derived-status pointer —
 CHUNK.md first, SKETCH.md second) is saved in the game folder — a non-programmer-legible
-checkpoint. From here, by default, **the same session continues into the next chunk** — it re-enters
-Step 2, routes to the next chunk's `investigate`, and runs continuously to that chunk's `ask` gate (a
-new chunk's first human-input gate), per `state-machine.md` "Session Handoff Seams" → "Cross-chunk
-continuation". It stops at this boundary instead — telling the user to re-invoke `/bs-build-chunk` —
-only when a stop condition fires: the user said stop, context has crossed the 60% low-water mark, or
-an automated step is stuck/unrecoverable.
+checkpoint. From here, by default, **the same session auto-advances into the next chunk** — it
+re-enters Step 2, routes to the next chunk's `investigate`, and runs continuously to that chunk's
+`ask` gate (a new chunk's first human-input gate), per `state-machine.md` "Session Handoff Seams" →
+"Cross-chunk continuation" (SKILLAUTO-04/05) — carrying the same auto-advance into the next logical
+step across chunk types, including the generate-AI → final-acceptance progression. The printed
+`/bs-build-chunk` re-invocation is the crash/context-fallback resume, never the default stop: it
+only comes into play when a stop condition fires at this boundary — the user said stop, context has
+crossed the 60% low-water mark, or an automated step is stuck/unrecoverable.
 
 ## Session Handoff Seams
 
 Cite `state-machine.md` "Session Handoff Seams" for the four group boundaries and the stopping
 policy — do not restate them here. In short: the boundaries are cold-resume/persistence
 checkpoints, not mandatory stops; a single session runs continuously across them — and across chunk
-boundaries (after `close` it rolls straight into the next chunk's `investigate` and stops at that
-chunk's `ask`, per `state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation") — and
-stops only at a human-input gate (`ask` approval, a redteam refuted-twice escalation, the `playtest`
-gate, a repair round-3 triage, or `close`'s delta gate), when an automated step hits an
+boundaries (after `close` it auto-advances straight into the next chunk's `investigate` and stops at
+that chunk's `ask`, per `state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation") —
+and stops only at a human-input gate (`ask` approval, a redteam refuted-twice escalation, the
+`playtest` gate, a repair round-3 triage, or `close`'s delta gate), when an automated step hits an
 unrecoverable/stuck state, or when context crosses the **60%-used** low-water mark (see
 `state-machine.md` "Session Handoff Seams" → "Context-low escape hatch" for the exact threshold
-rule). Below 60% the session keeps going — it does NOT stop early because the work feels large.
-At/above ~60% used (or an earlier harness context warning, or a stuck automated step), it finishes
-and persists the current step, then stops at that cold-resume checkpoint and tells the user to
-`/clear` and re-invoke `/bs-build-chunk` to resume.
+rule). This is the run-while-away model (SKILLAUTO-04): below 60% the session keeps going — it does
+NOT stop early because the work feels large — and auto-advances into the next chunk and the next
+logical step without the human re-invoking (SKILLAUTO-05). At/above ~60% used (or an earlier harness
+context warning, or a stuck automated step), it finishes and persists the current step, then stops
+at that cold-resume checkpoint and tells the user to `/clear` and re-invoke `/bs-build-chunk` to
+resume — this printed re-invocation is the crash/context-fallback resume path, not a routine
+end-of-session handoff.
 
 Example one-line progress narration (style guide, not a script — one or two per group):
 

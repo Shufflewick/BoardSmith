@@ -232,23 +232,33 @@ rather than as a string of one-off interruptions. This is distinct from a **bloc
 question this chunk's own design cannot proceed without still gates that chunk's `ask` directly
 (`build/ask.md` "Ask Triple-Gate"), it is never queued past the chunk that needs it answered.
 
-**Cross-chunk continuation (the chunk→chunk seam).** The boundary between one chunk's `close` and
-the next chunk's `investigate` is itself a seam the session flows across, exactly like the four
-intra-chunk group boundaries — it is NOT a session terminus. When `close` finishes (its bookkeeping
-written, its sketch-tail delta gate resolved — approved if there was a delta, silently skipped if
-there was none), the session does NOT stop and tell the user to re-invoke. Instead, if none of the
-three stop conditions (a)/(b)/(c) above applies — the user has not said stop, context is below the
-60% low-water mark, and no automated step is stuck — it re-enters `build-chunk.md` Step 2 (Resume
-Routing), routes to the next chunk's first incomplete step (its `investigate`, lazily detailing the
-tail entry first per Step 2's "Sketch-level tail-entry target"), and runs `investigate → redteam`
+**Cross-chunk continuation (the chunk→chunk seam) — run-while-away + auto-advance (SKILLAUTO-04/
+05).** The boundary between one chunk's `close` and the next chunk's `investigate` is itself a seam
+the session flows across, exactly like the four intra-chunk group boundaries — it is NOT a session
+terminus. When `close` finishes (its bookkeeping written, its sketch-tail delta gate resolved —
+approved if there was a delta, silently skipped if there was none), the session does NOT stop and
+tell the user to re-invoke. Instead, if none of the three stop conditions (a)/(b)/(c) above applies
+— the user has not said stop, context is below the 60% low-water mark, and no automated step is
+stuck — it **auto-advances**: the pipeline keeps making progress on reasonable defaults, bounded
+only by the milestone gates (SKILLAUTO-01's three milestone chunks), a genuine rules adjudication /
+open-question escalation, and the context/stuck-state conditions above — this is the run-while-away
+model the human being away does not pause. It re-enters `build-chunk.md` Step 2 (Resume Routing),
+routes to the next chunk's first incomplete step (its `investigate`, lazily detailing the tail
+entry first per Step 2's "Sketch-level tail-entry target"), and runs `investigate → redteam`
 continuously, stopping at that next chunk's `ask` approval gate — a new chunk's first human-input
 gate. (A light-path next chunk has no `ask`; it continues to that chunk's `playtest` gate, its first
 human gate, instead. The mandated final-acceptance chunk dispatches `build/final-acceptance.md` per
-"Final-acceptance chunk exception" below.) This is what makes the router a **loop over chunks**
-bounded by human gates, context, and stuck-state — not a one-shot that halts after every `close`.
-`close` still presents the next-chunk proposal and its resume command before continuing, so the user
-always sees what is coming (and can say "stop") before that chunk's first gate; the printed command
-is the resume path for the case where a stop condition *does* fire at this boundary.
+"Final-acceptance chunk exception" below.) Auto-advance is not limited to ordinary chunk-to-chunk
+continuation: it carries into the next LOGICAL step across chunk types, including the **generate-AI
+→ final-acceptance** progression — once a sketch's `bs-generate-ai` chunk closes, the same session
+auto-advances into the final-acceptance chunk that follows it exactly as it would any other next
+chunk, rather than stopping to let the human re-invoke between them. This is what makes the router a
+**loop over chunks** bounded by human gates, context, and stuck-state — not a one-shot that halts
+after every `close`. `close` still presents the next-chunk proposal before continuing, so the user
+always sees what is coming (and can say "stop") before that chunk's first gate; the printed
+`/bs-build-chunk` command is retained ONLY as a cold-resume/crash fallback for the case where a stop
+condition *does* fire at this boundary — it is never the default end-of-close signal, and silence
+from the user means auto-advance, not a wait for re-invocation.
 
 **Context-low escape hatch.** "Context-low" has a concrete threshold: **60% of the context
 window used.** Below 60%, the session keeps going — it does NOT stop, wrap up, or suggest a
