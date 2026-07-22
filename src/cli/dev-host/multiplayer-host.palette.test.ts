@@ -84,4 +84,40 @@ describe('MultiplayerHost — declared color palette reaches per-seat color (D16
     expect(playerOptions?.[0].color).not.toBe('red');
     expect(playerOptions?.[0].color).not.toBe('#e74c3c');
   });
+
+  it('F-04: the palette reaches the ACTUAL player.color in the broadcast view (not just the wire frame)', async () => {
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 1,
+      makeSeed: () => 'palette-view',
+      colorPalette: [
+        { value: '#123456', label: 'Custom One' },
+        { value: '#abcdef', label: 'Custom Two' },
+      ],
+      executeOp: (gameOptions, snap, pend, op, hostOptions) =>
+        executeOp(def, gameOptions, snap, pend, op, hostOptions),
+      send: (clientId, msg) => sent.push({ clientId, msg }),
+    });
+
+    await host.handleMessage('A', { type: 'hello' });
+
+    // The first browser is auto-seated on seat 1 and receives a game_state
+    // broadcast whose view carries the actual per-seat player.color — this is
+    // exactly what GameShell renders. Pre-fix the engine ignored the palette
+    // (constructor reads only options.colors) and assigned its red/blue default.
+    const gameStates = sent
+      .map((s) => s.msg)
+      .filter((m): m is Extract<HostOutbound, { type: 'game_state' }> => m.type === 'game_state');
+    expect(gameStates.length).toBeGreaterThan(0);
+
+    const view = gameStates[gameStates.length - 1].view as {
+      state?: { players?: Array<{ seat: number; color?: string }> };
+    };
+    const players = view.state?.players ?? [];
+    const seat1 = players.find((p) => p.seat === 1);
+    const seat2 = players.find((p) => p.seat === 2);
+    expect(seat1?.color).toBe('#123456');
+    expect(seat2?.color).toBe('#abcdef');
+  });
 });
