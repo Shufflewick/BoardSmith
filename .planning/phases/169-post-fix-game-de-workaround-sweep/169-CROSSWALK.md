@@ -90,10 +90,26 @@ committed to the repo by any BoardSmith-repo process.**
 | Repo-id | Filing title | Dxx | v4.8 req | Fix phase | Sweep target file:line (from CONTEXT) | Disposition-hint |
 |---|---|---|---|---|---|---|
 | BOARDSMITH-BUG-01 | `GameShell` auto-executes sole no-selection action in unbounded loop | — (not in D1-D32 battery; same territory as seven's BSR-3, not a deduped Dxx) | n/a | n/a | n/a | out-of-scope for this Dxx crosswalk |
-| BOARDSMITH-BUG-02 | undo op ignores non-undoable actions | D1 | UNDO-01 | 155 | `src/rules/actions.ts:64,174,275,354` `.notUndoable()` ×4 + docblocks citing BOARDSMITH-BUG-02 | removable-if-verified — same UNDO-01 gating as the other `seven` repo |
+| BOARDSMITH-BUG-02 | undo op ignores non-undoable actions, desyncs `simultaneousActionStep` flow state (3 root causes, filed at BLOCKER severity) | D1 | UNDO-01 | 155 | `src/rules/actions.ts:64,174,275,354` `.notUndoable()` ×4 + docblocks citing BOARDSMITH-BUG-02; `tests/undo.test.ts` 4-test pinned-defect block | **169-06 OUTCOME: RESOLVED, ledger + tests + docblocks updated.** D1 confirmed PRESENT (same grep evidence as Section 2). This filing was NEVER worked around in-game (per `BoardSmithGames2/CLAUDE.md`, the game used only the documented `.notUndoable()` mechanism and filed the request instead) — so there was no compensating re-guard LOGIC to remove, only three stale "not enforced server-side" docblocks (draw/discard/score in `actions.ts`) and a 4-test `tests/undo.test.ts` block that PINNED the pre-fix (wrong) behavior. Baseline `npx vitest run` (before any edit) showed exactly these 4 tests newly red against the fixed engine — expected per the filing's own "when the library fix lands this WILL fail" comment, confirming `assertUndoAllowed()` now refuses undo unconditionally for any turn containing a `.notUndoable()` action. Re-verified empirically (scratch repro, not committed): the refusal happens BEFORE any checkpoint restore, so root causes 2 (per-seat `completed`-marker desync) and 3 (rollback not fenced at a flow-node boundary) are MOOT for this game — there is no rollback left for them to corrupt. All 4 pinned tests rewritten to assert the correct behavior (undo refused, `errorCode: 'UNDO_NOT_ALLOWED'`/`'NO_ACTIONS_TO_UNDO'`, game/flow state untouched, every seat still live), including the worst-case round-closer ordering. Docblocks refreshed; `.notUndoable()` kept on all four actions (legit API). Suite: 4 pre-existing unrelated failures (hidden-zone `mess` childCount/DOM-leak-audit family, same shape as the doom-machine WR-01-adjacent deferred items) present on baseline AND after the sweep — NOT caused by this sweep, logged to `deferred-items.md`, left unmodified. `git status --porcelain` was CLEAN before branching (no pre-existing dirty tree). Commit is file-scoped (3 files: `actions.ts`, `tests/undo.test.ts`, the ledger `.md`); `git show --stat HEAD` confirms no stray files, no deletions. Own-repo ledger (`BOARDSMITH-BUG-02-*.md`) marked RESOLVED with the original filing preserved for the historical record. |
 | BOARDSMITH-BUG-03 | dev host orphans first seat | — (not in D1-D32 battery; dev-host defect) | n/a | n/a | n/a | out-of-scope |
 | BOARDSMITH-BUG-04 | startup zoom fits against a stale dock height | D12-adjacent (ZOOM-01 territory) | ZOOM-01 | 158 | not called out as a compensating-code target in CONTEXT inventory | no-op (verify fix; no removal target identified) |
 | BOARDSMITH-BUG-05 | shell GameOverCard cannot be suppressed by a game with its own terminal UI | — (not in D1-D32 battery) | n/a | n/a | n/a | out-of-scope |
+
+**BSR-12 (AI, D9/AI-01 + D8/AI-02) — BoardSmithGames2/seven status:** `src/rules/ai.ts` has NO
+`BOARDSMITH-BUG` workaround language and no "does NOT try to work around it" caveats at all — it is a
+clean MCTS objective/playout-policy/move-ordering config with no compensating logic for either D9 or
+D8. `npx tsc --noEmit -p .` is clean (the module type-checks). There is no committed AI test in this
+repo's suite (`tests/` has no `ai*.test.ts`), so 169-06 re-verified behaviorally via a scratch,
+uncommitted repro (`createBot(game, SevenGame, 'seven', seat, actionHistory, 'easy', sevenAIConfig)`
+driven turn-by-turn through both seats): the bot played a full 2-player, 7-round game to
+`isFinished() === true` in 22 iterations with zero thrown errors, correctly resolving the `score`
+action's function-valued `multiSelect: { min: 7, max: 7 }` pick every game (AI-01/D9) and reading only
+its own seat's hand via `handCardsFor()` — never another seat's private state (this game's hidden
+info is weak, per the file's own header comment: "hands are `contentsVisibleToOwner()`... a seat
+cannot see what another seat is collecting", so AI-02/D8's redacted-clone concern has limited surface
+here, but nothing in the file contradicts it). **Verdict for 169-06 Task 3: "BoardSmithGames2/seven
+BSR-12: ai.ts builds clean (tsc --noEmit) + a full game drives to completion via `createBot` against
+AI-01/AI-02 in an uncommitted scratch repro; no committed AI test in the suite."**
 
 ### No-op / withdrawn / out-of-scope items (explicit record)
 
@@ -104,6 +120,103 @@ committed to the repo by any BoardSmith-repo process.**
 | Lanternfall WITHDRAWN filing 1 — seat display names | WITHDRAWN | Maintainer-rejected 2026-07-12, not an open bug; no removal action. |
 | Lanternfall WITHDRAWN filing 2 — seat chips ignoring `--bsg-seat-N` | WITHDRAWN | Maintainer-rejected 2026-07-12, not an open bug; no removal action. |
 | MERC (`~/Dropbox/MERC/BoardSmith/MERC`) | out-of-scope | Not among the 5 listed repos; vendored copy (not symlinked) requires a separate re-vendor step. Explicitly out of scope for Phase 169. |
+
+---
+
+## 1a. FINAL BSR-12 Close Verdict (169-06 Task 3 — aggregated from all four AI-bearing repos)
+
+**Rule applied (PROC-01 adversarial-verification):** CLOSED requires a recorded status for EVERY
+AI-bearing repo showing `ai.ts` builds + AI tests/repro pass against AI-01 (D9) and AI-02 (D8). A
+missing per-repo status forces KEPT-OPEN — never an unevidenced CLOSED. doom-machine is N/A (solo, no
+AI) and is excluded from the four-repo count.
+
+| # | Repo | Recorded by | Status |
+|---|------|-------------|--------|
+| 1 | lanternfall | 169-02 (Section 1, "BSR-12 ... lanternfall status" note above) | `src/rules/ai.ts` + `tests/ai-smoke.test.ts` are pre-existing **untracked WIP**, deliberately not committed by the sweep. `npx tsc --noEmit -p .` clean; `tests/ai-smoke.test.ts` passes as part of the full `npx vitest run` (5 files / 214 tests green). All five MCTS hooks wired against the game's own public geometry, no workaround language for D9/D8. **PASS (as untracked WIP — see caveat below).** |
+| 2 | seven (`~/BoardSmithGames/seven`) | 169-03 (Section 1, BSR-12 row) | `src/rules/ai.ts` type-checks cleanly; bot re-verified via a scratch headless repro (not committed) to resolve `chooseScoring`'s function-based `multiSelect` and return a legal move at the `score` step instead of throwing. No committed AI test in the repo's own suite. **PASS (scratch repro, no committed test).** |
+| 3 | one-two-punch | 169-04 (Section 1, BUG 8 row) | `src/rules/ai.ts:12-33`'s "does NOT try to work around it" stance re-verified against BOTH originally-reported defects (redacted-clone `toJSONForPlayer`, pre-reveal simultaneous baseline). `tests/ai.test.ts` (5 tests, already committed, includes an AI-vs-AI self-play soak) passes under `npx vitest run`. **PASS (committed AI test suite — strongest evidence of the four).** |
+| 4 | BoardSmithGames2/seven | 169-06 Task 2 (this plan, Section 1, BOARDSMITH-BUG-02 row's BSR-12 note) | `src/rules/ai.ts` type-checks cleanly (no workaround language at all); no committed AI test, so re-verified via a scratch, uncommitted repro: a full 2-player 7-round game drives to `isFinished()` via `createBot(...)` with zero thrown errors, correctly resolving the function-valued `multiSelect: { min: 7, max: 7 }` score pick every game. **PASS (scratch repro, no committed test).** |
+
+**All four recorded statuses are present and all four PASS** (ai.ts builds + AI plays/tests pass
+against AI-01/AI-02, evidenced per-repo above — two by committed test suites, two by scratch repro
+against a live game, one of the two scratch repros on top of untracked WIP source).
+
+### Verdict: **BSR-12 CLOSED**
+
+D9/AI-01 (function-valued `multiSelect` enumeration + metadata, Phase 159) and D8/AI-02 (redacted-view
+MCTS clone + pre-reveal simultaneous baseline, Phase 159) are confirmed PRESENT in the library and
+confirmed working end-to-end in all four AI-bearing game repos. doom-machine is N/A (no AI; explicitly
+excluded from this count, not a missing input).
+
+**Caveat carried forward, not a blocker to CLOSED:** lanternfall's `ai.ts`/`ai-smoke.test.ts` remain
+**untracked WIP** in that repo — real, passing, and re-verified, but not yet committed to the
+lanternfall repo by any BoardSmith-repo process. This is a lanternfall-repo housekeeping item (commit
+the WIP), not a library defect or an open AI-01/AI-02 gap — it does not reopen BSR-12, but it is
+recorded here so a future lanternfall-specific commit is not lost sight of.
+
+**No BLOCKER (fix-absent) AI removals were skipped in any of the four repos** — every AI-bearing repo's
+D9/D8 library-fix check returned PRESENT (Section 2 below), so no repo's AI verification was gated off
+by an absent fix.
+
+---
+
+## 1b. Cross-Repo Ledger Reconciliation (SKILLAUTO-08 — audit the paperwork, not just the code)
+
+Every filing across all five repos' own ledgers, with its final disposition:
+
+**lanternfall** (`BOARDSMITH-BUGS.md`, 7 filings + 2 withdrawn): BUG 1 no-op (verify-only, D31 fix
+confirmed present), BUG 2 no-op (D12, no removal target), BUG 3 out-of-scope (tooling, not a Dxx),
+BUG 4 no-op (D30, no removal target), BUG 5 out-of-scope (not in D1-D32 battery), BUG 6 **RESOLVED**
+(comment refreshed, D29 valve kept), BUG 7 **kept-and-noted** (guard is genuinely defensive, removal
+turned `a11y.test.ts` red, reverted), BSR-12/AI **PASS as untracked WIP** (see 1a). 2 WITHDRAWN filings
+recorded, no action. Own-repo ledger (`BOARDSMITH-BUGS.md`) updated by 169-02 for BUG 6/7.
+
+**seven** (`~/BoardSmithGames/seven/BOARDSMITH-REQUESTS.md`, 12 filings): BSR-1 **RESOLVED, removed**
+(D24, `concealFromEverySeat` redundant call deleted), BSR-2 no-op, BSR-3 **partially resolved**
+(`ActionBuilder.manual()` test-only flip, wiring deferred to a future plan), BSR-4 out-of-scope
+(dev tooling), BSR-5 **RESOLVED, docblocks refreshed** (D1, no compensating logic existed, undo
+tripwires flipped to passing), BSR-6 no-op (its `it.fails` tripwire correctly still fails, untouched),
+BSR-7 out-of-scope (SIM family; a related unlabeled pre-existing failure logged to `deferred-items.md`,
+left unmodified), BSR-8 out-of-scope (SIM family), BSR-9/BSR-10 out-of-scope (not in D1-D32 battery),
+BSR-11 no-op (D28, no removal target), BSR-12/AI **CLOSED, PASS via scratch repro** (see 1a). Own-repo
+ledger updated by 169-03 for BSR-1/BSR-3/BSR-5/BSR-12.
+
+**one-two-punch** (`BOARDSMITH-BUGS.md`, 8 filings): BUG 1/BUG 2 out-of-scope (test-env/tooling, not
+game `src/`), BUG 3 **kept-and-noted** (D1 confirmed present and closes the originally-reported gap,
+but `assertPlanLockHolds()` pins a second independent invariant — removal reverted after 4 tests went
+red), BUG 4 out-of-scope (not in D1-D32 battery), BUG 5 no-op (D6, no removal target), BUG 6/BUG 7
+out-of-scope (SIM family), BUG 8/BSR-12 **CLOSED** (D8 confirmed present, re-verified against the
+repo's own committed `tests/ai.test.ts` including an AI-vs-AI soak — see 1a). Own-repo ledger updated
+by 169-04 for BUG 3/BUG 8.
+
+**doom-machine** (`BOARDSMITH-BUGS.md`, 11 filings, N/A for BSR-12 — solo, no AI): BS-1/BS-2
+out-of-scope (not in D1-D32 battery), BS-3 **kept-and-noted** (D12 confirmed present, board-height cap
+assessed and kept — it is a design-floor mechanism, not a stale-fit compensator), BS-4 no-op (D2, no
+removal target), BS-5 **deferred, comment-only** (D9 confirmed present for the originally-reported
+panel gap; the native-multiSelect rewrite explicitly deferred as a risky game-logic change; defect 2 —
+the auto-fill scalar `TypeError` — untouched and remains open), BS-6/BS-7/BS-8 out-of-scope (dev-host
+defects, not in D1-D32 battery), BS-9 **kept-and-noted** (D23 confirmed present, `MachineRow`'s
+spare-slot/reseat model assessed and kept as load-bearing architecture, not a pure compensator), BS-10
+**RECLASSIFIED** (game already fixed its own art paths pre-sweep; folded into a scaffold-default
+recommendation, not re-fixed), BS-11 out-of-scope (dev-host defect). 6 pre-existing, unrelated
+deck-secrecy/anonymous-entry test failures logged to `deferred-items.md`, confirmed identical
+count/names before and after every sweep task — not caused by this sweep. Own-repo ledger updated by
+169-05 for BS-3/BS-5/BS-9/BS-10.
+
+**BoardSmithGames2/seven** (`BOARDSMITH-BUG-0{1..5}-*.md`, 5 filings): BOARDSMITH-BUG-01 out-of-scope
+(not in D1-D32 battery, same territory as seven's BSR-3), BOARDSMITH-BUG-02 **RESOLVED** (D1, ledger +
+`tests/undo.test.ts`'s 4-test pinned-defect block + 3 stale docblocks all updated — see the row above
+and this plan's Task 1/2), BOARDSMITH-BUG-03 out-of-scope (dev-host defect), BOARDSMITH-BUG-04 no-op
+(ZOOM-01-adjacent, no removal target), BOARDSMITH-BUG-05 out-of-scope (not in D1-D32 battery). 4
+pre-existing, unrelated hidden-zone `mess` childCount/DOM-leak-audit failures (same family as
+doom-machine's deferred items) logged to `deferred-items.md`, confirmed identical before and after this
+plan's edits — not caused by this sweep. Own-repo ledger updated by 169-06 for BOARDSMITH-BUG-02.
+
+**Every filing across all 5 repos has a final, recorded disposition.** No filing was silently dropped;
+every out-of-scope/no-op/deferred/reclassified/kept-and-noted/resolved/closed item above traces to the
+per-repo SUMMARY that recorded it. No BLOCKER (fix-absent) removal was attempted anywhere — every
+removal or removal-candidate this phase touched had its gating `Dxx` verified PRESENT in Section 2
+before any edit was made.
 
 ---
 

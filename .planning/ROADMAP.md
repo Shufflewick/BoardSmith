@@ -31,7 +31,7 @@ Every fix phase bakes in JT's discipline (PROC-01): **fix → write tests → ad
 - [x] **Phase 166: Skills Defects — Session-Lock + UI/Library Boundary** — fix the close-ceremony lock seam, fence the game/library boundary, tell the agent not to use the fenced suppress hatch (B.8 ×2, C.3-skills) (completed 2026-07-21)
 - [x] **Phase 167: Skills Autonomy Rewrite** — playtest-gate, question discipline, batch, run-while-away, auto-advance, context ≥50% + sub-agent offload, loud completion, process lessons — preserving Part D disciplines (B.1–B.7, B.9) (completed 2026-07-22)
 - [x] **Phase 168: Platform Feature Spike — Seed-to-State** — scope/feasibility spike for seeding a game into a target playtest state (C.1) (completed 2026-07-22)
-- [ ] **Phase 169: Post-Fix Game De-Workaround Sweep** — remove every now-unneeded workaround across the five game repos, gated on verified fixes + green suites; close BSR-12; reclassify BS-10 (Part E #6)
+- [x] **Phase 169: Post-Fix Game De-Workaround Sweep** — remove every now-unneeded workaround across the five game repos, gated on verified fixes + green suites; close BSR-12; reclassify BS-10 (Part E #6) (completed 2026-07-22)
 
 ### Phase Details
 
@@ -246,14 +246,14 @@ Plans:
 3. The deferred AI opponents are re-verified and closed — run-003 BSR-12 (previously blocked on D9) now builds and passes (ties to AI-01).
 4. The stale Doom BS-10 filing is reclassified/closed as a game-side art-path fix (absolute `/cards/`, commit `6949fde`), NOT re-fixed as a library bug; the scaffold `<base href="/">` gap is folded into a scaffold-default recommendation rather than left as an open engine defect.
 5. No workaround is removed whose underlying fix is not verified present (a removal gated on an unverified fix is a blocker, not a silent skip) (PROC-01).
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 Plans:
 - [x] 169-01-PLAN.md — Crosswalk foundation: D××↔BUG-n map from all 5 ledgers + grep-verified library-fix-present checklist (the SC-5/PROC-01 gate) [SWEEP-01, PROC-01] (wave 1)
 - [x] 169-02-PLAN.md — lanternfall sweep (D29 comment-refresh, D26 guard) + green suite + ledger [SWEEP-01, PROC-01] (wave 2)
 - [x] 169-03-PLAN.md — seven sweep (D1 undo re-guards, D24 conceal smell; keep multiSelect) + green suite + ledger [SWEEP-01, PROC-01] (wave 3)
 - [x] 169-04-PLAN.md — one-two-punch sweep (D1 reimplemented undo guard) + BSR-12 AI re-verify (BUG 8 = D8) + green suite + ledger [SWEEP-01, PROC-01] (wave 4)
 - [x] 169-05-PLAN.md — doom-machine sweep (DEFER D9 rewrite, gate D12/D23) + BS-10 reclassify + D32 no-op + green suite + ledger [SWEEP-01, PROC-01] (wave 5)
-- [ ] 169-06-PLAN.md — BoardSmithGames2/seven sweep (D1) + final BSR-12 close verdict + cross-repo ledger reconciliation [SWEEP-01, PROC-01] (wave 6)
+- [x] 169-06-PLAN.md — BoardSmithGames2/seven sweep (D1) + final BSR-12 close verdict + cross-repo ledger reconciliation [SWEEP-01, PROC-01] (wave 6)
 
 ### Progress
 
@@ -273,4 +273,4 @@ Plans:
 | 166. Skills Defects — Session-Lock + UI/Library Boundary | 2/2 | Complete   | 2026-07-21 |
 | 167. Skills Autonomy Rewrite | 5/5 | Complete   | 2026-07-22 |
 | 168. Platform Feature Spike — Seed-to-State | 2/2 | Complete   | 2026-07-22 |
-| 169. Post-Fix Game De-Workaround Sweep | 5/6 | In Progress|  |
+| 169. Post-Fix Game De-Workaround Sweep | 6/6 | Complete   | 2026-07-22 |

@@ -63,3 +63,41 @@ after every sweep task (Task 1 comment-refresh, Task 2 gated assessment, Task 3 
 — the sweep introduces NO NEW failures relative to this recorded baseline. Recommend a follow-up plan
 investigate the hidden-zone deck/removed-pile visibility path in doom-machine against the current
 library `src/engine/element/game.ts` D24 serializer branch, independent of this sweep.
+
+## BoardSmithGames2/seven — 4 pre-existing hidden-zone `mess` childCount / DOM-leak-audit test failures (baseline, not green)
+
+**Discovered during:** 169-06 Task 1, baseline `npx vitest run` on `~/BoardSmithGames2/seven`
+immediately after `git checkout -b sweep/v4.8-dework` off `master`, BEFORE any sweep edit.
+`git status --porcelain` was empty before branching (no pre-existing dirty tree).
+
+**Result:** `Test Files 4 failed | 18 passed (22)` / `Tests 8 failed | 366 passed (374)` on the raw
+baseline — 4 of those 8 were the `BOARDSMITH-BUG-02` pinned-defect tests in `tests/undo.test.ts` that
+this plan intentionally flipped to green (they pinned WRONG pre-fix behavior by design; see the
+169-CROSSWALK.md BOARDSMITH-BUG-02 row). The remaining 4 are a SEPARATE, unrelated pre-existing family:
+
+**Failing tests:**
+- `tests/a11y.example.test.ts` > "GameTable — hidden information in the DOM > renders every face-down
+  mess card identically — nothing distinguishes a bonus card"
+- `tests/discard.test.ts` > "discard — visibility: the pile is public, the rest of the hand is not >
+  payload: a discard does not de-anonymize the mess the card passed through"
+- `tests/leak-audit.test.ts` > "hidden-information audit > DOM (real GameTable): a face-down card
+  carries NO identity vocabulary at all"
+- `tests/leak-audit.test.ts` > "hidden-information audit > DOM (real GameTable): face-down cards are
+  byte-identical; no bonus tell"
+
+**Symptom pattern:** all four assert on rendered `.mess__card` DOM node counts / mess `children`
+lengths — e.g. `expect(backs.length).toBe(game.game.mess.count(SevenCard))` receiving `0` instead of
+the expected count, and `expect(messNode.children.length)` throwing `Cannot read properties of
+undefined (reading 'length')`. This is the SAME surface family as `seven`'s (the other repo's)
+hidden-zone `mess`/`concealFromEverySeat` territory and doom-machine's deferred hidden-zone
+childCount/anonymous-entry failures (both logged above) — a hidden `Space`'s child-rendering/DOM
+representation, not the undo path this plan's gated removal targets.
+
+**Disposition:** left failing, unmodified, throughout 169-06. Confirmed identical failure count/names
+before and after the sweep's Task 1/2 edits (`actions.ts`, `tests/undo.test.ts`,
+`BOARDSMITH-BUG-02-*.md`) — the sweep introduces NO NEW failures relative to this recorded baseline;
+suite went from 8 failed (4 undo + 4 this family) to 4 failed (this family only) after the sweep.
+Not investigated further — out of scope for this conservative, gated undo-only sweep. Recommend a
+future plan investigate the hidden-zone `mess` DOM-rendering/leak-audit path in BoardSmithGames2/seven
+against the current library D24 serializer branch, independent of this sweep — same recommendation as
+doom-machine's entry above.
