@@ -652,7 +652,17 @@ export class MultiplayerHost {
   // ── Game start ────────────────────────────────────────────────────────────
 
   private async startGame(): Promise<void> {
+    // ENDGAME-02 / F-12: single-chokepoint concurrency guard. Two near-
+    // simultaneous (re)start triggers (restart + configure, or two restarts)
+    // would otherwise each build a live session and both broadcast — the loser
+    // never stopped. Ignore a racing trigger while a start is already in flight.
+    if (this.starting) return;
     this.starting = true;
+    // F-12: dispose the outgoing session BEFORE building the new one so its
+    // fire-and-forget demo loop and any late `complete`/state broadcasts cannot
+    // leak stale frames onto (and resurrect the GameOverCard over) the fresh
+    // game. Safe on the first start (no session yet).
+    this.session?.dispose();
     const { playerCount } = this.opts;
     const humanSeats = new Set(
       [...this.seats.values()].filter((s) => s.clientId).map((s) => s.seat),

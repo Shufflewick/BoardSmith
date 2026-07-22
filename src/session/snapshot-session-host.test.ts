@@ -175,6 +175,33 @@ function makeAdapters(
 
 describe('SnapshotSessionHost', () => {
 
+  // ── 0. dispose() latches off all broadcasts (F-12 / ENDGAME-02) ────────────
+  describe('dispose() — dead session never broadcasts (F-12)', () => {
+    it('broadcastCurrent() no-ops after dispose()', async () => {
+      const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      host.dispose();
+      host.broadcastCurrent();
+
+      expect(broadcastLog.length).toBe(0);
+    });
+
+    it('a state-mutating op does not broadcast after dispose()', async () => {
+      const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      host.dispose();
+      broadcastLog.length = 0;
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+
+      expect(broadcastLog.length).toBe(0);
+    });
+  });
+
   // ── 1. Broadcast-before-response ordering ──────────────────────────────────
 
   describe('broadcast-before-response ordering', () => {

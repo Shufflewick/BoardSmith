@@ -164,6 +164,32 @@ describe('MultiplayerHost (always-live)', () => {
     expect(has('A', 'game_state')).toBe(true);
   });
 
+  it('F-12: two near-simultaneous restarts start only ONE new session (in-flight guard)', async () => {
+    let startOps = 0;
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 1,
+      makeSeed: () => 'mp',
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start') startOps++;
+        return executeOp(def, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: (clientId, msg) => sent.push({ clientId, msg }),
+    });
+
+    await host.handleMessage('A', { type: 'hello' }); // initial start
+    startOps = 0;
+
+    // Fire two restarts without awaiting the first — the second must be ignored
+    // by the concurrency guard rather than building a second live session.
+    const p1 = host.handleMessage('A', { type: 'restart' });
+    const p2 = host.handleMessage('A', { type: 'restart' });
+    await Promise.all([p1, p2]);
+
+    expect(startOps).toBe(1);
+  });
+
   it('leaving a seat mid-game frees it (reverts to open/AI)', async () => {
     const { host, lastOfType } = makeHost();
     await host.handleMessage('A', { type: 'hello' });
