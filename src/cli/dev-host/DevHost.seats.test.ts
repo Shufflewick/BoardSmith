@@ -219,6 +219,44 @@ describe('DevHost — seat switcher', () => {
     expect(joinIdx).toBeGreaterThan(leaveIdx);
   });
 
+  it('Back to lobby (data-testid=leave-seat) leaves the seat and returns to the lobby picker (F-18)', async () => {
+    // Give the config a preset so the actual `lobby-preset-picker` <select>
+    // renders once we are back in the lobby (it is gated on cfg.presets.length).
+    const wrapper = mount(DevHost, {
+      props: {
+        config: {
+          ...TEST_CONFIG,
+          presets: [{ name: 'Quick', gameOptions: { speed: 'fast' } }],
+        },
+      },
+      attachTo: document.body,
+    });
+    await wrapper.vm.$nextTick();
+    await activateSeat(wrapper, 1);
+
+    // In-game: the seat switcher button is shown, the lobby picker is not.
+    expect(wrapper.find('.dev-chrome__seat-switcher').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="lobby-preset-picker"]').exists()).toBe(false);
+
+    const ws = mockWsInstance!;
+    ws.send.mockClear();
+
+    // Open the seat switcher menu and click "Back to lobby".
+    await wrapper.find('.dev-chrome__badge--btn').trigger('click');
+    await wrapper.vm.$nextTick();
+    const leave = wrapper.find('[data-testid="leave-seat"]');
+    expect(leave.exists()).toBe(true);
+    await leave.trigger('click');
+    await wrapper.vm.$nextTick();
+
+    // It reuses leaveSeat(): sends a {type:'leave'} frame...
+    const calls = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(calls.some((c) => c.type === 'leave')).toBe(true);
+    // ...and clears mySeat so the lobby (with the preset picker) renders again.
+    expect((wrapper.vm as unknown as { mySeat: number | null }).mySeat).toBeNull();
+    expect(wrapper.find('[data-testid="lobby-preset-picker"]').exists()).toBe(true);
+  });
+
   it('does not switch to the current seat (no-op)', async () => {
     const wrapper = await mountDevHost();
     await activateSeat(wrapper, 1);
