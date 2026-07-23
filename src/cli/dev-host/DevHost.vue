@@ -652,6 +652,21 @@ onUnmounted(() => {
                   <span v-if="cfg.aiSeats.includes(seat.seat)" class="seat-switcher-menu__ai">AI</span>
                   <span v-if="seat.seat === mySeat" class="seat-switcher-menu__current-label"> (you)</span>
                 </button>
+                <div class="seat-switcher-menu__sep"></div>
+                <!-- Back to lobby: the host auto-seats the first browser, so a
+                     solo dev never reaches the lobby preset/gameOption picker
+                     without an explicit way to un-seat. Reuses leaveSeat() (sets
+                     mySeat=null), which returns the view to the lobby where the
+                     picker (data-testid="lobby-preset-picker") renders. -->
+                <button
+                  type="button"
+                  class="seat-switcher-menu__item"
+                  data-testid="leave-seat"
+                  @click="seatSwitcherOpen = false; leaveSeat()"
+                >
+                  <span class="dev-chrome__btn-icon" aria-hidden="true">←</span>
+                  Back to lobby
+                </button>
               </div>
             </div>
           </div>
