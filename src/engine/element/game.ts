@@ -27,7 +27,7 @@ import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand, undoCommand } from '../command/executor.js';
 import { createInverseCommand } from '../command/inverse.js';
-import { canPlayerSee } from '../command/visibility.js';
+import { canPlayerSee, redactVisibilityForSeat } from '../command/visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
@@ -2853,6 +2853,34 @@ export class Game<
           }
           ownJson = { ...json, attributes: filteredAttrs };
         }
+      }
+
+      // F-09 (residual): redact grant rosters on the way OUT of the per-player
+      // serializer. `Space.toJSON` emits the FULL `zoneVisibility` (and
+      // `GameElement.toJSON` the full element `visibility`), including the
+      // `addPlayers`/`exceptPlayers` lists naming EVERY seat that has been
+      // granted or denied vision. Broadcasting that to all seats discloses
+      // who-can-see-what — the same information-leak class F-09 addressed.
+      // Collapse each emitted roster to the receiving seat's OWN grant/denial.
+      //
+      // This is safe for restore: the checkpoint/restore path serializes via
+      // the full `toJSON()` (NOT this per-player path), so the complete roster
+      // still round-trips there. The live `_zoneVisibility`, read via
+      // `getZoneVisibility()` below for `canPlayerSee`, is likewise untouched —
+      // redaction happens only on the copy placed in `ownJson`.
+      // A shallow spread never mutates the source `json` (the shared,
+      // full-fidelity object), so restore/checkpoint state is never corrupted.
+      if (ownJson.zoneVisibility) {
+        ownJson = {
+          ...ownJson,
+          zoneVisibility: redactVisibilityForSeat(ownJson.zoneVisibility, visibilityPosition),
+        };
+      }
+      if (ownJson.visibility) {
+        ownJson = {
+          ...ownJson,
+          visibility: redactVisibilityForSeat(ownJson.visibility, visibilityPosition),
+        };
       }
 
       // Check zone visibility for children (if this is a Space)

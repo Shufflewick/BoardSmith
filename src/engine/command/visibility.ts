@@ -81,6 +81,33 @@ export function copyVisibilityState(state: VisibilityState): VisibilityState {
 }
 
 /**
+ * Redact a zone/element VisibilityState for a single receiving seat (F-09
+ * residual). The FULL grant roster (`addPlayers` / `exceptPlayers`) names
+ * every OTHER seat that has been granted or denied vision of a hidden zone —
+ * broadcasting it to all seats leaks who-can-see-what, the same class of leak
+ * F-09 addressed. This keeps only the receiving seat's OWN grant/denial so a
+ * client still knows whether IT is included, and drops all other seats.
+ *
+ * Use ONLY on the per-player serialization path (`toJSONForPlayer`). The
+ * full-fidelity `copyVisibilityState` is what the checkpoint/restore path
+ * (full `toJSON`) uses; that must keep the complete roster, so never route
+ * restore serialization through here.
+ */
+export function redactVisibilityForSeat(
+  state: VisibilityState,
+  seat: number
+): VisibilityState {
+  const redacted: VisibilityState = { mode: state.mode, explicit: state.explicit };
+  if (state.addPlayers?.includes(seat)) {
+    redacted.addPlayers = [seat];
+  }
+  if (state.exceptPlayers?.includes(seat)) {
+    redacted.exceptPlayers = [seat];
+  }
+  return redacted;
+}
+
+/**
  * Create visibility state from a mode
  */
 export function visibilityFromMode(mode: VisibilityMode): VisibilityState {
