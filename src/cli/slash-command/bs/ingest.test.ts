@@ -199,6 +199,7 @@ const RETURN_SHAPE_FIELDS = [
   'componentMentions[]',
   'visualEvidence[]',
   'variants[]',
+  'openGaps[]',
 ] as const;
 
 describe('SKILLAUTO-01 — milestone-chunk mandates', () => {
@@ -223,6 +224,50 @@ describe('SKILLAUTO-01 — milestone-chunk mandates', () => {
   it('sketch-derivation.md assigns `none` as the milestone value for non-milestone chunks', () => {
     const sketchDerivation = read('ingest/sketch-derivation.md');
     expect(sketchDerivation).toMatch(/`none`/);
+  });
+});
+
+describe('v4.9 INGEST-02 — Derived/Visual line-prefix split', () => {
+  it('transcription.md defines the Visual (p. prefix', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('Visual (p.');
+  });
+
+  it('transcription.md defines the Derived (p. prefix', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('Derived (p.');
+  });
+
+  it('transcription.md states the rule-bearing decision test verbatim', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('legality, scoring, or sequencing');
+  });
+
+  it('transcription.md still cites rulebook/00-visual-survey.md (split does not retire the survey slice)', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('rulebook/00-visual-survey.md');
+  });
+});
+
+describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
+  it('transcription.md defines openGaps[]', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('openGaps[]');
+  });
+
+  it('transcription.md still contains the Named-but-undefined marker', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('Named-but-undefined');
+  });
+
+  it('the Return exactly: enumeration line names openGaps[] in the same statement', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toMatch(/Return exactly:[\s\S]*?openGaps\[\][\s\S]*?\}/);
+  });
+
+  it('does not instruct re-reading the slice to collect gaps', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).not.toMatch(/re-read(ing)? the slice[^.]*gap/i);
   });
 });
 
