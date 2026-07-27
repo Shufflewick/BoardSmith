@@ -247,6 +247,39 @@ describe('v4.9 INGEST-02 — Derived/Visual line-prefix split', () => {
     const transcription = read('ingest/transcription.md');
     expect(transcription).toContain('rulebook/00-visual-survey.md');
   });
+
+  // Regression: the 170-03 proof run produced ZERO `Visual (p.` lines and misfiled 5 of 10
+  // `Derived (p.` lines as pure layout/art/typography descriptions. Root cause was two
+  // compounding defects in transcription.md, pinned by the two tests below. A green
+  // "the prefix is defined" assertion did not catch either — the prefix WAS defined.
+
+  it('the DERIVED bullet is self-limiting: its own definition carries the rule-bearing qualifier', () => {
+    const transcription = read('ingest/transcription.md');
+    // Defect 1: DERIVED was defined by provenance alone ("anything you condensed or
+    // inferred"), so a layout inference matched it exactly and never reached the VISUAL
+    // bullet's decision test. The qualifier must live AT the DERIVED site, not only below it.
+    const derivedBullet = transcription.slice(
+      transcription.indexOf('- DERIVED lines:'),
+      transcription.indexOf('- VISUAL lines:'),
+    );
+    expect(derivedBullet).not.toBe('');
+    expect(derivedBullet).toContain('rule-bearing');
+    expect(derivedBullet).toContain('legality, scoring, or sequencing');
+    // The exclusion must be explicit: inferred-ness alone does not earn the Derived prefix.
+    expect(derivedBullet).toMatch(/NOT by itself|not by itself/);
+  });
+
+  it('the visualEvidence[] weave instruction names the Visual (p.N): prefix at its own site', () => {
+    const transcription = read('ingest/transcription.md');
+    // Defect 2: visualEvidence[] told the subagent to "weave those diagram/image
+    // descriptions into the slice text" without naming a prefix, so it reached for the
+    // prefix whose definition fit — Derived. The weave site must name Visual itself.
+    const weaveIdx = transcription.indexOf('Weave those diagram/image descriptions');
+    expect(weaveIdx).toBeGreaterThan(-1);
+    const weaveInstruction = transcription.slice(weaveIdx, weaveIdx + 400);
+    expect(weaveInstruction).toContain('Visual (p.N):');
+    expect(weaveInstruction).toContain('never under `Derived (p.N):`');
+  });
 });
 
 describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {

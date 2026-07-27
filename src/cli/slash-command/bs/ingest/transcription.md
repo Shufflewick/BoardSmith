@@ -42,9 +42,12 @@ section continues into the next range). For each section:
          A citation prefix is a promise of verbatim text — before writing each quote line,
          re-check it word-for-word against the source page. Never put a paraphrase, a
          condensation, or a logical consequence under a citation prefix, however faithful.
-       - DERIVED lines: anything you condensed or inferred, prefixed `Derived (p.14):`. A
-         derived line must follow from quote lines in this slice alone — never from your own
-         knowledge of this game or of any game like it.
+       - DERIVED lines: a **rule-bearing** condensation or inference — one that affects
+         legality, scoring, or sequencing — prefixed `Derived (p.14):`. A derived line must
+         follow from quote lines in this slice alone — never from your own knowledge of this
+         game or of any game like it. Being inferred rather than quoted is NOT by itself
+         enough to make a line `Derived`: an inference about layout, art, palette, or
+         typography is a VISUAL line (below), however much inference went into producing it.
        - VISUAL lines: a diagram, art, layout, or typography description, prefixed
          `Visual (p.14):` (same page-citation shape as `Derived (p.14):`). Deciding between
          `Derived` and `Visual` is a single decision test, not a category list: does the line
@@ -87,8 +90,10 @@ section continues into the next range). For each section:
      (e) visualEvidence[] — visual identity observations from your assigned pages: dominant
          palette candidates, typography feel, iconography, notes on board/card art, and a short
          description of every setup diagram or embedded component image (with page citation).
-         Weave those diagram/image descriptions into the slice text you write as well — the
-         slice is the only downstream record of them; nothing re-reads the PDF/images later.
+         Weave those diagram/image descriptions into the slice text you write as well, each
+         one under the `Visual (p.N):` prefix — never under `Derived (p.N):`, which is
+         reserved for rule-bearing lines. The slice is the only downstream record of them;
+         nothing re-reads the PDF/images later.
      (f) variants[] — every rule this section marks as a variant, optional module, or
          advanced/expert rule (name + page citation). Also tag each one out-of-scope-by-default
          inline in the slice text you write (e.g. a `> Variant:` note) — the tag lives in the
