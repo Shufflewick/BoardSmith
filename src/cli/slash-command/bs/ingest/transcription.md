@@ -45,6 +45,28 @@ section continues into the next range). For each section:
        - DERIVED lines: anything you condensed or inferred, prefixed `Derived (p.14):`. A
          derived line must follow from quote lines in this slice alone — never from your own
          knowledge of this game or of any game like it.
+       - VISUAL lines: a diagram, art, layout, or typography description, prefixed
+         `Visual (p.14):` (same page-citation shape as `Derived (p.14):`). Deciding between
+         `Derived` and `Visual` is a single decision test, not a category list: does the line
+         affect **legality, scoring, or sequencing**? If yes, it is `Derived` — write it under
+         the `Derived (p.N):` prefix even though it was inferred rather than quoted. If no —
+         it describes a diagram, art, layout, or typography — it is `Visual`, and a line
+         answering "no" to this test is never written under the `Derived (p.N):` prefix, no
+         matter how much inference went into describing it. Two worked examples:
+           - Derived: a per-player starting-hand card count inferred from a setup diagram
+             (e.g. "Derived (p.3): Each player starts with 5 cards.") — it affects legality
+             (how many cards a player may hold at setup), so it is `Derived`.
+           - Visual: a setup-diagram layout description (e.g. "Visual (p.3): Setup diagram
+             shows the deck centered with each player's starting hand fanned below their
+             seat.") — it describes layout, not a rule, so it is `Visual`.
+         A publisher logo or copyright note is a useful edge case to keep in mind (do not add
+         it as a third worked example): it is neither a diagram of play nor rule-bearing, so
+         it fails the rule-bearing test and is `Visual`.
+         This inline `Visual (p.N):` prefix is complementary to, not a replacement for,
+         `rulebook/00-visual-survey.md` — the survey remains the durable whole-rulebook
+         handoff to the first `ui:` chunk, written from `visualEvidence[]` at Step 3,
+         unchanged; `Visual (p.N):` instead marks a diagram/art note sitting mid-rule inside a
+         rule slice.
      If the source names a rule without defining it (a bare mention or cross-reference), write
      `Named-but-undefined (p.N): <rule name>` and stop there — do not reconstruct the
      definition from the rule's name or from general knowledge; downstream steps surface it
@@ -71,9 +93,12 @@ section continues into the next range). For each section:
          advanced/expert rule (name + page citation). Also tag each one out-of-scope-by-default
          inline in the slice text you write (e.g. a `> Variant:` note) — the tag lives in the
          slice, the list entry lives in your return.
+     (g) openGaps[] — every `Named-but-undefined (p.N): <rule name>` line you wrote in this
+         section's slice, verbatim (rule name + page citation), so the orchestrator can build
+         `## Open Rules Gaps` without re-reading the slice.
 
 Return exactly: one { slicePath, sectionSummary, citedTerms[], componentMentions[],
-visualEvidence[], variants[] } per section.
+visualEvidence[], variants[], openGaps[] } per section.
 ```
 
 **Edition (opening-pages range only):** for the subagent assigned the rulebook's first pages,
