@@ -34,16 +34,16 @@ the tag.
 - [ ] **PROC-01**: Every skill change is proven against a real bs-built game (seven or
       one-two-punch), not only against the skill text — a skill edit that cannot be demonstrated on
       a real project is not done.
-- [ ] **PROC-02**: Fix → write tests → adversarially verify the fix holds → only then close.
+- [x] **PROC-02**: Fix → write tests → adversarially verify the fix holds → only then close.
 
 ### Ingest Contract (INGEST)
 
 - [ ] **INGEST-01**: Ingest archives the source rulebook into the game project at a standard path
       and records its hash, so a later verify pass can re-read the same source it transcribed from.
-- [ ] **INGEST-02**: Transcription emits `Visual (p.N):` for diagram, art, and layout description,
+- [x] **INGEST-02**: Transcription emits `Visual (p.N):` for diagram, art, and layout description,
       distinct from `Derived (p.N):` for rule inference, so rule-bearing inferences are separable
       from presentation notes.
-- [ ] **INGEST-03**: `rulebook/INDEX.md` carries a standardized `## Open Rules Gaps` section listing
+- [x] **INGEST-03**: `rulebook/INDEX.md` carries a standardized `## Open Rules Gaps` section listing
       every rule the source names but never defines, so gap tracking does not depend on a session
       improvising the section.
 - [ ] **INGEST-04**: A designer can tell from `INDEX.md` alone which edition and which source file
@@ -135,10 +135,10 @@ the tag.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROC-01 | Phase 170 | Pending |
-| PROC-02 | Phase 170 | Pending |
+| PROC-02 | Phase 170 | Complete |
 | INGEST-01 | Phase 170 | Pending |
-| INGEST-02 | Phase 170 | Pending |
-| INGEST-03 | Phase 170 | Pending |
+| INGEST-02 | Phase 170 | Complete |
+| INGEST-03 | Phase 170 | Complete |
 | INGEST-04 | Phase 170 | Pending |
 | PROV-01 | Phase 171 | Pending |
 | PROV-02 | Phase 171 | Pending |

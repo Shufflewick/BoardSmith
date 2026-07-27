@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
-status: planning
-last_updated: "2026-07-27T16:25:43.972Z"
+status: executing
+stopped_at: Completed 169-04-PLAN.md
+last_updated: "2026-07-27T17:18:06.480Z"
 last_activity: 2026-07-27
 progress:
   total_phases: 10
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Planning next milestone (v4.8 shipped 2026-07-22)
+**Current focus:** Phase 170 — Ingest Contract Upgrade
 
 ## Current Position
 
-Phase: 170 of 179 (Ingest Contract Upgrade) — ready to plan
-Plan: —
-Status: Roadmap defined, ready for /gsd:plan-phase 170
-Last activity: 2026-07-27 — v4.9 roadmap created (10 phases, 170-179; 25/25 requirements mapped)
+Phase: 170 (Ingest Contract Upgrade) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-07-27
 
 ## Milestones
 
@@ -321,6 +322,8 @@ Recent decisions affecting current work:
 - [Phase 169]: doom-machine 169-05: D9/BS-5 rewrite deferred (comment-only); D12/D23 kept-and-noted (load-bearing beyond workaround); BS-10 reclassified as game-side fix already handled (commit 6949fde)
 - [Phase 169]: BOARDSMITH-BUG-02 required no logic removal, only pinned-defect test flip + docblock refresh
 - [Phase 169]: BSR-12 CLOSED — all four AI-bearing repos show a recorded PASS status; doom-machine correctly excluded as N/A
+- [Phase 170]: Exactly two worked examples for the Derived/Visual split per CONTEXT.md's locked cap; publisher-logo edge case mentioned in prose only
+- [Phase 170]: openGaps[] added as a new seventh return field mirroring variants[], not folded into citedTerms[]
 
 ### Pending Todos
 
@@ -332,7 +335,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-22T05:19:31.598Z
+Last session: 2026-07-27T17:14:44.566Z
 Stopped at: Completed 169-04-PLAN.md
 Resume file: 
 None

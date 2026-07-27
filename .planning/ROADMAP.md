@@ -49,7 +49,7 @@ no archived source degrades honestly instead of failing.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 170-01-PLAN.md — transcription.md: Derived/Visual decision test + `openGaps[]` return field (INGEST-02, INGEST-03)
+- [x] 170-01-PLAN.md — transcription.md: Derived/Visual decision test + `openGaps[]` return field (INGEST-02, INGEST-03)
 - [ ] 170-02-PLAN.md — ingest-rules.md Step 3: source archive + SHA-256, INDEX header block, always-emitted `## Open Rules Gaps` (INGEST-01, INGEST-03, INGEST-04)
 - [ ] 170-03-PLAN.md — PROC-01 manual proof: real `/bs-ingest-rules` run against seven/rules.pdf, output captured (PROC-01)
 - [ ] 170-04-PLAN.md — golden INDEX.md fixtures + artifact-shape test + PROC-02 adversarial closure (INGEST-03, INGEST-04, PROC-02)
@@ -154,7 +154,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 170. Ingest Contract Upgrade | 0/TBD | Not started | - |
+| 170. Ingest Contract Upgrade | 1/4 | In Progress|  |
 | 171. Provenance Recording | 0/TBD | Not started | - |
 | 172. Source-Free Conformance Checks | 0/TBD | Not started | - |
 | 173. Verify Pipeline Core | 0/TBD | Not started | - |

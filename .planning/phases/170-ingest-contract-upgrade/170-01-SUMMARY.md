@@ -101,3 +101,11 @@ None - no external service configuration required.
 ---
 *Phase: 170-ingest-contract-upgrade*
 *Completed: 2026-07-27*
+
+## Self-Check: PASSED
+
+- FOUND: src/cli/slash-command/bs/ingest/transcription.md
+- FOUND: src/cli/slash-command/bs/ingest.test.ts
+- FOUND: .planning/phases/170-ingest-contract-upgrade/170-01-SUMMARY.md
+- FOUND: commit 69f89e11 (Task 1)
+- FOUND: commit 8326fc85 (Task 2)
