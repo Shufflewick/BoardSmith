@@ -1,6 +1,6 @@
 # Phase 170 — PROC-01 Proof Run Record
 
-**Status: FAILED (7 of 9 checks).** Checkpoint not approved. Recorded per `170-03-PLAN.md`
+**Status: FAILED (8 of 9 checks).** Checkpoint not approved. Recorded per `170-03-PLAN.md`
 Task 2/3.
 
 **Date:** 2026-07-27
