@@ -10,6 +10,7 @@ import { lintCommand } from './commands/lint.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { simulateCommand } from './commands/simulate.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
+import { ingestArchiveCommand } from './commands/ingest-archive.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -117,6 +118,16 @@ program
   .option('--dev', 'Publish to the local dev platform (http://localhost:3006)')
   .option('--test', 'Publish to the test platform (test.shufflewick.pub)')
   .action(publishCommand);
+
+// Ingest: deterministic archive + hash + INDEX provenance header.
+// Mechanical work belongs in code, not in skill text an agent executes from recall.
+program
+  .command('ingest-archive <rulebook>')
+  .description('Archive a source rulebook, hash it, and write rulebook/INDEX.md provenance header')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--edition <edition>', 'Edition string as stated in the rulebook')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(ingestArchiveCommand);
 
 // Claude Code integration
 const claudeCmd = program

@@ -116,42 +116,43 @@ full by this orchestrator.
 Once transcription or interview output has landed, this orchestrator-only step assembles the
 following artifacts **from subagent-returned summaries only** — never from re-reading slices.
 
-**Items 1 and 2 are delegated to a subagent — this orchestrator performs neither itself.** Four
-successive in-line attempts (reworded instructions, a self-limiting definition, a shipped template
-to copy, and folding the archive into this step) each verified present in the installed skill text
-and each failed against a live run: the archive was never created and `INDEX.md` was composed
-freehand instead of filled from its template. A fresh-context subagent whose entire job is these
-two mechanical actions does not drift the way a long orchestrator session does. Do not "simplify"
-this back into in-line orchestrator work.
+**Item 1 is a command, not a task.** Run it. Do not perform its work by hand and do not skip it.
 
-1-2. **Dispatch one synthesis subagent** to archive the source and write `rulebook/INDEX.md`.
-   Its prompt is short and carries only values this orchestrator holds — never a restatement of
-   the contract:
+1. **Archive the source and write the INDEX provenance header — run this command:**
 
-```
-Read `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/synthesis-subagent.md` in full and follow it
-exactly.
+   ```
+   npx boardsmith ingest-archive <rulebookPath> --edition "<edition or omit>"
+   ```
 
-Rulebook path: {rulebookPath}
-Edition:       {edition or the literal UNKNOWN}
-Slices:        {slice manifest rows}
-Cited terms:   {accumulated citedTerms[] pairs}
-Open gaps:     {accumulated openGaps[] entries, verbatim, in order}
-```
+   Run it from inside the game project directory. It copies the source to
+   `rulebook/source/<filename>`, computes its SHA-256, and writes `rulebook/INDEX.md` with the
+   four provenance header lines (`Edition:`, `Source:`, `Source hash:`, `Transcribed:`) plus
+   empty `## Open Rules Gaps`, `## Slices`, and `## Term → Slice` sections for you to fill.
 
-   Substitute those five values and nothing else. Do not restate, paraphrase, or summarize any
-   part of `synthesis-subagent.md` in the dispatch prompt — the whole finding this delegation
-   exists to work around is that composed prose loses mechanical content in transit.
+   Omit `--edition` when the rulebook states none; the command writes the explicit
+   `not stated in the rulebook` value rather than leaving it blank. If the command errors, STOP
+   and report it — do not hand-write `INDEX.md` as a fallback.
 
-   The subagent returns `{ archivedPath, sourceHash, indexPath, gapsWritten, headingsVerified }`.
-   **If `headingsVerified` is not `true`, or the subagent reports Task 1 blocked, STOP and report
-   it** — do not proceed to item 3 and do not write `INDEX.md` yourself as a fallback. A silent
-   orchestrator fallback is exactly how this defect stayed invisible through four fix attempts.
+   This is a command rather than an instruction for a measured reason. Copying a file, hashing
+   it, and emitting four exact header lines have one correct output, and nine successive attempts
+   to get a session to do them from skill text all failed on live runs — the session reads its
+   skill files at the start, then works from recall. Tool-call capture showed Bash invocations
+   succeeding reliably in every one of those same runs. So the deterministic half is code now.
+   Your half is judgment: transcription, terms, and gaps.
 
-   **Interview-path exception:** on the interview path there is no source file. Dispatch the same
-   subagent with `Rulebook path: NONE (interview path)`; it skips Task 1, creates no
-   `rulebook/source/`, and writes the interview header values per
-   `ingest/interview-fallback.md`'s "Output Re-Target".
+2. **Fill the sections the command scaffolded.** Open `rulebook/INDEX.md` (it is your own
+   just-written scaffold, not a slice — reading it is not a Context-Economics violation) and fill:
+
+   - `## Open Rules Gaps` — every `Named-but-undefined (p.N): <rule name>` entry from the
+     accumulated `openGaps[]` returns, one per line, verbatim. **Do not deduplicate** — a rule
+     named in two slices and defined in neither is two entries, and the recurrence is signal.
+     Leave the `_None._` token exactly as-is if there were none.
+   - `## Slices` — one row per slice: path, pages, one-line coverage.
+   - `## Term → Slice` — one row per accumulated `citedTerms[]` pair, sorted.
+
+   Keep every heading exactly as the command wrote it. Do not rename, reword, reorder, or
+   "improve" them — downstream tooling parses those strings, and inventing a nicer heading is the
+   single most repeated failure in this step's history.
 
 3. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
    approximate aspect ratios (cards, tiles, board proportions), accumulated from the transcription

@@ -59,7 +59,6 @@ const UI_TAG_REGEX = /none *\| *touches *\| *major/;
 /** Every path `ingest-rules.md` must cite by exact path (cross-file consistency, INGEST-*). */
 const REFERENCED_PATHS = [
   'ingest/transcription.md',
-  'ingest/synthesis-subagent.md',
   'ingest/interview-fallback.md',
   'ingest/sketch-derivation.md',
   'ingest/scaffold.md',
@@ -492,82 +491,49 @@ describe('v4.9 PROC-01 — re-read gates at the long-session handoff', () => {
   });
 });
 
-describe('v4.9 INGEST-01 — source archive + SHA-256 (delegated to a synthesis subagent)', () => {
-  // Four in-line mechanisms were tried and refuted against live harness runs:
-  //   1. reworded instructions + self-limiting DERIVED definition   -> no effect
-  //   2. contract extracted to a file the subagent reads            -> no effect
-  //   3. templates/INDEX.template.md to copy and fill               -> no effect
-  //   4. archive folded into Step 3 alongside its consumer          -> no effect
-  // In every run the orchestrator did excellent semantic work and skipped the mechanical
-  // specifications: rulebook/source/ was never created and INDEX.md was composed freehand.
+describe('v4.9 INGEST-01 — source archive + SHA-256 (delegated to a CLI command)', () => {
+  // Nine mechanisms were tried and refuted against live runs: reworded instructions, a
+  // self-limiting definition, an extracted contract file, a shipped template, a step reorder,
+  // a delegated synthesis subagent, two re-read gates, and a dispatch handshake. Direct
+  // tool-call capture showed why -- the session reads its skill files at the start and then
+  // executes from recall, reproducing a superseded contract. Instructions living in the
+  // drifting text drift with it.
   //
-  // The one mechanism with positive evidence is a fresh-context subagent doing a single job
-  // and reading its own contract. Step 3 items 1-2 are now delegated to one.
-  //
-  // These tests pin the delegation. Reverting it to in-line orchestrator work reintroduces
-  // four separately-refuted failure modes at once.
+  // The same traces showed Bash invocations succeeding in every run. So the deterministic
+  // half -- copy, hash, four exact header lines, three exact headings -- moved into
+  // `boardsmith ingest-archive`, which is pinned by src/cli/commands/ingest-archive.test.ts
+  // and cannot forget a heading. The session keeps the judgment half.
 
-  it('ingest-rules.md delegates the archive + INDEX write rather than performing them in-line', () => {
+  it('Step 3 invokes the ingest-archive command rather than describing the work', () => {
     const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('ingest/synthesis-subagent.md');
-    expect(flat(ingestRules)).toMatch(/delegated to a subagent — this orchestrator performs neither itself/);
+    expect(ingestRules).toContain('npx boardsmith ingest-archive');
+    expect(flat(ingestRules)).toMatch(/Item 1 is a command, not a task/);
   });
 
-  it('the dispatch forbids restating the contract and forbids an orchestrator fallback', () => {
+  it('Step 3 forbids hand-writing INDEX.md when the command fails', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/do not hand-write `INDEX.md` as a fallback/);
+  });
+
+  it('Step 3 states why this is a command, citing the measured failure', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    // A bare "run this" gets skipped; the evidence is what earns the invocation.
+    expect(ingestRules).toMatch(/nine successive attempts/i);
+    expect(ingestRules).toMatch(/Bash invocations succeeding reliably/);
+  });
+
+  it('Step 3 tells the session to fill the scaffolded sections without renaming headings', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/Fill the sections the command scaffolded/);
+    expect(ingestRules).toMatch(/Do not rename, reword, reorder, or "improve" them/);
+    expect(ingestRules).toMatch(/Do not deduplicate/i);
+  });
+
+  it('the superseded synthesis-subagent contract is gone, not left as a second path', () => {
+    // Two mechanisms for the same job is how a fallback silently becomes the real path.
+    expect(existsSync(join(__dirname, 'ingest/synthesis-subagent.md'))).toBe(false);
     const ingestRules = read('ingest-rules.md');
-    const step3 = flat(
-      ingestRules.slice(ingestRules.indexOf('## Step 3: Synthesis'), ingestRules.indexOf('## Step 4:')),
-    );
-    expect(step3).toMatch(/Do not restate, paraphrase, or summarize any part of `synthesis-subagent.md`/);
-    expect(step3).toMatch(/do not write `INDEX.md` yourself as a fallback/);
-  });
-
-  it('the synthesis contract exists and tells the subagent to read it in full', () => {
-    const contract = read('ingest/synthesis-subagent.md');
-    expect(flat(contract)).toMatch(/Do not accept a paraphrase of this file in place of the file/);
-  });
-
-  it('the synthesis contract prescribes the archive path, copy invariant, and hash commands', () => {
-    const contract = read('ingest/synthesis-subagent.md');
-    expect(contract).toContain('rulebook/source/');
-    expect(contract).toContain('shasum -a 256');
-    expect(contract).toContain('sha256sum');
-    expect(flat(contract)).toMatch(/never a move, rename, delete, or overwrite/);
-    expect(flat(contract)).toMatch(/STOP and report it/);
-  });
-
-  it('the synthesis contract pins all four INDEX headings and header labels byte-for-byte', () => {
-    const contract = read('ingest/synthesis-subagent.md');
-    for (const heading of ['## Open Rules Gaps', '## Slices', '## Term → Slice']) {
-      expect(contract, `synthesis contract must pin "${heading}"`).toContain(heading);
-    }
-    for (const label of ['Edition:', 'Source:', 'Source hash:', 'Transcribed:']) {
-      expect(contract, `synthesis contract must pin "${label}"`).toContain(label);
-    }
-    expect(contract).toContain('_None._');
-    expect(flat(contract)).toMatch(/do not deduplicate/i);
-  });
-
-  it('the synthesis contract blocks the INDEX write when the archive fails', () => {
-    const contract = read('ingest/synthesis-subagent.md');
-    expect(flat(contract)).toMatch(/Task 2 is \*\*blocked\*\*/);
-    expect(flat(contract)).toMatch(/must never surface as a silently absent `Source hash:` line/);
-  });
-
-  it('the synthesis contract requires self-verification of its own written output', () => {
-    const contract = read('ingest/synthesis-subagent.md');
-    expect(contract).toContain('headingsVerified');
-    // Re-reading its OWN output is explicitly not a Context-Economics violation; the rule
-    // prohibits the orchestrator re-reading slices, which INDEX.md is not.
-    expect(flat(contract)).toMatch(/is not a Context-Economics violation/);
-  });
-
-  it('the interview path is routed through the same subagent, not a second code path', () => {
-    const ingestRules = read('ingest-rules.md');
-    const step3 = flat(
-      ingestRules.slice(ingestRules.indexOf('## Step 3: Synthesis'), ingestRules.indexOf('## Step 4:')),
-    );
-    expect(step3).toMatch(/Dispatch the same subagent with `Rulebook path: NONE \(interview path\)`/);
+    expect(ingestRules).not.toContain('synthesis-subagent');
   });
 
   it('ingest/scaffold.md does NOT contain rulebook/source/ (Pitfall 1 guard — scaffold.md runs before {rulebookPath} is known)', () => {
@@ -589,10 +555,14 @@ describe('v4.9 INGEST-04 — INDEX.md header block (template fill)', () => {
     expect(ingestRules).not.toMatch(/^\s*-\s*`Source hash:`/m);
   });
 
-  it('the synthesis contract states the two template-fill prohibitions (no rewording, no composing from scratch)', () => {
-    const ingestRules = read('ingest/synthesis-subagent.md');
-    expect(flat(ingestRules)).toMatch(/do not rewrite, reword, abbreviate, or reorder any heading/i);
-    expect(flat(ingestRules)).toMatch(/do not compose an `?INDEX\.md`? from scratch/i);
+  it('the command owns the header block, so no prose can drift it', () => {
+    // The four labels are emitted by src/cli/commands/ingest-archive.ts and pinned by its own
+    // test. Nothing here needs to instruct a session to type them correctly.
+    const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
+    for (const label of ['Edition:', 'Source:', 'Source hash:', 'Transcribed:']) {
+      expect(cmd, `ingest-archive must emit "${label}"`).toContain(label);
+    }
+    expect(cmd).toContain('not stated in the rulebook');
   });
 
   it('interview-fallback.md cites templates/INDEX.template.md and contains the same four header labels plus the interview-path not-applicable value', () => {
@@ -606,10 +576,26 @@ describe('v4.9 INGEST-04 — INDEX.md header block (template fill)', () => {
 });
 
 describe('v4.9 INGEST-03 — ## Open Rules Gaps section (template fill)', () => {
-  it('the synthesis contract cites INDEX.template.md and pins the Open Rules Gaps heading', () => {
-    const ingestRules = read('ingest/synthesis-subagent.md');
-    expect(ingestRules).toContain('INDEX.template.md');
-    expect(ingestRules).toContain('## Open Rules Gaps');
+  it('the command emits the exact Open Rules Gaps heading and empty token', () => {
+    const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
+    expect(cmd).toContain('## Open Rules Gaps');
+    expect(cmd).toContain('_None._');
+  });
+
+  it('INDEX.template.md and the command agree on every heading', () => {
+    // The command writes INDEX.md on the rulebook path; the template documents the same shape
+    // for the interview path. Two sources for one shape is how they drift apart, so pin them
+    // to agree rather than leaving it to review.
+    const template = read('templates/INDEX.template.md');
+    const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
+    for (const heading of ['## Open Rules Gaps', '## Slices', '## Term → Slice']) {
+      expect(template, `template must contain "${heading}"`).toContain(heading);
+      expect(cmd, `command must contain "${heading}"`).toContain(heading);
+    }
+    for (const label of ['Edition:', 'Source:', 'Source hash:', 'Transcribed:']) {
+      expect(template, `template must contain "${label}"`).toContain(label);
+      expect(cmd, `command must contain "${label}"`).toContain(label);
+    }
   });
 
   it('ingest-rules.md builds the section exclusively from openGaps[]', () => {
