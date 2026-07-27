@@ -67,7 +67,8 @@
     "lint:css": "stylelint 'src/ui/**/*.vue'",
     "audit:duplication": "npx jscpd src/ --min-lines 10 --min-tokens 100",
     "audit:dead-code": "npx fallow",
-    "audit": "npm run audit:dead-code && npm run audit:duplication"
+    "audit": "npm run audit:dead-code && npm run audit:duplication",
+    "harness:ingest": "node scripts/ingest-harness/run.mjs"
   },
   "files": [
     "dist",
