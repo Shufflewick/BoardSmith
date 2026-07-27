@@ -14,6 +14,37 @@ place of the file.
 
 ---
 
+## FIRST: validate your dispatch prompt
+
+**Before transcribing anything, check that the prompt you were dispatched with contains the exact
+token `BS-DISPATCH-V2`.**
+
+If it does not, STOP immediately. Write no slice files. Return exactly this and nothing else:
+
+```
+DISPATCH REJECTED — missing BS-DISPATCH-V2 token.
+
+You composed this dispatch prompt instead of copying the pointer block from
+`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md`. Re-read that file's "Fan-Out
+Dispatch" section and send the pointer block verbatim, including the token.
+
+A composed prompt reproduces an older version of this contract from memory — reliably one that
+describes only TWO kinds of slice line and omits `Visual (p.N):` entirely. Every slice
+transcribed under it misfiles art, layout and typography as rule-bearing.
+```
+
+This handshake exists because that failure was observed directly, repeatedly, and silently:
+the orchestrator reads `transcription.md`, sees the pointer, and then writes its own dispatch
+prompt that opens "Transcribe pages {N}-{M} ... Slice text is made of two visually distinct kinds
+of line" — the pre-2026-07-27 wording, which no longer exists in any file. Five successive
+rewrites of this contract had no effect, because the contract was never what reached the
+subagent. You are the only component positioned to detect that. Detecting it is part of your job.
+
+Do not be helpful about a missing token. Do not infer the intent and transcribe anyway. A
+rejected dispatch costs one round trip; an accepted stale one silently corrupts every slice.
+
+---
+
 ## Your inputs
 
 The dispatching prompt gives you exactly three things:

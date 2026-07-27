@@ -33,6 +33,8 @@ subagent reads it directly. Each dispatch prompt is short, and carries only the 
 substitutions the subagent cannot know on its own:
 
 ```
+BS-DISPATCH-V2
+
 Read `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md` in full and follow it
 exactly.
 
@@ -40,6 +42,14 @@ Your page range: {N}-{M}
 Rulebook path:   {rulebookPath}
 Write slices to: rulebook/
 ```
+
+**The `BS-DISPATCH-V2` token is required and the subagent validates it.** A dispatch without it is
+rejected unread. This is not ceremony: sessions reliably read this file, see this block, and then
+send a prompt they composed from memory instead — one that reproduces a superseded version of the
+contract describing only two kinds of slice line, silently dropping `Visual (p.N):`. You cannot
+produce the token from memory, so carrying it is the proof you copied this block rather than
+recalled one. Copy the block; do not retype it from what you remember a transcription prompt
+looking like.
 
 Fill `{rulebookPath}` with the actual path to the PDF/image files/text and `{N}`-`{M}` with the
 range — a fresh-context Task subagent has no inherited knowledge of where the source lives.

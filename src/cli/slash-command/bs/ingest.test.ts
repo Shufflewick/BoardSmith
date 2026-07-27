@@ -356,6 +356,49 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
 // specified string. The acceptance bar is `npm run harness:ingest`, not this file — see
 // scripts/ingest-harness/README.md.
 
+describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
+  // Root cause, observed directly via stream-json tool-call capture: the orchestrator reads
+  // transcription.md, sees the pointer block, and then dispatches a prompt it composed from
+  // memory -- reproducing the superseded inline contract that opened "Slice text is made of
+  // two visually distinct kinds of line". That wording exists in no file since 724befd7. The
+  // composed prompt omits Visual (p.N): entirely, which is why five rewrites of the contract
+  // changed nothing: the contract was never what reached the subagent.
+  //
+  // The token is unguessable from memory, so its presence proves the block was copied. The
+  // subagent validates it and rejects a dispatch without it -- detection at the only point in
+  // the system positioned to detect it.
+
+  it('the pointer block carries the token', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('BS-DISPATCH-V2');
+  });
+
+  it('transcription.md explains why the token cannot be produced from memory', () => {
+    const transcription = flat(read('ingest/transcription.md'));
+    expect(transcription).toMatch(/subagent validates it/);
+    expect(transcription).toMatch(/cannot produce the token from memory/);
+  });
+
+  it('the subagent validates the token before transcribing anything', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('BS-DISPATCH-V2');
+    expect(flat(contract)).toMatch(/FIRST: validate your dispatch prompt/);
+    expect(flat(contract)).toMatch(/DISPATCH REJECTED/);
+  });
+
+  it('the subagent is told not to be helpful about a missing token', () => {
+    const contract = flat(read('ingest/transcription-subagent.md'));
+    // A subagent that infers intent and transcribes anyway defeats the handshake entirely.
+    expect(contract).toMatch(/Do not be helpful about a missing token/);
+    expect(contract).toMatch(/Write no slice files/);
+  });
+
+  it('the rejection message names the two-kinds-of-line signature of a stale prompt', () => {
+    const contract = flat(read('ingest/transcription-subagent.md'));
+    expect(contract).toMatch(/TWO kinds of slice line/);
+  });
+});
+
 describe('v4.9 PROC-01 — re-read gates at the long-session handoff', () => {
   // Measured: compliance with Step 3 decays with session length. A 1-turn session performs it
   // correctly; 5 turns partially; 8, 13, and a real designer's session fail almost completely
