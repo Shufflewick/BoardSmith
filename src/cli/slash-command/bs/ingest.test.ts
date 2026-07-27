@@ -356,6 +356,45 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
 // specified string. The acceptance bar is `npm run harness:ingest`, not this file — see
 // scripts/ingest-harness/README.md.
 
+describe('v4.9 INGEST-02 — inline transcription path is contract-bound', () => {
+  // Observed via stream-json capture: for a 2-page rulebook the orchestrator dispatches a
+  // subagent nominally, then reads the PDF itself and writes every slice in the main stream,
+  // transcribing from a recalled (superseded) contract with no Visual (p.N): at all.
+  // Every rulebook in the ecosystem -- seven, one-two-punch, doom-machine -- is 2 pages, so
+  // this was happening on every real run and the fan-out contract reached nothing.
+  //
+  // Rather than insist on a path the model reliably abandons at that size, the inline path is
+  // now explicit AND bound by the same contract. A rule the system reliably breaks protects
+  // nothing.
+
+  it('transcription.md defines who transcribes before describing fan-out', () => {
+    const transcription = read('ingest/transcription.md');
+    const whoIdx = transcription.indexOf('## Who transcribes');
+    const fanIdx = transcription.indexOf('## Fan-Out Dispatch');
+    expect(whoIdx).toBeGreaterThan(-1);
+    expect(fanIdx).toBeGreaterThan(whoIdx);
+  });
+
+  it('both paths are bound by the same contract file', () => {
+    const transcription = flat(read('ingest/transcription.md'));
+    expect(transcription).toMatch(/both are governed by/);
+    expect(transcription).toMatch(/Whoever writes a slice file reads that contract first/);
+  });
+
+  it('the inline path is permitted only for short rulebooks and still requires the contract', () => {
+    const transcription = flat(read('ingest/transcription.md'));
+    expect(transcription).toMatch(/1-3 pages/);
+    expect(transcription).toMatch(/read `transcription-subagent.md` in full first/);
+    expect(transcription).toMatch(/held to the subagent's contract/);
+  });
+
+  it('the contract addresses the inline transcriber, not only a dispatched subagent', () => {
+    const contract = flat(read('ingest/transcription-subagent.md'));
+    expect(contract).toMatch(/or the orchestrator itself transcribing a short/);
+    expect(contract).toMatch(/Skip this section if you are the orchestrator transcribing inline/);
+  });
+});
+
 describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
   // Root cause, observed directly via stream-json tool-call capture: the orchestrator reads
   // transcription.md, sees the pointer block, and then dispatches a prompt it composed from

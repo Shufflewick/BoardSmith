@@ -17,7 +17,36 @@ this. It silently reintroduces the exact context-exhaustion failure mode this fa
 exists to avoid. If something looks wrong in a returned summary, ask the user or dispatch a
 narrower follow-up subagent — never fall back to reading the slice yourself.
 
-## Fan-Out Dispatch
+## Who transcribes — read this before choosing
+
+Two paths produce slices, and **both are governed by
+`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md`.** Whoever writes a slice
+file reads that contract first, in full, as an actual file read. There is no path where slices
+get written from a recollection of what a transcription prompt looks like.
+
+- **Rulebook of 4+ pages → fan-out.** Dispatch one subagent per page range, as below. Context
+  economics require it: the orchestrator cannot hold a long rulebook and still run the rest of
+  the skill.
+- **Rulebook of 1-3 pages → the orchestrator may transcribe inline**, without dispatching. At
+  that size, fan-out buys nothing and every observed session skipped it anyway. **If you take
+  this path, read `transcription-subagent.md` in full first and follow it exactly** — the same
+  three line kinds (`QUOTE` / `Derived (p.N):` / `Visual (p.N):`), the same decision test, the
+  same `Named-but-undefined` markers, the same structured summary per section. You are doing the
+  subagent's job; you are held to the subagent's contract.
+
+This branch is written down because pretending otherwise was measurably worse. Every rulebook in
+this ecosystem is 2 pages. Sessions were dispatching a subagent nominally, then reading the PDF
+and writing all slices in the orchestrator anyway — and, because they never read the contract,
+transcribing to a superseded version of it recalled from memory: two line kinds, no
+`Visual (p.N):` at all. The rule that "the orchestrator never reads the rulebook" was being
+violated on every real run, so the contract that rode on it never reached anything. A rule the
+system reliably breaks protects nothing; a rule matched to what actually happens does.
+
+The Context-Economics Hard Rule above still holds without exception for **slice re-reads** and
+for rulebooks large enough to fan out. Reading a 2-page source once, inline, to transcribe it is
+not the failure that rule guards against — accumulating slice text across a long session is.
+
+## Fan-Out Dispatch (4+ pages)
 
 Divide the rulebook into page ranges (e.g. pp. 1-8, 9-16, 17-24, ...) sized so each subagent's
 read stays bounded regardless of total rulebook length. The total page count needed to divide

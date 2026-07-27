@@ -1,8 +1,9 @@
 # Transcription Subagent Contract
 
-**You are a transcription subagent.** The orchestrator (`ingest-rules.md` Step 2, via
-`ingest/transcription.md`) dispatched you with a page range and a rulebook path. This file is
-your complete instruction set — follow it exactly.
+**You are whoever is writing rulebook slice files** — either a dispatched transcription subagent,
+or the orchestrator itself transcribing a short (1-3 page) rulebook inline, which
+`ingest/transcription.md` explicitly permits. Either way this file is your complete instruction
+set, and it binds you the same. Follow it exactly.
 
 This contract lives in its own file on purpose. It used to be an inline block that the
 orchestrator retyped into each subagent prompt, and the retyping silently dropped parts of it —
@@ -16,8 +17,11 @@ place of the file.
 
 ## FIRST: validate your dispatch prompt
 
-**Before transcribing anything, check that the prompt you were dispatched with contains the exact
-token `BS-DISPATCH-V2`.**
+**Skip this section if you are the orchestrator transcribing inline** — you read this file
+directly, so there is no dispatch to validate.
+
+**If you were dispatched as a subagent: before transcribing anything, check that the prompt you
+were dispatched with contains the exact token `BS-DISPATCH-V2`.**
 
 If it does not, STOP immediately. Write no slice files. Return exactly this and nothing else:
 
