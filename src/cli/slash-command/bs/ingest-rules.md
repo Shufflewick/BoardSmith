@@ -97,10 +97,19 @@ full by this orchestrator.
 
 ## Step 2.5: Archive the Source Rulebook (INGEST-01)
 
-This step has exactly one deliverable: after this step, `rulebook/source/<original-filename>`
-exists and its SHA-256 is known. Step 3 cannot write `rulebook/INDEX.md`'s `Source hash:` line
-without the value this step computes — a skipped Step 2.5 must surface as a **blocked Step 3**,
-never as a silently missing line.
+**Do this step now, before Step 3, as its own concrete action — not a detail folded into
+Synthesis.** This step has exactly one deliverable: after this step,
+`rulebook/source/<original-filename>` exists on disk and its SHA-256 is known. Step 3 cannot
+write `rulebook/INDEX.md`'s `Source hash:` line without the value this step computes — a skipped
+Step 2.5 must surface as a **blocked Step 3**, never as a silently missing line. Do not defer
+this step's shell commands to "later" or fold them into Step 3's synthesis prose — run them here,
+between dispatching transcription/interview (Step 2) and writing any Step 3 artifact.
+
+Concretely, in order: (1) run a copy command placing the source file bound at Step 2
+(`{rulebookPath}`) at `rulebook/source/<original-filename>`; (2) run
+`shasum -a 256 rulebook/source/<original-filename>` (or the `sha256sum` fallback) and read its
+actual output; (3) hold that 64-hex-character value for Step 3's `Source hash:` line. All three
+are real tool invocations this session runs itself, not steps to summarize as already done.
 
 Copy the source file bound at Step 2 (`{rulebookPath}`) to `rulebook/source/<original-filename>`,
 preserving the original filename verbatim. This is a **copy**, never a move, rename, delete, or
@@ -127,13 +136,18 @@ See `ingest/interview-fallback.md`'s "Output Re-Target" for that path's header v
 Once transcription or interview output has landed, this orchestrator-only step assembles the
 following artifacts **from subagent-returned summaries only** — never from re-reading slices:
 
-1. **`rulebook/INDEX.md` — copy and fill the template.** Copy
-   `${CLAUDE_SKILL_DIR}/../bs-shared/templates/INDEX.template.md` into the project as
-   `rulebook/INDEX.md` and fill its placeholders — exactly as Step 7 already does for
-   `SKETCH.template.md` and `CHUNK.template.md`. Cite the template rather than restating its
-   content: it carries the four header labels, the `## Open Rules Gaps` heading and its
-   `_None._`/no-deduplication rules, the `## Slices` table, and the `## Term → Slice` table, each
-   with its own fill instructions. The fill needs:
+1. **`rulebook/INDEX.md` — copy and fill the template. Do this literally, as the FIRST
+   concrete action of this step, before drafting any other Step 3 artifact.** Read
+   `${CLAUDE_SKILL_DIR}/../bs-shared/templates/INDEX.template.md` in full, then write
+   `rulebook/INDEX.md` starting from that exact structure — same H1, same comments-become-fills,
+   same three headings, same order — with its placeholders filled. This is a **copy-then-fill**
+   operation on a real file this session reads and writes itself, the same mechanical action Step
+   7 performs for `SKETCH.template.md` and `CHUNK.template.md` — it is not a paraphrase of what
+   the template roughly says. If what gets written does not contain, verbatim, `## Open Rules
+   Gaps`, `## Slices`, and `## Term → Slice`, the template was not actually read. Cite the
+   template rather than restating its content: it carries the four header labels, the
+   `## Open Rules Gaps` heading and its `_None._`/no-deduplication rules, the `## Slices` table,
+   and the `## Term → Slice` table, each with its own fill instructions. The fill needs:
    - the `edition` field the opening-pages transcription subagent returned (or the interview
      path's `unpublished — designer statement` value — never the reverse);
    - the archived path and hash Step 2.5 produced;
