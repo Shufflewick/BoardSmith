@@ -31,7 +31,7 @@ the tag.
 
 ### Process (PROC)
 
-- [ ] **PROC-01**: Every skill change is proven against a real bs-built game (seven or
+- [x] **PROC-01**: Every skill change is proven against a real bs-built game (seven or
       one-two-punch), not only against the skill text — a skill edit that cannot be demonstrated on
       a real project is not done.
 - [x] **PROC-02**: Fix → write tests → adversarially verify the fix holds → only then close.
@@ -134,7 +134,7 @@ the tag.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROC-01 | Phase 170 | Pending |
+| PROC-01 | Phase 170 | Complete |
 | PROC-02 | Phase 170 | Pending |
 | INGEST-01 | Phase 170 | Pending |
 | INGEST-02 | Phase 170 | Pending |
