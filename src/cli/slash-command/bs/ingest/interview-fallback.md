@@ -169,6 +169,20 @@ referenced in each answer (component names, mechanic vocabulary) are collected i
 identically — the orchestrator's Step 3 synthesis does not need to know which input path
 produced the terms it's indexing.
 
+This path also carries the same four-line `rulebook/INDEX.md` header block
+`ingest-rules.md` Step 3 writes for the transcription path — no line is omitted here either, even
+though there is no source file to archive on this path:
+
+- `Edition:` keeps its existing `unpublished — designer statement` value.
+- `Source:` and `Source hash:` are each written with the explicit value
+  `not applicable — no source rulebook (interview path)`, since there is nothing to archive or
+  hash on this path — there is no `rulebook/source/` directory here, and that absence is expected
+  only on this path.
+- `Transcribed:` is the ISO date of the interview session.
+
+`## Open Rules Gaps` is written on this path too, on the same always/`_None._` terms Step 3
+describes, populated from any rule the designer named but could not define during the interview.
+
 ## Aspect Detection (cite, do not recopy)
 
 After the interview is confirmed, detect which aspects apply using the keyword table in
