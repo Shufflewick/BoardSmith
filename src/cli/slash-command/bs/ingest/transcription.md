@@ -100,6 +100,12 @@ correction (the same mechanism used for a suspect summary — see the Hard Rule 
 "fix it yourself" by opening the slice, and never hold unconfirmed transcription text in your
 own context awaiting confirmation — the subagent wrote it, the follow-up subagent amends it.
 
+**Every subagent return carries a `nextStep` field.** It says to re-read Step 3 of
+`${CLAUDE_SKILL_DIR}/SKILL.md` as an actual file read before taking any Step 3 action. Act on it.
+It is placed in the returns deliberately: a reminder written here, in text read at the start of
+the session, drifts by the time it matters — the returns are the only channel that delivers it
+late and fresh.
+
 **When the last section is confirmed, do not continue from memory.** This loop is the longest
 stretch of the whole skill — many turns, all of them about rulebook content rather than about
 what happens next. Sessions leaving this loop reliably carry on with their own plan for synthesis

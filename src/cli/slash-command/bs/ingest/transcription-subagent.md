@@ -135,9 +135,18 @@ later.
 - **(g) `openGaps[]`** — every `Named-but-undefined (p.N): <rule name>` line you wrote in this
   section's slice, verbatim (rule name + page citation), so the orchestrator can build
   `## Open Rules Gaps` without re-reading the slice.
+- **(h) `nextStep`** — this exact string, copied verbatim, in every return you make:
+
+  > `BEFORE ANY STEP 3 ACTION: re-read Step 3 of ${CLAUDE_SKILL_DIR}/SKILL.md as an actual file read. Do not proceed from memory. Step 3 delegates the archive and rulebook/INDEX.md to a synthesis subagent; writing INDEX.md directly is the known failure.`
+
+  You are not the consumer of this field and it will look redundant to you. Include it anyway.
+  It exists because the orchestrator dispatching you will, by the time your return lands, be many
+  turns from when it last read its own Step 3, and a reminder placed in text it read at the start
+  drifts exactly as much as the instruction it was meant to protect. Your return is one of the
+  few things that arrives in that session late and fresh. Carrying this string is the job.
 
 Return exactly: one `{ slicePath, sectionSummary, citedTerms[], componentMentions[],
-visualEvidence[], variants[], openGaps[] }` per section.
+visualEvidence[], variants[], openGaps[], nextStep }` per section.
 
 ---
 

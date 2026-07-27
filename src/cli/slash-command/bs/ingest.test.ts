@@ -386,6 +386,22 @@ describe('v4.9 PROC-01 — re-read gates at the long-session handoff', () => {
     expect(step3).toMatch(/13-turn|13 turn/);
   });
 
+  it('the subagent return shape carries a nextStep re-read carrier', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('nextStep');
+    expect(flat(contract)).toMatch(/BEFORE ANY STEP 3 ACTION/);
+    // The carrier exists because returns are the only channel delivering content late and
+    // fresh; a reminder in start-of-session text drifts exactly as much as what it protects.
+    expect(flat(contract)).toMatch(/arrives in that session late and fresh/);
+    expect(contract).toMatch(/openGaps\[\], nextStep \}/);
+  });
+
+  it('the orchestrator is told the returns carry nextStep and to act on it', () => {
+    const transcription = flat(read('ingest/transcription.md'));
+    expect(transcription).toMatch(/Every subagent return carries a `nextStep` field/);
+    expect(transcription).toMatch(/Act on it/);
+  });
+
   it('the confirmation loop hands off with its own re-read instruction', () => {
     const transcription = flat(read('ingest/transcription.md'));
     expect(transcription).toMatch(/When the last section is confirmed, do not continue from memory/);
