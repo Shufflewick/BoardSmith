@@ -356,6 +356,44 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
 // specified string. The acceptance bar is `npm run harness:ingest`, not this file — see
 // scripts/ingest-harness/README.md.
 
+describe('v4.9 PROC-01 — re-read gates at the long-session handoff', () => {
+  // Measured: compliance with Step 3 decays with session length. A 1-turn session performs it
+  // correctly; 5 turns partially; 8, 13, and a real designer's session fail almost completely
+  // (archive skipped, INDEX.md composed freehand, delegation silently replaced by a direct
+  // write). See 170-HARNESS-REPAIR-SUMMARY.md.
+  //
+  // Six prior fixes all changed text the session reads ONCE, EARLY, then drifts from. These
+  // gates instead force a re-read at the moment of use. Removing them removes the only
+  // mechanism aimed at the actual variable.
+
+  it('Step 3 opens with a re-read gate naming SKILL.md as an actual file read', () => {
+    const ingestRules = read('ingest-rules.md');
+    const step3 = flat(
+      ingestRules.slice(ingestRules.indexOf('## Step 3: Synthesis'), ingestRules.indexOf('## Step 4:')),
+    );
+    expect(step3).toMatch(/STOP\. Re-read this step from the file before doing anything in it/);
+    expect(step3).toContain('SKILL.md');
+    expect(step3).toMatch(/Do not proceed from memory/);
+  });
+
+  it('the Step 3 gate states the measured decay rather than generic caution', () => {
+    const ingestRules = read('ingest-rules.md');
+    const step3 = flat(
+      ingestRules.slice(ingestRules.indexOf('## Step 3: Synthesis'), ingestRules.indexOf('## Step 4:')),
+    );
+    // A gate that reads as boilerplate gets skimmed; the evidence is what earns the re-read.
+    expect(step3).toMatch(/one turn/i);
+    expect(step3).toMatch(/13-turn|13 turn/);
+  });
+
+  it('the confirmation loop hands off with its own re-read instruction', () => {
+    const transcription = flat(read('ingest/transcription.md'));
+    expect(transcription).toMatch(/When the last section is confirmed, do not continue from memory/);
+    expect(transcription).toContain('SKILL.md');
+    expect(transcription).toMatch(/highest-risk handoff/);
+  });
+});
+
 describe('v4.9 INGEST-01 — source archive + SHA-256 (delegated to a synthesis subagent)', () => {
   // Four in-line mechanisms were tried and refuted against live harness runs:
   //   1. reworded instructions + self-limiting DERIVED definition   -> no effect

@@ -100,6 +100,14 @@ correction (the same mechanism used for a suspect summary — see the Hard Rule 
 "fix it yourself" by opening the slice, and never hold unconfirmed transcription text in your
 own context awaiting confirmation — the subagent wrote it, the follow-up subagent amends it.
 
+**When the last section is confirmed, do not continue from memory.** This loop is the longest
+stretch of the whole skill — many turns, all of them about rulebook content rather than about
+what happens next. Sessions leaving this loop reliably carry on with their own plan for synthesis
+instead of the one `ingest-rules.md` Step 3 specifies, skipping the source archive and composing
+`rulebook/INDEX.md` freehand. Re-open `${CLAUDE_SKILL_DIR}/SKILL.md` and re-read Step 3 as an
+actual file read before taking any Step 3 action. Exiting this loop is the single highest-risk
+handoff in the skill.
+
 ## Orchestrator Records (never writes slices, never re-reads them)
 
 The subagents write every `rulebook/NN-topic.md`; the orchestrator only accumulates the

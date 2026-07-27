@@ -97,6 +97,22 @@ full by this orchestrator.
 
 ## Step 3: Synthesis
 
+> **STOP. Re-read this step from the file before doing anything in it.**
+>
+> Open `${CLAUDE_SKILL_DIR}/SKILL.md` and re-read Step 3 in full, right now, as an actual file
+> read. Do not proceed from memory.
+>
+> This is not boilerplate caution. Step 2's per-section confirmation loop takes many turns, and
+> by the time you arrive here you last read this text a long way back in the session. Measured
+> behavior: a session reaching Step 3 in one turn performs this step correctly; the same text in
+> a 5-turn session performs it partially; in 8- and 13-turn sessions, and in a real designer's
+> session, it fails almost completely — the archive is skipped, `rulebook/INDEX.md` gets composed
+> freehand with invented headings, and the delegation below is silently replaced by writing the
+> file directly.
+>
+> That failure does not feel like forgetting. It feels like already knowing what this step says.
+> The re-read is what makes the difference, so do it before the first action, not after.
+
 Once transcription or interview output has landed, this orchestrator-only step assembles the
 following artifacts **from subagent-returned summaries only** — never from re-reading slices.
 
