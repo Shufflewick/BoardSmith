@@ -46,7 +46,13 @@ no archived source degrades honestly instead of failing.
   2. Transcription output distinguishes `Visual (p.N):` diagram/art/layout lines from `Derived (p.N):` rule-inference lines in the generated slices.
   3. `rulebook/INDEX.md` for a freshly-ingested game carries a standardized `## Open Rules Gaps` section plus edition/source-file/transcription-date header lines a designer can read without opening any slice.
   4. Every skill-text change landed in this phase is demonstrated against a real ingest run (not skill-text review alone) and locked by a regression test — the pattern every subsequent phase follows.
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 170-01-PLAN.md — transcription.md: Derived/Visual decision test + `openGaps[]` return field (INGEST-02, INGEST-03)
+- [ ] 170-02-PLAN.md — ingest-rules.md Step 3: source archive + SHA-256, INDEX header block, always-emitted `## Open Rules Gaps` (INGEST-01, INGEST-03, INGEST-04)
+- [ ] 170-03-PLAN.md — PROC-01 manual proof: real `/bs-ingest-rules` run against seven/rules.pdf, output captured (PROC-01)
+- [ ] 170-04-PLAN.md — golden INDEX.md fixtures + artifact-shape test + PROC-02 adversarial closure (INGEST-03, INGEST-04, PROC-02)
 
 ### Phase 171: Provenance Recording
 **Goal**: The build pipeline and status reporting both know, honestly, what was verified against what.
