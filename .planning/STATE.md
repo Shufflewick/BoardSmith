@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-07-27T16:25:43.972Z"
 last_activity: 2026-07-27
 progress:
-  total_phases: 0
+  total_phases: 10
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 170 of 179 (Ingest Contract Upgrade) — ready to plan
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-27 — Milestone v4.9 started
+Status: Roadmap defined, ready for /gsd:plan-phase 170
+Last activity: 2026-07-27 — v4.9 roadmap created (10 phases, 170-179; 25/25 requirements mapped)
 
 ## Milestones
 
@@ -118,6 +118,15 @@ Carried forward from v4.0 (still deferred, separate repo): ShufflewickPub host s
 ## Accumulated Context
 
 ### Roadmap Evolution
+
+- v4.9 roadmap defined (2026-07-27): 10 phases (170-179), 25 requirements (PROC, INGEST, PROV, VERIFY, CHECK, TEST) derived from direct inspection of the two bs-built reference games (`~/BoardSmithGames/seven`, `~/BoardSmithGames/one-two-punch`). Continues phase numbering from v4.8 (ended at 169).
+  - Phase 170 (Ingest Contract Upgrade) bundles PROC-01/PROC-02 with INGEST-01..04 — the milestone's verify-first process discipline is established alongside the archived-source/Visual-Derived-split/Open-Rules-Gaps prerequisites everything downstream reads, rather than given its own phase (PROC items are a recurring discipline, not standalone deliverable).
+  - Phase 172 (CHECK-03 traceability sweep + CHECK-05 code drift) is deliberately sequenced right after Provenance (171) and before the verify pipeline itself — both checks need neither the ingest changes nor re-transcription, so they land early and are proven immediately against seven/one-two-punch, de-risking the rest of the milestone per the roadmapper's phasing guidance.
+  - Phase 174 (VERIFY-03, the 4-way cosmetic/sharper/contradictory/source-changed classifier) is its own single-requirement phase — the highest-risk item in the milestone (two good-faith transcriptions of the same page differ in wording almost everywhere; an over-flagging classifier makes the skill unusable on its second run) gets room to be tuned and validated against real pass-1-vs-pass-2 output rather than being buried inside a larger phase.
+  - Phase 177 (CHECK-04 derived-line re-derivation) is split out from the Phase 172 source-free-checks phase because it depends on Phase 170's Derived/Visual split (needs separable rule-bearing lines), unlike CHECK-03/CHECK-05 which depend on neither ingest nor re-transcription.
+  - Phase 178 groups CHECK-06 (worked-example replay in verify) with TEST-01 (build/test.md worked-example test generation) since both derive executable tests from the same worked-example source and should share derivation logic rather than duplicate it.
+  - Phase 179 (VERIFY-09 source-free mode) is the capstone, depending on Phase 172's checks, Phase 177's check, and Phase 171's PROV-02 scope-recording — it wires the source-free checks together with honest scope reporting.
+  - Coverage: 25/25 requirements mapped, no orphans, no duplicates (see REQUIREMENTS.md Traceability table).
 
 - v4.8 roadmap defined (2026-07-20): 15 phases (155–169), 40 requirements (PROC, UNDO, AUTOEXEC, ENDGAME, ZOOM, AI, SIM, DEVHOST, TOOL, SPACE, LIBX, PLATLOG, SKILLDEF, SKILLAUTO, FEAT, SWEEP) derived from the 5-game build-battery post-mortem (`~/BoardSmithLab/findings/BATTERY-POST-MORTEM.md`). Continues phase numbering from v4.7 (ended at 154). Covers all 32 deduped library/platform defects (Part A, D1–D32), both filed skills defects + the autonomy rewrite (Part B), the three platform features (C.1→168, C.2→159, C.3→164+166), and the post-fix game de-workaround sweep (Part E #6→169). Part G (lab methodology) deliberately excluded — belongs to the lab, not this repo.
   - Phases ordered by the Part A priority ranking: multi-game defects first (155 D1/D2, 156 D7, 157 D10/D11, 158 D12), then AI-blocking (159 D9/D8), then simultaneous-step + single-game/minor (160–165), then skills (166–167), feature spike (168), and the de-workaround sweep last (169, spans the game repos not the library). D1+D2 co-located in Phase 155 because the post-mortem notes one fix largely closes both (shared root cause). C.2 folded into Phase 159 (it overlaps D9's panel/enumeration work); C.3 split library-half (164 LIBX-01) + skills-half (166 SKILLDEF-03).

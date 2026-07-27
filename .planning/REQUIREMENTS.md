@@ -64,9 +64,14 @@ the tag.
       per-chunk verdict without rebuilding the game.
 - [ ] **VERIFY-02**: The skill re-transcribes the full rulebook from archived source into a staging
       tree non-destructively — existing slices are never overwritten before the pass closes.
-- [ ] **VERIFY-03**: Each slice pair is classified `cosmetic` / `sharper` / `contradictory` /
-      `source-changed`; only `sharper` and `contradictory` mark chunks stale, so independent
-      re-wording does not flag every chunk.
+- [ ] **VERIFY-03**: Each slice pair is classified on two independent dimensions — **provenance**
+      (`source-changed` or `source-unchanged`, from the archived source hash) and **rule delta**
+      (`cosmetic` / `sharper` / `contradictory`, from semantic comparison of the two
+      transcriptions). Staleness keys off the rule delta alone: `sharper` or `contradictory` marks
+      chunks stale whether or not the source bytes moved, so independent re-wording does not flag
+      every chunk and a genuine edition change is not missed. `source-changed` is recorded
+      provenance and is always reported to the human — an edition change is a fact the designer
+      must see — but it is not itself a staleness verdict.
 - [ ] **VERIFY-04**: A `contradictory` classification always stops and asks the human, with both
       readings quoted side by side; the resolution is recorded in `RULINGS.md`.
 - [ ] **VERIFY-05**: Chunks affected by a changed slice flip to a rules-staleness marker visible in
@@ -129,4 +134,28 @@ the tag.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _(filled by roadmap)_ | | |
+| PROC-01 | Phase 170 | Pending |
+| PROC-02 | Phase 170 | Pending |
+| INGEST-01 | Phase 170 | Pending |
+| INGEST-02 | Phase 170 | Pending |
+| INGEST-03 | Phase 170 | Pending |
+| INGEST-04 | Phase 170 | Pending |
+| PROV-01 | Phase 171 | Pending |
+| PROV-02 | Phase 171 | Pending |
+| PROV-03 | Phase 171 | Pending |
+| CHECK-03 | Phase 172 | Pending |
+| CHECK-05 | Phase 172 | Pending |
+| VERIFY-01 | Phase 173 | Pending |
+| VERIFY-02 | Phase 173 | Pending |
+| VERIFY-07 | Phase 173 | Pending |
+| VERIFY-08 | Phase 173 | Pending |
+| VERIFY-03 | Phase 174 | Pending |
+| VERIFY-04 | Phase 175 | Pending |
+| VERIFY-05 | Phase 175 | Pending |
+| VERIFY-06 | Phase 175 | Pending |
+| CHECK-01 | Phase 176 | Pending |
+| CHECK-02 | Phase 176 | Pending |
+| CHECK-04 | Phase 177 | Pending |
+| CHECK-06 | Phase 178 | Pending |
+| TEST-01 | Phase 178 | Pending |
+| VERIFY-09 | Phase 179 | Pending |
