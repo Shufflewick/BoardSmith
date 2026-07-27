@@ -38,7 +38,7 @@ checks in the current directory, never `**/glob` patterns that search subfolders
    wrote the sketch. This is NOT a fresh directory: running Step 1's `init` here would
    scaffold a nested `<name>/<name>/` project, and re-transcribing would orphan the
    already-confirmed slices. STOP and ask the user whether to **resume from the existing
-   slices** (skip Steps 1-2, re-run Step 3 onward from the slices' accumulated INDEX/ASSETS
+   slices** (skip Steps 1-2, re-run Step 2.5 onward from the slices' accumulated INDEX/ASSETS
    content — re-dispatching narrow subagents only for anything missing) or **discard and
    restart** (delete `rulebook/`, `ASSETS.md`, and any `chunks/`, then treat the project
    directory per Step 1's verification-only path — `init` already ran). Never proceed
@@ -95,68 +95,61 @@ by this session from the designer's short answers in the interview path — and 
 `citedTerms[]` / `componentMentions[]` for Step 3's synthesis; no slice is ever read back in
 full by this orchestrator.
 
+## Step 2.5: Archive the Source Rulebook (INGEST-01)
+
+This step has exactly one deliverable: after this step, `rulebook/source/<original-filename>`
+exists and its SHA-256 is known. Step 3 cannot write `rulebook/INDEX.md`'s `Source hash:` line
+without the value this step computes — a skipped Step 2.5 must surface as a **blocked Step 3**,
+never as a silently missing line.
+
+Copy the source file bound at Step 2 (`{rulebookPath}`) to `rulebook/source/<original-filename>`,
+preserving the original filename verbatim. This is a **copy**, never a move, rename, delete, or
+overwrite: ingest never touches the designer's original — a source already sitting at the project
+root (e.g. `rules.pdf` in the project root) stays exactly where it is, untouched, in addition to
+the new copy under `rulebook/source/`. If a file already exists at the archive destination, STOP
+and ask the designer rather than clobbering it.
+
+Verify the copy before continuing: the archived file must exist and be byte-identical to the
+source (same size, same hash as computed below). This is a deterministic shell operation, not
+agent judgment: compute the SHA-256 of the **archived** file with
+`shasum -a 256 rulebook/source/<original-filename>` (macOS/BSD; use
+`sha256sum rulebook/source/<original-filename>` as the Linux/CI fallback, since GNU/Linux ships
+`sha256sum` rather than `shasum`), taking the first whitespace-delimited field as the hash. Never
+report a hash you did not compute by actually running the command. The computed hash is carried
+forward to Step 3's `Source hash:` line.
+
+**Interview-path exception:** on the interview path there is no source file — this step does not
+run, no `rulebook/source/` directory is created, and that absence is expected only on that path.
+See `ingest/interview-fallback.md`'s "Output Re-Target" for that path's header values instead.
+
 ## Step 3: Synthesis
 
 Once transcription or interview output has landed, this orchestrator-only step assembles the
 following artifacts **from subagent-returned summaries only** — never from re-reading slices:
 
-1. **Archive the source + compute its hash (INGEST-01).** Before writing `rulebook/INDEX.md`,
-   copy the source file bound at Step 2 (`{rulebookPath}`) to `rulebook/source/<original-filename>`,
-   preserving the original filename verbatim. This is a **copy**, never a move, rename, delete,
-   or overwrite: ingest never touches the designer's original — a source already sitting at the
-   project root (e.g. `rules.pdf` in the project root) stays exactly where it is, untouched, in
-   addition to the new copy under `rulebook/source/`. If a file already exists at the archive
-   destination, STOP and ask the designer rather than clobbering it. Verify the copy before
-   continuing: the archived file must exist and be byte-identical to the source (same size, same
-   hash as computed below). This is a deterministic shell operation, not agent judgment: compute
-   the SHA-256 of the **archived** file with `shasum -a 256 rulebook/source/<original-filename>`
-   (macOS/BSD; use `sha256sum rulebook/source/<original-filename>` as the Linux/CI fallback,
-   since GNU/Linux ships `sha256sum` rather than `shasum`), taking the first whitespace-delimited
-   field as the hash. Never report a hash you did not compute by actually running the command.
-   On the interview path there is no source file — see `ingest/interview-fallback.md`'s "Output
-   Re-Target" for that path's header values instead; no `rulebook/source/` directory is created
-   there, and that absence is expected only on that path.
-2. **`rulebook/INDEX.md`** — a term → slice-file cross-reference table, built exclusively from
-   the accumulated `citedTerms[]` lists.
-3. **The INDEX.md header block (INGEST-04).** Write a fixed four-line prose block at the top of
-   `rulebook/INDEX.md`, above the `## Slices` and `## Term → Slice` tables (never disturb those
-   tables — `/bs-check-status` and every chunk's term→slice sweep parse them), in this exact
-   order with these exact labels:
-   - `Edition:` — the edition/printing, sourced from the `edition` field the opening-pages
-     transcription subagent returns (or from the user if the rulebook states none; on the
-     interview path it reads "unpublished — designer statement" — see
-     `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` "Edition").
-   - `Source:` — the in-project archived path, `rulebook/source/<original-filename>` (never an
-     external absolute path).
-   - `Source hash:` — the bare 64-hex-character SHA-256 computed in item 1 above.
-   - `Transcribed:` — the ISO date (YYYY-MM-DD) of this ingest session.
+1. **`rulebook/INDEX.md` — copy and fill the template.** Copy
+   `${CLAUDE_SKILL_DIR}/../bs-shared/templates/INDEX.template.md` into the project as
+   `rulebook/INDEX.md` and fill its placeholders — exactly as Step 7 already does for
+   `SKETCH.template.md` and `CHUNK.template.md`. Cite the template rather than restating its
+   content: it carries the four header labels, the `## Open Rules Gaps` heading and its
+   `_None._`/no-deduplication rules, the `## Slices` table, and the `## Term → Slice` table, each
+   with its own fill instructions. The fill needs:
+   - the `edition` field the opening-pages transcription subagent returned (or the interview
+     path's `unpublished — designer statement` value — never the reverse);
+   - the archived path and hash Step 2.5 produced;
+   - today's ISO date;
+   - the accumulated `openGaps[]` lists, for `## Open Rules Gaps`;
+   - the accumulated `citedTerms[]` lists, for `## Term → Slice`.
 
-   These are prose lines, not YAML frontmatter, matching the INDEX.md style a designer already
-   reads. **All four lines are always written; a line is never dropped.** When a value is
-   genuinely unknown, write the line with the explicit value `not stated in the rulebook` rather
-   than omitting it. Variant/optional/advanced rules were already tagged out-of-scope-by-default
-   **in the slices at write time** by the transcription subagents (per
-   `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` "Variant / Optional / Advanced
-   Rules" — this orchestrator never edits a slice); this step's only variant job is to build the
-   `SKETCH.md` "Variants (deferred)" listing from the accumulated `variants[]` lists the
-   subagents return.
-4. **`## Open Rules Gaps` (INGEST-03).** Write a section whose heading is exactly
-   `## Open Rules Gaps` (no parenthetical suffix) into `rulebook/INDEX.md`, assembled
-   **exclusively** from the accumulated `openGaps[]` lists the transcription subagents return —
-   never by sweeping or grepping the slice files; the orchestrator does not re-read slices. The
-   section is written **always**: when no gaps were returned, its body is exactly `_None._`, so
-   an absent section is a defect rather than an ambiguity. Carry a one-sentence honesty note
-   stating that it reports what transcription *marked* as named-but-undefined and does not claim
-   to be an exhaustive list of the rulebook's gaps. **List every `openGaps[]` entry returned, one
-   per subagent report, even if the same rule name recurs across slices — do not deduplicate.** A
-   recurring name is itself signal (the rulebook names the rule in more than one place and
-   defines it in none).
-5. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
+   Two prohibitions, stated explicitly because they are the exact defects a prior proof run
+   produced: do not rewrite, reword, abbreviate, or reorder any heading the template ships, and
+   do not compose an `INDEX.md` from scratch as an alternative to copying the template.
+2. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
    approximate aspect ratios (cards, tiles, board proportions), seeded into `ASSETS.md`.
-6. **`ASSETS.md`** — the component/asset ledger (needed-by-chunk, requested, received,
+3. **`ASSETS.md`** — the component/asset ledger (needed-by-chunk, requested, received,
    placeholder-in-use, file path — see `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md`), seeded from the
    component inventory above. Assets are recorded as debt here, never requested up front.
-7. **Visual identity survey** — evidence only, no decision made cold: dominant palette
+4. **Visual identity survey** — evidence only, no decision made cold: dominant palette
    candidates, typography feel, iconography, notes on board/card art, and descriptions of setup
    diagrams and embedded component images. Built exclusively from the accumulated
    `visualEvidence[]` lists the transcription subagents return (parallel to how INDEX.md is
@@ -169,8 +162,15 @@ following artifacts **from subagent-returned summaries only** — never from re-
    the evidence the design ask depends on would be gone the moment this session ends. The
    actual design direction is decided there, at the first UI chunk's `ask` step, against
    `DESIGN.md`.
-8. **Player counts** — min/max player counts and any per-count setup differences, recorded at
+5. **Player counts** — min/max player counts and any per-count setup differences, recorded at
    sketch level.
+
+Variant/optional/advanced rules were already tagged out-of-scope-by-default **in the slices at
+write time** by the transcription subagents (per
+`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` "Variant / Optional / Advanced Rules"
+— this orchestrator never edits a slice); this step's only variant job is to build the
+`SKETCH.md` "Variants (deferred)" listing from the accumulated `variants[]` lists the subagents
+return.
 
 ## Step 4: Sketch Derivation
 
@@ -250,6 +250,7 @@ And to the shared reference files that ship with every `bs-` skill:
 - `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` — status enum, consistency check, session lock, write order, authority
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md` — the sketch skeleton this skill fills
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md` — the asset ledger skeleton this skill seeds
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/INDEX.template.md` — the rulebook index skeleton Step 3 copies and fills
 
 **Installed location:** this file installs as `.claude/skills/bs-ingest-rules/SKILL.md`. The
 shared `ingest/`, `templates/`, and `state-machine.md` referenced above install under the
