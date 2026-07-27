@@ -8,6 +8,24 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
+## Current Milestone: v4.9 BS Skills Re-Verification
+
+**Goal:** Re-verify a built game against its rules — catching drift introduced by improved models, improved rulebooks, or improved bs skills.
+
+**Target features:**
+- `/bs-verify-game` — full re-transcription from archived source, semantic classification of pass-1 vs pass-2 (`cosmetic` / `sharper` / `contradictory` / `source-changed`), impact map onto chunks, then the existing audit lenses + bounded repair loop. `contradictory` always gates to the human; re-playtest only chunks whose code changed during repair.
+- Ruling re-validation — every `RULINGS.md` entry re-checked against the fresh transcription, respecting supersession chains.
+- Source-free conformance mode — claim↔test↔ruling traceability sweep plus code drift since the verified commit, for projects whose source is unavailable.
+- Derived-line re-derivation — rule-bearing inferences (deck arithmetic, round counts) re-derived independently of pass 1.
+- Worked-example replay — rulebook examples as executable tests, in both the verify skill and `build/test.md` so new games accumulate them systematically.
+- Provenance and ingest contract — a `## Verified Against` block (slice hashes, edition, BoardSmith version, skills version, verification scope); archive the source rulebook into the project; split the overloaded `Derived` prefix into `Derived` (rule inference) and `Visual` (diagram/art); standardize the `## Open Rules Gaps` INDEX section.
+
+**Key context:**
+- Revert point tagged `bs-skills-pre-verify` at `2e92a3ee` before any work. `~/.claude/skills/` is not version controlled — a full revert requires re-running `npx boardsmith claude --force` from the tag.
+- The installed skills were behind repo source (v4.8 Phase 167's autonomy rewrite was never installed); reinstalled at milestone start so the baseline is coherent.
+- Evidence base is the two bs-built reference games, `~/BoardSmithGames/seven` and `~/BoardSmithGames/one-two-punch`. Findings that shape the design: `RULINGS.md` is the reliable index of rule gaps (26 and 20+ entries, each carrying a citation field) while `Named-but-undefined` is not (0 vs 4 markers); tests already carry claim/ruling annotations (140/227 and 214/212), giving a machine-traceable code↔interpretation chain; the `Derived` prefix is overloaded with diagram/art descriptions (8 of 12 in one-two-punch); seven's Ruling 1 supplies the entire scoring table from designer statement because the "Ways to Score" card is absent from the PDF.
+- No migration phase. Existing games verify in whatever mode their artifacts support — both reference games retain `rules.pdf`, so the source-based path still runs on them and the verify skill writes their provenance stamp on first run.
+
 ## Previous: v4.8 Shipped
 
 **Shipped:** 2026-07-22. 14/15 phases (155–169); Phase 165/D32 deferred-to-platform (audit `milestones/v4.8-MILESTONE-AUDIT.md`, status tech_debt → fixable debt resolved same session). Library suite 3141 green; all 5 game repos green.
