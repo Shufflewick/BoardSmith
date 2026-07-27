@@ -1,8 +1,8 @@
 ---
 phase: 170
 slug: ingest-contract-upgrade
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-27
 ---
@@ -48,8 +48,10 @@ created: 2026-07-27
 | TBD | 02 | 2 | INGEST-01 (archive + SHA-256) | — | N/A | skill-text contract | `npx vitest run src/cli/slash-command/bs/ingest.test.ts` | ✅ | ⬜ pending |
 | TBD | 02 | 2 | INGEST-03 (`## Open Rules Gaps` assembly) | — | N/A | skill-text contract | `npx vitest run src/cli/slash-command/bs/ingest.test.ts` | ✅ | ⬜ pending |
 | TBD | 02 | 2 | INGEST-04 (INDEX header block) | — | N/A | skill-text contract | `npx vitest run src/cli/slash-command/bs/ingest.test.ts` | ✅ | ⬜ pending |
-| TBD | 03 | 3 | INGEST-03 + INGEST-04 (artifact shape) | — | N/A | golden-fixture artifact-shape test | `npx vitest run src/cli/slash-command/bs/ingest.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | 03 | 3 | PROC-01 | — | N/A | manual proof run, recorded in SUMMARY | N/A — human-run `/bs-ingest-rules` | N/A | ⬜ pending |
+| 03-02 | 03 | 3 | PROC-01 + INGEST-01/03/04 (INDEX artifacts) | T-170-07, T-170-09 | reference game unmodified; hash independently recomputed | manual proof run, recorded in SUMMARY | N/A — human-run `/bs-ingest-rules` | N/A | ⬜ pending |
+| 03-02 | 03 | 3 | INGEST-02 on live output (checklist h/i) | — | N/A | manual proof run — slice grep + by-hand decision test | N/A — human-run `/bs-ingest-rules` | N/A | ⬜ pending |
+| 04-02 | 04 | 4 | INGEST-03 + INGEST-04 (artifact shape) | T-170-12 | fixture never hand-edited to green a test | golden-fixture artifact-shape test | `npx vitest run src/cli/slash-command/bs/ingest.test.ts -t "artifact shape"` | ❌ W0 → Plan 04 Task 1 | ⬜ pending |
+| 04-03 | 04 | 4 | PROC-02 (all six requirements) | T-170-11 | per-requirement RED-then-GREEN probe + circularity check | process record + full suite | `npm test` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -71,18 +73,18 @@ created: 2026-07-27
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| A real `/bs-ingest-rules` run archives `rulebook/source/rules.pdf`, records its true SHA-256, emits the four header lines, and emits `## Open Rules Gaps` | PROC-01, INGEST-01..04 | The skill is instructions to an LLM agent — its runtime behavior is not deterministic and cannot be asserted in CI without making CI non-deterministic | 1. `npx boardsmith claude --local` in a throwaway project dir (non-destructive; leaves the user's global `~/.claude/skills/` alone). 2. Run `/bs-ingest-rules` against `~/BoardSmithGames/seven/rules.pdf`. 3. Confirm `rulebook/source/rules.pdf` exists and `shasum -a 256` matches the `Source hash:` line in `rulebook/INDEX.md`. 4. Confirm the four header lines and `## Open Rules Gaps` are present. 5. Confirm `~/BoardSmithGames/seven` is unmodified (`git status` clean in that repo). |
+| A real `/bs-ingest-rules` run archives `rulebook/source/rules.pdf`, records its true SHA-256, emits the four header lines, emits a POPULATED `## Open Rules Gaps`, and produces slices carrying both `Derived (p.N):` and `Visual (p.N):` lines | PROC-01, INGEST-01..04 | The skill is instructions to an LLM agent — its runtime behavior is not deterministic and cannot be asserted in CI without making CI non-deterministic | See `170-03-PLAN.md` Task 2 checklist (a)-(i), which is the authoritative version of this procedure. In outline: install the edited skills `--local` into a throwaway dir (global `~/.claude/skills/` untouched); run `/bs-ingest-rules` against `~/BoardSmithGames/seven/rules.pdf`; verify the archived file + hash match; verify the four header lines; verify the gaps section lists real entries (`_None._` is a FAIL on this input — `seven` is known to carry 4 markers, so `_None._` means the `openGaps[]` transport broke); grep the produced slices for both line prefixes and hand-check them against the decision test; confirm `~/BoardSmithGames/seven` is unmodified. |
 | Adversarial re-check that the landed fix holds | PROC-02 | Process discipline, not a single assertion | After tests are green, re-read the edited skill text against the requirement wording and confirm no requirement is satisfied by test-shaped text alone |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 10s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies (the sole exception is `170-03` Task 2, a blocking human-verify checkpoint whose criteria are concrete pasted-output assertions)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (fixture → Plan 04 Task 1; artifact-shape test → Plan 04 Task 2; `RETURN_SHAPE_FIELDS` + `openGaps[]` → Plan 01 Task 2, extending the existing array)
+- [x] No watch-mode flags
+- [x] Feedback latency < 10s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-07-27 (post plan-check revision — blockers 1 and 2 closed in `170-03-PLAN.md` Task 2)

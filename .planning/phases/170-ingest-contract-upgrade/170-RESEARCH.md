@@ -480,9 +480,12 @@ exact file).
 **None of the four core INGEST-0X locked decisions from CONTEXT.md are challenged here** — only the
 *mechanics* of where code lands, which is exactly what this research was asked to resolve.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the archive+hash step get its own numbered ingest-rules.md step, or fold into Step 3?**
+   **RESOLVED (Phase 170 planning):** folded into Step 3 as a sub-item; no new top-level step and no
+   renumbering of Steps 4-7 (renumbering would break every cross-file "Step N" citation in the skill
+   family). Landed by `170-02-PLAN.md` Task 1.
    - What we know: Step 3 already writes INDEX.md and already knows `{rulebookPath}` by then.
    - What's unclear: whether bundling one more file-copy+hash operation into the already-dense
      6-item Step 3 list reduces clarity, vs. giving it a clean standalone step number.
@@ -492,6 +495,9 @@ exact file).
      archived file itself, plus two new header lines).
 
 2. **Does the interview-fallback path (no rulebook) need an archive+hash step at all?**
+   **RESOLVED (Phase 170 planning):** no archive/hash on that path, but the header lines are still
+   written with the explicit value `not applicable — no source rulebook (interview path)` rather
+   than omitted, per CONTEXT.md's never-omit rule. Landed by `170-02-PLAN.md` Task 2.
    - What we know: `interview-fallback.md` has no source file to archive — the interview path's
      Edition line already reads "unpublished — designer statement."
    - What's unclear: whether `Source:`/`Source hash:` header lines should be omitted entirely on
