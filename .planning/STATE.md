@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 169-04-PLAN.md
-last_updated: "2026-07-27T17:25:42.698Z"
+stopped_at: Completed 170-05-PLAN.md
+last_updated: "2026-07-27T20:06:52.511Z"
 last_activity: 2026-07-27
 progress:
   total_phases: 10
   completed_phases: 0
-  total_plans: 4
-  completed_plans: 2
+  total_plans: 10
+  completed_plans: 4
   percent: 0
 ---
 
@@ -26,7 +26,8 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 170 (Ingest Contract Upgrade) — EXECUTING
-Plan: 3 of 4
+Plan: 5 of 10 (170-05 complete; 170-06 driver awaits explicit operator consent before spawning a
+`--dangerously-skip-permissions` headless agent)
 Status: Ready to execute
 Last activity: 2026-07-27
 
@@ -327,6 +328,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 170-02]: Archive+hash landed as Step 3 item 1, not a new top-level step
 - [Phase ?]: [Phase 170-02]: ## Open Rules Gaps heading pinned bare (no parenthetical), standardizing over seven's pre-phase hand-authored variant
 - [Phase ?]: [Phase 170-02]: Interview path's Source:/Source hash: use explicit not-applicable sentinel rather than omission
+- [Phase 170]: gaps-reconciliation treats a wholly-absent Open Rules Gaps heading as a 0-entry body rather than an unrunnable check
+- [Phase 170]: conforming fixture rules.pdf is a 113-byte synthetic stand-in, not a copy of the real 2.1MB seven/rules.pdf
 
 ### Pending Todos
 
@@ -338,7 +341,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-27T17:24:11.791Z
+Last session: 2026-07-27T20:05:35.043Z
 Stopped at: Completed 169-04-PLAN.md
 Resume file: 
 None
