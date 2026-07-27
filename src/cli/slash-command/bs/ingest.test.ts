@@ -271,6 +271,75 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
   });
 });
 
+describe('v4.9 INGEST-01 — source archive + SHA-256', () => {
+  it('ingest-rules.md prescribes the rulebook/source/ archive path', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('rulebook/source/');
+  });
+
+  it('ingest-rules.md prescribes shasum -a 256 with a sha256sum fallback', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('shasum -a 256');
+    expect(ingestRules).toContain('sha256sum');
+  });
+
+  it('ingest-rules.md states the non-destructive copy/never-move-or-delete invariant', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toMatch(/copy[\s\S]{0,200}never[\s\S]{0,60}(move|delete|rename|overwrite)/i);
+  });
+
+  it('ingest/scaffold.md does NOT contain rulebook/source/ (Pitfall 1 guard — scaffold.md runs before {rulebookPath} is known)', () => {
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).not.toContain('rulebook/source/');
+  });
+});
+
+describe('v4.9 INGEST-04 — INDEX.md header block', () => {
+  it('ingest-rules.md contains all four header labels', () => {
+    const ingestRules = read('ingest-rules.md');
+    for (const label of ['Edition:', 'Source:', 'Source hash:', 'Transcribed:']) {
+      expect(ingestRules, `ingest-rules.md must contain "${label}"`).toContain(label);
+    }
+  });
+
+  it('ingest-rules.md states the never-omit fallback value', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('not stated in the rulebook');
+  });
+
+  it('interview-fallback.md contains the same four header labels plus the interview-path not-applicable value', () => {
+    const interviewFallback = read('ingest/interview-fallback.md');
+    for (const label of ['Edition:', 'Source:', 'Source hash:', 'Transcribed:']) {
+      expect(interviewFallback, `interview-fallback.md must contain "${label}"`).toContain(label);
+    }
+    expect(interviewFallback).toContain('not applicable — no source rulebook (interview path)');
+  });
+});
+
+describe('v4.9 INGEST-03 — ## Open Rules Gaps section', () => {
+  it('ingest-rules.md contains the exact bare heading (no parenthetical suffix)', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('## Open Rules Gaps');
+    expect(ingestRules).not.toContain('## Open Rules Gaps (');
+  });
+
+  it('ingest-rules.md contains the always-emitted _None._ empty-state token', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('_None._');
+  });
+
+  it('ingest-rules.md builds the section exclusively from openGaps[]', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('openGaps[]');
+  });
+
+  it('interview-fallback.md also emits ## Open Rules Gaps on the same always/_None._ terms', () => {
+    const interviewFallback = read('ingest/interview-fallback.md');
+    expect(interviewFallback).toContain('## Open Rules Gaps');
+    expect(interviewFallback).toContain('_None._');
+  });
+});
+
 describe('return-shape field names — pinned across the file set (WR-07)', () => {
   it('transcription.md defines every return-shape field', () => {
     const transcription = read('ingest/transcription.md');
@@ -281,7 +350,7 @@ describe('return-shape field names — pinned across the file set (WR-07)', () =
 
   it('ingest-rules.md consumes the synthesis-facing fields by the same names', () => {
     const ingestRules = read('ingest-rules.md');
-    for (const field of ['citedTerms[]', 'componentMentions[]', 'visualEvidence[]', 'variants[]']) {
+    for (const field of ['citedTerms[]', 'componentMentions[]', 'visualEvidence[]', 'variants[]', 'openGaps[]']) {
       expect(ingestRules, `ingest-rules.md must reference "${field}"`).toContain(field);
     }
   });
