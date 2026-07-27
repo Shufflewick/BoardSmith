@@ -52,13 +52,26 @@ const CHECK_META = Object.freeze({
 });
 
 // Case-insensitive presentation-description lexicon for the derived-purity heuristic (i).
-// This is deliberately a HEURISTIC, not a parser: it can false-positive on a genuinely
-// rule-bearing line that happens to mention a component's appearance (e.g. "the red card
-// beats the blue card" would not trip it, but a line explaining WHY a card uses a particular
-// typography choice might). The Plan 10 human gate adjudicates any such case; this checker's
-// job is only to flag candidates. It is calibrated against the two real misfilings the
-// 2026-07-27 proof run produced (02-solo-variant.md and 01-components-and-credits.md), both
-// of which trip it — see 170-PROOF-RUN.md item (i).
+// This is deliberately a HEURISTIC, not a parser. Its job is to flag candidates; the Plan 10
+// human gate adjudicates. It is calibrated against the two real misfilings the 2026-07-27
+// proof run produced (02-solo-variant.md and 01-components-and-credits.md), both of which
+// still trip it — see 170-PROOF-RUN.md item (i).
+//
+// REFERENTIAL TERMS ARE DELIBERATELY EXCLUDED — 'depicted', 'illustration', 'shown', 'image'.
+// They were in the original list and produced three false positives on a real run:
+//
+//   "Derived (p.1): Sets match on number only — the depicted Set example mixes two green
+//    cards with one purple card, so color is not required to match within a Set."
+//
+// That line is correctly filed. It affects legality, and it references the diagram because
+// it INFERS A RULE FROM the diagram — which is precisely the contract's own canonical
+// Derived example ("a per-player starting-hand card count inferred from a setup diagram").
+// A rule derived from a diagram must be able to mention the diagram. Flagging referential
+// vocabulary penalizes the exact behavior INGEST-02 asks for, and a check that fires on
+// correct work gets waived, taking its true positives with it.
+//
+// What remains are terms describing how the page LOOKS, which cannot carry a rule: no
+// statement about legality, scoring, or sequencing needs to say 'sans-serif' or 'full-bleed'.
 const PRESENTATION_LEXICON = [
   'sans-serif',
   'serif',
@@ -69,12 +82,10 @@ const PRESENTATION_LEXICON = [
   'italic',
   'font',
   'aspect ratio',
-  'illustration',
   'iconograph',
   'art style',
   'rotated',
   'bold white',
-  'depicted',
 ];
 
 function makeResult(id, pass, detail) {
