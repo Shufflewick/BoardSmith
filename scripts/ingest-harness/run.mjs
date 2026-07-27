@@ -306,6 +306,18 @@ function nextAnswer(answerIndex) {
   return answerIndex < ANSWER_SEQUENCE.length ? ANSWER_SEQUENCE[answerIndex] : DEFAULT_ANSWER;
 }
 
+/**
+ * True only if the completion marker appears as its OWN line (trimmed exact match), never as a
+ * mere substring anywhere in the transcript. A live session frequently *discusses* the marker
+ * without emitting it — e.g. "I won't print `HARNESS-STEP3-COMPLETE` — Step 3 never ran" — and a
+ * naive `.includes()` check reads that refusal as a false completion. Discovered live during this
+ * driver's own validation run (turn 7 of a stuck session explicitly refused to emit the marker,
+ * quoting it only to explain why, and a substring check still flagged it as HARNESS-STEP3-COMPLETE).
+ */
+function outputEmitsCompletionMarker(out) {
+  return out.split('\n').some((line) => line.trim() === 'HARNESS-STEP3-COMPLETE');
+}
+
 // `drive` is implemented as `driveAsync` below (it needs to `await import('node:child_process')`
 // for `spawnSync`, and `main()` is itself async) — see driveAsync().
 
@@ -507,7 +519,7 @@ async function driveAsync(opts) {
       break;
     }
 
-    if (out.includes('HARNESS-STEP3-COMPLETE')) {
+    if (outputEmitsCompletionMarker(out)) {
       stoppedReason = 'completed';
       break;
     }
