@@ -38,7 +38,7 @@ the tag.
 
 ### Ingest Contract (INGEST)
 
-- [ ] **INGEST-01**: Ingest archives the source rulebook into the game project at a standard path
+- [x] **INGEST-01**: Ingest archives the source rulebook into the game project at a standard path
       and records its hash, so a later verify pass can re-read the same source it transcribed from.
 - [x] **INGEST-02**: Transcription emits `Visual (p.N):` for diagram, art, and layout description,
       distinct from `Derived (p.N):` for rule inference, so rule-bearing inferences are separable
@@ -46,7 +46,7 @@ the tag.
 - [x] **INGEST-03**: `rulebook/INDEX.md` carries a standardized `## Open Rules Gaps` section listing
       every rule the source names but never defines, so gap tracking does not depend on a session
       improvising the section.
-- [ ] **INGEST-04**: A designer can tell from `INDEX.md` alone which edition and which source file
+- [x] **INGEST-04**: A designer can tell from `INDEX.md` alone which edition and which source file
       the slices were transcribed from, and when.
 
 ### Provenance (PROV)
@@ -136,10 +136,10 @@ the tag.
 |-------------|-------|--------|
 | PROC-01 | Phase 170 | Pending |
 | PROC-02 | Phase 170 | Complete |
-| INGEST-01 | Phase 170 | Pending |
+| INGEST-01 | Phase 170 | Complete |
 | INGEST-02 | Phase 170 | Complete |
 | INGEST-03 | Phase 170 | Complete |
-| INGEST-04 | Phase 170 | Pending |
+| INGEST-04 | Phase 170 | Complete |
 | PROV-01 | Phase 171 | Pending |
 | PROV-02 | Phase 171 | Pending |
 | PROV-03 | Phase 171 | Pending |

@@ -4,13 +4,13 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 169-04-PLAN.md
-last_updated: "2026-07-27T17:18:06.480Z"
+last_updated: "2026-07-27T17:25:42.698Z"
 last_activity: 2026-07-27
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 170 (Ingest Contract Upgrade) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-27
 
@@ -324,6 +324,9 @@ Recent decisions affecting current work:
 - [Phase 169]: BSR-12 CLOSED — all four AI-bearing repos show a recorded PASS status; doom-machine correctly excluded as N/A
 - [Phase 170]: Exactly two worked examples for the Derived/Visual split per CONTEXT.md's locked cap; publisher-logo edge case mentioned in prose only
 - [Phase 170]: openGaps[] added as a new seventh return field mirroring variants[], not folded into citedTerms[]
+- [Phase ?]: [Phase 170-02]: Archive+hash landed as Step 3 item 1, not a new top-level step
+- [Phase ?]: [Phase 170-02]: ## Open Rules Gaps heading pinned bare (no parenthetical), standardizing over seven's pre-phase hand-authored variant
+- [Phase ?]: [Phase 170-02]: Interview path's Source:/Source hash: use explicit not-applicable sentinel rather than omission
 
 ### Pending Todos
 
@@ -335,7 +338,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-27T17:14:44.566Z
+Last session: 2026-07-27T17:24:11.791Z
 Stopped at: Completed 169-04-PLAN.md
 Resume file: 
 None
