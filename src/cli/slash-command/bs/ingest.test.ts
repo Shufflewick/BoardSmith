@@ -59,6 +59,7 @@ const UI_TAG_REGEX = /none *\| *touches *\| *major/;
 /** Every path `ingest-rules.md` must cite by exact path (cross-file consistency, INGEST-*). */
 const REFERENCED_PATHS = [
   'ingest/transcription.md',
+  'ingest/synthesis-subagent.md',
   'ingest/interview-fallback.md',
   'ingest/sketch-derivation.md',
   'ingest/scaffold.md',
@@ -355,82 +356,82 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
 // specified string. The acceptance bar is `npm run harness:ingest`, not this file — see
 // scripts/ingest-harness/README.md.
 
-describe('v4.9 INGEST-01 — source archive + SHA-256 (Step 3, item 1)', () => {
-  // The archive was briefly its own `Step 2.5` between Steps 2 and 3. A live harness run
-  // skipped that step outright, which left INDEX.md's `Source hash:` unfillable and caused
-  // the session to abandon the template and compose the file freehand -- failing every
-  // structural check downstream. The archive now lives INSIDE Step 3 as item 1, so every
-  // input INDEX.md needs is produced by the same step that writes it (which is exactly why
-  // ASSETS.md, whose inputs are all step-local, conformed while INDEX.md did not).
+describe('v4.9 INGEST-01 — source archive + SHA-256 (delegated to a synthesis subagent)', () => {
+  // Four in-line mechanisms were tried and refuted against live harness runs:
+  //   1. reworded instructions + self-limiting DERIVED definition   -> no effect
+  //   2. contract extracted to a file the subagent reads            -> no effect
+  //   3. templates/INDEX.template.md to copy and fill               -> no effect
+  //   4. archive folded into Step 3 alongside its consumer          -> no effect
+  // In every run the orchestrator did excellent semantic work and skipped the mechanical
+  // specifications: rulebook/source/ was never created and INDEX.md was composed freehand.
   //
-  // These tests pin that coupling. A future edit promoting the archive back out to its own
-  // step reintroduces the skip.
+  // The one mechanism with positive evidence is a fresh-context subagent doing a single job
+  // and reading its own contract. Step 3 items 1-2 are now delegated to one.
+  //
+  // These tests pin the delegation. Reverting it to in-line orchestrator work reintroduces
+  // four separately-refuted failure modes at once.
 
-  it('ingest-rules.md does NOT carry a standalone Step 2.5 archive step', () => {
+  it('ingest-rules.md delegates the archive + INDEX write rather than performing them in-line', () => {
     const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).not.toContain('## Step 2.5');
+    expect(ingestRules).toContain('ingest/synthesis-subagent.md');
+    expect(flat(ingestRules)).toMatch(/delegated to a subagent — this orchestrator performs neither itself/);
   });
 
-  it('the archive is item 1 of Step 3 and INDEX.md is item 2', () => {
-    const ingestRules = read('ingest-rules.md');
-    const step3 = ingestRules.slice(
-      ingestRules.indexOf('## Step 3: Synthesis'),
-      ingestRules.indexOf('## Step 4:'),
-    );
-    expect(step3).not.toBe('');
-    const archiveIdx = step3.indexOf('1. **Archive the source rulebook');
-    const indexIdx = step3.indexOf('2. **`rulebook/INDEX.md`');
-    expect(archiveIdx).toBeGreaterThan(-1);
-    expect(indexIdx).toBeGreaterThan(archiveIdx);
-  });
-
-  it('Step 3 states the coupling and warns against promoting the archive back out', () => {
+  it('the dispatch forbids restating the contract and forbids an orchestrator fallback', () => {
     const ingestRules = read('ingest-rules.md');
     const step3 = flat(
-      ingestRules.slice(
-        ingestRules.indexOf('## Step 3: Synthesis'),
-        ingestRules.indexOf('## Step 4:'),
-      ),
+      ingestRules.slice(ingestRules.indexOf('## Step 3: Synthesis'), ingestRules.indexOf('## Step 4:')),
     );
-    expect(step3).toMatch(/Do not promote item 1 back out to a step of its own/);
-    expect(step3).toMatch(/item 1 produces the archived path and hash that item 2's header block requires/);
+    expect(step3).toMatch(/Do not restate, paraphrase, or summarize any part of `synthesis-subagent.md`/);
+    expect(step3).toMatch(/do not write `INDEX.md` yourself as a fallback/);
   });
 
-  it('ingest-rules.md prescribes the rulebook/source/ archive path', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('rulebook/source/');
+  it('the synthesis contract exists and tells the subagent to read it in full', () => {
+    const contract = read('ingest/synthesis-subagent.md');
+    expect(flat(contract)).toMatch(/Do not accept a paraphrase of this file in place of the file/);
   });
 
-  it('ingest-rules.md prescribes shasum -a 256 with a sha256sum fallback', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('shasum -a 256');
-    expect(ingestRules).toContain('sha256sum');
+  it('the synthesis contract prescribes the archive path, copy invariant, and hash commands', () => {
+    const contract = read('ingest/synthesis-subagent.md');
+    expect(contract).toContain('rulebook/source/');
+    expect(contract).toContain('shasum -a 256');
+    expect(contract).toContain('sha256sum');
+    expect(flat(contract)).toMatch(/never a move, rename, delete, or overwrite/);
+    expect(flat(contract)).toMatch(/STOP and report it/);
   });
 
-  it('ingest-rules.md states the non-destructive copy/never-move-or-delete invariant', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toMatch(/copy[\s\S]{0,200}never[\s\S]{0,60}(move|delete|rename|overwrite)/i);
+  it('the synthesis contract pins all four INDEX headings and header labels byte-for-byte', () => {
+    const contract = read('ingest/synthesis-subagent.md');
+    for (const heading of ['## Open Rules Gaps', '## Slices', '## Term → Slice']) {
+      expect(contract, `synthesis contract must pin "${heading}"`).toContain(heading);
+    }
+    for (const label of ['Edition:', 'Source:', 'Source hash:', 'Transcribed:']) {
+      expect(contract, `synthesis contract must pin "${label}"`).toContain(label);
+    }
+    expect(contract).toContain('_None._');
+    expect(flat(contract)).toMatch(/do not deduplicate/i);
   });
 
-  it('the archive item states the stop-and-ask rule for an existing destination', () => {
-    const ingestRules = read('ingest-rules.md');
-    const step3 = ingestRules.slice(
-      ingestRules.indexOf('## Step 3: Synthesis'),
-      ingestRules.indexOf('## Step 4:'),
-    );
-    expect(flat(step3)).toMatch(/STOP and ask/);
+  it('the synthesis contract blocks the INDEX write when the archive fails', () => {
+    const contract = read('ingest/synthesis-subagent.md');
+    expect(flat(contract)).toMatch(/Task 2 is \*\*blocked\*\*/);
+    expect(flat(contract)).toMatch(/must never surface as a silently absent `Source hash:` line/);
   });
 
-  it('the archive item states that a failed archive BLOCKS the INDEX.md write', () => {
+  it('the synthesis contract requires self-verification of its own written output', () => {
+    const contract = read('ingest/synthesis-subagent.md');
+    expect(contract).toContain('headingsVerified');
+    // Re-reading its OWN output is explicitly not a Context-Economics violation; the rule
+    // prohibits the orchestrator re-reading slices, which INDEX.md is not.
+    expect(flat(contract)).toMatch(/is not a Context-Economics violation/);
+  });
+
+  it('the interview path is routed through the same subagent, not a second code path', () => {
     const ingestRules = read('ingest-rules.md');
     const step3 = flat(
-      ingestRules.slice(
-        ingestRules.indexOf('## Step 3: Synthesis'),
-        ingestRules.indexOf('## Step 4:'),
-      ),
+      ingestRules.slice(ingestRules.indexOf('## Step 3: Synthesis'), ingestRules.indexOf('## Step 4:')),
     );
-    expect(step3).toContain('Source hash:');
-    expect(step3).toMatch(/item 2 is \*\*blocked\*\*/);
+    expect(step3).toMatch(/Dispatch the same subagent with `Rulebook path: NONE \(interview path\)`/);
   });
 
   it('ingest/scaffold.md does NOT contain rulebook/source/ (Pitfall 1 guard — scaffold.md runs before {rulebookPath} is known)', () => {
@@ -452,10 +453,10 @@ describe('v4.9 INGEST-04 — INDEX.md header block (template fill)', () => {
     expect(ingestRules).not.toMatch(/^\s*-\s*`Source hash:`/m);
   });
 
-  it('ingest-rules.md states the two template-fill prohibitions (no rewording, no composing from scratch)', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(flat(ingestRules)).toMatch(/do not rewrite, reword, abbreviate, or reorder any heading/);
-    expect(flat(ingestRules)).toMatch(/do not compose an `?INDEX\.md`? from scratch/);
+  it('the synthesis contract states the two template-fill prohibitions (no rewording, no composing from scratch)', () => {
+    const ingestRules = read('ingest/synthesis-subagent.md');
+    expect(flat(ingestRules)).toMatch(/do not rewrite, reword, abbreviate, or reorder any heading/i);
+    expect(flat(ingestRules)).toMatch(/do not compose an `?INDEX\.md`? from scratch/i);
   });
 
   it('interview-fallback.md cites templates/INDEX.template.md and contains the same four header labels plus the interview-path not-applicable value', () => {
@@ -469,8 +470,8 @@ describe('v4.9 INGEST-04 — INDEX.md header block (template fill)', () => {
 });
 
 describe('v4.9 INGEST-03 — ## Open Rules Gaps section (template fill)', () => {
-  it('ingest-rules.md Step 3 cites INDEX.template.md for the Open Rules Gaps contract rather than restating it', () => {
-    const ingestRules = read('ingest-rules.md');
+  it('the synthesis contract cites INDEX.template.md and pins the Open Rules Gaps heading', () => {
+    const ingestRules = read('ingest/synthesis-subagent.md');
     expect(ingestRules).toContain('INDEX.template.md');
     expect(ingestRules).toContain('## Open Rules Gaps');
   });

@@ -100,66 +100,50 @@ full by this orchestrator.
 Once transcription or interview output has landed, this orchestrator-only step assembles the
 following artifacts **from subagent-returned summaries only** — never from re-reading slices.
 
-Items 1 and 2 are ordered and coupled: item 1 produces the archived path and hash that item 2's
-header block requires. Both live inside this step deliberately. An earlier revision made the
-archive its own `Step 2.5` between Step 2 and Step 3, and a live run skipped it outright —
-leaving item 2 with an unfillable `Source hash:` line, at which point the session abandoned the
-template and composed `rulebook/INDEX.md` freehand, failing every structural check. Every input
-`INDEX.md` needs is now produced by this same step. Do not promote item 1 back out to a step of
-its own.
+**Items 1 and 2 are delegated to a subagent — this orchestrator performs neither itself.** Four
+successive in-line attempts (reworded instructions, a self-limiting definition, a shipped template
+to copy, and folding the archive into this step) each verified present in the installed skill text
+and each failed against a live run: the archive was never created and `INDEX.md` was composed
+freehand instead of filled from its template. A fresh-context subagent whose entire job is these
+two mechanical actions does not drift the way a long orchestrator session does. Do not "simplify"
+this back into in-line orchestrator work.
 
-1. **Archive the source rulebook and compute its hash (INGEST-01).** Run this as the first
-   concrete action of this step. It has exactly one deliverable: after it,
-   `rulebook/source/<original-filename>` exists on disk and its SHA-256 is known.
+1-2. **Dispatch one synthesis subagent** to archive the source and write `rulebook/INDEX.md`.
+   Its prompt is short and carries only values this orchestrator holds — never a restatement of
+   the contract:
 
-   Concretely, in order: (1) run a copy command placing the source file bound at Step 2
-   (`{rulebookPath}`) at `rulebook/source/<original-filename>`, preserving the original filename
-   verbatim; (2) run `shasum -a 256 rulebook/source/<original-filename>` (or the `sha256sum`
-   fallback on Linux/CI) and read its actual output, taking the first whitespace-delimited field;
-   (3) hold that 64-hex value for item 2's `Source hash:` line. All three are real tool
-   invocations this session runs itself — never report a hash you did not compute by running the
-   command, and never summarize these as already done.
+```
+Read `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/synthesis-subagent.md` in full and follow it
+exactly.
 
-   This is a **copy**, never a move, rename, delete, or overwrite: ingest never touches the
-   designer's original. A source already sitting at the project root stays exactly where it is,
-   untouched, in addition to the new copy under `rulebook/source/`. If a file already exists at
-   the archive destination, STOP and ask the designer rather than clobbering it.
+Rulebook path: {rulebookPath}
+Edition:       {edition or the literal UNKNOWN}
+Slices:        {slice manifest rows}
+Cited terms:   {accumulated citedTerms[] pairs}
+Open gaps:     {accumulated openGaps[] entries, verbatim, in order}
+```
 
-   If this item cannot complete, item 2 is **blocked** — say so and stop. A missing archive must
-   never surface as a silently missing `Source hash:` line.
+   Substitute those five values and nothing else. Do not restate, paraphrase, or summarize any
+   part of `synthesis-subagent.md` in the dispatch prompt — the whole finding this delegation
+   exists to work around is that composed prose loses mechanical content in transit.
 
-   **Interview-path exception:** on the interview path there is no source file — this item does
-   not run, no `rulebook/source/` directory is created, and that absence is expected only on that
-   path. See `ingest/interview-fallback.md`'s "Output Re-Target" for that path's header values.
+   The subagent returns `{ archivedPath, sourceHash, indexPath, gapsWritten, headingsVerified }`.
+   **If `headingsVerified` is not `true`, or the subagent reports Task 1 blocked, STOP and report
+   it** — do not proceed to item 3 and do not write `INDEX.md` yourself as a fallback. A silent
+   orchestrator fallback is exactly how this defect stayed invisible through four fix attempts.
 
-2. **`rulebook/INDEX.md` — copy and fill the template.** Do this immediately after item 1,
-   before drafting any other Step 3 artifact. Read
-   `${CLAUDE_SKILL_DIR}/../bs-shared/templates/INDEX.template.md` in full, then write
-   `rulebook/INDEX.md` starting from that exact structure — same H1, same comments-become-fills,
-   same three headings, same order — with its placeholders filled. This is a **copy-then-fill**
-   operation on a real file this session reads and writes itself, the same mechanical action Step
-   7 performs for `SKETCH.template.md` and `CHUNK.template.md` — it is not a paraphrase of what
-   the template roughly says. If what gets written does not contain, verbatim, `## Open Rules
-   Gaps`, `## Slices`, and `## Term → Slice`, the template was not actually read. Cite the
-   template rather than restating its content: it carries the four header labels, the
-   `## Open Rules Gaps` heading and its `_None._`/no-deduplication rules, the `## Slices` table,
-   and the `## Term → Slice` table, each with its own fill instructions. The fill needs:
-   - the `edition` field the opening-pages transcription subagent returned (or the interview
-     path's `unpublished — designer statement` value — never the reverse);
-   - the archived path and hash item 1 of this step produced;
-   - today's ISO date;
-   - the accumulated `openGaps[]` lists, for `## Open Rules Gaps`;
-   - the accumulated `citedTerms[]` lists, for `## Term → Slice`.
+   **Interview-path exception:** on the interview path there is no source file. Dispatch the same
+   subagent with `Rulebook path: NONE (interview path)`; it skips Task 1, creates no
+   `rulebook/source/`, and writes the interview header values per
+   `ingest/interview-fallback.md`'s "Output Re-Target".
 
-   Two prohibitions, stated explicitly because they are the exact defects a prior proof run
-   produced: do not rewrite, reword, abbreviate, or reorder any heading the template ships, and
-   do not compose an `INDEX.md` from scratch as an alternative to copying the template.
-2. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
-   approximate aspect ratios (cards, tiles, board proportions), seeded into `ASSETS.md`.
-3. **`ASSETS.md`** — the component/asset ledger (needed-by-chunk, requested, received,
+3. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
+   approximate aspect ratios (cards, tiles, board proportions), accumulated from the transcription
+   subagents' `componentMentions[]` returns and seeded into `ASSETS.md` below.
+4. **`ASSETS.md`** — the component/asset ledger (needed-by-chunk, requested, received,
    placeholder-in-use, file path — see `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md`), seeded from the
    component inventory above. Assets are recorded as debt here, never requested up front.
-4. **Visual identity survey** — evidence only, no decision made cold: dominant palette
+5. **Visual identity survey** — evidence only, no decision made cold: dominant palette
    candidates, typography feel, iconography, notes on board/card art, and descriptions of setup
    diagrams and embedded component images. Built exclusively from the accumulated
    `visualEvidence[]` lists the transcription subagents return (parallel to how INDEX.md is
@@ -172,7 +156,7 @@ its own.
    the evidence the design ask depends on would be gone the moment this session ends. The
    actual design direction is decided there, at the first UI chunk's `ask` step, against
    `DESIGN.md`.
-5. **Player counts** — min/max player counts and any per-count setup differences, recorded at
+6. **Player counts** — min/max player counts and any per-count setup differences, recorded at
    sketch level.
 
 Variant/optional/advanced rules were already tagged out-of-scope-by-default **in the slices at
