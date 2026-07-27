@@ -65,6 +65,7 @@ const REFERENCED_PATHS = [
   'state-machine.md',
   'templates/SKETCH.template.md',
   'templates/ASSETS.template.md',
+  'templates/INDEX.template.md',
 ] as const;
 
 describe('INGEST-01 — transcription per-section confirmation', () => {
@@ -348,7 +349,29 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
   });
 });
 
-describe('v4.9 INGEST-01 — source archive + SHA-256', () => {
+// NOTE (Plan 07): these assertions prove the instruction EXISTS in skill text; they do not
+// prove an agent RECEIVES or FOLLOWS it. On 2026-07-27 every one of the blocks below (in
+// their pre-Plan-07 form) was green while the real INGEST-01/03/04 run diverged on every
+// specified string. The acceptance bar is `npm run harness:ingest`, not this file — see
+// scripts/ingest-harness/README.md.
+
+describe('v4.9 INGEST-01 — source archive + SHA-256 (Step 2.5)', () => {
+  it('ingest-rules.md names Step 2.5 as its own numbered step, citing INGEST-01', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('## Step 2.5');
+    expect(ingestRules).toMatch(/## Step 2\.5:[^\n]*INGEST-01/);
+  });
+
+  it('Step 2.5 is positioned between the Step 2 and Step 3 headings', () => {
+    const ingestRules = read('ingest-rules.md');
+    const step2Idx = ingestRules.indexOf('## Step 2:');
+    const step25Idx = ingestRules.indexOf('## Step 2.5:');
+    const step3Idx = ingestRules.indexOf('## Step 3:');
+    expect(step2Idx).toBeGreaterThan(-1);
+    expect(step25Idx).toBeGreaterThan(step2Idx);
+    expect(step3Idx).toBeGreaterThan(step25Idx);
+  });
+
   it('ingest-rules.md prescribes the rulebook/source/ archive path', () => {
     const ingestRules = read('ingest-rules.md');
     expect(ingestRules).toContain('rulebook/source/');
@@ -365,27 +388,53 @@ describe('v4.9 INGEST-01 — source archive + SHA-256', () => {
     expect(ingestRules).toMatch(/copy[\s\S]{0,200}never[\s\S]{0,60}(move|delete|rename|overwrite)/i);
   });
 
+  it('ingest-rules.md states the stop-and-ask rule for an already-existing archive destination', () => {
+    const ingestRules = read('ingest-rules.md');
+    const step25 = ingestRules.slice(
+      ingestRules.indexOf('## Step 2.5:'),
+      ingestRules.indexOf('## Step 3:'),
+    );
+    expect(flat(step25)).toMatch(/STOP and ask/);
+  });
+
+  it("Step 2.5 states Step 3's Source hash: line depends on the value computed here", () => {
+    const ingestRules = read('ingest-rules.md');
+    const step25 = ingestRules.slice(
+      ingestRules.indexOf('## Step 2.5:'),
+      ingestRules.indexOf('## Step 3:'),
+    );
+    expect(step25).toContain('Source hash:');
+    expect(flat(step25)).toMatch(/carried forward to Step 3/);
+  });
+
   it('ingest/scaffold.md does NOT contain rulebook/source/ (Pitfall 1 guard — scaffold.md runs before {rulebookPath} is known)', () => {
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).not.toContain('rulebook/source/');
   });
 });
 
-describe('v4.9 INGEST-04 — INDEX.md header block', () => {
-  it('ingest-rules.md contains all four header labels', () => {
+describe('v4.9 INGEST-04 — INDEX.md header block (template fill)', () => {
+  it('ingest-rules.md Step 3 cites templates/INDEX.template.md, the same citation form used for ASSETS.template.md', () => {
     const ingestRules = read('ingest-rules.md');
-    for (const label of ['Edition:', 'Source:', 'Source hash:', 'Transcribed:']) {
-      expect(ingestRules, `ingest-rules.md must contain "${label}"`).toContain(label);
-    }
+    expect(ingestRules).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/templates/INDEX.template.md');
+    expect(ingestRules).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md');
   });
 
-  it('ingest-rules.md states the never-omit fallback value', () => {
+  it('ingest-rules.md no longer enumerates the four header labels as prose instructions', () => {
     const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('not stated in the rulebook');
+    expect(ingestRules).not.toMatch(/^\s*-\s*`Edition:`/m);
+    expect(ingestRules).not.toMatch(/^\s*-\s*`Source hash:`/m);
   });
 
-  it('interview-fallback.md contains the same four header labels plus the interview-path not-applicable value', () => {
+  it('ingest-rules.md states the two template-fill prohibitions (no rewording, no composing from scratch)', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(flat(ingestRules)).toMatch(/do not rewrite, reword, abbreviate, or reorder any heading/);
+    expect(flat(ingestRules)).toMatch(/do not compose an `?INDEX\.md`? from scratch/);
+  });
+
+  it('interview-fallback.md cites templates/INDEX.template.md and contains the same four header labels plus the interview-path not-applicable value', () => {
     const interviewFallback = read('ingest/interview-fallback.md');
+    expect(interviewFallback).toContain('templates/INDEX.template.md');
     for (const label of ['Edition:', 'Source:', 'Source hash:', 'Transcribed:']) {
       expect(interviewFallback, `interview-fallback.md must contain "${label}"`).toContain(label);
     }
@@ -393,16 +442,11 @@ describe('v4.9 INGEST-04 — INDEX.md header block', () => {
   });
 });
 
-describe('v4.9 INGEST-03 — ## Open Rules Gaps section', () => {
-  it('ingest-rules.md contains the exact bare heading (no parenthetical suffix)', () => {
+describe('v4.9 INGEST-03 — ## Open Rules Gaps section (template fill)', () => {
+  it('ingest-rules.md Step 3 cites INDEX.template.md for the Open Rules Gaps contract rather than restating it', () => {
     const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('INDEX.template.md');
     expect(ingestRules).toContain('## Open Rules Gaps');
-    expect(ingestRules).not.toContain('## Open Rules Gaps (');
-  });
-
-  it('ingest-rules.md contains the always-emitted _None._ empty-state token', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('_None._');
   });
 
   it('ingest-rules.md builds the section exclusively from openGaps[]', () => {
@@ -410,10 +454,10 @@ describe('v4.9 INGEST-03 — ## Open Rules Gaps section', () => {
     expect(ingestRules).toContain('openGaps[]');
   });
 
-  it('interview-fallback.md also emits ## Open Rules Gaps on the same always/_None._ terms', () => {
+  it('interview-fallback.md also emits ## Open Rules Gaps by filling the template, on the same always/_None._ terms', () => {
     const interviewFallback = read('ingest/interview-fallback.md');
     expect(interviewFallback).toContain('## Open Rules Gaps');
-    expect(interviewFallback).toContain('_None._');
+    expect(interviewFallback).toContain('templates/INDEX.template.md');
   });
 });
 

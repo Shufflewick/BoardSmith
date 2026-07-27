@@ -28,6 +28,14 @@ function read(relativePath: string): string {
 }
 
 /**
+ * Collapse all runs of whitespace to a single space, so a pinned phrase stays pinned across a
+ * hand-wrapped Markdown line break without also pinning where that break falls.
+ */
+function flat(text: string): string {
+  return text.replace(/\s+/g, ' ');
+}
+
+/**
  * The status enum values, in order — single source of truth for this suite.
  * Both pinned lines below are derived from this array so the enum cannot
  * drift between state-machine.md and CHUNK.template.md without a test edit.
@@ -368,6 +376,83 @@ describe('SKILLAUTO-01 — SKETCH milestone flag', () => {
     expect(mandatedSection).toMatch(/core-loop/);
     expect(mandatedSection).toMatch(/scoring/i);
     expect(mandatedSection).toMatch(/final-acceptance/);
+  });
+});
+
+/**
+ * INDEX.template.md (Phase 170 Plan 07) — pins the exact strings the harness's
+ * `checkIngestArtifacts()` asserts against a live-agent-produced `rulebook/INDEX.md`. These
+ * assertions prove the template carries the required strings; they do NOT prove an agent
+ * copies and fills the template rather than composing its own INDEX.md from prose memory —
+ * on 2026-07-27 every contract test for this requirement was green while the real run
+ * diverged on every one of these strings. The acceptance bar is `npm run harness:ingest`.
+ */
+describe('v4.9 INGEST-01/03/04 — INDEX.template.md', () => {
+  const indexTemplate = read('templates/INDEX.template.md');
+
+  /** The three literal headings, in document order — single source of truth for this block. */
+  const INDEX_HEADINGS = ['## Open Rules Gaps', '## Slices', '## Term → Slice'] as const;
+
+  /** The four header labels, in the exact order they must appear at line start. */
+  const HEADER_LABELS = ['Edition:', 'Source:', 'Source hash:', 'Transcribed:'] as const;
+
+  it('contains each required heading, exactly, on its own line', () => {
+    for (const heading of INDEX_HEADINGS) {
+      expect(indexTemplate, `must contain the exact line "${heading}"`).toMatch(
+        new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'),
+      );
+    }
+  });
+
+  it('does not carry a parenthetical suffix on the gaps heading', () => {
+    expect(indexTemplate).not.toContain('## Open Rules Gaps (');
+  });
+
+  it('uses the rightwards arrow U+2192 in the term-table heading, never the ASCII "->" digraph', () => {
+    expect(indexTemplate).toContain('## Term → Slice');
+    expect(indexTemplate).not.toContain('## Term -> Slice');
+  });
+
+  it('contains all four header labels at line start, in order', () => {
+    let cursor = -1;
+    for (const label of HEADER_LABELS) {
+      const match = indexTemplate.slice(cursor + 1).match(new RegExp(`^${label}`, 'm'));
+      expect(match, `must contain "${label}" at line start after the previous label`).not.toBeNull();
+      const index = cursor + 1 + (match!.index ?? 0);
+      expect(index).toBeGreaterThan(cursor);
+      cursor = index;
+    }
+  });
+
+  it('contains the always-emitted empty-gaps body token, exactly', () => {
+    expect(indexTemplate).toContain('_None._');
+  });
+
+  it('contains the archive path shape, rulebook/source/<original-filename>', () => {
+    expect(indexTemplate).toContain('rulebook/source/<original-filename>');
+  });
+
+  it('names the interview-path Edition sentinel and states it must not appear on the rulebook path', () => {
+    expect(indexTemplate).toContain('unpublished — designer statement');
+    expect(flat(indexTemplate)).toMatch(
+      /INTERVIEW PATH.{0,80}must NEVER appear on this \(rulebook\) path/,
+    );
+  });
+
+  it('declares a PARSE CONTRACT (TMPL-02) comment naming the required headings in order', () => {
+    const contract = parseContractBlock(indexTemplate);
+    let cursor = -1;
+    for (const heading of INDEX_HEADINGS) {
+      const index = contract.indexOf(heading, cursor + 1);
+      expect(index, `PARSE CONTRACT must list "${heading}" (after the previously listed heading)`).toBeGreaterThan(
+        cursor,
+      );
+      cursor = index;
+    }
+  });
+
+  it('is not a {{BOARDSMITH_ROOT}} thin pointer', () => {
+    expect(indexTemplate).not.toContain('{{BOARDSMITH_ROOT}}');
   });
 });
 
