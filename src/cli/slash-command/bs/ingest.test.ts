@@ -355,21 +355,45 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
 // specified string. The acceptance bar is `npm run harness:ingest`, not this file — see
 // scripts/ingest-harness/README.md.
 
-describe('v4.9 INGEST-01 — source archive + SHA-256 (Step 2.5)', () => {
-  it('ingest-rules.md names Step 2.5 as its own numbered step, citing INGEST-01', () => {
+describe('v4.9 INGEST-01 — source archive + SHA-256 (Step 3, item 1)', () => {
+  // The archive was briefly its own `Step 2.5` between Steps 2 and 3. A live harness run
+  // skipped that step outright, which left INDEX.md's `Source hash:` unfillable and caused
+  // the session to abandon the template and compose the file freehand -- failing every
+  // structural check downstream. The archive now lives INSIDE Step 3 as item 1, so every
+  // input INDEX.md needs is produced by the same step that writes it (which is exactly why
+  // ASSETS.md, whose inputs are all step-local, conformed while INDEX.md did not).
+  //
+  // These tests pin that coupling. A future edit promoting the archive back out to its own
+  // step reintroduces the skip.
+
+  it('ingest-rules.md does NOT carry a standalone Step 2.5 archive step', () => {
     const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('## Step 2.5');
-    expect(ingestRules).toMatch(/## Step 2\.5:[^\n]*INGEST-01/);
+    expect(ingestRules).not.toContain('## Step 2.5');
   });
 
-  it('Step 2.5 is positioned between the Step 2 and Step 3 headings', () => {
+  it('the archive is item 1 of Step 3 and INDEX.md is item 2', () => {
     const ingestRules = read('ingest-rules.md');
-    const step2Idx = ingestRules.indexOf('## Step 2:');
-    const step25Idx = ingestRules.indexOf('## Step 2.5:');
-    const step3Idx = ingestRules.indexOf('## Step 3:');
-    expect(step2Idx).toBeGreaterThan(-1);
-    expect(step25Idx).toBeGreaterThan(step2Idx);
-    expect(step3Idx).toBeGreaterThan(step25Idx);
+    const step3 = ingestRules.slice(
+      ingestRules.indexOf('## Step 3: Synthesis'),
+      ingestRules.indexOf('## Step 4:'),
+    );
+    expect(step3).not.toBe('');
+    const archiveIdx = step3.indexOf('1. **Archive the source rulebook');
+    const indexIdx = step3.indexOf('2. **`rulebook/INDEX.md`');
+    expect(archiveIdx).toBeGreaterThan(-1);
+    expect(indexIdx).toBeGreaterThan(archiveIdx);
+  });
+
+  it('Step 3 states the coupling and warns against promoting the archive back out', () => {
+    const ingestRules = read('ingest-rules.md');
+    const step3 = flat(
+      ingestRules.slice(
+        ingestRules.indexOf('## Step 3: Synthesis'),
+        ingestRules.indexOf('## Step 4:'),
+      ),
+    );
+    expect(step3).toMatch(/Do not promote item 1 back out to a step of its own/);
+    expect(step3).toMatch(/item 1 produces the archived path and hash that item 2's header block requires/);
   });
 
   it('ingest-rules.md prescribes the rulebook/source/ archive path', () => {
@@ -388,23 +412,25 @@ describe('v4.9 INGEST-01 — source archive + SHA-256 (Step 2.5)', () => {
     expect(ingestRules).toMatch(/copy[\s\S]{0,200}never[\s\S]{0,60}(move|delete|rename|overwrite)/i);
   });
 
-  it('ingest-rules.md states the stop-and-ask rule for an already-existing archive destination', () => {
+  it('the archive item states the stop-and-ask rule for an existing destination', () => {
     const ingestRules = read('ingest-rules.md');
-    const step25 = ingestRules.slice(
-      ingestRules.indexOf('## Step 2.5:'),
-      ingestRules.indexOf('## Step 3:'),
+    const step3 = ingestRules.slice(
+      ingestRules.indexOf('## Step 3: Synthesis'),
+      ingestRules.indexOf('## Step 4:'),
     );
-    expect(flat(step25)).toMatch(/STOP and ask/);
+    expect(flat(step3)).toMatch(/STOP and ask/);
   });
 
-  it("Step 2.5 states Step 3's Source hash: line depends on the value computed here", () => {
+  it('the archive item states that a failed archive BLOCKS the INDEX.md write', () => {
     const ingestRules = read('ingest-rules.md');
-    const step25 = ingestRules.slice(
-      ingestRules.indexOf('## Step 2.5:'),
-      ingestRules.indexOf('## Step 3:'),
+    const step3 = flat(
+      ingestRules.slice(
+        ingestRules.indexOf('## Step 3: Synthesis'),
+        ingestRules.indexOf('## Step 4:'),
+      ),
     );
-    expect(step25).toContain('Source hash:');
-    expect(flat(step25)).toMatch(/carried forward to Step 3/);
+    expect(step3).toContain('Source hash:');
+    expect(step3).toMatch(/item 2 is \*\*blocked\*\*/);
   });
 
   it('ingest/scaffold.md does NOT contain rulebook/source/ (Pitfall 1 guard — scaffold.md runs before {rulebookPath} is known)', () => {

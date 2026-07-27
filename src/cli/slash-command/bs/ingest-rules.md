@@ -38,7 +38,7 @@ checks in the current directory, never `**/glob` patterns that search subfolders
    wrote the sketch. This is NOT a fresh directory: running Step 1's `init` here would
    scaffold a nested `<name>/<name>/` project, and re-transcribing would orphan the
    already-confirmed slices. STOP and ask the user whether to **resume from the existing
-   slices** (skip Steps 1-2, re-run Step 2.5 onward from the slices' accumulated INDEX/ASSETS
+   slices** (skip Steps 1-2, re-run Step 3 onward from the slices' accumulated INDEX/ASSETS
    content — re-dispatching narrow subagents only for anything missing) or **discard and
    restart** (delete `rulebook/`, `ASSETS.md`, and any `chunks/`, then treat the project
    directory per Step 1's verification-only path — `init` already ran). Never proceed
@@ -95,49 +95,45 @@ by this session from the designer's short answers in the interview path — and 
 `citedTerms[]` / `componentMentions[]` for Step 3's synthesis; no slice is ever read back in
 full by this orchestrator.
 
-## Step 2.5: Archive the Source Rulebook (INGEST-01)
-
-**Do this step now, before Step 3, as its own concrete action — not a detail folded into
-Synthesis.** This step has exactly one deliverable: after this step,
-`rulebook/source/<original-filename>` exists on disk and its SHA-256 is known. Step 3 cannot
-write `rulebook/INDEX.md`'s `Source hash:` line without the value this step computes — a skipped
-Step 2.5 must surface as a **blocked Step 3**, never as a silently missing line. Do not defer
-this step's shell commands to "later" or fold them into Step 3's synthesis prose — run them here,
-between dispatching transcription/interview (Step 2) and writing any Step 3 artifact.
-
-Concretely, in order: (1) run a copy command placing the source file bound at Step 2
-(`{rulebookPath}`) at `rulebook/source/<original-filename>`; (2) run
-`shasum -a 256 rulebook/source/<original-filename>` (or the `sha256sum` fallback) and read its
-actual output; (3) hold that 64-hex-character value for Step 3's `Source hash:` line. All three
-are real tool invocations this session runs itself, not steps to summarize as already done.
-
-Copy the source file bound at Step 2 (`{rulebookPath}`) to `rulebook/source/<original-filename>`,
-preserving the original filename verbatim. This is a **copy**, never a move, rename, delete, or
-overwrite: ingest never touches the designer's original — a source already sitting at the project
-root (e.g. `rules.pdf` in the project root) stays exactly where it is, untouched, in addition to
-the new copy under `rulebook/source/`. If a file already exists at the archive destination, STOP
-and ask the designer rather than clobbering it.
-
-Verify the copy before continuing: the archived file must exist and be byte-identical to the
-source (same size, same hash as computed below). This is a deterministic shell operation, not
-agent judgment: compute the SHA-256 of the **archived** file with
-`shasum -a 256 rulebook/source/<original-filename>` (macOS/BSD; use
-`sha256sum rulebook/source/<original-filename>` as the Linux/CI fallback, since GNU/Linux ships
-`sha256sum` rather than `shasum`), taking the first whitespace-delimited field as the hash. Never
-report a hash you did not compute by actually running the command. The computed hash is carried
-forward to Step 3's `Source hash:` line.
-
-**Interview-path exception:** on the interview path there is no source file — this step does not
-run, no `rulebook/source/` directory is created, and that absence is expected only on that path.
-See `ingest/interview-fallback.md`'s "Output Re-Target" for that path's header values instead.
-
 ## Step 3: Synthesis
 
 Once transcription or interview output has landed, this orchestrator-only step assembles the
-following artifacts **from subagent-returned summaries only** — never from re-reading slices:
+following artifacts **from subagent-returned summaries only** — never from re-reading slices.
 
-1. **`rulebook/INDEX.md` — copy and fill the template. Do this literally, as the FIRST
-   concrete action of this step, before drafting any other Step 3 artifact.** Read
+Items 1 and 2 are ordered and coupled: item 1 produces the archived path and hash that item 2's
+header block requires. Both live inside this step deliberately. An earlier revision made the
+archive its own `Step 2.5` between Step 2 and Step 3, and a live run skipped it outright —
+leaving item 2 with an unfillable `Source hash:` line, at which point the session abandoned the
+template and composed `rulebook/INDEX.md` freehand, failing every structural check. Every input
+`INDEX.md` needs is now produced by this same step. Do not promote item 1 back out to a step of
+its own.
+
+1. **Archive the source rulebook and compute its hash (INGEST-01).** Run this as the first
+   concrete action of this step. It has exactly one deliverable: after it,
+   `rulebook/source/<original-filename>` exists on disk and its SHA-256 is known.
+
+   Concretely, in order: (1) run a copy command placing the source file bound at Step 2
+   (`{rulebookPath}`) at `rulebook/source/<original-filename>`, preserving the original filename
+   verbatim; (2) run `shasum -a 256 rulebook/source/<original-filename>` (or the `sha256sum`
+   fallback on Linux/CI) and read its actual output, taking the first whitespace-delimited field;
+   (3) hold that 64-hex value for item 2's `Source hash:` line. All three are real tool
+   invocations this session runs itself — never report a hash you did not compute by running the
+   command, and never summarize these as already done.
+
+   This is a **copy**, never a move, rename, delete, or overwrite: ingest never touches the
+   designer's original. A source already sitting at the project root stays exactly where it is,
+   untouched, in addition to the new copy under `rulebook/source/`. If a file already exists at
+   the archive destination, STOP and ask the designer rather than clobbering it.
+
+   If this item cannot complete, item 2 is **blocked** — say so and stop. A missing archive must
+   never surface as a silently missing `Source hash:` line.
+
+   **Interview-path exception:** on the interview path there is no source file — this item does
+   not run, no `rulebook/source/` directory is created, and that absence is expected only on that
+   path. See `ingest/interview-fallback.md`'s "Output Re-Target" for that path's header values.
+
+2. **`rulebook/INDEX.md` — copy and fill the template.** Do this immediately after item 1,
+   before drafting any other Step 3 artifact. Read
    `${CLAUDE_SKILL_DIR}/../bs-shared/templates/INDEX.template.md` in full, then write
    `rulebook/INDEX.md` starting from that exact structure — same H1, same comments-become-fills,
    same three headings, same order — with its placeholders filled. This is a **copy-then-fill**
@@ -150,7 +146,7 @@ following artifacts **from subagent-returned summaries only** — never from re-
    and the `## Term → Slice` table, each with its own fill instructions. The fill needs:
    - the `edition` field the opening-pages transcription subagent returned (or the interview
      path's `unpublished — designer statement` value — never the reverse);
-   - the archived path and hash Step 2.5 produced;
+   - the archived path and hash item 1 of this step produced;
    - today's ISO date;
    - the accumulated `openGaps[]` lists, for `## Open Rules Gaps`;
    - the accumulated `citedTerms[]` lists, for `## Term → Slice`.
