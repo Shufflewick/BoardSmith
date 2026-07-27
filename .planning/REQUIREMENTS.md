@@ -135,11 +135,11 @@ the tag.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROC-01 | Phase 170 | Pending |
-| PROC-02 | Phase 170 | Complete |
-| INGEST-01 | Phase 170 | Complete |
-| INGEST-02 | Phase 170 | Complete |
-| INGEST-03 | Phase 170 | Complete |
-| INGEST-04 | Phase 170 | Complete |
+| PROC-02 | Phase 170 | Pending |
+| INGEST-01 | Phase 170 | Pending |
+| INGEST-02 | Phase 170 | Pending |
+| INGEST-03 | Phase 170 | Pending |
+| INGEST-04 | Phase 170 | Pending |
 | PROV-01 | Phase 171 | Pending |
 | PROV-02 | Phase 171 | Pending |
 | PROV-03 | Phase 171 | Pending |

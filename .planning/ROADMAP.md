@@ -46,13 +46,19 @@ no archived source degrades honestly instead of failing.
   2. Transcription output distinguishes `Visual (p.N):` diagram/art/layout lines from `Derived (p.N):` rule-inference lines in the generated slices.
   3. `rulebook/INDEX.md` for a freshly-ingested game carries a standardized `## Open Rules Gaps` section plus edition/source-file/transcription-date header lines a designer can read without opening any slice.
   4. Every skill-text change landed in this phase is demonstrated against a real ingest run (not skill-text review alone) and locked by a regression test — the pattern every subsequent phase follows.
-**Plans**: 4 plans
+**Plans**: 10 plans (01-02 shipped, 03 ran and FAILED, 04 superseded, 05-10 are the gap-closure replan)
 
 Plans:
 - [x] 170-01-PLAN.md — transcription.md: Derived/Visual decision test + `openGaps[]` return field (INGEST-02, INGEST-03)
 - [x] 170-02-PLAN.md — ingest-rules.md Step 3: source archive + SHA-256, INDEX header block, always-emitted `## Open Rules Gaps` (INGEST-01, INGEST-03, INGEST-04)
-- [ ] 170-03-PLAN.md — PROC-01 manual proof: real `/bs-ingest-rules` run against seven/rules.pdf, output captured (PROC-01)
-- [ ] 170-04-PLAN.md — golden INDEX.md fixtures + artifact-shape test + PROC-02 adversarial closure (INGEST-03, INGEST-04, PROC-02)
+- [x] 170-03-PLAN.md — PROC-01 manual proof run: **FAILED 7 of 9 checks**; root cause recorded in `170-PROOF-RUN.md` — the orchestrator does not execute prose skill text literally (PROC-01)
+- [~] 170-04-PLAN.md — SUPERSEDED. Its golden-fixture premise is invalid (the proof run's output is non-conforming). Tasks 1-2 replaced by `templates/INDEX.template.md` + the harness checker fixtures; Task 3 salvaged as 170-09.
+- [ ] 170-05-PLAN.md — ingest harness: deterministic produced-artifact checker + fixtures from the real failed run (PROC-01, PROC-02)
+- [ ] 170-06-PLAN.md — ingest harness driver: live headless agent run, operator-invoked, never in CI; failing baseline recorded (PROC-01)
+- [ ] 170-07-PLAN.md — `templates/INDEX.template.md` + Step 2.5 archive/hash; INDEX produced by template fill (INGEST-01, INGEST-03, INGEST-04, PROC-02)
+- [ ] 170-08-PLAN.md — dispatch prompt as template + per-slice line-kind receipt; INGEST-02 on live output (INGEST-02, PROC-02)
+- [ ] 170-09-PLAN.md — capture passing-run evidence + PROC-02 adversarial closure across all six requirements (INGEST-01..04, PROC-02)
+- [ ] 170-10-PLAN.md — PROC-01 human gate re-run, gated on the harness passing first (PROC-01)
 
 ### Phase 171: Provenance Recording
 **Goal**: The build pipeline and status reporting both know, honestly, what was verified against what.
