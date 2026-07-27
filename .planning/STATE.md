@@ -4,13 +4,13 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 170-06-PLAN.md
-last_updated: "2026-07-27T20:25:17.317Z"
+last_updated: "2026-07-27T20:56:47.968Z"
 last_activity: 2026-07-27
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 10
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -26,9 +26,12 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 170 (Ingest Contract Upgrade) — EXECUTING
-Plan: 6 of 10 (170-06 complete: live-agent harness driver built and run against current HEAD;
-baseline reproduces the 2026-07-27 human gate's 8-of-9 failure with no human in the loop, 1/10
-checks passing. No INGEST requirement closed. 170-07 not started.)
+Plan: 8 of 10 (170-07 complete: authored templates/INDEX.template.md + ingest-rules.md Step 2.5
+archive/hash, rewrote Step 3 to copy-and-fill the template, pinned contract tests. Two live
+`npm run harness:ingest` runs — one with the as-landed skill text, one after a mid-task wording
+strengthening — both scored 1/10, identical to the 170-06 baseline; the template-copy mechanism
+did NOT survive a live orchestrator session for INDEX.md's structural complexity in either
+attempt. No INGEST requirement closed. 170-08 not started.)
 Status: Ready to execute
 Last activity: 2026-07-27
 
@@ -333,6 +336,7 @@ Recent decisions affecting current work:
 - [Phase 170]: conforming fixture rules.pdf is a 113-byte synthetic stand-in, not a copy of the real 2.1MB seven/rules.pdf
 - [Phase 170]: No --add-dir passed to the driven claude session; source rulebook copied into throwaway tree at stage time so the reference game repo is structurally unreachable, not merely git-status-detected
 - [Phase 170]: 170-PROOF-RUN.md header arithmetic corrected from 7-of-9 to 8-of-9 to match its own checklist table before using it as this baseline's comparison target
+- [Phase ?]: Live harness stayed 1/10 across two attempts for INDEX.md template-copy mechanism; deferred deeper architectural fix to next plan
 
 ### Pending Todos
 
@@ -344,7 +348,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-27T20:25:17.309Z
+Last session: 2026-07-27T20:55:24.163Z
 Stopped at: Completed 170-06-PLAN.md
 Resume file: 
 None

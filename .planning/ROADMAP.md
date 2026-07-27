@@ -55,7 +55,7 @@ Plans:
 - [~] 170-04-PLAN.md — SUPERSEDED. Its golden-fixture premise is invalid (the proof run's output is non-conforming). Tasks 1-2 replaced by `templates/INDEX.template.md` + the harness checker fixtures; Task 3 salvaged as 170-09.
 - [x] 170-05-PLAN.md — ingest harness: deterministic produced-artifact checker + fixtures from the real failed run (PROC-01, PROC-02)
 - [x] 170-06-PLAN.md — ingest harness driver: live headless agent run, operator-invoked, never in CI; failing baseline recorded (PROC-01)
-- [ ] 170-07-PLAN.md — `templates/INDEX.template.md` + Step 2.5 archive/hash; INDEX produced by template fill (INGEST-01, INGEST-03, INGEST-04, PROC-02)
+- [x] 170-07-PLAN.md — `templates/INDEX.template.md` + Step 2.5 archive/hash; INDEX produced by template fill (INGEST-01, INGEST-03, INGEST-04, PROC-02)
 - [ ] 170-08-PLAN.md — dispatch prompt as template + per-slice line-kind receipt; INGEST-02 on live output (INGEST-02, PROC-02)
 - [ ] 170-09-PLAN.md — capture passing-run evidence + PROC-02 adversarial closure across all six requirements (INGEST-01..04, PROC-02)
 - [ ] 170-10-PLAN.md — PROC-01 human gate re-run, gated on the harness passing first (PROC-01)
@@ -160,7 +160,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 170. Ingest Contract Upgrade | 4/10 | In Progress|  |
+| 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
 | 171. Provenance Recording | 0/TBD | Not started | - |
 | 172. Source-Free Conformance Checks | 0/TBD | Not started | - |
 | 173. Verify Pipeline Core | 0/TBD | Not started | - |
