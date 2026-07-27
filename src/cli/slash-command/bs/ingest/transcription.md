@@ -25,95 +25,41 @@ the ranges comes from the user or from file metadata (a file listing for page im
 metadata for a PDF) — never from opening the rulebook content itself; that would violate the
 Hard Rule above. Dispatch one Task-tool subagent per page range, in parallel where the harness
 allows it. **The subagent writes the slice files itself** — the transcribed text never flows
-back through the orchestrator's context. Each subagent's prompt — fill `{rulebookPath}` with
-the actual path to the PDF/image files/text and `{N}`-`{M}` with the range; a fresh-context
-Task subagent has no inherited knowledge of where the source lives:
+back through the orchestrator's context.
+
+**Do not compose, restate, or summarize the transcription contract in the dispatch prompt.** The
+contract lives in `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md`; the
+subagent reads it directly. Each dispatch prompt is short, and carries only the three
+substitutions the subagent cannot know on its own:
 
 ```
-Transcribe pages {N}-{M} of the rulebook at {rulebookPath} to canonical text. Identify natural section
-boundaries within this range (a section rarely spans a page-range seam cleanly — note where a
-section continues into the next range). For each section:
+Read `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md` in full and follow it
+exactly.
 
-  1. WRITE the transcribed text directly to `rulebook/NN-topic.md`, where NN is the section's
-     STARTING PAGE NUMBER, zero-padded to two digits (e.g. the section starting on p.14 →
-     `rulebook/14-movement.md`). Slice text is made of two visually distinct kinds of line —
-     never blend them:
-       - QUOTE lines: exact source sentences under a citation prefix (e.g. "p.14, Movement:").
-         A citation prefix is a promise of verbatim text — before writing each quote line,
-         re-check it word-for-word against the source page. Never put a paraphrase, a
-         condensation, or a logical consequence under a citation prefix, however faithful.
-       - DERIVED lines: a **rule-bearing** condensation or inference — one that affects
-         legality, scoring, or sequencing — prefixed `Derived (p.14):`. A derived line must
-         follow from quote lines in this slice alone — never from your own knowledge of this
-         game or of any game like it. Being inferred rather than quoted is NOT by itself
-         enough to make a line `Derived`: an inference about layout, art, palette, or
-         typography is a VISUAL line (below), however much inference went into producing it.
-       - VISUAL lines: a diagram, art, layout, or typography description, prefixed
-         `Visual (p.14):` (same page-citation shape as `Derived (p.14):`). Deciding between
-         `Derived` and `Visual` is a single decision test, not a category list: does the line
-         affect **legality, scoring, or sequencing**? If yes, it is `Derived` — write it under
-         the `Derived (p.N):` prefix even though it was inferred rather than quoted. If no —
-         it describes a diagram, art, layout, or typography — it is `Visual`, and a line
-         answering "no" to this test is never written under the `Derived (p.N):` prefix, no
-         matter how much inference went into describing it. Two worked examples:
-           - Derived: a per-player starting-hand card count inferred from a setup diagram
-             (e.g. "Derived (p.3): Each player starts with 5 cards.") — it affects legality
-             (how many cards a player may hold at setup), so it is `Derived`.
-           - Visual: a setup-diagram layout description (e.g. "Visual (p.3): Setup diagram
-             shows the deck centered with each player's starting hand fanned below their
-             seat.") — it describes layout, not a rule, so it is `Visual`.
-         A publisher logo or copyright note is a useful edge case to keep in mind (do not add
-         it as a third worked example): it is neither a diagram of play nor rule-bearing, so
-         it fails the rule-bearing test and is `Visual`.
-         This inline `Visual (p.N):` prefix is complementary to, not a replacement for,
-         `rulebook/00-visual-survey.md` — the survey remains the durable whole-rulebook
-         handoff to the first `ui:` chunk, written from `visualEvidence[]` at Step 3,
-         unchanged; `Visual (p.N):` instead marks a diagram/art note sitting mid-rule inside a
-         rule slice.
-     If the source names a rule without defining it (a bare mention or cross-reference), write
-     `Named-but-undefined (p.N): <rule name>` and stop there — do not reconstruct the
-     definition from the rule's name or from general knowledge; downstream steps surface it
-     to the designer instead.
-     Worked examples, sample positions/states, and rule-bearing diagrams are
-     transcription-critical: copy their exact contents (coordinates, values, quantities,
-     captions) into the slice in full. They are the only seed downstream test scenarios
-     have — a dropped example gets silently replaced by an invented one later.
-  2. RETURN a structured summary only — never the transcribed text itself:
-     (a) slicePath — the rulebook/NN-topic.md file you wrote.
-     (b) sectionSummary — 2-4 sentences describing what the section covers, written for a
-         user confirmation prompt.
-     (c) citedTerms[] — every term this section defines or meaningfully references (rules
-         vocabulary a cross-reference table would need — not every noun, just game-rules terms).
-     (d) componentMentions[] — any physical component mentioned or depicted (cards, tiles, dice,
-         board, tokens), each with its approximate aspect ratio if the rulebook shows or states
-         dimensions, and the page citation.
-     (e) visualEvidence[] — visual identity observations from your assigned pages: dominant
-         palette candidates, typography feel, iconography, notes on board/card art, and a short
-         description of every setup diagram or embedded component image (with page citation).
-         Weave those diagram/image descriptions into the slice text you write as well, each
-         one under the `Visual (p.N):` prefix — never under `Derived (p.N):`, which is
-         reserved for rule-bearing lines. The slice is the only downstream record of them;
-         nothing re-reads the PDF/images later.
-     (f) variants[] — every rule this section marks as a variant, optional module, or
-         advanced/expert rule (name + page citation). Also tag each one out-of-scope-by-default
-         inline in the slice text you write (e.g. a `> Variant:` note) — the tag lives in the
-         slice, the list entry lives in your return.
-     (g) openGaps[] — every `Named-but-undefined (p.N): <rule name>` line you wrote in this
-         section's slice, verbatim (rule name + page citation), so the orchestrator can build
-         `## Open Rules Gaps` without re-reading the slice.
-
-Return exactly: one { slicePath, sectionSummary, citedTerms[], componentMentions[],
-visualEvidence[], variants[], openGaps[] } per section.
+Your page range: {N}-{M}
+Rulebook path:   {rulebookPath}
+Write slices to: rulebook/
 ```
+
+Fill `{rulebookPath}` with the actual path to the PDF/image files/text and `{N}`-`{M}` with the
+range — a fresh-context Task subagent has no inherited knowledge of where the source lives.
+
+This indirection is load-bearing; do not "simplify" it back into an inline block. When the
+contract was inline, composing each dispatch prompt silently dropped parts of it — most
+damagingly the `VISUAL lines` rule, which produced slices where every art and layout note was
+misfiled under `Derived (p.N):`. Every contract test stayed green while it happened, because the
+tests asserted that the instruction existed, not that a subagent ever received it. A pointer
+cannot degrade in transit; a retyped 70-line block can, and did.
 
 **Edition (opening-pages range only):** for the subagent assigned the rulebook's first pages,
-append this line to the prompt above — it is not part of the base template, so the other
+append this line to the dispatch prompt above — it is not part of the base dispatch, so the other
 ranges never return it:
 
 ```
-Additionally return one top-level `edition` field — the edition/printing stated on the
-cover, title page, or colophon (null if the rulebook states none).
+You own the rulebook's opening pages: additionally return the top-level `edition` field
+described in the contract.
 ```
+
 
 If it comes back null, the orchestrator asks the user. The
 orchestrator records it as a header line in `rulebook/INDEX.md` (e.g. `Edition: 2nd edition,
@@ -121,7 +67,7 @@ orchestrator records it as a header line in `rulebook/INDEX.md` (e.g. `Edition: 
 the interview path the line reads `Edition: unpublished — designer statement`.
 
 **Slice numbering is page-anchored** (`NN` = the section's zero-padded starting page number,
-stated in the template above) precisely because it is self-allocating: a subagent needs no
+specified in `ingest/transcription-subagent.md`) precisely because it is self-allocating: a subagent needs no
 knowledge of how many sections any other range produced, so parallel ranges can never collide
 on a prefix and the files sort in page order with zero coordination between subagents. Do not
 substitute a sequential "numbering base" scheme — the orchestrator cannot know a range's

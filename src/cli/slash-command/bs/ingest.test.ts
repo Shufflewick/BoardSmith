@@ -35,6 +35,18 @@ function read(relativePath: string): string {
 }
 
 /**
+ * Collapse all runs of whitespace to a single space.
+ *
+ * Skill text is hand-wrapped Markdown prose, so a canonical phrase like "legality, scoring,
+ * or sequencing" legitimately wraps across a line break. Assert on the flattened text when
+ * pinning a phrase, so the phrase stays pinned without pinning the line breaks around it —
+ * otherwise a harmless re-wrap fails the suite and trains people to loosen the assertion.
+ */
+function flat(text: string): string {
+  return text.replace(/\s+/g, ' ');
+}
+
+/**
  * Sketch-level tail-entry marker (em-dash, not hyphen). Byte-identical across
  * state-machine.md, SKETCH.template.md, and any ingest reference file that
  * quotes it (e.g. sketch-derivation.md's 2-3-chunk detail cap explanation).
@@ -228,74 +240,106 @@ describe('SKILLAUTO-01 — milestone-chunk mandates', () => {
 });
 
 describe('v4.9 INGEST-02 — Derived/Visual line-prefix split', () => {
-  it('transcription.md defines the Visual (p. prefix', () => {
-    const transcription = read('ingest/transcription.md');
-    expect(transcription).toContain('Visual (p.');
+  it('the subagent contract defines the Visual (p. prefix', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('Visual (p.');
   });
 
-  it('transcription.md defines the Derived (p. prefix', () => {
-    const transcription = read('ingest/transcription.md');
-    expect(transcription).toContain('Derived (p.');
+  it('the subagent contract defines the Derived (p. prefix', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('Derived (p.');
   });
 
-  it('transcription.md states the rule-bearing decision test verbatim', () => {
-    const transcription = read('ingest/transcription.md');
-    expect(transcription).toContain('legality, scoring, or sequencing');
+  it('the subagent contract states the rule-bearing decision test verbatim', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('legality, scoring, or sequencing');
   });
 
-  it('transcription.md still cites rulebook/00-visual-survey.md (split does not retire the survey slice)', () => {
-    const transcription = read('ingest/transcription.md');
-    expect(transcription).toContain('rulebook/00-visual-survey.md');
+  it('the subagent contract still cites rulebook/00-visual-survey.md (split does not retire the survey slice)', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('rulebook/00-visual-survey.md');
   });
 
-  // Regression: the 170-03 proof run produced ZERO `Visual (p.` lines and misfiled 5 of 10
-  // `Derived (p.` lines as pure layout/art/typography descriptions. Root cause was two
-  // compounding defects in transcription.md, pinned by the two tests below. A green
-  // "the prefix is defined" assertion did not catch either — the prefix WAS defined.
+  // Regression: the 170-03 proof run produced ZERO `Visual (p.` lines and misfiled art,
+  // layout and typography notes under `Derived (p.` -- twice, across two wording fixes.
+  //
+  // Root cause was NOT the wording. A controlled probe (dispatching a subagent with the
+  // contract delivered verbatim) produced the correct split on the same page that failed
+  // twice in situ. The orchestrator was composing its own paraphrase of a ~70-line inline
+  // block and dropping the VISUAL bullet in transit. The contract now lives in its own
+  // file that the subagent reads directly, so it cannot degrade in transit.
+  //
+  // These tests pin the indirection, not the prose. A future editor who "simplifies" the
+  // pointer back into an inline block reintroduces the exact defect.
+
+  it('the dispatch does NOT inline the contract -- transcription.md carries no line-prefix bullets', () => {
+    const transcription = read('ingest/transcription.md');
+    // The contract's own section markers must not reappear in the dispatching file.
+    expect(transcription).not.toContain('- QUOTE lines:');
+    expect(transcription).not.toContain('- DERIVED lines:');
+    expect(transcription).not.toContain('Return exactly:');
+  });
+
+  it('the dispatch points at the contract file and forbids restating it', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('ingest/transcription-subagent.md');
+    expect(transcription).toMatch(/Do not compose, restate, or summarize the transcription contract/);
+  });
+
+  it('the contract file tells the subagent to read it in full rather than accept a paraphrase', () => {
+    // Markdown prose wraps; collapse whitespace so a canonical phrase stays pinned
+    // without pinning the line breaks around it.
+    const contract = flat(read('ingest/transcription-subagent.md'));
+    expect(contract).toContain('Do not accept a paraphrase of this file in place of the file');
+  });
 
   it('the DERIVED bullet is self-limiting: its own definition carries the rule-bearing qualifier', () => {
-    const transcription = read('ingest/transcription.md');
-    // Defect 1: DERIVED was defined by provenance alone ("anything you condensed or
-    // inferred"), so a layout inference matched it exactly and never reached the VISUAL
-    // bullet's decision test. The qualifier must live AT the DERIVED site, not only below it.
-    const derivedBullet = transcription.slice(
-      transcription.indexOf('- DERIVED lines:'),
-      transcription.indexOf('- VISUAL lines:'),
+    const contract = read('ingest/transcription-subagent.md');
+    // Defect 1: DERIVED defined by provenance alone ("anything you condensed or inferred")
+    // matches a layout inference exactly, so the reader never reaches the VISUAL rule.
+    const derivedSection = flat(
+      contract.slice(contract.indexOf('### DERIVED lines'), contract.indexOf('### VISUAL lines')),
     );
-    expect(derivedBullet).not.toBe('');
-    expect(derivedBullet).toContain('rule-bearing');
-    expect(derivedBullet).toContain('legality, scoring, or sequencing');
-    // The exclusion must be explicit: inferred-ness alone does not earn the Derived prefix.
-    expect(derivedBullet).toMatch(/NOT by itself|not by itself/);
+    expect(derivedSection).not.toBe('');
+    expect(derivedSection).toContain('rule-bearing');
+    expect(derivedSection).toContain('legality, scoring, or sequencing');
+    expect(derivedSection).toMatch(/not by itself/i);
   });
 
   it('the visualEvidence[] weave instruction names the Visual (p.N): prefix at its own site', () => {
-    const transcription = read('ingest/transcription.md');
-    // Defect 2: visualEvidence[] told the subagent to "weave those diagram/image
-    // descriptions into the slice text" without naming a prefix, so it reached for the
-    // prefix whose definition fit — Derived. The weave site must name Visual itself.
-    const weaveIdx = transcription.indexOf('Weave those diagram/image descriptions');
+    const contract = read('ingest/transcription-subagent.md');
+    // Defect 2: the weave instruction told the subagent to put visual descriptions in the
+    // slice without naming a prefix, so it reached for the one whose definition fit.
+    const weaveIdx = contract.indexOf('Weave those diagram/image descriptions');
     expect(weaveIdx).toBeGreaterThan(-1);
-    const weaveInstruction = transcription.slice(weaveIdx, weaveIdx + 400);
+    const weaveInstruction = flat(contract.slice(weaveIdx, weaveIdx + 400));
     expect(weaveInstruction).toContain('Visual (p.N):');
     expect(weaveInstruction).toContain('never under `Derived (p.N):`');
+  });
+
+  it('the contract forbids the invented ## Visual notes heading the failing runs produced', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    // Both failing runs invented a `## Visual notes` heading -- a string absent from all
+    // skill text -- and wrote `Derived (p.N):` lines under it. The prefix is the marker.
+    expect(contract).toContain('Visual notes');
+    expect(flat(contract)).toContain('prefix is the marker, not the heading');
   });
 });
 
 describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
-  it('transcription.md defines openGaps[]', () => {
-    const transcription = read('ingest/transcription.md');
-    expect(transcription).toContain('openGaps[]');
+  it('the subagent contract defines openGaps[]', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('openGaps[]');
   });
 
-  it('transcription.md still contains the Named-but-undefined marker', () => {
-    const transcription = read('ingest/transcription.md');
-    expect(transcription).toContain('Named-but-undefined');
+  it('the subagent contract still contains the Named-but-undefined marker', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('Named-but-undefined');
   });
 
   it('the Return exactly: enumeration line names openGaps[] in the same statement', () => {
-    const transcription = read('ingest/transcription.md');
-    expect(transcription).toMatch(/Return exactly:[\s\S]*?openGaps\[\][\s\S]*?\}/);
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toMatch(/Return exactly:[\s\S]*?openGaps\[\][\s\S]*?\}/);
   });
 
   it('does not instruct re-reading the slice to collect gaps', () => {
@@ -374,10 +418,12 @@ describe('v4.9 INGEST-03 — ## Open Rules Gaps section', () => {
 });
 
 describe('return-shape field names — pinned across the file set (WR-07)', () => {
-  it('transcription.md defines every return-shape field', () => {
-    const transcription = read('ingest/transcription.md');
+  it('the transcription subagent contract defines every return-shape field', () => {
+    // The return shape moved out of transcription.md into the standalone subagent
+    // contract when the dispatch became a pointer (see the v4.9 INGEST-02 block).
+    const contract = read('ingest/transcription-subagent.md');
     for (const field of RETURN_SHAPE_FIELDS) {
-      expect(transcription, `transcription.md must define "${field}"`).toContain(field);
+      expect(contract, `transcription-subagent.md must define "${field}"`).toContain(field);
     }
   });
 
