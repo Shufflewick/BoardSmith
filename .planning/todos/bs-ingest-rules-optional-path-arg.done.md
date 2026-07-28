@@ -1,7 +1,13 @@
 # `/bs-ingest-rules` — optional rulebook path argument
 
 **Raised:** 2026-07-27 (during Phase 170's human gate, by JT)
-**Status:** pending — implement immediately after Phase 170's PROC-01 gate closes
+**Status:** IMPLEMENTED 2026-07-27. Kept for the record; nothing to do.
+
+Landed as the optional `/bs-ingest-rules [path-to-rulebook]` argument, and it turned out to be
+load-bearing rather than ergonomic: it is what let the source archive move into
+`boardsmith init --rulebook`, which is one of only two mechanisms in Phase 170 that survived a
+live run. All five design constraints below were implemented, including the loud failure on an
+unreadable path. See `.planning/phases/170-ingest-contract-upgrade/170-MECHANISMS.md`.
 **Scope:** `src/cli/slash-command/bs/ingest-rules.md`, `bs/create-game.md`,
 `scripts/ingest-harness/run.mjs`, `src/cli/slash-command/bs/ingest.test.ts`
 

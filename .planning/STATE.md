@@ -25,14 +25,45 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 170 (Ingest Contract Upgrade) — EXECUTING
-Plan: 8 of 10 (170-07 complete: authored templates/INDEX.template.md + ingest-rules.md Step 2.5
-archive/hash, rewrote Step 3 to copy-and-fill the template, pinned contract tests. Two live
-`npm run harness:ingest` runs — one with the as-landed skill text, one after a mid-task wording
-strengthening — both scored 1/10, identical to the 170-06 baseline; the template-copy mechanism
-did NOT survive a live orchestrator session for INDEX.md's structural complexity in either
-attempt. No INGEST requirement closed. 170-08 not started.)
-Status: Ready to execute
+Phase: 170 (Ingest Contract Upgrade) — SOLVED, awaiting the human gate
+Plan: 10 of 10. **Read `.planning/phases/170-ingest-contract-upgrade/170-MECHANISMS.md` first** —
+it consolidates the whole phase and lists which artifacts in that directory are superseded.
+
+`npm run harness:ingest` reports **10/10 PASS** on live multi-turn runs (was 1/10). Fourteen
+mechanisms were tried; the two that worked both remove the model's choice:
+
+  1. `boardsmith init` REFUSES to run without `--rulebook <path>` or `--without-rulebook`, and
+     archives the source + writes rulebook/INDEX.md's provenance header when given a path.
+  2. `init` installs a `pre-commit` hook running `boardsmith ingest-gaps`, which fills
+     `## Open Rules Gaps` from the slices and relabels presentation-only `Derived (p.N):` lines as
+     `Visual (p.N):`. The bs- build protocol commits at every step, so it runs unprompted.
+
+Twelve instruction-shaped attempts all failed on live runs — prose, a template, a pointer, a
+handshake token, a delegated subagent, re-read gates, a CLI command, a sequence item, a command-line
+flag. Tool-call capture showed the orchestrator composes subagent prompts from memory, bypasses the
+fan-out design (reading the PDF and writing slices itself), and skips newly added steps even from a
+file it just read.
+
+**The finding that matters for 171-179:** skill text conveys JUDGMENT reliably and MECHANICS not at
+all. Sort each remaining requirement into those two buckets before planning; mechanical ones need
+code, not better wording.
+
+New surface: `boardsmith init --rulebook/--without-rulebook/--edition`,
+`boardsmith ingest-archive`, `boardsmith ingest-gaps`, `boardsmith ingest-relabel`,
+`src/cli/lib/ingest-hook.ts`, `scripts/ingest-harness/` (checker in CI, live driver not).
+Also implemented: the optional `/bs-ingest-rules <path>` argument
+(`.planning/todos/pending/bs-ingest-rules-optional-path-arg.md` — can be closed).
+
+Status: **NOT closed.** INGEST-01/02/03/04 and PROC-01/02 all pass the harness but remain `Pending`
+in REQUIREMENTS.md on purpose — two were marked Complete prematurely earlier in this phase and had
+to be reverted. The `170-10` human gate has not been re-run since the fix and is the formal closure.
+`170-10-PLAN.md`'s staging section is stale (references a removed `Step 2.5`); `170-03-PLAN.md`'s
+`(a)-(i)` checklist is still the right bar.
+
+Harness governance rule: a green is only meaningful with a realistic turn count. **A green at ≤2
+turns is an INVALID RUN.** The original single-turn driver scored a broken build 10/10 three times
+before a human scored the same text 1/10.
+
 Last activity: 2026-07-27
 
 ## Milestones
