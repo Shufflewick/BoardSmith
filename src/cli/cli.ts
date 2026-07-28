@@ -17,6 +17,7 @@ import {
   ingestGapsCommand,
   ingestRelabelCommand,
 } from './commands/ingest-archive.js';
+import { chunkCheckCommand } from './commands/chunk-provenance.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -161,6 +162,15 @@ program
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(ingestRelabelCommand);
 
+// Provenance: record or repair a chunk's `## Verified Against` block. Same mechanical-work-
+// belongs-in-code rationale as the ingest-* family above (171-CONTEXT.md).
+program
+  .command('chunk-check <slug>')
+  .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale")
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(chunkCheckCommand);
+
 // Claude Code integration
 const claudeCmd = program
   .command('claude')
@@ -175,4 +185,16 @@ claudeCmd
   .option('--local', 'Uninstall from current project instead of globally')
   .action(uninstallClaudeCommand);
 
-program.parse();
+// `program.parse()` does not await async action handlers — a rejection from one (any command
+// that throws, e.g. an unreadable rulebook path or a missing chunk slug) would otherwise surface
+// as a raw Node unhandled-rejection stack trace, leaking internal file paths and line numbers.
+// CLAUDE.md forbids that ("never leak implementation details ... stack traces, internal paths"),
+// and this is the same guarantee `ingestCheckCommand`/`chunkCheckCommand` already give on their
+// own repair-then-fail terminal paths. `parseAsync()` awaits the action, so a thrown Error can be
+// caught here once, for every command, and reported as a clean one-line message instead.
+try {
+  await program.parseAsync();
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exitCode = 1;
+}
