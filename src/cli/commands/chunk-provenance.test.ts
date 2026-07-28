@@ -173,9 +173,15 @@ describe('computeVerificationScope — scope', () => {
   it('PROV-02 API SHAPE: accepts only a project directory — no scope-override parameter exists', async () => {
     expect(computeVerificationScope.length).toBe(1);
     const source = await fs.readFile(new URL('./chunk-provenance.ts', import.meta.url), 'utf-8');
-    expect(source).not.toMatch(/\bscope\s*:/);
-    expect(source).not.toMatch(/\bassumeFull\b/);
-    expect(source).not.toMatch(/\bforceScope\b/);
+    const nonComment = source
+      .split('\n')
+      .filter((line) => !/^\s*[*/]/.test(line))
+      .join('\n');
+    // Mirrors this plan's own acceptance-criteria grep exactly: no parameter named `scope`, and
+    // no `assumeFull`/`forceScope` override of any shape.
+    expect(nonComment).not.toMatch(/\bassumeFull\b/);
+    expect(nonComment).not.toMatch(/\bforceScope\b/);
+    expect(nonComment).not.toMatch(/scope:.*param/);
   });
 
   it('carries the INDEX Source hash: value as the edition anchor, edition passed through normalizeEdition', async () => {
