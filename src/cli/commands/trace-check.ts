@@ -23,6 +23,7 @@ import {
   parseBuildManifest,
   parseInterpretationClaims,
   parseRulings,
+  resolveManifestPath,
 } from './build-manifest.js';
 
 // -------------------------------------------------------------------------------------------
@@ -216,14 +217,6 @@ async function walkTestFiles(dir: string): Promise<string[]> {
 /** POSIX-style path relative to `projectDir`, for stable comparison against manifest paths. */
 function relPosix(projectDir: string, absPath: string): string {
   return relative(projectDir, absPath).split(sep).join('/');
-}
-
-/** Resolves a manifest-supplied relative path against `projectDir`, rejecting any escape. */
-function resolveManifestPath(projectDir: string, relPathStr: string): string | 'escapes' {
-  const resolved = pathResolve(projectDir, relPathStr);
-  const rel = relative(projectDir, resolved);
-  if (rel === '..' || rel.startsWith(`..${sep}`)) return 'escapes';
-  return resolved;
 }
 
 /**

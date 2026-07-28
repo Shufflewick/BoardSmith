@@ -14,6 +14,8 @@
  * convention as `chunk-provenance.ts` exporting `resolveCitedSlices` for reuse.
  */
 
+import { relative, resolve as pathResolve, sep } from 'node:path';
+
 /** The locked finding-kind enum from 172-CONTEXT.md decision 7. Never a hand-written union. */
 export const FINDING_KINDS = Object.freeze([
   'claim-untested',
@@ -112,6 +114,26 @@ export interface ParsedManifest {
 const PATH_TOKEN = /[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g;
 
 /**
+ * Resolves a manifest-supplied relative path against `projectDir`, rejecting any escape.
+ *
+ * Manifest paths are semi-trusted input (they come from a project's CHUNK.md, which a session
+ * wrote), so a `../../etc/passwd` entry must not reach a disk read. Lives here, beside the parser
+ * that produces the paths, because BOTH `trace-check` and `drift-check` consume them — this module
+ * is the phase's single authority, and a security guard is the last thing that should exist in two
+ * copies free to drift apart.
+ *
+ * Returns the absolute resolved path, or the sentinel `'escapes'` for a path that leaves
+ * `projectDir`. Callers report the escape as a finding rather than throwing — one bad manifest row
+ * must not abort the whole sweep.
+ */
+export function resolveManifestPath(projectDir: string, relPathStr: string): string | 'escapes' {
+  const resolved = pathResolve(projectDir, relPathStr);
+  const rel = relative(projectDir, resolved);
+  if (rel === '..' || rel.startsWith(`..${sep}`)) return 'escapes';
+  return resolved;
+}
+
+/**
  * Verb classification for a manifest row's status cell.
  *
  * Both tests run against the cell's LEADING VERB ONLY (`leadingVerb()`), never the whole cell.
@@ -134,11 +156,13 @@ const PATH_TOKEN = /[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g;
 const AUTHORING_VERBS = /^(new|written)$/i;
 
 /**
- * The status cell's leading verb: the first word, stripped of trailing punctuation. Returns '' for
- * an empty cell, which classifies as neither editing nor authoring.
+ * The status cell's leading verb: the first word, with surrounding markdown emphasis (`**`, `*`,
+ * `_`, backticks) stripped — bolded leading verbs are real in live manifest data. Returns '' for an
+ * empty cell, which classifies as non-authoring.
  */
 function leadingVerb(status: string): string {
-  return status.trimStart().split(/[\s,(—-]/, 1)[0] ?? '';
+  const firstWord = status.trimStart().split(/[\s,(—-]/, 1)[0] ?? '';
+  return firstWord.replace(/^[*_`]+/, '').replace(/[*_`]+$/, '');
 }
 
 /**

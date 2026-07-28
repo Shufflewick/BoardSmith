@@ -31,7 +31,12 @@
 import { promises as fs } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { join, relative, resolve as pathResolve, sep } from 'node:path';
-import { type Finding, parseBuildManifest, extractVerifiedCommitHash } from './build-manifest.js';
+import {
+  type Finding,
+  parseBuildManifest,
+  extractVerifiedCommitHash,
+  resolveManifestPath,
+} from './build-manifest.js';
 
 /**
  * A hand-written promisified wrapper, NOT `promisify(execFile)`. Node's `execFile` carries a
@@ -156,14 +161,6 @@ export interface DriftCheckResult {
   findings: Finding[];
   counts: { clean: number; drifted: number; unknown: number };
   head: string;
-}
-
-/** Resolves a manifest-supplied relative path against `projectDir`, rejecting any escape. */
-function resolveManifestPath(projectDir: string, relPathStr: string): string | 'escapes' {
-  const resolved = pathResolve(projectDir, relPathStr);
-  const rel = relative(projectDir, resolved);
-  if (rel === '..' || rel.startsWith(`..${sep}`)) return 'escapes';
-  return resolved;
 }
 
 async function fileExists(absPath: string): Promise<boolean> {

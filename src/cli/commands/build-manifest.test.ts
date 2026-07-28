@@ -7,6 +7,7 @@ import {
   parseInterpretationClaims,
   extractVerifiedCommitHash,
   parseRulings,
+  resolveManifestPath,
 } from './build-manifest.js';
 
 /**
@@ -216,6 +217,30 @@ describe('parseBuildManifest', () => {
     expect(byPath['tests/e.test.ts']).toBe(true);
     expect(byPath['tests/f.test.ts']).toBe(false);
   });
+
+  it('authoring sees through markdown emphasis on the leading verb', () => {
+    // Bolded leading verbs are real in live manifest data (`**repair…` appears 12 times across the
+    // reference games), so an exact-match token test silently loses precision on `**written**`.
+    // Failing safe (non-authoring leaves a citation ambiguous rather than misattributed) is the
+    // right direction to be wrong in, but the emphasis is presentation, not meaning.
+    const chunk = tableChunk(
+      [
+        '| tests/a.test.ts | **written** — added breakGuard() |',
+        '| tests/b.test.ts | *NEW* (test step) — net-new coverage |',
+        '| tests/c.test.ts | `written` — backticked |',
+        '| tests/d.test.ts | **edited** — still not authoring |',
+        '| tests/e.test.ts | **repair** — a real live shape, not an authoring verb |',
+      ].join('\n'),
+    );
+    const byPath = Object.fromEntries(
+      parseBuildManifest(chunk).entries.map((e) => [e.path, e.authoring]),
+    );
+    expect(byPath['tests/a.test.ts']).toBe(true);
+    expect(byPath['tests/b.test.ts']).toBe(true);
+    expect(byPath['tests/c.test.ts']).toBe(true);
+    expect(byPath['tests/d.test.ts']).toBe(false);
+    expect(byPath['tests/e.test.ts']).toBe(false);
+  });
 });
 
 describe('parseInterpretationClaims', () => {
@@ -395,5 +420,33 @@ describe('parseRulings', () => {
     const ruling1 = parsed.find((r) => r.number === 1)!;
     expect(ruling1.supersededBy).toBeUndefined();
     expect(ruling1.unparsedSupersession.length).toBe(1);
+  });
+});
+
+describe('resolveManifestPath', () => {
+  // Shared by trace-check and drift-check. It lived in both as byte-identical copies until the
+  // 172 code review flagged it — a security guard is the last thing that should be free to drift.
+  const project = '/tmp/proj';
+
+  it('resolves an ordinary manifest path inside the project', () => {
+    expect(resolveManifestPath(project, 'src/rules/game.ts')).toBe('/tmp/proj/src/rules/game.ts');
+  });
+
+  it('resolves a path that only LOOKS like an escape but stays inside', () => {
+    expect(resolveManifestPath(project, 'src/../tests/a.test.ts')).toBe('/tmp/proj/tests/a.test.ts');
+  });
+
+  it('rejects a traversal that escapes the project root', () => {
+    expect(resolveManifestPath(project, '../../etc/passwd')).toBe('escapes');
+    expect(resolveManifestPath(project, '..')).toBe('escapes');
+  });
+
+  it('rejects an absolute path outside the project', () => {
+    expect(resolveManifestPath(project, '/etc/passwd')).toBe('escapes');
+  });
+
+  it('does not treat a sibling directory with a shared prefix as inside', () => {
+    // `/tmp/proj-evil` shares the `/tmp/proj` prefix — a naive startsWith check would admit it.
+    expect(resolveManifestPath(project, '../proj-evil/secrets.ts')).toBe('escapes');
   });
 });
