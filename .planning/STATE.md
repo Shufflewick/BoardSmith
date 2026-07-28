@@ -4,13 +4,13 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 171-07-PLAN.md
-last_updated: "2026-07-28T20:18:52.993Z"
+last_updated: "2026-07-28T20:30:58.241Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 22
-  completed_plans: 16
+  completed_plans: 17
   percent: 10
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 172 (source-free-conformance-checks) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 
 `171-07-PLAN.md` is the phase's PROC-01 record: `chunk-check` and `chunk-provenance-status` proven
 end-to-end against COPIES of both real reference games (`~/BoardSmithGames/seven`, read-only,
@@ -518,6 +518,7 @@ Recent decisions affecting current work:
 - [Phase 172]: parseBuildManifest distinguishes tabular:true-empty from tabular:false-prose via a table-structure scan, not row-count alone
 - [Phase 172]: parseVerifiedAgainst fixed to use findHeadingIndex instead of chunkText.indexOf, closing the latent f73153a3 recurrence
 - [Phase ?]: Three-rung claim-resolution ladder (owners -> live-claim validity -> authoring chunk) implemented as sequential array filters; rung 3 falls back to rung-2 survivors when authoring narrowing would empty the set, never dropping to nothing
+- [Phase 172]: drift-check.ts: hand-written execFileAsync instead of promisify(execFile) — Node's util.promisify.custom symbol is dropped when execFile is wrapped for test mocking, silently changing the resolved shape from {stdout,stderr} to a positional array
 
 ### Pending Todos
 
@@ -529,7 +530,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T20:17:18.569Z
+Last session: 2026-07-28T20:29:30.657Z
 Stopped at: Completed 171-07-PLAN.md
 Resume file: 
 None
