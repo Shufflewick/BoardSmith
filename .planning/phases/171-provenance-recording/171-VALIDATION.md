@@ -66,7 +66,7 @@ wiring in plan 06 is deliberately *not* the guarantee — the machine-owned fenc
 | TBD | 04 | 3 | PROV-01, PROV-02 (`chunk-check`) | T-171-write | writes only between fences; refuses when absent | unit + exitCode save/restore | `npx vitest run src/cli/commands/chunk-provenance.test.ts` | ❌ W0 | ⬜ pending |
 | TBD | 05 | 4 | PROV-03, PROV-02 (`chunk-provenance-status`) | — | three states kept distinct in the `--json` shape | unit vs. multi-chunk fixture | `npx vitest run src/cli/commands/chunk-provenance-status.test.ts` | ❌ W0 | ⬜ pending |
 | TBD | 06 | 5 | PROV-01, PROV-03 (both close paths) | — | reuse-by-citation preserved; ordinals resolve | skill-text contract — **existence only** | `npx vitest run src/cli/slash-command/bs/build-chunk.test.ts` | ✅ | ⬜ pending |
-| TBD | 06 | 5 | ordinal-citation drift guard | — | renumbering close.md fails the suite | derived-numbering test (new) | `npx vitest run src/cli/slash-command/bs/build-chunk.test.ts` | ❌ W0 | ⬜ pending |
+| TBD | 06 | 5 | ordinal-citation drift guard | — | renumbering close.md fails the suite | derived-numbering test (new test, existing file) | `npx vitest run src/cli/slash-command/bs/build-chunk.test.ts` | ✅ | ⬜ pending |
 | TBD | 07 | 6 | PROC-01 + all three PROV | T-171-readonly | `seven` clean before AND after | real-reference-game proof on a COPY | `npm test` + recorded command output | N/A | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
