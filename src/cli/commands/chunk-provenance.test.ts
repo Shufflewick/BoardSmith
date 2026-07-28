@@ -920,6 +920,68 @@ describe('chunk-provenance-status', () => {
     const after = await hashTree(project);
     expect(after).toEqual(before);
   });
+
+  /**
+   * `parseVerifiedAgainst` — the `f73153a3` defect class recurring at a SECOND, unfixed call
+   * site.
+   *
+   * `chunk-provenance.ts:394-395`'s write path already fixed the substring-heading bug once
+   * (`indexOf(heading)` matches a heading NAME echoed in prose, not just the real section). This
+   * read path, `parseVerifiedAgainst`, still used `chunkText.indexOf(VERIFIED_AGAINST_HEADING)`
+   * directly — reachable through this tool's OWN documented recovery instruction
+   * (`chunkCheckCommand`'s fence-refusal error tells the user to delete the entire
+   * "## Verified Against" section and re-run), after which the template's surviving line-18
+   * prose mention of "## Verified Against" made `parseVerifiedAgainst` find a heading index
+   * that isn't the real section — mislabeling a never-recorded chunk as `blockMalformed: true`
+   * (172-CONTEXT.md decision 10's exact state conflation: "older" reporting as "damaged").
+   */
+  describe('parseVerifiedAgainst — heading location', () => {
+    it('the template exactly as shipped (real section present) still returns unknown, not malformed', async () => {
+      const template = await fs.readFile(
+        new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
+        'utf-8',
+      );
+      const parsed = parseVerifiedAgainst(template);
+      expect(parsed.state).toBe(PROVENANCE_UNKNOWN);
+      expect(parsed.blockMalformed).toBe(false);
+    });
+
+    it('a chunk whose real "## Verified Against" section is deleted, with the template\'s line-18 prose mention of the heading still present, returns unknown/not-malformed — never blockMalformed: true', async () => {
+      const template = await fs.readFile(
+        new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
+        'utf-8',
+      );
+      const headingIdx = template.indexOf('\n## Verified Against\n');
+      expect(headingIdx).toBeGreaterThan(-1); // sanity: the real section exists in the shipped template
+      const sectionDeleted = template.slice(0, headingIdx) + '\n';
+
+      // The template's own PARSE CONTRACT comment (line 18) legitimately names "## Verified Against"
+      // in prose — confirm the fixture still carries that prose mention after the real section is gone.
+      expect(sectionDeleted).toContain('"## Verified Against"');
+      expect(sectionDeleted).not.toContain('\n## Verified Against\n');
+
+      const parsed = parseVerifiedAgainst(sectionDeleted);
+      expect(parsed.state).toBe(PROVENANCE_UNKNOWN);
+      expect(parsed.blockMalformed).toBe(false); // never-recorded, not damaged
+    });
+
+    it('a real recorded block still parses to full — unmodified from the pre-existing contract', async () => {
+      const { project } = await makeStatusProject();
+      await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
+      await chunkCheckCommand('jab', { project, json: true });
+      const chunkText = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+      const parsed = parseVerifiedAgainst(chunkText);
+      expect(parsed.state).toBe(SCOPE_FULL);
+      expect(parsed.blockMalformed).toBe(false);
+    });
+
+    it('genuinely missing fences still report blockMalformed: true', () => {
+      const chunkText = '## Verified Against\n\nsome hand-written text, no fences at all\n';
+      const parsed = parseVerifiedAgainst(chunkText);
+      expect(parsed.state).toBe(PROVENANCE_UNKNOWN);
+      expect(parsed.blockMalformed).toBe(true);
+    });
+  });
 });
 
 /**
