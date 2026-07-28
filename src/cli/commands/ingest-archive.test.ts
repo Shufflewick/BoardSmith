@@ -463,10 +463,12 @@ describe('edition normalization (F-1)', () => {
     expect(normalizeEdition('NONE STATED')).toBe(EDITION_UNKNOWN);
   });
 
-  it('never contains the bare substring "edition" — that would fire on real editions like "First edition"', () => {
-    for (const phrase of EDITION_EMPTY_LEXICON) {
-      expect(phrase).not.toMatch(/edition/i);
-    }
+  it('never lists the bare word "edition" or "unknown" alone — both would fire on legitimate editions', () => {
+    // A self-invalidating-lexicon guard. Compound phrases like "no edition" and "unknown
+    // edition" are fine — they never appear as a substring of "First edition" or "Unknown
+    // Armies 2nd printing" — but the bare words alone would match both.
+    expect(EDITION_EMPTY_LEXICON).not.toContain('edition');
+    expect(EDITION_EMPTY_LEXICON).not.toContain('unknown');
   });
 
   it('writes the machine-checkable sentinel for a free-text edition, preserving the original on Edition note:', async () => {

@@ -40,6 +40,52 @@ export const EDITION_UNKNOWN = 'not stated in the rulebook';
 export const GAPS_EMPTY = '_None._';
 
 /**
+ * Lowercase phrases that mean "no edition was stated" — matched case-insensitively as a
+ * substring of a caller-supplied `--edition` value. Found via the 2026-07-28 human gate
+ * (`170-PROOF-RUN-2.md`, finding F-1): a free-text paraphrase (`none stated in the rulebook`)
+ * displaced the machine-checkable `EDITION_UNKNOWN` sentinel within a single ingest run, and
+ * Phase 171's PROV-01/PROV-03 both read this field — it must be machine-checkable before
+ * anything reads it. Live in real project data: `seven` and `one-two-punch` both carry
+ * non-canonical `Edition:` free text right now (171-CONTEXT.md decision 5).
+ *
+ * Deliberately ABSENT: the bare word `edition` and the bare word `unknown`. Both would fire on
+ * legitimate editions — "First edition", "Unknown Armies 2nd printing" — and a check that fires
+ * on correct work gets waived (the same rationale that shapes the presentation lexicon below).
+ */
+export const EDITION_EMPTY_LEXICON = Object.freeze([
+  'not stated',
+  'none stated',
+  'no edition',
+  'not specified',
+  'unspecified',
+  'none given',
+  'unknown edition',
+  'n/a',
+]);
+
+/**
+ * The un-parsed field CONTEXT.md decision 2 calls for: "any human note goes in a separate
+ * adjacent field that nothing parses." Deliberately NOT added to `HEADER_LABELS` — that tuple is
+ * the parsed-header contract pinned by tests and by `scripts/ingest-harness/check.mjs`.
+ */
+export const EDITION_NOTE_LABEL = 'Edition note:';
+
+/**
+ * `--edition` normalization for finding F-1 (`170-PROOF-RUN-2.md`, 2026-07-28 human gate): a
+ * free-text paraphrase ("none stated in the rulebook") displaced the machine-checkable
+ * `EDITION_UNKNOWN` sentinel within a single ingest run, and Phase 171's PROV-01/PROV-03 both
+ * read this field. Recognisably-empty free text collapses to the sentinel; a genuine edition
+ * string is preserved verbatim (trimmed). Nothing else is transformed.
+ */
+export function normalizeEdition(raw: string | undefined): string {
+  const trimmed = raw?.trim();
+  if (!trimmed) return EDITION_UNKNOWN;
+  const lower = trimmed.toLowerCase();
+  if (EDITION_EMPTY_LEXICON.some((phrase) => lower.includes(phrase))) return EDITION_UNKNOWN;
+  return trimmed;
+}
+
+/**
  * Fences delimiting the machine-owned body of `## Open Rules Gaps`.
  *
  * The section is written by `boardsmith ingest-gaps` and by nothing else. It is fenced rather
@@ -69,9 +115,15 @@ export function renderIndex(params: {
   transcribed: string;
 }): string {
   const { gameName, edition, archivedPath, sourceHash, transcribed } = params;
+  const normalizedEdition = normalizeEdition(edition);
+  const originalEdition = edition?.trim();
+  const editionNoteLine =
+    originalEdition && normalizedEdition === EDITION_UNKNOWN && originalEdition !== EDITION_UNKNOWN
+      ? `\n${EDITION_NOTE_LABEL} ${originalEdition}`
+      : '';
   return `# Rulebook Index — ${gameName}
 
-Edition: ${edition && edition.trim() ? edition.trim() : EDITION_UNKNOWN}
+Edition: ${normalizedEdition}${editionNoteLine}
 Source: ${archivedPath}
 Source hash: ${sourceHash}
 Transcribed: ${transcribed}
@@ -476,8 +528,20 @@ export async function ingestArchiveCommand(
     await fs.access(indexPath);
     // INDEX.md already exists — rewrite only the provenance header, leave filled sections alone.
     const existing = await fs.readFile(indexPath, 'utf-8');
-    const withHeader = existing
-      .replace(/^Edition:.*$/m, `Edition: ${options.edition?.trim() || EDITION_UNKNOWN}`)
+    const normalizedEdition = normalizeEdition(options.edition);
+    const originalEdition = options.edition?.trim();
+    const editionNoteLine =
+      originalEdition && normalizedEdition === EDITION_UNKNOWN && originalEdition !== EDITION_UNKNOWN
+        ? `${EDITION_NOTE_LABEL} ${originalEdition}`
+        : undefined;
+    // Strip any prior Edition note: line before rewriting, so a repeated ingest-archive run does
+    // not accumulate duplicates — the same "replace, don't append" discipline as the Edition:
+    // line itself.
+    const withoutOldNote = existing.replace(/^Edition note:.*\n?/m, '');
+    const withEditionNote = editionNoteLine
+      ? withoutOldNote.replace(/^Edition:.*$/m, `Edition: ${normalizedEdition}\n${editionNoteLine}`)
+      : withoutOldNote.replace(/^Edition:.*$/m, `Edition: ${normalizedEdition}`);
+    const withHeader = withEditionNote
       .replace(/^Source:.*$/m, `Source: ${relArchivePath}`)
       .replace(/^Source hash:.*$/m, `Source hash: ${sourceHash}`)
       .replace(/^Transcribed:.*$/m, `Transcribed: ${transcribed}`);
