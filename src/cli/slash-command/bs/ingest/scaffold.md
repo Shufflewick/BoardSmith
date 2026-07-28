@@ -40,8 +40,13 @@ as `<name>` in every command below.
 
 ## Directory Framing — `init` Always Creates a New Subdirectory
 
-`npx boardsmith init <name>` **unconditionally creates `<cwd>/<name>`** and **errors** if that
-path already exists (`Error: Directory "<name>" already exists` — `src/cli/commands/init.ts`).
+`npx boardsmith init <name> --rulebook <path>` **unconditionally creates `<cwd>/<name>`** and
+**errors** if that path already exists (`Error: Directory "<name>" already exists` —
+`src/cli/commands/init.ts`). It also errors if neither `--rulebook` nor `--without-rulebook` is
+given; there is no bare `init`. The flag is written into every occurrence of this command line in
+this file on purpose — two live runs (2026-07-27 and 2026-07-28) reported the bare form as "what
+the doc says" while later paragraphs specified the flag, so the first occurrence is the one that
+gets copied.
 There is no in-place mode and no "use the current directory if it's empty" mode — do not instruct
 a session to run `init` inside an existing directory expecting it to scaffold that directory in
 place. This corrects the old skill's stale Phase 1B framing, which conditionally used the current
@@ -59,8 +64,12 @@ npx boardsmith init <name> --rulebook <absolute-rulebookPath>   # ALWAYS creates
 the designer passed one to `/bs-ingest-rules` (see its "Invocation" section). It is not a separate
 step and not optional-when-convenient. With it, `init` archives the source to
 `rulebook/source/<filename>`, computes its SHA-256, and writes `rulebook/INDEX.md` with the four
-provenance header lines plus empty `## Open Rules Gaps`, `## Slices`, and `## Term → Slice`
-sections for Step 3 to fill. Add `--edition "<edition>"` too if the edition is already known;
+provenance header lines, empty `## Slices` and `## Term → Slice` tables for Step 3 to fill, and a
+**machine-owned** `## Open Rules Gaps` section which Step 3 must NOT fill — it is fenced between
+`<!-- boardsmith:gaps:begin -->` and `<!-- boardsmith:gaps:end -->` and is written only by
+`boardsmith ingest-gaps` / `boardsmith ingest-check`. On 2026-07-28 an ingest session filled it by
+hand with 2 entries while its own slices carried 5 markers; leave it alone and the sweep gets all
+five. Add `--edition "<edition>"` too if the edition is already known;
 without it the header records an explicit `not stated in the rulebook` value rather than a blank.
 
 **`init` refuses to run without an explicit rulebook decision** — it exits with an error naming

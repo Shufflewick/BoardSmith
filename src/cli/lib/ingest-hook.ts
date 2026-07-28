@@ -22,6 +22,23 @@ import { join } from 'node:path';
  * a `pre-commit` hook runs the synthesis automatically on the first commit after slices exist.
  * The harness runs it, not the model.
  *
+ * WHAT THIS HOOK DOES NOT COVER (found by the 2026-07-28 human gate, 170-PROOF-RUN-2.md)
+ *
+ * "The build protocol commits at every step" is true of `/bs-build-chunk` and false of
+ * `/bs-ingest-rules`, which has no commit in it at all. A real ingest run therefore ENDS with
+ * this hook never having fired: gaps unswept, nothing relabelled. `/bs-build-chunk` then reads
+ * `rulebook/INDEX.md` during investigate, before its own first commit, so the first chunk is
+ * planned against the unsynthesized index.
+ *
+ * Two things close that window, and neither replaces this hook:
+ *   - `## Open Rules Gaps` is fenced as machine-owned, so an orchestrator cannot fill it by hand
+ *     (which is what happened — 2 entries written against 5 slice markers). Worst case is now a
+ *     visibly-empty `_None._`, not a plausible-looking wrong answer.
+ *   - `boardsmith ingest-check` repairs and then exits non-zero, and `/bs-build-chunk` Step 0
+ *     runs it. The non-zero exit is the point: it forces a re-read of the repaired index.
+ *
+ * This hook stays as the backstop for every commit after that.
+ *
  * DESIGN NOTES
  *
  * - It FIXES and STAGES rather than failing the commit. A hook that blocks commits would fight

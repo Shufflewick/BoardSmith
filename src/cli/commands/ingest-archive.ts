@@ -39,6 +39,18 @@ export const HEADER_LABELS = ['Edition:', 'Source:', 'Source hash:', 'Transcribe
 export const EDITION_UNKNOWN = 'not stated in the rulebook';
 export const GAPS_EMPTY = '_None._';
 
+/**
+ * Fences delimiting the machine-owned body of `## Open Rules Gaps`.
+ *
+ * The section is written by `boardsmith ingest-gaps` and by nothing else. It is fenced rather
+ * than merely documented because the 2026-07-28 human gate (`170-PROOF-RUN-2.md`) found an
+ * ingest orchestrator that filled the section by hand with 2 entries while its own slices
+ * carried 5 markers — a section that is wrong while looking entirely healthy. Prose could not
+ * stop that; a fence makes hand-authoring detectable, and `ingest-check` makes it fatal.
+ */
+export const GAPS_BEGIN = '<!-- boardsmith:gaps:begin -->';
+export const GAPS_END = '<!-- boardsmith:gaps:end -->';
+
 function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex');
 }
@@ -67,22 +79,37 @@ Transcribed: ${transcribed}
 <!-- The four header lines above are written by \`boardsmith ingest-archive\` and are the
      provenance record a later verify pass reads. Do not edit them by hand.
 
-     The three sections below are scaffolding for this ingest session to FILL. Keep every
+     The two TABLE sections below are scaffolding for this ingest session to FILL. Keep every
      heading exactly as written — downstream tooling parses these strings. Add rows; do not
-     rename, reword, reorder, or "improve" the headings. -->
+     rename, reword, reorder, or "improve" the headings.
+
+     "## Open Rules Gaps" is NOT yours to fill — see the fence inside it. -->
 
 ${INDEX_HEADINGS[0]}
 
-<!-- Every \`Named-but-undefined (p.N): <rule name>\` marker the transcription produced, one per
-     line, verbatim. Do NOT deduplicate: a rule named in two slices and defined in neither is
-     two entries, and that recurrence is signal.
+<!-- MACHINE-OWNED. Do not write between the fences below, and do not move or delete them.
+
+     \`boardsmith ingest-gaps\` fills this section by sweeping every
+     \`Named-but-undefined (p.N): <rule name>\` marker out of the slice files. It runs
+     automatically from the pre-commit hook \`boardsmith init\` installs, and from
+     \`boardsmith ingest-check\`. Anything you write here is overwritten on the next run.
+
+     Why this is fenced rather than requested politely: on 2026-07-28 an ingest session filled
+     this section by hand with 2 entries while its own slices carried 5 markers. Three real gaps
+     vanished, and the result looked perfectly healthy — both entries were correctly worded. A
+     hand-authored section cannot be distinguished from a swept one by reading it, so it is made
+     structurally impossible instead. \`boardsmith ingest-check\` fails if the fences are gone.
+
+     Do NOT deduplicate these entries anywhere downstream, and note that the sweep does not
+     either: a rule named in two slices and defined in neither is two entries, and that
+     recurrence is signal.
 
      This section reports what transcription MARKED as named-but-undefined. It does not claim to
-     be an exhaustive list of the rulebook's gaps.
+     be an exhaustive list of the rulebook's gaps. -->
 
-     If there are none, leave exactly the token below and delete this comment. -->
-
+${GAPS_BEGIN}
 ${GAPS_EMPTY}
+${GAPS_END}
 
 ${INDEX_HEADINGS[1]}
 
@@ -112,8 +139,8 @@ ${INDEX_HEADINGS[2]}
  * the slice-side marker count, so dedup here would make a working sweep look like a dropping one.
  */
 export async function ingestGapsCommand(
-  options: { project?: string; json?: boolean; skipRelabel?: boolean } = {},
-): Promise<void> {
+  options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean } = {},
+): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean }> {
   const projectDir = resolve(options.project ?? process.cwd());
 
   // Relabel FIRST, as part of this command rather than as a second one the session must
@@ -124,8 +151,11 @@ export async function ingestGapsCommand(
   //
   // Ordering matters: relabelling moves presentation lines off the Derived prefix, and the gaps
   // sweep below reads final slice content.
+  let relabelled = 0;
   if (!options.skipRelabel) {
-    await ingestRelabelCommand({ project: projectDir, json: false });
+    relabelled = (
+      await ingestRelabelCommand({ project: projectDir, json: false, quiet: options.quiet })
+    ).relabelled;
   }
   const rulebookDir = join(projectDir, 'rulebook');
   const indexPath = join(rulebookDir, 'INDEX.md');
@@ -153,32 +183,51 @@ export async function ingestGapsCommand(
   }
 
   const heading = INDEX_HEADINGS[0];
-  const headingAt = index.indexOf(heading);
-  if (headingAt === -1) {
+  if (index.indexOf(heading) === -1) {
     throw new Error(
       `rulebook/INDEX.md has no "${heading}" heading. It may have been hand-edited — restore it by re-running ingest-archive.`,
     );
   }
-  const bodyStart = headingAt + heading.length;
-  // The section runs to the next heading, whatever that is.
-  const nextHeading = index.indexOf('\n## ', bodyStart);
-  const bodyEnd = nextHeading === -1 ? index.length : nextHeading;
 
-  const body = entries.length
-    ? `\n\n${entries.join('\n')}\n\nThis section reports what transcription MARKED as named-but-undefined. It does not claim to be\nan exhaustive list of the rulebook's gaps.\n`
-    : `\n\n${GAPS_EMPTY}\n`;
-
-  await fs.writeFile(indexPath, index.slice(0, bodyStart) + body + index.slice(bodyEnd));
-
-  if (options.json) {
-    console.log(JSON.stringify({ gapsWritten: entries.length, slicesScanned: names.length }, null, 2));
-    return;
+  // Write strictly between the machine-owned fences. Replacing "heading to next heading" was the
+  // old behaviour and it silently tolerated a hand-authored section: whatever the orchestrator
+  // wrote simply got overwritten on the next run, so nothing ever reported that it had happened.
+  // Bounding the write to the fences means their absence is a hard, nameable error instead.
+  const begin = index.indexOf(GAPS_BEGIN);
+  const end = index.indexOf(GAPS_END);
+  if (begin === -1 || end === -1 || end < begin) {
+    throw new Error(
+      `rulebook/INDEX.md's "${heading}" section is missing its machine-owned fences.\n` +
+        `Expected ${GAPS_BEGIN} ... ${GAPS_END}.\n` +
+        `This section is written by \`boardsmith ingest-gaps\`, never by hand. Restore the fences by\n` +
+        `re-running \`boardsmith ingest-archive <rulebook>\`, then re-run this command.`,
+    );
   }
-  console.log(
-    chalk.green(
-      `✓ Filled ${heading} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} from ${names.length} slice${names.length === 1 ? '' : 's'}`,
-    ),
+
+  const before = index.slice(begin + GAPS_BEGIN.length, end);
+  const body = entries.length
+    ? `\n${entries.join('\n')}\n`
+    : `\n${GAPS_EMPTY}\n`;
+  const changed = before !== body || relabelled > 0;
+
+  await fs.writeFile(
+    indexPath,
+    index.slice(0, begin + GAPS_BEGIN.length) + body + index.slice(end),
   );
+
+  const result = { gapsWritten: entries.length, slicesScanned: names.length, changed };
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+  if (!options.quiet) {
+    console.log(
+      chalk.green(
+        `✓ Filled ${heading} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} from ${names.length} slice${names.length === 1 ? '' : 's'}`,
+      ),
+    );
+  }
+  return result;
 }
 
 /**
@@ -205,6 +254,23 @@ export const PRESENTATION_LEXICON = Object.freeze([
   'art style',
   'rotated',
   'bold white',
+  // Added 2026-07-28 after the human gate (170-PROOF-RUN-2.md item (i)). The list above is
+  // typography- and layout-weighted and let a whole-line card-art description through:
+  //   "Card art depicted on this page uses flat, fully saturated color fields — red, green,
+  //    blue, purple, and black — with a large white numeral centered on the face, small white
+  //    pip-like dots along the card edges, and slightly rounded corners."
+  // Terms below describe how a component is RENDERED and cannot carry legality, scoring, or
+  // sequencing. Deliberately NOT added, despite appearing in that line: 'numeral', 'pip',
+  // 'card face'. Each of those can legitimately name a rule-bearing property ("cards match on
+  // the numeral", "count the pips"), and a check that fires on correct work gets waived.
+  'card art',
+  'color field',
+  'colour field',
+  'flat color',
+  'flat colour',
+  'saturated',
+  'rounded corner',
+  'background fill',
 ]);
 
 /**
@@ -225,8 +291,8 @@ export const PRESENTATION_LEXICON = Object.freeze([
  * Lines that need human judgment are left alone and reported, not guessed at.
  */
 export async function ingestRelabelCommand(
-  options: { project?: string; json?: boolean; dryRun?: boolean } = {},
-): Promise<void> {
+  options: { project?: string; json?: boolean; dryRun?: boolean; quiet?: boolean } = {},
+): Promise<{ relabelled: number; changes: Array<{ file: string; line: number; matched: string }> }> {
   const projectDir = resolve(options.project ?? process.cwd());
   const dir = join(projectDir, 'rulebook');
   const lexicon = new RegExp(`(${PRESENTATION_LEXICON.join('|')})`, 'i');
@@ -261,13 +327,15 @@ export async function ingestRelabelCommand(
     if (touched && !options.dryRun) await fs.writeFile(full, lines.join('\n'));
   }
 
+  const result = { relabelled: changed.length, changes: changed };
   if (options.json) {
-    console.log(JSON.stringify({ relabelled: changed.length, changes: changed }, null, 2));
-    return;
+    console.log(JSON.stringify(result, null, 2));
+    return result;
   }
+  if (options.quiet) return result;
   if (!changed.length) {
     console.log(chalk.green('✓ No Derived (p. line carries presentation-only vocabulary'));
-    return;
+    return result;
   }
   console.log(
     chalk.green(
@@ -277,6 +345,77 @@ export async function ingestRelabelCommand(
   for (const c of changed) {
     console.log(`  ${chalk.gray(`${c.file}:${c.line}`)} matched "${c.matched}"`);
   }
+  return result;
+}
+
+/**
+ * `boardsmith ingest-check` — repair ingest synthesis, and FAIL if repair was needed.
+ *
+ * The gap this closes: `boardsmith init` installs a pre-commit hook that runs synthesis, and the
+ * bs- build protocol commits at every chunk step — but `/bs-ingest-rules` itself never commits.
+ * The 2026-07-28 human gate found the hook had therefore never run at the end of a real ingest:
+ * `## Open Rules Gaps` held 2 of 5 gaps, and not one `Derived (p.N):` line had been separated
+ * from presentation. `/bs-build-chunk` reads `rulebook/INDEX.md` during investigate, before it
+ * commits anything, so chunk 1 gets planned against that broken index.
+ *
+ * It repairs first and fails second, on purpose. A check that only reports leaves the caller to
+ * remember a follow-up command, and this pipeline's entire history is of follow-up commands not
+ * being run. A check that repairs silently is worse: the session carries on holding the stale
+ * `INDEX.md` it already read into its context. So the repair lands on disk AND the non-zero exit
+ * forces a re-read — the one mechanism this phase proved survives contact with a live session.
+ * Re-running immediately afterwards exits 0, so it can never wedge a project.
+ */
+export async function ingestCheckCommand(
+  options: { project?: string; json?: boolean } = {},
+): Promise<void> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  const relabel = await ingestRelabelCommand({ project: projectDir, quiet: true });
+  const gaps = await ingestGapsCommand({ project: projectDir, skipRelabel: true, quiet: true });
+  const repaired = relabel.relabelled > 0 || gaps.changed;
+
+  if (options.json) {
+    console.log(
+      JSON.stringify(
+        { repaired, relabelled: relabel.relabelled, gapsWritten: gaps.gapsWritten }, null, 2),
+    );
+  }
+
+  if (!repaired) {
+    if (!options.json) {
+      console.log(
+        chalk.green(
+          `✓ Ingest synthesis up to date — ${gaps.gapsWritten} open rules gap${gaps.gapsWritten === 1 ? '' : 's'}, no Derived/Visual misfiling`,
+        ),
+      );
+    }
+    return;
+  }
+
+  if (!options.json) {
+    console.error(chalk.yellow('rulebook/ was out of sync with its slices. It has been REPAIRED:'));
+    if (relabel.relabelled) {
+      console.error(
+        `  • relabelled ${relabel.relabelled} presentation line${relabel.relabelled === 1 ? '' : 's'} Derived → Visual`,
+      );
+      for (const c of relabel.changes) {
+        console.error(`      ${chalk.gray(`${c.file}:${c.line}`)} matched "${c.matched}"`);
+      }
+    }
+    if (gaps.changed) {
+      console.error(
+        `  • rewrote ## Open Rules Gaps from the slices — ${gaps.gapsWritten} entr${gaps.gapsWritten === 1 ? 'y' : 'ies'}`,
+      );
+    }
+    console.error('');
+    console.error(chalk.yellow('Re-read rulebook/INDEX.md before continuing — the copy you have is stale.'));
+    console.error(chalk.dim('Then re-run `boardsmith ingest-check`; it will pass.'));
+  }
+
+  // Set the exit code rather than throwing: `program.parse()` does not await action handlers, so a
+  // rejection surfaces as an unhandled-rejection stack trace. The caller here is a git hook or a
+  // build session, both of which need the non-zero status and neither of which should be shown
+  // this repo's internal paths.
+  process.exitCode = 1;
 }
 
 export async function ingestArchiveCommand(

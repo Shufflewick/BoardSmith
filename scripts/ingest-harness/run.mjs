@@ -372,18 +372,50 @@ function assertCmd(opts) {
 
   const projectDir = findProjectDir(workDir);
 
-  // Commit the produced slices before asserting.
+  // ---------------------------------------------------------------------------------------
+  // Phase A — assert the state the session ACTUALLY LEFT, before any synthesis runs.
   //
-  // `boardsmith init` installs a pre-commit hook that runs the ingest synthesis (fills
-  // "## Open Rules Gaps" from the slices, relabels presentation-only Derived lines as Visual).
-  // The bs- build protocol commits at every step, so in real use that hook fires as soon as
-  // chunk work begins. But this harness stops the session at the end of Step 3 -- before any
-  // such commit -- so without this it measures the artifacts BEFORE the hook has ever run and
-  // reports the hook's work as missing.
+  // This used to commit first, on the reasoning that "the bs- build protocol commits at every
+  // step, so in real use the hook fires as soon as chunk work begins". The 2026-07-28 human gate
+  // (170-PROOF-RUN-2.md) disproved it: `/bs-ingest-rules` contains no commit at all, so a real
+  // ingest run ENDS with the hook never having fired, and `/bs-build-chunk` reads INDEX.md during
+  // investigate before its own first commit. Committing here manufactured a tree state the
+  // pipeline never actually produces, and the harness passed (e) and (h) on it while a human run
+  // failed both.
   //
-  // This is not the harness doing the session's job: the commit is something the pipeline
-  // genuinely performs, and the hook is the thing under test. Skipping it would test a state
-  // real projects never sit in.
+  // So: check the as-left state first. The only thing that must be true here is that the session
+  // did not hand-author the machine-owned gaps section — the defect that gate found.
+  // ---------------------------------------------------------------------------------------
+  const asLeft = checkIngestArtifacts({
+    projectDir,
+    sourceFileName: state.sourceFileName,
+    expectedSourceHash: state.expectHash,
+  });
+  const machineOwned = asLeft.checks.find((c) => c.id === 'gaps-machine-owned');
+  console.log(`[assert] as-left (pre-synthesis): gaps-machine-owned ${machineOwned.pass ? 'PASS' : 'FAIL'} — ${machineOwned.detail}`);
+
+  // ---------------------------------------------------------------------------------------
+  // Phase B — run what `/bs-build-chunk` Step 0 runs. This is the real next step in the
+  // pipeline, and it is what makes the artifacts correct before anything consumes them.
+  // A non-zero exit is EXPECTED here: ingest leaves synthesis undone, and ingest-check repairs
+  // it and then fails precisely so the next session re-reads. Both outcomes are fine; what would
+  // not be fine is the artifacts still being wrong afterwards, which Phase C checks.
+  // ---------------------------------------------------------------------------------------
+  let checkRepaired = false;
+  try {
+    execFileSync('npx', ['--no-install', 'boardsmith', 'ingest-check'], {
+      cwd: projectDir,
+      stdio: 'ignore',
+    });
+    console.log('[assert] `boardsmith ingest-check` exited 0 — synthesis was already current');
+  } catch {
+    checkRepaired = true;
+    console.log('[assert] `boardsmith ingest-check` exited non-zero — it repaired stale synthesis (expected after ingest)');
+  }
+
+  // Phase B2 — the pre-commit hook is the backstop for every later commit. Prove it still works
+  // and is idempotent: after ingest-check has already repaired everything, a commit must not
+  // change the artifacts again.
   try {
     execFileSync('git', ['-C', projectDir, 'add', '-A'], { stdio: 'ignore' });
     execFileSync(
@@ -398,12 +430,13 @@ function assertCmd(opts) {
     );
     console.log('[assert] committed produced slices (fires the init-installed pre-commit hook)');
   } catch {
-    // Nothing to commit, or no git identity available. Non-fatal: the checks below report the
-    // resulting artifact state either way, which is what actually matters.
     console.log('[assert] no commit made (nothing staged, or git unavailable) — hook may not have run');
   }
 
-  const { pass: artifactsPass, checks } = checkIngestArtifacts({
+  // ---------------------------------------------------------------------------------------
+  // Phase C — the gating assertion: the artifacts a downstream consumer actually sees.
+  // ---------------------------------------------------------------------------------------
+  const { checks } = checkIngestArtifacts({
     projectDir,
     sourceFileName: state.sourceFileName,
     expectedSourceHash: state.expectHash,
@@ -420,8 +453,17 @@ function assertCmd(opts) {
     : `reference repo CHANGED: clean=${gClean} (status: ${refStatusNow.trim() || '(none)'}), head-matches=${gHeadMatches} (now ${refHeadNow} vs recorded ${state.refHead})`;
   const gCheck = { id: 'reference-repo-unmodified', letter: 'g', label: '~/BoardSmithGames/seven unmodified', pass: gPass, detail: gDetail };
 
-  const allChecks = [...checks, gCheck];
-  const overallPass = artifactsPass && gPass;
+  // (e0) is asserted against the AS-LEFT state, not the post-synthesis one. Post-synthesis it is
+  // trivially true — `ingest-gaps` writes between the fences by construction — which is exactly
+  // the tautology that made (e2) worthless in the old single-phase harness. Substitute Phase A's
+  // verdict for Phase C's so the reported row is the one that can actually fail.
+  const checksGating = checks.map((c) =>
+    c.id === 'gaps-machine-owned'
+      ? { ...machineOwned, detail: `${machineOwned.detail} [asserted on the as-left tree]` }
+      : c,
+  );
+  const allChecks = [...checksGating, gCheck];
+  const overallPass = checksGating.every((c) => c.pass) && gPass;
   const passCount = allChecks.filter((c) => c.pass).length;
 
   console.log('');
@@ -434,6 +476,9 @@ function assertCmd(opts) {
     console.log(`| ${i + 1} | ${c.id} | ${c.letter} | ${c.pass ? 'PASS' : 'FAIL'} | ${c.detail} |`);
   });
   console.log('');
+  console.log(
+    `Synthesis at end of ingest: ${checkRepaired ? 'STALE — repaired by `boardsmith ingest-check` (as /bs-build-chunk Step 0 does)' : 'already current'}`,
+  );
   console.log(`SUMMARY: ${passCount}/${allChecks.length} checks passing.`);
   console.log(overallPass ? 'OVERALL: PASS' : 'OVERALL: FAIL');
 

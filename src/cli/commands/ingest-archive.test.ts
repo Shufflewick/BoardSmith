@@ -5,11 +5,16 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   ingestArchiveCommand,
+  ingestCheckCommand,
+  ingestGapsCommand,
+  ingestRelabelCommand,
   renderIndex,
   INDEX_HEADINGS,
   HEADER_LABELS,
   EDITION_UNKNOWN,
   GAPS_EMPTY,
+  GAPS_BEGIN,
+  GAPS_END,
 } from './ingest-archive.js';
 
 /**
@@ -244,4 +249,172 @@ describe('init — an explicit rulebook decision is required', () => {
       await fs.rm(parent, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+/**
+ * Regression suite for the 2026-07-28 human gate (`.planning/phases/170-ingest-contract-upgrade/
+ * 170-PROOF-RUN-2.md`).
+ *
+ * That gate found the automated harness reporting 10/10 on a contract a real run failed three
+ * items of. The cause was not a broken mechanism — `boardsmith ingest-gaps` worked perfectly when
+ * invoked. It was that nothing ever invoked it: the pre-commit hook that runs synthesis needs a
+ * commit, and `/bs-ingest-rules` has none. The ingest orchestrator filled `## Open Rules Gaps` by
+ * hand instead, with 2 entries against 5 slice markers, and nothing could tell by reading it.
+ *
+ * Every test below fails against the pre-fix code.
+ */
+describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)', () => {
+  async function withSlices(entries: string[], derivedLines: string[] = []) {
+    const project = await run();
+    await fs.writeFile(
+      join(project, 'rulebook', '01-core.md'),
+      ['# Core', '', ...entries, '', ...derivedLines, ''].join('\n'),
+    );
+    return project;
+  }
+
+  const readIndex = (project: string) =>
+    fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+
+  it('scaffolds the gaps section fenced as machine-owned, holding only the empty token', async () => {
+    const project = await run();
+    const index = await readIndex(project);
+    const begin = index.indexOf(GAPS_BEGIN);
+    const end = index.indexOf(GAPS_END);
+    expect(begin).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(begin);
+    expect(index.slice(begin + GAPS_BEGIN.length, end).trim()).toBe(GAPS_EMPTY);
+    // The scaffold must say the section is not the session's to fill. The 2026-07-28 orchestrator
+    // filled it because the old scaffold told it to.
+    expect(index).toMatch(/MACHINE-OWNED/);
+  });
+
+  it('sweeps EVERY slice marker, not the subset an orchestrator would summarise', async () => {
+    // The exact shape of the failure: five markers in the slices, and a hand-written section
+    // carrying the two that read as most important.
+    const project = await withSlices([
+      'Named-but-undefined (p.1): "Ways to Score" card',
+      'Named-but-undefined (p.2): the 7 scoring hands',
+      'Named-but-undefined (p.2): match',
+      'Named-but-undefined (p.2): game',
+      'Named-but-undefined (p.2): total score',
+    ]);
+    const result = await ingestGapsCommand({ project, quiet: true });
+    expect(result.gapsWritten).toBe(5);
+
+    const index = await readIndex(project);
+    const inner = index.slice(index.indexOf(GAPS_BEGIN) + GAPS_BEGIN.length, index.indexOf(GAPS_END));
+    expect(inner).toContain('total score');
+    expect(inner.split('\n').filter((l) => l.startsWith('Named-but-undefined'))).toHaveLength(5);
+  });
+
+  it('overwrites a hand-authored section rather than appending to it', async () => {
+    const project = await withSlices(['Named-but-undefined (p.1): real gap']);
+    const index = await readIndex(project);
+    await fs.writeFile(
+      join(project, 'rulebook', 'INDEX.md'),
+      index.replace(GAPS_EMPTY, 'Named-but-undefined (p.9): invented by the orchestrator'),
+    );
+    await ingestGapsCommand({ project, quiet: true });
+    const after = await readIndex(project);
+    expect(after).toContain('real gap');
+    expect(after).not.toContain('invented by the orchestrator');
+  });
+
+  it('refuses to write if the fences were removed, naming how to restore them', async () => {
+    // A wholesale section rewrite is indistinguishable from a correct one by reading. Losing the
+    // fences is the observable signature, so it must be loud rather than silently re-fenced.
+    const project = await withSlices(['Named-but-undefined (p.1): x']);
+    const index = await readIndex(project);
+    await fs.writeFile(
+      join(project, 'rulebook', 'INDEX.md'),
+      index.replace(GAPS_BEGIN, '').replace(GAPS_END, ''),
+    );
+    await expect(ingestGapsCommand({ project, quiet: true })).rejects.toThrow(
+      /machine-owned fences/i,
+    );
+    await expect(ingestGapsCommand({ project, quiet: true })).rejects.toThrow(
+      /ingest-archive/,
+    );
+  });
+
+  describe('ingest-check', () => {
+    let exitCode: number | undefined;
+    beforeEach(() => {
+      exitCode = process.exitCode;
+      process.exitCode = undefined;
+    });
+    afterEach(() => {
+      process.exitCode = exitCode;
+    });
+
+    it('exits non-zero when synthesis is stale — the signal that forces a re-read', async () => {
+      const project = await withSlices(['Named-but-undefined (p.1): a gap the index has not seen']);
+      await ingestCheckCommand({ project, json: true });
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('repairs on that same failing run, so the retry passes', async () => {
+      // Repair-then-fail, not fail-and-tell-you-to-fix: a follow-up command is exactly what this
+      // pipeline has never once executed. Re-running must therefore be able to succeed.
+      const project = await withSlices(['Named-but-undefined (p.1): a gap']);
+      await ingestCheckCommand({ project, json: true });
+      expect(process.exitCode).toBe(1);
+
+      process.exitCode = undefined;
+      await ingestCheckCommand({ project, json: true });
+      expect(process.exitCode).toBeUndefined();
+      expect(await readIndex(project)).toContain('a gap');
+    });
+
+    it('exits zero on an already-synchronised project — it must be free to run every time', async () => {
+      const project = await withSlices(['Named-but-undefined (p.1): a gap']);
+      await ingestGapsCommand({ project, quiet: true });
+      process.exitCode = undefined;
+      await ingestCheckCommand({ project, json: true });
+      expect(process.exitCode).toBeUndefined();
+    });
+
+    it('treats an unrelabelled presentation line as stale, not just a missing gap', async () => {
+      const project = await withSlices(
+        [],
+        ['Derived (p.1): The page is set in a bold sans-serif with four columns.'],
+      );
+      await ingestGapsCommand({ project, quiet: true });
+      process.exitCode = undefined;
+      // Re-introduce the misfiled line after the section is already current.
+      await fs.writeFile(
+        join(project, 'rulebook', '01-core.md'),
+        'Derived (p.1): The page is set in a bold sans-serif with four columns.\n',
+      );
+      await ingestCheckCommand({ project, json: true });
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  it('relabels the card-art description that slipped past the typography-only lexicon', async () => {
+    // Gate item (i), verbatim from the run. The pre-2026-07-28 lexicon matched none of it.
+    const artLine =
+      'Derived (p.1): Card art depicted on this page uses flat, fully saturated color fields — ' +
+      'red, green, blue, purple, and black — with a large white numeral centered on the face, ' +
+      'small white pip-like dots along the card edges, and slightly rounded corners.';
+    const project = await withSlices([], [artLine]);
+    const result = await ingestRelabelCommand({ project, quiet: true });
+    expect(result.relabelled).toBe(1);
+    expect(await fs.readFile(join(project, 'rulebook', '01-core.md'), 'utf-8')).toContain(
+      'Visual (p.1): Card art depicted',
+    );
+  });
+
+  it('leaves rule-bearing lines that merely mention a diagram alone', async () => {
+    // The counterweight. 'depicted'/'shown' are deliberately absent from the lexicon: a rule
+    // INFERRED FROM a diagram is the contract's own canonical Derived example, and a check that
+    // fires on correct work gets waived rather than fixed.
+    const ruleLine =
+      'Derived (p.1): Sets match on number only — the depicted Set example mixes two green ' +
+      'cards with one purple card, so color is not required to match within a Set.';
+    const project = await withSlices([], [ruleLine]);
+    const result = await ingestRelabelCommand({ project, quiet: true });
+    expect(result.relabelled).toBe(0);
+  });
 });

@@ -17,6 +17,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { checkIngestArtifacts, CHECK_IDS } from './check.mjs';
 
@@ -50,10 +52,12 @@ describe('ingest harness checker — non-conforming fixture (the real 2026-07-27
     expect(result.pass).toBe(false);
   });
 
-  it('reports exactly 9 failing checks — a future loosening that quietly turns one green fails here', () => {
+  it('reports exactly 10 failing checks — a future loosening that quietly turns one green fails here', () => {
+    // 10 since 2026-07-28: `gaps-machine-owned` (e0) joined the set, and this fixture — a real
+    // failed run — has no machine-owned fences at all, so it fails that one too.
     const failing = result.checks.filter((c) => !c.pass);
-    expect(failing.length).toBe(9);
-    expect(result.checks.length).toBe(9);
+    expect(failing.length).toBe(10);
+    expect(result.checks.length).toBe(10);
   });
 
   it.each([
@@ -157,5 +161,88 @@ describe('visual-lines (h) — separability, not an inline-line count', () => {
     });
     const h = r.checks.find((c) => c.id === 'visual-lines');
     expect(h.detail).toMatch(/presentation recorded in: (00-visual-survey\.md|\d+ inline Visual)/);
+  });
+});
+
+/**
+ * (e0) `gaps-machine-owned` — the check added on 2026-07-28 for the defect the harness missed.
+ *
+ * The 2026-07-28 human gate (170-PROOF-RUN-2.md) found an ingest orchestrator that filled
+ * `## Open Rules Gaps` by hand with 2 entries while its slices carried 5. The harness scored that
+ * run 10/10. Reading the section could not expose it — both entries were real gaps, correctly
+ * worded, in the right format. The only observable difference between a hand-authored section and
+ * a swept one is whether the writer respected the machine-owned fence, so that is the assertion.
+ *
+ * These build INDEX.md text inline rather than adding fixtures: the property under test is a
+ * property of the gaps section alone, and a full fixture tree would obscure that.
+ */
+describe('gaps-machine-owned (e0)', () => {
+  /** Clone the conforming fixture into a temp dir, with INDEX.md's gaps section replaced. */
+  function withGapsSection(sectionBody) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-e0-'));
+    fs.cpSync(CONFORMING_DIR, tmp, { recursive: true });
+    const indexPath = path.join(tmp, 'rulebook', 'INDEX.md');
+    const text = fs.readFileSync(indexPath, 'utf8');
+    const start = text.indexOf('## Open Rules Gaps');
+    const end = text.indexOf('## Slices');
+    fs.writeFileSync(
+      indexPath,
+      `${text.slice(0, start)}## Open Rules Gaps\n\n${sectionBody}\n\n${text.slice(end)}`,
+    );
+    return checkIngestArtifacts({
+      projectDir: tmp,
+      sourceFileName: 'rules.pdf',
+      expectedSourceHash: CONFORMING_SOURCE_HASH,
+    });
+  }
+
+  it('fails a hand-authored section — the exact 2026-07-28 defect', () => {
+    const result = withGapsSection(
+      [
+        'Named-but-undefined (p.1): "Ways to Score" card',
+        'Named-but-undefined (p.2): the 7 scoring hands',
+      ].join('\n'),
+    );
+    const check = findCheck(result, 'gaps-machine-owned');
+    expect(check.pass).toBe(false);
+    expect(check.detail).toMatch(/fences missing/i);
+  });
+
+  it('fails when entries are written outside intact fences', () => {
+    const result = withGapsSection(
+      [
+        'Named-but-undefined (p.1): written above the fence',
+        '<!-- boardsmith:gaps:begin -->',
+        '_None._',
+        '<!-- boardsmith:gaps:end -->',
+      ].join('\n'),
+    );
+    const check = findCheck(result, 'gaps-machine-owned');
+    expect(check.pass).toBe(false);
+    expect(check.detail).toMatch(/OUTSIDE the machine-owned fences/);
+  });
+
+  it('fails on prose smuggled between the fences', () => {
+    const result = withGapsSection(
+      [
+        '<!-- boardsmith:gaps:begin -->',
+        'These are rules the rulebook names but never defines.',
+        'Named-but-undefined (p.1): a gap',
+        '<!-- boardsmith:gaps:end -->',
+      ].join('\n'),
+    );
+    const check = findCheck(result, 'gaps-machine-owned');
+    expect(check.pass).toBe(false);
+    expect(check.detail).toMatch(/hand-authored line/);
+  });
+
+  it('passes the empty-but-fenced state a real ingest run leaves behind', () => {
+    // This is what ingest now produces before any synthesis runs, and it must NOT be a failure:
+    // `boardsmith ingest-check` at /bs-build-chunk Step 0 is what fills it. Failing here would
+    // make the harness reject the correct post-ingest state.
+    const result = withGapsSection(
+      ['<!-- boardsmith:gaps:begin -->', '_None._', '<!-- boardsmith:gaps:end -->'].join('\n'),
+    );
+    expect(findCheck(result, 'gaps-machine-owned').pass).toBe(true);
   });
 });

@@ -7,14 +7,14 @@ Transcribed: 2026-07-27, checker fixture (hand-built, not a live ingest run)
 
 ## Open Rules Gaps
 
-These are rules the rulebook names but never defines. They are recorded here from the slices'
-`Named-but-undefined` markers rather than reconstructed, and are deferred to the `ask` step of
-the chunk that first needs them.
+<!-- MACHINE-OWNED. Written by `boardsmith ingest-gaps` from the slices' `Named-but-undefined`
+     markers, never by hand. This fixture reproduces the exact shape that command emits — the
+     markers verbatim, one per line, undeduplicated, between the fences and nothing else. -->
 
-1. **"Starting bonus" contents** — mentioned in the setup callout box (`01-setup.md`), but its
-   effect is never described anywhere on page 1.
-2. **"Turn order" definition** — used before it is defined; no definition appears on page 1 or 2
-   (`01-setup.md`).
+<!-- boardsmith:gaps:begin -->
+Named-but-undefined (p.1): the "starting bonus" mentioned in the setup callout box (referenced by
+Named-but-undefined (p.1): "turn order" is used before it is defined — the rulebook assumes the
+<!-- boardsmith:gaps:end -->
 
 ## Slices
 

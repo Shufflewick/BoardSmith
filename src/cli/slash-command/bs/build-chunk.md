@@ -34,9 +34,27 @@ sources (slices, docs, code), not on reading chunk state. `${CLAUDE_SKILL_DIR}/.
 `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md` restate the source-reading ban because those are the two steps where the
 temptation to "double-check by re-reading the sources a subagent just read" is strongest.
 
-## Step 0: Entry — Consistency Check + Session Lock
+## Step 0: Entry — Ingest Synthesis Check + Consistency Check + Session Lock
 
-On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
+On entry, before any other work, run:
+
+```bash
+npx boardsmith ingest-check
+```
+
+**This is not optional and it is not a formality.** If it exits non-zero it has already REPAIRED
+`rulebook/` on disk, and the copy of `rulebook/INDEX.md` in your context is stale. Re-read
+`rulebook/INDEX.md` and any slice it names before continuing, then re-run the command — it will
+pass. Do not proceed to the consistency check on a non-zero exit.
+
+Why this is here: `/bs-ingest-rules` never commits, so the pre-commit hook that performs ingest
+synthesis has never run when you arrive. On 2026-07-28 a real ingest run ended with
+`## Open Rules Gaps` holding 2 of the 5 gaps its own slices recorded, and zero `Derived (p.N):`
+lines separated from presentation description. Investigate reads `INDEX.md`, so without this the
+first chunk is designed against a rulebook index that is missing three named-but-undefined rules.
+`ingest-check` is a no-op in a project whose synthesis is current, so it costs nothing to run.
+
+Then run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
 ("Consistency Check"). Use literal `ls <file>` checks in the current directory, never
 `**/glob` patterns that search subfolders.
 

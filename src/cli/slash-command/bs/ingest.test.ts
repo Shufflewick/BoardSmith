@@ -387,7 +387,9 @@ describe('v4.9 INGEST-02 — relabel command and shared lexicon', () => {
     expect(ingestRules).not.toContain('npx boardsmith ingest-relabel');
     const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
     // ingest-gaps must actually call the relabel first, not just document that it does.
-    expect(cmd).toMatch(/if \(!options\.skipRelabel\) \{\s*await ingestRelabelCommand/);
+    // (The call captures a return value since 2026-07-28 — `ingest-check` needs to know whether
+    // anything was relabelled — so this matches the guarded call, not one exact spelling of it.)
+    expect(cmd).toMatch(/if \(!options\.skipRelabel\) \{[\s\S]{0,120}?ingestRelabelCommand\(/);
   });
 
   it('the relabel command changes only the prefix, never the text', () => {
@@ -412,6 +414,12 @@ describe('v4.9 INGEST-02 — relabel command and shared lexicon', () => {
       const close = src.indexOf(']', open);
       return src
         .slice(open + 1, close)
+        .split('\n')
+        // Both copies carry rationale comments INSIDE the array (why a term was added, and why
+        // 'numeral'/'pip'/'card face' were deliberately excluded). Strip them before comparing —
+        // the terms must match; the prose explaining them need not.
+        .filter((line) => !line.trim().startsWith('//'))
+        .join('\n')
         .split(',')
         .map((t) => t.trim().replace(/^['"]|['"]$/g, ''))
         .filter(Boolean)

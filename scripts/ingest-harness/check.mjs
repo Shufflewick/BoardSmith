@@ -33,6 +33,7 @@ export const CHECK_IDS = Object.freeze([
   'hash-recorded',
   'header-block',
   'gaps-heading',
+  'gaps-machine-owned',
   'gaps-reconciliation',
   'tables-intact',
   'visual-lines',
@@ -45,6 +46,7 @@ const CHECK_META = Object.freeze({
   'hash-recorded': { letter: 'c', label: 'INDEX.md Source hash: line matches the archive hash' },
   'header-block': { letter: 'd', label: 'INDEX.md four header lines present, ordered, non-empty' },
   'gaps-heading': { letter: 'e1', label: 'INDEX.md has the exact "## Open Rules Gaps" heading' },
+  'gaps-machine-owned': { letter: 'e0', label: 'Gaps section fences intact and not hand-authored' },
   'gaps-reconciliation': { letter: 'e2', label: 'Gaps section entries reconcile with slice markers' },
   'tables-intact': { letter: 'f', label: 'INDEX.md has "## Slices" and "## Term → Slice" tables' },
   'visual-lines': { letter: 'h', label: 'Slices carry both Visual (p. and Derived (p. lines' },
@@ -86,6 +88,16 @@ const PRESENTATION_LEXICON = [
   'art style',
   'rotated',
   'bold white',
+  // See the matching block in src/cli/commands/ingest-archive.ts for why these were added on
+  // 2026-07-28 and why 'numeral', 'pip', and 'card face' were deliberately left out.
+  'card art',
+  'color field',
+  'colour field',
+  'flat color',
+  'flat colour',
+  'saturated',
+  'rounded corner',
+  'background fill',
 ];
 
 function makeResult(id, pass, detail) {
@@ -266,6 +278,82 @@ function checkGapsHeading(indexText) {
       ? `expected "## Open Rules Gaps" but found instead: "${candidate.trim()}"`
       : 'no gaps-shaped heading found at all';
   return makeResult('gaps-heading', false, detail);
+}
+
+const GAPS_BEGIN = '<!-- boardsmith:gaps:begin -->';
+const GAPS_END = '<!-- boardsmith:gaps:end -->';
+
+/**
+ * (e0) The gaps section is machine-owned: its fences are intact, and nothing lives between them
+ * except swept `Named-but-undefined` markers or the `_None._` token.
+ *
+ * This is the check that would have caught the 2026-07-28 human gate failure, and it is
+ * deliberately asserted on the state the ingest session LEAVES — before any synthesis runs.
+ * That run's orchestrator hand-authored the section with 2 entries while its slices carried 5.
+ * Reading the result told you nothing: both entries were real gaps, correctly worded. The only
+ * observable difference between a hand-authored section and a swept one is whether the writer
+ * respected the fence, so that is what gets checked.
+ *
+ * Note this is NOT the same assertion as (e2). (e2) compares counts, which is meaningful only
+ * before a sweep has made the two sides equal by construction — see the harness README.
+ */
+function checkGapsMachineOwned(indexText) {
+  if (indexText === null) {
+    return makeResult('gaps-machine-owned', false, 'cannot check: rulebook/INDEX.md missing');
+  }
+  const begin = indexText.indexOf(GAPS_BEGIN);
+  const end = indexText.indexOf(GAPS_END);
+  if (begin === -1 || end === -1) {
+    return makeResult(
+      'gaps-machine-owned',
+      false,
+      `machine-owned fences missing (begin=${begin !== -1}, end=${end !== -1}) — the section was rewritten wholesale rather than left to \`boardsmith ingest-gaps\``,
+    );
+  }
+  if (end < begin) {
+    return makeResult('gaps-machine-owned', false, 'fences are out of order (end before begin)');
+  }
+
+  const inner = indexText.slice(begin + GAPS_BEGIN.length, end);
+  const stray = inner
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && l !== '_None._' && !l.startsWith('Named-but-undefined'));
+  if (stray.length) {
+    return makeResult(
+      'gaps-machine-owned',
+      false,
+      `${stray.length} hand-authored line(s) inside the machine-owned fences: ${stray.slice(0, 3).map((l) => JSON.stringify(l)).join(', ')}${stray.length > 3 ? ', …' : ''}`,
+    );
+  }
+
+  // Anything the session wrote OUTSIDE the fences but inside the section is also hand-authoring.
+  const bodyLines = getGapsSectionBodyLines(indexText) ?? [];
+  const outside = [];
+  let insideFence = false;
+  for (const line of bodyLines) {
+    const t = line.trim();
+    if (t === GAPS_BEGIN) { insideFence = true; continue; }
+    if (t === GAPS_END) { insideFence = false; continue; }
+    if (insideFence) continue;
+    if (t === '' || t.startsWith('<!--') || t.startsWith('-->') || t.endsWith('-->')) continue;
+    // Inside an HTML comment block spanning lines — cheap detection is enough here.
+    if (t.startsWith('Named-but-undefined') || t === '_None._') outside.push(t);
+  }
+  if (outside.length) {
+    return makeResult(
+      'gaps-machine-owned',
+      false,
+      `${outside.length} gap entr${outside.length === 1 ? 'y' : 'ies'} written OUTSIDE the machine-owned fences — the sweep will not see or replace them`,
+    );
+  }
+
+  const entries = inner.split('\n').filter((l) => l.trim().startsWith('Named-but-undefined')).length;
+  return makeResult(
+    'gaps-machine-owned',
+    true,
+    `fences intact, nothing hand-authored; ${entries} swept entr${entries === 1 ? 'y' : 'ies'} between them`,
+  );
 }
 
 function getGapsSectionBodyLines(indexText) {
@@ -463,6 +551,7 @@ export function checkIngestArtifacts({ projectDir, sourceFileName, expectedSourc
   const hashRecorded = checkHashRecorded(indexText, computedHash);
   const headerBlock = checkHeaderBlock(indexText, hasSourceDir);
   const gapsHeading = checkGapsHeading(indexText);
+  const gapsMachineOwned = checkGapsMachineOwned(indexText);
   const gapsReconciliation = checkGapsReconciliation(indexText, sliceFiles);
   const tablesIntact = checkTablesIntact(indexText);
   const surveyPath = path.join(rulebookDir(projectDir), '00-visual-survey.md');
@@ -476,6 +565,7 @@ export function checkIngestArtifacts({ projectDir, sourceFileName, expectedSourc
     hashRecorded,
     headerBlock,
     gapsHeading,
+    gapsMachineOwned,
     gapsReconciliation,
     tablesIntact,
     visualLines,

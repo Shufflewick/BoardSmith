@@ -12,6 +12,7 @@ import { simulateCommand } from './commands/simulate.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
 import {
   ingestArchiveCommand,
+  ingestCheckCommand,
   ingestGapsCommand,
   ingestRelabelCommand,
 } from './commands/ingest-archive.js';
@@ -143,6 +144,13 @@ program
   .option('--skip-relabel', 'Do not relabel presentation-only Derived lines first')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(ingestGapsCommand);
+
+program
+  .command('ingest-check')
+  .description('Repair ingest synthesis (gaps + Derived/Visual) and exit non-zero if it was stale')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(ingestCheckCommand);
 
 program
   .command('ingest-relabel')
