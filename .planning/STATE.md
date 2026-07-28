@@ -4,13 +4,13 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 173-01-PLAN.md
-last_updated: "2026-07-28T22:47:29.194Z"
+last_updated: "2026-07-28T22:57:17.530Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 29
-  completed_plans: 23
+  completed_plans: 24
   percent: 20
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 173 (verify-pipeline-core) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 
 `173-01-PLAN.md` closed the phase's wave-1 hard gate: `ingestArchiveCommand`'s existing-INDEX
 branch was reporting false success on already-ingested projects while silently failing to write
@@ -560,6 +560,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Decision 15 honored: reused transcription-subagent.md as a shared, parameterized contract instead of forking a verify-specific copy for VERIFY-07
 - [Phase 173]: verify-shaped lock identity is verify:<run-id>, reusing SKETCH.md's existing Session Lock slug position rather than a second lock mechanism
 - [Phase 173]: Removed literal --apply/cutover mentions from verify-game.md prose so the decision-8 absence guard in verify.test.ts is a real structural check
+- [Phase ?]: Replaced all five hardcoded SKILL_NAMES test literals with a single exported source of truth (SKILL_NAMES), closing the drift hazard structurally
+- [Phase ?]: SHARED_LEAF_PROBES verify/ leaf probe uses source-resolution.md per plan fallback instruction
 
 ### Pending Todos
 
@@ -571,7 +573,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T22:46:04.156Z
+Last session: 2026-07-28T22:55:59.916Z
 Stopped at: Completed 173-01-PLAN.md
 Resume file: 
 None
