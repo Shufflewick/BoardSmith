@@ -499,3 +499,309 @@ export async function chunkCheckCommand(
   // internal paths.
   process.exitCode = 1;
 }
+
+/**
+ * `boardsmith chunk-provenance-status` — PROV-03's deliverable. A read-only aggregation of every
+ * chunk's `## Verified Against` block, backing `/bs-check-status` (which formats this, per
+ * 171-CONTEXT.md, rather than computing it itself).
+ *
+ * THE THREE STATES, NEVER TWO (171-CONTEXT.md "specifics" item 3, and the single most important
+ * property of this file): `full`, `code-conformance-only`, and `unknown`. A chunk verified BEFORE
+ * this phase existed carries no block at all — that is not drift, and reporting it as
+ * `code-conformance-only` would assert a scope determination that was never made. All 29 existing
+ * chunks across both reference games are `unknown` today (verified 2026-07-28); conflating that
+ * with `code-conformance-only` would report every one of them as damaged rather than simply older.
+ * `PROVENANCE_UNKNOWN` exists as its own sentinel, distinct from `SCOPE_FULL`/`SCOPE_CODE_ONLY`,
+ * for exactly this reason.
+ */
+export const PROVENANCE_UNKNOWN = 'unknown';
+
+export interface ParsedVerifiedAgainst {
+  state: typeof SCOPE_FULL | typeof SCOPE_CODE_ONLY | typeof PROVENANCE_UNKNOWN;
+  /** Only present when `state` is `code-conformance-only`. */
+  reason?: ScopeReason;
+  /** The RAW recorded edition string (not yet normalised) — undefined when `state` is `unknown` or the block recorded no edition. */
+  edition?: string;
+  sourceHash?: string;
+  boardsmithVersion?: string;
+  skillsTreeHash?: string;
+  citedSlices: string[];
+  unresolved: string[];
+  /**
+   * true only when a "## Verified Against" HEADING exists but its body could not be parsed (a
+   * fence missing, a required label removed). Distinct from the ordinary "no heading at all"
+   * unknown case — that one means "verified before this phase existed," not "corrupted." Both
+   * report `state: unknown`; this flag is how a caller tells them apart without conflating a
+   * project's age with damage to its records.
+   */
+  blockMalformed: boolean;
+}
+
+function unparsed(blockMalformed: boolean): ParsedVerifiedAgainst {
+  return { state: PROVENANCE_UNKNOWN, citedSlices: [], unresolved: [], blockMalformed };
+}
+
+/**
+ * Pure. Parses a chunk's full CHUNK.md text for its `## Verified Against` block, using ONLY the
+ * exported `VERIFIED_AGAINST_*` constants — never a second hand-copied label string.
+ *
+ * Strict by design: a missing fence, a missing required label, or the not-yet-recorded sentinel
+ * body all yield `state: PROVENANCE_UNKNOWN`. A PARTIALLY parsed block is never returned as
+ * valid — T-171-17's mitigation (chunk-provenance.ts threat register): a hand-forged or damaged
+ * block must not be able to present as a real verification record.
+ */
+export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
+  const headingIdx = chunkText.indexOf(VERIFIED_AGAINST_HEADING);
+  if (headingIdx === -1) return unparsed(false); // never verified under this phase's contract
+
+  const beginIdx = chunkText.indexOf(VERIFIED_AGAINST_BEGIN, headingIdx);
+  const endIdx = chunkText.indexOf(VERIFIED_AGAINST_END, headingIdx);
+  if (beginIdx === -1 || endIdx === -1 || endIdx < beginIdx) return unparsed(true); // structurally damaged
+
+  const body = chunkText.slice(beginIdx + VERIFIED_AGAINST_BEGIN.length, endIdx).trim();
+  if (body === VERIFIED_AGAINST_EMPTY) return unparsed(false); // freshly scaffolded, never run
+
+  const readLabel = (label: string): string | undefined => {
+    const match = new RegExp(`^${label}\\s*(.*)$`, 'm').exec(body);
+    return match ? match[1].trim() : undefined;
+  };
+
+  const scopeRaw = readLabel(LABEL_SCOPE);
+  const editionRaw = readLabel(LABEL_EDITION);
+  const sourceHashRaw = readLabel(LABEL_SOURCE_HASH);
+  const versionRaw = readLabel(LABEL_VERSION);
+  const skillsHashRaw = readLabel(LABEL_SKILLS_HASH);
+
+  if (
+    (scopeRaw !== SCOPE_FULL && scopeRaw !== SCOPE_CODE_ONLY) ||
+    editionRaw === undefined ||
+    sourceHashRaw === undefined ||
+    !versionRaw ||
+    !skillsHashRaw ||
+    !body.includes(LABEL_CITED)
+  ) {
+    return unparsed(true); // present but unparseable — never a partial record treated as valid
+  }
+
+  let reason: ScopeReason | undefined;
+  if (scopeRaw === SCOPE_CODE_ONLY) {
+    const reasonRaw = readLabel(LABEL_REASON);
+    if (!reasonRaw || !(SCOPE_REASONS as readonly string[]).includes(reasonRaw)) {
+      return unparsed(true);
+    }
+    reason = reasonRaw as ScopeReason;
+  }
+
+  const citedSlices: string[] = [];
+  const citedSectionMatch = new RegExp(
+    `${LABEL_CITED}\\s*\\n\\n([\\s\\S]*?)(?:\\n\\n${LABEL_UNRESOLVED}|$)`,
+  ).exec(body);
+  if (citedSectionMatch) {
+    for (const row of citedSectionMatch[1].matchAll(/^\|\s*(rulebook\/[^\s|]+)\s*\|/gm)) {
+      citedSlices.push(row[1]);
+    }
+  }
+
+  const unresolved: string[] = [];
+  const unresolvedSectionMatch = new RegExp(`${LABEL_UNRESOLVED}\\s*\\n\\n([\\s\\S]*)$`).exec(
+    body,
+  );
+  if (unresolvedSectionMatch) {
+    for (const bullet of unresolvedSectionMatch[1].matchAll(/^-\s*(.+)$/gm)) {
+      unresolved.push(bullet[1].trim());
+    }
+  }
+
+  return {
+    state: scopeRaw,
+    reason,
+    edition: editionRaw === 'none recorded' ? undefined : editionRaw,
+    sourceHash: sourceHashRaw === 'none recorded' ? undefined : sourceHashRaw,
+    boardsmithVersion: versionRaw,
+    skillsTreeHash: skillsHashRaw,
+    citedSlices,
+    unresolved,
+    blockMalformed: false,
+  };
+}
+
+export interface ChunkProvenanceEntry {
+  slug: string;
+  /** The literal `Status:` line value, e.g. `verified`, `verified (user-waived)`, `built`. */
+  status: string;
+  state: typeof SCOPE_FULL | typeof SCOPE_CODE_ONLY | typeof PROVENANCE_UNKNOWN;
+  reason?: ScopeReason;
+  edition?: string;
+  skillsTreeHash?: string;
+  boardsmithVersion?: string;
+  citedSliceCount: number;
+  unresolvedCount: number;
+  blockMalformed: boolean;
+}
+
+export interface ChunkProvenanceStatusResult {
+  chunks: ChunkProvenanceEntry[];
+  counts: { full: number; codeConformanceOnly: number; unknown: number };
+  /** Keyed by `normalizeEdition()` output — pre-F-1 free text collapses to one bucket (RESEARCH.md Pitfall 3). */
+  byEdition: Record<string, string[]>;
+  bySkillsTreeHash: Record<string, string[]>;
+  byBoardsmithVersion: Record<string, string[]>;
+  /**
+   * Slugs whose `Status:` starts with `verified` (covering both `verified` and
+   * `verified (user-waived)` — a waived verification is still a claim) but whose `state` is
+   * `unknown`. This is the compensating control for T-171-14/T-171-18: if a live `close` session
+   * skips `chunk-check`, THIS is what surfaces it, rather than the skip passing silently.
+   *
+   * Composition with the `unknown` state: an `unknown` chunk on a pre-existing (pre-Phase-171)
+   * project is ALSO flagged here if its Status already reads `verified` — that is correct, not a
+   * false positive. The flag does not ask "is this project old?"; it asks "does this chunk's
+   * Status claim a verification that no record backs?" A project that has never run
+   * `chunk-check` at all will show every verified chunk flagged, honestly, and plan 07's
+   * real-reference-game proof exercises exactly that case (all 29 chunks, both `unknown` AND
+   * flagged, at once) — that is the phase's stated ready-made proof target, not a false alarm.
+   */
+  verifiedWithoutProvenance: string[];
+}
+
+/**
+ * `boardsmith chunk-provenance-status [--json]` — enumerates `chunks/*␣/CHUNK.md`, parses each
+ * one's `## Verified Against` block, and reports the three-state classification, edition/
+ * skills-tree/version drift, and the `verifiedWithoutProvenance` flag.
+ *
+ * READ-ONLY. This is not incidental: it backs `check-status.md`, whose documented posture is
+ * "This skill performs no writes of any kind." No `fs.writeFile` (or any other mutating fs call)
+ * appears anywhere in this function's body — the read-only property is pinned directly by a
+ * before/after whole-project byte-hash test (T-171-19).
+ */
+export async function chunkProvenanceStatusCommand(
+  options: { project?: string; json?: boolean } = {},
+): Promise<ChunkProvenanceStatusResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  const chunksDir = join(projectDir, 'chunks');
+
+  let entries: Array<{ name: string; isDirectory(): boolean }>;
+  try {
+    entries = await fs.readdir(chunksDir, { withFileTypes: true });
+  } catch {
+    throw new Error(
+      `No chunks/ directory in ${projectDir}.\n` +
+        `This command looks for chunks/<slug>/CHUNK.md files — run it from a BoardSmith game\n` +
+        `project directory, or pass --project <dir>.`,
+    );
+  }
+  const slugs = entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+
+  const chunks: ChunkProvenanceEntry[] = [];
+  const byEdition: Record<string, string[]> = {};
+  const bySkillsTreeHash: Record<string, string[]> = {};
+  const byBoardsmithVersion: Record<string, string[]> = {};
+  const verifiedWithoutProvenance: string[] = [];
+  const counts = { full: 0, codeConformanceOnly: 0, unknown: 0 };
+
+  for (const slug of slugs) {
+    let chunkText: string;
+    try {
+      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
+    } catch {
+      continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
+    }
+
+    const statusMatch = /^Status:\s*(.*)$/m.exec(chunkText);
+    const status = statusMatch ? statusMatch[1].trim() : 'unknown';
+
+    const parsed = parseVerifiedAgainst(chunkText);
+
+    if (parsed.state === SCOPE_FULL) counts.full++;
+    else if (parsed.state === SCOPE_CODE_ONLY) counts.codeConformanceOnly++;
+    else counts.unknown++;
+
+    const editionKey = normalizeEdition(parsed.edition);
+    (byEdition[editionKey] ??= []).push(slug);
+    if (parsed.skillsTreeHash) (bySkillsTreeHash[parsed.skillsTreeHash] ??= []).push(slug);
+    if (parsed.boardsmithVersion) (byBoardsmithVersion[parsed.boardsmithVersion] ??= []).push(slug);
+
+    if (status.startsWith('verified') && parsed.state === PROVENANCE_UNKNOWN) {
+      verifiedWithoutProvenance.push(slug);
+    }
+
+    chunks.push({
+      slug,
+      status,
+      state: parsed.state,
+      reason: parsed.reason,
+      edition: parsed.edition,
+      skillsTreeHash: parsed.skillsTreeHash,
+      boardsmithVersion: parsed.boardsmithVersion,
+      citedSliceCount: parsed.citedSlices.length,
+      unresolvedCount: parsed.unresolved.length,
+      blockMalformed: parsed.blockMalformed,
+    });
+  }
+
+  const result: ChunkProvenanceStatusResult = {
+    chunks,
+    counts,
+    byEdition,
+    bySkillsTreeHash,
+    byBoardsmithVersion,
+    verifiedWithoutProvenance,
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  for (const c of chunks) {
+    const label = c.blockMalformed ? `${c.state} (block malformed)` : c.state;
+    const reasonSuffix = c.reason ? `, ${c.reason}` : '';
+    console.log(`${c.slug} — ${c.status} — ${label}${reasonSuffix}`);
+  }
+  console.log('');
+  console.log(
+    `full: ${counts.full}  code-conformance-only: ${counts.codeConformanceOnly}  unknown: ${counts.unknown}`,
+  );
+
+  const editionKeys = Object.keys(byEdition);
+  const skillsHashKeys = Object.keys(bySkillsTreeHash);
+  const versionKeys = Object.keys(byBoardsmithVersion);
+  if (editionKeys.length > 1 || skillsHashKeys.length > 1 || versionKeys.length > 1) {
+    console.log('');
+    console.log(chalk.yellow('Drift:'));
+    if (editionKeys.length > 1) {
+      for (const key of editionKeys) {
+        console.log(`  edition ${key}: ${byEdition[key].join(', ')}`);
+      }
+    }
+    if (skillsHashKeys.length > 1) {
+      for (const key of skillsHashKeys) {
+        console.log(`  skills-tree hash ${key}: ${bySkillsTreeHash[key].join(', ')}`);
+      }
+    }
+    if (versionKeys.length > 1) {
+      for (const key of versionKeys) {
+        console.log(`  BoardSmith version ${key}: ${byBoardsmithVersion[key].join(', ')}`);
+      }
+    }
+  }
+
+  if (verifiedWithoutProvenance.length) {
+    console.log('');
+    console.log(
+      chalk.red(
+        `VERIFIED WITHOUT PROVENANCE — these chunks' Status claims verification but no valid ` +
+          `"${VERIFIED_AGAINST_HEADING}" block backs it. This means either a skipped ` +
+          `\`chunk-check\` invocation, or a pre-existing project whose verification predates this ` +
+          `phase (run \`boardsmith chunk-check <slug>\` on each to record real provenance now):`,
+      ),
+    );
+    for (const slug of verifiedWithoutProvenance) {
+      console.log(`  • ${slug}`);
+    }
+  }
+
+  return result;
+}

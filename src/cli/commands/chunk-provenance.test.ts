@@ -836,11 +836,11 @@ describe('chunk-provenance-status', () => {
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const result = await chunkProvenanceStatusCommand({ project, json: false });
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
     logSpy.mockRestore();
 
     expect(Object.keys(result.bySkillsTreeHash).length).toBe(2);
     expect(result.bySkillsTreeHash[driftHash]).toEqual(['cross']);
-    const output = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(output.toLowerCase()).toContain('drift');
     expect(output).toContain(driftHash);
   });
