@@ -87,7 +87,13 @@ Plans:
   1. Running the traceability sweep against seven or one-two-punch reports every Interpretation claim's test coverage, every test's claim linkage, and every ruling's test coverage, with zero rulebook/source access.
   2. Running the code-drift check against a reference game reports every chunk whose Build Manifest files changed since its recorded verified commit hash.
   3. Both checks are demonstrated end-to-end against at least one reference game, surfacing real findings (not a dry no-op run).
-**Plans**: TBD
+**Plans**: 5 plans (4 waves)
+Plans:
+- [ ] 172-01-PLAN.md — Shared CHUNK.md/Build-Manifest parser module + f73153a3 recurrence fix (wave 1)
+- [ ] 172-02-PLAN.md — CHECK-03 `trace-check`: citation scanner, three-rung resolution ladder, findings, report (wave 2)
+- [ ] 172-03-PLAN.md — CHECK-05 `drift-check`: commit-hash extraction, git diff plumbing, three drift states (wave 2)
+- [ ] 172-04-PLAN.md — CLI registration + exit-code contract through the real entry point (wave 3)
+- [ ] 172-05-PLAN.md — Real-data proof against copies of both reference games, `172-PROOF.md` (wave 4)
 
 ### Phase 173: Verify Pipeline Core
 **Goal**: A designer can invoke `/bs-verify-game` against an existing bs-built project and get a safely-staged, resumable re-transcription without disturbing the live project.
