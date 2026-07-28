@@ -68,7 +68,16 @@ Plans:
   1. Closing a chunk writes a `## Verified Against` block to CHUNK.md — slice paths and hashes, rulebook edition, BoardSmith version, skills version, and verification scope.
   2. A verification that could not re-read source records its scope as code-conformance-only with an explicit reason, visibly distinct from a full verification — never silently reading as a full one.
   3. `/bs-check-status` reports, per chunk, which rulebook edition and skills version it was last verified against, and separately flags which chunks are code-conformance-only.
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+- [ ] 171-01-PLAN.md — F-1: normalise recognisably-empty `--edition` free text to the `EDITION_UNKNOWN` sentinel, preserving the designer's wording on an unparsed note line (PROV-01)
+- [ ] 171-02-PLAN.md — the two non-citation provenance inputs: a real `boardsmith --version` and a content hash of the installed bs- skills tree (PROV-01)
+- [ ] 171-03-PLAN.md — `computeVerificationScope` (five enumerated reason codes, computed never declared) + `resolveCitedSlices` from existing chunk prose (PROV-02, PROV-01)
+- [ ] 171-04-PLAN.md — `boardsmith chunk-check <slug>`: the fenced machine-owned `## Verified Against` block, repair-then-exit-non-zero (PROV-01, PROV-02)
+- [ ] 171-05-PLAN.md — `boardsmith chunk-provenance-status --json`: three states incl. `unknown`, drift grouping, and the verified-without-provenance flag (PROV-03, PROV-02)
+- [ ] 171-06-PLAN.md — wire both close paths + the CHUNK.md scaffold + `/bs-check-status` item 8 to the two commands (PROV-01, PROV-03)
+- [ ] 171-07-PLAN.md — PROC-01 proof against copies of both reference games; `~/BoardSmithGames/seven` asserted clean before and after (PROV-01, PROV-02, PROV-03)
 
 ### Phase 172: Source-Free Conformance Checks
 **Goal**: The two checks that need neither the ingest changes nor re-transcription exist and are proven immediately against real games, de-risking everything downstream.
