@@ -23,7 +23,7 @@
  * per requirement ID.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -346,6 +346,88 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
   it('does not instruct re-reading the slice to collect gaps', () => {
     const transcription = read('ingest/transcription.md');
     expect(transcription).not.toMatch(/re-read(ing)? the slice[^.]*gap/i);
+  });
+});
+
+// NOTE (Plan 173-03): these assertions prove the instruction EXISTS in skill text; they do not
+// prove a live subagent RECEIVES or FOLLOWS it. The behavioural evidence for VERIFY-07 -- that
+// the orchestrator never holds transcribed text -- is the transcript-absence proof in plan
+// 173-06, not this file. See ingest.test.ts:352-356's identical caveat for the sibling contract.
+describe('transcription-subagent.md — output directory is a dispatch input (VERIFY-07, decision 15)', () => {
+  it('the write-instruction section names the assigned output directory, not a hardcoded rulebook/', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('WRITE the transcribed text to `NN-topic.md` in your assigned output directory');
+    expect(contract).not.toMatch(/WRITE the transcribed text to `rulebook\//);
+  });
+
+  it('slicePath\'s description references the assigned output directory, not a hardcoded rulebook/', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('`slicePath`** — the `NN-topic.md` file you wrote, inside your assigned output directory');
+    expect(contract).not.toMatch(/`slicePath`\*\* — the `rulebook\//);
+  });
+
+  it('the ## Your inputs block still enumerates exactly three dispatch inputs', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    const inputsIdx = contract.indexOf('## Your inputs');
+    expect(inputsIdx).toBeGreaterThan(-1);
+    const nextSectionIdx = contract.indexOf('---', inputsIdx);
+    const inputsSection = contract.slice(inputsIdx, nextSectionIdx);
+    const bulletCount = (inputsSection.match(/^- \*\*/gm) ?? []).length;
+    expect(bulletCount).toBe(3);
+    expect(inputsSection).toContain('**Page range**');
+    expect(inputsSection).toContain('**Rulebook path**');
+    expect(inputsSection).toContain('**Output directory**');
+  });
+
+  it('still contains the rulebook/00-visual-survey.md reference verbatim (generalization did not over-reach)', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('rulebook/00-visual-survey.md');
+  });
+
+  it('ingest/transcription.md still fills Write slices to: with rulebook/ — ingest is unchanged', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('Write slices to: rulebook/');
+  });
+
+  it('transcription.md names the verify orchestrator as the other caller of this dispatch input', () => {
+    const transcription = flat(read('ingest/transcription.md'));
+    expect(transcription).toMatch(/verify orchestrator/i);
+    expect(transcription).toContain('per-dispatch substitution');
+  });
+
+  it('no verify-side fork exists: no file under bs/verify/ restates the transcription contract body', () => {
+    // Structural guard, not a comment asking people to be careful. Runs whether or not
+    // bs/verify/ exists yet (it does not, until plan 173-04). If plan 173-04 ever adds a file
+    // there that pastes in the BS-DISPATCH-V2 contract body instead of pointing at
+    // ingest/transcription-subagent.md, this must fail loudly -- a fork here silently
+    // reintroduces the copy-drift trap (f73153a3 and its Phase 172 recurrence) at the exact
+    // point decision 15 forbids it.
+    const verifyDir = join(__dirname, 'verify');
+    if (!existsSync(verifyDir)) return;
+
+    // Markers unique to the contract body itself (not merely a mention/citation of it).
+    const CONTRACT_BODY_MARKERS = [
+      'legality, scoring, or sequencing',
+      'Do not accept a paraphrase of this file in place of the file',
+    ];
+
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) return walk(full);
+        return entry.name.endsWith('.md') ? [full] : [];
+      });
+
+    for (const filePath of walk(verifyDir)) {
+      const text = readFileSync(filePath, 'utf-8');
+      for (const marker of CONTRACT_BODY_MARKERS) {
+        expect(
+          text,
+          `${filePath} restates the transcription contract body ("${marker}") instead of ` +
+            'pointing at ingest/transcription-subagent.md -- decision 15 forbids a verify-side fork.',
+        ).not.toContain(marker);
+      }
+    }
   });
 });
 
