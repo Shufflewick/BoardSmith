@@ -391,8 +391,19 @@ function assertCmd(opts) {
     sourceFileName: state.sourceFileName,
     expectedSourceHash: state.expectHash,
   });
-  const machineOwned = asLeft.checks.find((c) => c.id === 'gaps-machine-owned');
-  console.log(`[assert] as-left (pre-synthesis): gaps-machine-owned ${machineOwned.pass ? 'PASS' : 'FAIL'} — ${machineOwned.detail}`);
+  // Both gaps checks are asserted here and NOT re-derived after synthesis.
+  //
+  // (e0) alone is not enough. It proves the fences survived, but a session that writes
+  // marker-shaped lines BETWEEN intact fences is indistinguishable from a swept section by
+  // inspection — which is the 2026-07-28 defect wearing a different hat. What separates them is
+  // the count: a hand-written section is partial (2 entries against 5 markers), a swept one is
+  // exact. That is (e2), and it is only meaningful HERE. Run after `ingest-check`, (e2) is a
+  // tautology — the repair makes both sides equal and the evidence of the partial fill is gone.
+  const AS_LEFT_CHECK_IDS = ['gaps-machine-owned', 'gaps-reconciliation'];
+  const asLeftChecks = AS_LEFT_CHECK_IDS.map((id) => asLeft.checks.find((c) => c.id === id));
+  for (const c of asLeftChecks) {
+    console.log(`[assert] as-left (pre-synthesis): ${c.id} ${c.pass ? 'PASS' : 'FAIL'} — ${c.detail}`);
+  }
 
   // ---------------------------------------------------------------------------------------
   // Phase B — run what `/bs-build-chunk` Step 0 runs. This is the real next step in the
@@ -453,15 +464,14 @@ function assertCmd(opts) {
     : `reference repo CHANGED: clean=${gClean} (status: ${refStatusNow.trim() || '(none)'}), head-matches=${gHeadMatches} (now ${refHeadNow} vs recorded ${state.refHead})`;
   const gCheck = { id: 'reference-repo-unmodified', letter: 'g', label: '~/BoardSmithGames/seven unmodified', pass: gPass, detail: gDetail };
 
-  // (e0) is asserted against the AS-LEFT state, not the post-synthesis one. Post-synthesis it is
-  // trivially true — `ingest-gaps` writes between the fences by construction — which is exactly
-  // the tautology that made (e2) worthless in the old single-phase harness. Substitute Phase A's
-  // verdict for Phase C's so the reported row is the one that can actually fail.
-  const checksGating = checks.map((c) =>
-    c.id === 'gaps-machine-owned'
-      ? { ...machineOwned, detail: `${machineOwned.detail} [asserted on the as-left tree]` }
-      : c,
-  );
+  // Substitute Phase A's verdicts for Phase C's on both gaps checks — see the note above. The
+  // reported row must be the one that can actually fail.
+  const checksGating = checks.map((c) => {
+    const asLeftCheck = asLeftChecks.find((a) => a.id === c.id);
+    return asLeftCheck
+      ? { ...asLeftCheck, detail: `${asLeftCheck.detail} [asserted on the as-left tree]` }
+      : c;
+  });
   const allChecks = [...checksGating, gCheck];
   const overallPass = checksGating.every((c) => c.pass) && gPass;
   const passCount = allChecks.filter((c) => c.pass).length;

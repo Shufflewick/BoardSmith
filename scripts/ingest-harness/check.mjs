@@ -407,20 +407,47 @@ function checkGapsReconciliation(indexText, sliceFiles) {
 
   const bodyLines = getGapsSectionBodyLines(indexText);
   const sectionAbsent = bodyLines === null;
-  const effectiveBody = bodyLines ?? [];
-  const explicitNone = !sectionAbsent && isExplicitNoneBody(effectiveBody);
-  const entryCount = explicitNone ? 0 : countOrderedListEntries(effectiveBody);
+
+  // When the machine-owned fences are present, read ONLY between them. Scanning the whole section
+  // body cannot work here: the scaffold's MACHINE-OWNED explainer is a multi-line HTML comment
+  // whose continuation lines do not start with `<!--`, so a body scan counts them as content and
+  // a pristine `_None._` project reads as "not empty". Fenced projects are the normal case; the
+  // unfenced branch below exists for pre-fence trees such as the non-conforming fixture.
+  const begin = indexText.indexOf(GAPS_BEGIN);
+  const end = indexText.indexOf(GAPS_END);
+  const fenced = begin !== -1 && end > begin;
+  const scanLines = fenced
+    ? indexText.slice(begin + GAPS_BEGIN.length, end).split('\n')
+    : (bodyLines ?? []);
+
+  const explicitNone = !sectionAbsent && isExplicitNoneBody(scanLines);
+  const entryCount = explicitNone ? 0 : countOrderedListEntries(scanLines);
 
   // Run this comparison unconditionally, for every entry count — never gated on the count
   // looking low; a drop can land anywhere.
-  const pass = entryCount === sliceMarkerCount;
+  //
+  // The empty section is the ONE exempt state, and only because of how the pipeline is now
+  // sequenced (2026-07-28). `/bs-ingest-rules` does not perform synthesis: it leaves the fenced
+  // section holding `_None._`, and `/bs-build-chunk` Step 0 fills it via `boardsmith
+  // ingest-check`. So "empty, with markers in the slices" is the CORRECT post-ingest state and
+  // must not fail — while any PARTIAL fill is the 2026-07-28 defect exactly (2 entries written
+  // against 5 slice markers) and must.
+  //
+  // Empty-or-exact is what makes this check meaningful on the as-left tree, which is where the
+  // harness now asserts it. Post-synthesis it is a tautology: `ingest-gaps` writes the section
+  // FROM the markers, so the two sides are equal by construction and nothing can ever fail.
+  // Exempt state is specifically the PRISTINE `_None._` token, not merely a zero count: a body
+  // someone emptied is not the same as a body synthesis has not reached yet, and a missing
+  // section is not exempt at all.
+  const pass = !sectionAbsent && (explicitNone || entryCount === sliceMarkerCount);
 
   let direction = '';
-  if (!pass) {
-    direction =
-      sliceMarkerCount > entryCount
-        ? ' (markers greater than entries: the transport is dropping gaps)'
-        : ' (entries greater than markers: the section is not built purely from openGaps[])';
+  if (!pass && !sectionAbsent) {
+    direction = explicitNone
+      ? ''
+      : sliceMarkerCount > entryCount
+        ? ' (markers greater than entries: the section was PARTIALLY filled — the 2026-07-28 defect)'
+        : ' (entries greater than markers: the section is not built purely from the slice markers)';
   }
   const sectionNote = sectionAbsent ? ' [no "## Open Rules Gaps" section found; treated as 0 entries]' : '';
   const detail = `section entries=${entryCount}, slice Named-but-undefined markers=${sliceMarkerCount}${direction}${sectionNote}`;

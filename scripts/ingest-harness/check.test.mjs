@@ -246,3 +246,69 @@ describe('gaps-machine-owned (e0)', () => {
     expect(findCheck(result, 'gaps-machine-owned').pass).toBe(true);
   });
 });
+
+/**
+ * (e2) `gaps-reconciliation` on the AS-LEFT tree.
+ *
+ * Found while auditing the 2026-07-28 fix's own harness run: `gaps-machine-owned` (e0) proves the
+ * fences survived, but a session that writes marker-shaped lines BETWEEN intact fences passes it.
+ * That is the original defect wearing a different hat. What separates a hand-written section from
+ * a swept one is not its shape but its COUNT — hand-written is partial, swept is exact.
+ *
+ * This only works before `ingest-check` runs. After the repair both sides are equal and the
+ * evidence is gone, which is why the harness asserts this on the as-left tree.
+ */
+describe('gaps-reconciliation (e2) — partial fills inside intact fences', () => {
+  function withGapsBody(fencedBody) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-e2-'));
+    fs.cpSync(CONFORMING_DIR, tmp, { recursive: true });
+    const indexPath = path.join(tmp, 'rulebook', 'INDEX.md');
+    const text = fs.readFileSync(indexPath, 'utf8');
+    const begin = text.indexOf('<!-- boardsmith:gaps:begin -->');
+    const end = text.indexOf('<!-- boardsmith:gaps:end -->');
+    fs.writeFileSync(
+      indexPath,
+      `${text.slice(0, begin)}<!-- boardsmith:gaps:begin -->\n${fencedBody}\n${text.slice(end)}`,
+    );
+    return checkIngestArtifacts({
+      projectDir: tmp,
+      sourceFileName: 'rules.pdf',
+      expectedSourceHash: CONFORMING_SOURCE_HASH,
+    });
+  }
+
+  // The conforming fixture's slices carry exactly 2 `Named-but-undefined` markers.
+  it('fails a partial fill even though the fences are intact and e0 passes', () => {
+    const result = withGapsBody('Named-but-undefined (p.1): only one of the two real markers');
+    expect(findCheck(result, 'gaps-machine-owned').pass).toBe(true); // e0 is fooled...
+    const e2 = findCheck(result, 'gaps-reconciliation');
+    expect(e2.pass).toBe(false); // ...e2 is not.
+    expect(e2.detail).toMatch(/PARTIALLY filled/);
+  });
+
+  it('passes the pristine _None._ state — the correct output of an ingest that has not synthesised', () => {
+    // Must NOT fail: /bs-ingest-rules deliberately leaves synthesis to /bs-build-chunk Step 0.
+    // A check that demands a filled section here would force synthesis back into ingest, which is
+    // the arrangement that never worked.
+    const result = withGapsBody('_None._');
+    expect(findCheck(result, 'gaps-reconciliation').pass).toBe(true);
+  });
+
+  it('fails an emptied body that is not the pristine token', () => {
+    const result = withGapsBody('');
+    expect(findCheck(result, 'gaps-reconciliation').pass).toBe(false);
+  });
+
+  it('fails invented entries that outnumber the slice markers', () => {
+    const result = withGapsBody(
+      [
+        'Named-but-undefined (p.1): the "starting bonus" mentioned in the setup callout box (referenced by',
+        'Named-but-undefined (p.1): "turn order" is used before it is defined — the rulebook assumes the',
+        'Named-but-undefined (p.3): invented from whole cloth',
+      ].join('\n'),
+    );
+    const e2 = findCheck(result, 'gaps-reconciliation');
+    expect(e2.pass).toBe(false);
+    expect(e2.detail).toMatch(/not built purely from the slice markers/);
+  });
+});
