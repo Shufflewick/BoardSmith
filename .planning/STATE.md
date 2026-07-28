@@ -4,13 +4,13 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 173-01-PLAN.md
-last_updated: "2026-07-28T22:32:43.911Z"
+last_updated: "2026-07-28T22:38:55.874Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 29
-  completed_plans: 21
+  completed_plans: 22
   percent: 20
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 173 (verify-pipeline-core) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 
 `173-01-PLAN.md` closed the phase's wave-1 hard gate: `ingestArchiveCommand`'s existing-INDEX
 branch was reporting false success on already-ingested projects while silently failing to write
@@ -557,6 +557,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 172-04]: trace-check/drift-check registered on the CLI surface with --project/--json only, no mode flag; pinned findings-exit-0/tool-failure-exits-non-zero via a real child-process spawn of node bin/boardsmith.js (first such test in this repo)
 - [Phase 172]: Phase 172 closed: trace-check/drift-check proven end-to-end against both reference games via cp -R copies; independent cross-check found and documented a real narrow-impact parser precision defect in AUTHORING_VERBS (filed for follow-up, not fixed in this proof-only plan)
 - [Phase 173]: Wave-1 gate closed: ingest-archive existing-INDEX branch repaired and proven against both reference games — Unblocks decision 1 (adopt-on-first-verify) and every later plan needing real-game data; two plan hedges refuted empirically and documented in 173-PROOF.md rather than silently absorbed
+- [Phase ?]: Decision 15 honored: reused transcription-subagent.md as a shared, parameterized contract instead of forking a verify-specific copy for VERIFY-07
 
 ### Pending Todos
 
@@ -568,7 +569,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T22:31:31.292Z
+Last session: 2026-07-28T22:37:43.617Z
 Stopped at: Completed 173-01-PLAN.md
 Resume file: 
 None
