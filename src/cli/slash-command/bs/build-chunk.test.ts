@@ -26,7 +26,7 @@
  * helper, same named byte-identical-marker-constant technique, one `describe` per requirement.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -742,9 +742,10 @@ describe('UIQ-05 — final-acceptance router coherence (146-REVIEW CR/WR fixes, 
     expect(playtest).toContain('## Sketch-Tail Delta Gate');
     // close.md must state the light path reuses ONLY the Bookkeeping Sequence in full
     // (SKILLDEF-01 added the terminal lock-release step; SKILLAUTO-08/167-04 added the
-    // ledger-reconciliation step before it, making the sequence five items).
+    // ledger-reconciliation step before it; 171-06 added the provenance-record step before
+    // that, making the sequence six items).
     const close = read('build/close.md');
-    expect(close).toMatch(/light path reuses \*\*only\*\* this five-item sequence/i);
+    expect(close).toMatch(/light path reuses \*\*only\*\* this six-item sequence/i);
   });
 
   it('WR-01: build-chunk.md calls final-acceptance a 7-point check, never 6-point', () => {
@@ -1391,5 +1392,173 @@ describe('PROC-02 — Part D survives the autonomy rewrite', () => {
     expect(build).toMatch(/reads\s*\n?\s*this chunk's cited raw rulebook slices directly/);
     expect(playtest).toMatch(/## The Numbered Click-By-Click Test Script/);
     expect(playtest).toMatch(/observable, outcome-based "expect:" clause/);
+  });
+});
+
+/**
+ * PROV-01/PROV-03 (171-06) — both close paths invoke `boardsmith chunk-check <slug>`.
+ *
+ * These assertions prove the instruction EXISTS in the installed skill text. Phase 170
+ * established across fourteen live runs that a contract test of this shape cannot prove a live
+ * session actually follows it — `/bs-build-chunk` Step 0's `ingest-check` call from that phase
+ * has still never been exercised by a live session, and this plan adds a second invocation with
+ * the identical risk profile. The load-bearing guarantees are NOT these tests — they are (1) the
+ * machine-owned `## Verified Against` fence a session declines to hand-author (pinned in
+ * templates.test.ts), and (2) `chunk-provenance-status`'s `verifiedWithoutProvenance` flag, which
+ * surfaces a skipped invocation after the fact regardless of whether skill text was followed.
+ */
+describe('PROV-01/PROV-03 — both close paths invoke chunk-check, reused by citation not duplication', () => {
+  it('close.md\'s Bookkeeping Sequence invokes `boardsmith chunk-check`', () => {
+    const close = read('build/close.md');
+    expect(close).toContain('boardsmith chunk-check');
+  });
+
+  it('playtest.md\'s Light-Path Bookkeeping cites close.md\'s Bookkeeping Sequence BY NAME and does not duplicate the chunk-check text', () => {
+    const playtest = read('build/playtest.md');
+    expect(playtest).toContain('## Bookkeeping Sequence');
+    // Reuse-by-citation is the contract that keeps the two close paths from drifting apart — a
+    // duplicated copy of the chunk-check instruction is exactly how they would diverge.
+    expect(playtest).not.toContain('boardsmith chunk-check');
+  });
+});
+
+/**
+ * Ordinal-citation drift guard (171-06, plan-check blocker).
+ *
+ * `close.md`'s Bookkeeping Sequence is a numbered list. Other files cite specific items by
+ * ordinal (`Bookkeeping Sequence ... item N`) rather than by name, and nothing previously pinned
+ * those ordinals to the sequence's REAL numbering — inserting or removing an item silently
+ * broke every ordinal citation without failing any test (171-06 found exactly this: two
+ * citations still named "item 4" after an insertion had shifted that duty to item 5). This test
+ * derives close.md's actual numbering by parsing its own numbered list, then validates every
+ * ordinal citation anywhere under this directory tree against it, so a future renumber fails the
+ * suite instead of depending on someone remembering to grep.
+ */
+describe('Bookkeeping Sequence ordinal citations resolve to the item they describe', () => {
+  const bsDir = __dirname;
+
+  /** Parse close.md's `## Bookkeeping Sequence` into { itemNumber -> full item text }. */
+  function parseBookkeepingSequence(): Map<number, string> {
+    const close = read('build/close.md');
+    const sectionStart = close.indexOf('## Bookkeeping Sequence');
+    expect(sectionStart, 'close.md must have a "## Bookkeeping Sequence" heading').toBeGreaterThan(-1);
+    const nextHeading = close.indexOf('\n## ', sectionStart + 1);
+    const section = nextHeading === -1 ? close.slice(sectionStart) : close.slice(sectionStart, nextHeading);
+
+    const items = new Map<number, string>();
+    const itemRe = /^(\d+)\.\s+\*\*/gm;
+    const starts: Array<{ n: number; idx: number }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = itemRe.exec(section))) {
+      starts.push({ n: Number(m[1]), idx: m.index });
+    }
+    for (let i = 0; i < starts.length; i++) {
+      const end = i + 1 < starts.length ? starts[i + 1].idx : section.length;
+      items.set(starts[i].n, section.slice(starts[i].idx, end));
+    }
+    return items;
+  }
+
+  /** Recursively list every .md file under bsDir. */
+  function listMarkdownFiles(dir: string): string[] {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...listMarkdownFiles(full));
+      else if (entry.isFile() && entry.name.endsWith('.md')) out.push(full);
+    }
+    return out;
+  }
+
+  const GENERIC_STOPWORDS = new Set([
+    'chunk', 'chunks', 'close', 'record', 'records', 'recorded', 'write', 'writes', 'written',
+    'before', 'after', 'these', 'which', 'status', 'sequence', 'bookkeeping', 'itself', 'never',
+    'always', 'other', 'above', 'below', 'exact', 'exactly', 'first', 'final', 'terminal', 'every',
+    'state-machine', 'build-close', 'session', 'their', 'there', 'about', 'still', 'until', 'again',
+    // Structurally overloaded within THIS document — "ledger(s)" names four distinct per-item
+    // ledgers across the sequence (a DECISIONS.md ledger in one item, three others reconciled in
+    // another), so its presence alone does not distinguish which item a citation describes.
+    'ledger', 'ledgers',
+  ]);
+
+  /** Significant lowercase words (>=5 chars, alnum/hyphen), generic connective words filtered out. */
+  function significantWords(text: string): string[] {
+    const words = text.toLowerCase().match(/[a-z][a-z0-9-]{4,}/g) ?? [];
+    return Array.from(new Set(words)).filter((w) => !GENERIC_STOPWORDS.has(w));
+  }
+
+  /** Two words "overlap" if identical, or share their first 6 characters (handles plural/gerund drift). */
+  function wordsOverlap(a: string, b: string): boolean {
+    if (a === b) return true;
+    const prefixLen = 6;
+    if (a.length < prefixLen || b.length < prefixLen) return false;
+    return a.slice(0, prefixLen) === b.slice(0, prefixLen);
+  }
+
+  it('close.md\'s Bookkeeping Sequence parses to a non-empty, contiguously-numbered list', () => {
+    const items = parseBookkeepingSequence();
+    expect(items.size).toBeGreaterThan(0);
+    const numbers = Array.from(items.keys()).sort((x, y) => x - y);
+    expect(numbers).toEqual(Array.from({ length: numbers.length }, (_, i) => i + 1));
+  });
+
+  it('every "Bookkeeping Sequence ... item N" citation under this directory names an N that exists and describes that item\'s actual duty', () => {
+    const items = parseBookkeepingSequence();
+    const citationRe = /Bookkeeping Sequence[^a-zA-Z0-9]{0,6}item\s+(\d+)/gi;
+    const failures: string[] = [];
+
+    for (const file of listMarkdownFiles(bsDir)) {
+      const rel = file.slice(bsDir.length + 1);
+      // close.md is the source of the numbering, not a citation of it — it never cites itself
+      // by ordinal, so there's nothing to cross-check there.
+      if (rel === 'build/close.md') continue;
+
+      const text = readFileSync(file, 'utf-8');
+      let match: RegExpExecArray | null;
+      while ((match = citationRe.exec(text))) {
+        const n = Number(match[1]);
+        const item = items.get(n);
+        if (!item) {
+          failures.push(`${rel}: cites "item ${n}" but close.md's Bookkeeping Sequence has no item ${n} (has ${items.size} items)`);
+          continue;
+        }
+        // Citing sentences in this doc set often enumerate SEVERAL duties in one long sentence
+        // before citing an ordinal for only the nearest one (e.g. "...rolls up decisions,
+        // reconciles the ledgers... (SKILLAUTO-08, see ... item N)"). A wide fixed-width window
+        // would pick up every enumerated duty and defeat the discriminative check entirely — so
+        // narrow to the clause immediately preceding the citation: walk back to the nearest
+        // enclosing "(" (citations here are always parenthetical), then from there back to the
+        // nearest clause boundary (comma/semicolon/period), which is where the SPECIFIC duty
+        // description for this ordinal starts.
+        const lookback = text.slice(Math.max(0, match.index - 120), match.index);
+        const parenOffset = lookback.lastIndexOf('(');
+        const parenStart = parenOffset === -1 ? match.index : Math.max(0, match.index - 120) + parenOffset;
+        const clauseWindow = text.slice(Math.max(0, parenStart - 200), parenStart);
+        const boundary = Math.max(
+          clauseWindow.lastIndexOf(','),
+          clauseWindow.lastIndexOf(';'),
+          clauseWindow.lastIndexOf('.'),
+        );
+        const clauseStart =
+          boundary === -1 ? Math.max(0, parenStart - 150) : Math.max(0, parenStart - 200) + boundary + 1;
+        // Trailing buffer is deliberately small: it exists only to close a citation's own
+        // parenthesis, not to reach into the following sentence, whose vocabulary belongs to
+        // an unrelated clause and would otherwise leak in as a coincidental false match.
+        const context = text.slice(clauseStart, match.index + match[0].length + 10);
+        const citationWords = significantWords(context);
+        const itemWords = significantWords(item);
+        const overlaps = citationWords.some((cw) => itemWords.some((iw) => wordsOverlap(cw, iw)));
+        if (!overlaps) {
+          failures.push(
+            `${rel}: cites "item ${n}" but the citing text shares no significant vocabulary with ` +
+              `close.md's item ${n} ("${item.slice(0, 80).replace(/\s+/g, ' ')}..."). Either the ` +
+              `citation is stale (item ${n} was renumbered) or this test's overlap heuristic needs ` +
+              `updating for genuinely new wording.`,
+          );
+        }
+      }
+    }
+
+    expect(failures, failures.join('\n')).toEqual([]);
   });
 });

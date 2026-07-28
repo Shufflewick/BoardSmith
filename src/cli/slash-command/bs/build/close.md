@@ -22,15 +22,15 @@ section BY NAME — a light-path chunk (`build, test, playtest`, no `close` step
 this exact sequence from inside its own `playtest` step, on this chunk's behalf, once its
 Verified Checklist is confirmed.
 
-The light path reuses **only** this five-item sequence. It does NOT run the `## Sketch-Tail
+The light path reuses **only** this six-item sequence. It does NOT run the `## Sketch-Tail
 Delta Gate` or `## Propose the Next Chunk` sections below — both are user-gated duties of a full
 `close`. A light-path chunk therefore defers sketch-tail re-derivation and the next-chunk
 proposal to `build-chunk.md` Step 2's lazy tail-entry detailing (which derives any undetailed
 tail entry when routing next reaches it) or to the next full chunk's `close`; it never silently
 details the tail from inside `playtest`. This matches `state-machine.md` "Step Names (exact, light
-path — trivial chunks)", which lists exactly these five light-path bookkeeping items (status
-already landed, commit hash, decision rollup, ledger reconciliation, lock release) and no tail
-detailing.
+path — trivial chunks)", which lists exactly these six light-path bookkeeping items (status
+already landed, commit hash, provenance record, decision rollup, ledger reconciliation, lock
+release) and no tail detailing.
 
 1. **Status already landed; this step's own duty starts after.** `playtest` already wrote
    `Status: verified` (or `verified (user-waived)`) to CHUNK.md and mirrored the derived pointer
@@ -50,12 +50,19 @@ detailing.
    hash sits alongside. Do not restate that rationale or that format in new words here; cite it
    by name.
 
-3. **Roll up decisions.** Append this chunk's settled house-rule/adaptation choices and any
+3. **Record what this chunk was verified against.** Run `boardsmith chunk-check <slug>`. It
+   computes the verification scope, resolves this chunk's cited slices, and writes the
+   machine-owned `## Verified Against` block. A NON-ZERO exit means it had to write or repair the
+   block: re-read `chunks/<slug>/CHUNK.md` (the copy in context is stale) and re-run the command,
+   which will then pass. Do not hand-author anything between the block's fences — that section is
+   written by this command and by nothing else.
+
+4. **Roll up decisions.** Append this chunk's settled house-rule/adaptation choices and any
    revise-round resolutions into `DECISIONS.md`'s append-only ledger, one entry per decision, so
    a future session (or `/bs-check-status`) can see what this chunk actually settled without
    re-reading its whole CHUNK.md.
 
-4. **Reconcile the paperwork ledgers (SKILLAUTO-08).** Before the lock is released, audit the
+5. **Reconcile the paperwork ledgers (SKILLAUTO-08).** Before the lock is released, audit the
    paperwork, not just the code: reconcile, against what this chunk actually changed, the three
    ledgers this pipeline keeps —
    - the **filings / library-gap ledger** — `build/build.md` "Boundaries" `## 3` (a library gap is
@@ -78,7 +85,7 @@ detailing.
    omitting the step — a reconciliation that never appears is indistinguishable from one that
    never ran.
 
-5. **Release the lock.** The FINAL write of this Bookkeeping Sequence: set SKETCH.md's
+6. **Release the lock.** The FINAL write of this Bookkeeping Sequence: set SKETCH.md's
    `Session Lock:` line back to `Session Lock: none` (`templates/SKETCH.template.md`), so a
    cleanly-closed chunk leaves NO live lock behind — cite `state-machine.md` "Session Lock" for
    the release semantics. This release is the terminal write of the sequence: every

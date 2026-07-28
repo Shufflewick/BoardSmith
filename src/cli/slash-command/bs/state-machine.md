@@ -40,12 +40,13 @@ proposal (proposal acceptance is the light path's ask-equivalent authorization g
 `build` + `test` complete; it then moves `built → verified` (or `verified (user-waived)`)
 when the human confirms the playtest checklist. Because the light path has no `close` step,
 for light chunks the `playtest` step also performs `close`'s bookkeeping: it records the
-verified commit hash in CHUNK.md (the bisect anchor — see Git Protocol), updates the Status
-line (CHUNK.md first, SKETCH.md second, per Write Order), rolls up decisions, reconciles the
-filings/library-gap, asset-debt, and waived-chunk ledgers against what this chunk changed
-(SKILLAUTO-08, see `build/close.md` "Bookkeeping Sequence" item 4), and — as the
-terminal write — releases the session lock (`Session Lock: none`, see "Session Lock" above and
-`build/close.md` "Bookkeeping Sequence").
+verified commit hash in CHUNK.md (the bisect anchor — see Git Protocol), records what the chunk
+was verified against (`boardsmith chunk-check <slug>`, writing the machine-owned
+`## Verified Against` block), updates the Status line (CHUNK.md first, SKETCH.md second, per
+Write Order), rolls up decisions, reconciles the filings/library-gap, asset-debt, and
+waived-chunk ledgers against what this chunk changed (SKILLAUTO-08, see `build/close.md`
+"Bookkeeping Sequence" item 5), and — as the terminal write — releases the session lock
+(`Session Lock: none`, see "Session Lock" above and `build/close.md` "Bookkeeping Sequence").
 
 ## Authority
 
@@ -110,7 +111,7 @@ Every agent that reads a rulebook slice — `investigate`, `redteam`, `audit` �
 cross-session, per-game store every future chunk's `investigate`/`redteam`/`audit` reads. When a
 fix lands during this chunk's work (a `revise` round, a `repair` cycle, or a build-time
 correction) that resolves, supersedes, or narrows a ruling already recorded in `RULINGS.md`,
-`build/close.md`'s ledger-reconciliation step (Bookkeeping Sequence item 4) re-touches that
+`build/close.md`'s ledger-reconciliation step (Bookkeeping Sequence item 5) re-touches that
 ruling entry — updates it to reflect the outcome — rather than leaving `RULINGS.md` describing a
 house rule the code no longer actually implements. A ruling entry that silently drifts from what
 the code does is exactly the "paperwork lagging the code" failure this re-touch exists to
