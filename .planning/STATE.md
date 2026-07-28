@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 171-06-PLAN.md
-last_updated: "2026-07-28T18:50:34.192Z"
+stopped_at: Completed 171-07-PLAN.md
+last_updated: "2026-07-28T19:05:23.396Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
-  completed_phases: 0
+  completed_phases: 2
   total_plans: 17
-  completed_plans: 13
-  percent: 0
+  completed_plans: 17
+  percent: 20
 ---
 
 # Project State
@@ -21,11 +21,37 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 171 — Provenance Recording
+**Current focus:** Phase 171 — Provenance Recording — **COMPLETE**
 
 ## Current Position
 
-Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 06/07 complete.
+Phase: 171 (Provenance Recording) — **COMPLETE**, 7/7 plans.
+
+`171-07-PLAN.md` is the phase's PROC-01 record: `chunk-check` and `chunk-provenance-status` proven
+end-to-end against COPIES of both real reference games (`~/BoardSmithGames/seven`, read-only,
+confirmed clean at `a03f38d4792af9dfc7c798be69686fc3230f54dd` before AND after; `one-two-punch`,
+confirmed byte-identical before/after despite pre-existing unrelated dirty state). All 29
+pre-existing chunks (12 + 17) classified `unknown` before any run, `full: 0`/`codeConformanceOnly: 0`
+both games, and every single one flagged `verifiedWithoutProvenance` — the phase's stated
+ready-made proof target, demonstrated exactly as predicted. Every `chunk-check` run on every real
+chunk in both games landed on `Scope: code-conformance-only` / `Reason: pre-provenance-project` —
+the `source-missing` STOP condition never fired, confirming the precedence order is correct on
+live data. 11/12 one-two-punch and 15/17 seven chunks resolved at least one real cited slice on
+real prose; one recorded hash independently cross-checked with `shasum -a 256` and matched
+exactly. Both games' re-runs were idempotent (exit 0, `changed: false`, byte-identical files).
+Post-run status showed `unknown: 0`, `verifiedWithoutProvenance: []`, `projectProvenanceState:
+"complete"` for both. F-1 edition normalisation confirmed on live data: one-two-punch's and
+seven's different raw `Edition:` free text both collapsed into the single
+`"not stated in the rulebook"` byEdition bucket. **Recorded honestly, not glossed over:** the
+plan anticipated seven's live prose would exercise the genuinely-ambiguous bare `rulebook/01`
+shorthand (seven has two `01-`-prefixed slices) — it does not; every citation in seven's real
+chunks uses full filenames, and the shorthand only appears live in one-two-punch, where it is
+unambiguous (only one `01-` slice there). The resolver's ambiguity-handling logic remains proven
+by its Wave-0 unit fixture, not by this run. `npm test` — 3407/3407, matching the phase baseline
+exactly (no source touched; this is a proof-only plan). Filed F-3 (`boardsmith.json`'s stub
+`description`/`playtime` ownership after `init`) as a todo. See
+`.planning/phases/171-provenance-recording/171-PROOF.md` and
+`.planning/phases/171-provenance-recording/171-07-SUMMARY.md`.
 
 `171-06-PLAN.md` wired the two commands from plans 04/05 into the actual pipeline: CHUNK.template.md
 now scaffolds the machine-owned `## Verified Against` fence (byte-identical to the writer's
@@ -487,6 +513,7 @@ Recent decisions affecting current work:
 - [Phase 171]: 171-04: chunk-check writes strictly between VERIFIED_AGAINST_BEGIN/END (distinct fence pair from GAPS_BEGIN/END); citation scan is scoped to content BEFORE any existing Verified Against section so the block can never re-poison its own next computation; program.parse() -> parseAsync()+try/catch in cli.ts fixes a repo-wide stack-trace leak affecting every CLI command, not just chunk-check
 - [Phase ?]: unknown and verifiedWithoutProvenance compose by design (171-05)
 - [Phase 171-06]: check-status.md item 8 consumes chunk-provenance-status's projectProvenanceState field rather than re-deriving severity, so a pre-provenance project (both reference games, 100% flagged) reports as informational not alarming
+- [Phase ?]: 171-07: real chunk-check output disproves the plan's anticipated ambiguous rulebook/01 shorthand in seven's live prose; recorded honestly rather than assumed, per the phase honesty requirement
 
 ### Pending Todos
 
@@ -498,8 +525,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T18:50:34.182Z
-Stopped at: Completed 171-06-PLAN.md
+Last session: 2026-07-28T19:05:23.387Z
+Stopped at: Completed 171-07-PLAN.md
 Resume file: 
 None
 

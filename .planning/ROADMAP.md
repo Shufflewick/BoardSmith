@@ -25,7 +25,7 @@ no archived source degrades honestly instead of failing.
 ## Phases
 
 - [x] **Phase 170: Ingest Contract Upgrade** - Archived source + hash, `Visual`/`Derived` split, standardized `Open Rules Gaps` index, and the milestone's verify-first process discipline
-- [ ] **Phase 171: Provenance Recording** - `## Verified Against` block at close, code-conformance-only scope recording, `/bs-check-status` drift reporting
+- [x] **Phase 171: Provenance Recording** - `## Verified Against` block at close, code-conformance-only scope recording, `/bs-check-status` drift reporting (completed 2026-07-28)
 - [ ] **Phase 172: Source-Free Conformance Checks** - Traceability sweep + code drift, proven immediately against the two reference games with zero source dependency
 - [ ] **Phase 173: Verify Pipeline Core** - `/bs-verify-game` skill entry, non-destructive re-transcription staging, subagent-only context economics, crash resumability
 - [ ] **Phase 174: Verify Classifier** - Two-dimension classification (provenance + rule delta), tuned and validated against real pass-1-vs-pass-2 output
@@ -77,7 +77,7 @@ Plans:
 - [x] 171-04-PLAN.md — `boardsmith chunk-check <slug>`: the fenced machine-owned `## Verified Against` block, repair-then-exit-non-zero (PROV-01, PROV-02)
 - [x] 171-05-PLAN.md — `boardsmith chunk-provenance-status --json`: three states incl. `unknown`, drift grouping, and the verified-without-provenance flag (PROV-03, PROV-02)
 - [x] 171-06-PLAN.md — wire both close paths + the CHUNK.md scaffold + `/bs-check-status` item 8 to the two commands (PROV-01, PROV-03)
-- [ ] 171-07-PLAN.md — PROC-01 proof against copies of both reference games; `~/BoardSmithGames/seven` asserted clean before and after (PROV-01, PROV-02, PROV-03)
+- [x] 171-07-PLAN.md — PROC-01 proof against copies of both reference games; `~/BoardSmithGames/seven` asserted clean before and after (PROV-01, PROV-02, PROV-03)
 
 ### Phase 172: Source-Free Conformance Checks
 **Goal**: The two checks that need neither the ingest changes nor re-transcription exist and are proven immediately against real games, de-risking everything downstream.
@@ -170,7 +170,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
-| 171. Provenance Recording | 6/7 | In Progress|  |
+| 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
 | 172. Source-Free Conformance Checks | 0/TBD | Not started | - |
 | 173. Verify Pipeline Core | 0/TBD | Not started | - |
 | 174. Verify Classifier | 0/TBD | Not started | - |
