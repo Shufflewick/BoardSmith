@@ -171,6 +171,58 @@ describe('STAT-01 — check-status.md read-only status reader', () => {
   });
 });
 
+/**
+ * PROV-03 (171-06) — item 8, verification provenance and drift, backed by
+ * `boardsmith chunk-provenance-status --json`.
+ *
+ * These assertions prove the instruction EXISTS in the installed skill text. They cannot prove a
+ * live session actually runs the command — Phase 170 established across fourteen live runs that a
+ * contract test of this shape proves existence only, never that a session follows it. The
+ * load-bearing guarantees are NOT these tests — they are (1) the machine-owned `## Verified
+ * Against` fence a session declines to hand-author, and (2)
+ * `chunk-provenance-status`'s own `verifiedWithoutProvenance` flag, which surfaces a skipped
+ * `chunk-check` invocation after the fact regardless of whether this skill's instruction was read.
+ */
+describe('PROV-03 — check-status.md item 8: verification provenance and drift', () => {
+  it('enumerates report item 8: verification provenance and drift', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).toMatch(/\*\*8\.\s+Verification provenance and drift\.\*\*/);
+  });
+
+  it('runs `boardsmith chunk-provenance-status --json` and formats it, never computes', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).toContain('boardsmith chunk-provenance-status --json');
+    expect(checkStatus).toMatch(/FORMAT its output|do not compute/i);
+  });
+
+  it('describes `unknown` as distinct from `code-conformance-only`, never reported as it', () => {
+    const checkStatus = read('check-status.md');
+    const item8 = checkStatus.slice(
+      checkStatus.indexOf('**8. Verification provenance and drift.**'),
+    );
+    expect(item8).toMatch(/`unknown`/);
+    expect(item8).toMatch(/not the same as `code-conformance-only`/i);
+  });
+
+  it('names `verifiedWithoutProvenance` and its own heading', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).toContain('verifiedWithoutProvenance');
+  });
+
+  it('the count sentences say "eight items", never "seven items"', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).not.toMatch(/seven items/i);
+    const matches = checkStatus.match(/eight items/gi) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('still contains no instruction to write a state file (read-only posture preserved)', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).not.toMatch(/write .*SKETCH|edit .*CHUNK|mutate|bump .*version/i);
+    expect(checkStatus).toMatch(/read-only|no writes|never (mutate|write)/i);
+  });
+});
+
 describe('SKILLAUTO-08 — ledgers surfaced for close reconciliation', () => {
   it('item 4 (waived verifications) is framed as the waived-chunk ledger close reconciliation reads', () => {
     const checkStatus = read('check-status.md');

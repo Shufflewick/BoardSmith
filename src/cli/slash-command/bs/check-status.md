@@ -31,10 +31,10 @@ to proceed before continuing — this skill never silently repairs a problem it 
 guesses the intended state. If `SKETCH.md` does not exist at all, report that no project has been
 ingested yet and stop here — there is nothing to report status on.
 
-## Body: Read, Then Synthesize the Seven Items
+## Body: Read, Then Synthesize the Eight Items
 
 Read `SKETCH.md`'s `## Ordered Chunk List`, then the in-progress chunk's `chunks/<slug>/CHUNK.md`
-(derived below), then `ASSETS.md`. Synthesize exactly the following seven items — this is the
+(derived below), then `ASSETS.md`. Synthesize exactly the following eight items — this is the
 canonical contract (see `.planning/bs-skills-plan.md` "/bs-check-status"). Do not add or omit
 items.
 
@@ -101,17 +101,40 @@ from the state just read:
   inserting, splitting, or removing a chunk), the next command is `/bs-insert-chunk` (this
   overrides the build-chunk case above).
 - (Note, not a live branch:) the no-`SKETCH.md` case is terminal at Step 0 — it stops and returns
-  "no project has been ingested yet" before this seven-item synthesis is ever reached, so this item
+  "no project has been ingested yet" before this eight-item synthesis is ever reached, so this item
   never fires for it. Documented here only so the next-command mapping is complete: that case maps
   to `/bs-ingest-rules`.
 
-Present all seven items together as one report, in the order above, followed by the exact next
+**8. Verification provenance and drift.** Run `boardsmith chunk-provenance-status --json` and
+FORMAT its output — do not compute any of it here. Report: how many chunks are `full`,
+`code-conformance-only` (with each one's reason code), and `unknown`; which rulebook edition and
+skills-tree hash each group was verified against, calling out drift when more than one of either
+is present; and, under its own heading, every slug in `verifiedWithoutProvenance` — chunks that
+claim verification with no provenance record behind them. `unknown` means the chunk was verified
+before provenance recording existed; it is not the same as `code-conformance-only` and must not
+be reported as it.
+
+Consume the command's own `projectProvenanceState` field rather than re-deriving severity from
+the raw `verifiedWithoutProvenance` count: a `pre-provenance` project (no chunk in it carries a
+`## Verified Against` block at all — both reference games are in this state, 12 and 17 chunks)
+has every verified chunk flagged BY DEFINITION, and that is expected, not an alarm — report it
+as informational, not a warning. `partial` (the project DOES record provenance elsewhere, yet
+some verified chunk has none) is the suspicious case — the signature of a skipped `chunk-check`
+at close — and is the one severity worth calling out. This skill formats that distinction; it
+does not recompute it.
+
+This command is read-only — item 8 does not violate this skill's no-writes-of-any-kind posture
+(see `## Read-Only Posture (explicit)` below).
+
+Present all eight items together as one report, in the order above, followed by the exact next
 command on its own line.
 
 ## Read-Only Posture (explicit)
 
 This skill performs **no writes** of any kind — not to `SKETCH.md`, not to any `CHUNK.md`, not to
-`ASSETS.md`, and not to the session-lock timestamp inside `SKETCH.md`. It may REPORT the
+`ASSETS.md`, and not to the session-lock timestamp inside `SKETCH.md`. Item 8's
+`boardsmith chunk-provenance-status --json` call is itself read-only (it aggregates and reports;
+it never writes a `CHUNK.md`), so it does not violate this posture. It may REPORT the
 `## Session Lock` note it finds (cite `state-machine.md` "Session Lock") — whether a lock exists,
 which chunk it names, and whether it looks stale — but it never takes, refreshes, or clears that
 lock; refreshing a live-resume lock is `/bs-build-chunk`'s job (Step 0's "Same chunk resume"
@@ -123,7 +146,9 @@ skill to fix something it found, direct them to `/bs-build-chunk` or `/bs-insert
 ## Reference Files
 
 This skill cites the shared reference files that ship with every `bs-` skill — it does not
-duplicate their content:
+duplicate their content. Item 8 above additionally runs `boardsmith chunk-provenance-status
+--json` — a CLI command, not a file, so it is described in the body where the item is
+synthesized rather than listed here:
 
 - `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` — status enum, consistency check, session lock, write order, authority
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md` — the `## Ordered Chunk List` / `## Ideas Backlog` grammar this
