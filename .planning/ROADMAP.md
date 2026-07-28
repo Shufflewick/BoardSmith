@@ -73,7 +73,7 @@ Plans:
 Plans:
 - [x] 171-01-PLAN.md — F-1: normalise recognisably-empty `--edition` free text to the `EDITION_UNKNOWN` sentinel, preserving the designer's wording on an unparsed note line (PROV-01)
 - [x] 171-02-PLAN.md — the two non-citation provenance inputs: a real `boardsmith --version` and a content hash of the installed bs- skills tree (PROV-01)
-- [ ] 171-03-PLAN.md — `computeVerificationScope` (five enumerated reason codes, computed never declared) + `resolveCitedSlices` from existing chunk prose (PROV-02, PROV-01)
+- [x] 171-03-PLAN.md — `computeVerificationScope` (five enumerated reason codes, computed never declared) + `resolveCitedSlices` from existing chunk prose (PROV-02, PROV-01)
 - [ ] 171-04-PLAN.md — `boardsmith chunk-check <slug>`: the fenced machine-owned `## Verified Against` block, repair-then-exit-non-zero (PROV-01, PROV-02)
 - [ ] 171-05-PLAN.md — `boardsmith chunk-provenance-status --json`: three states incl. `unknown`, drift grouping, and the verified-without-provenance flag (PROV-03, PROV-02)
 - [ ] 171-06-PLAN.md — wire both close paths + the CHUNK.md scaffold + `/bs-check-status` item 8 to the two commands (PROV-01, PROV-03)
@@ -170,7 +170,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
-| 171. Provenance Recording | 2/7 | In Progress|  |
+| 171. Provenance Recording | 3/7 | In Progress|  |
 | 172. Source-Free Conformance Checks | 0/TBD | Not started | - |
 | 173. Verify Pipeline Core | 0/TBD | Not started | - |
 | 174. Verify Classifier | 0/TBD | Not started | - |

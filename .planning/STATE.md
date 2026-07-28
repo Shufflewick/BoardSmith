@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 171-02-PLAN.md
-last_updated: "2026-07-28T18:15:00.000Z"
+stopped_at: Completed 171-03-PLAN.md
+last_updated: "2026-07-28T18:35:00.000Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 17
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -25,7 +25,26 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 02/07 complete.
+Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 03/07 complete.
+
+`171-03-PLAN.md` built the two pure functions at the heart of PROV-02 and PROV-01, no CLI wiring
+yet: `computeVerificationScope(projectDir)` is a single-parameter, disk-only computation with a
+top-to-bottom early-return precedence over five enumerated reason codes (`no-rulebook-project` →
+`index-missing` → `pre-provenance-project` → `source-missing` → `source-hash-mismatch` → `full`).
+`full` requires BOTH the archived file's existence AND its SHA-256 matching `INDEX.md`'s
+`Source hash:` — pinned by two dedicated invariant tests (deleted file, rewritten hash) — and no
+caller-supplied override exists anywhere (CONTEXT.md decision 1; the API-shape test greps the
+source for `assumeFull`/`forceScope`/a scope parameter and asserts arity 1).
+`resolveCitedSlices(chunkText, sliceFilenames)` recovers a chunk's cited rulebook slices from its
+existing prose, resolving both full-filename and `rulebook/02 p.4` shorthand citations against the
+`rulebook/` DIRECTORY LISTING (not `INDEX.md`'s `## Slices` table — one-two-punch's real INDEX.md
+has no such heading). Every fixture citation string is copied verbatim from real one-two-punch
+`CHUNK.md` prose; the ambiguous-shorthand fixture reproduces `seven`'s genuine two-`01-`-slice
+collision (`01-definitions-and-components.md` / `01-overview-setup-and-play.md`) and pins that it
+resolves to NOTHING, recorded verbatim, never guessed — the PROV-01 analogue of Phase 170's
+gap-dropping defect. Full suite: 3365 passed (was 3344). Both reference games' real `rulebook/`
+state (no `Source:`/`Source hash:` lines at all) computes `pre-provenance-project`, matching this
+plan's own prediction. See `.planning/phases/171-provenance-recording/171-03-SUMMARY.md`.
 
 `171-02-PLAN.md` built the two remaining provenance INPUTS PROV-01 needs beyond citation/scope:
 `readBoardsmithVersion()` fixes `boardsmith --version`'s hardcoded `.version('0.0.1')` lie
@@ -396,6 +415,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Live harness stayed 1/10 across two attempts for INDEX.md template-copy mechanism; deferred deeper architectural fix to next plan
 - [Phase 171]: 171-01: normalizeEdition collapses recognisably-empty --edition free text to EDITION_UNKNOWN, preserving designer wording on a separate un-parsed Edition note: line — F-1 fix per CONTEXT.md decision 5 -- PROV-01/PROV-03 read this field, so it must be machine-checkable before anything reads it
 - [Phase 171]: readBoardsmithVersion() walks up to package.json (not fixed hop), throws rather than falling back; hashSkillsTree() hashes installer-owned bs- paths by relPath+content sorted, returns SKILLS_TREE_ABSENT when no root found
+- [Phase 171]: 171-03: computeVerificationScope's five reason codes checked as a single top-to-bottom early-return chain (order is contract, not incidental); resolveCitedSlices resolves shorthand against the rulebook/ directory listing (not INDEX.md's ## Slices table, absent in one-two-punch); ambiguous/unresolvable citations recorded verbatim, never guessed or dropped — pinned against seven's genuine two-01--slice collision
 
 ### Pending Todos
 
