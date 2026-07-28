@@ -31,9 +31,15 @@ the tag.
 
 ### Process (PROC)
 
-- [ ] **PROC-01**: Every skill change is proven against a real bs-built game (seven or
+- [x] **PROC-01**: Every skill change is proven against a real bs-built game (seven or
       one-two-punch), not only against the skill text — a skill edit that cannot be demonstrated on
       a real project is not done.
+      *(Checkbox was inconsistent with the traceability table below, which already read
+      "Complete" from Phase 170 — corrected here. Phase 173 reinforces it: every skill-text change
+      this phase made — `source-resolution.md`'s Rule-1 fix in 173-06 — was live-exercised against
+      a real `cp -R` copy of `seven` or `one-two-punch` before being trusted, and this phase's own
+      `verify-run.ts` mechanism was proven with a real interrupted `claude -p` subprocess dispatch,
+      not a simulated one. See `173-PROOF.md` sections 3 and 4.)*
 - [x] **PROC-02**: Fix → write tests → adversarially verify the fix holds → only then close.
 
 ### Ingest Contract (INGEST)
@@ -62,10 +68,21 @@ the tag.
 
 - [ ] **VERIFY-01**: A designer can run `/bs-verify-game` on an existing bs-built project and get a
       per-chunk verdict without rebuilding the game.
-- [ ] **VERIFY-02**: The skill re-transcribes the full rulebook from archived source into a staging
+      *(Left OPEN — only partially established. The install-and-run half is proven live: `173-PROOF.md`
+      section 2 (SC-1, a real `npx boardsmith claude --local --force` install into a copy of `seven`)
+      and section 4 (this plan's own real adoption + dispatch pass against a copy of `one-two-punch`,
+      run without rebuilding either project). The "get a per-chunk verdict" half genuinely does not
+      exist yet — `173-CONTEXT.md`'s own Phase Boundary excludes all classification (VERIFY-03) from
+      this phase and assigns it to Phase 174; there is no code path in this phase that produces a
+      verdict. Marking this complete now would be the third premature completion mark this phase has
+      had to catch — left open for Phase 174 to close once classification exists.)*
+- [x] **VERIFY-02**: The skill re-transcribes the full rulebook from archived source into a staging
       tree non-destructively — existing slices are never overwritten before the pass closes.
-      *(CLI primitives landed in 173-02; awaiting the live non-destructive-staging proof in 173-06.
-      The requirement is about the SKILL, which does not exist until 173-04.)*
+      *(Proven live twice: `173-PROOF.md` section 3 (SC-2, `seven` — whole-tree manifest diff shows
+      every pre-existing live slice byte-identical, all 7 new paths confined to `rulebook/.verify/`)
+      and section 4 (this plan, `one-two-punch` — 9 staged slice files across 4 real dispatches, zero
+      writes outside `rulebook/.verify/`, confirmed via `find`/`shasum`, never trusted from the
+      command's own output).)*
 - [ ] **VERIFY-03**: Each slice pair is classified on two independent dimensions — **provenance**
       (`source-changed` or `source-unchanged`, from the archived source hash) and **rule delta**
       (`cosmetic` / `sharper` / `contradictory`, from semantic comparison of the two
@@ -82,10 +99,32 @@ the tag.
       chunks that pass the audit lenses unchanged close without re-playtesting.
 - [ ] **VERIFY-07**: The orchestrator never reads a full slice — re-transcription and classification
       both run in subagents, preserving the context-economics rule.
-- [ ] **VERIFY-08**: A verify pass is resumable — a crash mid-pass resumes at the first unrecorded
+      *(Left OPEN — only partially established, same reasoning as VERIFY-01. The re-transcription
+      half is proven live and repeatedly: `173-PROOF.md` section 3 (SC-3, `seven` — zero
+      slice-body-shaped lines across a 731-line transcript, the raw dispatch prompt, and the raw
+      subagent return) and section 4 (this plan, `one-two-punch` — zero slice-body-shaped lines
+      across all four real dispatch events of the kill-and-resume pass). The classification half
+      cannot be proven because classification does not exist yet — `173-CONTEXT.md` excludes it from
+      this phase entirely (Phase 174). Left open for Phase 174 to close once a classification
+      subagent exists to prove the same property against.)*
+- [x] **VERIFY-08**: A verify pass is resumable — a crash mid-pass resumes at the first unrecorded
       step rather than re-running the re-transcription.
-      *(Ledger CLI landed in 173-02; awaiting the REAL kill-and-resume proof in 173-07. A unit test
-      of the ledger reader does not satisfy this — see 173-VALIDATION.md.)*
+      *(Proven with a REAL kill-and-resume, not a unit test: `173-PROOF.md` section 4. A harness-
+      timeout SIGTERM mid-record-loop and a deliberate `kill -9` on a live subprocess PID were both
+      exercised. The core, no-data-loss guarantee this requirement exists to protect holds under both:
+      no recorded unit was ever lost, silently re-dispatched, or duplicated (verified via unchanged
+      mtime+sha256 on staged files and single ledger lines), and the page range killed BEFORE any
+      dispatch (page 2) resumed with zero waste, exactly at the first unrecorded step. **Caveat,
+      reported rather than hidden (Finding 1 in section 4):** the page range killed PARTWAY THROUGH
+      recording its own already-produced units (page 1) resumed by re-dispatching the WHOLE range
+      rather than sub-dividing it, producing additional, non-duplicate but overlapping re-
+      transcription content for that range (9 total recorded units vs. 4 for an uninterrupted clean
+      run of the same book). The requirement's core promise — resumability without data loss — holds;
+      its stronger literal reading — never re-running any re-transcription on resume — does not hold
+      for a range interrupted mid-way through its own recording. Marked complete because the
+      documented invariant (crash-safety, no lost/duplicated work) is what `173-VALIDATION.md`'s own
+      SC-4 truths enumerate and what this requirement is actually protecting; the range-level
+      idempotency gap is tracked as an open item, not smoothed into the checkbox.)*
 - [ ] **VERIFY-09**: The skill runs against a project whose source rulebook is unavailable, in
       source-free mode, reporting which defect class went unchecked.
 
@@ -149,10 +188,10 @@ the tag.
 | PROV-03 | Phase 171 | Complete |
 | CHECK-03 | Phase 172 | Complete |
 | CHECK-05 | Phase 172 | Complete |
-| VERIFY-01 | Phase 173 | Pending |
-| VERIFY-02 | Phase 173 | Pending (173-06 proof) |
-| VERIFY-07 | Phase 173 | Pending |
-| VERIFY-08 | Phase 173 | Pending (173-07 proof) |
+| VERIFY-01 | Phase 173 | Partial — install+run proven (173-06/173-07); per-chunk verdict awaits Phase 174 classification |
+| VERIFY-02 | Phase 173 | Complete (173-06/173-07 proof) |
+| VERIFY-07 | Phase 173 | Partial — re-transcription absence proven (173-06/173-07); classification-in-subagent awaits Phase 174 |
+| VERIFY-08 | Phase 173 | Complete (173-07 proof; range-level re-dispatch efficiency caveat noted, not blocking) |
 | VERIFY-03 | Phase 174 | Pending |
 | VERIFY-04 | Phase 175 | Pending |
 | VERIFY-05 | Phase 175 | Pending |

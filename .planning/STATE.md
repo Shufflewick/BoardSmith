@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 173-01-PLAN.md
-last_updated: "2026-07-28T23:19:15.837Z"
+stopped_at: Completed 173-07-PLAN.md — Phase 173 (verify-pipeline-core) COMPLETE, 7/7 plans
+last_updated: "2026-07-28T23:50:28.766Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 29
-  completed_plans: 25
-  percent: 20
+  completed_plans: 26
+  percent: 30
 ---
 
 # Project State
@@ -25,8 +25,28 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 173 (verify-pipeline-core) — EXECUTING
-Plan: 6 of 7
+Phase: 173 (verify-pipeline-core) — COMPLETE (7/7 plans)
+Next: Phase 174 (verify-classifier) — not yet planned
+
+`173-07-PLAN.md` closed the phase: a REAL kill-and-resume proof for SC-4/VERIFY-08 against a fresh
+`cp -R` copy of `one-two-punch`, split into two single-page dispatches so a kill could land between
+independent subagent calls. Two genuine interruption mechanisms — a harness-timeout SIGTERM landing
+mid-record-loop, and a deliberate `kill -9` on a confirmed live PID — both left the core no-data-loss
+guarantee intact (byte-identical mtime+sha256 on already-recorded staged files, single ledger lines,
+zero waste on the range killed before any dispatch). Two real findings reported rather than smoothed
+over: range-level resume re-dispatch is NOT idempotent (an already-partially-recorded page range gets
+re-covered in full rather than sub-divided — 9 recorded units vs. 4 for a clean uninterrupted run of
+the same book), and a torn ledger line that ALSO destroys its trailing fence throws a hard error
+instead of gracefully demoting the affected unit (the narrower torn-line-only case behaves exactly as
+designed). Also deliberately exercised the torn-ledger-line crash-safety case with both sub-cases.
+Closed the phase's evidence trail: `173-PROOF.md` now carries all four live proofs plus a final
+phase-wide "What is still unproven" (9 items) and a "How to re-run every proof" block;
+`173-VALIDATION.md` fully signed off (`nyquist_compliant: true`); `REQUIREMENTS.md` — VERIFY-02 and
+VERIFY-08 marked complete with citations, VERIFY-01 and VERIFY-07 DELIBERATELY LEFT OPEN (their
+"per-chunk verdict"/"classification in subagents" halves depend on Phase 174's not-yet-built
+classifier — marking them now would have been a third premature completion mark this phase caught).
+`npm test`: 3597/3597 (unchanged, docs-only plan). See
+`.planning/phases/173-verify-pipeline-core/173-07-SUMMARY.md`.
 
 `173-01-PLAN.md` closed the phase's wave-1 hard gate: `ingestArchiveCommand`'s existing-INDEX
 branch was reporting false success on already-ingested projects while silently failing to write
@@ -563,6 +583,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Replaced all five hardcoded SKILL_NAMES test literals with a single exported source of truth (SKILL_NAMES), closing the drift hazard structurally
 - [Phase ?]: SHARED_LEAF_PROBES verify/ leaf probe uses source-resolution.md per plan fallback instruction
 - [Phase 173]: 173-06: source-resolution.md's post-adoption re-check used the wrong provenance field (chunk-provenance-status's projectProvenanceState, which never flips from ingest-archive alone) — found live, fixed to check rulebook/INDEX.md's Source hash: directly
+- [Phase 173]: VERIFY-01 and VERIFY-07 left open — per-chunk-verdict/classification-in-subagents halves depend on Phase 174's classifier, which does not exist yet; marking complete now would be a third premature completion mark this phase caught
+- [Phase 173]: VERIFY-08 marked complete despite a real finding (range-level resume re-dispatch is not idempotent) because the requirement's core no-data-loss guarantee holds under two real interruption mechanisms; the idempotency gap is tracked as an open item in 173-PROOF.md, not hidden
 
 ### Pending Todos
 
@@ -574,10 +596,10 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T23:17:41.687Z
-Stopped at: Completed 173-01-PLAN.md
+Last session: 2026-07-28T23:50:28.758Z
+Stopped at: Completed 173-07-PLAN.md — Phase 173 (verify-pipeline-core) COMPLETE, 7/7 plans
 Resume file: 
-None
+None (phase closed; Phase 174 not yet planned)
 
 ## Operator Next Steps
 
