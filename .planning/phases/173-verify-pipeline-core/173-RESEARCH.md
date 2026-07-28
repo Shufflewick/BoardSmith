@@ -551,7 +551,17 @@ of the repo (Phases 170-172, all landed 2026-07-28 or earlier this milestone).
 
 **If this table is empty:** N/A — see above.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+**RESOLVED — Q1:** one fence pair (the `GAPS_BEGIN` shape, so the codebase keeps exactly one fencing
+convention) wrapping line-delimited JSON records. Per-line self-delimitation buys the same crash
+safety a per-record fence would, without minting a second convention: an unparseable trailing line
+reads as *not recorded*, so resume re-dispatches that unit. Decided in `173-02-PLAN.md` Task 2, which
+also mints distinct `RUN_LEDGER_BEGIN`/`END` constants — a ledger must never share a fence with
+another section.
+
+**RESOLVED — Q2:** resolved by the wave split itself. The CLI fix (`173-01`, wave 1) is sequenced
+ahead of the skill-text gate (`173-04`, wave 3), which is what this document recommended.
 
 1. **Exact RUN.md record-per-step format.**
    - What we know: fenced machine-owned, append-only, one record per slice-unit (decisions 9-10),
