@@ -28,7 +28,10 @@
  * `trace-check.ts` pin.
  */
 
+import { promises as fs } from 'node:fs';
 import { execFile } from 'node:child_process';
+import { join, relative, resolve as pathResolve, sep } from 'node:path';
+import { type Finding, parseBuildManifest, extractVerifiedCommitHash } from './build-manifest.js';
 
 /**
  * A hand-written promisified wrapper, NOT `promisify(execFile)`. Node's `execFile` carries a
@@ -130,5 +133,276 @@ async function assertGitRepo(projectDir: string): Promise<void> {
         `drift-check needs git history to diff each chunk's Build Manifest files against — run it ` +
         `from inside a game project's git repo, or pass --project <dir>.`,
     );
+  }
+}
+
+// -------------------------------------------------------------------------------------------
+// driftCheckCommand (Task 2)
+// -------------------------------------------------------------------------------------------
+
+export interface ChunkDrift {
+  chunk: string;
+  hash?: string;
+  state: 'clean' | 'drifted' | 'unknown';
+  /** Manifest files that changed between `hash` and HEAD. */
+  changedFiles: string[];
+  /** Manifest files no longer present on disk (decision 12 — the strongest drift signal). */
+  missingFiles: string[];
+  manifestFileCount: number;
+}
+
+export interface DriftCheckResult {
+  chunks: ChunkDrift[];
+  findings: Finding[];
+  counts: { clean: number; drifted: number; unknown: number };
+  head: string;
+}
+
+/** Resolves a manifest-supplied relative path against `projectDir`, rejecting any escape. */
+function resolveManifestPath(projectDir: string, relPathStr: string): string | 'escapes' {
+  const resolved = pathResolve(projectDir, relPathStr);
+  const rel = relative(projectDir, resolved);
+  if (rel === '..' || rel.startsWith(`..${sep}`)) return 'escapes';
+  return resolved;
+}
+
+async function fileExists(absPath: string): Promise<boolean> {
+  try {
+    await fs.stat(absPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `boardsmith drift-check [--json]` — enumerates `chunks/*␣/CHUNK.md`, for each one diffs its
+ * `## Build Manifest` files against the commit recorded in `## Verified Commit Hash`, and reports
+ * the three-state classification (decision 10): `clean`, `drifted`, or `unknown` — never
+ * collapsed in either direction.
+ *
+ * Tool failure (no `chunks/` directory, not a git repo) throws a one-line actionable `Error`;
+ * `cli.ts`'s top-level catch prints only `err.message`, never a stack trace or internal path
+ * (CLAUDE.md, T-172-05). A FINDING never sets `process.exitCode` — findings exit 0
+ * (172-CONTEXT.md decision 6).
+ *
+ * `--json`: `console.log(JSON.stringify(result, null, 2))` as the last thing computed, then
+ * returns the result — the exact convention `trace-check.ts`/`chunk-provenance.ts` establish.
+ * Otherwise: a grouped, count-first human report (`printHumanReport` below).
+ */
+export async function driftCheckCommand(
+  options: { project?: string; json?: boolean } = {},
+): Promise<DriftCheckResult> {
+  const projectDir = pathResolve(options.project ?? process.cwd());
+
+  await assertGitRepo(projectDir);
+  const head = await resolveHead(projectDir);
+
+  const chunksDir = join(projectDir, 'chunks');
+  let chunkDirEntries: Array<{ name: string; isDirectory(): boolean }>;
+  try {
+    chunkDirEntries = await fs.readdir(chunksDir, { withFileTypes: true });
+  } catch {
+    throw new Error(
+      `No chunks/ directory in ${projectDir}.\n` +
+        `This command looks for chunks/<slug>/CHUNK.md files — run it from a BoardSmith game\n` +
+        `project directory, or pass --project <dir>.`,
+    );
+  }
+  const slugs = chunkDirEntries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+
+  const findings: Finding[] = [];
+  const chunks: ChunkDrift[] = [];
+  const counts = { clean: 0, drifted: 0, unknown: 0 };
+
+  // One diff / ancestor check per DISTINCT hash — several chunks can record the same commit, and
+  // a per-chunk subprocess spawn on a 17-chunk game is wasteful.
+  const diffCache = new Map<string, string[] | typeof UNRESOLVABLE>();
+  const ancestorCache = new Map<string, boolean>();
+
+  async function cachedDiff(hash: string): Promise<string[] | typeof UNRESOLVABLE> {
+    let cached = diffCache.get(hash);
+    if (cached === undefined) {
+      cached = await diffedFilesSince(projectDir, hash);
+      diffCache.set(hash, cached);
+    }
+    return cached;
+  }
+  async function cachedIsAncestor(hash: string): Promise<boolean> {
+    let cached = ancestorCache.get(hash);
+    if (cached === undefined) {
+      cached = await isAncestorOfHead(projectDir, hash);
+      ancestorCache.set(hash, cached);
+    }
+    return cached;
+  }
+
+  function markUnknown(slug: string, hash: string | undefined, manifestFileCount: number, detail: string): void {
+    chunks.push({ chunk: slug, hash, state: 'unknown', changedFiles: [], missingFiles: [], manifestFileCount });
+    counts.unknown++;
+    findings.push({ kind: 'drift-unknown', chunk: slug, subject: slug, detail });
+  }
+
+  for (const slug of slugs) {
+    let chunkText: string;
+    try {
+      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
+    } catch {
+      continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
+    }
+
+    const manifest = parseBuildManifest(chunkText);
+    for (const rowIndex of manifest.pathlessRowIndexes) {
+      findings.push({
+        kind: 'manifest-file-missing',
+        chunk: slug,
+        subject: `row ${rowIndex}`,
+        detail: `row ${rowIndex} has no path token`,
+      });
+    }
+
+    if (!manifest.tabular) {
+      findings.push({
+        kind: 'manifest-file-missing',
+        chunk: slug,
+        subject: 'Build Manifest',
+        detail: 'manifest is not table-shaped',
+      });
+      // A non-table-shaped manifest gives no computable file list — unknown, never clean
+      // (reporting clean here would claim knowledge the tool does not have).
+      markUnknown(slug, extractVerifiedCommitHash(chunkText), 0, 'manifest is not table-shaped; no computable diff base');
+      continue;
+    }
+
+    const manifestPaths = [...new Set(manifest.entries.map((e) => e.path))];
+    const hash = extractVerifiedCommitHash(chunkText);
+
+    if (!hash) {
+      markUnknown(slug, undefined, manifestPaths.length, 'no ## Verified Commit Hash recorded for this chunk');
+      continue;
+    }
+    if (!HASH_SHAPE.test(hash)) {
+      markUnknown(slug, hash, manifestPaths.length, `recorded hash "${hash}" is not a valid commit-hash shape`);
+      continue;
+    }
+
+    const ancestor = await cachedIsAncestor(hash);
+    if (!ancestor) {
+      markUnknown(slug, hash, manifestPaths.length, `hash ${hash} is not resolvable as an ancestor of HEAD`);
+      continue;
+    }
+
+    const diff = await cachedDiff(hash);
+    if (diff === UNRESOLVABLE) {
+      markUnknown(slug, hash, manifestPaths.length, `hash ${hash} could not be diffed against HEAD`);
+      continue;
+    }
+    const diffSet = new Set(diff);
+
+    const changedFiles: string[] = [];
+    const missingFiles: string[] = [];
+
+    for (const path of manifestPaths) {
+      const resolved = resolveManifestPath(projectDir, path);
+      if (resolved === 'escapes') {
+        findings.push({
+          kind: 'manifest-file-missing',
+          chunk: slug,
+          subject: path,
+          detail: `manifest path escapes the project root: ${path}`,
+        });
+        continue;
+      }
+
+      // Decision 12: a manifest file absent from disk IS drift — the strongest signal, checked
+      // regardless of whether the diff also names it.
+      if (!(await fileExists(resolved))) {
+        missingFiles.push(path);
+        continue;
+      }
+
+      if (diffSet.has(path)) {
+        changedFiles.push(path);
+      }
+    }
+
+    const state: ChunkDrift['state'] = changedFiles.length > 0 || missingFiles.length > 0 ? 'drifted' : 'clean';
+    chunks.push({ chunk: slug, hash, state, changedFiles, missingFiles, manifestFileCount: manifestPaths.length });
+    counts[state]++;
+
+    if (changedFiles.length > 0) {
+      findings.push({
+        kind: 'chunk-code-drifted',
+        chunk: slug,
+        subject: slug,
+        detail: `changed since ${hash}: ${changedFiles.join(', ')}`,
+      });
+    }
+    if (missingFiles.length > 0) {
+      findings.push({
+        kind: 'chunk-code-drifted',
+        chunk: slug,
+        subject: slug,
+        detail: `manifest file(s) deleted from disk since ${hash}: ${missingFiles.join(', ')}`,
+      });
+    }
+  }
+
+  const result: DriftCheckResult = { chunks, findings, counts, head };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  printHumanReport(result);
+  return result;
+}
+
+// -------------------------------------------------------------------------------------------
+// Human report — count-first, grouped and truncated per chunk (172-CONTEXT.md's "report text
+// formatting" item: measured expectation is 10/12 one-two-punch chunks drift, one with 19 changed
+// files, so per-chunk truncation is what keeps the report readable).
+// -------------------------------------------------------------------------------------------
+
+const MAX_FILES_PER_CHUNK = 10;
+const MAX_FINDINGS_SHOWN = 10;
+
+function printHumanReport(result: DriftCheckResult): void {
+  const { counts, chunks, findings, head } = result;
+
+  console.log(`HEAD: ${head}`);
+  console.log(`clean: ${counts.clean}  drifted: ${counts.drifted}  unknown: ${counts.unknown}`);
+
+  for (const c of chunks) {
+    if (c.state === 'clean') continue;
+
+    if (c.state === 'unknown') {
+      const detail = findings.find((f) => f.kind === 'drift-unknown' && f.chunk === c.chunk)?.detail ?? '';
+      console.log(`  ${c.chunk} — unknown — ${detail}`);
+      continue;
+    }
+
+    const files = [...c.changedFiles, ...c.missingFiles.map((f) => `${f} (deleted)`)];
+    const shown = files.slice(0, MAX_FILES_PER_CHUNK);
+    const remaining = files.length - shown.length;
+    const tail = remaining > 0 ? ` +${remaining} more — run --json for the full list` : '';
+    console.log(`  ${c.chunk} — drifted since ${c.hash} — ${shown.join(', ')}${tail}`);
+  }
+
+  const manifestFindings = findings.filter((f) => f.kind === 'manifest-file-missing');
+  if (manifestFindings.length > 0) {
+    console.log(`\nmanifest-file-missing (${manifestFindings.length})`);
+    const shown = manifestFindings.slice(0, MAX_FINDINGS_SHOWN);
+    for (const f of shown) {
+      console.log(`  [${f.chunk || '-'}] ${f.subject}: ${f.detail}`);
+    }
+    const remaining = manifestFindings.length - shown.length;
+    if (remaining > 0) {
+      console.log(`  +${remaining} more — run --json for the full list`);
+    }
   }
 }
