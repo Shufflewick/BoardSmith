@@ -62,7 +62,7 @@ the tag.
 
 - [ ] **VERIFY-01**: A designer can run `/bs-verify-game` on an existing bs-built project and get a
       per-chunk verdict without rebuilding the game.
-- [ ] **VERIFY-02**: The skill re-transcribes the full rulebook from archived source into a staging
+- [x] **VERIFY-02**: The skill re-transcribes the full rulebook from archived source into a staging
       tree non-destructively — existing slices are never overwritten before the pass closes.
 - [ ] **VERIFY-03**: Each slice pair is classified on two independent dimensions — **provenance**
       (`source-changed` or `source-unchanged`, from the archived source hash) and **rule delta**
@@ -80,7 +80,7 @@ the tag.
       chunks that pass the audit lenses unchanged close without re-playtesting.
 - [ ] **VERIFY-07**: The orchestrator never reads a full slice — re-transcription and classification
       both run in subagents, preserving the context-economics rule.
-- [ ] **VERIFY-08**: A verify pass is resumable — a crash mid-pass resumes at the first unrecorded
+- [x] **VERIFY-08**: A verify pass is resumable — a crash mid-pass resumes at the first unrecorded
       step rather than re-running the re-transcription.
 - [ ] **VERIFY-09**: The skill runs against a project whose source rulebook is unavailable, in
       source-free mode, reporting which defect class went unchecked.
@@ -146,9 +146,9 @@ the tag.
 | CHECK-03 | Phase 172 | Complete |
 | CHECK-05 | Phase 172 | Complete |
 | VERIFY-01 | Phase 173 | Pending |
-| VERIFY-02 | Phase 173 | Pending |
+| VERIFY-02 | Phase 173 | Complete |
 | VERIFY-07 | Phase 173 | Pending |
-| VERIFY-08 | Phase 173 | Pending |
+| VERIFY-08 | Phase 173 | Complete |
 | VERIFY-03 | Phase 174 | Pending |
 | VERIFY-04 | Phase 175 | Pending |
 | VERIFY-05 | Phase 175 | Pending |

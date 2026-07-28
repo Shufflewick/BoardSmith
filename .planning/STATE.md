@@ -4,13 +4,13 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 173-01-PLAN.md
-last_updated: "2026-07-28T22:21:28.712Z"
+last_updated: "2026-07-28T22:32:43.911Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 29
-  completed_plans: 20
+  completed_plans: 21
   percent: 20
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 173 (verify-pipeline-core) — EXECUTING
-Plan: 1 of 7
+Plan: 2 of 7
 
 `173-01-PLAN.md` closed the phase's wave-1 hard gate: `ingestArchiveCommand`'s existing-INDEX
 branch was reporting false success on already-ingested projects while silently failing to write
@@ -568,7 +568,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T22:21:28.704Z
+Last session: 2026-07-28T22:31:31.292Z
 Stopped at: Completed 173-01-PLAN.md
 Resume file: 
 None
