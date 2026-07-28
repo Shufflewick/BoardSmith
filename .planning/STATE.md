@@ -4,13 +4,13 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 171-07-PLAN.md
-last_updated: "2026-07-28T20:05:37.447Z"
+last_updated: "2026-07-28T20:18:52.993Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 22
-  completed_plans: 15
+  completed_plans: 16
   percent: 10
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 172 (source-free-conformance-checks) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 `171-07-PLAN.md` is the phase's PROC-01 record: `chunk-check` and `chunk-provenance-status` proven
 end-to-end against COPIES of both real reference games (`~/BoardSmithGames/seven`, read-only,
@@ -517,6 +517,7 @@ Recent decisions affecting current work:
 - [Phase ?]: 171-07: real chunk-check output disproves the plan's anticipated ambiguous rulebook/01 shorthand in seven's live prose; recorded honestly rather than assumed, per the phase honesty requirement
 - [Phase 172]: parseBuildManifest distinguishes tabular:true-empty from tabular:false-prose via a table-structure scan, not row-count alone
 - [Phase 172]: parseVerifiedAgainst fixed to use findHeadingIndex instead of chunkText.indexOf, closing the latent f73153a3 recurrence
+- [Phase ?]: Three-rung claim-resolution ladder (owners -> live-claim validity -> authoring chunk) implemented as sequential array filters; rung 3 falls back to rung-2 survivors when authoring narrowing would empty the set, never dropping to nothing
 
 ### Pending Todos
 
@@ -528,7 +529,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T20:04:01.267Z
+Last session: 2026-07-28T20:17:18.569Z
 Stopped at: Completed 171-07-PLAN.md
 Resume file: 
 None
