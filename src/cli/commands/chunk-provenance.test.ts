@@ -15,6 +15,10 @@ import {
   VERIFIED_AGAINST_BEGIN,
   VERIFIED_AGAINST_END,
   VERIFIED_AGAINST_LABELS,
+  VERIFIED_AGAINST_EMPTY,
+  PROVENANCE_UNKNOWN,
+  parseVerifiedAgainst,
+  chunkProvenanceStatusCommand,
 } from './chunk-provenance.js';
 
 /**
@@ -579,5 +583,320 @@ describe('chunk-check', () => {
 
     logSpy.mockRestore();
     errSpy.mockRestore();
+  });
+});
+
+/**
+ * `chunk-provenance-status` — PROV-03's read-only aggregation. The three-state contract
+ * (171-CONTEXT.md "specifics" item 3): `full`, `code-conformance-only`, and `unknown` — the last
+ * one for a chunk verified before this phase existed, NEVER collapsed into
+ * `code-conformance-only`. `verifiedWithoutProvenance` is the load-bearing flag (decision 6,
+ * second half): a chunk whose Status claims verification but has no valid block, so a skipped
+ * `chunk-check` invocation surfaces rather than passing silently.
+ */
+describe('chunk-provenance-status', () => {
+  let exitCode: number | undefined;
+  beforeEach(() => {
+    exitCode = process.exitCode;
+    process.exitCode = undefined;
+  });
+  afterEach(() => {
+    process.exitCode = exitCode;
+  });
+
+  /** A project with a real archived+hashed source and one real slice file — mirrors makeCheckProject above. */
+  async function makeStatusProject(): Promise<{ project: string }> {
+    const project = join(dir, 'game-status');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+
+    const sourceBuf = Buffer.from(
+      '%PDF-1.4 fake rulebook bytes for chunk-provenance-status testing\n',
+    );
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game-status',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash,
+        transcribed: '2026-07-28',
+      }),
+    );
+    await fs.mkdir(join(project, 'rulebook', 'source'), { recursive: true });
+    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.writeFile(
+      join(rulebookDir, '01-setup-and-round-structure.md'),
+      '# Setup and Round Structure\n\nReal slice content for hashing.\n',
+    );
+    return { project };
+  }
+
+  /** Scaffolds chunks/<slug>/CHUNK.md from the real template, with the given Status and citation. */
+  async function addChunk(
+    project: string,
+    slug: string,
+    status: string,
+    cites = '',
+  ): Promise<string> {
+    const template = await fs.readFile(
+      new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
+      'utf-8',
+    );
+    let text = template.replace(/^Status: proposed$/m, `Status: ${status}`);
+    if (cites) {
+      text = text.replace(
+        '1. <!-- claim text --> — cites <!-- rulebook section / RULINGS.md entry -->',
+        `1. A claim — cites ${cites}`,
+      );
+    }
+    const chunkDir = join(project, 'chunks', slug);
+    await fs.mkdir(chunkDir, { recursive: true });
+    const chunkPath = join(chunkDir, 'CHUNK.md');
+    await fs.writeFile(chunkPath, text);
+    return chunkPath;
+  }
+
+  /** Recursive path -> sha256 map, for the read-only proof. */
+  async function hashTree(project: string): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    async function walk(d: string): Promise<void> {
+      const entries = await fs.readdir(d, { withFileTypes: true });
+      for (const e of entries) {
+        const p = join(d, e.name);
+        if (e.isDirectory()) await walk(p);
+        else map.set(p, createHash('sha256').update(await fs.readFile(p)).digest('hex'));
+      }
+    }
+    await walk(project);
+    return map;
+  }
+
+  it('a well-formed full block reports state full', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
+    await chunkCheckCommand('jab', { project, json: true });
+
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    const entry = result.chunks.find((c) => c.slug === 'jab')!;
+    expect(entry.state).toBe(SCOPE_FULL);
+  });
+
+  it('a well-formed code-conformance-only block reports that state AND its reason code', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
+    await fs.rm(join(project, 'rulebook', 'source', 'rules.pdf'));
+    await chunkCheckCommand('jab', { project, json: true });
+
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    const entry = result.chunks.find((c) => c.slug === 'jab')!;
+    expect(entry.state).toBe(SCOPE_CODE_ONLY);
+    expect(entry.reason).toBe('source-missing');
+    expect(SCOPE_REASONS).toContain(entry.reason);
+  });
+
+  it('a chunk with no "## Verified Against" heading at all reports unknown — asserted distinct from BOTH other states', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified');
+
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    const entry = result.chunks.find((c) => c.slug === 'jab')!;
+    expect(entry.state).toBe(PROVENANCE_UNKNOWN);
+    expect(entry.state).not.toBe(SCOPE_FULL);
+    expect(entry.state).not.toBe(SCOPE_CODE_ONLY);
+  });
+
+  it('a chunk whose block body is still VERIFIED_AGAINST_EMPTY reports unknown', async () => {
+    const { project } = await makeStatusProject();
+    const chunkPath = await addChunk(project, 'jab', 'proposed');
+    const text = await fs.readFile(chunkPath, 'utf-8');
+    const scaffolded = `${text}\n${VERIFIED_AGAINST_HEADING}\n\n${VERIFIED_AGAINST_BEGIN}\n${VERIFIED_AGAINST_EMPTY}\n${VERIFIED_AGAINST_END}\n`;
+    await fs.writeFile(chunkPath, scaffolded);
+
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    const entry = result.chunks.find((c) => c.slug === 'jab')!;
+    expect(entry.state).toBe(PROVENANCE_UNKNOWN);
+  });
+
+  it('a chunk whose block exists but is unparseable (a required label removed) reports unknown with blockMalformed: true', async () => {
+    const { project } = await makeStatusProject();
+    const chunkPath = await addChunk(
+      project,
+      'jab',
+      'verified',
+      'rulebook/01-setup-and-round-structure.md',
+    );
+    await chunkCheckCommand('jab', { project, json: true });
+    const text = await fs.readFile(chunkPath, 'utf-8');
+    await fs.writeFile(chunkPath, text.replace(/^BoardSmith version:.*$/m, ''));
+
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    const entry = result.chunks.find((c) => c.slug === 'jab')!;
+    expect(entry.state).toBe(PROVENANCE_UNKNOWN);
+    expect(entry.blockMalformed).toBe(true);
+  });
+
+  it('a chunk whose block exists but has a fence deleted reports unknown with blockMalformed: true', async () => {
+    const { project } = await makeStatusProject();
+    const chunkPath = await addChunk(
+      project,
+      'jab',
+      'verified',
+      'rulebook/01-setup-and-round-structure.md',
+    );
+    await chunkCheckCommand('jab', { project, json: true });
+    const text = await fs.readFile(chunkPath, 'utf-8');
+    await fs.writeFile(chunkPath, text.replace(VERIFIED_AGAINST_END, ''));
+
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    const entry = result.chunks.find((c) => c.slug === 'jab')!;
+    expect(entry.state).toBe(PROVENANCE_UNKNOWN);
+    expect(entry.blockMalformed).toBe(true);
+  });
+
+  it('Status verified + state unknown appears in verifiedWithoutProvenance', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified');
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    expect(result.verifiedWithoutProvenance).toContain('jab');
+  });
+
+  it('Status "verified (user-waived)" + state unknown ALSO appears in verifiedWithoutProvenance — a waived verification is still a claim', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified (user-waived)');
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    expect(result.verifiedWithoutProvenance).toContain('jab');
+  });
+
+  it('Status built + state unknown does NOT appear in verifiedWithoutProvenance — it never claimed verification', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'built');
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    expect(result.verifiedWithoutProvenance).not.toContain('jab');
+  });
+
+  it('two chunks recorded with different raw edition free text that both normalise to EDITION_UNKNOWN group into ONE edition bucket', async () => {
+    const { project } = await makeStatusProject();
+    const chunkA = await addChunk(
+      project,
+      'jab',
+      'verified',
+      'rulebook/01-setup-and-round-structure.md',
+    );
+    await chunkCheckCommand('jab', { project, json: true });
+    process.exitCode = undefined;
+    const chunkB = await addChunk(
+      project,
+      'cross',
+      'verified',
+      'rulebook/01-setup-and-round-structure.md',
+    );
+    await chunkCheckCommand('cross', { project, json: true });
+
+    // Hand-edit each block's "Rulebook edition:" line to different non-canonical free text that
+    // both normalise to EDITION_UNKNOWN — reproducing a pre-F-1 or hand-edited block
+    // (171-CONTEXT.md decision 5; RESEARCH.md Pitfall 3).
+    const textA = await fs.readFile(chunkA, 'utf-8');
+    await fs.writeFile(
+      chunkA,
+      textA.replace(/^Rulebook edition:.*$/m, 'Rulebook edition: not specified anywhere'),
+    );
+    const textB = await fs.readFile(chunkB, 'utf-8');
+    await fs.writeFile(
+      chunkB,
+      textB.replace(/^Rulebook edition:.*$/m, 'Rulebook edition: none given in this printing'),
+    );
+
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    expect(Object.keys(result.byEdition)).toEqual([EDITION_UNKNOWN]);
+    expect(result.byEdition[EDITION_UNKNOWN].sort()).toEqual(['cross', 'jab']);
+  });
+
+  it('two chunks recorded against different skills-tree hashes group into two buckets, and the report names the drift', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
+    await chunkCheckCommand('jab', { project, json: true });
+    process.exitCode = undefined;
+    const chunkB = await addChunk(
+      project,
+      'cross',
+      'verified',
+      'rulebook/01-setup-and-round-structure.md',
+    );
+    await chunkCheckCommand('cross', { project, json: true });
+
+    const textB = await fs.readFile(chunkB, 'utf-8');
+    const driftHash = '0'.repeat(64);
+    await fs.writeFile(
+      chunkB,
+      textB.replace(/^Skills tree hash:.*$/m, `Skills tree hash: ${driftHash}`),
+    );
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    logSpy.mockRestore();
+
+    expect(Object.keys(result.bySkillsTreeHash).length).toBe(2);
+    expect(result.bySkillsTreeHash[driftHash]).toEqual(['cross']);
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(output.toLowerCase()).toContain('drift');
+    expect(output).toContain(driftHash);
+  });
+
+  it('--json emits a stable documented shape', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
+    await chunkCheckCommand('jab', { project, json: true });
+    process.exitCode = undefined;
+    await addChunk(project, 'legacy', 'verified');
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const result = await chunkProvenanceStatusCommand({ project, json: true });
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const parsed = JSON.parse(logSpy.mock.calls[0][0] as string);
+    logSpy.mockRestore();
+
+    expect(parsed).toEqual(result);
+    expect(parsed.chunks.map((c: { slug: string }) => c.slug).sort()).toEqual(['jab', 'legacy']);
+    expect(parsed.counts).toEqual({ full: 1, codeConformanceOnly: 0, unknown: 1 });
+    expect(parsed.verifiedWithoutProvenance).toEqual(['legacy']);
+    expect(Array.isArray(parsed.chunks)).toBe(true);
+    expect(typeof parsed.byEdition).toBe('object');
+    expect(typeof parsed.bySkillsTreeHash).toBe('object');
+    expect(typeof parsed.byBoardsmithVersion).toBe('object');
+  });
+
+  it('the human output prints one row per chunk plus the group summaries', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
+    await chunkCheckCommand('jab', { project, json: true });
+    process.exitCode = undefined;
+    await addChunk(project, 'legacy', 'verified');
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await chunkProvenanceStatusCommand({ project, json: false });
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    logSpy.mockRestore();
+
+    expect(output).toContain('jab');
+    expect(output).toContain('legacy');
+    expect(output).toMatch(/full/);
+    expect(output).toMatch(/unknown/i);
+    expect(output).toMatch(/legacy/); // flagged in verifiedWithoutProvenance section
+  });
+
+  it('the command writes nothing: every file byte-identical before and after', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
+    await chunkCheckCommand('jab', { project, json: true });
+    process.exitCode = undefined;
+    await addChunk(project, 'legacy', 'verified');
+
+    const before = await hashTree(project);
+    await chunkProvenanceStatusCommand({ project, json: true });
+    const after = await hashTree(project);
+    expect(after).toEqual(before);
   });
 });
