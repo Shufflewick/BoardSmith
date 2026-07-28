@@ -117,8 +117,38 @@ error, and what to fix) — never proceed past a failing step assuming it will "
    rule violation (`CLAUDE.md`: "Don't leave a dev server running that you start.") and independently
    required by the plan itself: any server this skill starts must be killed before it returns.
 
-Only once all three steps have completed (compile clean, serve confirmed, process killed) is the
-scaffold considered verified and chunk 1 work may begin against it. The session stays inside
+4. **Archive the source rulebook** — only when a rulebook path is known at this point (the
+   designer passed one to `/bs-ingest-rules`). From inside `<name>/`:
+
+   ```bash
+   npx boardsmith ingest-archive <absolute-rulebookPath> --edition "<edition if known, else omit>"
+   ```
+
+   This copies the source to `rulebook/source/<filename>`, computes its SHA-256, and writes
+   `rulebook/INDEX.md` with the four provenance header lines and empty `## Open Rules Gaps`,
+   `## Slices`, and `## Term → Slice` sections for Step 3 to fill. Omit `--edition` when unknown —
+   the command writes an explicit `not stated in the rulebook` value rather than leaving a blank.
+
+   If the command errors, STOP and report it. Do not hand-write `rulebook/INDEX.md` as a fallback,
+   and do not defer this to Step 3.
+
+   **Skip this step when no rulebook path is known** — either the designer has no rulebook (the
+   interview path will produce the header values itself, per `ingest/interview-fallback.md`), or
+   they will supply the path at Step 2, in which case run this command then, immediately after
+   binding it.
+
+   **Why this lives in Step 1 rather than in Step 3, where it logically belongs.** It was in
+   Step 3, and across ten measured live runs it never once executed. Step 3 sits after Step 2's
+   many-turn per-section confirmation loop, by which point the session is working from what it
+   recalls of this skill rather than from the files — ten different mechanisms were tried there
+   (prose, a template, a pointer, a handshake token, a delegated subagent, even this exact command)
+   and none ran. This step, by contrast, executed correctly in all ten of those same runs:
+   `init`, the compile gate, the serve-check and the kill all happened every time, because Step 1
+   runs while the session still has the skill text fresh. The work is not fragile; its old
+   scheduling was. Do not move it back to Step 3.
+
+Only once all four steps have completed (compile clean, serve confirmed, process killed, source
+archived when a path is known) is the scaffold considered verified and chunk 1 work may begin against it. The session stays inside
 `<name>/` from here on — every subsequent ingest step (transcription/interview, synthesis,
 sketch writing) writes its artifacts into this directory, never the parent.
 

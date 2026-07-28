@@ -26,6 +26,12 @@ or shortcut any of its steps:
    (e.g. "create a new game, it's a trick-taking card game about pirates"), carry that forward
    into `bs-ingest-rules`' routing: it seeds the interview's opening vision question or, if they
    pointed at a rulebook, the transcription path. Do not re-ask what they already told you.
+3. **If they gave a path to a rulebook file** — as an argument to `/bs-create-game`, or anywhere
+   in that same message — carry it forward as `bs-ingest-rules`' optional rulebook-path argument
+   (see its "Invocation" section). Resolve it to an absolute path, expanding a leading `~`, before
+   Step 1 runs; Step 1 `cd`s into the new project directory, so a relative path captured earlier
+   is wrong afterward. Passing it through means Step 1 archives the source, which is where that
+   work reliably happens — do not let the path arrive only at Step 2.
 
 Everything else — scaffold, transcription vs. interview, synthesis, sketch derivation, the
 context-economics hard rule — lives in `bs-ingest-rules` and its `bs-shared/` references. Cite

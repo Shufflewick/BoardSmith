@@ -491,54 +491,109 @@ describe('v4.9 PROC-01 — re-read gates at the long-session handoff', () => {
   });
 });
 
-describe('v4.9 INGEST-01 — source archive + SHA-256 (delegated to a CLI command)', () => {
-  // Nine mechanisms were tried and refuted against live runs: reworded instructions, a
-  // self-limiting definition, an extracted contract file, a shipped template, a step reorder,
-  // a delegated synthesis subagent, two re-read gates, and a dispatch handshake. Direct
-  // tool-call capture showed why -- the session reads its skill files at the start and then
-  // executes from recall, reproducing a superseded contract. Instructions living in the
-  // drifting text drift with it.
+describe('v4.9 INGEST-01 — optional rulebook path + archive scheduled in Step 1', () => {
+  // Ten mechanisms were tried at Step 3 and none ever executed across ten measured live runs.
+  // Step 1's sequence -- init, compile gate, serve-check, kill -- executed correctly in all ten
+  // of those same runs. The work was never fragile; its scheduling was. Step 3 sits after Step
+  // 2's many-turn confirmation loop, by which point the session works from recall; Step 1 runs
+  // while the skill text is still fresh.
   //
-  // The same traces showed Bash invocations succeeding in every run. So the deterministic
-  // half -- copy, hash, four exact header lines, three exact headings -- moved into
-  // `boardsmith ingest-archive`, which is pinned by src/cli/commands/ingest-archive.test.ts
-  // and cannot forget a heading. The session keeps the judgment half.
+  // Moving the archive into Step 1 requires the rulebook path to be known that early, which is
+  // what the optional invocation argument provides.
 
-  it('Step 3 invokes the ingest-archive command rather than describing the work', () => {
+  it('the skill documents an optional rulebook-path argument', () => {
     const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('npx boardsmith ingest-archive');
-    expect(flat(ingestRules)).toMatch(/Item 1 is a command, not a task/);
+    expect(ingestRules).toContain('## Invocation');
+    expect(ingestRules).toMatch(/\/bs-ingest-rules \[path-to-rulebook\]/);
   });
 
-  it('Step 3 forbids hand-writing INDEX.md when the command fails', () => {
+  it('a supplied path resolves to absolute before Step 1 cds into the project', () => {
     const ingestRules = flat(read('ingest-rules.md'));
-    expect(ingestRules).toMatch(/do not hand-write `INDEX.md` as a fallback/);
+    expect(ingestRules).toMatch(/Resolve it to an \*\*absolute\*\* path immediately, before Step 1 runs/);
+    expect(ingestRules).toMatch(/expanding a leading `~`/);
   });
 
-  it('Step 3 states why this is a command, citing the measured failure', () => {
+  it('a supplied-but-unreadable path stops rather than falling through to the interview', () => {
+    // Silently interviewing a designer whose PDF is on disk is worse than an error: nothing
+    // looks wrong until much later.
     const ingestRules = flat(read('ingest-rules.md'));
-    // A bare "run this" gets skipped; the evidence is what earns the invocation.
-    expect(ingestRules).toMatch(/nine successive attempts/i);
-    expect(ingestRules).toMatch(/Bash invocations succeeding reliably/);
+    expect(ingestRules).toMatch(/STOP and say so, naming the path/);
+    expect(ingestRules).toMatch(/Do not fall through to the structured interview/);
   });
 
-  it('Step 3 tells the session to fill the scaffolded sections without renaming headings', () => {
+  it('Step 2 skips the rulebook question when a path was supplied', () => {
     const ingestRules = flat(read('ingest-rules.md'));
-    expect(ingestRules).toMatch(/Fill the sections the command scaffolded/);
-    expect(ingestRules).toMatch(/Do not rename, reword, reorder, or "improve" them/);
-    expect(ingestRules).toMatch(/Do not deduplicate/i);
+    expect(ingestRules).toMatch(/If a rulebook path was supplied at invocation, skip this question/);
+  });
+
+  it('scaffold.md runs ingest-archive as item 4 of the Step 1 sequence', () => {
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain('npx boardsmith ingest-archive');
+    const seqIdx = scaffold.indexOf('## Verification Sequence');
+    const archiveIdx = scaffold.indexOf('4. **Archive the source rulebook');
+    expect(seqIdx).toBeGreaterThan(-1);
+    expect(archiveIdx).toBeGreaterThan(seqIdx);
+    expect(flat(scaffold)).toMatch(/all four steps have completed/);
+  });
+
+  it('scaffold.md records why the archive lives in Step 1 and forbids moving it back', () => {
+    const scaffold = flat(read('ingest/scaffold.md'));
+    expect(scaffold).toMatch(/never once executed/);
+    expect(scaffold).toMatch(/Do not move it back to Step 3/);
+  });
+
+  it('scaffold.md forbids hand-writing INDEX.md if the command fails', () => {
+    const scaffold = flat(read('ingest/scaffold.md'));
+    expect(scaffold).toMatch(/Do not hand-write `rulebook\/INDEX.md` as a fallback/);
+  });
+
+  it('Step 3 fills the existing scaffold rather than creating INDEX.md', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/`rulebook\/INDEX.md` already exists: Step 1 created it/);
+    expect(ingestRules).toMatch(/Your job here is to fill those sections, not to create the file/);
+  });
+
+  it('create-game forwards a supplied rulebook path', () => {
+    const createGame = flat(read('create-game.md'));
+    expect(createGame).toMatch(/If they gave a path to a rulebook file/);
+    expect(createGame).toMatch(/do not let the path arrive only at Step 2/);
+  });
+});
+
+describe('v4.9 INGEST-01 — command ownership of the mechanical contract', () => {
+  it('the command owns copy, hash and the exact headings so no prose can drift them', () => {
+    const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
+    expect(cmd).toContain('rulebook/source/');
+    expect(cmd).toContain('sha256');
+    for (const heading of ['## Open Rules Gaps', '## Slices', '## Term → Slice']) {
+      expect(cmd, `command must emit "${heading}"`).toContain(heading);
+    }
   });
 
   it('the superseded synthesis-subagent contract is gone, not left as a second path', () => {
-    // Two mechanisms for the same job is how a fallback silently becomes the real path.
+    // Two mechanisms for one job is how a fallback silently becomes the real path.
     expect(existsSync(join(__dirname, 'ingest/synthesis-subagent.md'))).toBe(false);
     const ingestRules = read('ingest-rules.md');
     expect(ingestRules).not.toContain('synthesis-subagent');
   });
 
-  it('ingest/scaffold.md does NOT contain rulebook/source/ (Pitfall 1 guard — scaffold.md runs before {rulebookPath} is known)', () => {
+  it('scaffold.md archives ONLY when a rulebook path is known, and skips otherwise', () => {
+    // SUPERSEDED PREMISE. This was previously a negative guard asserting scaffold.md never
+    // mentions rulebook/source/, because at Step 1 the rulebook path was not yet bound --
+    // 170-RESEARCH.md Pitfall 1. The optional invocation argument changes that: a supplied path
+    // is resolved to absolute before Step 1 runs, so Step 1 can archive.
+    //
+    // The invariant that still matters is conditionality. Archiving unconditionally at Step 1
+    // would break the interview path (no source file exists) and any run where the designer
+    // supplies the path later at Step 2.
     const scaffold = read('ingest/scaffold.md');
-    expect(scaffold).not.toContain('rulebook/source/');
+    const flatScaffold = flat(scaffold);
+    expect(flatScaffold).toMatch(/only when a rulebook path is known at this point/);
+    expect(flatScaffold).toMatch(/Skip this step when no rulebook path is known/);
+    // The interview path must be named as a legitimate skip reason, not left implicit.
+    expect(flatScaffold).toMatch(/interview path will produce the header values itself/);
+    // And a path arriving at Step 2 must still get archived, just later.
+    expect(flatScaffold).toMatch(/they will supply the path at Step 2, in which case run this command then/);
   });
 });
 

@@ -15,6 +15,24 @@ see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
 Run once per game. Re-running on an existing project is destructive to sketch state and requires
 explicit confirmation (see Step 0 below).
 
+## Invocation
+
+```
+/bs-ingest-rules [path-to-rulebook]
+```
+
+The path is optional. When given, treat it as `{rulebookPath}` for the whole session and **skip
+the "do you have a written rulebook?" question in Step 2** — the designer has already answered it.
+
+Resolve it to an **absolute** path immediately, before Step 1 runs, expanding a leading `~`.
+Step 1 does `cd <name>` into the newly created project, so a relative path captured before that
+`cd` is wrong afterward.
+
+**If a path was supplied but does not exist or cannot be read, STOP and say so, naming the path.**
+Do not fall through to the structured interview. A designer who supplied a path has a rulebook;
+silently interviewing them for a game whose PDF is sitting on disk is a worse outcome than an
+error, because nothing looks wrong until much later.
+
 ## Context-Economics Hard Rule
 
 **The orchestrator never reads full rulebook slices.** `rulebook/INDEX.md` is built exclusively
@@ -82,7 +100,10 @@ remaining step — nothing this skill produces is ever written to the parent dir
 
 ## Step 2: Route to Transcription or Interview Fallback
 
-Ask whether the designer has a written rulebook (PDF/images/text).
+**If a rulebook path was supplied at invocation, skip this question** — `{rulebookPath}` is
+already bound and Step 1 has already archived it. Go straight to the transcription path.
+
+Otherwise ask whether the designer has a written rulebook (PDF/images/text).
 
 - **Rulebook available** — dispatch fan-out subagents per `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md`.
 - **No rulebook** (unpublished prototype, rules in the designer's head) — run the structured
@@ -116,32 +137,13 @@ full by this orchestrator.
 Once transcription or interview output has landed, this orchestrator-only step assembles the
 following artifacts **from subagent-returned summaries only** — never from re-reading slices.
 
-**Item 1 is a command, not a task.** Run it. Do not perform its work by hand and do not skip it.
+`rulebook/INDEX.md` already exists: Step 1 created it, with the four provenance header lines
+(`Edition:`, `Source:`, `Source hash:`, `Transcribed:`) and empty `## Open Rules Gaps`,
+`## Slices`, and `## Term → Slice` sections. Your job here is to fill those sections, not to
+create the file.
 
-1. **Archive the source and write the INDEX provenance header — run this command:**
-
-   ```
-   npx boardsmith ingest-archive <rulebookPath> --edition "<edition or omit>"
-   ```
-
-   Run it from inside the game project directory. It copies the source to
-   `rulebook/source/<filename>`, computes its SHA-256, and writes `rulebook/INDEX.md` with the
-   four provenance header lines (`Edition:`, `Source:`, `Source hash:`, `Transcribed:`) plus
-   empty `## Open Rules Gaps`, `## Slices`, and `## Term → Slice` sections for you to fill.
-
-   Omit `--edition` when the rulebook states none; the command writes the explicit
-   `not stated in the rulebook` value rather than leaving it blank. If the command errors, STOP
-   and report it — do not hand-write `INDEX.md` as a fallback.
-
-   This is a command rather than an instruction for a measured reason. Copying a file, hashing
-   it, and emitting four exact header lines have one correct output, and nine successive attempts
-   to get a session to do them from skill text all failed on live runs — the session reads its
-   skill files at the start, then works from recall. Tool-call capture showed Bash invocations
-   succeeding reliably in every one of those same runs. So the deterministic half is code now.
-   Your half is judgment: transcription, terms, and gaps.
-
-2. **Fill the sections the command scaffolded.** Open `rulebook/INDEX.md` (it is your own
-   just-written scaffold, not a slice — reading it is not a Context-Economics violation) and fill:
+1. **Fill the scaffolded sections.** Open `rulebook/INDEX.md` — it is the scaffold Step 1 wrote,
+   not a slice, so reading it is not a Context-Economics violation — and fill:
 
    - `## Open Rules Gaps` — every `Named-but-undefined (p.N): <rule name>` entry from the
      accumulated `openGaps[]` returns, one per line, verbatim. **Do not deduplicate** — a rule
@@ -150,9 +152,15 @@ following artifacts **from subagent-returned summaries only** — never from re-
    - `## Slices` — one row per slice: path, pages, one-line coverage.
    - `## Term → Slice` — one row per accumulated `citedTerms[]` pair, sorted.
 
-   Keep every heading exactly as the command wrote it. Do not rename, reword, reorder, or
-   "improve" them — downstream tooling parses those strings, and inventing a nicer heading is the
-   single most repeated failure in this step's history.
+   **Keep every heading exactly as Step 1 wrote it.** Do not rename, reword, reorder, or
+   "improve" them, and do not rewrite the header lines — downstream tooling parses those exact
+   strings, and inventing a nicer heading is the single most repeated failure in this step's
+   history.
+
+2. **If `Edition:` reads `not stated in the rulebook` and the transcription subagent returned an
+   actual edition**, update just that line with the returned value. Leave `Source:`,
+   `Source hash:`, and `Transcribed:` untouched — those are the provenance record a later verify
+   pass reads, and they describe the archive Step 1 made.
 
 3. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
    approximate aspect ratios (cards, tiles, board proportions), accumulated from the transcription
