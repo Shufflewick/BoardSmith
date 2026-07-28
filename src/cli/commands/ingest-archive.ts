@@ -523,30 +523,22 @@ export async function ingestArchiveCommand(
   const transcribed = isoDate(new Date());
   const indexPath = join(projectDir, 'rulebook', 'INDEX.md');
 
-  let wroteIndex = false;
+  // Decide the branch BEFORE any try/catch that performs a write. Today's bug (T-173-01): the
+  // existence probe and the real repair write shared one try, with a catch that overwrote a real
+  // designer INDEX.md with a fresh scaffold on ANY throw raised while repairing — a read failure,
+  // a transform error, a partial write. The scaffold branch below is now reached ONLY when
+  // INDEX.md genuinely does not exist; a repair error propagates as a plain exception instead.
+  let indexExists: boolean;
   try {
     await fs.access(indexPath);
-    // INDEX.md already exists — rewrite only the provenance header, leave filled sections alone.
-    const existing = await fs.readFile(indexPath, 'utf-8');
-    const normalizedEdition = normalizeEdition(options.edition);
-    const originalEdition = options.edition?.trim();
-    const editionNoteLine =
-      originalEdition && normalizedEdition === EDITION_UNKNOWN && originalEdition !== EDITION_UNKNOWN
-        ? `${EDITION_NOTE_LABEL} ${originalEdition}`
-        : undefined;
-    // Strip any prior Edition note: line before rewriting, so a repeated ingest-archive run does
-    // not accumulate duplicates — the same "replace, don't append" discipline as the Edition:
-    // line itself.
-    const withoutOldNote = existing.replace(/^Edition note:.*\n?/m, '');
-    const withEditionNote = editionNoteLine
-      ? withoutOldNote.replace(/^Edition:.*$/m, `Edition: ${normalizedEdition}\n${editionNoteLine}`)
-      : withoutOldNote.replace(/^Edition:.*$/m, `Edition: ${normalizedEdition}`);
-    const withHeader = withEditionNote
-      .replace(/^Source:.*$/m, `Source: ${relArchivePath}`)
-      .replace(/^Source hash:.*$/m, `Source hash: ${sourceHash}`)
-      .replace(/^Transcribed:.*$/m, `Transcribed: ${transcribed}`);
-    await fs.writeFile(indexPath, withHeader);
+    indexExists = true;
   } catch {
+    indexExists = false;
+  }
+
+  let wroteIndex = false;
+  let headerBroughtToContract = false;
+  if (!indexExists) {
     await fs.mkdir(dirname(indexPath), { recursive: true });
     await fs.writeFile(
       indexPath,
@@ -559,6 +551,14 @@ export async function ingestArchiveCommand(
       }),
     );
     wroteIndex = true;
+    headerBroughtToContract = true;
+  } else {
+    headerBroughtToContract = await repairExistingIndex(indexPath, {
+      edition: options.edition,
+      relArchivePath,
+      sourceHash,
+      transcribed,
+    });
   }
 
   if (options.json) {
@@ -575,12 +575,159 @@ export async function ingestArchiveCommand(
   console.log(chalk.green('✓ Archived source rulebook'));
   console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
   console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
-  console.log(
-    wroteIndex
-      ? `  ${chalk.gray('index:')} rulebook/INDEX.md written with provenance header + section scaffolding`
-      : `  ${chalk.gray('index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
-  );
+  // Only report the header as updated when it was actually brought to the four-line contract —
+  // the unconditional "provenance header updated" message is what hid this defect (T-173-03).
+  if (wroteIndex) {
+    console.log(
+      `  ${chalk.gray('index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
+    );
+  } else if (headerBroughtToContract) {
+    console.log(
+      `  ${chalk.gray('index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
+    );
+  } else {
+    console.log(
+      `  ${chalk.gray('index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
+    );
+  }
   console.log();
   console.log(chalk.gray('Fill the scaffolded sections from the transcription summaries.'));
   console.log(chalk.gray('Keep every heading exactly as written — downstream tooling parses them.'));
+}
+
+/** The line-bounds of one matched `^Label:` line (multiline-anchored), or `undefined` if absent. */
+function findLabelLine(
+  text: string,
+  label: string,
+): { start: number; end: number; value: string } | undefined {
+  const re = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(.*)$`, 'm');
+  const match = re.exec(text);
+  if (!match) return undefined;
+  return { start: match.index, end: match.index + match[0].length, value: match[1].trim() };
+}
+
+/**
+ * Repairs an existing INDEX.md's provenance header in place, per CONTEXT.md decision 1b. Returns
+ * whether the header was actually brought to the `HEADER_LABELS` contract (so the caller can stop
+ * printing an unconditional success line).
+ *
+ * Root causes closed, in `HEADER_LABELS` order:
+ *  - `Source hash:` / `Transcribed:` are INSERTED when absent, never blind-`.replace()`d (a
+ *    no-match replace is a silent no-op — root cause (a)).
+ *  - `Source:` is wrap-safe: an already-canonical bare path is left untouched (idempotence), a
+ *    bare-path-with-trailing-heading is replaced in place, and WRAPPED prose is never truncated —
+ *    only its `Source: ` label prefix is stripped, and a new canonical line is inserted above it
+ *    (root cause (b)). `computeVerificationScope` reads the FIRST `^Source:` match and joins it
+ *    to the project dir, so the canonical bare-path line must exist and must come first; the
+ *    wrapped prose is the designer's own annotation and is not this command's to delete.
+ *  - `Edition:` is left byte-identical when `--edition` is omitted and a real value already
+ *    exists — never regressed to `EDITION_UNKNOWN` (root cause (c)).
+ */
+async function repairExistingIndex(
+  indexPath: string,
+  params: { edition: string | undefined; relArchivePath: string; sourceHash: string; transcribed: string },
+): Promise<boolean> {
+  const { edition, relArchivePath, sourceHash, transcribed } = params;
+  const before = await fs.readFile(indexPath, 'utf-8');
+  let text = before;
+
+  // 1. Edition: — only touch it when the caller actually supplied a value. An omitted --edition
+  //    must never clobber a real designer-authored Edition: line.
+  const editionLine = findLabelLine(text, 'Edition:');
+  const suppliedEdition = edition?.trim();
+  if (suppliedEdition) {
+    const normalizedEdition = normalizeEdition(suppliedEdition);
+    const editionNoteLine =
+      normalizedEdition === EDITION_UNKNOWN && suppliedEdition !== EDITION_UNKNOWN
+        ? `${EDITION_NOTE_LABEL} ${suppliedEdition}`
+        : undefined;
+    // Strip any prior Edition note: line before rewriting, so a repeated run does not accumulate
+    // duplicates — the same "replace, don't append" discipline as the Edition: line itself.
+    text = text.replace(/^Edition note:.*\n?/m, '');
+    const replacement = editionNoteLine
+      ? `Edition: ${normalizedEdition}\n${editionNoteLine}`
+      : `Edition: ${normalizedEdition}`;
+    const at = findLabelLine(text, 'Edition:');
+    if (at) {
+      text = text.slice(0, at.start) + replacement + text.slice(at.end);
+    } else {
+      text = `Edition: ${normalizedEdition}${editionNoteLine ? `\n${editionNoteLine}` : ''}\n\n${text}`;
+    }
+  } else if (!editionLine) {
+    // No --edition supplied AND no existing Edition: line — insert the sentinel so the header
+    // still converges on the HEADER_LABELS contract.
+    text = `Edition: ${EDITION_UNKNOWN}\n\n${text}`;
+  }
+  // Else: a real Edition: line already exists and --edition was omitted — leave it byte-identical,
+  // including any adjacent Edition note: line.
+
+  // 2. Source: — wrap-safe classification. Re-locate after step 1 may have shifted offsets.
+  const sourceLine = findLabelLine(text, 'Source:');
+  if (!sourceLine) {
+    // Absent — insert immediately after the Edition: line (or at the top of the header region if
+    // Edition: is also absent, though step 1 guarantees an Edition: line exists by this point).
+    const editionAt = findLabelLine(text, 'Edition:');
+    if (editionAt) {
+      const insertAt = text.indexOf('\n', editionAt.end);
+      const at = insertAt === -1 ? text.length : insertAt + 1;
+      text = text.slice(0, at) + `Source: ${relArchivePath}\n` + text.slice(at);
+    } else {
+      text = `Source: ${relArchivePath}\n\n${text}`;
+    }
+  } else if (sourceLine.value === relArchivePath) {
+    // Already canonical — leave untouched. Load-bearing for idempotence (B9/B11): after a first
+    // repair the file reads "Source: <canonical>" followed by the designer's now-unlabeled prose
+    // continuation line, which is non-blank and would otherwise look like wrapped prose again.
+  } else {
+    const lineEnd = text.indexOf('\n', sourceLine.end);
+    const restOfLine = lineEnd === -1 ? '' : text.slice(sourceLine.end, lineEnd);
+    const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
+    const isBarePath =
+      !/\s/.test(sourceLine.value) &&
+      (nextLine === undefined ||
+        nextLine.trim() === '' ||
+        nextLine.startsWith('## ') ||
+        HEADER_LABELS.some((label) => nextLine.startsWith(label)));
+    if (isBarePath) {
+      // bare path (today's shape) — replace the line in place.
+      text = text.slice(0, sourceLine.start) + `Source: ${relArchivePath}` + text.slice(sourceLine.end);
+    } else {
+      // wrapped prose — never truncate. Strip only the "Source: " label prefix from the first
+      // physical line (leaving the prose intact, rejoined with its continuation) and insert a new
+      // canonical bare-path line immediately above it.
+      const strippedFirstLine = sourceLine.value + restOfLine;
+      text =
+        text.slice(0, sourceLine.start) +
+        `Source: ${relArchivePath}\n` +
+        strippedFirstLine +
+        text.slice(lineEnd === -1 ? sourceLine.end : lineEnd);
+    }
+  }
+
+  // 3. Source hash: — insert-if-absent, never blind-replace.
+  const hashLine = findLabelLine(text, 'Source hash:');
+  if (hashLine) {
+    text = text.slice(0, hashLine.start) + `Source hash: ${sourceHash}` + text.slice(hashLine.end);
+  } else {
+    const at = findLabelLine(text, 'Source:');
+    const insertAfter = at ? text.indexOf('\n', at.end) : -1;
+    const pos = insertAfter === -1 ? text.length : insertAfter + 1;
+    text = text.slice(0, pos) + `Source hash: ${sourceHash}\n` + text.slice(pos);
+  }
+
+  // 4. Transcribed: — insert-if-absent, immediately after Source hash:, never blind-replace.
+  const transcribedLine = findLabelLine(text, 'Transcribed:');
+  if (transcribedLine) {
+    text =
+      text.slice(0, transcribedLine.start) + `Transcribed: ${transcribed}` + text.slice(transcribedLine.end);
+  } else {
+    const at = findLabelLine(text, 'Source hash:');
+    const insertAfter = at ? text.indexOf('\n', at.end) : -1;
+    const pos = insertAfter === -1 ? text.length : insertAfter + 1;
+    text = text.slice(0, pos) + `Transcribed: ${transcribed}\n` + text.slice(pos);
+  }
+
+  if (text === before) return false;
+  await fs.writeFile(indexPath, text);
+  return true;
 }
