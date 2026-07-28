@@ -10,12 +10,21 @@
  * growth never moves the zoom on its own.
  *
  * Separately, and for the whole component lifetime, a persistent
- * ResizeObserver on the region plus a watch on the dock's measured height
- * re-fit the board whenever the AVAILABLE SPACE changes (the dock landing,
- * a region resize) — this is what keeps a never-touched-zoom player's board
- * reachable as the layout moves around it. A manual `setZoom` (the slider)
- * takes control and this auto-refit stops; `fitZoom()` (the header/menu
- * "Fit" button) re-fits once and re-arms it.
+ * ResizeObserver on the REGION re-fits the board whenever the available space
+ * genuinely changes (a window/iframe resize, the sidebar collapsing) — this is
+ * what keeps a never-touched-zoom player's board reachable as the layout moves
+ * around it. A manual `setZoom` (the slider) takes control and this auto-refit
+ * stops; `fitZoom()` (the header/menu "Fit" button) re-fits once and re-arms it.
+ *
+ * The dock's height is deliberately NOT part of that persistent re-fit. It is
+ * reserved during startup (so the dock landing is accounted for in the initial
+ * fit) and then frozen. The action panel's height changes constantly during
+ * play — every selection step re-wraps it — and re-fitting on that resized the
+ * board under the player's cursor on every click: the board visibly shook when
+ * a piece was selected and again when it moved. Nothing is lost by ignoring it:
+ * the dock is out of flow (GameShell's `.actionbar` is `position: absolute`) so
+ * it never moves the board by itself, and the board region keeps `--dock-h` of
+ * scroll room, so anything a grown dock covers stays scrollable into view.
  *
  * Measurement notes:
  * - The board element carries CSS `zoom`, so its getBoundingClientRect() is
@@ -65,6 +74,12 @@ export function useAutoZoom(options: {
    *  persistent available-space re-fit is a no-op — `fitZoom()` clears it. */
   let userControlled = false;
 
+  /** The dock height the fit reserves. Null while startup is still following
+   *  the live dock; set to the dock's height at the moment startup ends, after
+   *  which mid-game dock growth/shrink can no longer change the board's size
+   *  (see the module docblock). Cleared when a new board mounts. */
+  let reservedDockHeight: number | null = null;
+
   /** Measure and apply the fitted zoom. Returns true when both boxes were
    *  measurable (a fit was computed), false when layout isn't ready yet. */
   function measureAndFit(): boolean {
@@ -84,7 +99,7 @@ export function useAutoZoom(options: {
       height: region.clientHeight
         - (parseFloat(regionStyle.paddingTop) || 0)
         - (parseFloat(regionStyle.paddingBottom) || 0)
-        - dockHeight.value,
+        - (reservedDockHeight ?? dockHeight.value),
     };
 
     const fit = computeFitZoom(natural, avail);
@@ -101,6 +116,10 @@ export function useAutoZoom(options: {
 
   function endStartup() {
     startupDone = true;
+    // Freeze the dock allowance at whatever the dock measures right now, so a
+    // later region-driven re-fit reserves the same space this fit did rather
+    // than silently adopting a mid-game panel height.
+    reservedDockHeight = dockHeight.value;
     if (settleTimer !== null) clearTimeout(settleTimer);
     settleTimer = null;
     boardObserver?.disconnect();
@@ -121,6 +140,8 @@ export function useAutoZoom(options: {
   watch(boardEl, (el) => {
     endStartup();
     startupDone = false;
+    // A new board gets a fresh startup, which follows the live dock again.
+    reservedDockHeight = null;
     if (el && typeof ResizeObserver !== 'undefined') {
       boardObserver = new ResizeObserver(onBoardResize);
       boardObserver.observe(el); // observe() always fires an initial callback
@@ -169,7 +190,15 @@ export function useAutoZoom(options: {
 
   // The dock's own ResizeObserver already writes fresh dockHeight
   // (GameShell.vue) — just react to the ref, don't re-measure it here.
-  watch(dockHeight, scheduleRefit, { flush: 'post' });
+  //
+  // STARTUP ONLY. The frozen allowance in measureAndFit is what actually holds
+  // the board's size still after startup; this guard additionally skips the
+  // pointless rAF + layout measurement that a mid-game dock resize would
+  // otherwise schedule — and the panel re-wraps on every single selection step.
+  watch(dockHeight, () => {
+    if (startupDone) return;
+    scheduleRefit();
+  }, { flush: 'post' });
 
   onUnmounted(() => {
     endStartup();
