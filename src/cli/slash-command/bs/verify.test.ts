@@ -147,10 +147,18 @@ describe('verify/source-resolution.md — gated adoption flow (decision 1)', () 
     expect(doc).toMatch(/no `--edition` flag/);
   });
 
-  it('requires an independent chunk-provenance-status re-check after adoption, not trusting exit code', () => {
+  it('requires an independent Source hash: re-check after adoption, not trusting exit code', () => {
     const doc = flat(read('verify/source-resolution.md'));
-    expect(doc).toMatch(/independently re-run `boardsmith chunk-provenance-status --json`/);
+    expect(doc).toMatch(/independently re-check `rulebook\/INDEX\.md`/);
     expect(doc).toMatch(/Do not infer that\s*adoption succeeded from `ingest-archive`'s exit code alone|Do not infer/);
+  });
+
+  it('forbids using chunk-provenance-status projectProvenanceState for the post-adoption re-check (173-06 live finding)', () => {
+    // Live proof 173-06 found `projectProvenanceState` never flips away from "pre-provenance" from
+    // ingest-archive alone (only a later chunk-check does) — using it here produces a false STOP
+    // on every successful Case-2 adoption. See 173-PROOF.md section 3.
+    const doc = flat(read('verify/source-resolution.md'));
+    expect(doc).toMatch(/Do NOT use `chunk-provenance-status --json`'s `projectProvenanceState` field/);
   });
 
   it('treats a hash mismatch as a signal to record and proceed, never to overwrite the archive', () => {

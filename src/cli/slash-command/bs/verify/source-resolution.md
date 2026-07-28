@@ -39,12 +39,23 @@ with **no `--edition` flag.** The repaired command preserves an existing `Editio
 `--edition` is omitted; supplying one here would overwrite the designer's already-recorded text
 with nothing to replace it with.
 
-**Then independently re-run `boardsmith chunk-provenance-status --json` and CONFIRM
-`projectProvenanceState` actually changed away from `"pre-provenance"`.** Do not infer that
-adoption succeeded from `ingest-archive`'s exit code alone — `ingest-archive` has reported success
-while silently failing to do its one job before (`173-CONTEXT.md` decision 1b). If
-`projectProvenanceState` is still `"pre-provenance"` after the command ran, STOP and report it;
-that is exactly the false-success failure this independent re-check exists to catch.
+**Then independently re-check `rulebook/INDEX.md` and CONFIRM it now carries a well-formed
+`Source hash:` line matching a fresh `shasum -a 256` of the archived file at
+`rulebook/source/<candidate>`.** Do not infer that adoption succeeded from `ingest-archive`'s exit
+code alone — `ingest-archive` has reported success while silently failing to do its one job before
+(`173-CONTEXT.md` decision 1b). If `rulebook/INDEX.md` has no `Source hash:` line, or its value
+does not match the archived file's hash, STOP and report it; that is exactly the false-success
+failure this independent re-check exists to catch.
+
+**Do NOT use `chunk-provenance-status --json`'s `projectProvenanceState` field for this re-check.**
+It answers a different, per-chunk question — whether any chunk in the project has ever had
+`chunk-check` run on it — and does not flip away from `"pre-provenance"` when `ingest-archive`
+succeeds; only a later, separate `chunk-check` invocation changes it. Checking it here produces a
+false STOP on every successful Case-2 adoption, since ordinary `/bs-verify-game` usage never runs
+`chunk-check`. `173-PROOF.md`'s wave-1 "Hedge Refutation" section documents this distinction in
+full; `computeVerificationScope()`'s own doc comment in `chunk-provenance.ts` is the code-level
+source of truth this file mirrors — `Source hash:` presence-and-match is exactly the disk-state
+test that function performs.
 
 ## Case 3 — Multiple candidates at root: STOP AND ASK, never guess
 
