@@ -142,11 +142,20 @@ following artifacts **from subagent-returned summaries only** — never from re-
 `## Slices`, and `## Term → Slice` sections. Your job here is to fill those sections, not to
 create the file.
 
-1. **Fill `## Open Rules Gaps` with a command, not by hand:**
+1. **Run both synthesis commands, in this order:**
 
    ```
+   npx boardsmith ingest-relabel
    npx boardsmith ingest-gaps
    ```
+
+   `ingest-relabel` moves any `Derived (p.N):` line whose text is pure presentation description
+   (typography, palette, layout, wordmark) onto the `Visual (p.N):` prefix. It changes only the
+   prefix — no text is rewritten and nothing is deleted. Run it before `ingest-gaps` so the gaps
+   sweep sees final slices. Lines needing real judgment are reported, not guessed at; read that
+   report and fix any it names by hand.
+
+   `ingest-gaps` then fills `## Open Rules Gaps`:
 
    It sweeps the slice files for every `Named-but-undefined (p.N): <rule>` line and writes them
    into the section verbatim, without deduplicating — a rule named in two slices and defined in

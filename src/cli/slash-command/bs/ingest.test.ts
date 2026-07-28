@@ -355,6 +355,53 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
 // specified string. The acceptance bar is `npm run harness:ingest`, not this file — see
 // scripts/ingest-harness/README.md.
 
+describe('v4.9 INGEST-02 — relabel command and shared lexicon', () => {
+  it('Step 3 runs ingest-relabel before ingest-gaps', () => {
+    const ingestRules = read('ingest-rules.md');
+    const relabel = ingestRules.indexOf('npx boardsmith ingest-relabel');
+    const gaps = ingestRules.indexOf('npx boardsmith ingest-gaps');
+    expect(relabel).toBeGreaterThan(-1);
+    expect(gaps).toBeGreaterThan(relabel);
+  });
+
+  it('the relabel command changes only the prefix, never the text', () => {
+    const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
+    expect(flat(cmd)).toMatch(/the prefix changes, which is the marker the contract cares about/);
+    // Judgment cases must be reported rather than guessed at.
+    expect(flat(cmd)).toMatch(/left alone and reported, not guessed at/);
+  });
+
+  it('the presentation lexicon is identical in the command and the checker', () => {
+    // Two copies exist because scripts/*.mjs cannot import from src/*.ts without a build step.
+    // The relabel command ACTS on the same signal the checker FLAGS, so a divergence would mean
+    // the harness fails lines the command refuses to fix, or vice versa.
+    const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
+    const checker = readFileSync(
+      join(__dirname, '../../../../scripts/ingest-harness/check.mjs'),
+      'utf-8',
+    );
+    const extract = (src: string) => {
+      const at = src.indexOf('PRESENTATION_LEXICON');
+      const open = src.indexOf('[', at);
+      const close = src.indexOf(']', open);
+      return src
+        .slice(open + 1, close)
+        .split(',')
+        .map((t) => t.trim().replace(/^['"]|['"]$/g, ''))
+        .filter(Boolean)
+        .sort();
+    };
+    const fromCmd = extract(cmd);
+    const fromChecker = extract(checker);
+    expect(fromCmd.length).toBeGreaterThan(5);
+    expect(fromCmd).toEqual(fromChecker);
+    // Referential terms must stay out of both — they flagged correctly-filed rules.
+    for (const banned of ['depicted', 'illustration', 'shown']) {
+      expect(fromCmd, `"${banned}" must not be in the lexicon`).not.toContain(banned);
+    }
+  });
+});
+
 describe('v4.9 INGEST-02 — inline transcription path is contract-bound', () => {
   // Observed via stream-json capture: for a 2-page rulebook the orchestrator dispatches a
   // subagent nominally, then reads the PDF itself and writes every slice in the main stream,
@@ -652,7 +699,7 @@ describe('v4.9 INGEST-03 — ## Open Rules Gaps section (template fill)', () => 
     // requires no judgment, so it does not belong in skill text.
     const ingestRules = read('ingest-rules.md');
     expect(ingestRules).toContain('npx boardsmith ingest-gaps');
-    expect(flat(ingestRules)).toMatch(/not by hand/);
+    expect(flat(ingestRules)).toMatch(/Run both synthesis commands/);
     const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
     expect(cmd).toContain('Named-but-undefined');
     expect(cmd).toMatch(/NOT deduplicated/i);

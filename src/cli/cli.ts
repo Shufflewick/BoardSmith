@@ -10,7 +10,11 @@ import { lintCommand } from './commands/lint.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { simulateCommand } from './commands/simulate.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
-import { ingestArchiveCommand, ingestGapsCommand } from './commands/ingest-archive.js';
+import {
+  ingestArchiveCommand,
+  ingestGapsCommand,
+  ingestRelabelCommand,
+} from './commands/ingest-archive.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -138,6 +142,14 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(ingestGapsCommand);
+
+program
+  .command('ingest-relabel')
+  .description('Relabel Derived (p. lines that are pure presentation descriptions as Visual (p.')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--dry-run', 'Report what would change without writing')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(ingestRelabelCommand);
 
 // Claude Code integration
 const claudeCmd = program

@@ -169,6 +169,104 @@ export async function ingestGapsCommand(
   );
 }
 
+/**
+ * Presentation-only vocabulary: terms describing how a page LOOKS, which cannot carry a
+ * statement about legality, scoring, or sequencing.
+ *
+ * MUST stay in sync with PRESENTATION_LEXICON in scripts/ingest-harness/check.mjs — a test pins
+ * the two together. Referential terms ('depicted', 'illustration', 'shown') are deliberately
+ * ABSENT: a rule inferred from a diagram legitimately mentions the diagram, and that is the
+ * contract's own canonical Derived example. Flagging those produced false positives on real
+ * output, and a check that fires on correct work gets waived.
+ */
+export const PRESENTATION_LEXICON = Object.freeze([
+  'sans-serif',
+  'serif',
+  'typograph',
+  'full-bleed',
+  'palette',
+  'wordmark',
+  'italic',
+  'font',
+  'aspect ratio',
+  'iconograph',
+  'art style',
+  'rotated',
+  'bold white',
+]);
+
+/**
+ * `boardsmith ingest-relabel` — move presentation descriptions off the `Derived (p.N):` prefix.
+ *
+ * INGEST-02 exists because rule-bearing inferences must be separable from presentation notes.
+ * Twelve mechanisms were tried to get transcription to make that split at write time and the
+ * live output is unchanged every run: zero `Visual (p.N):` lines, with layout, typography and
+ * wordmark descriptions filed under `Derived (p.N):`, often beneath an invented
+ * `## Visual notes` heading that appears in no skill file.
+ *
+ * Classification is genuine judgment and cannot be a command in general. But the unambiguous
+ * cases are exactly what the harness's `derived-purity` heuristic already detects, so the same
+ * signal can drive the correction: a `Derived (p.N):` line containing presentation-only
+ * vocabulary is relabelled `Visual (p.N):`. Nothing is deleted and no text is rewritten — only
+ * the prefix changes, which is the marker the contract cares about.
+ *
+ * Lines that need human judgment are left alone and reported, not guessed at.
+ */
+export async function ingestRelabelCommand(
+  options: { project?: string; json?: boolean; dryRun?: boolean } = {},
+): Promise<void> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  const dir = join(projectDir, 'rulebook');
+  const lexicon = new RegExp(`(${PRESENTATION_LEXICON.join('|')})`, 'i');
+
+  let names: string[];
+  try {
+    names = (await fs.readdir(dir)).filter(
+      // 00-visual-survey.md is presentation by design — it has no Derived lines to relabel.
+      (f) => f.endsWith('.md') && f !== 'INDEX.md' && f !== '00-visual-survey.md',
+    );
+  } catch {
+    throw new Error(`No rulebook/ directory in ${projectDir}. Run transcription first.`);
+  }
+
+  const changed: Array<{ file: string; line: number; matched: string }> = [];
+
+  for (const name of names.sort()) {
+    const full = join(dir, name);
+    const lines = (await fs.readFile(full, 'utf-8')).split('\n');
+    let touched = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^(\s*)Derived (\(p\.[^)]*\)):(.*)$/.exec(lines[i]);
+      if (!m) continue;
+      const hit = lexicon.exec(m[3]);
+      if (!hit) continue;
+      lines[i] = `${m[1]}Visual ${m[2]}:${m[3]}`;
+      changed.push({ file: name, line: i + 1, matched: hit[1] });
+      touched = true;
+    }
+
+    if (touched && !options.dryRun) await fs.writeFile(full, lines.join('\n'));
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify({ relabelled: changed.length, changes: changed }, null, 2));
+    return;
+  }
+  if (!changed.length) {
+    console.log(chalk.green('✓ No Derived (p. line carries presentation-only vocabulary'));
+    return;
+  }
+  console.log(
+    chalk.green(
+      `✓ Relabelled ${changed.length} line${changed.length === 1 ? '' : 's'} Derived → Visual${options.dryRun ? ' (dry run — nothing written)' : ''}`,
+    ),
+  );
+  for (const c of changed) {
+    console.log(`  ${chalk.gray(`${c.file}:${c.line}`)} matched "${c.matched}"`);
+  }
+}
+
 export async function ingestArchiveCommand(
   rulebook: string,
   options: IngestArchiveOptions = {},
