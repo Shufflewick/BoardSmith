@@ -18,6 +18,8 @@ import {
   ingestRelabelCommand,
 } from './commands/ingest-archive.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
+import { traceCheckCommand } from './commands/trace-check.js';
+import { driftCheckCommand } from './commands/drift-check.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -177,6 +179,24 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(chunkProvenanceStatusCommand);
+
+// CHECK-03/CHECK-05: the two source-free conformance sweeps (172-CONTEXT.md decisions 5-6).
+// Unlike chunk-check above, these never write a file and never repair anything — there is
+// nothing to repair, only findings to report — so they never exit non-zero for a finding.
+// Non-zero is reserved for a TOOL failure (not a bs- project, not a git repo, etc.).
+program
+  .command('trace-check')
+  .description('Report traceability gaps between Interpretation claims, rulings, and tests (read-only)')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(traceCheckCommand);
+
+program
+  .command('drift-check')
+  .description('Report chunks whose Build Manifest files changed since their verified commit (read-only)')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(driftCheckCommand);
 
 // Claude Code integration
 const claudeCmd = program
