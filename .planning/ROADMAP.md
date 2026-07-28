@@ -92,7 +92,7 @@ Plans:
 - [x] 172-01-PLAN.md — Shared CHUNK.md/Build-Manifest parser module + f73153a3 recurrence fix (wave 1)
 - [x] 172-02-PLAN.md — CHECK-03 `trace-check`: citation scanner, three-rung resolution ladder, findings, report (wave 2)
 - [x] 172-03-PLAN.md — CHECK-05 `drift-check`: commit-hash extraction, git diff plumbing, three drift states (wave 2)
-- [ ] 172-04-PLAN.md — CLI registration + exit-code contract through the real entry point (wave 3)
+- [x] 172-04-PLAN.md — CLI registration + exit-code contract through the real entry point (wave 3)
 - [ ] 172-05-PLAN.md — Real-data proof against copies of both reference games, `172-PROOF.md` (wave 4)
 
 ### Phase 173: Verify Pipeline Core
@@ -177,7 +177,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 |-------|----------------|--------|-----------|
 | 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
-| 172. Source-Free Conformance Checks | 3/5 | In Progress|  |
+| 172. Source-Free Conformance Checks | 4/5 | In Progress|  |
 | 173. Verify Pipeline Core | 0/TBD | Not started | - |
 | 174. Verify Classifier | 0/TBD | Not started | - |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |

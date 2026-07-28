@@ -4,13 +4,13 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 171-07-PLAN.md
-last_updated: "2026-07-28T20:30:58.241Z"
+last_updated: "2026-07-28T20:40:15.339Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 22
-  completed_plans: 17
+  completed_plans: 18
   percent: 10
 ---
 
@@ -26,7 +26,24 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 172 (source-free-conformance-checks) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
+
+`172-04-PLAN.md` registered both CHECK-03/CHECK-05 commands on the CLI surface next to
+`chunk-provenance-status`: `boardsmith trace-check [--project <dir>] [--json]` and
+`boardsmith drift-check [--project <dir>] [--json]`, no mode/repair flag, matching the existing
+registration shape exactly. Pinned 172-CONTEXT.md decision 6 — findings exit 0, tool failure exits
+non-zero — with `src/cli/cli-conformance-commands.test.ts`, the first test in this repo to spawn
+`node bin/boardsmith.js` as a REAL child process rather than call a command function in-process
+(the only way to exercise `cli.ts`'s `parseAsync()`/top-level-catch exit-code path for real). 4
+spawns: `trace-check` against a fixture with an untested claim (exit 0, JSON, `claim-untested`
+finding present), `trace-check` against a non-bs-project (exit 1, single clean line naming the dir
+and `--project`, no stack frame/`.ts:` ref/repo `src/` path), `drift-check` against a real
+two-commit git fixture with a changed manifest file (exit 0, JSON, `chunk-code-drifted` finding
+present), `drift-check` against a non-git directory (exit 1, same message discipline). All fixture
+projects confirmed byte-identical before/after. Zero changes needed to 172-02's/172-03's
+already-implemented command logic — this plan was pure CLI wiring + proof. `npm test`: 3503/3503.
+The CLI surface plan 172-05's real-game proof harness invokes now exists and works. See
+`.planning/phases/172-source-free-conformance-checks/172-04-SUMMARY.md`.
 
 `171-07-PLAN.md` is the phase's PROC-01 record: `chunk-check` and `chunk-provenance-status` proven
 end-to-end against COPIES of both real reference games (`~/BoardSmithGames/seven`, read-only,
@@ -519,6 +536,7 @@ Recent decisions affecting current work:
 - [Phase 172]: parseVerifiedAgainst fixed to use findHeadingIndex instead of chunkText.indexOf, closing the latent f73153a3 recurrence
 - [Phase ?]: Three-rung claim-resolution ladder (owners -> live-claim validity -> authoring chunk) implemented as sequential array filters; rung 3 falls back to rung-2 survivors when authoring narrowing would empty the set, never dropping to nothing
 - [Phase 172]: drift-check.ts: hand-written execFileAsync instead of promisify(execFile) — Node's util.promisify.custom symbol is dropped when execFile is wrapped for test mocking, silently changing the resolved shape from {stdout,stderr} to a positional array
+- [Phase ?]: [Phase 172-04]: trace-check/drift-check registered on the CLI surface with --project/--json only, no mode flag; pinned findings-exit-0/tool-failure-exits-non-zero via a real child-process spawn of node bin/boardsmith.js (first such test in this repo)
 
 ### Pending Todos
 
@@ -530,7 +548,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T20:29:30.657Z
+Last session: 2026-07-28T20:38:37.573Z
 Stopped at: Completed 171-07-PLAN.md
 Resume file: 
 None
