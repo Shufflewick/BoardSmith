@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { readBoardsmithVersion } from './lib/boardsmith-version.js';
 import { initCommand } from './commands/init.js';
 import { devCommand } from './commands/dev.js';
 import { buildCommand } from './commands/build.js';
@@ -24,7 +25,7 @@ const program = new Command();
 program
   .name('boardsmith')
   .description('BoardSmith CLI - Build and run board games')
-  .version('0.0.1');
+  .version(readBoardsmithVersion());
 
 // Project initialization
 program
