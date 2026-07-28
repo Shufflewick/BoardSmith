@@ -18,6 +18,7 @@ import {
   GAPS_BEGIN,
   GAPS_END,
 } from './ingest-archive.js';
+import { computeVerificationScope } from './chunk-provenance.js';
 
 /**
  * `ingest-archive` exists because nine successive attempts to get an ingest session to perform
@@ -483,5 +484,223 @@ describe('edition normalization (F-1)', () => {
     const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).toContain('Edition: Second Edition, 2019 printing');
     expect(index).not.toContain('Edition note:');
+  });
+});
+
+/**
+ * Regression suite for CONTEXT.md decision 1b (Phase 173, 2026-07-28): `ingest-archive` reports
+ * success ("provenance header updated") on an already-ingested project while silently failing to
+ * write `Source hash:`/`Transcribed:`, orphaning a wrapped `Source:` paragraph, and clobbering a
+ * real `Edition:` value. Reproduced twice — by `173-RESEARCH.md` and independently by the phase
+ * orchestrator against a `cp -R` copy of `seven`.
+ *
+ * The fixture below reproduces `seven`'s real shape verbatim (title, blank, real free-text
+ * Edition:, blank, wrapped Source: paragraph, `## Slices` / `## Term → Slice` sections) — it
+ * deliberately carries NO `Source hash:`, NO `Transcribed:`, and NO gaps fences, matching both
+ * reference games as read live 2026-07-28.
+ *
+ * Every test below fails against the pre-fix code (Task 2 has not run yet).
+ */
+describe('ingest-archive — existing INDEX.md adoption (decision 1b)', () => {
+  // A dedicated source path named `rules.pdf` (not the outer `src-rules.pdf`) so the canonical
+  // Source: value this suite asserts on (`rulebook/source/rules.pdf`) matches what
+  // computeVerificationScope's real-game payoff check (B10) actually reads.
+  let rulesPdfPath: string;
+
+  beforeEach(async () => {
+    rulesPdfPath = join(dir, 'rules.pdf');
+    await fs.writeFile(rulesPdfPath, SOURCE_BYTES);
+  });
+
+  const WRAPPED_SOURCE_LINE1 =
+    'Source: `rules.pdf` (2 pages). This index is the term → slice cross-reference. It is built from the';
+  const WRAPPED_SOURCE_LINE2 = "transcription subagents' returned `citedTerms[]` lists.";
+  const SEVEN_EDITION =
+    'not stated in the rulebook (no edition/printing on cover, title page, or colophon) — ' +
+    'pending designer confirmation';
+
+  /** Builds a synthetic pre-provenance INDEX.md reproducing seven's real shape. */
+  async function writePreProvenanceIndex(
+    baseDir: string,
+    opts: {
+      gameName?: string;
+      edition?: string;
+      sourceLines?: string[];
+      sliceMarker?: string;
+      projectName?: string;
+    } = {},
+  ): Promise<string> {
+    const gameName = opts.gameName ?? 'seven';
+    const edition = opts.edition ?? SEVEN_EDITION;
+    const sourceLines = opts.sourceLines ?? [WRAPPED_SOURCE_LINE1, WRAPPED_SOURCE_LINE2];
+    const sliceRow = `| \`01-core.md\` | p.1 | ${opts.sliceMarker ?? 'core rules'} |`;
+    const content = [
+      `# Rulebook Index — ${gameName}`,
+      '',
+      `Edition: ${edition}`,
+      '',
+      ...sourceLines,
+      '',
+      '## Slices',
+      '',
+      '| slice | pages | covers |',
+      '|-------|-------|--------|',
+      sliceRow,
+      '',
+      '## Term → Slice',
+      '',
+      '| term | slice |',
+      '|------|-------|',
+      '| example term | `01-core.md` |',
+      '',
+    ].join('\n');
+    const project = join(baseDir, opts.projectName ?? 'game');
+    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, 'rulebook', 'INDEX.md'), content);
+    return project;
+  }
+
+  const readIndex = (project: string) =>
+    fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+
+  it('B1 insert-if-absent (hash): inserts Source hash: with the independently-computed sha256', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    const match = /^Source hash: ([0-9a-f]{64})$/m.exec(index);
+    expect(match, 'Source hash: line must be present and well-formed').not.toBeNull();
+    const archived = await fs.readFile(join(project, 'rulebook', 'source', 'rules.pdf'));
+    const expectedHash = createHash('sha256').update(archived).digest('hex');
+    expect(match![1]).toBe(expectedHash);
+    expect(expectedHash).toBe(SOURCE_HASH);
+  });
+
+  it('B2 insert-if-absent (transcribed): inserts a well-formed Transcribed: date', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    expect(index).toMatch(/^Transcribed: \d{4}-\d{2}-\d{2}$/m);
+  });
+
+  it('B3 header order/contiguity: the four HEADER_LABELS lines appear in order with nothing between Source: and Transcribed:', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    let cursor = -1;
+    for (const label of HEADER_LABELS) {
+      const at = index.search(new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'm'));
+      expect(at, `${label} must be present`).toBeGreaterThan(cursor);
+      cursor = at;
+    }
+    const sourceIdx = index.search(/^Source hash:/m);
+    const transcribedIdx = index.search(/^Transcribed:/m);
+    const between = index.slice(sourceIdx, transcribedIdx).split('\n').slice(1, -1);
+    expect(between.every((l) => l.trim() === ''), 'no non-empty line between Source hash: and Transcribed:').toBe(true);
+  });
+
+  it('B4 Edition preserved: with no --edition, the real free-text Edition: line is byte-identical afterward', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    expect(index).toContain(`Edition: ${SEVEN_EDITION}`);
+  });
+
+  it('B5 Edition still settable: with --edition supplied, the line updates', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true, edition: '2nd edition' });
+    const index = await readIndex(project);
+    expect(index).toContain('Edition: 2nd edition');
+    expect(index).not.toContain(SEVEN_EDITION);
+  });
+
+  it('B6 F-1 unchanged: a recognizably-empty --edition normalizes to EDITION_UNKNOWN with an Edition note:', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, {
+      project,
+      json: true,
+      edition: 'none stated in the rulebook',
+    });
+    const index = await readIndex(project);
+    expect(index).toContain(`Edition: ${EDITION_UNKNOWN}`);
+    expect(index).toContain('Edition note: none stated in the rulebook');
+  });
+
+  it('B7 wrap-safe: the wrapped Source: prose is intact, with its continuation on the next physical line', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    const prose =
+      '(2 pages). This index is the term → slice cross-reference. It is built from the';
+    const proseIdx = index.indexOf(prose);
+    expect(proseIdx, 'wrapped prose must survive verbatim').toBeGreaterThan(-1);
+    const restOfLine = index.slice(proseIdx).split('\n');
+    expect(restOfLine[1]).toContain("transcription subagents' returned");
+  });
+
+  it('B8 canonical Source wins: the FIRST ^Source: match is the bare canonical path', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    const match = /^Source:\s*(.*)$/m.exec(index);
+    expect(match).not.toBeNull();
+    expect(match![1].trim()).toBe('rulebook/source/rules.pdf');
+  });
+
+  it('B9 bare-path in-place: an already-canonical Source: is replaced in place, never duplicated', async () => {
+    const project = await writePreProvenanceIndex(dir, {
+      sourceLines: ['Source: rulebook/source/rules.pdf'],
+    });
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    const matches = index.match(/^Source:/gm) ?? [];
+    expect(matches).toHaveLength(1);
+    expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/rules.pdf');
+  });
+
+  it('B10 payoff check: computeVerificationScope reports full for the repaired fixture', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const scope = await computeVerificationScope(project);
+    expect(scope.scope).toBe('full');
+  });
+
+  it('B11 idempotence: running the command twice produces a byte-identical INDEX.md the second time', async () => {
+    const project = await writePreProvenanceIndex(dir);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const afterFirst = await readIndex(project);
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const afterSecond = await readIndex(project);
+    expect(afterSecond).toBe(afterFirst);
+    // And it must not have accumulated a duplicate canonical Source: line either.
+    expect((afterSecond.match(/^Source:/gm) ?? [])).toHaveLength(1);
+  });
+
+  it('B12a no scaffold-overwrite: a normal run leaves a distinctive existing marker untouched', async () => {
+    const project = await writePreProvenanceIndex(dir, { sliceMarker: 'DISTINCTIVE_MARKER_XYZ' });
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    expect(index).toContain('DISTINCTIVE_MARKER_XYZ');
+  });
+
+  it('B12b no scaffold-overwrite: a forced repair failure never falls through to a fresh scaffold', async () => {
+    const project = await writePreProvenanceIndex(dir, { sliceMarker: 'DISTINCTIVE_MARKER_XYZ' });
+    const indexPath = join(project, 'rulebook', 'INDEX.md');
+    const before = await fs.readFile(indexPath, 'utf-8');
+    // Write-only, no read permission: fs.access's existence probe (F_OK) still succeeds, but the
+    // repair's own fs.readFile fails — forcing exactly the mid-repair throw this test exists to
+    // prove is safe. (A fully write-blocked file would fail identically old vs. new code, since
+    // both the repair write AND the scaffold write would be blocked; write-only-no-read isolates
+    // the read failure so old code's catch-and-scaffold path is free to run if it still exists.)
+    await fs.chmod(indexPath, 0o200);
+    try {
+      await expect(
+        ingestArchiveCommand(rulesPdfPath, { project, json: true }),
+      ).rejects.toThrow();
+    } finally {
+      await fs.chmod(indexPath, 0o644);
+    }
+    const after = await fs.readFile(indexPath, 'utf-8');
+    expect(after).toBe(before);
+    expect(after).toContain('DISTINCTIVE_MARKER_XYZ');
   });
 });
