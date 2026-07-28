@@ -19,7 +19,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, statSync, w
 import { join, dirname } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { installClaudeCommand } from './install-claude-command.js';
+import { installClaudeCommand, uninstallClaudeCommand } from './install-claude-command.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -104,6 +104,7 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
     'bs-check-status',
     'bs-insert-chunk',
     'bs-generate-ai',
+    'bs-verify-game',
   ];
 
   beforeAll(async () => {
@@ -121,7 +122,7 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
   });
 
   describe('DIST-01', () => {
-    it('installs bs- skill family: all 6 bs-<name>/SKILL.md + shared reference tree under bs-shared/', () => {
+    it('installs bs- skill family: all 7 bs-<name>/SKILL.md + shared reference tree under bs-shared/', () => {
       for (const name of SKILL_NAMES) {
         expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
       }
@@ -131,11 +132,22 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
       expect(existsSync(join(skillsRoot, 'bs-shared', 'ingest'))).toBe(true);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'templates'))).toBe(true);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'aspects'))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify'))).toBe(true);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
       // The un-namespaced flat siblings must NOT exist — they were the collision hazard.
       expect(existsSync(join(skillsRoot, 'build'))).toBe(false);
       expect(existsSync(join(skillsRoot, 'templates'))).toBe(false);
       expect(existsSync(join(skillsRoot, 'state-machine.md'))).toBe(false);
+    });
+
+    it('verify/ shared dir contains every file present in src/cli/slash-command/bs/verify/', () => {
+      const sourceVerifyDir = join(REPO_ROOT, 'src', 'cli', 'slash-command', 'bs', 'verify');
+      const sourceFiles = walk(sourceVerifyDir)
+        .filter((f) => f.endsWith('.md')) // installer excludes *.test.ts
+        .sort();
+      const installedVerifyDir = join(skillsRoot, 'bs-shared', 'verify');
+      const installedFiles = walk(installedVerifyDir).sort();
+      expect(installedFiles).toEqual(sourceFiles);
     });
 
     it('no dangling references: every entry-point SKILL.md relative reference resolves', () => {
@@ -246,6 +258,7 @@ describe('installClaudeCommand — bs- skill handoff contract (no Skill-tool sel
     'bs-check-status',
     'bs-insert-chunk',
     'bs-generate-ai',
+    'bs-verify-game',
   ];
 
   beforeAll(async () => {
@@ -310,6 +323,7 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
     'bs-check-status',
     'bs-insert-chunk',
     'bs-generate-ai',
+    'bs-verify-game',
   ];
 
   beforeAll(async () => {
@@ -345,7 +359,7 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
     for (const name of SKILL_NAMES) {
       expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
     }
-    for (const dir of ['build', 'ingest', 'templates', 'aspects']) {
+    for (const dir of ['build', 'ingest', 'templates', 'aspects', 'verify']) {
       expect(existsSync(join(skillsRoot, 'bs-shared', dir))).toBe(true);
     }
     expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
@@ -448,6 +462,7 @@ describe('installClaudeCommand — partial install is not misreported as complet
     'bs-check-status',
     'bs-insert-chunk',
     'bs-generate-ai',
+    'bs-verify-game',
   ];
 
   beforeAll(() => {
@@ -473,7 +488,7 @@ describe('installClaudeCommand — partial install is not misreported as complet
     for (const name of SKILL_NAMES) {
       expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
     }
-    for (const dir of ['build', 'ingest', 'templates', 'aspects']) {
+    for (const dir of ['build', 'ingest', 'templates', 'aspects', 'verify']) {
       expect(existsSync(join(skillsRoot, 'bs-shared', dir))).toBe(true);
     }
     expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
@@ -499,6 +514,7 @@ describe('installClaudeCommand — empty shared dir is detected as partial, not 
     'bs-check-status',
     'bs-insert-chunk',
     'bs-generate-ai',
+    'bs-verify-game',
   ];
 
   beforeAll(() => {
@@ -506,13 +522,13 @@ describe('installClaudeCommand — empty shared dir is detected as partial, not 
     tempDir = mkdtempSync(join(tmpdir(), 'bs-install-emptyshared-'));
     process.chdir(tempDir);
     skillsRoot = join(tempDir, '.claude', 'skills');
-    // Simulate an interrupt AFTER all 5 SKILL.md were written and the shared dirs were CREATED
+    // Simulate an interrupt AFTER all 7 SKILL.md were written and the shared dirs were CREATED
     // by fs.cp but BEFORE their leaf files were populated: every dir exists, all are empty.
     for (const name of SKILL_NAMES) {
       mkdirSync(join(skillsRoot, name), { recursive: true });
       writeFileSync(join(skillsRoot, name, 'SKILL.md'), 'placeholder from interrupted install');
     }
-    for (const dir of ['build', 'ingest', 'templates', 'aspects']) {
+    for (const dir of ['build', 'ingest', 'templates', 'aspects', 'verify']) {
       mkdirSync(join(skillsRoot, 'bs-shared', dir), { recursive: true });
     }
   });
@@ -532,5 +548,82 @@ describe('installClaudeCommand — empty shared dir is detected as partial, not 
     expect(existsSync(join(skillsRoot, 'bs-shared', 'build', 'build.md'))).toBe(true);
     expect(existsSync(join(skillsRoot, 'bs-shared', 'ingest', 'transcription.md'))).toBe(true);
     expect(existsSync(join(skillsRoot, 'bs-shared', 'aspects', 'index.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-resolution.md'))).toBe(true);
+  });
+});
+
+/**
+ * WR-03a (verify-specific case): the `verify/` shared dir added by this plan must be independently
+ * repairable — created but left empty by an interrupted install (not merely covered incidentally
+ * by the all-dirs-empty case above). Empties only `verify/` from an otherwise-complete tree and
+ * asserts a non-force install repopulates it.
+ */
+describe('installClaudeCommand — partial verify/ shared dir is detected and repaired (WR-03a, verify)', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let skillsRoot: string;
+
+  beforeAll(async () => {
+    origCwd = process.cwd();
+    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-verify-partial-'));
+    process.chdir(tempDir);
+    // Fresh, complete install first.
+    await installClaudeCommand({ local: true, force: true, skipLink: true });
+    skillsRoot = join(tempDir, '.claude', 'skills');
+
+    // Now simulate an interrupt that emptied only the verify/ shared dir, leaving every other
+    // installer-owned path intact — the leaf probe must catch this dir specifically.
+    rmSync(join(skillsRoot, 'bs-shared', 'verify'), { recursive: true, force: true });
+    mkdirSync(join(skillsRoot, 'bs-shared', 'verify'), { recursive: true });
+  });
+
+  afterAll(() => {
+    process.chdir(origCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('a non-force install repopulates an emptied verify/ shared dir', async () => {
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-resolution.md'))).toBe(false);
+
+    await installClaudeCommand({ local: true, force: false, skipLink: true });
+
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-resolution.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'staging-dispatch.md'))).toBe(true);
+  });
+});
+
+/**
+ * `boardsmith claude uninstall` must remove bs-verify-game (and, by extension, the whole
+ * installer-owned tree) and leave no orphan behind under the shared tree.
+ */
+describe('installClaudeCommand — uninstall removes bs-verify-game with no orphan', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let skillsRoot: string;
+
+  beforeAll(async () => {
+    origCwd = process.cwd();
+    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-uninstall-'));
+    process.chdir(tempDir);
+    await installClaudeCommand({ local: true, force: true, skipLink: true });
+    skillsRoot = join(tempDir, '.claude', 'skills');
+  });
+
+  afterAll(() => {
+    process.chdir(origCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('uninstall removes bs-verify-game/ and bs-shared/verify/, leaving no orphan', async () => {
+    expect(existsSync(join(skillsRoot, 'bs-verify-game', 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-resolution.md'))).toBe(true);
+
+    await uninstallClaudeCommand({ local: true });
+
+    expect(existsSync(join(skillsRoot, 'bs-verify-game'))).toBe(false);
+    expect(existsSync(join(skillsRoot, 'bs-shared'))).toBe(false);
+    // No orphan: every entry under skillsRoot named bs-* (installer-owned prefix) is gone.
+    const remaining = readdirSync(skillsRoot).filter((entry) => entry.startsWith('bs-'));
+    expect(remaining).toEqual([]);
   });
 });
