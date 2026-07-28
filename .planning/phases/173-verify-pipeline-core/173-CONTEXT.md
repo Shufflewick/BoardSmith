@@ -71,6 +71,41 @@ against. Area 1 below resolves this, and it is the phase's highest-risk item.
    Rejected: refusing and deferring to Phase 179's source-free mode — that mode does not exist yet,
    and it would leave this phase unprovable against real data.
 
+1b. **`ingest-archive` MUST BE FIXED FIRST — it is broken on already-ingested projects.**
+   Added 2026-07-28 after `173-RESEARCH.md` found this and the orchestrator independently
+   reproduced it against a `cp -R` copy of `seven`. Decision 1 is **unimplementable until this
+   lands**, and every other success criterion in this phase is unprovable against real data.
+
+   Reproduced: `boardsmith ingest-archive rules.pdf` in an already-ingested project printed
+   `index: rulebook/INDEX.md provenance header updated (existing sections untouched)` — a FALSE
+   SUCCESS — while producing three distinct defects:
+
+   | Field | Before | After |
+   |---|---|---|
+   | `Edition:` | `not stated in the rulebook (no edition/printing on cover, title page, or colophon) — pending designer confirmation` | `not stated in the rulebook` |
+   | `Source:` | `` `rules.pdf` (2 pages). This index is the term → slice… `` (wrapped prose) | `rulebook/source/rules.pdf`, orphaning the continuation line |
+   | `Source hash:` | absent | **still absent** |
+   | `Transcribed:` | absent | **still absent** |
+
+   Root causes, in order of severity:
+   a. **Silent no-op insert.** `Source hash:` / `Transcribed:` are written with regex `.replace()`,
+      which no-ops when the line is absent rather than inserting it. A fresh-ingest scaffold has
+      those lines; a real existing `INDEX.md` does not.
+   b. **Content corruption.** The real `Source:` line is WRAPPED prose. Replacing only its first
+      line orphans the continuation into a dangling fragment.
+   c. **Destroys a real `Edition:` value** when `--edition` is not resupplied — overwriting exactly
+      the designer-pending qualifier that Phase 171's F-1 fix exists to protect.
+
+   Payoff check, run independently: `chunk-provenance-status` still reports `pre-provenance`
+   afterward. Adoption silently fails to do its one job.
+
+   **Scope of the fix (wave 1, user-chosen 2026-07-28):** `ingestArchiveCommand`'s existing-INDEX
+   branch only — insert-if-absent rather than replace-if-present, wrap-safe `Source:` replacement,
+   and never clobber a real `Edition:`. Prove against copies of BOTH reference games. Do not let it
+   grow into a rewrite of `ingest-archive`, and do not add the broader refuse-on-ambiguity hardening
+   (considered and deliberately not chosen — file it as a todo if the fix surfaces more of the
+   false-success class).
+
 2. **Adoption is GATED on designer confirmation.** It writes to the live project (creates
    `rulebook/source/`, rewrites `INDEX.md`'s header). PROC-02's "how, never what" autonomy rule
    makes acquiring a source-of-truth the designer's call, not the session's. This is the one live
@@ -206,8 +241,13 @@ against. Area 1 below resolves this, and it is the phase's highest-risk item.
 <specifics>
 ## Specific Ideas
 
-- The adoption path (decision 1) is the single highest-risk item and should be planned first and
-  proven early — everything downstream assumes an archived, hashed source exists.
+- The adoption path (decision 1) is the single highest-risk item and is planned FIRST as wave 1,
+  because decision 1b's `ingest-archive` fix gates everything: no other success criterion can be
+  proven against a real game until an adopted project actually computes `full` scope rather than
+  `pre-provenance`. The wave-1 exit condition is exactly that — run adoption on copies of both
+  games and confirm `chunk-provenance-status` reports the adopted scope, not merely that the
+  command exited 0. **`ingest-archive` reported success while doing damage; do not trust an exit
+  code as the proof.**
 - Success criterion 4 (kill mid-run, re-invoke, resume) demands a REAL interrupted run, not a unit
   test of the ledger reader. Plan an actual kill-and-resume proof.
 - Success criterion 3 (orchestrator never reads a slice) is an ABSENCE, which is hard to prove.
