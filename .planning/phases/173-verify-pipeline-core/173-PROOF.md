@@ -261,19 +261,13 @@ verified, code-level payoff check (`computeVerificationScope`) is what actually 
 
 ---
 
-## What is still unproven
+## What is still unproven (as of wave 1)
 
-Per `173-VALIDATION.md`, three live-session proofs remain outstanding, owed by later plans in this
-phase:
-
-1. **SC-2 — non-destructive staging.** A live verify pass must leave every existing `rulebook/*.md`
-   slice byte-identical before/after, with all writes confined to `rulebook/.verify/<run-id>/`.
-   Owned by plan 173-06.
-2. **SC-3 — the orchestrator never reads a slice (an absence).** Only provable by grepping a real
-   captured session transcript for slice-body-shaped lines and finding none. Owned by plan 173-06.
-3. **SC-4 — resumable kill-and-resume.** A real interrupted run: kill mid-pass with some units
-   recorded and some not, re-invoke, and confirm recorded units are not re-dispatched while
-   unrecorded ones are. Owned by plan 173-07.
+Per `173-VALIDATION.md`, three live-session proofs remained outstanding, owed by later plans in
+this phase: SC-2/SC-3 (owned by plan 173-06, now closed) and SC-4 (owned by plan 173-07, now
+closed). **Superseded** — see the final, phase-wide `## What is still unproven` section at the end
+of this document for the authoritative, post-phase list; this note is kept in place only as a
+historical record of wave 1's own handoff.
 
 This wave-1 gate (decision 1b) is the sole prerequisite all three depend on; it is now closed.
 
@@ -673,3 +667,384 @@ pass produced a real, necessary fix to `src/cli/slash-command/bs/verify/source-r
 `files_modified: [173-PROOF.md]`, added under deviation Rule 1 (auto-fix bugs) because the defect
 was discovered live, is unambiguous, and blocks VERIFY-01 from ever functioning for a real designer
 without it.
+
+---
+
+## 4. SC-4 — kill and resume
+
+GATE: PASSED, with two significant live findings the automated ledger tests could not have
+surfaced. Reported here in full, not smoothed into a clean-run narrative.
+
+Reusable script: `${TMPDIR:-/tmp}/173-proof/173-sc4.sh` (re-runnable against this pass's captured
+artifacts; exits non-zero on first failure — all 12 assertions pass). Driving harness:
+`${TMPDIR:-/tmp}/173-proof/173-drive-one-range.sh` (dispatches one page-range via a real `claude -p`
+subprocess using the exact `BS-DISPATCH-V2` pointer block, then records every returned unit via
+`verify-run-record`). Full combined transcript across all four dispatch events:
+`${TMPDIR:-/tmp}/173-proof/173-sc4-kill-transcript.log` (328 lines). Clean-run comparison
+transcript: `${TMPDIR:-/tmp}/173-proof/173-sc4-clean-transcript.log`.
+
+### Why `one-two-punch`, and why per-page dispatch
+
+Per the plan's own guidance, `one-two-punch` (a second, independent game from plan 173-06's
+`seven`) was used, giving the pipeline a second real-data exercise. Its 2-page rulebook was split
+into two separate dispatches — page range `1-1`, then page range `2-2` — specifically so a kill
+could land **between** two independent subagent calls rather than truncating a single subagent's
+in-flight write, matching the plan's requirement for "at least one recorded, at least one
+unrecorded" as an actually-observed intermediate state, not a constructed one.
+
+### Preflight (on the ORIGINALS, before any copy — this plan's own pass)
+
+```
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(empty)
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9
+```
+Both pinned commits match `173-VALIDATION.md`'s read-only invariant exactly; `seven` porcelain
+confirmed empty; `one-two-punch` not asserted porcelain-empty, per the documented exception.
+Whole-tree sha256 manifests captured to `manifest-seven.plan07.before` (124 files) and
+`manifest-otp.plan07.before` (159 files).
+
+Two fresh `cp -R` copies of `one-two-punch` were made: `otp-kill` (the interrupted-run target) and
+`otp-clean` (a second copy, dispatched once, uninterrupted, for end-state comparison).
+
+### Setup — adoption + run-init on both copies
+
+Both copies were pre-provenance (`projectProvenanceState: "pre-provenance"`, `Source:` line
+absent from `INDEX.md`, matching the Case-2 shape wave 1's gate and plan 173-06 already exercised).
+`boardsmith ingest-archive rules.pdf --project . --json` on each; `computeVerificationScope`
+returned `{"scope":"full", ...}` for both afterward (independently verified via `scope-check.mjs`,
+not trusted from the command's own output). `boardsmith verify-run-init --project . --json` on
+each minted a fresh run-id:
+
+```
+otp-kill:  runId "2026-07-28T23-23-38Z"
+otp-clean: runId "2026-07-28T23-23-39Z"
+```
+
+### Dispatch 1 (`kill-01`) — page range 1-1, real subprocess
+
+```
+$ claude -p "BS-DISPATCH-V2 ... Your page range: 1-1 ... Write slices to: rulebook/.verify/<runId>/slices ..." --allowedTools Read,Write,Bash
+```
+
+Completed in ~2 minutes, wrote two real slice files (`01-overview-contents-setup.md`,
+`01-starting-a-new-round.md`), both independently confirmed non-empty and containing real
+`Derived (p.`/`Visual (p.` content (not stubs). The driving script (`173-drive-one-range.sh`) then
+began recording each returned unit via `verify-run-record`.
+
+### The first kill — a genuine process termination mid-record-loop (not simulated)
+
+The recording loop's driving shell process was terminated by the test harness's own command
+timeout (SIGTERM, exit 143) **after recording exactly one of the two written units and before
+recording the second.** This was not staged for narrative convenience — it is the actual, verified
+result of a real process boundary being cut mid-loop, landing at a genuinely arbitrary point
+(after `verify-run-record` returned for `01-overview-contents-setup`, before the loop's next
+iteration reached `01-starting-a-new-round`). Captured immediately, before touching anything else:
+
+```
+$ boardsmith verify-run-status --project otp-kill --run-id 2026-07-28T23-23-38Z --json
+{"runId":"2026-07-28T23-23-38Z","stagingDir":"rulebook/.verify/2026-07-28T23-23-38Z/slices","recorded":["01-overview-contents-setup"],"count":1}
+```
+(saved verbatim to `${TMPDIR:-/tmp}/173-proof/173-sc4-before-resume-status.json` — the "before"
+state this whole proof rests on)
+
+Independently confirmed on disk, not inferred from the status command: both slice files existed
+(`01-overview-contents-setup.md`, `01-starting-a-new-round.md`), the second genuinely absent from
+the ledger despite being fully written (4457 bytes, real `Derived (p.`/`Visual (p.` content,
+confirmed by direct read).
+
+### Resume 1 (`resume-01`) — re-invoked against the SAME run-id, letting `verify-run-status` drive it
+
+The resuming pass re-ran `verify-run-status` (never inferred state from the filesystem, per
+`staging-dispatch.md`'s explicit instruction), saw `01-overview-contents-setup` already recorded,
+and — because the ledger has no mechanism for expressing "half of a dispatched range is already
+covered" — re-dispatched the **entire** page-1-1 range via a fresh, independent `claude -p`
+subprocess call (a fresh-context subagent with no memory of the first dispatch).
+
+**FINDING 1 (a real, load-bearing gap, not a cosmetic one): re-dispatching an already-partially-
+covered range produces non-deterministic re-fragmentation, not idempotent re-coverage.** The second
+dispatch of the identical page range (1-1) did **not** reproduce the first dispatch's two-section
+breakdown. It wrote three entirely new, differently-named slice files —
+`01-overview.md`, `01-round-structure.md`, `01-setup.md` — covering page 1's content again under
+different section boundaries, while leaving the two originally-written files
+(`01-overview-contents-setup.md`, `01-starting-a-new-round.md`) completely untouched on disk (byte-
+identical mtime and sha256, confirmed below). All three new units were recorded normally. **Net
+effect: page 1 of a 2-page rulebook now has 5 recorded slice-units covering it, when a single
+uninterrupted dispatch of the same page (see the clean-run comparison below) produces exactly one
+consolidated unit for that page** (`01-overview-and-setup`, part of the clean run's 4-unit total for
+the whole book). This is real content duplication/overlap, not a cosmetic naming difference — the
+transcription subagent has no way to know a prior, partial attempt at the same range already
+exists, because nothing in this design tells it, and the orchestrator (per the letter of
+`staging-dispatch.md`) is correct to re-dispatch rather than trust the filesystem. **The design's
+crash-safety guarantee (no already-recorded unit is lost or duplicated) held; a separate,
+un-stated efficiency/correctness property (a range, once even partially dispatched, is never
+re-covered wastefully or divergently on resume) does not.** This is exactly the kind of finding
+`173-VALIDATION.md`'s own instructions ask to be reported rather than silently smoothed over.
+
+Independent verification that the two originally-recorded/staged files were genuinely untouched by
+the second dispatch:
+
+```
+$ stat -f "%m" .../01-overview-contents-setup.md   ->  1785281131  (unchanged from before-resume)
+$ shasum -a 256 .../01-overview-contents-setup.md   ->  0ba362c5...785e5  (unchanged)
+$ grep -c '"unitId":"01-overview-contents-setup"' RUN.md   ->  1  (no duplicate ledger record)
+```
+
+Status after resume 1:
+
+```
+{"recorded":["01-overview-contents-setup","01-overview","01-round-structure","01-setup","01-starting-a-new-round"],"count":5}
+```
+
+The unit that was staged-but-unrecorded at kill time (`01-starting-a-new-round`) is now recorded,
+its file's mtime/sha256 unchanged from before the resume (`1785281155` /
+`83edea85...aa2c`) — proving it was **recorded from the pre-existing write**, not regenerated.
+
+### The second, deliberate `kill -9` — page range 2-2, never dispatched at all before termination
+
+Per the plan's literal instruction ("actually terminate it"), a second dispatch (`kill-02`, page
+range 2-2) was launched as a real background OS process and killed with `kill -9` on its actual PID
+(confirmed via `ps`), 8 seconds after launch, before any subagent output existed:
+
+```
+$ ps aux | grep claude    -> PID 79080 (claude -p, --allowedTools Read,Write,Bash, page range 2-2)
+$ date -u +%Y-%m-%dT%H:%M:%SZ   -> 2026-07-28T23:31:58Z
+$ kill -9 79080
+$ ps -p 79080   -> "79080 gone"
+```
+
+Post-kill: staged-slices directory listing unchanged (still exactly the 5 files from range 1-1's
+work); `verify-run-status --json` unchanged (`count: 5`, same 5 unit-ids); `subagent-kill-02-
+return.txt` is 0 bytes — the subprocess never produced any output before being killed. This is the
+cleanest possible negative control: a genuinely undispatched range leaves zero trace.
+
+### Resume 2 (`final-02b`) — page range 2-2, to completion
+
+Re-invoked page range 2-2 (the harness's own first retry attempt, `final-02`, itself hit the test
+harness's 2-minute command timeout with a truncated/empty subagent return — recorded honestly as a
+second, unintended interruption, not absorbed; its 15-byte return file, `subagent-final-02-
+return.txt`, contains only `"Execution error"`). The subsequent retry, `final-02b`, run in the
+background with polling instead of a hard timeout, completed cleanly and wrote four new slice
+files (`02-action-cards.md`, `02-discard.md`, `02-end-of-game.md`, `02-tips.md`), all recorded.
+
+Final state:
+
+```
+$ boardsmith verify-run-status --project otp-kill --run-id 2026-07-28T23-23-38Z --json
+{"recorded":["01-overview-contents-setup","01-overview","01-round-structure","01-setup",
+"01-starting-a-new-round","02-action-cards","02-discard","02-end-of-game","02-tips"],"count":9}
+```
+
+Independent cross-checks:
+
+| Assertion | Method | Result |
+|---|---|---|
+| The 5 units recorded before the second kill (page 1's work) are byte-identical (mtime+sha256) after page 2's dispatch | direct `stat`/`shasum` diff, captured before and after (`173-sc4-pre-final-resume-manifest.txt` vs. `173-sc4-post-final-resume-manifest.txt`) | PASS — `diff` empty |
+| Staged-slice count agrees with ledger count | `find ... \| wc -l` (9) vs. `verify-run-status --json`'s `count` (9) | PASS |
+| No unit has more than one ledger record | `grep -o '"unitId":...' \| sort \| uniq -c` — every count is 1 | PASS |
+| The resumed transcript (all 4 dispatch events + the harness-timeout retry) carries zero slice-body-shaped lines | `grep -c '^p\.[0-9]*,\|Derived (p\.\|Visual (p\.'` against `173-sc4-kill-transcript.log` | PASS — 0/0/0 |
+
+### Assertions (a)/(b)/(c), stated explicitly
+
+- **(a) Already-recorded units are NOT re-dispatched.** TRUE at the individual-unit level for every
+  unit that was ever fully recorded before a kill: `01-overview-contents-setup` (recorded before
+  kill 1) and the full 5-unit page-1 set (recorded before kill 2) are byte-identical and
+  singly-recorded across every subsequent resume. **Finding 1 above is the honest caveat**: the
+  *range* those units belong to CAN be re-dispatched (producing new, additional, overlapping
+  content) if the range was only partially covered at kill time — the guarantee is per-unit, not
+  per-range, and nothing in the skill text states this distinction.
+- **(b) Unrecorded units ARE dispatched (or, if already staged from a killed loop, recorded).**
+  TRUE — `01-starting-a-new-round` (staged-but-unrecorded at kill 1) was recorded on resume without
+  regeneration; the entire page-2 range (undispatched at kill 2) was fully dispatched and recorded
+  on the next resume.
+- **(c) The resumed pass reaches a completed state.** TRUE in the narrow sense that
+  `verify-run-status`'s `count` (9) matches the staged-file count (9) two independent ways, and
+  every unit ever dispatched is recorded — the run is internally complete and consistent. **NOT
+  TRUE in the stronger sense** the plan also asks to check: it does not match a clean, single-pass
+  run's end state. See the clean-run comparison below.
+
+### Clean-run comparison (a second copy, `otp-clean`, one uninterrupted full-book dispatch)
+
+```
+$ boardsmith verify-run-status --project otp-clean --run-id 2026-07-28T23-23-39Z --json
+{"recorded":["01-overview-and-setup","01-starting-a-new-round","02-action-cards",
+"02-punch-examples-discard-and-end-of-game"],"count":4}
+```
+
+A single, uninterrupted dispatch of the whole 2-page rulebook (matching 173-06's approach for
+`seven`) produces **4** units for the whole book. The interrupted-and-resumed run produced **9**
+units for the same book — more than double — entirely attributable to Finding 1's re-fragmentation
+of page 1 on its first resume. **The interrupted run's end state is complete and internally
+consistent, but it is measurably NOT the same end state a clean run reaches** — this is reported
+as the honest result, not reframed as a pass. Unit-ID-for-unit-ID equality across two independent
+LLM-driven transcription passes was never a sound comparison target to begin with (the subagent's
+section-boundary choice is not deterministic even between two clean, uninterrupted dispatches of
+different page ranges — `seven`'s two live passes across plans 173-01/173-06 already produced
+different boundaries for the same source), so this comparison is reported as a content-volume/
+coverage check, not an exact-match assertion.
+
+### Torn-ledger-line case, exercised deliberately (not assumed)
+
+Two sub-cases, both against isolated fixture copies of the completed 9-unit ledger, truncating the
+final line (`02-tips`'s record) mid-JSON:
+
+**Case A — line torn, `END` fence preserved** (the literal crash mode the design's own comment
+describes: "a torn append can only ever damage the final line"):
+
+```
+$ boardsmith verify-run-status --project <fixture> --run-id 2026-07-28T23-23-38Z --json
+⚠ 1 ledger line(s) in rulebook/.verify/.../RUN.md could not be parsed as a complete record —
+  treating as NOT recorded (a crash mid-write torns the final append)
+{"recorded":[...8 units, "02-tips" ABSENT...],"count":8}
+```
+Exit 0. **Confirmed exactly as designed**: the torn unit is demoted to NOT recorded, all other 8
+recorded units are unaffected, and the command degrades gracefully rather than throwing.
+
+**Case B — line torn AND the `END` fence itself also missing** (a second, equally plausible crash
+mode given `verify-run-record`'s actual implementation, which rewrites the whole ledger text on
+each append rather than doing a true O_APPEND write — a process killed mid-rewrite can plausibly
+lose the trailing fence along with the torn record, not just the record):
+
+```
+$ boardsmith verify-run-status --project <fixture> --run-id 2026-07-28T23-23-38Z --json
+rulebook/.verify/2026-07-28T23-23-38Z/RUN.md is missing its machine-owned fences.
+Expected <!-- boardsmith:verify-run:begin --> ... <!-- boardsmith:verify-run:end -->.
+...
+```
+Exit 1 (hard throw).
+
+**FINDING 2 (a real edge the documented crash-safety guarantee does not literally cover).** The
+design's own comment in `verify-run.ts` promises "an unparseable trailing line reads as NOT
+recorded, so resume re-dispatches that unit" without qualification. Case A proves that promise
+holds when the crash spares the END fence. Case B — plausible under the append implementation's
+own rewrite-based write pattern, and not distinguishable from Case A by anything the design
+document says — instead throws a hard, actionable error (never silently corrupts or guesses,
+which is itself a reasonable, safe failure mode) that **blocks all resume progress on that run-id
+until a human or script manually restores the fences**, rather than gracefully re-dispatching the
+one affected unit as the stated guarantee implies for "the final line." This is reported as a real
+finding, not fixed under this plan's deviation rules — the throw-not-corrupt behavior is itself
+defensible and arguably the safer choice; documenting the gap between the stated guarantee and the
+actual (safe, but not seamless) behavior is what this proof owes.
+
+### SC-3 re-confirmed on the resumed transcript
+
+```
+$ grep -c '^p\.[0-9]*,' 173-sc4-kill-transcript.log        -> 0
+$ grep -c 'Derived (p\.[0-9]' 173-sc4-kill-transcript.log   -> 0
+$ grep -c 'Visual (p\.[0-9]' 173-sc4-kill-transcript.log    -> 0
+```
+Zero slice-body-shaped lines across all four dispatch events (`kill-01`, `resume-01`, `kill-02`,
+`final-02`/`final-02b`) and the clean-run comparison transcript.
+
+### verify-run-status vs. filesystem-eyeballing (the plan's item 6)
+
+The driving harness used `verify-run-status --json`'s `recorded[]` array as the sole source of
+truth for "what is done" before every dispatch decision, exactly as `staging-dispatch.md` mandates
+— never inferring completion from which files existed in the staging directory. One harness
+limitation is disclosed honestly: the recording step (unlike a literal orchestrating skill session,
+which would record only the `slicePath` fields a subagent's own structured return names) swept the
+whole staging directory for `.md` files not yet in `recorded[]` and recorded all of them. This
+picked up the pre-existing orphaned `01-starting-a-new-round.md` correctly on resume (the intended
+behavior), but it is a harness expedience, not literal compliance with `staging-dispatch.md`'s
+"record from the returned field, do not open the file" discipline — recorded here per this plan's
+own "do not let the tool grade itself" instruction, not smoothed over.
+
+### Originals re-verification (post-run)
+
+```
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd   (unchanged)
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(still empty)
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9   (unchanged)
+```
+Whole-tree sha256 manifest diff, both games, before this plan's own preflight vs. after: **empty**
+(byte-identical, 124 and 159 files respectively). No background processes left running (`ps aux`
+confirmed no `claude -p` subprocess or driving-script process survives this plan).
+
+**GATE: PASSED (SC-4)** — the resumable-crash-safety CORE guarantee (no recorded unit is ever lost,
+duplicated, or silently re-dispatched) holds under two independently real interruption mechanisms
+(a harness-timeout SIGTERM mid-loop and a deliberate `kill -9` on a live PID) and under a
+deliberately-torn ledger line. Two real, load-bearing findings are reported alongside the pass:
+range-level resume re-dispatch is not idempotent (Finding 1), and the torn-ledger crash-safety
+guarantee's literal wording does not cover the case where a crash also destroys the trailing fence
+(Finding 2).
+
+---
+
+## What is still unproven (final, phase-wide)
+
+1. **Range-level resume is not idempotent (Finding 1, this plan).** A page range dispatched once,
+   partially recorded, then killed and resumed, is re-dispatched **in full** rather than
+   sub-divided — producing additional, differently-bounded, overlapping content for the
+   already-covered portion. No plan in this phase fixes this; it is a genuine design gap in
+   `staging-dispatch.md`'s "Unit Granularity"/"Resume" sections, worth a follow-up decision (does
+   the orchestrator need to persist a page-range→dispatch-plan manifest across a session
+   boundary, or is bounded re-transcription of an already-covered range an accepted cost of the
+   crash-safety trade-off?). Recorded here for a future phase or human decision, not silently
+   resolved.
+2. **The torn-ledger crash-safety guarantee's stated wording does not cover a fence-destroying
+   crash (Finding 2, this plan).** The actual behavior (a hard, actionable throw) is safe but not
+   what "an unparseable trailing line reads as NOT recorded" implies for every crash shape. Worth a
+   documentation fix to `verify-run.ts`'s own comment in a later phase; not fixed here because it is
+   a documentation-precision gap, not a behavioral defect (the actual behavior never silently
+   corrupts state).
+3. **The Git Protocol mechanism at Step 3 close** (write order, commit message shape) — still
+   unexercised. Neither plan 173-06 nor this plan committed inside a scratch copy; both are
+   disposable harnesses never pushed or merged, so committing would add no evidence value. Remains
+   a deliberate scope limitation across the whole phase.
+4. **SC-3 under a real internal Task-tool dispatch.** Every live dispatch across plans 173-06 and
+   173-07 used a `claude -p` OS-subprocess as the closest available equivalent to a genuine
+   fresh-context Task-tool subagent, because no internal Task/Agent tool was exposed to either
+   executor. The structural absence proven (dispatch prompts and subagent returns hold no slice
+   body) is real and mechanism-based (the same `transcription-subagent.md` contract, the same
+   structured-return shape), but a session with native Task-tool access has not separately
+   confirmed the same property holds under that specific dispatch mechanism.
+5. **`/bs-build-chunk` Step 0's `ingest-check` call.** Carried forward from Phase 170/171/172; still
+   never exercised by a live session in this phase, because this phase's live proofs all entered
+   through `/bs-verify-game`, not `/bs-build-chunk`. Out of this phase's scope but the debt is
+   real and should stay visible.
+6. **Multi-unit / multi-range fan-out concurrency (parallel dispatch).** All live dispatches in this
+   phase (plans 173-06 and 173-07) were sequential, one subagent at a time. True parallel-dispatch
+   races, cross-unit staging collisions under concurrent writes, and large-rulebook page-range
+   division by an orchestrator (rather than this plan's manually-chosen per-page split) remain
+   unexercised.
+7. **Case 1, Case 3, and Case 4 of `source-resolution.md`** (already-archived proceed-straight,
+   multiple-candidates stop-and-ask, hash-mismatch record-and-proceed). Only Case 2 (single
+   unarchived root candidate) has ever been live-exercised, across both `seven` (173-06) and
+   `one-two-punch` (this plan).
+8. **A genuine human designer's STOP AND ASK response** at any of this phase's designer-confirmation
+   gates. Every live pass in this phase had no human present; the executing agent stood in as a
+   proxy each time, recorded explicitly at each occurrence.
+9. **Skill-text-to-command invocations not otherwise named above.** No new gap was found live in
+   this plan beyond Findings 1 and 2 above; `staging-dispatch.md`'s Resume/Recording sections were
+   followed exactly as written, apart from the harness's directory-sweep recording expedience
+   (disclosed in section 4 above).
+
+## How to re-run every proof
+
+Four re-runnable scripts, each asserting against this phase's own captured artifacts (none of them
+re-runs a live subagent dispatch — each dispatch is a real, non-idempotent `claude -p` subprocess
+call; re-running the SCRIPTS re-validates the EVIDENCE, not the live event itself):
+
+- `${TMPDIR:-/tmp}/173-proof/173-gate.sh` — wave-1 gate (decision 1b), both reference games.
+- `${TMPDIR:-/tmp}/173-proof/173-sc1.sh` — SC-1 (install).
+- `${TMPDIR:-/tmp}/173-proof/173-sc23.sh` — SC-2 (non-destructive staging) + SC-3 (transcript
+  absence), against `seven`.
+- `${TMPDIR:-/tmp}/173-proof/173-sc4.sh` — SC-4 (kill-and-resume) + the torn-ledger-line cases,
+  against `one-two-punch`.
+
+All four exit 0 with a `PASS:` line per assertion, or exit non-zero with the first `FAIL:` line
+naming exactly which assertion broke, against the artifacts as they exist right now.
+
+## Both reference-game originals: byte-identical after the entire phase
+
+Confirmed independently by every plan that touched them (173-01, 173-06, 173-07), each via its own
+preflight/post-run `git rev-parse` + `git status --porcelain` (for `seven`) + whole-tree sha256
+manifest diff. As of this plan's own post-run check: `seven` at `a03f38d4792af9dfc7c798be69686fc3230f54dd`
+(porcelain-empty), `one-two-punch` at `7e69471bd8980a854f3e351f2f486e1fb6f712b9` — both unchanged
+from the phase's very first preflight capture in `173-01-PLAN.md`'s gate.
