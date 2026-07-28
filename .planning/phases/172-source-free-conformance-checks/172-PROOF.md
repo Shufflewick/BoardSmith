@@ -427,6 +427,34 @@ process:**
    filed as a todo, not fixed in this proof-only plan** (this plan's `files_modified` is
    `172-PROOF.md`/`172-VALIDATION.md` only; a parser-precision fix belongs to a follow-up task).
 
+   ---
+
+   **RESOLVED, same day, by the phase orchestrator (commit `fix(172): anchor manifest authoring
+   classification to the leading verb`).** The recommendation above was adopted rather than
+   deferred: rung 3 is the mechanism CONTEXT.md decision 3's amendment exists to provide, and
+   shipping it with a known false-authoring path contradicts the reason the amendment was made.
+
+   Reproduced first, independently of this proof's hand-walk, via a direct probe against
+   `parseBuildManifest` — 2 of 7 synthetic status shapes misclassified, both false-authoring:
+   `updated — new coverage added for claim 3` and `touched — depends on the new helper written in
+   game.ts`. A failing test was committed before the fix.
+
+   The fix anchors classification to the status cell's **leading verb** (`leadingVerb()`), making
+   authoring a strict allow-list: only a leading `new`/`written` asserts authoring, and every other
+   verb — including `unchanged`, `updated`, and anything future authors invent — is non-authoring
+   by default. The companion `EDITING_VERBS` blocklist was **removed** as redundant and
+   structurally wrong-shaped: a leading verb cannot be in both disjoint lists, and a blocklist must
+   be exhaustive to be correct while the live data already contained verbs (`unchanged`) it missed.
+   That missing entry is precisely what let this defect through.
+
+   **Re-run against fresh `cp -R` copies of BOTH games after the fix: every finding count
+   identical** (one-two-punch `claim-untested: 157 / ambiguous-claim-ref: 18 / unresolved-claim-ref:
+   22 / test-unlinked: 2 / unassociated-test: 4 / ruling-untested: 2 / manifest-file-missing: 1`;
+   seven `claim-untested: 212 / ambiguous-claim-ref: 13 / test-unlinked: 1 / unassociated-test: 3 /
+   ruling-untested: 3`). This independently confirms this section's own impact analysis — `claim 13`
+   remains `ambiguous-claim-ref` because 4 genuinely-authoring candidates survive without the false
+   one. Suite: 3504/3504. Both originals re-verified unchanged after the re-run.
+
 ### 6. Ruling supersession-exemption — hand-confirmed on real data
 
 `172-RESEARCH.md` measured a raw (pre-supersession-exemption) figure of 3 untested rulings for

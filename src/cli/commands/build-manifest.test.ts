@@ -185,6 +185,37 @@ describe('parseBuildManifest', () => {
     expect(byPath['src/rules/rest.ts']).toBe(false);
     expect(byPath['src/rules/mixed.ts']).toBe(false); // editing verb wins
   });
+
+  it('authoring reads the LEADING verb only — an authoring word later in prose does not authorize', () => {
+    // Found by 172-PROOF.md's hand-walk of the resolution ladder. `/\b(new|written)\b/` matched
+    // anywhere in the status prose, so a row whose leading verb is an editing verb OUTSIDE the
+    // known list ("updated", "touched") but whose prose happens to say "new" or "written" was
+    // classified as authoring. That is the dangerous direction: rung 3 of the decision-3 ladder
+    // narrows TO the authoring chunk, so a false authoring silently attributes a claim citation
+    // to a chunk that merely touched the file.
+    const chunk = tableChunk(
+      [
+        '| tests/a.test.ts | updated — new coverage added for claim 3 |',
+        '| tests/b.test.ts | touched — depends on the new helper written in game.ts |',
+        '| tests/c.test.ts | edited — new assertions written for claim 3 |',
+        '| tests/d.test.ts | NEW (test step) — net-new coverage |',
+        '| tests/e.test.ts | written — added breakGuard() |',
+        // The shape that actually fired on live data (seven/game-end-trigger): a leading
+        // `unchanged` whose prose mentions a hypothetical test that "would go green" if written.
+        '| tests/f.test.ts | unchanged — deliberately; any test written for it would go green |',
+      ].join('\n'),
+    );
+    const byPath = Object.fromEntries(
+      parseBuildManifest(chunk).entries.map((e) => [e.path, e.authoring]),
+    );
+    expect(byPath['tests/a.test.ts']).toBe(false);
+    expect(byPath['tests/b.test.ts']).toBe(false);
+    expect(byPath['tests/c.test.ts']).toBe(false);
+    // The real leading-verb shapes must keep working.
+    expect(byPath['tests/d.test.ts']).toBe(true);
+    expect(byPath['tests/e.test.ts']).toBe(true);
+    expect(byPath['tests/f.test.ts']).toBe(false);
+  });
 });
 
 describe('parseInterpretationClaims', () => {

@@ -112,13 +112,34 @@ export interface ParsedManifest {
 const PATH_TOKEN = /[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g;
 
 /**
- * Editing verbs checked BEFORE the NEW/written test — a status cell naming both (real shape:
- * "edited, then NEW again") is conservatively treated as NOT authoring, since rung 3 of the
- * CONTEXT.md decision-3 resolution ladder narrows TO the authoring chunk and a false-authoring
- * classification is the more dangerous direction to be wrong in.
+ * Verb classification for a manifest row's status cell.
+ *
+ * Both tests run against the cell's LEADING VERB ONLY (`leadingVerb()`), never the whole cell.
+ * Real status cells are `<verb> — <free prose>` or `<verb> (<note>) — <free prose>`, and that
+ * prose routinely contains "new"/"written" while describing something the chunk did NOT author
+ * ("updated — new coverage added…", "touched — depends on the new helper written in game.ts").
+ * Matching anywhere in the cell classified those as authoring — the dangerous direction, because
+ * rung 3 of the CONTEXT.md decision-3 ladder narrows TO the authoring chunk, so a false authoring
+ * silently attributes a claim citation to a chunk that merely touched the file. Found by
+ * `172-PROOF.md`'s hand-walk of the ladder.
+ *
+ * Anchoring to the leading verb makes this a strict allow-list: authoring is asserted ONLY by a
+ * leading `new`/`written`, and every other verb — `edited`, `extended`, `rewritten`, `tightened`,
+ * `unchanged`, `updated`, or anything future authors invent — is non-authoring by default. No
+ * companion editing-verb blocklist is needed (a leading verb cannot be in both), and a blocklist
+ * would be the wrong shape anyway: it must be exhaustive to be correct, and the live data already
+ * contains verbs it would have missed. "edited, then NEW again" resolves to `edited` and stays
+ * non-authoring for the same reason.
  */
-const EDITING_VERBS = /\b(edited|extended|rewritten|tightened)\b/i;
-const AUTHORING_VERBS = /\b(new|written)\b/i;
+const AUTHORING_VERBS = /^(new|written)$/i;
+
+/**
+ * The status cell's leading verb: the first word, stripped of trailing punctuation. Returns '' for
+ * an empty cell, which classifies as neither editing nor authoring.
+ */
+function leadingVerb(status: string): string {
+  return status.trimStart().split(/[\s,(—-]/, 1)[0] ?? '';
+}
 
 /**
  * Parses the `## Build Manifest` section per 172-CONTEXT.md decision 11.
@@ -179,8 +200,7 @@ export function parseBuildManifest(chunkText: string): ParsedManifest {
     }
 
     const status = statusCell.trim();
-    const isEditing = EDITING_VERBS.test(status);
-    const isAuthoring = !isEditing && AUTHORING_VERBS.test(status);
+    const isAuthoring = AUTHORING_VERBS.test(leadingVerb(status));
 
     for (const path of paths) {
       entries.push({ path, status, authoring: isAuthoring });
