@@ -17,7 +17,7 @@ import {
   ingestGapsCommand,
   ingestRelabelCommand,
 } from './commands/ingest-archive.js';
-import { chunkCheckCommand } from './commands/chunk-provenance.js';
+import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -170,6 +170,13 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(chunkCheckCommand);
+
+program
+  .command('chunk-provenance-status')
+  .description('Report per-chunk verification provenance and drift (read-only)')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(chunkProvenanceStatusCommand);
 
 // Claude Code integration
 const claudeCmd = program
