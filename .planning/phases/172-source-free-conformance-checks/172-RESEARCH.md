@@ -488,9 +488,15 @@ directly from source in this repo (`[VERIFIED]`, effectively `[CITED: local sour
 directly against the two live reference games this session (also empirical, not `[ASSUMED]`). No
 claim in this document rests on training-data recall of an external library or API.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should `manifest-not-tabular` (Pattern 4's `ai-opponent` case) be its own finding kind, or
+1. **RESOLVED — reuse `manifest-file-missing`, distinguish in `detail`. No tenth finding kind.**
+   Closed by `172-01-PLAN.md` ("do not add a tenth kind") per CONTEXT.md decision 7, which locks the
+   enum at 9 kinds. The whole-chunk non-tabular case is carried by `ParsedManifest.tabular` plus a
+   `detail` string that distinguishes "manifest is not table-shaped" from "row N has no path token".
+   This matches the recommendation below.
+
+   **Should `manifest-not-tabular` (Pattern 4's `ai-opponent` case) be its own finding kind, or
    silently degrade to `manifest-file-missing`?**
    - What we know: `ai-opponent/CHUNK.md`'s Build Manifest is legitimately a bulleted prose list,
      not a table — the chunk WAS built with real files (`src/rules/ai.ts`, `src/rules/index.ts`,
@@ -505,7 +511,15 @@ claim in this document rests on training-data recall of an external library or A
      without a new machine-checkable kind. This is a planner-level formatting choice, not a new
      design decision.
 
-2. **How should the human (non-`--json`) report avoid drowning success criterion 3's real findings
+2. **RESOLVED — grouped-by-kind with a leading count summary, no hard line cap.** Closed by
+   CONTEXT.md ("report text formatting" under Claude's Discretion) and implemented in
+   `172-02-PLAN.md` / `172-03-PLAN.md` as a count-first grouped report, mirroring
+   `chunkProvenanceStatusCommand`'s existing summary-line convention. Note also that this question's
+   premise — near-total `ambiguous-claim-ref` — was itself superseded: CONTEXT.md decision 3 was
+   AMENDED after this document was written, replacing the flat "2+ owners ⇒ ambiguous" rule with a
+   three-rung narrowing ladder. Section 3's predicted counts are now UPPER BOUNDS, not expectations.
+
+   **How should the human (non-`--json`) report avoid drowning success criterion 3's real findings
    in the volume Section 3 predicts (near-total `ambiguous-claim-ref` on both games)?**
    - What we know: this is explicitly "Claude's Discretion: report text formatting."
    - What's unclear: whether a summary-first, grouped-by-kind rendering (counts, then a few
@@ -539,7 +553,7 @@ claim in this document rests on training-data recall of an external library or A
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|--------------------|-------------|
 | CHECK-03 | Claim-list parsing scoped to `## Interpretation` only, including `### Corrections...` continuations | unit | `npx vitest run src/cli/commands/trace-check.test.ts -t "Interpretation"` | ❌ Wave 0 |
-| CHECK-03 | Bare `claim N` resolves via manifest-owning-chunk(s): 1 owner=resolved, 0=`unassociated-test`, 2+=`ambiguous-claim-ref` | unit | `npx vitest run src/cli/commands/trace-check.test.ts -t "resolve"` | ❌ Wave 0 |
+| CHECK-03 | ⚠️ **SUPERSEDED — do not implement this row.** It states the pre-amendment rule (1 owner=resolved, 0=`unassociated-test`, 2+=`ambiguous-claim-ref`). CONTEXT.md decision 3 was AMENDED after this document was written. The authoritative rule is the three-rung ladder: owners → live-claim-number validity → authoring chunk; `ambiguous-claim-ref` only if >1 survives all three. | unit | `npx vitest run src/cli/commands/trace-check.test.ts -t "resolve"` | ❌ Wave 0 |
 | CHECK-03 | `RULINGS.md` `### Ruling N` parsing + global (not per-chunk) ruling-citation coverage | unit | `npx vitest run src/cli/commands/trace-check.test.ts -t "ruling"` | ❌ Wave 0 |
 | CHECK-03 | End-to-end, real data: run against a COPY of `one-two-punch`/`seven`, assert non-zero real findings of each measured kind | integration | manual invocation per the 171-07-PLAN.md proof-harness pattern (Section "Proof Harness" below), captured in a `172-PROOF.md` | ❌ Wave 0 (proof plan, not a unit test file) |
 | CHECK-05 | Verified-commit-hash extraction handles all 5 real formats (bare short, backtick short, bare full, backtick full, prose-prefixed) | unit | `npx vitest run src/cli/commands/drift-check.test.ts -t "hash"` | ❌ Wave 0 |
