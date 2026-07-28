@@ -104,7 +104,16 @@ Plans:
   2. A verify pass re-transcribes the full archived rulebook into a non-destructive staging tree — the project's existing slices are never overwritten before the pass closes.
   3. The orchestrator never reads a full slice directly — re-transcription and classification are both dispatched to subagents, matching the context-economics rule the other `bs-` skills already follow.
   4. Killing a verify pass mid-run and re-invoking it resumes at the first unrecorded step rather than re-running re-transcription from scratch.
-**Plans**: TBD
+**Plans**: 7 plans in 6 waves
+
+Plans:
+- [ ] 173-01-PLAN.md — Repair `ingest-archive`'s existing-INDEX branch + real-data gate proof on both reference games (**wave 1, hard gate**)
+- [ ] 173-02-PLAN.md — `verify-run` CLI: staging-tree allocation and the append-only RUN.md resume ledger
+- [ ] 173-03-PLAN.md — Generalize `transcription-subagent.md`'s output directory (reuse, no fork)
+- [ ] 173-04-PLAN.md — `/bs-verify-game` entry point + `bs/verify/` sub-steps + skill-text contract pins
+- [ ] 173-05-PLAN.md — Installer registration for `bs-verify-game` + all five `SKILL_NAMES` sites + anti-drift meta-test
+- [ ] 173-06-PLAN.md — Live proofs: SC-1 install, SC-2 non-destructive staging, SC-3 transcript absence
+- [ ] 173-07-PLAN.md — Live proof: SC-4 real kill-and-resume + phase evidence closeout
 
 ### Phase 174: Verify Classifier
 **Goal**: The highest-risk single item in the milestone — a classifier that distinguishes real drift from independent re-wording — works well enough that a second run of the skill does not flag every chunk as stale.
