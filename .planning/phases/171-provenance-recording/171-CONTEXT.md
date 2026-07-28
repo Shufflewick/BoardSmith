@@ -90,6 +90,51 @@ a plan rewording instructions — 170 spent twelve mechanisms proving that does 
 
    Rejected: git SHA — undefined for a designer using an installed npm package with no git repo,
    which is the case this field exists to serve.
+
+### Decided after research (2026-07-28), post-`171-RESEARCH.md`
+
+8. **Cited slices are EXTRACTED from existing CHUNK.md prose, then recorded structurally.**
+
+   Research reported the citation format as "unparseable prose". That is overstated, and it was
+   checked directly before deciding: across `one-two-punch`'s 12 chunks, `cites rulebook/<slice>.md`
+   appears 74 times with full filenames and **11 of 12 chunks reference a rulebook slice**. What is
+   genuinely messy is (a) a shorthand variant — `cites rulebook/02 p.4`, 41 occurrences — which must
+   be resolved against `INDEX.md`'s `## Slices` table, and (b) citations to non-slice targets
+   (`DESIGN.md`, `RULINGS.md`, `DECISIONS.md`, `SKETCH.md`, source paths, screenshots) which must be
+   filtered out. That is a parsing task with a known shape.
+
+   The command therefore: scans CHUNK.md for `rulebook/…` references → resolves shorthand against
+   the INDEX Slices table → filters non-slice targets → writes the **resolved set** into the
+   machine-owned block. The block then becomes the structured record going forward, so this both
+   works retroactively on 29 existing chunks across the two reference games AND removes the need
+   for a new skill-text instruction to populate a separate field.
+
+   Rejected: a new `## Cited Slices` section populated by build-chunk — it writes off every existing
+   chunk and depends on a new skill-text instruction, the exact mechanism Phase 170 disproved.
+   Rejected: hashing every slice — flags a chunk stale on unrelated changes, and a check that fires
+   on correct work gets waived.
+
+   **Unresolvable citations are their own outcome.** A chunk whose citations cannot be resolved is
+   NOT silently treated as citing nothing — it records the unresolved reference verbatim so the
+   failure is visible. Silent under-recording is the PROV-01 analogue of the gap-dropping defect
+   Phase 170 spent itself on.
+
+9. **`cli.ts` must read the real version from `package.json`.** `src/cli/cli.ts:27` hardcodes
+   `.version('0.0.1')` and `package.json` has never been bumped off `0.0.1` — verified via full
+   `git log -p`. So the version half of decision 7 currently carries zero signal and
+   `boardsmith --version` lies. Fix the hardcode here (it is a real bug in the field this phase
+   records); record version alongside the skills-tree hash; but key PROV-03's drift detection on
+   **the content hash**, which is what actually distinguishes two installs.
+
+   Out of scope, explicitly: establishing a release-versioning convention or bumping the version
+   to something meaningful. That is a milestone-level decision, not PROV-01's to make.
+
+10. **A fifth scope reason code: `pre-provenance-project`.** Both reference games predate Phase
+    170's `INDEX.md` contract — no `rulebook/source/` directory (their `rules.pdf` sits at project
+    root) and no `Source hash:` line at all. This is materially different from `source-missing`,
+    which means a project that HAD provenance and lost it. Conflating them would report every
+    pre-170 project as damaged rather than simply older. Both games also carry non-canonical
+    `Edition:` free text, so F-1 (decision 5) is live in real project data.
 </decisions>
 
 <code_context>
