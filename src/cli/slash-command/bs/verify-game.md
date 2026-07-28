@@ -14,9 +14,10 @@ the status enum, the consistency check, or the session lock inline — see
 
 **This skill does NOT rebuild the project.** It reads the archived rulebook, stages a fresh
 re-transcription into a run-scoped, non-live directory, and records each completed unit through
-the ledger CLI. It never runs a build, never edits a chunk, and never touches a live slice — no
-`--apply`, no cutover, no comparison of the staged output to what already exists. That comparison
-is a later phase's job; this skill's job ends the moment staging closes.
+the ledger CLI. It never runs a build, never edits a chunk, never writes a staged slice over a
+live one, and never compares the staged output to what already exists. That comparison is a later
+phase's job; this skill's job ends the moment staging closes. There is no flag or path anywhere in
+this skill that writes staged output into a live location.
 
 ## Invocation
 
