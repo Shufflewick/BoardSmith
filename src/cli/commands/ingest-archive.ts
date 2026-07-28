@@ -96,6 +96,79 @@ ${INDEX_HEADINGS[2]}
 `;
 }
 
+/**
+ * `boardsmith ingest-gaps` — fill `## Open Rules Gaps` from the slice files.
+ *
+ * The section's content is a literal sweep of every `Named-but-undefined (p.N): <rule>` line the
+ * transcription wrote. No judgment is involved, so it does not belong in skill text either — a
+ * live session left the section empty while the slices carried four markers.
+ *
+ * This does NOT violate the Context-Economics Hard Rule. That rule stops the *orchestrator*
+ * accumulating slice text in its context across a long session; a CLI process reading files costs
+ * the session nothing.
+ *
+ * Entries are NOT deduplicated: a rule named in two slices and defined in neither is two
+ * entries, and the recurrence is signal. The harness reconciles the section's entry count against
+ * the slice-side marker count, so dedup here would make a working sweep look like a dropping one.
+ */
+export async function ingestGapsCommand(
+  options: { project?: string; json?: boolean } = {},
+): Promise<void> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  const rulebookDir = join(projectDir, 'rulebook');
+  const indexPath = join(rulebookDir, 'INDEX.md');
+
+  let index: string;
+  try {
+    index = await fs.readFile(indexPath, 'utf-8');
+  } catch {
+    throw new Error(
+      `No rulebook/INDEX.md in ${projectDir}.\n` +
+        `Run \`boardsmith init <name> --rulebook <path>\` first, or \`boardsmith ingest-archive <path>\` in an existing project.`,
+    );
+  }
+
+  const entries: string[] = [];
+  const names = (await fs.readdir(rulebookDir)).filter(
+    (f) => f.endsWith('.md') && f !== 'INDEX.md',
+  );
+  for (const name of names.sort()) {
+    const text = await fs.readFile(join(rulebookDir, name), 'utf-8');
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('Named-but-undefined')) entries.push(trimmed);
+    }
+  }
+
+  const heading = INDEX_HEADINGS[0];
+  const headingAt = index.indexOf(heading);
+  if (headingAt === -1) {
+    throw new Error(
+      `rulebook/INDEX.md has no "${heading}" heading. It may have been hand-edited — restore it by re-running ingest-archive.`,
+    );
+  }
+  const bodyStart = headingAt + heading.length;
+  // The section runs to the next heading, whatever that is.
+  const nextHeading = index.indexOf('\n## ', bodyStart);
+  const bodyEnd = nextHeading === -1 ? index.length : nextHeading;
+
+  const body = entries.length
+    ? `\n\n${entries.join('\n')}\n\nThis section reports what transcription MARKED as named-but-undefined. It does not claim to be\nan exhaustive list of the rulebook's gaps.\n`
+    : `\n\n${GAPS_EMPTY}\n`;
+
+  await fs.writeFile(indexPath, index.slice(0, bodyStart) + body + index.slice(bodyEnd));
+
+  if (options.json) {
+    console.log(JSON.stringify({ gapsWritten: entries.length, slicesScanned: names.length }, null, 2));
+    return;
+  }
+  console.log(
+    chalk.green(
+      `✓ Filled ${heading} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} from ${names.length} slice${names.length === 1 ? '' : 's'}`,
+    ),
+  );
+}
+
 export async function ingestArchiveCommand(
   rulebook: string,
   options: IngestArchiveOptions = {},

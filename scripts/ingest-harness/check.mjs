@@ -280,8 +280,24 @@ function getGapsSectionBodyLines(indexText) {
   return body;
 }
 
+/**
+ * Count gap entries in the `## Open Rules Gaps` body.
+ *
+ * Counts BOTH forms, and takes whichever is larger:
+ *   - a verbatim `Named-but-undefined (p.N): <rule>` line (what `boardsmith ingest-gaps` writes)
+ *   - a numbered list item (what a session writing the section by hand tends to produce)
+ *
+ * Originally this counted numbered list items only. That was inferred from the incidental
+ * formatting of the 2026-07-27 failed run, not from any requirement, and it made the
+ * reconciliation an apples-to-oranges comparison: numbered markers on the section side versus
+ * `Named-but-undefined` occurrences on the slice side. Counting the same token on both sides is
+ * the comparison the check is actually trying to make. Accepting both forms is a superset of the
+ * old behaviour — a hand-written numbered list still counts exactly as it did before.
+ */
 function countOrderedListEntries(bodyLines) {
-  return bodyLines.filter((line) => /^\s*\d+[.)]\s+/.test(line)).length;
+  const numbered = bodyLines.filter((line) => /^\s*\d+[.)]\s+/.test(line)).length;
+  const markers = bodyLines.filter((line) => /^\s*Named-but-undefined\b/.test(line)).length;
+  return Math.max(numbered, markers);
 }
 
 function isExplicitNoneBody(bodyLines) {

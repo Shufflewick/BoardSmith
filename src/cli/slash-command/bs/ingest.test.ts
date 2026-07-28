@@ -645,9 +645,17 @@ describe('v4.9 INGEST-03 — ## Open Rules Gaps section (template fill)', () => 
     }
   });
 
-  it('ingest-rules.md builds the section exclusively from openGaps[]', () => {
+  it('the gaps section is filled by a command that sweeps the slices, not from openGaps[] by hand', () => {
+    // openGaps[] remains the transport for the per-section confirmation flow, but the INDEX
+    // section is now written by `boardsmith ingest-gaps`, which greps the slice files directly.
+    // A live session left the section empty while the slices carried four markers; the content
+    // requires no judgment, so it does not belong in skill text.
     const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('openGaps[]');
+    expect(ingestRules).toContain('npx boardsmith ingest-gaps');
+    expect(flat(ingestRules)).toMatch(/not by hand/);
+    const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
+    expect(cmd).toContain('Named-but-undefined');
+    expect(cmd).toMatch(/NOT deduplicated/i);
   });
 
   it('interview-fallback.md also emits ## Open Rules Gaps by filling the template, on the same always/_None._ terms', () => {
@@ -669,9 +677,18 @@ describe('return-shape field names — pinned across the file set (WR-07)', () =
 
   it('ingest-rules.md consumes the synthesis-facing fields by the same names', () => {
     const ingestRules = read('ingest-rules.md');
-    for (const field of ['citedTerms[]', 'componentMentions[]', 'visualEvidence[]', 'variants[]', 'openGaps[]']) {
+    // openGaps[] is deliberately NOT in this list any more. The orchestrator no longer consumes
+    // it to build INDEX.md's gaps section — `boardsmith ingest-gaps` sweeps the slice files
+    // instead. The field still exists as the per-section transport and is pinned in the
+    // transcription contract's own return-shape assertions.
+    for (const field of ['citedTerms[]', 'componentMentions[]', 'visualEvidence[]', 'variants[]']) {
       expect(ingestRules, `ingest-rules.md must reference "${field}"`).toContain(field);
     }
+  });
+
+  it('openGaps[] is still pinned in the transcription contract even though INDEX no longer reads it', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('openGaps[]');
   });
 
   it('interview-fallback.md produces the same citedTerms[]/componentMentions[] shape by name', () => {

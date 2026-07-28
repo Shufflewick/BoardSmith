@@ -142,13 +142,20 @@ following artifacts **from subagent-returned summaries only** — never from re-
 `## Slices`, and `## Term → Slice` sections. Your job here is to fill those sections, not to
 create the file.
 
-1. **Fill the scaffolded sections.** Open `rulebook/INDEX.md` — it is the scaffold Step 1 wrote,
-   not a slice, so reading it is not a Context-Economics violation — and fill:
+1. **Fill `## Open Rules Gaps` with a command, not by hand:**
 
-   - `## Open Rules Gaps` — every `Named-but-undefined (p.N): <rule name>` entry from the
-     accumulated `openGaps[]` returns, one per line, verbatim. **Do not deduplicate** — a rule
-     named in two slices and defined in neither is two entries, and the recurrence is signal.
-     Leave the `_None._` token exactly as-is if there were none.
+   ```
+   npx boardsmith ingest-gaps
+   ```
+
+   It sweeps the slice files for every `Named-but-undefined (p.N): <rule>` line and writes them
+   into the section verbatim, without deduplicating — a rule named in two slices and defined in
+   neither is two entries, and the recurrence is signal. If there are none it leaves the
+   `_None._` token. Nothing about this section requires judgment, and a live session left it
+   empty while the slices carried four markers, so it is code now.
+
+2. **Fill the two tables by hand** — these do need judgment:
+
    - `## Slices` — one row per slice: path, pages, one-line coverage.
    - `## Term → Slice` — one row per accumulated `citedTerms[]` pair, sorted.
 
@@ -157,7 +164,7 @@ create the file.
    strings, and inventing a nicer heading is the single most repeated failure in this step's
    history.
 
-2. **If `Edition:` reads `not stated in the rulebook` and the transcription subagent returned an
+3. **If `Edition:` reads `not stated in the rulebook` and the transcription subagent returned an
    actual edition**, update just that line with the returned value. Leave `Source:`,
    `Source hash:`, and `Transcribed:` untouched — those are the provenance record a later verify
    pass reads, and they describe the archive Step 1 made.

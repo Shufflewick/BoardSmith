@@ -10,7 +10,7 @@ import { lintCommand } from './commands/lint.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { simulateCommand } from './commands/simulate.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
-import { ingestArchiveCommand } from './commands/ingest-archive.js';
+import { ingestArchiveCommand, ingestGapsCommand } from './commands/ingest-archive.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -131,6 +131,13 @@ program
   .option('--edition <edition>', 'Edition string as stated in the rulebook')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(ingestArchiveCommand);
+
+program
+  .command('ingest-gaps')
+  .description('Fill rulebook/INDEX.md\'s Open Rules Gaps section from the slice files')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(ingestGapsCommand);
 
 // Claude Code integration
 const claudeCmd = program
