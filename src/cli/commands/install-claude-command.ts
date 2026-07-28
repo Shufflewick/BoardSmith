@@ -2,8 +2,8 @@
  * Install BoardSmith Agent Skills for Claude Code
  *
  * This installs the bs- skill family (bs-create-game, bs-ingest-rules, bs-build-chunk,
- * bs-check-status, bs-insert-chunk, bs-generate-ai) globally so users can design and build
- * BoardSmith games directly within Claude Code conversations.
+ * bs-check-status, bs-insert-chunk, bs-generate-ai, bs-verify-game) globally so users can
+ * design and build BoardSmith games directly within Claude Code conversations.
  */
 
 import { promises as fs } from 'node:fs';
@@ -34,6 +34,7 @@ const SKILL_ENTRY_POINTS: Array<{ source: string; skillName: string }> = [
   { source: join('bs', 'check-status.md'), skillName: 'bs-check-status' },
   { source: join('bs', 'insert-chunk.md'), skillName: 'bs-insert-chunk' },
   { source: 'generate-ai-instructions.md', skillName: 'bs-generate-ai' },
+  { source: join('bs', 'verify-game.md'), skillName: 'bs-verify-game' },
 ];
 
 /**
@@ -47,7 +48,7 @@ const SKILL_ENTRY_POINTS: Array<{ source: string; skillName: string }> = [
 const SHARED_ROOT = 'bs-shared';
 
 /** Shared reference directories copied under the `bs-shared/` namespace root. */
-const SHARED_DIRS = ['build', 'ingest', 'templates', 'aspects'];
+const SHARED_DIRS = ['build', 'ingest', 'templates', 'aspects', 'verify'];
 
 /**
  * A known leaf file inside each shared dir (relative to `targetDir`). A COMPLETE install
@@ -61,6 +62,7 @@ const SHARED_LEAF_PROBES = [
   join(SHARED_ROOT, 'ingest', 'transcription.md'),
   join(SHARED_ROOT, 'templates', 'SKETCH.template.md'),
   join(SHARED_ROOT, 'aspects', 'index.md'),
+  join(SHARED_ROOT, 'verify', 'source-resolution.md'),
 ];
 
 /** Filter applied to every recursive tree copy: never ship test files. */
@@ -235,6 +237,7 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log(chalk.cyan('  bs-check-status') + chalk.gray('  - Report sketch/chunk progress and next steps'));
   console.log(chalk.cyan('  bs-insert-chunk') + chalk.gray('  - Insert a new chunk into an existing sketch'));
   console.log(chalk.cyan('  bs-generate-ai') + chalk.gray('   - Generate AI evaluation functions for a game chunk'));
+  console.log(chalk.cyan('  bs-verify-game') + chalk.gray('   - Re-verify an existing game against its archived rulebook source'));
   console.log('');
   console.log(chalk.gray('Each skill reads from a shared reference tree (build/, ingest/,'));
   console.log(chalk.gray('templates/, aspects/, state-machine.md) installed under bs-shared/.'));
