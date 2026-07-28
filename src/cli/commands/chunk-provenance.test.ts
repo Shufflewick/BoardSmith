@@ -900,3 +900,61 @@ describe('chunk-provenance-status', () => {
     expect(after).toEqual(before);
   });
 });
+
+/**
+ * `projectProvenanceState` — what makes `verifiedWithoutProvenance` usable rather than noise.
+ *
+ * The flag's membership is correct: a chunk claiming `verified` with no backing block IS
+ * unbacked, whether the project is old or someone skipped `chunk-check`. But the two cases have
+ * opposite severity, and on a pre-provenance project the flag fires on 100% of chunks — verified
+ * live against a copy of `one-two-punch`, where all 12 chunks flagged. Rendering that as an alert
+ * on every run trains the reader to ignore the flag, and the flag is this phase's ONLY
+ * enforcement half that does not depend on a live agent following a skill-text instruction.
+ * A check that fires on correct work gets waived rather than fixed.
+ */
+describe('projectProvenanceState', () => {
+  async function projectWithChunks(chunks: Array<{ slug: string; status: string; block?: string }>) {
+    const project = join(dir, `proj-${Math.abs(chunks.length * 7 + chunks[0].slug.length)}`);
+    for (const c of chunks) {
+      const chunkDir = join(project, 'chunks', c.slug);
+      await fs.mkdir(chunkDir, { recursive: true });
+      await fs.writeFile(
+        join(chunkDir, 'CHUNK.md'),
+        `# Chunk: ${c.slug}\n\nStatus: ${c.status}\n\n${c.block ?? ''}\n`,
+      );
+    }
+    return project;
+  }
+
+  it('classifies a project with no blocks at all as pre-provenance, not partial', async () => {
+    // Both reference games are exactly this shape.
+    const project = await projectWithChunks([
+      { slug: 'a', status: 'verified' },
+      { slug: 'b', status: 'verified (user-waived)' },
+    ]);
+    const r = await chunkProvenanceStatusCommand({ project, json: false, quiet: true });
+    expect(r.projectProvenanceState).toBe('pre-provenance');
+    // Membership is unchanged — both are still flagged. Only the severity signal differs.
+    expect(r.verifiedWithoutProvenance).toEqual(['a', 'b']);
+  });
+
+  it('classifies a project that records provenance but has a blockless verified chunk as partial', async () => {
+    // THIS is the case that indicates a skipped chunk-check, and the only one worth alarming on.
+    const withBlock = await projectWithChunks([{ slug: 'has-block', status: 'verified' }]);
+    await chunkCheckCommand('has-block', { project: withBlock, quiet: true }).catch(() => {});
+    const chunkDir = join(withBlock, 'chunks', 'skipped');
+    await fs.mkdir(chunkDir, { recursive: true });
+    await fs.writeFile(join(chunkDir, 'CHUNK.md'), '# Chunk: skipped\n\nStatus: verified\n');
+
+    const r = await chunkProvenanceStatusCommand({ project: withBlock, json: false, quiet: true });
+    expect(r.projectProvenanceState).toBe('partial');
+    expect(r.verifiedWithoutProvenance).toContain('skipped');
+  });
+
+  it('reports empty for a project with no chunks', async () => {
+    const project = join(dir, 'no-chunks');
+    await fs.mkdir(join(project, 'chunks'), { recursive: true });
+    const r = await chunkProvenanceStatusCommand({ project, json: false, quiet: true });
+    expect(r.projectProvenanceState).toBe('empty');
+  });
+});

@@ -661,6 +661,27 @@ export interface ChunkProvenanceStatusResult {
    * flagged, at once) — that is the phase's stated ready-made proof target, not a false alarm.
    */
   verifiedWithoutProvenance: string[];
+  /**
+   * Project-level classification, which is what makes `verifiedWithoutProvenance` usable.
+   *
+   * The flag's membership is correct but its SEVERITY is not uniform, and without this field a
+   * consumer cannot tell the two cases apart:
+   *
+   * - `pre-provenance` — no chunk in the project carries a block at all. Every verified chunk is
+   *   flagged, and that is expected, not alarming: the project simply predates Phase 171. Both
+   *   reference games are in this state (12 and 17 chunks, 100% flagged).
+   * - `partial` — the project demonstrably DOES record provenance, yet some verified chunk has no
+   *   block. THIS is the suspicious case — the signature of a skipped `chunk-check`.
+   * - `complete` — every verified chunk has a block.
+   * - `empty` — no chunks yet.
+   *
+   * Why this exists: rendering 100%-flagged as an alert on every pre-existing project makes the
+   * flag noise, and a check that fires on correct work gets waived rather than fixed (the same
+   * rationale as the presentation-lexicon exclusions in `ingest-archive.ts`). Waiving it would
+   * cost the phase its only enforcement half that does not depend on a live agent following a
+   * skill-text instruction.
+   */
+  projectProvenanceState: 'pre-provenance' | 'partial' | 'complete' | 'empty';
 }
 
 /**
@@ -741,6 +762,16 @@ export async function chunkProvenanceStatusCommand(
     });
   }
 
+  const withBlocks = counts.full + counts.codeConformanceOnly;
+  const projectProvenanceState: ChunkProvenanceStatusResult['projectProvenanceState'] =
+    chunks.length === 0
+      ? 'empty'
+      : withBlocks === 0
+        ? 'pre-provenance'
+        : verifiedWithoutProvenance.length > 0
+          ? 'partial'
+          : 'complete';
+
   const result: ChunkProvenanceStatusResult = {
     chunks,
     counts,
@@ -748,6 +779,7 @@ export async function chunkProvenanceStatusCommand(
     bySkillsTreeHash,
     byBoardsmithVersion,
     verifiedWithoutProvenance,
+    projectProvenanceState,
   };
 
   if (options.json) {
@@ -790,14 +822,30 @@ export async function chunkProvenanceStatusCommand(
 
   if (verifiedWithoutProvenance.length) {
     console.log('');
-    console.log(
-      chalk.red(
-        `VERIFIED WITHOUT PROVENANCE — these chunks' Status claims verification but no valid ` +
-          `"${VERIFIED_AGAINST_HEADING}" block backs it. This means either a skipped ` +
-          `\`chunk-check\` invocation, or a pre-existing project whose verification predates this ` +
-          `phase (run \`boardsmith chunk-check <slug>\` on each to record real provenance now):`,
-      ),
-    );
+    // Severity follows projectProvenanceState, not the raw count. A pre-provenance project has
+    // every verified chunk flagged BY DEFINITION; painting that red on every run trains the
+    // reader to ignore the flag, and then `partial` — the case that actually indicates a skipped
+    // `chunk-check` — goes unread too.
+    if (projectProvenanceState === 'pre-provenance') {
+      console.log(
+        chalk.yellow(
+          `NO RECORDED PROVENANCE YET — this project's verifications predate provenance ` +
+            `recording, so all ${verifiedWithoutProvenance.length} verified chunk(s) lack a ` +
+            `"${VERIFIED_AGAINST_HEADING}" block. This is expected for a project built before ` +
+            `this phase, not a fault. Run \`boardsmith chunk-check <slug>\` per chunk to record ` +
+            `provenance from here on.`,
+        ),
+      );
+    } else {
+      console.log(
+        chalk.red(
+          `VERIFIED WITHOUT PROVENANCE — this project DOES record provenance elsewhere, yet ` +
+            `these chunks' Status claims verification with no valid ` +
+            `"${VERIFIED_AGAINST_HEADING}" block behind it. That is the signature of a skipped ` +
+            `\`chunk-check\` at close. Run \`boardsmith chunk-check <slug>\` on each:`,
+        ),
+      );
+    }
     for (const slug of verifiedWithoutProvenance) {
       console.log(`  • ${slug}`);
     }
