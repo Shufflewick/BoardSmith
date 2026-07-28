@@ -1,9 +1,9 @@
 ---
 phase: 172
 slug: source-free-conformance-checks
-status: planned
+status: complete
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-07-28
 ---
 
@@ -48,18 +48,18 @@ expected pre-172 baseline. Any red at phase start is pre-existing and must be re
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| T1 — line-anchored locator, FINDING_KINDS, manifest/claim/hash parsers | 172-01 | 1 | CHECK-03, CHECK-05 | unit | `npx vitest run src/cli/commands/build-manifest.test.ts` | ❌ created by this task | ⬜ pending |
-| T2 — RULINGS.md parser, narrow direction-aware supersession | 172-01 | 1 | CHECK-03 | unit | `npx vitest run src/cli/commands/build-manifest.test.ts -t "ruling"` | ❌ created by T1 | ⬜ pending |
-| T3 — fix `parseVerifiedAgainst` f73153a3 recurrence | 172-01 | 1 | CHECK-03 (parser hygiene) | unit (regression) | `npx vitest run src/cli/commands/chunk-provenance.test.ts` | ✅ exists | ⬜ pending |
-| T4 — citation scanner + three-rung resolution ladder | 172-02 | 2 | CHECK-03 | unit | `npx vitest run src/cli/commands/trace-check.test.ts -t "resolve"` | ❌ created by this task | ⬜ pending |
-| T5 — `traceCheckCommand` sweep, findings, read-only invariant | 172-02 | 2 | CHECK-03 | unit + read-only byte-hash | `npx vitest run src/cli/commands/trace-check.test.ts` | ❌ created by T4 | ⬜ pending |
-| T6 — `--json` contract + grouped count-first human report | 172-02 | 2 | CHECK-03 | unit (stdout spy) | `npx vitest run src/cli/commands/trace-check.test.ts -t "report"` | ❌ created by T4 | ⬜ pending |
-| T7 — git plumbing, `cwd` discipline, hash validation | 172-03 | 2 | CHECK-05 | unit against a REAL temp git repo | `npx vitest run src/cli/commands/drift-check.test.ts -t "git"` | ❌ created by this task | ⬜ pending |
-| T8 — `driftCheckCommand` three states, findings, read-only invariant | 172-03 | 2 | CHECK-05 | unit + read-only byte-hash | `npx vitest run src/cli/commands/drift-check.test.ts` | ❌ created by T7 | ⬜ pending |
-| T9 — register `trace-check` / `drift-check` in `cli.ts` | 172-04 | 3 | CHECK-03, CHECK-05 | smoke (CLI surface) | `node bin/boardsmith.js trace-check --help && node bin/boardsmith.js drift-check --help` | ✅ `cli.ts` exists | ⬜ pending |
-| T10 — exit-code contract through the real entry point | 172-04 | 3 | CHECK-03, CHECK-05 | integration (spawned process) | `npx vitest run src/cli/cli-conformance-commands.test.ts` | ❌ created by this task | ⬜ pending |
-| T11 — read-only preflight, copies, real runs | 172-05 | 4 | CHECK-03, CHECK-05, SC-3 | integration proof | preflight gate: `git -C ~/BoardSmithGames/seven rev-parse HEAD` pinned + porcelain empty; `one-two-punch` HEAD pinned | ✅ both repos exist | ⬜ pending |
-| T12 — independent cross-check + `172-PROOF.md` | 172-05 | 4 | CHECK-03, CHECK-05, SC-3 | integration proof | `npm test` (plus per-count independent `grep`/`git diff` cross-checks recorded in the proof) | ❌ proof created by this task | ⬜ pending |
+| T1 — line-anchored locator, FINDING_KINDS, manifest/claim/hash parsers | 172-01 | 1 | CHECK-03, CHECK-05 | unit | `npx vitest run src/cli/commands/build-manifest.test.ts` | ✅ created (172-01) | ✅ green (npm test 3503/3503) |
+| T2 — RULINGS.md parser, narrow direction-aware supersession | 172-01 | 1 | CHECK-03 | unit | `npx vitest run src/cli/commands/build-manifest.test.ts -t "ruling"` | ✅ created (172-01) | ✅ green |
+| T3 — fix `parseVerifiedAgainst` f73153a3 recurrence | 172-01 | 1 | CHECK-03 (parser hygiene) | unit (regression) | `npx vitest run src/cli/commands/chunk-provenance.test.ts` | ✅ exists | ✅ green |
+| T4 — citation scanner + three-rung resolution ladder | 172-02 | 2 | CHECK-03 | unit | `npx vitest run src/cli/commands/trace-check.test.ts -t "resolve"` | ✅ created (172-02) | ✅ green |
+| T5 — `traceCheckCommand` sweep, findings, read-only invariant | 172-02 | 2 | CHECK-03 | unit + read-only byte-hash | `npx vitest run src/cli/commands/trace-check.test.ts` | ✅ created (172-02) | ✅ green |
+| T6 — `--json` contract + grouped count-first human report | 172-02 | 2 | CHECK-03 | unit (stdout spy) | `npx vitest run src/cli/commands/trace-check.test.ts -t "report"` | ✅ created (172-02) | ✅ green |
+| T7 — git plumbing, `cwd` discipline, hash validation | 172-03 | 2 | CHECK-05 | unit against a REAL temp git repo | `npx vitest run src/cli/commands/drift-check.test.ts -t "git"` | ✅ created (172-03) | ✅ green |
+| T8 — `driftCheckCommand` three states, findings, read-only invariant | 172-03 | 2 | CHECK-05 | unit + read-only byte-hash | `npx vitest run src/cli/commands/drift-check.test.ts` | ✅ created (172-03) | ✅ green |
+| T9 — register `trace-check` / `drift-check` in `cli.ts` | 172-04 | 3 | CHECK-03, CHECK-05 | smoke (CLI surface) | `node bin/boardsmith.js trace-check --help && node bin/boardsmith.js drift-check --help` | ✅ `cli.ts` exists | ✅ green (both `--help` list `--project`/`--json` only, re-confirmed this plan) |
+| T10 — exit-code contract through the real entry point | 172-04 | 3 | CHECK-03, CHECK-05 | integration (spawned process) | `npx vitest run src/cli/cli-conformance-commands.test.ts` | ✅ created (172-04) | ✅ green |
+| T11 — read-only preflight, copies, real runs | 172-05 | 4 | CHECK-03, CHECK-05, SC-3 | integration proof | preflight gate: `git -C ~/BoardSmithGames/seven rev-parse HEAD` pinned + porcelain empty; `one-two-punch` HEAD pinned | ✅ both repos exist | ✅ green — gate passed, `cp -R` copies made, all 8 invocations (4 JSON + 4 human) exit 0 with real non-zero findings on both games; see `172-PROOF.md` |
+| T12 — independent cross-check + `172-PROOF.md` | 172-05 | 4 | CHECK-03, CHECK-05, SC-3 | integration proof | `npm test` (plus per-count independent `grep`/`git diff` cross-checks recorded in the proof) | ✅ `172-PROOF.md` created | ✅ green — `npm test` 3503/3503; every claim/ruling/manifest/drift count independently cross-checked and matched (one first-draft cross-check bug found and corrected in the independent script itself, and one real narrow-impact parser precision defect found in the tool via hand-walking the resolution ladder — both documented prominently in `172-PROOF.md`); both originals confirmed byte-identical before/after |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -110,12 +110,14 @@ byte-identical instead.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have an automated verify command or a Wave 0 dependency
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 300s
-- [ ] `172-PROOF.md` exists with real invocations, verbatim output, independently cross-checked counts, and a "what is still unproven" section
-- [ ] Both reference-game originals confirmed unchanged after the proof run
+- [x] All tasks have an automated verify command or a Wave 0 dependency
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 300s
+- [x] `172-PROOF.md` exists with real invocations, verbatim output, independently cross-checked counts, and a "what is still unproven" section
+- [x] Both reference-game originals confirmed unchanged after the proof run
 
-**Approval:** planner-populated 2026-07-28; statuses filled by plan 172-05 task 2.
+**Approval:** planner-populated 2026-07-28; statuses filled by plan 172-05 task 2 (2026-07-28) —
+all 12 tasks green, `172-PROOF.md` complete at 631 lines, both reference games confirmed
+byte-identical before and after (whole-tree SHA-256 manifest diff, zero output).
