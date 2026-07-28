@@ -72,6 +72,11 @@ Rulebook path:   {rulebookPath}
 Write slices to: rulebook/
 ```
 
+`Write slices to:` is a per-dispatch substitution, not a constant — this ingest path always fills
+it with `rulebook/`, but the verify orchestrator (`bs/verify/*.md`) is the other caller of this
+same contract and fills it with a staging path instead. The contract in
+`transcription-subagent.md` treats it as an input either way.
+
 **The `BS-DISPATCH-V2` token is required and the subagent validates it.** A dispatch without it is
 rejected unread. This is not ceremony: sessions reliably read this file, see this block, and then
 send a prompt they composed from memory instead — one that reproduces a superseded version of the

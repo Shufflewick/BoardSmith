@@ -55,17 +55,19 @@ The dispatching prompt gives you exactly three things:
 
 - **Page range** `{N}-{M}` — the pages you are responsible for. Do not read outside it.
 - **Rulebook path** `{rulebookPath}` — the PDF / image files / text to transcribe from.
-- **Output directory** `rulebook/` — relative to the project directory you are already inside.
+- **Output directory** — the path given in this dispatch prompt, relative to the project
+  directory you are already inside. This is the ONLY place you write slice files; you never write
+  outside it.
 
 Identify natural section boundaries within your range. A section rarely spans a page-range seam
 cleanly — note where a section continues into the next range.
 
 ---
 
-## 1. WRITE the transcribed text to `rulebook/NN-topic.md`
+## 1. WRITE the transcribed text to `NN-topic.md` in your assigned output directory
 
 `NN` is the section's **starting page number**, zero-padded to two digits (a section starting on
-p.14 → `rulebook/14-movement.md`). Page-anchored numbering is self-allocating: you need no
+p.14 → `14-movement.md` in your assigned output directory). Page-anchored numbering is self-allocating: you need no
 knowledge of how many sections any other range produced, so parallel ranges can never collide.
 If two sections start on the same page, you own both (a page range never splits mid-page) —
 disambiguate with the topic name (`14-movement.md`, `14-combat.md`).
@@ -148,7 +150,7 @@ later.
 
 ## 2. RETURN a structured summary only — never the transcribed text itself
 
-- **(a) `slicePath`** — the `rulebook/NN-topic.md` file you wrote.
+- **(a) `slicePath`** — the `NN-topic.md` file you wrote, inside your assigned output directory.
 - **(b) `sectionSummary`** — 2-4 sentences describing what the section covers, written for a user
   confirmation prompt.
 - **(c) `citedTerms[]`** — every term this section defines or meaningfully references (rules
