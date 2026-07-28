@@ -62,8 +62,10 @@ the tag.
 
 - [ ] **VERIFY-01**: A designer can run `/bs-verify-game` on an existing bs-built project and get a
       per-chunk verdict without rebuilding the game.
-- [x] **VERIFY-02**: The skill re-transcribes the full rulebook from archived source into a staging
+- [ ] **VERIFY-02**: The skill re-transcribes the full rulebook from archived source into a staging
       tree non-destructively — existing slices are never overwritten before the pass closes.
+      *(CLI primitives landed in 173-02; awaiting the live non-destructive-staging proof in 173-06.
+      The requirement is about the SKILL, which does not exist until 173-04.)*
 - [ ] **VERIFY-03**: Each slice pair is classified on two independent dimensions — **provenance**
       (`source-changed` or `source-unchanged`, from the archived source hash) and **rule delta**
       (`cosmetic` / `sharper` / `contradictory`, from semantic comparison of the two
@@ -80,8 +82,10 @@ the tag.
       chunks that pass the audit lenses unchanged close without re-playtesting.
 - [ ] **VERIFY-07**: The orchestrator never reads a full slice — re-transcription and classification
       both run in subagents, preserving the context-economics rule.
-- [x] **VERIFY-08**: A verify pass is resumable — a crash mid-pass resumes at the first unrecorded
+- [ ] **VERIFY-08**: A verify pass is resumable — a crash mid-pass resumes at the first unrecorded
       step rather than re-running the re-transcription.
+      *(Ledger CLI landed in 173-02; awaiting the REAL kill-and-resume proof in 173-07. A unit test
+      of the ledger reader does not satisfy this — see 173-VALIDATION.md.)*
 - [ ] **VERIFY-09**: The skill runs against a project whose source rulebook is unavailable, in
       source-free mode, reporting which defect class went unchecked.
 
@@ -146,9 +150,9 @@ the tag.
 | CHECK-03 | Phase 172 | Complete |
 | CHECK-05 | Phase 172 | Complete |
 | VERIFY-01 | Phase 173 | Pending |
-| VERIFY-02 | Phase 173 | Complete |
+| VERIFY-02 | Phase 173 | Pending (173-06 proof) |
 | VERIFY-07 | Phase 173 | Pending |
-| VERIFY-08 | Phase 173 | Complete |
+| VERIFY-08 | Phase 173 | Pending (173-07 proof) |
 | VERIFY-03 | Phase 174 | Pending |
 | VERIFY-04 | Phase 175 | Pending |
 | VERIFY-05 | Phase 175 | Pending |
