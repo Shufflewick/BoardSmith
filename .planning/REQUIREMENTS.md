@@ -53,9 +53,9 @@ the tag.
 
 - [ ] **PROV-01**: `close` records a `## Verified Against` block in CHUNK.md — slice paths and
       hashes, rulebook edition, BoardSmith version, skills version, and verification scope.
-- [ ] **PROV-02**: A verification that could not re-read source records its scope as
+- [x] **PROV-02**: A verification that could not re-read source records its scope as
       code-conformance-only with the reason, so a partial verification never reads as a full one.
-- [ ] **PROV-03**: `/bs-check-status` reports verification drift — how many chunks were verified
+- [x] **PROV-03**: `/bs-check-status` reports verification drift — how many chunks were verified
       against which edition and skills version, and how many are code-conformance-only.
 
 ### Verify Pipeline (VERIFY)
@@ -141,8 +141,8 @@ the tag.
 | INGEST-03 | Phase 170 | Complete |
 | INGEST-04 | Phase 170 | Complete |
 | PROV-01 | Phase 171 | Pending |
-| PROV-02 | Phase 171 | Pending |
-| PROV-03 | Phase 171 | Pending |
+| PROV-02 | Phase 171 | Complete |
+| PROV-03 | Phase 171 | Complete |
 | CHECK-03 | Phase 172 | Pending |
 | CHECK-05 | Phase 172 | Pending |
 | VERIFY-01 | Phase 173 | Pending |

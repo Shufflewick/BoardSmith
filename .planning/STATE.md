@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 171-04-PLAN.md
-last_updated: "2026-07-28T19:05:00.000Z"
+stopped_at: Completed 170-06-PLAN.md
+last_updated: "2026-07-28T18:28:59.532Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
@@ -25,7 +25,29 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 04/07 complete.
+Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 05/07 complete.
+
+`171-05-PLAN.md` landed PROV-03's deliverable: `boardsmith chunk-provenance-status --json`, a
+read-only aggregation over every chunk's `## Verified Against` block. THE THREE STATES, NEVER TWO:
+`full`, `code-conformance-only`, and `unknown` — a chunk verified before this phase existed carries
+no block at all, and reporting that as `code-conformance-only` would assert a scope determination
+that was never made. `parseVerifiedAgainst()` distinguishes "never run" (no heading,
+`blockMalformed: false`) from "structurally damaged" (heading present, a fence or required label
+missing, `blockMalformed: true`) — both are `state: unknown`, but a partial parse is never returned
+as valid (T-171-17). `verifiedWithoutProvenance` — the load-bearing enforcement half from CONTEXT.md
+decision 6 — flags any chunk whose `Status:` starts with `verified` (covering both `verified` and
+`verified (user-waived)`) but whose state is `unknown`; `built` chunks are correctly excluded since
+they never claimed verification. Composition documented explicitly: `unknown` and
+`verifiedWithoutProvenance` are NOT mutually exclusive by design — a pre-existing project's verified
+chunks are correctly BOTH `unknown` AND flagged, which is exactly plan 07's stated proof target (all
+29 chunks across both reference games), not a false alarm. Grouping (`byEdition`/`bySkillsTreeHash`/
+`byBoardsmithVersion`) re-applies `normalizeEdition()` at READ time so pre-F-1/hand-edited free text
+still collapses to one bucket even though `chunk-check` already normalizes on write (RESEARCH.md
+Pitfall 3). Read-only, pinned by a before/after whole-project byte-hash test — no `writeFile` call is
+reachable from `chunkProvenanceStatusCommand`. RED-first: 14 new tests failed identically with
+`chunkProvenanceStatusCommand is not a function` before Task 2. Full suite: 3390 passed (was 3376).
+`~/BoardSmithGames/seven` confirmed unmodified. See
+`.planning/phases/171-provenance-recording/171-05-SUMMARY.md`.
 
 `171-04-PLAN.md` landed PROV-01's deliverable: `boardsmith chunk-check <slug>` writes/repairs a
 fenced, machine-owned `## Verified Against` block into `chunks/<slug>/CHUNK.md` — scope, edition,
@@ -437,6 +459,7 @@ Recent decisions affecting current work:
 - [Phase 171]: readBoardsmithVersion() walks up to package.json (not fixed hop), throws rather than falling back; hashSkillsTree() hashes installer-owned bs- paths by relPath+content sorted, returns SKILLS_TREE_ABSENT when no root found
 - [Phase 171]: 171-03: computeVerificationScope's five reason codes checked as a single top-to-bottom early-return chain (order is contract, not incidental); resolveCitedSlices resolves shorthand against the rulebook/ directory listing (not INDEX.md's ## Slices table, absent in one-two-punch); ambiguous/unresolvable citations recorded verbatim, never guessed or dropped — pinned against seven's genuine two-01--slice collision
 - [Phase 171]: 171-04: chunk-check writes strictly between VERIFIED_AGAINST_BEGIN/END (distinct fence pair from GAPS_BEGIN/END); citation scan is scoped to content BEFORE any existing Verified Against section so the block can never re-poison its own next computation; program.parse() -> parseAsync()+try/catch in cli.ts fixes a repo-wide stack-trace leak affecting every CLI command, not just chunk-check
+- [Phase ?]: unknown and verifiedWithoutProvenance compose by design (171-05)
 
 ### Pending Todos
 
