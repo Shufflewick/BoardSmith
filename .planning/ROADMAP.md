@@ -110,7 +110,7 @@ Plans:
 - [x] 173-01-PLAN.md — Repair `ingest-archive`'s existing-INDEX branch + real-data gate proof on both reference games (**wave 1, hard gate**)
 - [x] 173-02-PLAN.md — `verify-run` CLI: staging-tree allocation and the append-only RUN.md resume ledger
 - [x] 173-03-PLAN.md — Generalize `transcription-subagent.md`'s output directory (reuse, no fork)
-- [ ] 173-04-PLAN.md — `/bs-verify-game` entry point + `bs/verify/` sub-steps + skill-text contract pins
+- [x] 173-04-PLAN.md — `/bs-verify-game` entry point + `bs/verify/` sub-steps + skill-text contract pins
 - [ ] 173-05-PLAN.md — Installer registration for `bs-verify-game` + all five `SKILL_NAMES` sites + anti-drift meta-test
 - [ ] 173-06-PLAN.md — Live proofs: SC-1 install, SC-2 non-destructive staging, SC-3 transcript absence
 - [ ] 173-07-PLAN.md — Live proof: SC-4 real kill-and-resume + phase evidence closeout
@@ -187,7 +187,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
-| 173. Verify Pipeline Core | 3/7 | In Progress|  |
+| 173. Verify Pipeline Core | 4/7 | In Progress|  |
 | 174. Verify Classifier | 0/TBD | Not started | - |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |
 | 176. Stale-Chunk Repair | 0/TBD | Not started | - |
