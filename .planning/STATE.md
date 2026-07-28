@@ -4,14 +4,14 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 171-07-PLAN.md
-last_updated: "2026-07-28T19:05:23.396Z"
+last_updated: "2026-07-28T20:05:37.447Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
-  completed_phases: 2
-  total_plans: 17
-  completed_plans: 17
-  percent: 20
+  completed_phases: 1
+  total_plans: 22
+  completed_plans: 15
+  percent: 10
 ---
 
 # Project State
@@ -21,11 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 171 — Provenance Recording — **COMPLETE**
+**Current focus:** Phase 172 — source-free-conformance-checks
 
 ## Current Position
 
-Phase: 171 (Provenance Recording) — **COMPLETE**, 7/7 plans.
+Phase: 172 (source-free-conformance-checks) — EXECUTING
+Plan: 2 of 5
 
 `171-07-PLAN.md` is the phase's PROC-01 record: `chunk-check` and `chunk-provenance-status` proven
 end-to-end against COPIES of both real reference games (`~/BoardSmithGames/seven`, read-only,
@@ -514,6 +515,8 @@ Recent decisions affecting current work:
 - [Phase ?]: unknown and verifiedWithoutProvenance compose by design (171-05)
 - [Phase 171-06]: check-status.md item 8 consumes chunk-provenance-status's projectProvenanceState field rather than re-deriving severity, so a pre-provenance project (both reference games, 100% flagged) reports as informational not alarming
 - [Phase ?]: 171-07: real chunk-check output disproves the plan's anticipated ambiguous rulebook/01 shorthand in seven's live prose; recorded honestly rather than assumed, per the phase honesty requirement
+- [Phase 172]: parseBuildManifest distinguishes tabular:true-empty from tabular:false-prose via a table-structure scan, not row-count alone
+- [Phase 172]: parseVerifiedAgainst fixed to use findHeadingIndex instead of chunkText.indexOf, closing the latent f73153a3 recurrence
 
 ### Pending Todos
 
@@ -525,7 +528,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T19:05:23.387Z
+Last session: 2026-07-28T20:04:01.267Z
 Stopped at: Completed 171-07-PLAN.md
 Resume file: 
 None

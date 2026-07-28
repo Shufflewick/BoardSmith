@@ -89,7 +89,7 @@ Plans:
   3. Both checks are demonstrated end-to-end against at least one reference game, surfacing real findings (not a dry no-op run).
 **Plans**: 5 plans (4 waves)
 Plans:
-- [ ] 172-01-PLAN.md — Shared CHUNK.md/Build-Manifest parser module + f73153a3 recurrence fix (wave 1)
+- [x] 172-01-PLAN.md — Shared CHUNK.md/Build-Manifest parser module + f73153a3 recurrence fix (wave 1)
 - [ ] 172-02-PLAN.md — CHECK-03 `trace-check`: citation scanner, three-rung resolution ladder, findings, report (wave 2)
 - [ ] 172-03-PLAN.md — CHECK-05 `drift-check`: commit-hash extraction, git diff plumbing, three drift states (wave 2)
 - [ ] 172-04-PLAN.md — CLI registration + exit-code contract through the real entry point (wave 3)
@@ -177,7 +177,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 |-------|----------------|--------|-----------|
 | 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
-| 172. Source-Free Conformance Checks | 0/TBD | Not started | - |
+| 172. Source-Free Conformance Checks | 1/5 | In Progress|  |
 | 173. Verify Pipeline Core | 0/TBD | Not started | - |
 | 174. Verify Classifier | 0/TBD | Not started | - |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |

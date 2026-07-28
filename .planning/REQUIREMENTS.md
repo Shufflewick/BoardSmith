@@ -92,12 +92,12 @@ the tag.
       supersession chains.
 - [ ] **CHECK-02**: The three audit lenses (fidelity, visibility, undo) run per stale chunk against
       raw slices plus `RULINGS.md`, feeding the existing bounded repair loop.
-- [ ] **CHECK-03**: Traceability sweep — every Interpretation claim has a citing test, every test
+- [x] **CHECK-03**: Traceability sweep — every Interpretation claim has a citing test, every test
       traces to a live claim, and every ruling has a test; gaps are reported as findings. Runs with
       no source present.
 - [ ] **CHECK-04**: Derived-line re-derivation — every rule-bearing `Derived` line is re-derived
       independently of pass 1 and disagreements reported. Runs with no source present.
-- [ ] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
+- [x] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
       commit hash, and any chunk whose code moved since the human last approved it is reported.
 - [ ] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
       the engine and mismatches reported as findings.
@@ -143,8 +143,8 @@ the tag.
 | PROV-01 | Phase 171 | Complete |
 | PROV-02 | Phase 171 | Complete |
 | PROV-03 | Phase 171 | Complete |
-| CHECK-03 | Phase 172 | Pending |
-| CHECK-05 | Phase 172 | Pending |
+| CHECK-03 | Phase 172 | Complete |
+| CHECK-05 | Phase 172 | Complete |
 | VERIFY-01 | Phase 173 | Pending |
 | VERIFY-02 | Phase 173 | Pending |
 | VERIFY-07 | Phase 173 | Pending |
