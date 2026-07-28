@@ -112,9 +112,21 @@ ${INDEX_HEADINGS[2]}
  * the slice-side marker count, so dedup here would make a working sweep look like a dropping one.
  */
 export async function ingestGapsCommand(
-  options: { project?: string; json?: boolean } = {},
+  options: { project?: string; json?: boolean; skipRelabel?: boolean } = {},
 ): Promise<void> {
   const projectDir = resolve(options.project ?? process.cwd());
+
+  // Relabel FIRST, as part of this command rather than as a second one the session must
+  // remember. Both were separate commands for one run: the archive landed (it is forced by an
+  // init flag) and the gaps sweep landed, but `ingest-relabel` was simply never invoked --
+  // the same way every other newly-introduced step in this pipeline has been skipped. Reducing
+  // synthesis to a single command removes the thing that gets forgotten.
+  //
+  // Ordering matters: relabelling moves presentation lines off the Derived prefix, and the gaps
+  // sweep below reads final slice content.
+  if (!options.skipRelabel) {
+    await ingestRelabelCommand({ project: projectDir, json: false });
+  }
   const rulebookDir = join(projectDir, 'rulebook');
   const indexPath = join(rulebookDir, 'INDEX.md');
 

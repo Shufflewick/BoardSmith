@@ -138,8 +138,9 @@ program
 
 program
   .command('ingest-gaps')
-  .description('Fill rulebook/INDEX.md\'s Open Rules Gaps section from the slice files')
+  .description('Relabel presentation-only Derived lines, then fill Open Rules Gaps from the slices')
   .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--skip-relabel', 'Do not relabel presentation-only Derived lines first')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(ingestGapsCommand);
 

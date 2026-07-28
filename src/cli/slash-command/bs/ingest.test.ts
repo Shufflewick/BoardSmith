@@ -356,12 +356,16 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
 // scripts/ingest-harness/README.md.
 
 describe('v4.9 INGEST-02 — relabel command and shared lexicon', () => {
-  it('Step 3 runs ingest-relabel before ingest-gaps', () => {
+  it('synthesis is ONE command — relabel is folded into ingest-gaps', () => {
+    // Two commands were tried. The archive landed (forced by an init flag) and the gaps sweep
+    // landed, but ingest-relabel was simply never invoked — the same way every newly introduced
+    // step in this pipeline has been skipped. One command removes the thing that gets forgotten.
     const ingestRules = read('ingest-rules.md');
-    const relabel = ingestRules.indexOf('npx boardsmith ingest-relabel');
-    const gaps = ingestRules.indexOf('npx boardsmith ingest-gaps');
-    expect(relabel).toBeGreaterThan(-1);
-    expect(gaps).toBeGreaterThan(relabel);
+    expect(ingestRules).toContain('npx boardsmith ingest-gaps');
+    expect(ingestRules).not.toContain('npx boardsmith ingest-relabel');
+    const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
+    // ingest-gaps must actually call the relabel first, not just document that it does.
+    expect(cmd).toMatch(/if \(!options\.skipRelabel\) \{\s*await ingestRelabelCommand/);
   });
 
   it('the relabel command changes only the prefix, never the text', () => {
@@ -699,7 +703,7 @@ describe('v4.9 INGEST-03 — ## Open Rules Gaps section (template fill)', () => 
     // requires no judgment, so it does not belong in skill text.
     const ingestRules = read('ingest-rules.md');
     expect(ingestRules).toContain('npx boardsmith ingest-gaps');
-    expect(flat(ingestRules)).toMatch(/Run both synthesis commands/);
+    expect(flat(ingestRules)).toMatch(/Run the synthesis command/);
     const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
     expect(cmd).toContain('Named-but-undefined');
     expect(cmd).toMatch(/NOT deduplicated/i);

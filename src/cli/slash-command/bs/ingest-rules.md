@@ -142,20 +142,17 @@ following artifacts **from subagent-returned summaries only** — never from re-
 `## Slices`, and `## Term → Slice` sections. Your job here is to fill those sections, not to
 create the file.
 
-1. **Run both synthesis commands, in this order:**
+1. **Run the synthesis command:**
 
    ```
-   npx boardsmith ingest-relabel
    npx boardsmith ingest-gaps
    ```
 
-   `ingest-relabel` moves any `Derived (p.N):` line whose text is pure presentation description
-   (typography, palette, layout, wordmark) onto the `Visual (p.N):` prefix. It changes only the
-   prefix — no text is rewritten and nothing is deleted. Run it before `ingest-gaps` so the gaps
-   sweep sees final slices. Lines needing real judgment are reported, not guessed at; read that
-   report and fix any it names by hand.
-
-   `ingest-gaps` then fills `## Open Rules Gaps`:
+   It does two things. First it relabels any `Derived (p.N):` line whose text is pure
+   presentation description (typography, palette, layout, wordmark) onto the `Visual (p.N):`
+   prefix — only the prefix changes, no text is rewritten and nothing is deleted. Lines needing
+   real judgment are reported rather than guessed at; read that report and fix any it names by
+   hand. Then it fills `## Open Rules Gaps`:
 
    It sweeps the slice files for every `Named-but-undefined (p.N): <rule>` line and writes them
    into the section verbatim, without deduplicating — a rule named in two slices and defined in
@@ -178,13 +175,13 @@ create the file.
    `Source hash:`, and `Transcribed:` untouched — those are the provenance record a later verify
    pass reads, and they describe the archive Step 1 made.
 
-3. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
+4. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
    approximate aspect ratios (cards, tiles, board proportions), accumulated from the transcription
    subagents' `componentMentions[]` returns and seeded into `ASSETS.md` below.
-4. **`ASSETS.md`** — the component/asset ledger (needed-by-chunk, requested, received,
+5. **`ASSETS.md`** — the component/asset ledger (needed-by-chunk, requested, received,
    placeholder-in-use, file path — see `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md`), seeded from the
    component inventory above. Assets are recorded as debt here, never requested up front.
-5. **Visual identity survey** — evidence only, no decision made cold: dominant palette
+6. **Visual identity survey** — evidence only, no decision made cold: dominant palette
    candidates, typography feel, iconography, notes on board/card art, and descriptions of setup
    diagrams and embedded component images. Built exclusively from the accumulated
    `visualEvidence[]` lists the transcription subagents return (parallel to how INDEX.md is
@@ -197,7 +194,7 @@ create the file.
    the evidence the design ask depends on would be gone the moment this session ends. The
    actual design direction is decided there, at the first UI chunk's `ask` step, against
    `DESIGN.md`.
-6. **Player counts** — min/max player counts and any per-count setup differences, recorded at
+7. **Player counts** — min/max player counts and any per-count setup differences, recorded at
    sketch level.
 
 Variant/optional/advanced rules were already tagged out-of-scope-by-default **in the slices at
