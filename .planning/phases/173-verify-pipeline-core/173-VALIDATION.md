@@ -72,9 +72,26 @@ corrupting `INDEX.md` and silently failing to write `Source hash:`/`Transcribed:
 this session (research, then independently by the orchestrator against a `cp -R` copy of `seven`).
 
 **Wave 1 exit condition is not "the command exits 0" — it is that an adopted project actually
-computes the adopted scope.** Run adoption against copies of BOTH reference games and assert
-`chunk-provenance-status` no longer reports `pre-provenance`. The command already lies about
-success; its exit code is not evidence.
+computes the adopted scope.** The command already lies about success; its exit code is not evidence.
+
+**CORRECTED 2026-07-28 — the authoritative check is `computeVerificationScope()`, NOT
+`chunk-provenance-status`.** This document originally named the wrong one. The executor caught it,
+documented the refutation in `173-PROOF.md` rather than absorbing it, and the orchestrator confirmed
+it independently against `cp -R` copies:
+
+| Check | pristine `seven` | after adoption |
+|---|---|---|
+| `computeVerificationScope()` | `code-conformance-only` / `pre-provenance-project` | **`full`** ✅ |
+| `chunk-provenance-status` → `projectProvenanceState` | `pre-provenance` | `pre-provenance` (unchanged) |
+
+They measure different things. `projectProvenanceState` tracks whether *chunks* carry
+`## Verified Against` blocks — a per-chunk property written at close time, which adoption does not
+and should not touch. `computeVerificationScope()` tracks *project* source provenance, which is
+exactly what adoption establishes. Asserting the former would have been an unsatisfiable gate.
+
+Run adoption against copies of BOTH reference games and assert `computeVerificationScope()` returns
+`full`, plus `Edition:` preserved byte-identical, wrapped `Source:` prose intact, and
+`Source hash:`/`Transcribed:` present and independently sha256-verified.
 
 No later wave may be verified against real-game data until this passes. Plan 173-01 owns the gate
 and is wave 1 alone.
@@ -140,7 +157,7 @@ proved the point twelve times over. VERIFY-01, VERIFY-07 and VERIFY-08 are close
 | **SC-2** — non-destructive staging | Live slices byte-identical before/after a full pass; every write lands under `rulebook/.verify/<run-id>/`; no walker picks up the dot-dir | unit (path computation + 5 real consumers) + whole-tree byte manifest diff in the live proof | 173-02 T3, 173-06 T2 |
 | **SC-3** — orchestrator never reads a slice (**an ABSENCE**) | **Positive observable:** the orchestrator's captured transcript contains no slice-body-shaped line (`QUOTE`, `Derived (p.`, `Visual (p.`) anywhere across the pass; dispatch prompts carry only unit id + rulebook path + output dir; returns carry only structured-summary fields | live-session proof with a transcript grep — **never** a compliance assertion | 173-06 T2 |
 | **SC-4** — resumable | A real interrupted run: kill mid-pass with ≥1 unit recorded and ≥1 unrecorded, re-invoke, then assert (a) recorded units are NOT re-dispatched, (b) unrecorded ones ARE, (c) the end state matches a clean run | live kill-and-resume proof — **not** a unit test of the ledger reader | 173-07 T1 |
-| **Decision 1b** — the gate | `chunk-provenance-status` reports adopted (not `pre-provenance`) scope after adoption on copies of both games; `Edition:` preserved; `Source:` wrapped prose intact; `Source hash:`/`Transcribed:` present | unit + real-data proof on both games | 173-01 |
+| **Decision 1b** — the gate | `computeVerificationScope()` returns `full` (not `pre-provenance-project`) after adoption on copies of both games; `Edition:` preserved byte-identical; `Source:` wrapped prose intact; `Source hash:`/`Transcribed:` present. **Not** `chunk-provenance-status` — see the corrected gate section above | unit + real-data proof on both games | 173-01 |
 
 ---
 
