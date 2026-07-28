@@ -112,7 +112,7 @@ Plans:
 - [x] 173-03-PLAN.md — Generalize `transcription-subagent.md`'s output directory (reuse, no fork)
 - [x] 173-04-PLAN.md — `/bs-verify-game` entry point + `bs/verify/` sub-steps + skill-text contract pins
 - [x] 173-05-PLAN.md — Installer registration for `bs-verify-game` + all five `SKILL_NAMES` sites + anti-drift meta-test
-- [ ] 173-06-PLAN.md — Live proofs: SC-1 install, SC-2 non-destructive staging, SC-3 transcript absence
+- [x] 173-06-PLAN.md — Live proofs: SC-1 install, SC-2 non-destructive staging, SC-3 transcript absence
 - [ ] 173-07-PLAN.md — Live proof: SC-4 real kill-and-resume + phase evidence closeout
 
 ### Phase 174: Verify Classifier
@@ -187,7 +187,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
-| 173. Verify Pipeline Core | 5/7 | In Progress|  |
+| 173. Verify Pipeline Core | 6/7 | In Progress|  |
 | 174. Verify Classifier | 0/TBD | Not started | - |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |
 | 176. Stale-Chunk Repair | 0/TBD | Not started | - |
