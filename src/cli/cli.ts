@@ -27,6 +27,7 @@ program
   .description('Create a new BoardSmith game project')
   .option('--rulebook <path>', 'Archive this source rulebook into the new project and write rulebook/INDEX.md provenance')
   .option('--edition <edition>', 'Edition string as stated in the rulebook (used with --rulebook)')
+  .option('--without-rulebook', 'Explicitly declare no rulebook exists (the interview path supplies rulebook/ content)')
   .action(initCommand);
 
 // Development

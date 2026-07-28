@@ -124,7 +124,7 @@ describe('initCommand — git init on scaffold (Phase 149 Finding 1)', () => {
   it('initializes a git repository in the scaffolded project directory', async () => {
     parentDir = mkdtempSync(join(tmpdir(), 'bs-init-git-'));
     process.chdir(parentDir);
-    await initCommand('git-init-test-game');
+    await initCommand('git-init-test-game', { withoutRulebook: true });
     const projectPath = join(parentDir, 'git-init-test-game');
     expect(existsSync(join(projectPath, '.git'))).toBe(true);
   });
@@ -148,7 +148,7 @@ describe('initCommand — git init on scaffold (Phase 149 Finding 1)', () => {
     process.env.GIT_COMMITTER_NAME = '';
     process.env.GIT_COMMITTER_EMAIL = '';
     try {
-      await expect(initCommand('git-init-noid-game')).resolves.toBeUndefined();
+      await expect(initCommand('git-init-noid-game', { withoutRulebook: true })).resolves.toBeUndefined();
       const projectPath = join(parentDir, 'git-init-noid-game');
       // Scaffold survives, the repo exists, but no commit was made.
       expect(existsSync(join(projectPath, 'package.json'))).toBe(true);

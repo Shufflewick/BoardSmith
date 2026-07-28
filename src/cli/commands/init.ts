@@ -35,9 +35,42 @@ export interface InitOptions {
   rulebook?: string;
   /** Edition string as stated in the rulebook, passed through to the provenance header. */
   edition?: string;
+  /**
+   * Explicit "there is no rulebook" acknowledgement. Required when `rulebook` is absent, so a
+   * missing archive is always a deliberate choice rather than an omission nobody noticed.
+   */
+  withoutRulebook?: boolean;
 }
 
 export async function initCommand(name: string, options: InitOptions = {}): Promise<void> {
+  // REQUIRE an explicit rulebook decision. This is the twelfth mechanism tried for the ingest
+  // archive and the first that does not depend on the session reading anything.
+  //
+  // The eleventh added `--rulebook` to the `init` line in scaffold.md. A live session read that
+  // file (it needs `<name>` from it) and ran `npx boardsmith init seven` — the flag absent. The
+  // model reproduces these mechanics from its prior at every granularity: steps, subagent
+  // prompts, and command lines. Documentation cannot win that.
+  //
+  // What it does reliably is fix failing commands — the traces show it iterating on `tsc`
+  // errors until clean. So an omitted decision is now a hard failure with an actionable
+  // message, not a silently missing archive discovered at a later verify pass.
+  // Note: the flag is `--without-rulebook`, not `--no-rulebook`. Commander treats `--no-X` as a
+  // negation of `--X`, so `--no-rulebook` would set `rulebook: false` and collide with
+  // `--rulebook <path>` rather than producing its own field.
+  if (!options.rulebook && !options.withoutRulebook) {
+    console.error(
+      chalk.red('Error: init requires an explicit rulebook decision.\n') +
+        '\nPass one of:\n' +
+        `  --rulebook <path>   archive that source rulebook into ${name}/ and write\n` +
+        '                      rulebook/INDEX.md provenance (edition via --edition)\n' +
+        '  --without-rulebook  no rulebook exists; the structured interview will supply\n' +
+        '                      the rulebook/ content instead\n' +
+        '\nExample:\n' +
+        `  npx boardsmith init ${name} --rulebook ~/path/to/rules.pdf\n`,
+    );
+    process.exit(1);
+  }
+
   const projectPath = join(process.cwd(), name);
 
   if (existsSync(projectPath)) {

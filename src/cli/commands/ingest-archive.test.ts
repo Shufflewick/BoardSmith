@@ -194,7 +194,7 @@ describe('init --rulebook — the archive rides on a command that is never skipp
     try {
       process.chdir(parent);
       const { initCommand } = await import('./init.js');
-      await initCommand('plain-game');
+      await initCommand('plain-game', { withoutRulebook: true });
       // No rulebook path means no archive and no INDEX.md — the interview path writes those.
       await expect(
         fs.access(join(parent, 'plain-game', 'rulebook', 'INDEX.md')),
@@ -205,4 +205,43 @@ describe('init --rulebook — the archive rides on a command that is never skipp
       await fs.rm(parent, { recursive: true, force: true });
     }
   }, 120_000);
+});
+
+describe('init — an explicit rulebook decision is required', () => {
+  // Twelfth mechanism. The eleventh documented --rulebook on the init line in scaffold.md and a
+  // live session still ran the bare `npx boardsmith init seven`, reproducing the command from
+  // its prior rather than from the file it had just read. An omitted decision is now a hard
+  // failure, because failing commands are the one signal these sessions reliably act on.
+  it('exits non-zero with an actionable message when neither flag is given', async () => {
+    const parent = await fs.mkdtemp(join(tmpdir(), 'bs-init-required-'));
+    const cwd = process.cwd();
+    const errors: string[] = [];
+    const origError = console.error;
+    const origExit = process.exit;
+    try {
+      process.chdir(parent);
+      console.error = (msg?: unknown) => void errors.push(String(msg));
+      // @ts-expect-error — test double for a non-returning function
+      process.exit = (code?: number) => {
+        throw new Error(`EXIT:${code}`);
+      };
+      const { initCommand } = await import('./init.js');
+      await expect(initCommand('undeclared')).rejects.toThrow('EXIT:1');
+
+      const combined = errors.join('\n');
+      // The message must name both options and show a usable example — a bare "invalid
+      // arguments" would leave a session guessing, which is how this failed for eleven rounds.
+      expect(combined).toMatch(/--rulebook <path>/);
+      expect(combined).toMatch(/--without-rulebook/);
+      expect(combined).toMatch(/npx boardsmith init undeclared --rulebook/);
+
+      // And it must not have scaffolded a half-project before refusing.
+      await expect(fs.access(join(parent, 'undeclared'))).rejects.toThrow();
+    } finally {
+      console.error = origError;
+      process.exit = origExit;
+      process.chdir(cwd);
+      await fs.rm(parent, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

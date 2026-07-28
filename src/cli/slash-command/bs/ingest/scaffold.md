@@ -63,7 +63,13 @@ provenance header lines plus empty `## Open Rules Gaps`, `## Slices`, and `## Te
 sections for Step 3 to fill. Add `--edition "<edition>"` too if the edition is already known;
 without it the header records an explicit `not stated in the rulebook` value rather than a blank.
 
-Drop `--rulebook` only when no path exists at this point: the designer has no rulebook (the
+**`init` refuses to run without an explicit rulebook decision** — it exits with an error naming
+both options. That is deliberate: this flag was documented here first and a live session still
+ran the bare `npx boardsmith init <name>`, reproducing the command line from memory rather than
+from this file. An error is the one signal that reliably gets acted on.
+
+When no rulebook path exists, pass `--without-rulebook` instead. Drop `--rulebook` only when no
+path exists at this point: the designer has no rulebook (the
 interview path writes the header values itself, per `ingest/interview-fallback.md`), or they will
 supply a path later at Step 2 — in which case run `npx boardsmith ingest-archive <path>` from
 inside the project as soon as it is bound.
