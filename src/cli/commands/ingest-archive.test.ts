@@ -161,3 +161,48 @@ describe('ingest-archive — INDEX.md contract', () => {
     expect(after).toContain(`Source hash: ${SOURCE_HASH}`);
   });
 });
+
+describe('init --rulebook — the archive rides on a command that is never skipped', () => {
+  it('initCommand accepts a rulebook path and archives it', async () => {
+    const parent = await fs.mkdtemp(join(tmpdir(), 'bs-init-rulebook-'));
+    const cwd = process.cwd();
+    try {
+      process.chdir(parent);
+      const { initCommand } = await import('./init.js');
+      await initCommand('archived-game', { rulebook: sourcePath });
+
+      const archived = await fs.readFile(
+        join(parent, 'archived-game', 'rulebook', 'source', 'src-rules.pdf'),
+      );
+      expect(archived.equals(SOURCE_BYTES)).toBe(true);
+
+      const index = await fs.readFile(
+        join(parent, 'archived-game', 'rulebook', 'INDEX.md'),
+        'utf-8',
+      );
+      expect(index).toContain(`Source hash: ${SOURCE_HASH}`);
+      expect(index).toContain('## Open Rules Gaps');
+    } finally {
+      process.chdir(cwd);
+      await fs.rm(parent, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it('scaffolds normally when no rulebook is passed', async () => {
+    const parent = await fs.mkdtemp(join(tmpdir(), 'bs-init-norulebook-'));
+    const cwd = process.cwd();
+    try {
+      process.chdir(parent);
+      const { initCommand } = await import('./init.js');
+      await initCommand('plain-game');
+      // No rulebook path means no archive and no INDEX.md — the interview path writes those.
+      await expect(
+        fs.access(join(parent, 'plain-game', 'rulebook', 'INDEX.md')),
+      ).rejects.toThrow();
+      await expect(fs.access(join(parent, 'plain-game', 'package.json'))).resolves.toBeUndefined();
+    } finally {
+      process.chdir(cwd);
+      await fs.rm(parent, { recursive: true, force: true });
+    }
+  }, 120_000);
+});

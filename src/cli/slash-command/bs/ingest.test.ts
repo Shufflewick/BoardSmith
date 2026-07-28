@@ -526,27 +526,6 @@ describe('v4.9 INGEST-01 — optional rulebook path + archive scheduled in Step 
     expect(ingestRules).toMatch(/If a rulebook path was supplied at invocation, skip this question/);
   });
 
-  it('scaffold.md runs ingest-archive as item 4 of the Step 1 sequence', () => {
-    const scaffold = read('ingest/scaffold.md');
-    expect(scaffold).toContain('npx boardsmith ingest-archive');
-    const seqIdx = scaffold.indexOf('## Verification Sequence');
-    const archiveIdx = scaffold.indexOf('4. **Archive the source rulebook');
-    expect(seqIdx).toBeGreaterThan(-1);
-    expect(archiveIdx).toBeGreaterThan(seqIdx);
-    expect(flat(scaffold)).toMatch(/all four steps have completed/);
-  });
-
-  it('scaffold.md records why the archive lives in Step 1 and forbids moving it back', () => {
-    const scaffold = flat(read('ingest/scaffold.md'));
-    expect(scaffold).toMatch(/never once executed/);
-    expect(scaffold).toMatch(/Do not move it back to Step 3/);
-  });
-
-  it('scaffold.md forbids hand-writing INDEX.md if the command fails', () => {
-    const scaffold = flat(read('ingest/scaffold.md'));
-    expect(scaffold).toMatch(/Do not hand-write `rulebook\/INDEX.md` as a fallback/);
-  });
-
   it('Step 3 fills the existing scaffold rather than creating INDEX.md', () => {
     const ingestRules = flat(read('ingest-rules.md'));
     expect(ingestRules).toMatch(/`rulebook\/INDEX.md` already exists: Step 1 created it/);
@@ -577,23 +556,36 @@ describe('v4.9 INGEST-01 — command ownership of the mechanical contract', () =
     expect(ingestRules).not.toContain('synthesis-subagent');
   });
 
-  it('scaffold.md archives ONLY when a rulebook path is known, and skips otherwise', () => {
-    // SUPERSEDED PREMISE. This was previously a negative guard asserting scaffold.md never
-    // mentions rulebook/source/, because at Step 1 the rulebook path was not yet bound --
-    // 170-RESEARCH.md Pitfall 1. The optional invocation argument changes that: a supplied path
-    // is resolved to absolute before Step 1 runs, so Step 1 can archive.
-    //
-    // The invariant that still matters is conditionality. Archiving unconditionally at Step 1
-    // would break the interview path (no source file exists) and any run where the designer
-    // supplies the path later at Step 2.
+  it('the archive is a --rulebook flag on the init command line, not a separate step', () => {
+    // SUPERSEDED TWICE. First a negative guard (scaffold.md must never mention
+    // rulebook/source/, because the path was unknown at Step 1). Then a conditional item 4 of
+    // the Verification Sequence. That item was skipped by a session that had just read the file
+    // and performed items 1-3 correctly -- its prior that the sequence is three steps beat the
+    // file. `boardsmith init <name>` is never skipped, because the session needs it to create
+    // the directory, so the archive rides on that invocation instead.
     const scaffold = read('ingest/scaffold.md');
-    const flatScaffold = flat(scaffold);
-    expect(flatScaffold).toMatch(/only when a rulebook path is known at this point/);
-    expect(flatScaffold).toMatch(/Skip this step when no rulebook path is known/);
-    // The interview path must be named as a legitimate skip reason, not left implicit.
-    expect(flatScaffold).toMatch(/interview path will produce the header values itself/);
-    // And a path arriving at Step 2 must still get archived, just later.
-    expect(flatScaffold).toMatch(/they will supply the path at Step 2, in which case run this command then/);
+    expect(scaffold).toContain('npx boardsmith init <name> --rulebook');
+    // And it must NOT have been re-split into its own numbered step.
+    expect(scaffold).not.toContain('4. **Archive the source rulebook');
+    expect(flat(scaffold)).toMatch(/all three steps have completed/);
+  });
+
+  it('scaffold.md states the flag is not optional-when-convenient', () => {
+    const scaffold = flat(read('ingest/scaffold.md'));
+    expect(scaffold).toMatch(/is part of this command line whenever a rulebook path is known/);
+    expect(scaffold).toMatch(/not a separate step and not optional-when-convenient/);
+  });
+
+  it('scaffold.md records why a flag survives where a step did not, and forbids re-splitting', () => {
+    const scaffold = flat(read('ingest/scaffold.md'));
+    expect(scaffold).toMatch(/skipped item 4/);
+    expect(scaffold).toMatch(/Do not split this back out into its own step/);
+  });
+
+  it('scaffold.md still covers the two legitimate no-path cases', () => {
+    const scaffold = flat(read('ingest/scaffold.md'));
+    expect(scaffold).toMatch(/interview path writes the header values itself/);
+    expect(scaffold).toMatch(/supply a path later at Step 2/);
   });
 });
 

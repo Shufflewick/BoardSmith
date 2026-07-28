@@ -90,10 +90,20 @@ describe('init command — no -t/--template surface (CLIX-05 / F33)', () => {
     expect(cliSrc).toContain("-t, --target <path>");
   });
 
-  it('init.ts has no InitOptions.template field (the InitOptions type itself is gone)', () => {
+  it('init.ts has no template surface (CLIX-05 / F33)', () => {
+    // The original assertion also required that the `InitOptions` type not exist at all. That
+    // was a proxy for "no template option", correct while init took no options. It now takes
+    // --rulebook/--edition, so the proxy is retired and the real invariant asserted directly:
+    // no template surface of any kind. `--rulebook` is unrelated to templating.
     const initSrc = readFileSync(join(__dirname, 'init.ts'), 'utf-8');
     expect(initSrc).not.toContain('template');
-    expect(initSrc).not.toContain('InitOptions');
+    const cliSrc = readFileSync(join(__dirname, '..', 'cli.ts'), 'utf-8');
+    const initBlock = cliSrc.slice(
+      cliSrc.indexOf(".command('init <name>')"),
+      cliSrc.indexOf(".command('dev')"),
+    );
+    expect(initBlock).not.toContain('template');
+    expect(initBlock).not.toMatch(/-t\b/);
   });
 });
 

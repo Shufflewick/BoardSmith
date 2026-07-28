@@ -12,8 +12,32 @@ import {
   toDisplayName,
   type ProjectConfig,
 } from '../lib/project-scaffold.js';
+import { ingestArchiveCommand } from './ingest-archive.js';
 
-export async function initCommand(name: string): Promise<void> {
+export interface InitOptions {
+  /**
+   * Path to a source rulebook. When given, `init` archives it into the new project and writes
+   * `rulebook/INDEX.md`'s provenance header before returning.
+   *
+   * WHY THIS IS A FLAG ON `init` RATHER THAN A SEPARATE STEP
+   *
+   * Eleven mechanisms were tried to get an ingest session to archive the source. Ten lived in
+   * skill text at various points in the flow and none ever executed across ten measured live
+   * runs. The eleventh added it as item 4 of the Step 1 verification sequence, whose items 1-3
+   * (`init`, `tsc --noEmit`, serve-check + kill) execute correctly in every run — and the
+   * session performed items 1-3 and skipped the newly added item 4, from a file it had just
+   * read. The model's prior for "the scaffold sequence is three steps" overrode the file.
+   *
+   * What no run ever skips is `boardsmith init <name>` itself, because it needs the command to
+   * create the directory. So the archive rides on the command already being invoked instead of
+   * asking the session to invoke another one.
+   */
+  rulebook?: string;
+  /** Edition string as stated in the rulebook, passed through to the provenance header. */
+  edition?: string;
+}
+
+export async function initCommand(name: string, options: InitOptions = {}): Promise<void> {
   const projectPath = join(process.cwd(), name);
 
   if (existsSync(projectPath)) {
@@ -97,6 +121,17 @@ export async function initCommand(name: string): Promise<void> {
     }
 
     spinner.succeed(chalk.green(`Created ${name} successfully!`));
+
+    if (options.rulebook) {
+      // Archive inside init so it cannot be a step the session skips. A failure here is loud:
+      // a scaffolded project whose provenance header describes an archive that does not exist
+      // is worse than a failed init, because the gap only surfaces at a later verify pass.
+      await ingestArchiveCommand(options.rulebook, {
+        project: projectPath,
+        edition: options.edition,
+      });
+    }
+
     console.log(`
 ${chalk.cyan('Next steps:')}
 

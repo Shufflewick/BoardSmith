@@ -25,6 +25,8 @@ program
 program
   .command('init <name>')
   .description('Create a new BoardSmith game project')
+  .option('--rulebook <path>', 'Archive this source rulebook into the new project and write rulebook/INDEX.md provenance')
+  .option('--edition <edition>', 'Edition string as stated in the rulebook (used with --rulebook)')
   .action(initCommand);
 
 // Development
