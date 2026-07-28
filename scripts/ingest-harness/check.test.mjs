@@ -31,6 +31,7 @@ const CONFORMING_DIR = path.join(FIXTURES_DIR, 'conforming');
 // (170-05-PLAN.md context block). Used only as the "expected" hash against the
 // non-conforming fixture, which never archived a copy in the first place.
 const SEVEN_SOURCE_HASH = '5138858e789452d6d366e3ba3a898b5d5417a3561ee23bd53123fd98fe337880';
+const CONFORMING_SOURCE_HASH = '94b836814e8d4849fdff5f5e782a78a7c0a5b8f008808384096cb95359106a89';
 
 function findCheck(result, id) {
   const check = result.checks.find((c) => c.id === id);
@@ -91,7 +92,6 @@ describe('ingest harness checker — non-conforming fixture (the real 2026-07-27
 describe('ingest harness checker — conforming fixture', () => {
   // Computed once from the checked-in fixture PDF: `shasum -a 256
   // scripts/ingest-harness/__fixtures__/conforming/rulebook/source/rules.pdf`
-  const CONFORMING_SOURCE_HASH = '94b836814e8d4849fdff5f5e782a78a7c0a5b8f008808384096cb95359106a89';
 
   const result = checkIngestArtifacts({
     projectDir: CONFORMING_DIR,
@@ -120,5 +120,42 @@ describe('ingest harness checker — conforming fixture', () => {
     // (the file still has the lexicon hit) but the assertion below would flip — proving the
     // exclusion is load-bearing.
     expect(findCheck(result, 'derived-purity').pass).toBe(true);
+  });
+});
+
+describe('visual-lines (h) — separability, not an inline-line count', () => {
+  // Reshaped on evidence: the old check required >=1 inline Visual line, which passed only when
+  // a presentation line had been MISFILED for the synthesis hook to relabel, and failed a run
+  // that classified correctly and routed presentation to 00-visual-survey.md. It rewarded sloppy
+  // transcription and punished clean transcription.
+  it('passes when presentation is recorded in the survey and Derived lines exist', () => {
+    const r = checkIngestArtifacts({
+      projectDir: CONFORMING_DIR,
+      sourceFileName: 'rules.pdf',
+      expectedSourceHash: CONFORMING_SOURCE_HASH,
+    });
+    const h = r.checks.find((c) => c.id === 'visual-lines');
+    expect(h.pass).toBe(true);
+  });
+
+  it('fails when presentation is recorded NOWHERE', () => {
+    const r = checkIngestArtifacts({
+      projectDir: NONCONFORMING_DIR,
+      sourceFileName: 'rules.pdf',
+      expectedSourceHash: SEVEN_SOURCE_HASH,
+    });
+    const h = r.checks.find((c) => c.id === 'visual-lines');
+    expect(h.pass).toBe(false);
+    expect(h.detail).toContain('NOWHERE');
+  });
+
+  it('reports WHERE presentation was recorded, so a reader can tell the two cases apart', () => {
+    const r = checkIngestArtifacts({
+      projectDir: CONFORMING_DIR,
+      sourceFileName: 'rules.pdf',
+      expectedSourceHash: CONFORMING_SOURCE_HASH,
+    });
+    const h = r.checks.find((c) => c.id === 'visual-lines');
+    expect(h.detail).toMatch(/presentation recorded in: (00-visual-survey\.md|\d+ inline Visual)/);
   });
 });

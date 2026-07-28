@@ -363,7 +363,35 @@ function checkTablesIntact(indexText) {
   return makeResult('tables-intact', false, missing.join('; '));
 }
 
-function checkVisualLines(sliceFiles) {
+/**
+ * (h) INGEST-02 separability.
+ *
+ * RESHAPED 2026-07-27, on evidence from two live runs.
+ *
+ * This previously required at least one inline `Visual (p.N):` line in the rule slices. That was
+ * a proxy, and the proxy inverted the requirement:
+ *
+ *   run 1 — one presentation line was misfiled under Derived; the synthesis hook relabelled it;
+ *           Visual=1 -> PASS
+ *   run 2 — nothing was misfiled at all; presentation went to 00-visual-survey.md, its designed
+ *           home; every Derived line was rule-bearing; Visual=0 -> FAIL
+ *
+ * Run 2 is the better run. The old check passed only when a defect existed for the hook to fix,
+ * and failed a session that classified correctly at write time — rewarding sloppy transcription
+ * and punishing clean transcription.
+ *
+ * INGEST-02 asks that rule-bearing inference be SEPARABLE from presentation notes. That is what
+ * is asserted now:
+ *
+ *   1. at least one `Derived (p.N):` line exists — transcription produced rule-bearing inference
+ *      at all, so this cannot pass on an empty or unmarked slice set; and
+ *   2. presentation content is recorded SOMEWHERE — inline `Visual (p.N):` lines, or a populated
+ *      `rulebook/00-visual-survey.md`.
+ *
+ * Purity is checked separately by (i) `derived-purity`; together the two say "rule lines are
+ * rule-bearing, and presentation is captured, not dropped." Neither is satisfiable by a defect.
+ */
+function checkVisualLines(sliceFiles, surveyText) {
   let visualTotal = 0;
   let derivedTotal = 0;
   const perFile = [];
@@ -374,11 +402,22 @@ function checkVisualLines(sliceFiles) {
     derivedTotal += derivedCount;
     perFile.push(`${f.name}: Visual=${visualCount}, Derived=${derivedCount}`);
   }
-  // Zero "Visual (p." lines is a FAIL. No waiver is encoded here — a waiver, if ever
-  // justified, is a human judgment made at the Plan 10 gate, not something this checker
-  // can grant itself.
-  const pass = visualTotal >= 1 && derivedTotal >= 1;
-  const detail = `totals: Visual=${visualTotal}, Derived=${derivedTotal} | per-file: ${perFile.join('; ') || '(no slice files found)'}`;
+
+  // A survey counts as "presentation recorded" only if it has substantive content. An empty or
+  // heading-only stub must not satisfy this — that would let a run drop presentation entirely.
+  const surveyBody = (surveyText || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !l.startsWith('#') && !l.startsWith('<!--') && !l.startsWith('-->'));
+  const surveyPopulated = surveyBody.length >= 3;
+
+  const presentationRecorded = visualTotal >= 1 || surveyPopulated;
+  const pass = derivedTotal >= 1 && presentationRecorded;
+
+  const where = visualTotal >= 1 ? `${visualTotal} inline Visual line(s)` : surveyPopulated ? '00-visual-survey.md' : 'NOWHERE';
+  const detail =
+    `totals: Visual=${visualTotal}, Derived=${derivedTotal}; presentation recorded in: ${where}` +
+    ` | per-file: ${perFile.join('; ') || '(no slice files found)'}`;
   return makeResult('visual-lines', pass, detail);
 }
 
@@ -426,7 +465,9 @@ export function checkIngestArtifacts({ projectDir, sourceFileName, expectedSourc
   const gapsHeading = checkGapsHeading(indexText);
   const gapsReconciliation = checkGapsReconciliation(indexText, sliceFiles);
   const tablesIntact = checkTablesIntact(indexText);
-  const visualLines = checkVisualLines(sliceFiles);
+  const surveyPath = path.join(rulebookDir(projectDir), '00-visual-survey.md');
+  const surveyText = existsSync(surveyPath) ? readFileSync(surveyPath, 'utf8') : '';
+  const visualLines = checkVisualLines(sliceFiles, surveyText);
   const derivedPurity = checkDerivedPurity(sliceFiles);
 
   const checks = [
