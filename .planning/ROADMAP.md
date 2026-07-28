@@ -26,7 +26,7 @@ no archived source degrades honestly instead of failing.
 
 - [x] **Phase 170: Ingest Contract Upgrade** - Archived source + hash, `Visual`/`Derived` split, standardized `Open Rules Gaps` index, and the milestone's verify-first process discipline
 - [x] **Phase 171: Provenance Recording** - `## Verified Against` block at close, code-conformance-only scope recording, `/bs-check-status` drift reporting (completed 2026-07-28)
-- [ ] **Phase 172: Source-Free Conformance Checks** - Traceability sweep + code drift, proven immediately against the two reference games with zero source dependency
+- [x] **Phase 172: Source-Free Conformance Checks** - Traceability sweep + code drift, proven immediately against the two reference games with zero source dependency (completed 2026-07-28)
 - [ ] **Phase 173: Verify Pipeline Core** - `/bs-verify-game` skill entry, non-destructive re-transcription staging, subagent-only context economics, crash resumability
 - [ ] **Phase 174: Verify Classifier** - Two-dimension classification (provenance + rule delta), tuned and validated against real pass-1-vs-pass-2 output
 - [ ] **Phase 175: Impact Map & Repair Gating** - Contradictory human gate, cross-file staleness flip, scoped re-playtest (code-changed chunks only)
@@ -93,7 +93,7 @@ Plans:
 - [x] 172-02-PLAN.md — CHECK-03 `trace-check`: citation scanner, three-rung resolution ladder, findings, report (wave 2)
 - [x] 172-03-PLAN.md — CHECK-05 `drift-check`: commit-hash extraction, git diff plumbing, three drift states (wave 2)
 - [x] 172-04-PLAN.md — CLI registration + exit-code contract through the real entry point (wave 3)
-- [ ] 172-05-PLAN.md — Real-data proof against copies of both reference games, `172-PROOF.md` (wave 4)
+- [x] 172-05-PLAN.md — Real-data proof against copies of both reference games, `172-PROOF.md` (wave 4)
 
 ### Phase 173: Verify Pipeline Core
 **Goal**: A designer can invoke `/bs-verify-game` against an existing bs-built project and get a safely-staged, resumable re-transcription without disturbing the live project.
@@ -177,7 +177,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 |-------|----------------|--------|-----------|
 | 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
-| 172. Source-Free Conformance Checks | 4/5 | In Progress|  |
+| 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
 | 173. Verify Pipeline Core | 0/TBD | Not started | - |
 | 174. Verify Classifier | 0/TBD | Not started | - |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |

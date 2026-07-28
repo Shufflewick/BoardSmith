@@ -4,14 +4,14 @@ milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
 stopped_at: Completed 171-07-PLAN.md
-last_updated: "2026-07-28T20:40:15.339Z"
+last_updated: "2026-07-28T20:58:55.190Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 22
-  completed_plans: 18
-  percent: 10
+  completed_plans: 19
+  percent: 20
 ---
 
 # Project State
@@ -537,6 +537,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Three-rung claim-resolution ladder (owners -> live-claim validity -> authoring chunk) implemented as sequential array filters; rung 3 falls back to rung-2 survivors when authoring narrowing would empty the set, never dropping to nothing
 - [Phase 172]: drift-check.ts: hand-written execFileAsync instead of promisify(execFile) — Node's util.promisify.custom symbol is dropped when execFile is wrapped for test mocking, silently changing the resolved shape from {stdout,stderr} to a positional array
 - [Phase ?]: [Phase 172-04]: trace-check/drift-check registered on the CLI surface with --project/--json only, no mode flag; pinned findings-exit-0/tool-failure-exits-non-zero via a real child-process spawn of node bin/boardsmith.js (first such test in this repo)
+- [Phase 172]: Phase 172 closed: trace-check/drift-check proven end-to-end against both reference games via cp -R copies; independent cross-check found and documented a real narrow-impact parser precision defect in AUTHORING_VERBS (filed for follow-up, not fixed in this proof-only plan)
 
 ### Pending Todos
 
@@ -548,7 +549,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T20:38:37.573Z
+Last session: 2026-07-28T20:57:22.403Z
 Stopped at: Completed 171-07-PLAN.md
 Resume file: 
 None
