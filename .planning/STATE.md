@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 171-07-PLAN.md
-last_updated: "2026-07-28T20:58:55.190Z"
+stopped_at: Completed 173-01-PLAN.md
+last_updated: "2026-07-28T22:21:28.712Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 2
-  total_plans: 22
-  completed_plans: 19
+  total_plans: 29
+  completed_plans: 20
   percent: 20
 ---
 
@@ -21,12 +21,30 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 172 — source-free-conformance-checks
+**Current focus:** Phase 173 — verify-pipeline-core
 
 ## Current Position
 
-Phase: 172 (source-free-conformance-checks) — EXECUTING
-Plan: 5 of 5
+Phase: 173 (verify-pipeline-core) — EXECUTING
+Plan: 1 of 7
+
+`173-01-PLAN.md` closed the phase's wave-1 hard gate: `ingestArchiveCommand`'s existing-INDEX
+branch was reporting false success on already-ingested projects while silently failing to write
+`Source hash:`/`Transcribed:`, orphaning a wrapped `Source:` paragraph, and clobbering a real
+`Edition:` value. Repaired all four root causes (insert-if-absent headers, wrap-safe `Source:`
+handling, `Edition:` preservation, and deciding the existence branch OUTSIDE any write-performing
+try/catch so a mid-repair error can never fall through to a scaffold overwrite). Proved the fix
+against `cp -R` copies of BOTH reference games — `seven` (wrapped-prose `Source:`) and
+`one-two-punch` (no `Source:` line at all) — with `computeVerificationScope()` flipping
+`pre-provenance-project` → `full` for both, `Edition:` preserved byte-identical, and both originals
+confirmed byte-identical before/after. Documented (in `173-PROOF.md`) a refuted plan hedge:
+`chunk-provenance-status`'s project-level `pre-provenance` state does not flip from this fix alone
+— that field tracks whether any chunk has ever had `chunk-check` run on it, unrelated to
+`INDEX.md`'s header; `computeVerificationScope()` is the actual authoritative payoff check. Full
+suite 3525/3525, lint zero errors in `src/cli/`. See
+`.planning/phases/173-verify-pipeline-core/173-01-SUMMARY.md`.
+
+Phase 172 (source-free-conformance-checks) is complete — 5/5 plans, ready for verification.
 
 `172-04-PLAN.md` registered both CHECK-03/CHECK-05 commands on the CLI surface next to
 `chunk-provenance-status`: `boardsmith trace-check [--project <dir>] [--json]` and
@@ -538,6 +556,7 @@ Recent decisions affecting current work:
 - [Phase 172]: drift-check.ts: hand-written execFileAsync instead of promisify(execFile) — Node's util.promisify.custom symbol is dropped when execFile is wrapped for test mocking, silently changing the resolved shape from {stdout,stderr} to a positional array
 - [Phase ?]: [Phase 172-04]: trace-check/drift-check registered on the CLI surface with --project/--json only, no mode flag; pinned findings-exit-0/tool-failure-exits-non-zero via a real child-process spawn of node bin/boardsmith.js (first such test in this repo)
 - [Phase 172]: Phase 172 closed: trace-check/drift-check proven end-to-end against both reference games via cp -R copies; independent cross-check found and documented a real narrow-impact parser precision defect in AUTHORING_VERBS (filed for follow-up, not fixed in this proof-only plan)
+- [Phase 173]: Wave-1 gate closed: ingest-archive existing-INDEX branch repaired and proven against both reference games — Unblocks decision 1 (adopt-on-first-verify) and every later plan needing real-game data; two plan hedges refuted empirically and documented in 173-PROOF.md rather than silently absorbed
 
 ### Pending Todos
 
@@ -549,8 +568,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T20:57:22.403Z
-Stopped at: Completed 171-07-PLAN.md
+Last session: 2026-07-28T22:21:28.704Z
+Stopped at: Completed 173-01-PLAN.md
 Resume file: 
 None
 

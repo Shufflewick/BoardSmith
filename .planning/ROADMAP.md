@@ -107,7 +107,7 @@ Plans:
 **Plans**: 7 plans in 6 waves
 
 Plans:
-- [ ] 173-01-PLAN.md — Repair `ingest-archive`'s existing-INDEX branch + real-data gate proof on both reference games (**wave 1, hard gate**)
+- [x] 173-01-PLAN.md — Repair `ingest-archive`'s existing-INDEX branch + real-data gate proof on both reference games (**wave 1, hard gate**)
 - [ ] 173-02-PLAN.md — `verify-run` CLI: staging-tree allocation and the append-only RUN.md resume ledger
 - [ ] 173-03-PLAN.md — Generalize `transcription-subagent.md`'s output directory (reuse, no fork)
 - [ ] 173-04-PLAN.md — `/bs-verify-game` entry point + `bs/verify/` sub-steps + skill-text contract pins
@@ -187,7 +187,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
-| 173. Verify Pipeline Core | 0/TBD | Not started | - |
+| 173. Verify Pipeline Core | 1/7 | In Progress|  |
 | 174. Verify Classifier | 0/TBD | Not started | - |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |
 | 176. Stale-Chunk Repair | 0/TBD | Not started | - |
