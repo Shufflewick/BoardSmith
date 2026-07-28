@@ -383,7 +383,16 @@ export async function chunkCheckCommand(
 
   // The heading position in the file AS READ, before this run writes anything. Computed once and
   // reused both for scanning citations and for locating where to write below.
-  const headingIdx = chunkText.indexOf(VERIFIED_AGAINST_HEADING);
+  //
+  // Anchored to a LINE, not to the first substring occurrence. `indexOf(VERIFIED_AGAINST_HEADING)`
+  // also matched prose, and CHUNK.template.md:18 legitimately names "## Verified Against" inside
+  // its required-headings comment — 130 lines above the real section. That made `citableText`
+  // truncate at line 18, before `## Interpretation`, so EVERY citation was silently dropped and
+  // every chunk scaffolded from the template recorded provenance citing nothing. Silent
+  // under-recording is the exact defect class this phase exists to prevent, so the heading is
+  // located structurally rather than by substring.
+  const headingMatch = /^## Verified Against[ \t]*$/m.exec(chunkText);
+  const headingIdx = headingMatch ? headingMatch.index : -1;
 
   // Scan only the content BEFORE any existing "## Verified Against" section. The block's own
   // explanatory comment text legitimately discusses the rulebook index in prose — scanning the

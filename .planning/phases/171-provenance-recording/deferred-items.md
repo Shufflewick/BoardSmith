@@ -50,3 +50,34 @@ Not fixed here: 171-06's `files_modified` frontmatter does not include `chunk-pr
 its test file, and the SCOPE BOUNDARY rule excludes failures in files this plan does not touch.
 `npm test`'s overall pass count for 171-06's own verification is reported net of these 6
 pre-existing failures (3394/3400 passed, not 3400/3400) — see 171-06-SUMMARY.md.
+
+
+---
+
+## CORRECTED 2026-07-28 — the "pre-existing 171-04 chunk-check failures" entry was wrong
+
+171-06's SUMMARY logged 6 failing `chunk-check` tests as pre-existing debt from plan 171-04,
+bisected to `6fd875ef`. That bisection was wrong. The suite was verified fully green at
+`46239de4` (after both 171-04 and 171-05), and re-checking out that commit reproduces
+49/49 passing in `chunk-provenance.test.ts`. The failures were introduced by 171-06 itself.
+
+**Root cause — a real product bug, not a test artifact.** 171-06 correctly added
+`"## Verified Against"` to CHUNK.template.md:18's required-headings comment. But
+`chunkCheckCommand` located the section with `chunkText.indexOf(VERIFIED_AGAINST_HEADING)`, which
+matches the FIRST substring occurrence — line 18, some 130 lines above the real section. So
+`citableText = chunkText.slice(0, headingIdx)` truncated the file before `## Interpretation`, and
+every citation was silently dropped. Any chunk scaffolded from the template would have recorded
+provenance citing NOTHING while looking entirely healthy.
+
+That is silent under-recording — the same defect class as Phase 170's gap section holding 2 of 5
+markers, and precisely what this phase exists to prevent. It was one merge away from shipping as
+accepted debt.
+
+**Fixed:** the heading is now located structurally, `/^## Verified Against[ \t]*$/m`. A regression
+test pins it (`finds the section by LINE, not by first substring`) and was verified RED against the
+reverted fix — reverting turns 7 tests red, green with it.
+
+**Note the recurrence.** This is the third instance in this milestone of first-substring-match
+standing in for a structural lookup: the `PRESENTATION_LEXICON` extraction in `ingest.test.ts`, and
+now this. When locating a declaration or a section, anchor to its structure, never to the first
+occurrence of its name.

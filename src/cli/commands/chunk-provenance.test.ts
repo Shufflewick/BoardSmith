@@ -411,6 +411,27 @@ describe('chunk-check', () => {
   const JAB_CITES =
     '1. Jab is a basic strike — cites rulebook/01-setup-and-round-structure.md';
 
+  it('finds the section by LINE, not by first substring — a prose mention above it must not truncate citations', async () => {
+    // The real 171-06 regression, pinned. CHUNK.template.md:18 names "## Verified Against" inside
+    // its required-headings comment, 130 lines above the real section. With a substring indexOf,
+    // citableText truncated there — before ## Interpretation — so every citation was silently
+    // dropped and each chunk recorded provenance citing NOTHING, while still looking healthy.
+    // Silent under-recording is the defect class this phase exists to prevent.
+    const { project, sliceHash } = await makeCheckProject();
+    const chunkPath = await makeChunk(project, 'prose-mention', JAB_CITES);
+    const text = await fs.readFile(chunkPath, 'utf-8');
+    // Put the mention ABOVE everything, exactly as the template's comment does.
+    await fs.writeFile(
+      chunkPath,
+      `<!-- required sections: "## Verified Against" must be present -->\n${text}`,
+    );
+
+    await chunkCheckCommand('prose-mention', { project, quiet: true }).catch(() => {});
+
+    const after = await fs.readFile(chunkPath, 'utf-8');
+    expect(after).toContain(`| rulebook/01-setup-and-round-structure.md | ${sliceHash} |`);
+  });
+
   it('writes the whole fenced section when none exists, and exits non-zero', async () => {
     const { project } = await makeCheckProject();
     await makeChunk(project, 'jab', JAB_CITES);
