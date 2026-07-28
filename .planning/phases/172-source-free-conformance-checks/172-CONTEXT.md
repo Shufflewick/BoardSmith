@@ -73,14 +73,46 @@ These were checked directly before deciding, not assumed:
    CHECK-03 analogue of the gap-dropping defect Phase 170 spent itself on (and the direct parallel of
    PROV-01 decision 8).
 
-3. **A test file listed in MULTIPLE chunks' manifests makes its bare refs ambiguous.** Real case:
-   `game.test.ts` and `a11y.test.ts` appear in several one-two-punch manifests. An ambiguous bare
-   `claim N` is reported as `ambiguous-claim-ref` naming the candidate chunks and counts as coverage
-   for **none** of them. Only an explicitly qualified reference resolves.
+3. **A test file listed in MULTIPLE chunks' manifests resolves by DETERMINISTIC NARROWING, and is
+   only ambiguous if narrowing fails.**
 
-   Rejected: attributing to all candidates — inflates coverage, so the check reports clean where it
-   is blind. A check that reports clean on unknown data is worse than no check.
-   Rejected: attributing to the most recent chunk — a guess wearing a result's clothing.
+   **AMENDED 2026-07-28 after `172-RESEARCH.md` measured the real data — the original form of this
+   decision was made on a false premise and is superseded.** The premise was that multi-owner test
+   files are an edge case. They are not: *every* claim-bearing test file in both games is listed in
+   3–11 chunks' manifests (`a11y.test.ts` in 8, `game.test.ts` in 6 and 11, and `scoring.test.ts` —
+   which carries 46 of `seven`'s 48 claim citations — in 9). Under the original rule, ~115 of ~115
+   citations report `ambiguous-claim-ref` and `claim-untested` approaches **all 377 claims across
+   both games** — asserting that virtually every claim is untested when the claims demonstrably DO
+   have citing tests. That is the same "reports a verdict where it is blind" failure the original
+   decision was written to prevent, inverted from false-clean into false-broken. And a check that
+   fires on correct work gets waived (the lexicon rationale).
+
+   The resolution ladder, all three rungs deterministic — no proximity heuristics, no guessing:
+
+   1. **Candidate set** = every chunk whose Build Manifest lists this test file.
+   2. **Validity narrowing** — discard candidates that do not actually have a *live* claim with that
+      number in their current `## Interpretation` list. Claim counts range 0–77 and numbering is
+      non-contiguous in 4/17 `seven` chunks, so this discriminates hard.
+   3. **Authorship narrowing** — if >1 candidate survives, keep only the **authoring** chunk: the one
+      whose manifest row marks the file `NEW` or `written`, as opposed to `edited` / `extended` /
+      `rewritten` / `tightened`. This status prose is present in real manifest rows
+      (`tests/discard.test.ts | NEW (test step)` vs `tests/game.test.ts, tests/block.test.ts |
+      edited (test step, Decision 55)`).
+
+   Only if **more than one candidate survives all three rungs** is the citation reported as
+   `ambiguous-claim-ref`, naming the survivors, and counting as coverage for none of them.
+
+   Note the residual risk knowingly accepted at rung 3: a claim *added* by a later editing chunk
+   attributes to the authoring chunk. Rung 2 removes most of that exposure — the later chunk's claim
+   number usually does not exist in the author's list, so the author is discarded before rung 3 runs.
+   The user chose this trade explicitly over leaving the check unusable.
+
+   Still rejected: attributing to all candidates — inflates coverage, reports clean where blind.
+   Still rejected: attributing to the most recent chunk, or to a filename-slug match — guesses
+   wearing a result's clothing.
+   Still rejected: requiring a new qualified citation form — the pre-existing `CHUNK.md claim N`
+   form found in the data is *self*-referential ("this chunk's claim N"), names no slug, and so
+   resolves nothing; treat it exactly as a bare `claim N`.
 
 4. **Static parse only.** The sweep regexes test sources, `CHUNK.md`, and `RULINGS.md`. It never runs
    `npm test` and never touches the engine. This keeps CHECK-03 fast, offline, and source-free by
@@ -102,6 +134,25 @@ These were checked directly before deciding, not assumed:
    Note the contrast with `ingest-check`/`chunk-check`, which DO exit non-zero — those repair a
    machine-owned region and the non-zero exit forces the re-read that makes the repair stick. Nothing
    here is repaired, so nothing needs forcing.
+
+6b. **`test-unlinked` fires only for a chunk-associated, rule-shaped test that cites nothing.**
+   Decided 2026-07-28 alongside the decision-3 amendment; CONTEXT.md originally locked only the
+   finding-kind NAME and left the trigger unspecified, which `172-RESEARCH.md` correctly flagged.
+
+   Trigger: the test file **is** listed in ≥1 chunk's Build Manifest (so it is chunk-associated —
+   an unassociated file is already covered by `unassociated-test`) **AND** it imports from
+   `src/rules/` (so it is a rule test) **AND** it cites neither a claim nor a ruling.
+
+   Measured justification: 8/13 one-two-punch and 6/9 `seven` test files cite zero claims, and they
+   are legitimately varied — `a11y.test.ts`, `theme.test.ts`, `asset-reachability.test.ts`,
+   `simulation.test.ts`/`random-sim.test.ts` are a11y, structural, and soak tests with no rule claim
+   to cite. A bare "cites nothing ⇒ unlinked" rule fires on ~10 correct files per run across the two
+   games. Excluding them by *construction* (does it import the rules layer?) rather than by a
+   filename blocklist keeps the rule principled and keeps the check from training waiving.
+
+   The second, distinct sense of "every test traces to a **live** claim" is retained and is not
+   affected by this trigger: a test citing `claim 40` where the chunk's live list stops at 35 is a
+   stale citation and is always a finding.
 
 7. **Finding kinds are an ENUMERATED CODE set, not free text.** F-1 from `170-PROOF-RUN-2.md` showed
    free text displacing a machine-checkable sentinel within one run. Records are
@@ -194,16 +245,26 @@ These were checked directly before deciding, not assumed:
   record actual counts, not "ran clean".
 - Phase 171's PROC-01 record (`171-07-PLAN.md`) is the template for this phase's proof artifact:
   run against COPIES of both reference games, confirm the originals byte-identical before and after.
-- The `test-unlinked` direction ("every test traces to a live claim") is the one most likely to be
-  noisy — helper files, a11y tests, and simulation soaks legitimately cite no claim. Consider whether
-  a test file with **zero** claim references is `test-unlinked` or simply out of the check's subject
-  set; decide it explicitly rather than letting the regex decide by accident.
+- The `test-unlinked` open question flagged here was **closed by decision 6b** after measurement.
 - "Live claim" in CHECK-03 means a claim that still exists in the current `## Interpretation` list —
   a test citing `claim 40` where the chunk has 35 claims is a real finding (stale citation), distinct
   from a claim with no test.
 - Supersession matters for the ruling half: `RULINGS.md` entries are append-only and a superseded
-  ruling should not be demanded to have a live test. The supersession chain is stated in prose
-  ("supersedes Ruling N") — parse it, and where it cannot be parsed, report rather than assume.
+  ruling should not be demanded to have a live test. **`172-RESEARCH.md` measured this: only ~3 of
+  62 rulings across both games state supersession in parseable form ("supersedes"/"superseded"), and
+  one of those is direction-reversed (`SUPERSEDED BY RULING 9` sits on Ruling 3's own entry).** The
+  other cross-reference verbs found in the data — "reconciles", "extends", "UPHOLDS", "resolves
+  OQ-N" — are NOT supersession and must not be read as such; treating them as chains would
+  manufacture false positives. So: parse only the explicit supersede verbs, handle both directions,
+  and treat everything else as a plain cross-reference. Where a chain cannot be parsed, report it
+  rather than assume it.
+- **Report volume is the real risk, not emptiness.** Both checks produce substantial genuine findings
+  on run one; `drift-check` alone shows 10/12 one-two-punch chunks drifted. Human-readable output
+  must summarise and group so the signal is not buried — this is the "report text formatting" item
+  under Claude's Discretion, and it matters more than it looks.
+- **A confirmed real drift finding to use as the proof exhibit:** `one-two-punch`'s `jab` chunk
+  manifest lists `src/ui/components/GuardCardView.vue`, which `git log --diff-filter=D` confirms was
+  deleted in a later commit and never recreated — decision 12's case, present in live data.
 
 </specifics>
 
