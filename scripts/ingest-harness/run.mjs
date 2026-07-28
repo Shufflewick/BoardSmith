@@ -266,10 +266,12 @@ function buildInitialPrompt(state) {
   // confirmation protocol and wait for answers — never to auto-answer itself. Auto-answering
   // itself is exactly what collapsed the session shape that produced the false-green baseline
   // (see the MULTI-TURN REBUILD note at the top of this file).
+  // The path is passed as the skill's optional INVOCATION ARGUMENT, not described in prose.
+  // That is how a designer supplies it, and it is what lets Step 1 archive the source — the
+  // scheduling fix in 6db99d5c. Describing it in a sentence instead would test a path real
+  // usage does not take, and would leave the archive to Step 3, where it never runs.
   return [
-    `/bs-ingest-rules`,
-    ``,
-    `A rulebook exists at this absolute path: ${state.stagedCopyPath}`,
+    `/bs-ingest-rules ${state.stagedCopyPath}`,
     ``,
     `Project name: Seven.`,
     ``,
