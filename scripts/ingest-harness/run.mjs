@@ -371,6 +371,38 @@ function assertCmd(opts) {
   }
 
   const projectDir = findProjectDir(workDir);
+
+  // Commit the produced slices before asserting.
+  //
+  // `boardsmith init` installs a pre-commit hook that runs the ingest synthesis (fills
+  // "## Open Rules Gaps" from the slices, relabels presentation-only Derived lines as Visual).
+  // The bs- build protocol commits at every step, so in real use that hook fires as soon as
+  // chunk work begins. But this harness stops the session at the end of Step 3 -- before any
+  // such commit -- so without this it measures the artifacts BEFORE the hook has ever run and
+  // reports the hook's work as missing.
+  //
+  // This is not the harness doing the session's job: the commit is something the pipeline
+  // genuinely performs, and the hook is the thing under test. Skipping it would test a state
+  // real projects never sit in.
+  try {
+    execFileSync('git', ['-C', projectDir, 'add', '-A'], { stdio: 'ignore' });
+    execFileSync(
+      'git',
+      [
+        '-C', projectDir,
+        '-c', 'user.email=harness@boardsmith.local',
+        '-c', 'user.name=BoardSmith Harness',
+        'commit', '-m', 'chore(harness): slices landed — fires the ingest synthesis hook',
+      ],
+      { stdio: 'ignore' },
+    );
+    console.log('[assert] committed produced slices (fires the init-installed pre-commit hook)');
+  } catch {
+    // Nothing to commit, or no git identity available. Non-fatal: the checks below report the
+    // resulting artifact state either way, which is what actually matters.
+    console.log('[assert] no commit made (nothing staged, or git unavailable) — hook may not have run');
+  }
+
   const { pass: artifactsPass, checks } = checkIngestArtifacts({
     projectDir,
     sourceFileName: state.sourceFileName,
