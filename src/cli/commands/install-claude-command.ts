@@ -38,6 +38,14 @@ const SKILL_ENTRY_POINTS: Array<{ source: string; skillName: string }> = [
 ];
 
 /**
+ * The single source of truth for "what skills does this installer ship" — derived from
+ * `SKILL_ENTRY_POINTS`, never hand-duplicated. Exported so `install-claude-command.test.ts`
+ * has exactly one place to import the installed skill-name set from; a self-reading meta-test
+ * in that file guards against any future hardcoded literal drifting from this list.
+ */
+export const SKILL_NAMES: string[] = SKILL_ENTRY_POINTS.map(({ skillName }) => skillName);
+
+/**
  * Single namespaced root the installer owns for the shared reference tree. Everything the
  * skills read in common (build/, ingest/, templates/, aspects/, state-machine.md) lives UNDER
  * this one `bs-`-prefixed dir — `~/.claude/skills/bs-shared/{build,ingest,templates,aspects,

@@ -19,7 +19,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, statSync, w
 import { join, dirname } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { installClaudeCommand, uninstallClaudeCommand } from './install-claude-command.js';
+import { installClaudeCommand, uninstallClaudeCommand, SKILL_NAMES } from './install-claude-command.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -96,16 +96,6 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
   let tempDir: string;
   let origCwd: string;
   let skillsRoot: string;
-
-  const SKILL_NAMES = [
-    'bs-create-game',
-    'bs-ingest-rules',
-    'bs-build-chunk',
-    'bs-check-status',
-    'bs-insert-chunk',
-    'bs-generate-ai',
-    'bs-verify-game',
-  ];
 
   beforeAll(async () => {
     origCwd = process.cwd();
@@ -251,16 +241,6 @@ describe('installClaudeCommand — bs- skill handoff contract (no Skill-tool sel
   let origCwd: string;
   let skillsRoot: string;
 
-  const SKILL_NAMES = [
-    'bs-create-game',
-    'bs-ingest-rules',
-    'bs-build-chunk',
-    'bs-check-status',
-    'bs-insert-chunk',
-    'bs-generate-ai',
-    'bs-verify-game',
-  ];
-
   beforeAll(async () => {
     origCwd = process.cwd();
     tempDir = mkdtempSync(join(tmpdir(), 'bs-install-handoff-'));
@@ -315,16 +295,6 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
   let tempDir: string;
   let origCwd: string;
   let skillsRoot: string;
-
-  const SKILL_NAMES = [
-    'bs-create-game',
-    'bs-ingest-rules',
-    'bs-build-chunk',
-    'bs-check-status',
-    'bs-insert-chunk',
-    'bs-generate-ai',
-    'bs-verify-game',
-  ];
 
   beforeAll(async () => {
     origCwd = process.cwd();
@@ -455,16 +425,6 @@ describe('installClaudeCommand — partial install is not misreported as complet
   let origCwd: string;
   let skillsRoot: string;
 
-  const SKILL_NAMES = [
-    'bs-create-game',
-    'bs-ingest-rules',
-    'bs-build-chunk',
-    'bs-check-status',
-    'bs-insert-chunk',
-    'bs-generate-ai',
-    'bs-verify-game',
-  ];
-
   beforeAll(() => {
     origCwd = process.cwd();
     tempDir = mkdtempSync(join(tmpdir(), 'bs-install-partial-'));
@@ -506,16 +466,6 @@ describe('installClaudeCommand — empty shared dir is detected as partial, not 
   let tempDir: string;
   let origCwd: string;
   let skillsRoot: string;
-
-  const SKILL_NAMES = [
-    'bs-create-game',
-    'bs-ingest-rules',
-    'bs-build-chunk',
-    'bs-check-status',
-    'bs-insert-chunk',
-    'bs-generate-ai',
-    'bs-verify-game',
-  ];
 
   beforeAll(() => {
     origCwd = process.cwd();
@@ -625,5 +575,67 @@ describe('installClaudeCommand — uninstall removes bs-verify-game with no orph
     // No orphan: every entry under skillsRoot named bs-* (installer-owned prefix) is gone.
     const remaining = readdirSync(skillsRoot).filter((entry) => entry.startsWith('bs-'));
     expect(remaining).toEqual([]);
+  });
+});
+
+/**
+ * The five-site `SKILL_NAMES` drift hazard (RESEARCH.md Pitfall 2, confirmed at lines 100, 242,
+ * 306, 444, 495 before this plan) is now closed at the ROOT: every describe block above imports
+ * `SKILL_NAMES` from `install-claude-command.ts` (the single source of truth, derived from
+ * `SKILL_ENTRY_POINTS`) instead of hardcoding its own copy of the array. There is no longer a
+ * second literal to drift out of sync with the first.
+ *
+ * This meta-test is the guard against RE-INTRODUCING that hazard: it reads this file's OWN
+ * source from disk, finds every `const SKILL_NAMES = [ ... ]` literal a future edit might add
+ * (the regex is unbounded — it does not assume a fixed count, so a newly hardcoded sixth site
+ * is picked up automatically, not silently exempt), and asserts each one, sorted, matches the
+ * exported source of truth, sorted. A diverging site fails with an actionable message naming
+ * the offending `describe` block and its file offset — not merely "expected X, got Y".
+ */
+describe('installClaudeCommand — SKILL_NAMES has one source of truth (structural drift guard)', () => {
+  const SELF_PATH = fileURLToPath(import.meta.url);
+
+  /**
+   * Every `const SKILL_NAMES = [ 'a', 'b', ... ];` literal still present in this test file, if
+   * any. Deliberately narrow — bracket contents must consist ONLY of quoted strings, commas, and
+   * whitespace — so this doesn't false-positive on this very function's own doc comments and
+   * regex-literal source lines (which mention "const SKILL_NAMES = [...]" as prose/regex syntax,
+   * not an actual array-of-strings declaration).
+   */
+  function extractSkillNameLiterals(source: string): Array<{ names: string[]; index: number }> {
+    const results: Array<{ names: string[]; index: number }> = [];
+    const re = /const SKILL_NAMES\s*=\s*\[\s*((?:'[^']+'\s*,?\s*)+)\]\s*;/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(source)) !== null) {
+      const names = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+      results.push({ names, index: m.index });
+    }
+    return results;
+  }
+
+  /** The nearest enclosing `describe('<label>', ...)` above a given offset, for error messages. */
+  function nearestDescribeLabel(source: string, index: number): string {
+    const before = source.slice(0, index);
+    const matches = [...before.matchAll(/describe\(\s*'([^']+)'/g)];
+    return matches.length ? matches[matches.length - 1][1] : '(top-level, no enclosing describe)';
+  }
+
+  it('no hardcoded SKILL_NAMES literal in this file diverges from the exported source of truth', () => {
+    const source = readFileSync(SELF_PATH, 'utf-8');
+    const literals = extractSkillNameLiterals(source);
+    const expected = [...SKILL_NAMES].sort();
+
+    for (const { names, index } of literals) {
+      const label = nearestDescribeLabel(source, index);
+      const found = [...names].sort();
+      expect(
+        found,
+        `A hardcoded "const SKILL_NAMES = [...]" literal has reappeared in describe block ` +
+          `"${label}" (file offset ${index}) and has drifted from install-claude-command.ts's ` +
+          `exported SKILL_NAMES. Expected: [${expected.join(', ')}]. Found: [${found.join(', ')}]. ` +
+          `Fix: delete the local literal and use the imported SKILL_NAMES instead — it is the ` +
+          `single source of truth, derived from SKILL_ENTRY_POINTS.`
+      ).toEqual(expected);
+    }
   });
 });
