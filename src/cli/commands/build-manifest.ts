@@ -233,3 +233,102 @@ export function extractVerifiedCommitHash(chunkText: string): string | undefined
   return match?.[1];
 }
 
+// ---------------------------------------------------------------------------------------------
+// parseRulings
+// ---------------------------------------------------------------------------------------------
+
+export interface ParsedRuling {
+  number: number;
+  /** Set only for the explicit supersede verbs, direction-resolved. */
+  supersededBy?: number;
+  /** Supersede-verb sentences whose target number or direction could not be resolved. */
+  unparsedSupersession: string[];
+}
+
+/**
+ * ONLY these two explicit supersede-verb shapes are read as a chain. RESEARCH.md enumerated all
+ * 62 rulings across both reference games: exactly 3 occurrences are real supersession, and every
+ * other cross-ruling verb ("reconciles", "extends", "UPHOLDS", "resolves OQ-N", "overrides
+ * DECISIONS.md Decision N") is a citation to a live, non-obsoleted ruling. Broadening this verb
+ * list is the single highest-yield way to make this check fire on correct work, which is how a
+ * check gets waived — do not "helpfully" widen it later.
+ */
+const SUPERSEDED_BY = /supersede[sd]?\s+by\s+ruling\s+(\d+)/i;
+const SUPERSEDES_RULING = /\bsupersedes\s+ruling\s+(\d+)/i;
+/** Any other supersede-verb occurrence — recorded verbatim in `unparsedSupersession`. */
+const SUPERSEDE_VERB = /supersede[sd]?/i;
+
+/** Splits an entry body into individual sentences, for verbatim reporting of unparsed shapes. */
+function sentences(body: string): string[] {
+  return body
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Parses `RULINGS.md`'s `### Ruling N` entries with narrow, direction-aware supersession per
+ * 172-CONTEXT.md decision (specifics section) and RESEARCH.md's measured verb shapes:
+ *
+ * - `supersedes Ruling M` on entry N's own body means M is superseded by N (the sentence names
+ *   the superseded target; the entry names the superseder).
+ * - `superseded by Ruling M` on entry N's own body means N is superseded by M (the reversed
+ *   direction — a parser assuming "the number after 'Ruling' is the superseder" gets this
+ *   backwards).
+ * - A supersede verb whose object is not a resolvable `Ruling M` (e.g. "supersedes the RATIONALE
+ *   of Ruling 3" — the object is a sub-part, not the ruling itself) is recorded verbatim in
+ *   `unparsedSupersession`, never assumed as a chain.
+ */
+export function parseRulings(rulingsText: string): ParsedRuling[] {
+  const HEADING = /^### Ruling (\d+)[ \t]*$/gm;
+  const headings: Array<{ number: number; index: number; bodyStart: number }> = [];
+  for (const match of rulingsText.matchAll(HEADING)) {
+    const lineEnd = rulingsText.indexOf('\n', match.index);
+    headings.push({
+      number: Number(match[1]),
+      index: match.index,
+      bodyStart: lineEnd === -1 ? rulingsText.length : lineEnd,
+    });
+  }
+
+  const byNumber = new Map<number, ParsedRuling>();
+  for (const h of headings) {
+    byNumber.set(h.number, { number: h.number, unparsedSupersession: [] });
+  }
+
+  for (let i = 0; i < headings.length; i++) {
+    const h = headings[i];
+    const bodyEnd = i + 1 < headings.length ? headings[i + 1].index : rulingsText.length;
+    const body = rulingsText.slice(h.bodyStart, bodyEnd);
+    const entry = byNumber.get(h.number)!;
+
+    for (const sentence of sentences(body)) {
+      if (!SUPERSEDE_VERB.test(sentence)) continue;
+
+      const backward = SUPERSEDED_BY.exec(sentence);
+      if (backward) {
+        // "superseded by Ruling M" on entry N's own body -> N is superseded by M.
+        entry.supersededBy = Number(backward[1]);
+        continue;
+      }
+
+      const forward = SUPERSEDES_RULING.exec(sentence);
+      if (forward) {
+        // "supersedes Ruling M" on entry N's own body -> M is superseded by N, IF the sentence
+        // names the ruling directly (not a sub-part like "the RATIONALE of Ruling M").
+        const targetNumber = Number(forward[1]);
+        const target = byNumber.get(targetNumber);
+        if (target) {
+          target.supersededBy = h.number;
+          continue;
+        }
+      }
+
+      // Supersede verb present, but neither shape resolved cleanly (e.g. the object is a
+      // sub-part like "the RATIONALE of Ruling N", or no ruling number is present at all).
+      entry.unparsedSupersession.push(sentence);
+    }
+  }
+
+  return headings.map((h) => byNumber.get(h.number)!);
+}

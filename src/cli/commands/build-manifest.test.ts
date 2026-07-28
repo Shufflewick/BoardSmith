@@ -6,6 +6,7 @@ import {
   parseBuildManifest,
   parseInterpretationClaims,
   extractVerifiedCommitHash,
+  parseRulings,
 } from './build-manifest.js';
 
 /**
@@ -274,5 +275,94 @@ describe('extractVerifiedCommitHash', () => {
 
   it('returns undefined when the section has no hex token', () => {
     expect(extractVerifiedCommitHash(hashChunk('not recorded yet'))).toBeUndefined();
+  });
+});
+
+describe('parseRulings', () => {
+  function rulingsFixture(): string {
+    return [
+      '# Rulings',
+      '',
+      '### Ruling 3',
+      '',
+      'Decision: the card is face down.',
+      '⚠ RATIONALE SUPERSEDED BY RULING 9',
+      '',
+      '### Ruling 9',
+      '',
+      'Decision: the card is face up after the errata.',
+      '',
+      '### Ruling 14',
+      '',
+      'Decision: the card is shaped like a diamond.',
+      '',
+      '### Ruling 21',
+      '',
+      "Decision: supersedes Ruling 14's card-shaped presentation with a square token.",
+      '',
+      '### Ruling 22',
+      '',
+      'Decision: Supersedes the RATIONALE of Ruling 3, not its outcome.',
+      '',
+      '### Ruling 23',
+      '',
+      'Decision: UPHOLDS Ruling 23... wait, references itself for the fixture; also RESOLVES OQ-1.',
+      '',
+      '### Ruling 24',
+      '',
+      'Decision: reconciles Ruling 24 with Ruling 1, and extends Rulings 21/22.',
+      '',
+      '### Ruling 25',
+      '',
+      'Decision: overrides DECISIONS.md Decision 23.',
+      '',
+    ].join('\n');
+  }
+
+  it('parses every ### Ruling N entry, line-anchored, body to the next ### line', () => {
+    const parsed = parseRulings(rulingsFixture());
+    expect(parsed.map((r) => r.number)).toEqual([3, 9, 14, 21, 22, 23, 24, 25]);
+  });
+
+  it('"supersedes Ruling M" on entry N sets supersededBy: N on ruling M', () => {
+    const parsed = parseRulings(rulingsFixture());
+    const ruling14 = parsed.find((r) => r.number === 14)!;
+    expect(ruling14.supersededBy).toBe(21);
+  });
+
+  it('reversed direction: "SUPERSEDED BY RULING M" sitting on entry N sets supersededBy: M on N', () => {
+    const parsed = parseRulings(rulingsFixture());
+    const ruling3 = parsed.find((r) => r.number === 3)!;
+    expect(ruling3.supersededBy).toBe(9);
+  });
+
+  it('a supersede verb whose object is a sub-part (RATIONALE) goes to unparsedSupersession, not a resolved chain', () => {
+    const parsed = parseRulings(rulingsFixture());
+    const ruling22 = parsed.find((r) => r.number === 22)!;
+    expect(ruling22.supersededBy).toBeUndefined();
+    expect(ruling22.unparsedSupersession.length).toBeGreaterThan(0);
+    expect(ruling22.unparsedSupersession[0]).toMatch(/Supersedes the RATIONALE of Ruling 3/);
+  });
+
+  it('non-supersession cross-reference verbs never set supersededBy and never appear in unparsedSupersession', () => {
+    const parsed = parseRulings(rulingsFixture());
+    for (const num of [23, 24, 25]) {
+      const r = parsed.find((rr) => rr.number === num)!;
+      expect(r.supersededBy).toBeUndefined();
+      expect(r.unparsedSupersession).toEqual([]);
+    }
+  });
+
+  it('a supersede verb with no resolvable ruling number goes to unparsedSupersession verbatim', () => {
+    const text = [
+      '### Ruling 1',
+      '',
+      'Decision: this ruling supersedes an earlier unwritten house rule, no number given.',
+      '',
+    ].join('\n');
+    const parsed = parseRulings(text);
+    const ruling1 = parsed.find((r) => r.number === 1)!;
+    expect(ruling1.supersededBy).toBeUndefined();
+    expect(ruling1.unparsedSupersession.length).toBe(1);
   });
 });
