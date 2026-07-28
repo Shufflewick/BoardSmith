@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import { normalizeEdition } from './ingest-archive.js';
 import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
+import { findHeadingIndex } from './build-manifest.js';
 
 /**
  * `computeVerificationScope()` / `resolveCitedSlices()` — the two pure computations behind
@@ -558,9 +559,18 @@ function unparsed(blockMalformed: boolean): ParsedVerifiedAgainst {
  * body all yield `state: PROVENANCE_UNKNOWN`. A PARTIALLY parsed block is never returned as
  * valid — T-171-17's mitigation (chunk-provenance.ts threat register): a hand-forged or damaged
  * block must not be able to present as a real verification record.
+ *
+ * Line-anchored heading location via `findHeadingIndex` (`./build-manifest.js`), NOT a plain
+ * substring search on the heading text — this is the `f73153a3` defect class recurring at this
+ * call site. `CHUNK.template.md`'s own PARSE CONTRACT comment names
+ * "## Verified Against" in prose ~130 lines above the real section, and this function's own
+ * documented recovery path (`chunkCheckCommand`'s fence-refusal error) tells a user to delete the
+ * entire real section — after which a substring search still finds the prose mention and
+ * mislabels a never-recorded chunk as `blockMalformed: true` (172-CONTEXT.md decision 10's exact
+ * state conflation: "older" reporting as "damaged").
  */
 export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
-  const headingIdx = chunkText.indexOf(VERIFIED_AGAINST_HEADING);
+  const headingIdx = findHeadingIndex(chunkText, VERIFIED_AGAINST_HEADING);
   if (headingIdx === -1) return unparsed(false); // never verified under this phase's contract
 
   const beginIdx = chunkText.indexOf(VERIFIED_AGAINST_BEGIN, headingIdx);
