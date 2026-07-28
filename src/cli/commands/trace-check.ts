@@ -14,6 +14,17 @@
  * (`chunk-provenance.ts:706-714` is the precedent this doc comment mirrors).
  */
 
+import { promises as fs } from 'node:fs';
+import { join, relative, resolve as pathResolve, sep } from 'node:path';
+import {
+  FINDING_KINDS,
+  type Finding,
+  type FindingKind,
+  parseBuildManifest,
+  parseInterpretationClaims,
+  parseRulings,
+} from './build-manifest.js';
+
 // -------------------------------------------------------------------------------------------
 // scanTestCitations
 // -------------------------------------------------------------------------------------------
@@ -150,4 +161,294 @@ export function resolveClaimCitation(
   const survivors = authoringCandidates.length > 0 ? authoringCandidates : validCandidates;
   if (survivors.length === 1) return { status: 'resolved', chunk: survivors[0] };
   return { status: 'ambiguous', candidates: survivors };
+}
+
+// -------------------------------------------------------------------------------------------
+// traceCheckCommand
+// -------------------------------------------------------------------------------------------
+
+export interface TraceCheckResult {
+  findings: Finding[];
+  counts: Record<FindingKind, number>;
+  totals: {
+    chunks: number;
+    claims: number;
+    rulings: number;
+    testFiles: number;
+    claimCitations: number;
+    rulingCitations: number;
+  };
+  /** Supersede-verb sentences whose chain could not be parsed — reported, never assumed. */
+  unparsedSupersessions: Array<{ ruling: number; sentence: string }>;
+}
+
+function emptyCounts(): Record<FindingKind, number> {
+  const counts = {} as Record<FindingKind, number>;
+  for (const kind of FINDING_KINDS) counts[kind] = 0;
+  return counts;
+}
+
+function pushFinding(findings: Finding[], counts: Record<FindingKind, number>, f: Finding): void {
+  findings.push(f);
+  counts[f.kind]++;
+}
+
+/** Recursively collects every `*.test.ts` file under `dir`, returning absolute paths. */
+async function walkTestFiles(dir: string): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(current: string): Promise<void> {
+    let entries: Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
+    try {
+      entries = await fs.readdir(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (entry.isFile() && entry.name.endsWith('.test.ts')) out.push(full);
+    }
+  }
+  await walk(dir);
+  return out;
+}
+
+/** POSIX-style path relative to `projectDir`, for stable comparison against manifest paths. */
+function relPosix(projectDir: string, absPath: string): string {
+  return relative(projectDir, absPath).split(sep).join('/');
+}
+
+/** Resolves a manifest-supplied relative path against `projectDir`, rejecting any escape. */
+function resolveManifestPath(projectDir: string, relPathStr: string): string | 'escapes' {
+  const resolved = pathResolve(projectDir, relPathStr);
+  const rel = relative(projectDir, resolved);
+  if (rel === '..' || rel.startsWith(`..${sep}`)) return 'escapes';
+  return resolved;
+}
+
+/**
+ * `boardsmith trace-check [--json]` — enumerates `chunks/*␣/CHUNK.md`, parses each one's live
+ * `## Interpretation` claim list and `## Build Manifest`, scans every test file for `claim`/
+ * `Ruling` citations, resolves each citation through the three-rung ladder above, and emits the
+ * locked `FINDING_KINDS` records.
+ *
+ * Tool failure (no `chunks/` directory) throws a one-line actionable `Error`; `cli.ts`'s top-level
+ * catch prints only `err.message`, never a stack trace or internal path (CLAUDE.md, T-172-05).
+ * A FINDING never sets `process.exitCode` — findings exit 0 (172-CONTEXT.md decision 6).
+ *
+ * `--json`/human-report OUTPUT is wired in a later addition to this function (Task 3) — this
+ * version computes and returns the full `TraceCheckResult` without printing.
+ */
+export async function traceCheckCommand(
+  options: { project?: string; json?: boolean } = {},
+): Promise<TraceCheckResult> {
+  const projectDir = pathResolve(options.project ?? process.cwd());
+  const chunksDir = join(projectDir, 'chunks');
+
+  let chunkDirEntries: Array<{ name: string; isDirectory(): boolean }>;
+  try {
+    chunkDirEntries = await fs.readdir(chunksDir, { withFileTypes: true });
+  } catch {
+    throw new Error(
+      `No chunks/ directory in ${projectDir}.\n` +
+        `This command looks for chunks/<slug>/CHUNK.md files — run it from a BoardSmith game\n` +
+        `project directory, or pass --project <dir>.`,
+    );
+  }
+  const slugs = chunkDirEntries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+
+  const findings: Finding[] = [];
+  const counts = emptyCounts();
+
+  const liveClaims: Record<string, number[]> = {};
+  /** file (posix-relative) -> chunk -> authoring, built from every chunk's Build Manifest. */
+  const fileOwners: Record<string, Record<string, boolean>> = {};
+  const claimCoverage: Record<string, Set<number>> = {};
+
+  for (const slug of slugs) {
+    let chunkText: string;
+    try {
+      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
+    } catch {
+      continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
+    }
+
+    liveClaims[slug] = parseInterpretationClaims(chunkText);
+    claimCoverage[slug] = new Set();
+
+    const manifest = parseBuildManifest(chunkText);
+    if (!manifest.tabular) {
+      pushFinding(findings, counts, {
+        kind: 'manifest-file-missing',
+        chunk: slug,
+        subject: 'Build Manifest',
+        detail: 'manifest is not table-shaped',
+      });
+    }
+    for (const rowIndex of manifest.pathlessRowIndexes) {
+      pushFinding(findings, counts, {
+        kind: 'manifest-file-missing',
+        chunk: slug,
+        subject: `row ${rowIndex}`,
+        detail: `row ${rowIndex} has no path token`,
+      });
+    }
+    for (const entry of manifest.entries) {
+      const byChunk = (fileOwners[entry.path] ??= {});
+      byChunk[slug] = (byChunk[slug] ?? false) || entry.authoring;
+    }
+  }
+
+  // --- Test-file discovery: tests/**/*.test.ts, plus manifest-listed paths ending .test.ts. ---
+  const testsDir = join(projectDir, 'tests');
+  const walked = await walkTestFiles(testsDir);
+  const discovered = new Map<string, string>(); // relPosix path -> absolute path
+  for (const abs of walked) discovered.set(relPosix(projectDir, abs), abs);
+
+  for (const filePath of Object.keys(fileOwners)) {
+    if (!filePath.endsWith('.test.ts')) continue;
+    if (discovered.has(filePath)) continue;
+    const resolved = resolveManifestPath(projectDir, filePath);
+    if (resolved === 'escapes') {
+      const owningChunks = Object.keys(fileOwners[filePath]);
+      pushFinding(findings, counts, {
+        kind: 'manifest-file-missing',
+        chunk: owningChunks[0] ?? '',
+        subject: filePath,
+        detail: `manifest path escapes the project root: ${filePath}`,
+      });
+      continue;
+    }
+    discovered.set(filePath, resolved);
+  }
+
+  let claimCitationTotal = 0;
+  let rulingCitationTotal = 0;
+  const citedRulings = new Set<number>();
+
+  for (const [relPath, absPath] of [...discovered.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    let sourceText: string;
+    try {
+      sourceText = await fs.readFile(absPath, 'utf-8');
+    } catch {
+      continue; // a manifest-listed test file absent on disk is not this command's problem
+    }
+
+    const { claims, rulings, importsRules } = scanTestCitations(sourceText);
+    claimCitationTotal += claims.length;
+    rulingCitationTotal += rulings.length;
+    for (const r of rulings) citedRulings.add(r);
+
+    const owners = Object.keys(fileOwners[relPath] ?? {}).sort();
+
+    if (owners.length === 0) {
+      pushFinding(findings, counts, {
+        kind: 'unassociated-test',
+        chunk: '',
+        subject: relPath,
+        detail: "no chunk's Build Manifest lists this test file",
+      });
+      for (const claimNumber of claims) {
+        pushFinding(findings, counts, {
+          kind: 'unresolved-claim-ref',
+          chunk: '',
+          subject: `claim ${claimNumber}`,
+          detail: `${relPath} cites claim ${claimNumber}, but the file is unassociated (no owning chunk)`,
+        });
+      }
+      continue;
+    }
+
+    if (claims.length === 0 && rulings.length === 0 && importsRules) {
+      pushFinding(findings, counts, {
+        kind: 'test-unlinked',
+        chunk: owners.join(', '),
+        subject: relPath,
+        detail: `${relPath} imports src/rules/ but cites neither a claim nor a ruling`,
+      });
+    }
+
+    const authoringForFile: Record<string, boolean> = {};
+    for (const chunk of owners) authoringForFile[chunk] = fileOwners[relPath][chunk];
+
+    for (const claimNumber of claims) {
+      const resolution = resolveClaimCitation(claimNumber, owners, liveClaims, authoringForFile);
+      if (resolution.status === 'resolved') {
+        claimCoverage[resolution.chunk]?.add(claimNumber);
+      } else if (resolution.status === 'ambiguous') {
+        pushFinding(findings, counts, {
+          kind: 'ambiguous-claim-ref',
+          chunk: resolution.candidates.join(', '),
+          subject: `claim ${claimNumber} in ${relPath}`,
+          detail: `candidates: ${resolution.candidates.join(', ')}`,
+        });
+      } else {
+        // reason === 'no-live-claim' — 'no-owner' cannot occur here since owners.length > 0.
+        pushFinding(findings, counts, {
+          kind: 'unresolved-claim-ref',
+          chunk: owners.join(', '),
+          subject: `claim ${claimNumber}`,
+          detail: `${relPath} cites claim ${claimNumber}; owners checked: ${owners.join(', ')}; none has a live claim ${claimNumber}`,
+        });
+      }
+    }
+  }
+
+  // --- claim-untested: a live claim resolved to by no citation. ---
+  for (const slug of slugs) {
+    for (const claimNumber of liveClaims[slug] ?? []) {
+      if (!claimCoverage[slug]?.has(claimNumber)) {
+        pushFinding(findings, counts, {
+          kind: 'claim-untested',
+          chunk: slug,
+          subject: `claim ${claimNumber}`,
+          detail: `Interpretation claim ${claimNumber} has no resolved citing test`,
+        });
+      }
+    }
+  }
+
+  // --- RULINGS.md: ruling-untested + unparsed supersessions. Missing file -> zero findings. ---
+  let parsedRulings: ReturnType<typeof parseRulings> = [];
+  try {
+    const rulingsText = await fs.readFile(join(projectDir, 'RULINGS.md'), 'utf-8');
+    parsedRulings = parseRulings(rulingsText);
+  } catch {
+    parsedRulings = [];
+  }
+
+  for (const ruling of parsedRulings) {
+    if (ruling.supersededBy !== undefined) continue; // superseded rulings are not demanded a test
+    if (!citedRulings.has(ruling.number)) {
+      pushFinding(findings, counts, {
+        kind: 'ruling-untested',
+        chunk: '',
+        subject: `Ruling ${ruling.number}`,
+        detail: `no test file cites Ruling ${ruling.number}`,
+      });
+    }
+  }
+
+  const unparsedSupersessions: Array<{ ruling: number; sentence: string }> = [];
+  for (const ruling of parsedRulings) {
+    for (const sentence of ruling.unparsedSupersession) {
+      unparsedSupersessions.push({ ruling: ruling.number, sentence });
+    }
+  }
+
+  const totals = {
+    chunks: slugs.length,
+    claims: Object.values(liveClaims).reduce((sum, arr) => sum + arr.length, 0),
+    rulings: parsedRulings.length,
+    testFiles: discovered.size,
+    claimCitations: claimCitationTotal,
+    rulingCitations: rulingCitationTotal,
+  };
+
+  const result: TraceCheckResult = { findings, counts, totals, unparsedSupersessions };
+
+  return result;
 }
