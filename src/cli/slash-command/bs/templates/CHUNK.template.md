@@ -15,10 +15,10 @@ Status: proposed
      "## Ceremony", "## Step Checklist", "## Interpretation", "## Visibility Declaration",
      "## Newly Discovered Citations", "## Redteam Rounds", "## Findings Ledger", "## Revision Rounds",
      "## Build Manifest", "## Playtest Test Script",
-     "## Verified Checklist", "## Verified Commit Hash". If any required heading is missing, or
-     the Status line doesn't match a recognized enum value above, a resuming session STOPS and
-     asks the user — it never guesses the intended state. See state-machine.md
-     "Cold-Resume Parse Contract". -->
+     "## Verified Checklist", "## Verified Commit Hash", "## Verified Against". If any required
+     heading is missing, or the Status line doesn't match a recognized enum value above, a
+     resuming session STOPS and asks the user — it never guesses the intended state. See
+     state-machine.md "Cold-Resume Parse Contract". -->
 
 ## ui:
 <!-- Restated from this chunk's SKETCH.md entry (redundant-but-safe): none | touches | major.
@@ -189,3 +189,15 @@ Second-seat leak check (if hidden info): <!-- steps, or "n/a — no hidden info 
      (state-machine.md "Git Protocol"). -->
 
 <!-- <commit-hash> -->
+
+## Verified Against
+<!-- MACHINE-OWNED. Written by `boardsmith chunk-check <slug>` and by nothing else — never
+     hand-author anything between the fences below; the next `chunk-check` run overwrites it
+     regardless of what a session puts there. It is fenced rather than merely documented because
+     on 2026-07-28 a session filled a machine-owned section (`## Open Rules Gaps`) by hand and the
+     result looked entirely healthy while being wrong — prose asking a session not to do this did
+     not stop it; a fence makes hand-authoring detectable, and `chunk-check` makes it fatal. -->
+
+<!-- boardsmith:verified-against:begin -->
+_Not yet recorded._
+<!-- boardsmith:verified-against:end -->

@@ -19,6 +19,11 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import {
+  VERIFIED_AGAINST_HEADING,
+  VERIFIED_AGAINST_BEGIN,
+  VERIFIED_AGAINST_END,
+} from '../../commands/chunk-provenance.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -456,6 +461,33 @@ describe('v4.9 INGEST-01/03/04 — INDEX.template.md', () => {
   });
 });
 
+/**
+ * PROV-01 — the `## Verified Against` fence CHUNK.template.md scaffolds into every new chunk,
+ * so the fence exists before any session could be tempted to author the block by hand
+ * (171-CONTEXT.md decision 3). The fence strings are imported from the writer's own exported
+ * constants rather than re-typed here — a re-typed marker is the exact duplication trap
+ * `PRESENTATION_LEXICON` already had to be pinned against.
+ */
+describe('PROV-01 — CHUNK.template.md scaffolds the machine-owned Verified Against fence', () => {
+  const chunkTemplate = read('templates/CHUNK.template.md');
+
+  it('contains the "## Verified Against" heading', () => {
+    expect(chunkTemplate).toContain(VERIFIED_AGAINST_HEADING);
+  });
+
+  it('contains both fence strings, byte-identical to the exported constants', () => {
+    expect(chunkTemplate).toContain(VERIFIED_AGAINST_BEGIN);
+    expect(chunkTemplate).toContain(VERIFIED_AGAINST_END);
+  });
+
+  it('places the section AFTER "## Verified Commit Hash"', () => {
+    const commitHashIdx = chunkTemplate.indexOf('## Verified Commit Hash');
+    const verifiedAgainstIdx = chunkTemplate.indexOf(VERIFIED_AGAINST_HEADING);
+    expect(commitHashIdx).toBeGreaterThan(-1);
+    expect(verifiedAgainstIdx).toBeGreaterThan(commitHashIdx);
+  });
+});
+
 describe('TMPL-02 — parse-contract heading lists match each template\'s actual headings', () => {
   // The exact H2 headings each template ships, in order. A template's PARSE
   // CONTRACT comment must enumerate exactly these, and the file body must
@@ -476,6 +508,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
       '## Playtest Test Script',
       '## Verified Checklist',
       '## Verified Commit Hash',
+      '## Verified Against',
     ],
     'templates/SKETCH.template.md': [
       '## Player Counts',
