@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 171-03-PLAN.md
-last_updated: "2026-07-28T18:35:00.000Z"
+stopped_at: Completed 171-04-PLAN.md
+last_updated: "2026-07-28T19:05:00.000Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 17
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -25,7 +25,27 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 03/07 complete.
+Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 04/07 complete.
+
+`171-04-PLAN.md` landed PROV-01's deliverable: `boardsmith chunk-check <slug>` writes/repairs a
+fenced, machine-owned `## Verified Against` block into `chunks/<slug>/CHUNK.md` — scope, edition,
+rulebook source hash (the edition anchor), BoardSmith version, skills-tree hash, a cited-slice
+SHA-256 table, and any unresolved citations recorded verbatim. `ingestCheckCommand` was the
+precedent copied line-for-line: writes strictly between `VERIFIED_AGAINST_BEGIN`/`END` (a DISTINCT
+fence pair from `GAPS_BEGIN`/`END` per CONTEXT.md decision 3), throws an actionable error naming
+both markers when a fence is missing (never silently re-fences), and sets `process.exitCode = 1`
+(never throws) on the repair-then-fail terminal path so an immediate re-run passes. RED-first: 11
+new tests failed with `chunkCheckCommand is not a function` before Task 2. GREEN found a real bug
+(Rule 1): citation scanning must skip any existing Verified Against section, or the block's own
+explanatory prose about the rulebook index gets treated as a self-referential unresolved citation
+and a second unchanged run never settles to `process.exitCode === undefined`. Verifying Task 3's own
+"no stack trace" acceptance criterion surfaced a second, repo-wide bug (Rule 1/2): `program.parse()`
+doesn't await async action handlers, so ANY thrown Error in ANY command (verified this pre-existed
+for `ingest-archive` too) surfaced a raw unhandled-rejection stack trace with internal paths — fixed
+once, at the root, via `program.parseAsync()` wrapped in a top-level `try`/`catch` in `cli.ts`. Full
+suite: 3376 passed (was 3365). `~/BoardSmithGames/seven` confirmed unmodified (demo used a
+scratchpad temp fixture, deleted after). See
+`.planning/phases/171-provenance-recording/171-04-SUMMARY.md`.
 
 `171-03-PLAN.md` built the two pure functions at the heart of PROV-02 and PROV-01, no CLI wiring
 yet: `computeVerificationScope(projectDir)` is a single-parameter, disk-only computation with a
@@ -416,6 +436,7 @@ Recent decisions affecting current work:
 - [Phase 171]: 171-01: normalizeEdition collapses recognisably-empty --edition free text to EDITION_UNKNOWN, preserving designer wording on a separate un-parsed Edition note: line — F-1 fix per CONTEXT.md decision 5 -- PROV-01/PROV-03 read this field, so it must be machine-checkable before anything reads it
 - [Phase 171]: readBoardsmithVersion() walks up to package.json (not fixed hop), throws rather than falling back; hashSkillsTree() hashes installer-owned bs- paths by relPath+content sorted, returns SKILLS_TREE_ABSENT when no root found
 - [Phase 171]: 171-03: computeVerificationScope's five reason codes checked as a single top-to-bottom early-return chain (order is contract, not incidental); resolveCitedSlices resolves shorthand against the rulebook/ directory listing (not INDEX.md's ## Slices table, absent in one-two-punch); ambiguous/unresolvable citations recorded verbatim, never guessed or dropped — pinned against seven's genuine two-01--slice collision
+- [Phase 171]: 171-04: chunk-check writes strictly between VERIFIED_AGAINST_BEGIN/END (distinct fence pair from GAPS_BEGIN/END); citation scan is scoped to content BEFORE any existing Verified Against section so the block can never re-poison its own next computation; program.parse() -> parseAsync()+try/catch in cli.ts fixes a repo-wide stack-trace leak affecting every CLI command, not just chunk-check
 
 ### Pending Todos
 
