@@ -1,4 +1,186 @@
-# 170-PROOF-RUN-2 — PROC-01 human gate, re-run 2026-07-28
+# 170-PROOF-RUN-2 — PROC-01 human gate, 2026-07-28
+
+**Two human-driven runs on one day. Run 1 FAILED and is recorded in full below. Run 2, against the
+fixed contract, PASSED — and is the PROC-01 record.**
+
+---
+
+# Run 2 (2026-07-28, after commits `92f88bb9` + `c32bc184`) — PASS
+
+Project: `/tmp/bs-ingest-harness/seven`. Staged with `node scripts/ingest-harness/run.mjs stage`;
+reference repo recorded clean at `a03f38d4792af9dfc7c798be69686fc3230f54dd`.
+
+**This gate was NOT preceded by a green harness run.** The operator observed, correctly, that the
+harness had certified a broken contract twice (three single-turn 10/10s before a 1/10 human run,
+and an 11/11 immediately before Run 1's three failures), and directed that the manual pass run
+directly. The in-flight harness run was killed. The harness's verdict is therefore absent from
+this record by decision, not by omission — see "On the harness's standing" at the end.
+
+## Result: all of (a)–(i) pass, on the AS-LEFT tree
+
+The checker was run against the state the session left, with **no repair applied first**:
+
+```
+PASS  a   archive-exists       2194346 bytes at rulebook/source/rules.pdf
+PASS  b   archive-hash         5138858e…fe337880
+PASS  c   hash-recorded        recorded == computed
+PASS  d   header-block         all four labels present, ordered, non-empty
+PASS  e1  gaps-heading         exact "## Open Rules Gaps"
+PASS  e0  gaps-machine-owned   fences intact, nothing hand-authored; 7 swept entries
+PASS  e2  gaps-reconciliation  section entries=7, slice markers=7
+PASS  f   tables-intact        both tables present
+PASS  h   visual-lines         Visual=3, Derived=12; 3 inline Visual lines
+PASS  i   derived-purity       no Derived line matches the presentation lexicon
+PASS  g   reference-repo       clean, HEAD a03f38d4… matches recorded
+AS-LEFT OVERALL: PASS
+```
+
+`boardsmith ingest-check` then exited **0** — `✓ Ingest synthesis up to date — 7 open rules gaps,
+no Derived/Visual misfiling`.
+
+## The thing that actually changed
+
+`git log` in the produced project shows **one commit**: `5e6c320 chore: scaffold project via
+boardsmith init`. The pre-commit hook never ran. Yet the gaps section is fully and exactly swept.
+
+So the session performed synthesis itself, unprompted by any commit. Its own narration says so:
+
+> All ten sections confirmed. Let me sweep the named-but-undefined markers into the machine-owned
+> gaps section before synthesis.
+
+and, on the four p.2 markers that are actually defined on p.1:
+
+> The sweep is deliberately non-deduplicating, so I've left them alone rather than hand-editing a
+> machine-owned section.
+
+That second quote is the fence doing exactly what it was built for. The session had a clear motive
+to tidy the section — four of the seven entries are artifacts of the p.2 slice being read in
+isolation — recognised that motive, and declined because the section was marked machine-owned. Run
+1's session, facing a section marked "for this ingest session to FILL", hand-wrote 2 of 5.
+
+This is the first run in the phase's history where the produced tree was correct with **no**
+harness intervention. Run 1 and both prior harness runs required either a manufactured commit or a
+post-hoc repair to look green.
+
+Note what this does and does not establish. It shows the fence changed behaviour on this run. It
+does not establish that `/bs-build-chunk` Step 0's `ingest-check` instruction survives a live
+session — that step never executed here, because the gate stops at end of Step 3. That remains
+unproven and is called out in "What is still unproven".
+
+## (e2) reconciliation, stated as two numbers
+
+Slice-side markers: `01-setup.md` 1 + `01-game-end.md` 1 + `02-solo-variant.md` 5 = **7**.
+Section-side entries between the fences: **7**. Equal.
+
+```
+Named-but-undefined (p.1): best hand of 7 cards (scoring method for a hand)
+Named-but-undefined (p.1): "Ways to Score" card
+Named-but-undefined (p.2): match
+Named-but-undefined (p.2): game
+Named-but-undefined (p.2): total score
+Named-but-undefined (p.2): final score
+Named-but-undefined (p.2): the 7 scoring hands
+```
+
+Not `_None._`, so the ground-truth trap in item (e) is satisfied: `seven` does name rules it never
+defines, and the run recorded them.
+
+## (h) and (i) — the split, judged by hand
+
+Three `Visual (p.` lines, all in `02-solo-variant.md`. Decision test — *does this line affect
+legality, scoring, or sequencing?* Every one must answer **no**:
+
+| Line | Content | Test |
+|---|---|---|
+| `02:27` | saturated purple panel on white paper, thin light border | no — correct |
+| `02:29` | white sans-serif reversed out, narrow left column, bold heading | no — correct |
+| `02:31` | "SEVEN" wordmark, bold white italic caps, rotated ~45° | no — correct |
+
+Twelve `Derived (p.` lines. Every one must answer **yes**:
+
+| Line | Test |
+|---|---|
+| `01-about:6` player count 1–7, no per-count differences | yes |
+| `01-setup:10` the mess, 3-card starting hand, one Ways-to-Score card each | yes |
+| `01-round:10` round is simultaneous; net +1 card per round | yes |
+| `01-game-end:9` bonus cards score even outside the 7-card hand | yes |
+| `01-match-end:8` winner is cumulative score, not games won | yes |
+| `01-definitions:23` Set/Run illustrations use differing colours; Run art (1,2,3) contradicts its text (5,6,7) | yes — and this is the canonical case the lexicon deliberately must not flag: a rule inferred FROM a diagram, legitimately mentioning the diagram |
+| `01-distribution:14` 4 colours × 7 numbers × 4 copies = 112, plus 7 bonus | yes |
+| `01-match-length:11` default 7 games; shorter/longer offered as alternatives | yes |
+| `02-solo:15` three successive solo goals, each harder than the last | yes |
+| `01-credits:9` no edition/printing/version/date stated on the page | **borderline** — provenance, neither rule-bearing nor presentation. Tuning note |
+| `02-solo:23` p.2 terms referenced without definition here, may be defined on p.1 | **borderline** — slice-boundary metadata. Tuning note |
+| `02-solo:33` no diagrams, component illustrations, tables, cards, dice, boards or tokens on this page | **borderline, presentation-domain** — see finding F-2 |
+
+**Verdict on (i): PASS, with three tuning notes.** The criterion that fails a run is a `Derived`
+line that is *a pure diagram or art description*. None is. Run 1's failure — `Card art depicted on
+this page uses flat, fully saturated color fields … large white numeral … rounded corners`,
+affirmatively describing art under a `Derived` prefix — does not recur, and the lexicon terms added
+for it are present and did not misfire on the nine clearly rule-bearing lines.
+
+This is a judgment call and it is recorded as one: `02-solo:33` is presentation-domain content
+under a `Derived` prefix, and a stricter reading could fail it. It is called a tuning note rather
+than a failure because it is a *negative existence claim* about visuals, not a description of art
+presented as a rule — a materially milder thing than the defect the requirement exists to catch,
+and useful negative evidence for later asset work.
+
+## Findings from Run 2
+
+**F-1 — `--edition` lets a paraphrase displace the machine-checkable sentinel.** The header reads
+`Edition: none stated in rulebook`. The canonical no-edition token is `EDITION_UNKNOWN` = `not
+stated in the rulebook`, emitted when `--edition` is omitted. Here the session asked the operator,
+was told "No edition stated", and passed that through as free text. It satisfies (d) — non-empty,
+and not the interview path's `unpublished — designer statement` — so it is not a gate failure. But
+downstream cannot now distinguish "no edition was stated" from "the edition is literally named
+*none stated in rulebook*", and v4.9's PROV requirements read this field. Proposed fix: `init` /
+`ingest-archive` should normalise recognisably-empty edition strings to `EDITION_UNKNOWN`, or
+refuse them and tell the caller to omit the flag.
+
+**F-2 — the relabel lexicon does not catch negative visual claims.** `02-solo:33` asserts the
+*absence* of diagrams and components. No lexicon term matches, and extending it is not obviously
+right: the natural terms ('diagram', 'illustration', 'depicted') are exactly the referential words
+deliberately excluded, because `01-definitions:23` — a correctly-filed rule inference — contains
+two of them. Recommend leaving the lexicon alone and revisiting under Phase 177 (CHECK-04
+derived-line re-derivation), which re-derives rule-bearing lines independently and would classify
+this line on its content rather than its vocabulary.
+
+**F-3 — the session edited `boardsmith.json` outside its step's scope.** It corrected the stub
+`description` ("A fun game for 2-4 players") and `playtime` (15–30) to match the rulebook. The
+change is correct and was reported, but Run 1's session flagged the same mismatch and correctly
+declined to touch it. Two runs, two different scope decisions on the same defect, means the skill
+text does not say who owns `boardsmith.json` after `init`. Worth settling; out of scope for (a)–(i).
+
+## What is still unproven
+
+- **`/bs-build-chunk` Step 0 was never exercised.** The `ingest-check` call added there is skill
+  text, and `170-MECHANISMS.md` records twelve instruction-shaped mechanisms that were all skipped
+  on live runs. Nothing in Run 2 tests it: the gate stops at end of Step 3. It is a backstop for a
+  window this run did not enter, and the first `/bs-build-chunk` run on a real project is what will
+  settle it. The fence and the pre-commit hook both remain in place independently of it.
+- **One run is one sample.** The fence changed this session's behaviour. Whether it does so
+  reliably needs more runs, and the honest read of this phase's history is that a single green has
+  been misleading before.
+
+## On the harness's standing
+
+Its record: three green single-turn runs preceded a 1/10 human run; an 11/11 preceded Run 1's
+three failures; and its `assert` step manufactured the commit that made the second of those look
+green. Twice it certified a contract a real run failed.
+
+Run 2 was deliberately not gated on it. The changes in `c32bc184` — (e0) and (e2) asserted on the
+as-left tree — are what would have caught both historical misses, but that is an argument on paper
+and the harness has not yet corroborated a human gate even once. **Recommendation: the harness may
+inform, and must never again gate whether a manual pass is run.** If it agrees with the next manual
+gate, that is the first corroboration and it earns some standing back. If it disagrees again, retire
+it rather than patch it a third time.
+
+`~/BoardSmithGames/seven` verified clean at `a03f38d4792af9dfc7c798be69686fc3230f54dd` before and
+after Run 2.
+
+---
+
+# Run 1 (2026-07-28, before the fix) — FAIL
 
 **Verdict: FAIL.** Three defects, all of which the automated harness passed. The gate did the job it
 exists to do — the harness reported 10/10 on the same contract minutes earlier.

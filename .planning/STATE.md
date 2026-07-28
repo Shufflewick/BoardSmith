@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 170-06-PLAN.md
-last_updated: "2026-07-27T20:56:47.968Z"
-last_activity: 2026-07-27
+stopped_at: Completed 170-10-PLAN.md (phase 170 complete)
+last_updated: "2026-07-28T16:30:00.000Z"
+last_activity: 2026-07-28
 progress:
   total_phases: 10
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 10
-  completed_plans: 5
-  percent: 0
+  completed_plans: 10
+  percent: 10
 ---
 
 # Project State
@@ -21,50 +21,51 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 170 — Ingest Contract Upgrade
+**Current focus:** Phase 171 — Provenance Recording
 
 ## Current Position
 
-Phase: 170 (Ingest Contract Upgrade) — SOLVED, awaiting the human gate
-Plan: 10 of 10. **Read `.planning/phases/170-ingest-contract-upgrade/170-MECHANISMS.md` first** —
-it consolidates the whole phase and lists which artifacts in that directory are superseded.
+Phase: 170 (Ingest Contract Upgrade) — **COMPLETE**. Next: Phase 171 (Provenance Recording).
 
-`npm run harness:ingest` reports **10/10 PASS** on live multi-turn runs (was 1/10). Fourteen
-mechanisms were tried; the two that worked both remove the model's choice:
+The `170-10` PROC-01 human gate ran twice on 2026-07-28. Run 1 FAILED (e/h/i); Run 2, against the
+repaired contract, PASSED all of (a)-(i) **on the as-left tree with no repair applied**. Record:
+`.planning/phases/170-ingest-contract-upgrade/170-PROOF-RUN-2.md`; disposition in `170-10-SUMMARY.md`.
+Read `170-MECHANISMS.md` for the phase's fourteen-attempt history and which artifacts are superseded.
 
-  1. `boardsmith init` REFUSES to run without `--rulebook <path>` or `--without-rulebook`, and
-     archives the source + writes rulebook/INDEX.md's provenance header when given a path.
-  2. `init` installs a `pre-commit` hook running `boardsmith ingest-gaps`, which fills
-     `## Open Rules Gaps` from the slices and relabels presentation-only `Derived (p.N):` lines as
-     `Visual (p.N):`. The bs- build protocol commits at every step, so it runs unprompted.
+PROC-01/02 and INGEST-01..04 are now **Complete** in REQUIREMENTS.md.
 
-Twelve instruction-shaped attempts all failed on live runs — prose, a template, a pointer, a
-handshake token, a delegated subagent, re-read gates, a CLI command, a sequence item, a command-line
-flag. Tool-call capture showed the orchestrator composes subagent prompts from memory, bypasses the
-fan-out design (reading the PDF and writing slices itself), and skips newly added steps even from a
-file it just read.
+**The Run 1 root cause, which matters for 171-179:** `boardsmith init` installs a pre-commit hook
+that runs ingest synthesis, and the bs- build protocol commits at every chunk step -- but
+`/bs-ingest-rules` has no commit in it at all. So the hook had never fired at the end of a real
+ingest. The orchestrator hand-wrote `## Open Rules Gaps` instead: 2 entries against 5 slice markers,
+undetectable by reading. Fixes (`92f88bb9`, `c32bc184`): the section is now fenced machine-owned, and
+`boardsmith ingest-check` repairs-then-exits-non-zero from `/bs-build-chunk` Step 0.
 
-**The finding that matters for 171-179:** skill text conveys JUDGMENT reliably and MECHANICS not at
-all. Sort each remaining requirement into those two buckets before planning; mechanical ones need
-code, not better wording.
+**Standing finding, unchanged and now twice-confirmed:** skill text conveys JUDGMENT reliably and
+MECHANICS not at all. Sort every remaining requirement into those two buckets before planning;
+mechanical ones need code (a command, a flag that errors, a hook, a fence), not better wording.
+Run 2's fence worked precisely because it removed the choice -- the session had a real motive to
+tidy the gaps section and declined *because it was marked machine-owned*.
 
-New surface: `boardsmith init --rulebook/--without-rulebook/--edition`,
-`boardsmith ingest-archive`, `boardsmith ingest-gaps`, `boardsmith ingest-relabel`,
-`src/cli/lib/ingest-hook.ts`, `scripts/ingest-harness/` (checker in CI, live driver not).
-Also implemented: the optional `/bs-ingest-rules <path>` argument
-(`.planning/todos/pending/bs-ingest-rules-optional-path-arg.md` — can be closed).
+**The harness must no longer gate a manual pass.** It certified a broken contract twice (three
+single-turn 10/10s before a 1/10 human run; 11/11 immediately before Run 1's three failures), and
+its `assert` step was manufacturing the commit that made one of those greens possible. It may
+inform. If it corroborates the next manual gate that is the first time ever; if it disagrees again,
+retire it rather than patch it a third time. Governance rule still stands: **a green at <=2 turns is
+an INVALID RUN.**
 
-Status: **NOT closed.** INGEST-01/02/03/04 and PROC-01/02 all pass the harness but remain `Pending`
-in REQUIREMENTS.md on purpose — two were marked Complete prematurely earlier in this phase and had
-to be reverted. The `170-10` human gate has not been re-run since the fix and is the formal closure.
-`170-10-PLAN.md`'s staging section is stale (references a removed `Step 2.5`); `170-03-PLAN.md`'s
-`(a)-(i)` checklist is still the right bar.
+New surface: `boardsmith init --rulebook/--without-rulebook/--edition`, `boardsmith ingest-archive`,
+`boardsmith ingest-gaps`, `boardsmith ingest-relabel`, `boardsmith ingest-check`,
+`src/cli/lib/ingest-hook.ts`, `scripts/ingest-harness/`. Also implemented: the optional
+`/bs-ingest-rules <path>` argument (`.planning/todos/pending/bs-ingest-rules-optional-path-arg.md`
+-- can be closed).
 
-Harness governance rule: a green is only meaningful with a realistic turn count. **A green at ≤2
-turns is an INVALID RUN.** The original single-turn driver scored a broken build 10/10 three times
-before a human scored the same text 1/10.
+**Three findings carried into 171+:** F-1 `--edition` lets a free-text paraphrase displace the
+machine-checkable `EDITION_UNKNOWN` sentinel, and PROV reads that field (fix in 171). F-2 the relabel
+lexicon misses *negative* visual claims (defer to Phase 177 / CHECK-04). F-3 two runs made opposite
+scope calls on `boardsmith.json`'s stub description/playtime -- ownership after `init` is unstated.
 
-Last activity: 2026-07-27
+Last activity: 2026-07-28
 
 ## Milestones
 

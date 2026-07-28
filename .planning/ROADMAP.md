@@ -24,7 +24,7 @@ no archived source degrades honestly instead of failing.
 
 ## Phases
 
-- [ ] **Phase 170: Ingest Contract Upgrade** - Archived source + hash, `Visual`/`Derived` split, standardized `Open Rules Gaps` index, and the milestone's verify-first process discipline
+- [x] **Phase 170: Ingest Contract Upgrade** - Archived source + hash, `Visual`/`Derived` split, standardized `Open Rules Gaps` index, and the milestone's verify-first process discipline
 - [ ] **Phase 171: Provenance Recording** - `## Verified Against` block at close, code-conformance-only scope recording, `/bs-check-status` drift reporting
 - [ ] **Phase 172: Source-Free Conformance Checks** - Traceability sweep + code drift, proven immediately against the two reference games with zero source dependency
 - [ ] **Phase 173: Verify Pipeline Core** - `/bs-verify-game` skill entry, non-destructive re-transcription staging, subagent-only context economics, crash resumability
