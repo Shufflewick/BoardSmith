@@ -409,8 +409,14 @@ describe('v4.9 INGEST-02 — relabel command and shared lexicon', () => {
       'utf-8',
     );
     const extract = (src: string) => {
-      const at = src.indexOf('PRESENTATION_LEXICON');
-      const open = src.indexOf('[', at);
+      // Anchor on the DECLARATION, not the first mention of the name. `indexOf('PRESENTATION_LEXICON')`
+      // matched prose too, so a doc comment mentioning the constant above its own declaration
+      // silently redirected this extraction at the wrong bracket — which happened for real during
+      // 171-01 and was worked around by rewording the comment. A check that fires on correct work
+      // gets waived rather than fixed, so the check is fixed here instead.
+      const decl = /(?:export\s+)?const\s+PRESENTATION_LEXICON\s*=\s*(?:Object\.freeze\(\s*)?\[/.exec(src);
+      if (!decl) throw new Error('PRESENTATION_LEXICON declaration not found');
+      const open = decl.index + decl[0].length - 1;
       const close = src.indexOf(']', open);
       return src
         .slice(open + 1, close)
