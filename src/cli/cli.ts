@@ -20,6 +20,11 @@ import {
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
 import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
+import {
+  verifyRunInitCommand,
+  verifyRunRecordCommand,
+  verifyRunStatusCommand,
+} from './commands/verify-run.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -197,6 +202,35 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(driftCheckCommand);
+
+// Verify: staging-tree allocation + the append-only RUN.md resume ledger (VERIFY-02/VERIFY-08,
+// 173-CONTEXT.md decisions 5/9/11). Mechanical work belongs in code, not in skill text a session
+// executes from recall — same rationale as the ingest-*/chunk-check families above.
+program
+  .command('verify-run-init')
+  .description("Allocate (or resume) a verify pass's non-destructive staging tree and RUN.md resume ledger")
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Resume an existing run instead of minting a fresh one')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyRunInitCommand);
+
+program
+  .command('verify-run-record')
+  .description("Record a completed slice-unit in a verify run's RUN.md ledger (idempotent)")
+  .requiredOption('--run-id <id>', 'The run to record against')
+  .requiredOption('--unit <unit-id>', 'The slice-unit id being recorded')
+  .requiredOption('--slice <path>', "Path to the written slice, relative to the run's staging dir")
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyRunRecordCommand);
+
+program
+  .command('verify-run-status')
+  .description('Report which slice-units are recorded for a verify run (read-only, machine-readable)')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyRunStatusCommand);
 
 // Claude Code integration
 const claudeCmd = program
