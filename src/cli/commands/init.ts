@@ -13,6 +13,7 @@ import {
   type ProjectConfig,
 } from '../lib/project-scaffold.js';
 import { ingestArchiveCommand } from './ingest-archive.js';
+import { installIngestHook } from '../lib/ingest-hook.js';
 
 export interface InitOptions {
   /**
@@ -149,6 +150,17 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       } catch {
         console.log(
           chalk.dim('  (git repo created but initial commit skipped — set `git config user.name` / `user.email`, then run `git commit`)')
+        );
+      }
+    }
+
+    // Install the ingest synthesis hook BEFORE the archive, so it exists for every subsequent
+    // commit including the ones the bs- build protocol makes during chunk work.
+    if (gitRepoInitialized) {
+      const hookResult = await installIngestHook(projectPath);
+      if (hookResult === 'skipped-existing') {
+        console.log(
+          chalk.dim('  (left your existing .git/hooks/pre-commit alone — run `boardsmith ingest-gaps` manually after transcription)'),
         );
       }
     }

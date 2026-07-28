@@ -355,6 +355,28 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
 // specified string. The acceptance bar is `npm run harness:ingest`, not this file — see
 // scripts/ingest-harness/README.md.
 
+describe('v4.9 PROC-01 — synthesis runs via a pre-commit hook, not an instruction', () => {
+  // Fourteenth mechanism, and the first the model does not choose. Thirteen instruction-shaped
+  // attempts were all skipped on live runs, including this exact command reduced to a single
+  // invocation. The bs- build protocol commits at every step, so a hook installed by `init`
+  // (which is forced) runs the synthesis automatically. See src/cli/lib/ingest-hook.ts.
+
+  it('scaffold.md documents the hook as an effect, not as a step to perform', () => {
+    const scaffold = flat(read('ingest/scaffold.md'));
+    expect(scaffold).toMatch(/init` also installs a `pre-commit` hook/);
+    expect(scaffold).toMatch(/You do not need to invoke it/);
+    expect(scaffold).toMatch(/not as a step to perform/);
+  });
+
+  it('Step 3 states synthesis runs itself and keeps the manual escape hatch', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/Synthesis runs itself — you do not need to invoke it/);
+    // The manual command must remain documented: a session that never commits before the
+    // approval gate still needs a way to run it.
+    expect(read('ingest-rules.md')).toContain('npx boardsmith ingest-gaps');
+  });
+});
+
 describe('v4.9 INGEST-02 — relabel command and shared lexicon', () => {
   it('synthesis is ONE command — relabel is folded into ingest-gaps', () => {
     // Two commands were tried. The archive landed (forced by an init flag) and the gaps sweep
@@ -703,7 +725,7 @@ describe('v4.9 INGEST-03 — ## Open Rules Gaps section (template fill)', () => 
     // requires no judgment, so it does not belong in skill text.
     const ingestRules = read('ingest-rules.md');
     expect(ingestRules).toContain('npx boardsmith ingest-gaps');
-    expect(flat(ingestRules)).toMatch(/Run the synthesis command/);
+    expect(flat(ingestRules)).toMatch(/Synthesis runs itself/);
     const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
     expect(cmd).toContain('Named-but-undefined');
     expect(cmd).toMatch(/NOT deduplicated/i);

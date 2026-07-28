@@ -142,7 +142,9 @@ following artifacts **from subagent-returned summaries only** — never from re-
 `## Slices`, and `## Term → Slice` sections. Your job here is to fill those sections, not to
 create the file.
 
-1. **Run the synthesis command:**
+1. **Synthesis runs itself — you do not need to invoke it.** `init` installed a `pre-commit`
+   hook that runs `npx boardsmith ingest-gaps` on the first commit after slices exist. Run it
+   manually only if you are not going to commit before the approval gate:
 
    ```
    npx boardsmith ingest-gaps

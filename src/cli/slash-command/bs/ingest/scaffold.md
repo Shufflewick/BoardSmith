@@ -86,6 +86,15 @@ step does not. Do not split this back out into its own step.
 If the directory already exists, stop and ask the designer how to proceed (rename, or confirm the
 existing directory should be reused via a different flow) rather than guessing.
 
+**`init` also installs a `pre-commit` hook** in the new project that runs
+`boardsmith ingest-gaps` — filling `rulebook/INDEX.md`'s `## Open Rules Gaps` from the slices and
+relabelling presentation-only `Derived (p.N):` lines as `Visual (p.N):`. It is a no-op until
+slices exist, idempotent afterwards, stages its own corrections, and never blocks a commit. You do
+not need to invoke it; it runs on the first commit after transcription. If it reports a line it
+could not classify, read that report and fix it by hand.
+
+Mentioned here so its effects are not a surprise, not as a step to perform.
+
 **Display Name correction (immediately after `init` succeeds):** `init` sets
 `boardsmith.json`'s `displayName` by round-tripping the kebab-case argument through
 `toDisplayName` (`src/cli/commands/init.ts`), which is lossy for any name with punctuation
