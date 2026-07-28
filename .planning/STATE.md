@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 170-10-PLAN.md (phase 170 complete)
-last_updated: "2026-07-28T16:30:00.000Z"
+stopped_at: Completed 171-01-PLAN.md
+last_updated: "2026-07-28T17:45:36.320Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
-  completed_phases: 1
-  total_plans: 10
-  completed_plans: 10
-  percent: 10
+  completed_phases: 0
+  total_plans: 17
+  completed_plans: 9
+  percent: 0
 ---
 
 # Project State
@@ -25,7 +25,19 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 170 (Ingest Contract Upgrade) — **COMPLETE**. Next: Phase 171 (Provenance Recording).
+Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 01/07 complete.
+
+`171-01-PLAN.md` fixed F-1 (`--edition` free text displacing the `EDITION_UNKNOWN` sentinel):
+`normalizeEdition()` + `EDITION_EMPTY_LEXICON` now collapse recognisably-empty edition strings to
+the sentinel at both `INDEX.md` write sites, preserving the designer's original wording on a
+separate un-parsed `Edition note:` line (`HEADER_LABELS` untouched — byte-identical). Both
+reference games' live `Edition:` strings verified to normalise correctly as named test fixtures.
+`~/BoardSmithGames/seven` confirmed unmodified (read-only inspection only) before and after. Full
+suite: 3332 passed (was 3323). PROV-01 is NOT yet complete — this plan closed only its F-1
+sub-piece; the `## Verified Against` block itself (plans 02-06) is still pending. See
+`.planning/phases/171-provenance-recording/171-01-SUMMARY.md`.
+
+Phase: 170 (Ingest Contract Upgrade) — **COMPLETE**.
 
 The `170-10` PROC-01 human gate ran twice on 2026-07-28. Run 1 FAILED (e/h/i); Run 2, against the
 repaired contract, PASSED all of (a)-(i) **on the as-left tree with no repair applied**. Record:
@@ -369,6 +381,7 @@ Recent decisions affecting current work:
 - [Phase 170]: No --add-dir passed to the driven claude session; source rulebook copied into throwaway tree at stage time so the reference game repo is structurally unreachable, not merely git-status-detected
 - [Phase 170]: 170-PROOF-RUN.md header arithmetic corrected from 7-of-9 to 8-of-9 to match its own checklist table before using it as this baseline's comparison target
 - [Phase ?]: Live harness stayed 1/10 across two attempts for INDEX.md template-copy mechanism; deferred deeper architectural fix to next plan
+- [Phase 171]: 171-01: normalizeEdition collapses recognisably-empty --edition free text to EDITION_UNKNOWN, preserving designer wording on a separate un-parsed Edition note: line — F-1 fix per CONTEXT.md decision 5 -- PROV-01/PROV-03 read this field, so it must be machine-checkable before anything reads it
 
 ### Pending Todos
 
