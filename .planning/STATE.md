@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 171-01-PLAN.md
-last_updated: "2026-07-28T17:45:36.320Z"
+stopped_at: Completed 171-02-PLAN.md
+last_updated: "2026-07-28T18:15:00.000Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 17
-  completed_plans: 9
+  completed_plans: 10
   percent: 0
 ---
 
@@ -25,7 +25,22 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 01/07 complete.
+Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 02/07 complete.
+
+`171-02-PLAN.md` built the two remaining provenance INPUTS PROV-01 needs beyond citation/scope:
+`readBoardsmithVersion()` fixes `boardsmith --version`'s hardcoded `.version('0.0.1')` lie
+(`src/cli/cli.ts:27`) by walking up to the repo's own `package.json` and returning its real
+`version` field (throws, never falls back, when none is found). `hashSkillsTree()` adds the
+content hash CONTEXT.md decision 7 requires alongside it: Phase 170 ran fourteen `--local` installs
+that shared one unmoving package version while the skill text changed almost every run, so version
+alone would have stamped them all identical. `hashSkillsTree()` reduces the installer-owned `bs-`
+skills tree (5 `bs-<name>/` dirs + `bs-shared/`) to one SHA-256 digest over path+content, sorted by
+path, and returns the honest `SKILLS_TREE_ABSENT` (`'not installed'`) sentinel rather than a
+placeholder hash when no tree is found. `package.json`'s version field itself was read but never
+bumped (decision 9 — versioning policy stays out of scope). Full suite: 3344 passed (was 3332).
+PROV-01 is STILL NOT complete — this plan closed the version+hash inputs only; the `## Verified
+Against` block itself (plans 03-06) is still pending. See
+`.planning/phases/171-provenance-recording/171-02-SUMMARY.md`.
 
 `171-01-PLAN.md` fixed F-1 (`--edition` free text displacing the `EDITION_UNKNOWN` sentinel):
 `normalizeEdition()` + `EDITION_EMPTY_LEXICON` now collapse recognisably-empty edition strings to
@@ -33,9 +48,7 @@ the sentinel at both `INDEX.md` write sites, preserving the designer's original 
 separate un-parsed `Edition note:` line (`HEADER_LABELS` untouched — byte-identical). Both
 reference games' live `Edition:` strings verified to normalise correctly as named test fixtures.
 `~/BoardSmithGames/seven` confirmed unmodified (read-only inspection only) before and after. Full
-suite: 3332 passed (was 3323). PROV-01 is NOT yet complete — this plan closed only its F-1
-sub-piece; the `## Verified Against` block itself (plans 02-06) is still pending. See
-`.planning/phases/171-provenance-recording/171-01-SUMMARY.md`.
+suite: 3332 passed (was 3323). See `.planning/phases/171-provenance-recording/171-01-SUMMARY.md`.
 
 Phase: 170 (Ingest Contract Upgrade) — **COMPLETE**.
 
@@ -382,6 +395,7 @@ Recent decisions affecting current work:
 - [Phase 170]: 170-PROOF-RUN.md header arithmetic corrected from 7-of-9 to 8-of-9 to match its own checklist table before using it as this baseline's comparison target
 - [Phase ?]: Live harness stayed 1/10 across two attempts for INDEX.md template-copy mechanism; deferred deeper architectural fix to next plan
 - [Phase 171]: 171-01: normalizeEdition collapses recognisably-empty --edition free text to EDITION_UNKNOWN, preserving designer wording on a separate un-parsed Edition note: line — F-1 fix per CONTEXT.md decision 5 -- PROV-01/PROV-03 read this field, so it must be machine-checkable before anything reads it
+- [Phase 171]: readBoardsmithVersion() walks up to package.json (not fixed hop), throws rather than falling back; hashSkillsTree() hashes installer-owned bs- paths by relPath+content sorted, returns SKILLS_TREE_ABSENT when no root found
 
 ### Pending Todos
 
@@ -393,7 +407,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-27T20:55:24.163Z
+Last session: 2026-07-28T17:54:35.300Z
 Stopped at: Completed 170-06-PLAN.md
 Resume file: 
 None
