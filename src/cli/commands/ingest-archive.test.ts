@@ -9,6 +9,8 @@ import {
   ingestGapsCommand,
   ingestRelabelCommand,
   renderIndex,
+  normalizeEdition,
+  EDITION_EMPTY_LEXICON,
   INDEX_HEADINGS,
   HEADER_LABELS,
   EDITION_UNKNOWN,
@@ -416,5 +418,68 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
     const project = await withSlices([], [ruleLine]);
     const result = await ingestRelabelCommand({ project, quiet: true });
     expect(result.relabelled).toBe(0);
+  });
+});
+
+/**
+ * Regression suite for F-1 (`.planning/phases/170-ingest-contract-upgrade/170-PROOF-RUN-2.md`),
+ * fixed here per `171-CONTEXT.md` decision 5. `--edition` let a free-text paraphrase displace the
+ * machine-checkable `EDITION_UNKNOWN` sentinel — and PROV-01/PROV-03 (Phase 171) both read this
+ * field, so it must be machine-checkable before anything reads it.
+ *
+ * Every test below fails against the pre-fix code: `normalizeEdition` does not exist yet.
+ */
+describe('edition normalization (F-1)', () => {
+  // Read live 2026-07-28 from ~/BoardSmithGames/seven/rulebook/INDEX.md (Phase 170's proof
+  // target; read-only, never written by this suite).
+  const SEVEN_EDITION =
+    'not stated in the rulebook (no edition/printing on cover, title page, or colophon) — ' +
+    'pending designer confirmation';
+  // Read live 2026-07-28 from ~/BoardSmithGames/one-two-punch/rulebook/INDEX.md.
+  const ONE_TWO_PUNCH_EDITION =
+    'none stated in the rulebook — © 2020 Alright Games (transcribed from `rules.pdf`, 2 pages)';
+
+  it('normalizes undefined to EDITION_UNKNOWN', () => {
+    expect(normalizeEdition(undefined)).toBe(EDITION_UNKNOWN);
+  });
+
+  it('normalizes whitespace-only input to EDITION_UNKNOWN', () => {
+    expect(normalizeEdition('   ')).toBe(EDITION_UNKNOWN);
+  });
+
+  it("normalizes seven's real free-text edition to EDITION_UNKNOWN", () => {
+    expect(normalizeEdition(SEVEN_EDITION)).toBe(EDITION_UNKNOWN);
+  });
+
+  it("normalizes one-two-punch's real free-text edition to EDITION_UNKNOWN", () => {
+    expect(normalizeEdition(ONE_TWO_PUNCH_EDITION)).toBe(EDITION_UNKNOWN);
+  });
+
+  it('preserves a real edition string verbatim, trimmed', () => {
+    expect(normalizeEdition('Second Edition, 2019 printing')).toBe('Second Edition, 2019 printing');
+  });
+
+  it('matches lexicon phrases case-insensitively', () => {
+    expect(normalizeEdition('NONE STATED')).toBe(EDITION_UNKNOWN);
+  });
+
+  it('never contains the bare substring "edition" — that would fire on real editions like "First edition"', () => {
+    for (const phrase of EDITION_EMPTY_LEXICON) {
+      expect(phrase).not.toMatch(/edition/i);
+    }
+  });
+
+  it('writes the machine-checkable sentinel for a free-text edition, preserving the original on Edition note:', async () => {
+    const project = await run({ edition: ONE_TWO_PUNCH_EDITION });
+    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    expect(index).toContain(`Edition: ${EDITION_UNKNOWN}`);
+    expect(index).toContain(`Edition note: ${ONE_TWO_PUNCH_EDITION}`);
+  });
+
+  it('writes a real edition string with no Edition note: line', async () => {
+    const project = await run({ edition: 'Second Edition, 2019 printing' });
+    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    expect(index).toContain('Edition: Second Edition, 2019 printing');
+    expect(index).not.toContain('Edition note:');
   });
 });
