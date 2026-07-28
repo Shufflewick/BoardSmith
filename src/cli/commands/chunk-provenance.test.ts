@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -10,6 +10,11 @@ import {
   SCOPE_FULL,
   SCOPE_CODE_ONLY,
   SCOPE_REASONS,
+  chunkCheckCommand,
+  VERIFIED_AGAINST_HEADING,
+  VERIFIED_AGAINST_BEGIN,
+  VERIFIED_AGAINST_END,
+  VERIFIED_AGAINST_LABELS,
 } from './chunk-provenance.js';
 
 /**
@@ -325,5 +330,254 @@ describe('cited slices — resolveCitedSlices', () => {
     const { resolved, unresolved } = resolveCitedSlices(text, ONE_TWO_PUNCH_SLICES);
     expect(resolved).toEqual([]);
     expect(unresolved).toEqual([]);
+  });
+});
+
+/**
+ * `chunk-check` — PROV-01/PROV-02's write side. `ingestCheckCommand` is the precedent copied
+ * line-for-line (171-04-PLAN.md `<copy_these_mechanisms_exactly>`): a fenced machine-owned block,
+ * refusal (never silent re-fencing) when the fences are gone, and repair-then-`process.exitCode`
+ * rather than throwing on the terminal path — `program.parse()` does not await action handlers, so
+ * a rejection there would surface as an unhandled-rejection stack trace (CLAUDE.md forbids that).
+ */
+describe('chunk-check', () => {
+  let exitCode: number | undefined;
+  beforeEach(() => {
+    exitCode = process.exitCode;
+    process.exitCode = undefined;
+  });
+  afterEach(() => {
+    process.exitCode = exitCode;
+  });
+
+  /**
+   * A project with a real archived+hashed source (full scope, when untouched) and two real slice
+   * files on disk — resolveCitedSlices resolves against a DIRECTORY LISTING, so the slice content
+   * must actually exist for a citation to resolve at all.
+   */
+  async function makeCheckProject(): Promise<{ project: string; sliceHash: string }> {
+    const project = join(dir, 'game-check');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes for chunk-check testing\n');
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game-check',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash,
+        transcribed: '2026-07-28',
+      }),
+    );
+    await fs.mkdir(join(project, 'rulebook', 'source'), { recursive: true });
+    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+
+    const sliceBuf = Buffer.from('# Setup and Round Structure\n\nReal slice content for hashing.\n');
+    const sliceHash = createHash('sha256').update(sliceBuf).digest('hex');
+    await fs.writeFile(join(rulebookDir, '01-setup-and-round-structure.md'), sliceBuf);
+    await fs.writeFile(join(rulebookDir, '02-unrelated-slice.md'), '# Unrelated\n');
+
+    return { project, sliceHash };
+  }
+
+  /**
+   * Scaffolds `chunks/<slug>/CHUNK.md` from the real template's section order (171-04-PLAN.md
+   * Task 1's `<action>`), with a real `## Interpretation` citation line substituted in.
+   */
+  async function makeChunk(project: string, slug: string, interpretation: string): Promise<string> {
+    const template = await fs.readFile(
+      new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
+      'utf-8',
+    );
+    const withInterpretation = template.replace(
+      '1. <!-- claim text --> — cites <!-- rulebook section / RULINGS.md entry -->',
+      interpretation,
+    );
+    const chunkDir = join(project, 'chunks', slug);
+    await fs.mkdir(chunkDir, { recursive: true });
+    const chunkPath = join(chunkDir, 'CHUNK.md');
+    await fs.writeFile(chunkPath, withInterpretation);
+    return chunkPath;
+  }
+
+  const JAB_CITES =
+    '1. Jab is a basic strike — cites rulebook/01-setup-and-round-structure.md';
+
+  it('writes the whole fenced section when none exists, and exits non-zero', async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+    await chunkCheckCommand('jab', { project, json: true });
+    expect(process.exitCode).toBe(1);
+    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    expect(text).toContain(VERIFIED_AGAINST_HEADING);
+    expect(text).toContain(VERIFIED_AGAINST_BEGIN);
+    expect(text).toContain(VERIFIED_AGAINST_END);
+  });
+
+  it('running again with nothing changed leaves the file byte-identical, exitCode undefined', async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+    await chunkCheckCommand('jab', { project, json: true });
+    const after1 = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+
+    process.exitCode = undefined;
+    await chunkCheckCommand('jab', { project, json: true });
+    expect(process.exitCode).toBeUndefined();
+    const after2 = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    expect(after2).toBe(after1);
+  });
+
+  it('the written body contains Scope/Rulebook edition/Rulebook source hash/BoardSmith version/Skills tree hash lines and a cited-slice hash row', async () => {
+    const { project, sliceHash } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+    await chunkCheckCommand('jab', { project, json: true });
+    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+
+    for (const label of [
+      'Scope:',
+      'Rulebook edition:',
+      'Rulebook source hash:',
+      'BoardSmith version:',
+      'Skills tree hash:',
+    ]) {
+      expect(VERIFIED_AGAINST_LABELS).toContain(label);
+      expect(text).toContain(label);
+    }
+    expect(text).toContain(`| rulebook/01-setup-and-round-structure.md | ${sliceHash} |`);
+  });
+
+  it('code-conformance-only scope writes a Reason: line carrying an enumerated code; full scope writes no Reason: line', async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+    await chunkCheckCommand('jab', { project, json: true });
+    const fullText = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    expect(fullText).not.toContain('Reason:');
+
+    await fs.rm(join(project, 'rulebook', 'source', 'rules.pdf'));
+    process.exitCode = undefined;
+    await chunkCheckCommand('jab', { project, json: true });
+    const reducedText = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    expect(reducedText).toContain('Reason: source-missing');
+    expect(SCOPE_REASONS).toContain('source-missing');
+  });
+
+  it("the recorded slice hash equals the SHA-256 of that slice file's actual bytes, computed independently", async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+    await chunkCheckCommand('jab', { project, json: true });
+    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+
+    const sliceBytes = await fs.readFile(join(project, 'rulebook', '01-setup-and-round-structure.md'));
+    const independentHash = createHash('sha256').update(sliceBytes).digest('hex');
+    expect(text).toContain(`| rulebook/01-setup-and-round-structure.md | ${independentHash} |`);
+  });
+
+  it("editing a slice file and re-running rewrites that row's hash and exits 1", async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+    await chunkCheckCommand('jab', { project, json: true });
+
+    process.exitCode = undefined;
+    await fs.appendFile(join(project, 'rulebook', '01-setup-and-round-structure.md'), '\nAn added rule.\n');
+    const newBytes = await fs.readFile(join(project, 'rulebook', '01-setup-and-round-structure.md'));
+    const newHash = createHash('sha256').update(newBytes).digest('hex');
+
+    await chunkCheckCommand('jab', { project, json: true });
+    expect(process.exitCode).toBe(1);
+    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    expect(text).toContain(`| rulebook/01-setup-and-round-structure.md | ${newHash} |`);
+  });
+
+  it('unresolved citations are recorded verbatim under Unresolved citations:; a chunk with none omits the list', async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(
+      project,
+      'jab',
+      '1. Jab is a basic strike — cites rulebook/09-does-not-exist.md',
+    );
+    await chunkCheckCommand('jab', { project, json: true });
+    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    expect(text).toContain('Unresolved citations:');
+    expect(text).toContain('rulebook/09-does-not-exist.md');
+
+    await makeChunk(project, 'cross', JAB_CITES);
+    process.exitCode = undefined;
+    await chunkCheckCommand('cross', { project, json: true });
+    const crossText = await fs.readFile(join(project, 'chunks', 'cross', 'CHUNK.md'), 'utf-8');
+    expect(crossText).not.toContain('Unresolved citations:');
+  });
+
+  it('a fence-less "## Verified Against" section throws an actionable error naming both markers, and does NOT modify the file', async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+    await chunkCheckCommand('jab', { project, json: true });
+    process.exitCode = undefined;
+
+    const chunkPath = join(project, 'chunks', 'jab', 'CHUNK.md');
+    const withBlock = await fs.readFile(chunkPath, 'utf-8');
+    const strippedFences = withBlock
+      .replace(VERIFIED_AGAINST_BEGIN, '')
+      .replace(VERIFIED_AGAINST_END, '');
+    await fs.writeFile(chunkPath, strippedFences);
+
+    await expect(chunkCheckCommand('jab', { project, json: true })).rejects.toThrow(
+      /machine-owned fences/i,
+    );
+    await expect(chunkCheckCommand('jab', { project, json: true })).rejects.toThrow(
+      /chunk-check/,
+    );
+    const after = await fs.readFile(chunkPath, 'utf-8');
+    expect(after).toBe(strippedFences);
+  });
+
+  it('content OUTSIDE the fences (## Interpretation etc.) is byte-identical before and after a repair run', async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+    await chunkCheckCommand('jab', { project, json: true }); // first run creates the section
+    process.exitCode = undefined;
+
+    const chunkPath = join(project, 'chunks', 'jab', 'CHUNK.md');
+    const beforeSecondRun = await fs.readFile(chunkPath, 'utf-8');
+    const beforeHeadingIdx = beforeSecondRun.indexOf(VERIFIED_AGAINST_HEADING);
+    const outsideBefore = beforeSecondRun.slice(0, beforeHeadingIdx);
+
+    // Force a repair: change the cited slice's bytes, which rewrites its hash row.
+    await fs.appendFile(join(project, 'rulebook', '01-setup-and-round-structure.md'), '\nAdditional line.\n');
+    await chunkCheckCommand('jab', { project, json: true });
+    expect(process.exitCode).toBe(1);
+
+    const after = await fs.readFile(chunkPath, 'utf-8');
+    const afterHeadingIdx = after.indexOf(VERIFIED_AGAINST_HEADING);
+    expect(after.slice(0, afterHeadingIdx)).toBe(outsideBefore);
+  });
+
+  it('an unknown slug throws an error naming the path it looked for', async () => {
+    const { project } = await makeCheckProject();
+    await expect(chunkCheckCommand('no-such-chunk', { project, json: true })).rejects.toThrow(
+      /chunks[\\/]no-such-chunk[\\/]CHUNK\.md/,
+    );
+  });
+
+  it('--json emits { slug, scope, reason, changed, citedSlices, unresolved } and prints no human decoration', async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await chunkCheckCommand('jab', { project, json: true });
+
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const parsed = JSON.parse(logSpy.mock.calls[0][0] as string);
+    expect(parsed).toMatchObject({ slug: 'jab', scope: SCOPE_FULL, changed: true });
+    expect(parsed.citedSlices).toEqual(['rulebook/01-setup-and-round-structure.md']);
+    expect(parsed.unresolved).toEqual([]);
+
+    logSpy.mockRestore();
+    errSpy.mockRestore();
   });
 });
