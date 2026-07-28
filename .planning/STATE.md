@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 170-06-PLAN.md
-last_updated: "2026-07-28T18:28:59.532Z"
+stopped_at: Completed 171-06-PLAN.md
+last_updated: "2026-07-28T18:50:34.192Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
   percent: 0
 ---
 
@@ -25,7 +25,33 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 05/07 complete.
+Phase: 171 (Provenance Recording) — **IN PROGRESS**, plan 06/07 complete.
+
+`171-06-PLAN.md` wired the two commands from plans 04/05 into the actual pipeline: CHUNK.template.md
+now scaffolds the machine-owned `## Verified Against` fence (byte-identical to the writer's
+exported constants) into every new chunk; `close.md`'s Bookkeeping Sequence gained item 3, "Record
+what this chunk was verified against," which runs `boardsmith chunk-check <slug>` right after the
+verified-commit-hash item, renumbering the sequence to six items — `playtest.md`'s light path still
+cites the sequence BY NAME rather than duplicating the chunk-check text, so the two close paths
+cannot drift apart. Fixed the plan-check blocker along the way: inserting the new item shifted
+ledger-reconciliation from item 4 to item 5, and `state-machine.md`'s two ordinal citations were
+updated to match (its unrelated "consistency-check item 4" citation, a different sequence entirely,
+was left untouched — verified by content match, not line number, since this task's own edits shift
+lines above it). Added a derived-numbering drift guard to `build-chunk.test.ts` that parses
+close.md's real Bookkeeping Sequence at test time and validates every "item N" citation against it,
+so a future renumber fails the suite automatically. RED-first observation caught a real design bug
+in the guard's own overlap heuristic TWICE before it worked (a fixed-width text window was sweeping
+in vocabulary from neighboring duties in the same enumerating sentence, producing false passes on
+genuinely stale citations) — both fixes documented inline. `/bs-check-status` gained item 8,
+"Verification provenance and drift," formatting `boardsmith chunk-provenance-status --json` and
+explicitly consuming its `projectProvenanceState` field rather than re-deriving severity, so a
+pre-provenance project (both reference games, 100% of chunks flagged) reports as informational, not
+an alarm. Every test added proves the instruction EXISTS, never that a live session follows it — the
+load-bearing guarantees remain the machine-owned fence and plan 05's `verifiedWithoutProvenance`
+flag, exactly as `171-VALIDATION.md`'s tiering states. Found and logged (not fixed, out of scope) 6
+pre-existing `chunk-provenance.test.ts` `chunk-check` failures bisected to `171-04`, unrelated to
+this plan's file scope. Full suite: 3400/3406 passed (6 known pre-existing failures net of this
+plan's own 12 new passing tests). See `.planning/phases/171-provenance-recording/171-06-SUMMARY.md`.
 
 `171-05-PLAN.md` landed PROV-03's deliverable: `boardsmith chunk-provenance-status --json`, a
 read-only aggregation over every chunk's `## Verified Against` block. THE THREE STATES, NEVER TWO:
@@ -460,6 +486,7 @@ Recent decisions affecting current work:
 - [Phase 171]: 171-03: computeVerificationScope's five reason codes checked as a single top-to-bottom early-return chain (order is contract, not incidental); resolveCitedSlices resolves shorthand against the rulebook/ directory listing (not INDEX.md's ## Slices table, absent in one-two-punch); ambiguous/unresolvable citations recorded verbatim, never guessed or dropped — pinned against seven's genuine two-01--slice collision
 - [Phase 171]: 171-04: chunk-check writes strictly between VERIFIED_AGAINST_BEGIN/END (distinct fence pair from GAPS_BEGIN/END); citation scan is scoped to content BEFORE any existing Verified Against section so the block can never re-poison its own next computation; program.parse() -> parseAsync()+try/catch in cli.ts fixes a repo-wide stack-trace leak affecting every CLI command, not just chunk-check
 - [Phase ?]: unknown and verifiedWithoutProvenance compose by design (171-05)
+- [Phase 171-06]: check-status.md item 8 consumes chunk-provenance-status's projectProvenanceState field rather than re-deriving severity, so a pre-provenance project (both reference games, 100% flagged) reports as informational not alarming
 
 ### Pending Todos
 
@@ -471,8 +498,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T17:54:35.300Z
-Stopped at: Completed 170-06-PLAN.md
+Last session: 2026-07-28T18:50:34.182Z
+Stopped at: Completed 171-06-PLAN.md
 Resume file: 
 None
 

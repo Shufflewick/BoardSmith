@@ -51,7 +51,7 @@ the tag.
 
 ### Provenance (PROV)
 
-- [ ] **PROV-01**: `close` records a `## Verified Against` block in CHUNK.md — slice paths and
+- [x] **PROV-01**: `close` records a `## Verified Against` block in CHUNK.md — slice paths and
       hashes, rulebook edition, BoardSmith version, skills version, and verification scope.
 - [x] **PROV-02**: A verification that could not re-read source records its scope as
       code-conformance-only with the reason, so a partial verification never reads as a full one.
@@ -140,7 +140,7 @@ the tag.
 | INGEST-02 | Phase 170 | Complete |
 | INGEST-03 | Phase 170 | Complete |
 | INGEST-04 | Phase 170 | Complete |
-| PROV-01 | Phase 171 | Pending |
+| PROV-01 | Phase 171 | Complete |
 | PROV-02 | Phase 171 | Complete |
 | PROV-03 | Phase 171 | Complete |
 | CHECK-03 | Phase 172 | Pending |
