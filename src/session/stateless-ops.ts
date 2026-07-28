@@ -183,9 +183,13 @@ export interface GameDefinitionLike {
    */
   tutorial?: TutorialDefinition;
   /**
-   * Optional AI configuration — passed to `createBot` for hint/heatmap ops.
-   * Provides `hintTargetFromMove` for per-game board-highlight extraction and
-   * `objectives` for MCTS evaluation. When absent, hint/heatmap ops return a
+   * Optional AI configuration — passed to `createBot` by EVERY op that builds a
+   * bot: aiTurn, aiSuggest, hint, and heatmapToggle. Provides the MCTS hooks
+   * (`objectives`, `moveOrdering`, `playoutPolicy`, `threatResponseMoves`,
+   * `uctConstant`) plus `hintTargetFromMove` for per-game board-highlight
+   * extraction. A bot built without it searches with generic defaults, so any op
+   * that skips it plays a materially different (and worse) game than the one the
+   * game author configured. When absent entirely, hint/heatmap ops return a
    * protocol error (fail-loud: no AI config → no hint available).
    */
   ai?: import('../ai/types.js').AIConfig;
@@ -568,6 +572,12 @@ async function handleAITurn(
   }
 
   const seatLevel = op.seats.find((s) => s.seat === aiPlayer)?.level;
+  // `def.ai` MUST be threaded through — it carries the game's MCTS hooks
+  // (objectives, moveOrdering, playoutPolicy, threatResponseMoves, uctConstant).
+  // Omitting it silently downgrades every bot turn to a hookless generic search
+  // that treats concede-style actions (resign / offer draw) as ordinary moves and,
+  // at low iteration budgets, picks them — chess bots resigned on move one.
+  // handleHint already passes it; this is the same bot, so it gets the same config.
   const bot = createBot(
     runner.game as Game,
     def.gameClass as GameRunnerOptions<never>['GameClass'],
@@ -575,6 +585,7 @@ async function handleAITurn(
     aiPlayer,
     runner.actionHistory,
     parseAILevel(seatLevel ?? 'medium'),
+    def.ai,
   );
 
   const move = await bot.play();

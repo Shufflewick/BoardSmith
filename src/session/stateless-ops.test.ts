@@ -625,6 +625,59 @@ describe('executeOp', () => {
       expect(aiResult.success).toBe(true);
       expect(aiResult.aiMoved).toBe(false);
     });
+
+    // Regression: aiTurn used to build its bot WITHOUT def.ai, so every bot turn
+    // in production ran a hookless generic search. Games that use moveOrdering to
+    // keep concede-style actions out of the search (chess drops resign / offer
+    // draw) had that filter silently ignored, and at low iteration budgets the
+    // bot picked them — chess bots resigned on move one.
+    it("applies the game definition's AI hooks to the bot's move choice", async () => {
+      class ConcedeGame extends Game<ConcedeGame, Player> {
+        constructor(options: GameOptions) {
+          super(options);
+          this.registerAction(Action.create('advance').execute(() => ({ success: true })));
+          this.registerAction(Action.create('concede').execute(() => ({ success: true })));
+          this.setFlow(
+            defineFlow({
+              root: loop({
+                maxIterations: 100,
+                do: actionStep({
+                  actions: ['advance', 'concede'],
+                  player: (ctx) => ctx.game.getPlayer(1)!,
+                  repeatUntil: () => false,
+                }),
+              }),
+            }),
+          );
+        }
+      }
+
+      const moveOrdering = vi.fn((_game, _playerIndex, moves: Array<{ action: string }>) =>
+        moves.filter((m) => m.action !== 'concede'),
+      );
+      const concedeDef: GameDefinitionLike & { ai?: AIConfig } = {
+        gameClass: ConcedeGame as new (...args: unknown[]) => unknown,
+        gameType: 'concede-game',
+        minPlayers: 1,
+        maxPlayers: 2,
+        ai: { moveOrdering } as unknown as AIConfig,
+      };
+      const concedeOptions = { playerCount: 2, seed: 'concede-seed' };
+
+      const startResult = await executeOp(concedeDef, concedeOptions, null, null, { type: 'start' });
+      expect(startResult.success).toBe(true);
+
+      const aiResult = await executeOp(concedeDef, concedeOptions, startResult.snapshot, null, {
+        type: 'aiTurn',
+        seats: [{ seat: 1, level: 'easy' }],
+      });
+
+      expect(aiResult.success).toBe(true);
+      expect(aiResult.aiMoved).toBe(true);
+      expect(moveOrdering).toHaveBeenCalled();
+      const history = (aiResult.snapshot as { actionHistory: Array<{ name: string }> }).actionHistory;
+      expect(history.map((a) => a.name)).not.toContain('concede');
+    });
   });
 
   // ── startTutorial ─────────────────────────────────────────────────────────
