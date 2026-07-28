@@ -236,8 +236,10 @@ function resolveManifestPath(projectDir: string, relPathStr: string): string | '
  * catch prints only `err.message`, never a stack trace or internal path (CLAUDE.md, T-172-05).
  * A FINDING never sets `process.exitCode` — findings exit 0 (172-CONTEXT.md decision 6).
  *
- * `--json`/human-report OUTPUT is wired in a later addition to this function (Task 3) — this
- * version computes and returns the full `TraceCheckResult` without printing.
+ * `--json`: `console.log(JSON.stringify(result, null, 2))` as the last thing computed, then
+ * returns the result — the exact convention `chunk-provenance.ts:794-797` establishes. This is
+ * the contract Phase 173's `/bs-verify-game` consumes (decision 8: CLI computes, skill formats).
+ * Otherwise: a grouped, count-first human report (`printHumanReport` below).
  */
 export async function traceCheckCommand(
   options: { project?: string; json?: boolean } = {},
@@ -450,5 +452,51 @@ export async function traceCheckCommand(
 
   const result: TraceCheckResult = { findings, counts, totals, unparsedSupersessions };
 
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  printHumanReport(result);
   return result;
+}
+
+// -------------------------------------------------------------------------------------------
+// Human report — count-first, grouped by kind (172-CONTEXT.md's "report text formatting" item).
+// Both output modes go to stdout via console.log; console.error is reserved for a mutation
+// notice this command never emits, since it mutates nothing (PATTERNS.md).
+// -------------------------------------------------------------------------------------------
+
+const MAX_ITEMS_PER_KIND = 10;
+
+function printHumanReport(result: TraceCheckResult): void {
+  const { totals, counts, findings, unparsedSupersessions } = result;
+
+  console.log(
+    `Traceability sweep — ${totals.chunks} chunks, ${totals.claims} claims, ${totals.rulings} rulings, ` +
+      `${totals.testFiles} test files, ${totals.claimCitations} claim citations, ${totals.rulingCitations} ruling citations`,
+  );
+  console.log(FINDING_KINDS.map((kind) => `${kind}: ${counts[kind]}`).join('  '));
+
+  for (const kind of FINDING_KINDS) {
+    const kindFindings = findings.filter((f) => f.kind === kind);
+    if (kindFindings.length === 0) continue;
+
+    console.log(`\n${kind} (${kindFindings.length})`);
+    const shown = kindFindings.slice(0, MAX_ITEMS_PER_KIND);
+    for (const f of shown) {
+      console.log(`  [${f.chunk || '-'}] ${f.subject}: ${f.detail}`);
+    }
+    const remaining = kindFindings.length - shown.length;
+    if (remaining > 0) {
+      console.log(`  +${remaining} more — run --json for the full list`);
+    }
+  }
+
+  if (unparsedSupersessions.length > 0) {
+    console.log(`\nunparsed supersessions (${unparsedSupersessions.length})`);
+    for (const u of unparsedSupersessions) {
+      console.log(`  Ruling ${u.ruling}: ${u.sentence}`);
+    }
+  }
 }

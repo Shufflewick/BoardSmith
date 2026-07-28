@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { FINDING_KINDS } from './build-manifest.js';
 import { scanTestCitations, resolveClaimCitation, traceCheckCommand } from './trace-check.js';
 
 /**
@@ -141,12 +142,17 @@ describe('resolveClaimCitation — the three-rung ladder', () => {
  * CHUNK.template.md (this plan's fixtures don't need `## Verified Against`/provenance blocks).
  */
 let dir: string;
+/** Silences the human report's console.log noise in every test by default; Task 3's tests read
+ * its captured calls directly instead of installing a second, competing spy. */
+let logSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(async () => {
   dir = await fs.mkdtemp(join(tmpdir(), 'bs-trace-check-'));
+  logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 
 afterEach(async () => {
+  logSpy.mockRestore();
   await fs.rm(dir, { recursive: true, force: true });
 });
 
@@ -424,5 +430,68 @@ describe('traceCheckCommand', () => {
     await fs.mkdir(project, { recursive: true });
 
     await expect(traceCheckCommand({ project })).rejects.toThrow(/No chunks\/ directory/);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// --json contract and the grouped, count-first human report (Task 3)
+// -------------------------------------------------------------------------------------------
+
+describe('traceCheckCommand — --json / human report', () => {
+  it('--json emits a fully-populated TraceCheckResult with all nine count keys present, zero-valued when absent', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [], manifestRows: [] });
+
+    const result = await traceCheckCommand({ project, json: true });
+
+    expect(Object.keys(result.counts).sort()).toEqual([...FINDING_KINDS].sort());
+    for (const kind of FINDING_KINDS) {
+      expect(typeof result.counts[kind]).toBe('number');
+    }
+    // drift-check's kinds are always zero from trace-check — this command never emits them.
+    expect(result.counts['chunk-code-drifted']).toBe(0);
+    expect(result.counts['drift-unknown']).toBe(0);
+  });
+
+  it('--json prints the JSON-stringified result to stdout, exactly the two-line convention', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [], manifestRows: [] });
+
+    const result = await traceCheckCommand({ project, json: true });
+
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(logSpy.mock.calls[0][0]).toBe(JSON.stringify(result, null, 2));
+  });
+
+  it('the human report leads with a count-first summary line whose numbers match the JSON counts', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [1, 2], manifestRows: [{ files: 'tests/jab.test.ts', status: 'NEW' }] });
+    await writeTestFile(project, 'tests/jab.test.ts', '// claim 1\n');
+
+    const result = await traceCheckCommand({ project });
+    const printedLines = logSpy.mock.calls.map((c) => String(c[0]));
+
+    // First line: the totals summary.
+    expect(printedLines[0]).toContain(`${result.totals.chunks} chunks`);
+    expect(printedLines[0]).toContain(`${result.totals.claims} claims`);
+
+    // Second line: every finding kind's count, matching the JSON counts exactly.
+    for (const kind of FINDING_KINDS) {
+      expect(printedLines[1]).toContain(`${kind}: ${result.counts[kind]}`);
+    }
+
+    // At least one real finding (claim 2 untested) is grouped under its own kind heading.
+    expect(printedLines.some((line) => line.startsWith('claim-untested'))).toBe(true);
+  });
+
+  it('groups findings by kind with a "+N more" tail when a kind exceeds the printed cap', async () => {
+    const project = await makeProject();
+    const claims = Array.from({ length: 15 }, (_, i) => i + 1);
+    await makeChunk(project, 'jab', { claims, manifestRows: [] });
+
+    await traceCheckCommand({ project });
+    const printedLines = logSpy.mock.calls.map((c) => String(c[0]));
+
+    expect(printedLines.some((line) => /\+\d+ more — run --json for the full list/.test(line))).toBe(true);
   });
 });
