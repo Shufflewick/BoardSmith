@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 
 /**
@@ -21,10 +21,23 @@ import chalk from 'chalk';
  * `GAPS_BEGIN`/`GAPS_END` (ingest-archive.ts) and `VERIFIED_AGAINST_BEGIN`/`END`
  * (chunk-provenance.ts) already use, so this pipeline has exactly ONE fencing convention rather
  * than a second one invented for per-record framing. Each record is a SELF-DELIMITING single-line
- * JSON object. Per-line self-delimitation buys the same crash safety a per-record fence would
- * have bought, without a second convention: a torn append can damage at most the final line, and
- * a line that does not parse as a well-formed record is read as NOT recorded rather than as an
- * error or as complete — this is what makes resume safe (T-173-13).
+ * JSON object.
+ *
+ * CRASH SAFETY (CR-01 — corrects this comment's own prior, false claim): crash safety for the
+ * ledger comes from writing the WHOLE FILE atomically on every mutation — a temp file in the same
+ * directory, `fsync`'d, then `rename()`'d over the target — never from `fs.writeFile`'s default
+ * behavior, which truncates on open and is not append-safe on its own. POSIX `rename()` within
+ * one filesystem is atomic, so a crash at any point in a `verify-run-record` call leaves `RUN.md`
+ * either byte-identical to its pre-call state (every previously-recorded unit intact) or
+ * containing the fully-written new line — never a torn mix, and never a file with earlier records
+ * lost. This module's prior doc comment claimed "a torn append can damage at most the final
+ * line," which described what a true `O_APPEND` write would guarantee, not what the actual
+ * read-modify-rewrite-via-`fs.writeFile` implementation did — see 173-REVIEW.md CR-01 and
+ * `173-PROOF.md` §4 Finding 2 for the full account of why that claim was false. A line that does
+ * not parse as a well-formed record (the one torn shape still reachable — a crash that killed a
+ * process while the TEMP file itself was mid-write, which is simply an orphan, never the live
+ * `RUN.md`) is read as NOT recorded rather than as an error or as complete — this is what makes
+ * resume safe (T-173-13).
  *
  * This module mints its OWN fence pair. It never reuses `GAPS_BEGIN` or `VERIFIED_AGAINST_BEGIN`
  * — two unrelated machine-owned sections sharing one fence pair is a corruption vector, not a
@@ -118,6 +131,40 @@ function runRootDir(projectDir: string, runId: string): string {
 
 function ledgerFilePath(projectDir: string, runId: string): string {
   return join(runRootDir(projectDir, runId), 'RUN.md');
+}
+
+/**
+ * Atomically replaces `filePath`'s contents (CR-01's fix): write to a same-directory temp file,
+ * `fsync` it, then `rename()` over the target. POSIX `rename()` within one filesystem is atomic,
+ * so a crash at any point — including mid-write of the temp file itself, or between the temp
+ * write completing and the rename executing — leaves `filePath` either byte-identical to its
+ * pre-call state or containing the fully-written new content. Never a torn mix, never a
+ * zero-byte/truncated target.
+ *
+ * The temp name embeds the pid and a random suffix (T-173-08-02) so two calls — even concurrent
+ * runs whose ledgers happen to live in the same directory — can never collide on one temp path.
+ * If `rename()` itself fails (including a failure injected to simulate the crash window), the
+ * orphaned temp file is best-effort cleaned up and the error is re-thrown rather than swallowed —
+ * fail loud, per this project's error-handling contract. An orphan that outlives a real crash is
+ * harmless (T-173-08-04): its name is never `RUN.md`, so `ledgerFilePath`/`locateFences` and every
+ * other reader in this module can never mistake it for the ledger.
+ */
+async function atomicWriteFile(filePath: string, content: string): Promise<void> {
+  const dir = dirname(filePath);
+  const tmpPath = join(dir, `.${basename(filePath)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
+  const handle = await fs.open(tmpPath, 'w');
+  try {
+    await handle.writeFile(content, 'utf-8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await fs.rename(tmpPath, filePath);
+  } catch (err) {
+    await fs.rm(tmpPath, { force: true }).catch(() => {});
+    throw err;
+  }
 }
 
 /** The freshly-minted RUN.md contents: a title, an explanatory machine-owned comment, and an empty fence pair. */
@@ -256,7 +303,7 @@ export async function verifyRunInitCommand(
     await fs.access(ledgerFile);
     created = false;
   } catch {
-    await fs.writeFile(ledgerFile, renderEmptyRunMd(runId));
+    await atomicWriteFile(ledgerFile, renderEmptyRunMd(runId));
     created = true;
   }
 
@@ -386,7 +433,7 @@ export async function verifyRunRecordCommand(
   };
 
   const newText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
-  await fs.writeFile(ledgerFile, newText);
+  await atomicWriteFile(ledgerFile, newText);
 
   const result: VerifyRunRecordResult = {
     runId,

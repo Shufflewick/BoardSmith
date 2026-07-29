@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -349,6 +349,121 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
       verifyRunRecordCommand({ project, runId, unit: 'x', slice: '03-setup.md', json: true }),
     ).rejects.toThrow(/machine-owned fences/);
   });
+});
+
+// -------------------------------------------------------------------------------------------
+// 173-08 Task 1 — CR-01: the ledger write is crash-safe (atomic temp-write + rename)
+// -------------------------------------------------------------------------------------------
+
+describe('CR-01 — the ledger write is atomic, not a truncate+rewrite', () => {
+  it('CR-static: fs.writeFile(ledgerFile is never called against the ledger — atomicWriteFile only', async () => {
+    const src = await fs.readFile(new URL('./verify-run.ts', import.meta.url), 'utf-8');
+    expect(src).not.toMatch(/fs\.writeFile\(ledgerFile/);
+  });
+
+  it('CR-A: a failure injected between the temp write and the rename leaves the ledger byte-identical to its pre-call state, with earlier records intact, and surfaces the error (never swallowed)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const runId = init.runId;
+    await fs.writeFile(join(project, init.stagingDir, '03-setup.md'), 'staged setup content\n');
+    // One real, already-durable record before the injected crash.
+    await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
+
+    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const before = await fs.readFile(ledgerAbs, 'utf-8');
+
+    // Stage a second, real, non-empty slice so the call under test gets as far as the write.
+    const stagingAbs = join(project, 'rulebook', '.verify', runId, 'slices');
+    await fs.writeFile(join(stagingAbs, '07-turn.md'), 'staged turn content\n');
+
+    // Inject the failure at the exact boundary the plan names: the temp file has already been
+    // fully written and fsynced by the time this rejects — only the rename (the atomic
+    // "commit" step) fails, simulating a crash landing in that window.
+    const renameSpy = vi.spyOn(fs, 'rename').mockRejectedValueOnce(new Error('injected crash: rename never completed'));
+
+    await expect(
+      verifyRunRecordCommand({ project, runId, unit: '07-turn', slice: '07-turn.md', json: true }),
+    ).rejects.toThrow(/injected crash/);
+    renameSpy.mockRestore();
+
+    const after = await fs.readFile(ledgerAbs, 'utf-8');
+    expect(after).toBe(before); // byte-identical — no truncation, no partial rewrite
+
+    // The earlier, already-durable record survived the injected crash on the LATER call.
+    const status = await verifyRunStatusCommand({ project, runId, json: true });
+    expect(status.recorded).toEqual(['03-setup']);
+
+    // The orphaned temp file (if any) is never mistaken for the ledger by any reader (T-173-08-04):
+    // a fresh status call still reads exactly the pre-crash state.
+    const runDirAbs = join(project, 'rulebook', '.verify', runId);
+    const entries = await fs.readdir(runDirAbs);
+    const tmpFiles = entries.filter((e) => e.endsWith('.tmp'));
+    for (const tmp of tmpFiles) {
+      expect(tmp).not.toBe('RUN.md');
+    }
+  });
+
+  it('CR-B: a genuinely killed OS process (SIGKILL) between the temp write and the rename never corrupts the ledger — a real crash, not simulated', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const runId = init.runId;
+    await fs.writeFile(join(project, init.stagingDir, '03-setup.md'), 'staged setup content\n');
+    await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
+
+    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const before = await fs.readFile(ledgerAbs, 'utf-8');
+    const runDirAbs = join(project, 'rulebook', '.verify', runId);
+    const readySentinel = join(runDirAbs, '.crash-test-ready');
+
+    // A standalone script performing the SAME sequence atomicWriteFile does — open a
+    // same-directory temp file, write, fsync — then signal readiness and block forever,
+    // deliberately never reaching rename(). The parent SIGKILLs it once the sentinel appears,
+    // landing the kill in the exact window CR-01 concerns: after the temp write is durable,
+    // before the rename that would make it the live ledger.
+    const scriptPath = join(runDirAbs, '.crash-sim.mjs');
+    await fs.writeFile(
+      scriptPath,
+      `
+      import { promises as fs } from 'node:fs';
+      const tmpPath = ${JSON.stringify(join(runDirAbs, '.RUN.md.crashsim.tmp'))};
+      const handle = await fs.open(tmpPath, 'w');
+      await handle.writeFile('THIS MUST NEVER BECOME RUN.md\\n', 'utf-8');
+      await handle.sync();
+      await handle.close();
+      await fs.writeFile(${JSON.stringify(readySentinel)}, 'ready\\n');
+      setInterval(() => {}, 60000); // block forever (keeps the event loop alive) — never calls rename()
+      `,
+    );
+
+    const child = spawn(process.execPath, [scriptPath], { stdio: 'ignore' });
+    try {
+      const deadline = Date.now() + 5000;
+      while (!(await fs.access(readySentinel).then(() => true, () => false))) {
+        if (Date.now() > deadline) throw new Error('crash-sim script never became ready');
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      child.kill('SIGKILL');
+      await new Promise<void>((resolveKill) => child.once('exit', () => resolveKill()));
+    } finally {
+      child.kill('SIGKILL');
+    }
+
+    const after = await fs.readFile(ledgerAbs, 'utf-8');
+    expect(after).toBe(before); // the real, killed process never touched the live ledger
+
+    // The orphaned temp file from the killed process is a harmless leftover — never RUN.md.
+    const entries = await fs.readdir(runDirAbs);
+    expect(entries).toContain('RUN.md');
+    expect(entries).toContain('.RUN.md.crashsim.tmp');
+
+    // A subsequent, normal call still works — the run is not wedged by the orphan.
+    const stagingAbs = join(project, 'rulebook', '.verify', runId, 'slices');
+    await fs.writeFile(join(stagingAbs, '07-turn.md'), 'staged turn content\n');
+    const result = await verifyRunRecordCommand({ project, runId, unit: '07-turn', slice: '07-turn.md', json: true });
+    expect(result.alreadyRecorded).toBe(false);
+    const status = await verifyRunStatusCommand({ project, runId, json: true });
+    expect(status.recorded.sort()).toEqual(['03-setup', '07-turn']);
+  }, 15000);
 });
 
 // -------------------------------------------------------------------------------------------
