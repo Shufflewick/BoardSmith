@@ -129,6 +129,26 @@ export interface RangeMarkerRecord {
   recordedAt: string;
 }
 
+/**
+ * One recorded classification verdict for a live↔staged slice-pair GROUP (174-CONTEXT.md decision
+ * 4/6, amended). `units`, `liveSlices`, and `stagedSlices` are all ARRAYS — the pairing is m:n, and
+ * `units` mirrors `SlicePair.stagedUnits[]` (plan 174-03) field-for-field, with no collapsing step.
+ * `stale` is DERIVED from `ruleDelta` alone (decision 3) — never accepted as a caller-supplied
+ * field by the record command that will populate this (plan 174-04).
+ */
+export interface ClassificationRecord {
+  kind: 'classification';
+  pairId: string;
+  units: string[];
+  liveSlices: string[];
+  stagedSlices: string[];
+  provenance: 'source-changed' | 'source-unchanged' | 'unknown';
+  ruleDelta: 'cosmetic' | 'sharper' | 'contradictory' | 'unclassified';
+  stale: boolean;
+  evidence: string;
+  recordedAt: string;
+}
+
 function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex');
 }
@@ -352,8 +372,14 @@ export interface ParsedMarkerLine {
   index: number;
   record: RangeMarkerRecord;
 }
-/** Exported (174-02) — see `ParsedUnitLine`. */
-export type ParsedLine = ParsedUnitLine | ParsedMarkerLine;
+/** Exported (174-02) — a fourth ledger-line kind, `classification`, in the SAME fence pair. */
+export interface ParsedClassificationLine {
+  type: 'classification';
+  index: number;
+  record: ClassificationRecord;
+}
+/** Exported (174-02) — see `ParsedUnitLine`. Widened to include `ParsedClassificationLine`. */
+export type ParsedLine = ParsedUnitLine | ParsedMarkerLine | ParsedClassificationLine;
 
 /**
  * Parses every in-fence line as either a `LedgerRecord` (unit) or a `RangeMarkerRecord`
@@ -403,6 +429,46 @@ export function parseLedgerBody(
         }
         return;
       }
+      if (rec.kind === 'classification') {
+        // T-174-04/LEDGER-2: every field type-validated; a torn or malformed classification line
+        // lands in malformedLines and is never thrown, exactly the T-173-13 discipline the unit
+        // and marker branches above already follow. Enum-membership of provenance/ruleDelta is NOT
+        // validated here (that is the record command's normalization job, decision 8) — only that
+        // both are strings.
+        const isStringArray = (v: unknown): v is string[] =>
+          Array.isArray(v) && v.every((x) => typeof x === 'string');
+        if (
+          typeof rec.pairId === 'string' &&
+          isStringArray(rec.units) &&
+          isStringArray(rec.liveSlices) &&
+          isStringArray(rec.stagedSlices) &&
+          typeof rec.provenance === 'string' &&
+          typeof rec.ruleDelta === 'string' &&
+          typeof rec.stale === 'boolean' &&
+          typeof rec.evidence === 'string' &&
+          typeof rec.recordedAt === 'string'
+        ) {
+          lines.push({
+            type: 'classification',
+            index,
+            record: {
+              kind: 'classification',
+              pairId: rec.pairId,
+              units: rec.units,
+              liveSlices: rec.liveSlices,
+              stagedSlices: rec.stagedSlices,
+              provenance: rec.provenance as ClassificationRecord['provenance'],
+              ruleDelta: rec.ruleDelta as ClassificationRecord['ruleDelta'],
+              stale: rec.stale,
+              evidence: rec.evidence,
+              recordedAt: rec.recordedAt,
+            },
+          });
+        } else {
+          malformedLines.push(line);
+        }
+        return;
+      }
       if (
         (rec.kind === undefined || rec.kind === 'unit') &&
         typeof rec.unitId === 'string' &&
@@ -443,10 +509,17 @@ export function parseLedgerBody(
  *
  * Exported (174-02) — `verify-classify.ts` shares this resolution logic (widened in Task 2 below
  * to also resolve classification records) rather than re-deriving reset/complete semantics.
+ *
+ * `classifications` (174-02 Task 2) resolves to one `ClassificationRecord` per `pairId`,
+ * last-write-wins — a later record for the same `pairId` supersedes an earlier one (the
+ * append-only ledger's re-classification path). Classification lines are a DISTINCT kind from
+ * unit lines: they are never counted in `recorded[]`, and a `range-reset` marker — which is
+ * unit-scoped only — never supersedes one, matching decision 4/6's kind-isolation requirement.
  */
 export function resolveLedgerState(lines: ParsedLine[]): {
   recorded: LedgerRecord[];
   completeRanges: Set<string>;
+  classifications: ClassificationRecord[];
 } {
   const lastResetIndex = new Map<string, number>();
   const lastCompleteIndex = new Map<string, number>();
@@ -476,7 +549,16 @@ export function resolveLedgerState(lines: ParsedLine[]): {
     if (completeIdx > resetIdx) completeRanges.add(rangeId);
   }
 
-  return { recorded, completeRanges };
+  // Last-write-wins per pairId — a later classification line for the same pair supersedes an
+  // earlier one. File order (`index`) is the ledger's own append order, so the later `Map.set`
+  // for a repeated `pairId` always wins.
+  const classificationsByPairId = new Map<string, ClassificationRecord>();
+  for (const line of lines) {
+    if (line.type !== 'classification') continue;
+    classificationsByPairId.set(line.record.pairId, line.record);
+  }
+
+  return { recorded, completeRanges, classifications: [...classificationsByPairId.values()] };
 }
 
 // -------------------------------------------------------------------------------------------

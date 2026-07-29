@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   verifyRunInitCommand,
@@ -19,6 +19,7 @@ import {
   resolveLedgerState,
   ledgerFilePath,
   readLedgerOrThrow,
+  type ClassificationRecord,
 } from './verify-run.js';
 import { computeVerificationScope } from './chunk-provenance.js';
 import { chunkProvenanceStatusCommand } from './chunk-provenance.js';
@@ -786,5 +787,146 @@ describe('verify-run.ts — ledger helper export surface (174-02)', () => {
     const entries = await fs.readdir(targetDir);
     const tmpSiblings = entries.filter((e) => e.includes('.tmp'));
     expect(tmpSiblings).toEqual([]);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// 174-02 Task 2 — the ledger union's fourth kind, 'classification'
+// -------------------------------------------------------------------------------------------
+
+/**
+ * Appends one classification line to a run's RUN.md via the SAME exported append + atomic-write
+ * path a real command uses — never a hand-written whole-file replace.
+ */
+async function appendClassificationLine(
+  project: string,
+  runId: string,
+  record: ClassificationRecord,
+): Promise<void> {
+  const ledgerFile = ledgerFilePath(project, runId);
+  const relLedgerPath = relative(project, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, project);
+  const newText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
+  await atomicWriteFile(ledgerFile, newText);
+}
+
+function classificationFixture(overrides: Partial<ClassificationRecord> = {}): ClassificationRecord {
+  return {
+    kind: 'classification',
+    pairId: 'pair-1',
+    units: ['staged/01-round.md', 'staged/02-tips.md', 'staged/03-scoring.md'],
+    liveSlices: ['rulebook/01-round.md'],
+    stagedSlices: ['staged/01-round.md', 'staged/02-tips.md', 'staged/03-scoring.md'],
+    provenance: 'unknown',
+    ruleDelta: 'cosmetic',
+    stale: false,
+    evidence: 'wording differs, consequence identical',
+    recordedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+describe('verify-run.ts — classification record kind (174-02)', () => {
+  it('LEDGER-1: a valid classification line parses with a three-element units[] preserved in order', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const record = classificationFixture();
+    await appendClassificationLine(project, init.runId, record);
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines, malformedLines } = parseLedgerBody(ledgerText, relLedgerPath);
+
+    expect(malformedLines).toEqual([]);
+    const classificationLines = lines.filter((l) => l.type === 'classification');
+    expect(classificationLines).toHaveLength(1);
+    const parsed = classificationLines[0].record;
+    expect(parsed.units).toEqual(['staged/01-round.md', 'staged/02-tips.md', 'staged/03-scoring.md']);
+    expect(parsed).toMatchObject({ kind: 'classification', pairId: 'pair-1' });
+  });
+
+  it('LEDGER-2: a malformed classification line lands in malformedLines, never thrown', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+
+    // Missing required field (evidence).
+    const missingField = { ...classificationFixture(), evidence: undefined };
+    delete (missingField as Record<string, unknown>).evidence;
+    // units as a bare string instead of an array.
+    const unitsAsString = { ...classificationFixture(), units: 'staged/01-round.md' };
+    // units as an array containing a non-string.
+    const unitsWithNonString = { ...classificationFixture(), units: ['staged/01-round.md', 42] };
+    // Torn/unparseable JSON.
+    const tornLine = '{"kind":"classification","pairId":"pair-2","units":[';
+
+    let ledgerText = await readLedgerOrThrow(ledgerFile, init.runId, project);
+    for (const bad of [missingField, unitsAsString, unitsWithNonString]) {
+      ledgerText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(bad));
+    }
+    ledgerText = appendLedgerLine(ledgerText, relLedgerPath, tornLine);
+    await atomicWriteFile(ledgerFile, ledgerText);
+
+    const finalText = await fs.readFile(ledgerFile, 'utf-8');
+    expect(() => parseLedgerBody(finalText, relLedgerPath)).not.toThrow();
+    const { lines, malformedLines } = parseLedgerBody(finalText, relLedgerPath);
+    expect(lines.filter((l) => l.type === 'classification')).toHaveLength(0);
+    expect(malformedLines).toHaveLength(4);
+  });
+
+  it('LEDGER-3: a classification line never contaminates recorded[] — kind isolation both ways', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const stagingAbs = join(project, init.stagingDir);
+    await fs.writeFile(join(stagingAbs, '03-setup.md'), LIVE_03);
+    await verifyRunRecordCommand({
+      project,
+      runId: init.runId,
+      unit: '03-setup',
+      slice: '03-setup.md',
+    });
+    await verifyRunRecordCommand({
+      project,
+      runId: init.runId,
+      completeRange: '1-2',
+    });
+    // The classification line names the SAME unit id — it must not be double-counted.
+    await appendClassificationLine(
+      project,
+      init.runId,
+      classificationFixture({ pairId: 'pair-3', units: ['03-setup'] }),
+    );
+
+    const status = await verifyRunStatusCommand({ project, runId: init.runId, json: true });
+    expect(status.recorded).toEqual(['03-setup']);
+    expect(status.count).toBe(1);
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+    const { recorded, classifications } = resolveLedgerState(lines);
+    expect(recorded.map((r) => r.unitId)).toEqual(['03-setup']);
+    expect(classifications).toHaveLength(1);
+    expect(classifications[0].pairId).toBe('pair-3');
+  });
+
+  it('LEDGER-4: a range-reset marker does not supersede a classification record — reset is unit-scoped only', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, runId: undefined, json: true, ranges: ['1-2'] });
+    const record = classificationFixture({ pairId: 'pair-4', units: ['03-setup'] });
+    await appendClassificationLine(project, init.runId, record);
+    await verifyRunRecordCommand({ project, runId: init.runId, resetRange: '1-2' });
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+    const { classifications } = resolveLedgerState(lines);
+
+    expect(classifications).toHaveLength(1);
+    expect(classifications[0].units).toEqual(['03-setup']);
   });
 });
