@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 173-08-PLAN.md — closed CR-01 crash-safety + Finding 1 resume determinism, re-proved SC-4, VERIFY-08 re-confirmed
-last_updated: "2026-07-29T03:53:39.732Z"
-last_activity: 2026-07-28
+stopped_at: Completed 174-01-PLAN.md — produced real pass-1-vs-pass-2 fixtures for seven & one-two-punch, measured the presentation-marker inventory (decision 12b basis)
+last_updated: "2026-07-29T23:37:04.637Z"
+last_activity: 2026-07-29
 progress:
   total_phases: 10
   completed_phases: 3
-  total_plans: 30
-  completed_plans: 27
+  total_plans: 37
+  completed_plans: 28
   percent: 30
 ---
 
@@ -21,12 +21,36 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 173 — verify-pipeline-core
+**Current focus:** Phase 174 — verify-classifier
 
 ## Current Position
 
-Phase: 173 (verify-pipeline-core) — COMPLETE (8/8 plans)
-Next: Phase 174 (verify-classifier) — not yet planned
+Phase: 174 (verify-classifier) — IN PROGRESS (1/7 plans)
+Next: Phase 174 plan 02 (VERIFY-03 mechanical CLI extension — ledger helper exports)
+
+`174-01-PLAN.md` closed the phase's Wave-1 gate: neither reference game had any real
+pass-1-vs-pass-2 material on disk (`174-RESEARCH.md`'s biggest finding), so this plan produced it
+for real, reusing Phase 173's adoption + re-transcription pipeline unchanged against fresh `cp -R`
+copies of both `seven` and `one-two-punch`. Real skill install, real `ingest-archive` adoption
+(Case 2, no `--edition`), real `verify-run-init`/`-record`/`-status`, and a real `claude -p`
+subprocess dispatch of the transcription-subagent contract (no internal Task tool exposed to this
+executor — same documented constraint and resolution as `173-PROOF.md` §3). `seven` produced 6
+staged files vs. 3 live rule slices (reproducing 173's own 6-vs-3 measurement of this exact game
+exactly); `one-two-punch` produced 6 staged vs. 2 live (a 3x fan-out). Every live slice confirmed
+byte-identical before/after pass 2; zero slice-body-shaped lines in either subagent's raw return.
+Archived both games' real live+staged material into `174-FIXTURES/` with a 23-row sha256 manifest
+(independently re-verified 23/23 match) so it survives scratch cleanup. Measured the real
+presentation-marker inventory — `one-two-punch` live: 5 `— diagram description` + 1 `— art` of 12
+total `Derived` lines, 0 `Visual (p.` lines; `seven` live: 0/10, 0 `Visual (p.` — matching
+`174-RESEARCH.md`'s prior measurement of the untouched originals exactly, no contradiction. A
+sweep for a third legacy presentation qualifier found none (only `art` and `diagram description`
+exist), closing the open measurement question behind CONTEXT.md decision 12b's enumerated
+exclusion constant. Both `~/BoardSmithGames` originals confirmed byte-identical (whole-tree
+sha256 diff empty) before and after. `VERIFY-03` intentionally left OPEN in `REQUIREMENTS.md` —
+this plan produced fixtures only; no classifier code exists yet (plans 174-02 onward). See
+`.planning/phases/174-verify-classifier/174-01-SUMMARY.md`.
+
+Phase 173 (verify-pipeline-core) is COMPLETE (8/8 plans).
 
 `173-08-PLAN.md` was a follow-up closing two defects the phase's own evidence chain surfaced AFTER
 173-07 marked the phase complete: CR-01 (Critical — the ledger write was a full truncate+rewrite,
@@ -609,7 +633,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-29T03:53:39.721Z
+Last session: 2026-07-29T23:37:04.627Z
 Stopped at: Completed 173-08-PLAN.md — closed CR-01 crash-safety + Finding 1 resume determinism, re-proved SC-4, VERIFY-08 re-confirmed
 Resume file: 
 None
