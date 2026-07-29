@@ -1318,3 +1318,57 @@ preflight/post-run `git rev-parse` + `git status --porcelain` (for `seven`) + wh
 manifest diff. As of this plan's own post-run check: `seven` at `a03f38d4792af9dfc7c798be69686fc3230f54dd`
 (porcelain-empty), `one-two-punch` at `7e69471bd8980a854f3e351f2f486e1fb6f712b9` — both unchanged
 from the phase's very first preflight capture in `173-01-PLAN.md`'s gate.
+
+---
+
+## §6 — SC-3 under the NATIVE Task/Agent dispatch mechanism (closes the 173-VERIFICATION caveat)
+
+**Why this section exists.** Every live dispatch in §§2–5 used a `claude -p` OS subprocess as the
+fresh-context subagent, because those executing sessions had no internal Task tool. `173-VERIFICATION.md`
+disclosed this honestly and routed it to `human_needed` rather than passing it silently: VERIFY-07 is a
+load-bearing correctness property, and "the contract is dispatch-mechanism-agnostic" was a judgement, not
+evidence. The orchestrator session DID have the Agent tool, so it closed the gap directly instead of
+handing it over as a manual task.
+
+**Method.** A real transcription unit dispatched through the native Agent tool, pointed at the *installed*
+`ingest/transcription-subagent.md` contract, against a small disposable fixture rulebook. The subagent was
+given only: unit id, source path, pages, output directory, slice filename. It wrote its slice to the
+assigned directory and returned its summary. The orchestrator then grepped **what it actually received**
+for slice-body-shaped lines — `QUOTE`, `Derived (p.`, `Visual (p.` — which occur only inside a written
+slice, never inside a structured summary.
+
+**A positive control was included deliberately.** An absence proof is worthless if the thing being looked
+for could not have appeared. The written slice was confirmed to CONTAIN a body marker first, so the
+contract genuinely had something to leak.
+
+```
+=== slice written to the assigned output dir? ===
+01-setup-and-play.md
+
+=== slice DOES contain body markers (control — so there was something to leak) ===
+1
+   1 Derived (p.1)
+
+=== SC-3 OBSERVABLE: slice-body markers in what the orchestrator RECEIVED ===
+0
+
+=== control: same grep against the slice file itself ===
+1
+
+=== did any verbatim source sentence come back? ===
+0
+```
+
+**Result.** Zero slice-body markers and zero verbatim rule text in the return, against a control proving
+the marker was present in the slice. The return carried only the contract's structured fields
+(`slicePath`, `sectionSummary`, `citedTerms[]`, `componentMentions[]`, `visualEvidence[]`, `variants[]`,
+`openGaps[]`, `nextStep`).
+
+**Conclusion.** VERIFY-07's return contract holds under the native Task/Agent dispatch mechanism — the one
+production actually uses — and not merely under the `claude -p` stand-in. The `173-VERIFICATION.md` caveat
+is CLOSED. No further human verification is required for this item.
+
+**Scope limit, stated plainly:** this proves the *return contract* under native dispatch with a single
+unit against a synthetic 1-page fixture. It does not re-prove the full multi-unit fan-out of §§2–3 under
+native dispatch; those remain proven under the `claude -p` mechanism. The property at issue in the caveat
+— whether slice content can reach the orchestrator through a native return — is what was tested.

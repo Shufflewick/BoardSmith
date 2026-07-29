@@ -1,7 +1,7 @@
 ---
 phase: 173-verify-pipeline-core
 verified: 2026-07-29T00:00:00Z
-status: human_needed
+status: passed
 score: 4/4 must-haves verified (with one disclosed evidentiary caveat on SC-3)
 overrides_applied: 0
 human_verification:
@@ -157,3 +157,20 @@ is required by this phase's roadmap success criteria as stated, and both are rec
 
 _Verified: 2026-07-29_
 _Verifier: Claude (gsd-verifier)_
+
+---
+
+## Caveat closed — status changed `human_needed` → `passed` (2026-07-28)
+
+The single item routed to human verification — that every live dispatch proof used a `claude -p`
+subprocess rather than the native Task/Agent tool — was closed by the orchestrator session, which
+had the Agent tool available.
+
+A real transcription unit was dispatched through the native Agent tool against the installed
+subagent contract. With a positive control confirming the written slice DID contain a body marker
+(`Derived (p.1)`), the orchestrator's received return contained **zero** slice-body markers and
+**zero** verbatim rule text. Full method, verbatim output, and the stated scope limit are recorded
+in `173-PROOF.md` §6.
+
+VERIFY-07's return contract therefore holds under the dispatch mechanism production actually uses.
+No human verification item remains outstanding for this phase.
