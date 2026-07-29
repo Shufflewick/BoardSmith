@@ -190,7 +190,12 @@ function runRootDir(projectDir: string, runId: string): string {
   return dirname(stagingSlicesDir(projectDir, runId));
 }
 
-function ledgerFilePath(projectDir: string, runId: string): string {
+/**
+ * The single path-computation authority for a run's ledger file. Exported (174-02) so
+ * `verify-classify.ts` — the second caller sharing this ledger — can locate the SAME `RUN.md`
+ * `verify-run.ts` reads and writes, rather than re-deriving the path.
+ */
+export function ledgerFilePath(projectDir: string, runId: string): string {
   return join(runRootDir(projectDir, runId), 'RUN.md');
 }
 
@@ -209,8 +214,11 @@ function ledgerFilePath(projectDir: string, runId: string): string {
  * fail loud, per this project's error-handling contract. An orphan that outlives a real crash is
  * harmless (T-173-08-04): its name is never `RUN.md`, so `ledgerFilePath`/`locateFences` and every
  * other reader in this module can never mistake it for the ledger.
+ *
+ * Exported (174-02) — this is the ONE atomic ledger write path in the repo. `verify-classify.ts`
+ * is the second caller sharing it, never a second implementation of temp-file+fsync+rename.
  */
-async function atomicWriteFile(filePath: string, content: string): Promise<void> {
+export async function atomicWriteFile(filePath: string, content: string): Promise<void> {
   const dir = dirname(filePath);
   const tmpPath = join(dir, `.${basename(filePath)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
   const handle = await fs.open(tmpPath, 'w');
@@ -251,8 +259,12 @@ function renderEmptyRunMd(runId: string, ranges: string[]): string {
   );
 }
 
-/** Locates the ledger fence pair, or throws the actionable "missing its machine-owned fences" error (L9). */
-function locateFences(
+/**
+ * Locates the ledger fence pair, or throws the actionable "missing its machine-owned fences" error
+ * (L9). Exported (174-02) so `verify-classify.ts` can share this fence-location logic rather than
+ * re-deriving it.
+ */
+export function locateFences(
   ledgerText: string,
   relLedgerPath: string,
 ): { beginIdx: number; endIdx: number } {
@@ -314,8 +326,12 @@ function parseManifest(ledgerText: string): string[] {
  * because that is a read-time concern (`resolveLedgerState`/`verifyRunStatusCommand`), not a
  * write-time repair this append-only command performs. The returned text is written to disk by
  * the caller via `atomicWriteFile`, never `fs.writeFile` directly (CR-01).
+ *
+ * Exported (174-02) — `verify-classify.ts` shares this append helper (and `atomicWriteFile` above)
+ * so a classification record lands through the exact same crash-safe path a unit/marker record
+ * does, never a second append implementation.
  */
-function appendLedgerLine(ledgerText: string, relLedgerPath: string, newLine: string): string {
+export function appendLedgerLine(ledgerText: string, relLedgerPath: string, newLine: string): string {
   const { beginIdx, endIdx } = locateFences(ledgerText, relLedgerPath);
   const bodyStart = beginIdx + RUN_LEDGER_BEGIN.length;
   let body = ledgerText.slice(bodyStart, endIdx);
@@ -324,17 +340,20 @@ function appendLedgerLine(ledgerText: string, relLedgerPath: string, newLine: st
   return ledgerText.slice(0, bodyStart) + body + ledgerText.slice(endIdx);
 }
 
-interface ParsedUnitLine {
+/** Exported (174-02) — `verify-classify.ts` extends this discriminated union, never a second parser. */
+export interface ParsedUnitLine {
   type: 'unit';
   index: number;
   record: LedgerRecord;
 }
-interface ParsedMarkerLine {
+/** Exported (174-02) — see `ParsedUnitLine`. */
+export interface ParsedMarkerLine {
   type: 'marker';
   index: number;
   record: RangeMarkerRecord;
 }
-type ParsedLine = ParsedUnitLine | ParsedMarkerLine;
+/** Exported (174-02) — see `ParsedUnitLine`. */
+export type ParsedLine = ParsedUnitLine | ParsedMarkerLine;
 
 /**
  * Parses every in-fence line as either a `LedgerRecord` (unit) or a `RangeMarkerRecord`
@@ -347,8 +366,11 @@ type ParsedLine = ParsedUnitLine | ParsedMarkerLine;
  * temp-file write from a crash BEFORE the atomic rename ever ran — see CR-01's fix, which makes
  * a torn LIVE ledger unreachable) must read as NOT recorded so resume re-dispatches that unit,
  * never as an error that halts status.
+ *
+ * Exported (174-02) — `verify-classify.ts` is the second caller of this parser, sharing the SAME
+ * discriminated union and malformed-line discipline rather than re-implementing a parallel parse.
  */
-function parseLedgerBody(
+export function parseLedgerBody(
   ledgerText: string,
   relLedgerPath: string,
 ): { lines: ParsedLine[]; malformedLines: string[] } {
@@ -418,8 +440,11 @@ function parseLedgerBody(
  * `verifyRunRecordCommand` (idempotency + refusing to reset a complete range) and
  * `verifyRunStatusCommand` (the reported `recorded[]`/`rangesRecorded[]`) call this rather than
  * re-deriving it.
+ *
+ * Exported (174-02) — `verify-classify.ts` shares this resolution logic (widened in Task 2 below
+ * to also resolve classification records) rather than re-deriving reset/complete semantics.
  */
-function resolveLedgerState(lines: ParsedLine[]): {
+export function resolveLedgerState(lines: ParsedLine[]): {
   recorded: LedgerRecord[];
   completeRanges: Set<string>;
 } {
@@ -565,7 +590,12 @@ export interface VerifyRunRangeActionResult {
   alreadyRecorded: boolean;
 }
 
-async function readLedgerOrThrow(
+/**
+ * Reads the ledger file or throws the actionable "no verify run found" error. Exported (174-02) —
+ * `verify-classify.ts` is the second caller of this read helper, sharing the same error message
+ * and the same "run must be initialized first" contract.
+ */
+export async function readLedgerOrThrow(
   ledgerFile: string,
   runId: string,
   projectDir: string,

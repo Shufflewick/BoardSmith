@@ -12,6 +12,13 @@ import {
   RUN_LEDGER_BEGIN,
   RUN_LEDGER_END,
   RUN_ID_RE,
+  atomicWriteFile,
+  appendLedgerLine,
+  locateFences,
+  parseLedgerBody,
+  resolveLedgerState,
+  ledgerFilePath,
+  readLedgerOrThrow,
 } from './verify-run.js';
 import { computeVerificationScope } from './chunk-provenance.js';
 import { chunkProvenanceStatusCommand } from './chunk-provenance.js';
@@ -740,5 +747,44 @@ describe('the staging tree is invisible to every existing rulebook/ consumer', (
 
     const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).not.toContain('staged phantom rule');
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// 174-02 Task 1 — ledger helper export surface (genuine reuse, not a copy)
+// -------------------------------------------------------------------------------------------
+
+describe('verify-run.ts — ledger helper export surface (174-02)', () => {
+  it('EXPORT-1: the seven ledger helpers are all importable functions from a sibling module', () => {
+    for (const fn of [
+      atomicWriteFile,
+      appendLedgerLine,
+      locateFences,
+      parseLedgerBody,
+      resolveLedgerState,
+      ledgerFilePath,
+      readLedgerOrThrow,
+    ]) {
+      expect(typeof fn).toBe('function');
+    }
+  });
+
+  it('EXPORT-2: ledgerFilePath returns the exact RUN.md path a real init created, and it exists on disk', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const computed = ledgerFilePath(project, init.runId);
+    expect(computed).toBe(join(project, init.ledgerPath));
+    await expect(fs.access(computed)).resolves.toBeUndefined();
+  });
+
+  it('EXPORT-3: atomicWriteFile leaves no *.tmp* sibling behind after a successful write', async () => {
+    const project = await liveProject();
+    const targetDir = join(project, 'rulebook');
+    const target = join(targetDir, 'atomic-export-check.md');
+    await atomicWriteFile(target, 'hello\n');
+    expect(await fs.readFile(target, 'utf-8')).toBe('hello\n');
+    const entries = await fs.readdir(targetDir);
+    const tmpSiblings = entries.filter((e) => e.includes('.tmp'));
+    expect(tmpSiblings).toEqual([]);
   });
 });
