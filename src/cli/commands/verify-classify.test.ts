@@ -7,9 +7,13 @@ import { fileURLToPath } from 'node:url';
 import {
   RULE_DELTA_KINDS,
   PRESENTATION_EXCLUSION_MARKERS,
+  PAIR_KINDS,
   isPresentationLine,
   ruleBearingLines,
   deriveStale,
+  livePageSpan,
+  parseRangeId,
+  pairSlices,
   type RuleDelta,
 } from './verify-classify.js';
 
@@ -175,5 +179,153 @@ describe('staleness — single-input derivation from the rule delta alone', () =
     expect(region.replace(/^.*deriveStale\(ruleDelta: RuleDelta\).*$/m, '')).not.toMatch(
       /deriveStale\(.*provenance/i,
     );
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// pairing (Task 2)
+// -------------------------------------------------------------------------------------------
+
+describe('pairing — m:n page-overlap group join, over REAL archived fixtures', () => {
+  it('pairing-1: livePageSpan() over real seven live slices derives spans from their own p.N, citation lines, no INDEX.md read', async () => {
+    const definitions = await readFixture('seven/live/01-definitions-and-components.md');
+    const overview = await readFixture('seven/live/01-overview-setup-and-play.md');
+    const solo = await readFixture('seven/live/02-solo-variant.md');
+
+    expect(livePageSpan(definitions)).toEqual({ first: 1, last: 1 });
+    expect(livePageSpan(overview)).toEqual({ first: 1, last: 1 });
+    expect(livePageSpan(solo)).toEqual({ first: 2, last: 2 });
+  });
+
+  it('pairing-2: livePageSpan() works identically on one-two-punch live slices, which has NO INDEX.md Slices table', async () => {
+    const index = await readFixture('one-two-punch/live/INDEX.md');
+    expect(index).not.toMatch(/## Slices/);
+
+    const setup = await readFixture('one-two-punch/live/01-setup-and-round-structure.md');
+    const action = await readFixture('one-two-punch/live/02-action-cards-and-resolution.md');
+    expect(livePageSpan(setup)).toEqual({ first: 1, last: 1 });
+    expect(livePageSpan(action)).toEqual({ first: 2, last: 2 });
+  });
+
+  it('pairing-3: the real seven fixture (3 live rule slices, 6 staged units sharing rangeId "1-2") groups into ONE paired group — an m:n asymmetry, not a finding', async () => {
+    const liveNames = [
+      '01-definitions-and-components.md',
+      '01-overview-setup-and-play.md',
+      '02-solo-variant.md',
+    ];
+    const stagedNames = await listFixtureFiles('seven/staged');
+    expect(stagedNames.length).toBe(6);
+
+    const liveSlices = await Promise.all(
+      liveNames.map(async (name) => ({
+        path: `rulebook/${name}`,
+        text: await readFixture(`seven/live/${name}`),
+      })),
+    );
+    const stagedUnits = await Promise.all(
+      stagedNames.map(async (name) => ({
+        unit: name.replace(/\.md$/, ''),
+        slicePath: name,
+        rangeId: '1-2',
+        text: await readFixture(`seven/staged/${name}`),
+      })),
+    );
+
+    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const paired = pairs.filter((p) => p.kind === 'paired');
+    expect(paired).toHaveLength(1);
+    expect(paired[0].liveSlices).toHaveLength(3);
+    expect(paired[0].stagedUnits).toHaveLength(6);
+    expect(paired[0].kind).toBe('paired');
+  });
+
+  it('pairing-4: a live slice whose span overlaps nothing staged, and a staged range overlapping nothing live, are both reported as unpaired-slice — never dropped', () => {
+    const liveSlices = [
+      { path: 'rulebook/03-only-live.md', text: 'p.3, Something:\n"A live-only rule."\n' },
+    ];
+    const stagedUnits = [
+      { unit: '09-only-staged', slicePath: '09-only-staged.md', rangeId: '9-9', text: 'p.9, Something else:\n"A staged-only rule."\n' },
+    ];
+    const pairs = pairSlices({ liveSlices, stagedUnits });
+    expect(pairs).toHaveLength(2);
+    const staleFinding = pairs.find((p) => p.liveSlices.length > 0);
+    const liveMissing = pairs.find((p) => p.stagedUnits.length > 0);
+    expect(staleFinding).toMatchObject({ kind: 'unpaired-slice', missingSide: 'staged-missing' });
+    expect(liveMissing).toMatchObject({ kind: 'unpaired-slice', missingSide: 'live-missing' });
+  });
+
+  it('pairing-5: pairId is stable across repeated calls and shuffled input order', () => {
+    const liveSlices = [
+      { path: 'rulebook/a.md', text: 'p.1, A:\n"one"\n' },
+      { path: 'rulebook/b.md', text: 'p.2, B:\n"two"\n' },
+    ];
+    const stagedUnits = [
+      { unit: 'u1', slicePath: 'u1.md', rangeId: '1-1', text: 'p.1, A:\n"one restated"\n' },
+      { unit: 'u2', slicePath: 'u2.md', rangeId: '2-2', text: 'p.2, B:\n"two restated"\n' },
+    ];
+
+    const first = pairSlices({ liveSlices, stagedUnits });
+    const second = pairSlices({ liveSlices, stagedUnits });
+    expect(first.map((p) => p.pairId).sort()).toEqual(second.map((p) => p.pairId).sort());
+
+    const shuffled = pairSlices({
+      liveSlices: [liveSlices[1], liveSlices[0]],
+      stagedUnits: [stagedUnits[1], stagedUnits[0]],
+    });
+    expect(shuffled.map((p) => p.pairId).sort()).toEqual(first.map((p) => p.pairId).sort());
+
+    for (const pairId of first.map((p) => p.pairId)) {
+      const groupA = first.find((p) => p.pairId === pairId)!;
+      const groupB = shuffled.find((p) => p.pairId === pairId)!;
+      expect(new Set(groupA.liveSlices)).toEqual(new Set(groupB.liveSlices));
+      expect(new Set(groupA.stagedUnits)).toEqual(new Set(groupB.stagedUnits));
+    }
+  });
+
+  it('pairing-6: a group whose every side is presentation-only is reported with kind presentation-only, never silently skipped', () => {
+    const liveSlices = [
+      {
+        path: 'rulebook/00-visual-only.md',
+        text:
+          'p.4, Cover:\n' +
+          'Derived (p.4) — diagram description: A purely decorative layout note.\n',
+      },
+    ];
+    const stagedUnits = [
+      {
+        unit: '00-visual-only-staged',
+        slicePath: '00-visual-only-staged.md',
+        rangeId: '4-4',
+        text: 'p.4, Cover:\nVisual (p.4): The same purely decorative layout, restated.\n',
+      },
+    ];
+    const pairs = pairSlices({ liveSlices, stagedUnits });
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]).toMatchObject({
+      kind: 'presentation-only',
+      liveRuleBearingLines: 0,
+      stagedRuleBearingLines: 0,
+    });
+  });
+
+  it('pairing-7: a staged unit with no rangeId is reported as its own unpaired-slice group, never dropped', () => {
+    const liveSlices = [{ path: 'rulebook/a.md', text: 'p.1, A:\n"one"\n' }];
+    const stagedUnits = [
+      { unit: 'u1', slicePath: 'u1.md', rangeId: '1-1', text: 'p.1, A:\n"one restated"\n' },
+      { unit: 'orphan', slicePath: 'orphan.md', text: 'Some content with no rangeId.\n' },
+    ];
+    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const orphanGroup = pairs.find((p) => p.stagedUnits.includes('orphan'));
+    expect(orphanGroup).toMatchObject({ kind: 'unpaired-slice', missingSide: 'live-missing' });
+    expect(orphanGroup!.stagedUnits).toEqual(['orphan']);
+  });
+
+  it('parseRangeId rejects a malformed rangeId with an actionable error naming the value', () => {
+    expect(() => parseRangeId('not-a-range')).toThrow(/Invalid rangeId "not-a-range"/);
+  });
+
+  it('PAIR_KINDS is the frozen three-member enum', () => {
+    expect(Object.isFrozen(PAIR_KINDS)).toBe(true);
+    expect([...PAIR_KINDS]).toEqual(['paired', 'presentation-only', 'unpaired-slice']);
   });
 });
