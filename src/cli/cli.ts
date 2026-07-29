@@ -211,15 +211,46 @@ program
   .description("Allocate (or resume) a verify pass's non-destructive staging tree and RUN.md resume ledger")
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--run-id <id>', 'Resume an existing run instead of minting a fresh one')
+  .option(
+    '--ranges <json>',
+    'JSON array of page-range ids to persist as this run\'s dispatch-plan manifest, ' +
+      'e.g. \'["1-1","2-2"]\' (decided once at first init; ignored when resuming an existing run)',
+  )
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyRunInitCommand);
+  .action((options) => {
+    let ranges: string[] | undefined;
+    if (options.ranges !== undefined) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(options.ranges);
+      } catch {
+        console.error('--ranges must be valid JSON, e.g. --ranges \'["1-1","2-2"]\'');
+        process.exit(1);
+      }
+      if (!Array.isArray(parsed) || !parsed.every((r) => typeof r === 'string')) {
+        console.error('--ranges must be a JSON array of strings, e.g. --ranges \'["1-1","2-2"]\'');
+        process.exit(1);
+      }
+      ranges = parsed as string[];
+    }
+    return verifyRunInitCommand({ ...options, ranges });
+  });
 
 program
   .command('verify-run-record')
-  .description("Record a completed slice-unit in a verify run's RUN.md ledger (idempotent)")
+  .description(
+    "Record a completed slice-unit, or a range-level marker, in a verify run's RUN.md ledger " +
+      '(idempotent). Exactly one of --unit (with --slice), --complete-range, or --reset-range.',
+  )
   .requiredOption('--run-id <id>', 'The run to record against')
-  .requiredOption('--unit <unit-id>', 'The slice-unit id being recorded')
-  .requiredOption('--slice <path>', "Path to the written slice, relative to the run's staging dir")
+  .option('--unit <unit-id>', 'The slice-unit id being recorded')
+  .option('--slice <path>', "Path to the written slice, relative to the run's staging dir")
+  .option('--range <range-id>', 'Tag this unit record with the manifest range it belongs to')
+  .option('--complete-range <range-id>', 'Mark a manifest range as fully recorded')
+  .option(
+    '--reset-range <range-id>',
+    'Supersede a partially-recorded range\'s prior units before redispatching it fresh',
+  )
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyRunRecordCommand);

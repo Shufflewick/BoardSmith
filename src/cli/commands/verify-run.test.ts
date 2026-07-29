@@ -42,8 +42,8 @@ const LIVE_03 = '## 03-setup\n\nLive setup slice content.\n';
 const LIVE_07 = '## 07-turn\n\nLive turn slice content.\n';
 
 /** A fixture project with rulebook/INDEX.md and two distinctive live slices. */
-async function liveProject(): Promise<string> {
-  const project = join(dir, 'game');
+async function liveProject(name = 'game'): Promise<string> {
+  const project = join(dir, name);
   const rulebookDir = join(project, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   await fs.writeFile(
@@ -425,6 +425,7 @@ describe('CR-01 — the ledger write is atomic, not a truncate+rewrite', () => {
       scriptPath,
       `
       import { promises as fs } from 'node:fs';
+      const ledgerAbs = ${JSON.stringify(ledgerAbs)};
       const tmpPath = ${JSON.stringify(join(runDirAbs, '.RUN.md.crashsim.tmp'))};
       const handle = await fs.open(tmpPath, 'w');
       await handle.writeFile('THIS MUST NEVER BECOME RUN.md\\n', 'utf-8');
@@ -464,6 +465,220 @@ describe('CR-01 — the ledger write is atomic, not a truncate+rewrite', () => {
     const status = await verifyRunStatusCommand({ project, runId, json: true });
     expect(status.recorded.sort()).toEqual(['03-setup', '07-turn']);
   }, 15000);
+});
+
+// -------------------------------------------------------------------------------------------
+// 173-08 Task 2 — range-level resume determinism (PROOF.md §4 Finding 1)
+// -------------------------------------------------------------------------------------------
+
+describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determinism', () => {
+  it('M1: --ranges persists a manifest at fresh init, echoed back via --json', async () => {
+    const project = await liveProject();
+    const result = await verifyRunInitCommand({ project, ranges: ['1-1', '2-2'], json: true });
+    expect(result.ranges).toEqual(['1-1', '2-2']);
+
+    const status = await verifyRunStatusCommand({ project, runId: result.runId, json: true });
+    expect(status.ranges).toEqual(['1-1', '2-2']);
+    expect(status.rangesPending).toEqual(['1-1', '2-2']);
+    expect(status.rangesRecorded).toEqual([]);
+  });
+
+  it('M2: the manifest is decided ONCE — a resuming init call with different --ranges is ignored', async () => {
+    const project = await liveProject();
+    const first = await verifyRunInitCommand({ project, ranges: ['1-1', '2-2'], json: true });
+
+    const second = await verifyRunInitCommand({
+      project,
+      runId: first.runId,
+      ranges: ['9-9', '10-10', '11-11'],
+      json: true,
+    });
+    expect(second.created).toBe(false);
+    expect(second.ranges).toEqual(['1-1', '2-2']); // unchanged — first init's manifest wins
+  });
+
+  it('M3: verify-run-init with no --ranges creates no manifest section — ranges: [] and never breaks an unrelated run', async () => {
+    const project = await liveProject();
+    const result = await verifyRunInitCommand({ project, json: true });
+    expect(result.ranges).toEqual([]);
+    const status = await verifyRunStatusCommand({ project, runId: result.runId, json: true });
+    expect(status.ranges).toEqual([]);
+    expect(status.rangesPending).toEqual([]);
+  });
+
+  it('M4: --complete-range marks a manifest range recorded; it moves from rangesPending to rangesRecorded and is idempotent', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, ranges: ['1-1', '2-2'], json: true });
+
+    const first = await verifyRunRecordCommand({ project, runId: init.runId, completeRange: '1-1', json: true });
+    expect(first).toMatchObject({ action: 'range-complete', rangeId: '1-1', alreadyRecorded: false });
+
+    const status = await verifyRunStatusCommand({ project, runId: init.runId, json: true });
+    expect(status.rangesRecorded).toEqual(['1-1']);
+    expect(status.rangesPending).toEqual(['2-2']);
+
+    const second = await verifyRunRecordCommand({ project, runId: init.runId, completeRange: '1-1', json: true });
+    expect(second.alreadyRecorded).toBe(true);
+  });
+
+  it('M5: --complete-range / --unit --range refuse a range id absent from a non-empty manifest', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, ranges: ['1-1'], json: true });
+    const stagingAbs = join(project, init.stagingDir);
+    await fs.writeFile(join(stagingAbs, 'x.md'), 'content\n');
+
+    await expect(
+      verifyRunRecordCommand({ project, runId: init.runId, completeRange: 'nope', json: true }),
+    ).rejects.toThrow(/not in run .* manifest/);
+    await expect(
+      verifyRunRecordCommand({ project, runId: init.runId, unit: 'x', slice: 'x.md', range: 'nope', json: true }),
+    ).rejects.toThrow(/not in run .* manifest/);
+  });
+
+  it('M6: --reset-range supersedes a partially-recorded range\'s prior units — they drop out of recorded[]', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, ranges: ['1-1'], json: true });
+    const stagingAbs = join(project, init.stagingDir);
+
+    await fs.writeFile(join(stagingAbs, '01-overview-contents-setup.md'), 'stale attempt, unit 1\n');
+    await fs.writeFile(join(stagingAbs, '01-starting-a-new-round.md'), 'stale attempt, unit 2\n');
+    await verifyRunRecordCommand({
+      project, runId: init.runId, unit: '01-overview-contents-setup', slice: '01-overview-contents-setup.md',
+      range: '1-1', json: true,
+    });
+    // Simulate a kill: only the first unit was recorded before the interrupted range was reset.
+
+    const reset = await verifyRunRecordCommand({ project, runId: init.runId, resetRange: '1-1', json: true });
+    expect(reset).toMatchObject({ action: 'range-reset', rangeId: '1-1', alreadyRecorded: false });
+
+    const statusAfterReset = await verifyRunStatusCommand({ project, runId: init.runId, json: true });
+    expect(statusAfterReset.recorded).toEqual([]); // the stale unit is superseded, not just unfinished
+    expect(statusAfterReset.rangesPending).toEqual(['1-1']);
+  });
+
+  it('M7: refuses to reset an already-complete range (would discard verified work)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, ranges: ['1-1'], json: true });
+    await verifyRunRecordCommand({ project, runId: init.runId, completeRange: '1-1', json: true });
+
+    await expect(
+      verifyRunRecordCommand({ project, runId: init.runId, resetRange: '1-1', json: true }),
+    ).rejects.toThrow(/already fully recorded/);
+  });
+
+  it('M8: after a reset, re-recording the same unitId is a fresh record (not alreadyRecorded), and a completed range is never re-dispatched', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, ranges: ['1-1', '2-2'], json: true });
+    const stagingAbs = join(project, init.stagingDir);
+
+    // Range 1-1: killed mid-loop, exactly like PROOF.md §4 — one of two units recorded.
+    await fs.writeFile(join(stagingAbs, '01-overview-contents-setup.md'), 'first attempt section A\n');
+    await fs.writeFile(join(stagingAbs, '01-starting-a-new-round.md'), 'first attempt section B\n');
+    await verifyRunRecordCommand({
+      project, runId: init.runId, unit: '01-overview-contents-setup', slice: '01-overview-contents-setup.md',
+      range: '1-1', json: true,
+    });
+
+    // Range 2-2: never dispatched at all (the deliberate kill -9 case).
+
+    const beforeResume = await verifyRunStatusCommand({ project, runId: init.runId, json: true });
+    expect(beforeResume.rangesPending).toEqual(['1-1', '2-2']); // 1-1 has units but is NOT complete
+
+    // Resume: 1-1 is pending and has stale units — reset it, then redispatch it fresh (a
+    // DIFFERENT, deterministic-for-this-test section split than the killed attempt, matching a
+    // real subagent producing different boundaries on a fresh dispatch).
+    await verifyRunRecordCommand({ project, runId: init.runId, resetRange: '1-1', json: true });
+    await fs.rm(join(stagingAbs, '01-overview-contents-setup.md'));
+    await fs.rm(join(stagingAbs, '01-starting-a-new-round.md'));
+    await fs.writeFile(join(stagingAbs, '01-overview-and-setup.md'), 'clean single-unit content\n');
+    const fresh = await verifyRunRecordCommand({
+      project, runId: init.runId, unit: '01-overview-and-setup', slice: '01-overview-and-setup.md',
+      range: '1-1', json: true,
+    });
+    expect(fresh.alreadyRecorded).toBe(false);
+    await verifyRunRecordCommand({ project, runId: init.runId, completeRange: '1-1', json: true });
+
+    // Range 2-2: pending, never touched — dispatch it fresh, one unit, then complete it.
+    await fs.writeFile(join(stagingAbs, '02-everything.md'), 'clean single-unit content for page 2\n');
+    await verifyRunRecordCommand({
+      project, runId: init.runId, unit: '02-everything', slice: '02-everything.md', range: '2-2', json: true,
+    });
+    await verifyRunRecordCommand({ project, runId: init.runId, completeRange: '2-2', json: true });
+
+    const finalStatus = await verifyRunStatusCommand({ project, runId: init.runId, json: true });
+    // Exactly one unit per range survives — no re-fragmentation, no overlap with the killed
+    // attempt's stale output (the 9-vs-4 gap this task closes).
+    expect(finalStatus.recorded.sort()).toEqual(['01-overview-and-setup', '02-everything']);
+    expect(finalStatus.rangesRecorded.sort()).toEqual(['1-1', '2-2']);
+    expect(finalStatus.rangesPending).toEqual([]);
+
+    // Already-complete ranges are never re-dispatched (173-07's proven property, unregressed):
+    // attempting to complete or reset them again is either a no-op or a refusal, never silent data
+    // loss.
+    const recompleteAttempt = await verifyRunRecordCommand({ project, runId: init.runId, completeRange: '2-2', json: true });
+    expect(recompleteAttempt.alreadyRecorded).toBe(true);
+  });
+
+  it('M9: clean single-pass dispatch vs a killed-then-resumed dispatch over the same manifest produce identical final recorded[] sets', async () => {
+    // Deterministic "subagent": always the same page->unit mapping for a given range, so this
+    // test isolates the MECHANISM's determinism (Task 2's scope) from real transcription content
+    // non-determinism (out of scope — see 173-PROOF.md §4's own comparison caveat).
+    async function deterministicDispatch(
+      project: string, runId: string, stagingAbs: string, rangeId: string, units: string[],
+    ): Promise<void> {
+      for (const unit of units) {
+        await fs.writeFile(join(stagingAbs, `${unit}.md`), `content for ${unit}\n`);
+        await verifyRunRecordCommand({ project, runId, unit, slice: `${unit}.md`, range: rangeId, json: true });
+      }
+      await verifyRunRecordCommand({ project, runId, completeRange: rangeId, json: true });
+    }
+
+    const manifest = ['1-1', '2-2'];
+    const planByRange: Record<string, string[]> = {
+      '1-1': ['01-overview-and-setup', '01-starting-a-new-round'],
+      '2-2': ['02-action-cards', '02-punch-examples-discard-and-end-of-game'],
+    };
+
+    // Clean run: both ranges dispatched once, uninterrupted.
+    const cleanProject = await liveProject('clean-game');
+    const cleanInit = await verifyRunInitCommand({
+      project: cleanProject, runId: '2026-01-01T00-00-00Z', ranges: manifest, json: true,
+    });
+    const cleanStaging = join(cleanProject, cleanInit.stagingDir);
+    for (const rangeId of manifest) {
+      await deterministicDispatch(cleanProject, cleanInit.runId, cleanStaging, rangeId, planByRange[rangeId]);
+    }
+    const cleanStatus = await verifyRunStatusCommand({ project: cleanProject, runId: cleanInit.runId, json: true });
+
+    // Killed-then-resumed run: range 1-1 killed after its FIRST unit only, then resumed.
+    const killedProject = await liveProject('killed-game');
+    const killedInit = await verifyRunInitCommand({
+      project: killedProject, runId: '2026-01-02T00-00-00Z', ranges: manifest, json: true,
+    });
+    const killedStaging = join(killedProject, killedInit.stagingDir);
+    await fs.writeFile(join(killedStaging, '01-overview-and-setup.md'), 'content for 01-overview-and-setup\n');
+    await verifyRunRecordCommand({
+      project: killedProject, runId: killedInit.runId, unit: '01-overview-and-setup',
+      slice: '01-overview-and-setup.md', range: '1-1', json: true,
+    }); // <- kill lands here: second unit never recorded, range not completed
+
+    const statusBeforeResume = await verifyRunStatusCommand({ project: killedProject, runId: killedInit.runId, json: true });
+    expect(statusBeforeResume.rangesPending).toEqual(['1-1', '2-2']);
+
+    // Resume: 1-1 has stale, incomplete progress — reset and redispatch it fresh, identically to
+    // the clean run's plan (the manifest and the deterministic-for-this-test subagent guarantee
+    // this; a real subagent's exact boundaries are not asserted equal, per PROOF.md §4).
+    await verifyRunRecordCommand({ project: killedProject, runId: killedInit.runId, resetRange: '1-1', json: true });
+    await fs.rm(join(killedStaging, '01-overview-and-setup.md'));
+    await deterministicDispatch(killedProject, killedInit.runId, killedStaging, '1-1', planByRange['1-1']);
+    await deterministicDispatch(killedProject, killedInit.runId, killedStaging, '2-2', planByRange['2-2']);
+
+    const resumedStatus = await verifyRunStatusCommand({ project: killedProject, runId: killedInit.runId, json: true });
+
+    expect(resumedStatus.recorded.sort()).toEqual(cleanStatus.recorded.sort());
+    expect(resumedStatus.count).toBe(cleanStatus.count);
+    expect(resumedStatus.rangesRecorded.sort()).toEqual(cleanStatus.rangesRecorded.sort());
+  });
 });
 
 // -------------------------------------------------------------------------------------------
