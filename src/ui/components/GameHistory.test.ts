@@ -9,7 +9,7 @@
  *   3. (copy) copyHistory() writes the formatted message lines to the clipboard.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import GameHistory from './GameHistory.vue';
@@ -89,6 +89,75 @@ describe('GameHistory', () => {
       const [text] = writeTextMock.mock.calls[0] as [string];
       expect(text).toContain('Hello');
       expect(text).toContain('World');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Embedded-clipboard coverage.
+  //
+  // On the platform this component runs inside a CROSS-ORIGIN iframe, where
+  // WebKit refuses navigator.clipboard outright ("NotAllowedError: The request
+  // is not allowed by the user agent or the platform in the current context")
+  // and ignores the host's allow="clipboard-write" — it does not implement
+  // Permissions Policy delegation for the clipboard. The synchronous
+  // execCommand path is not permission-gated, so it must be tried FIRST, while
+  // the click's user activation is still live.
+  // -------------------------------------------------------------------------
+
+  describe('clipboard fallbacks', () => {
+    // jsdom ships no execCommand, so each test installs its own and removes it
+    // again — a leaked stub would silently change the path other tests take.
+    afterEach(() => {
+      delete (document as unknown as { execCommand?: unknown }).execCommand;
+    });
+
+    function stubExecCommand(result: boolean) {
+      const spy = vi.fn().mockReturnValue(result);
+      (document as unknown as { execCommand: unknown }).execCommand = spy;
+      return spy;
+    }
+
+    it('prefers the synchronous selection copy and never touches the async API', async () => {
+      const exec = stubExecCommand(true);
+      const wrapper = mount(GameHistory, { props: { messages: ['Hello', 'World'] } });
+      await nextTick();
+
+      await (wrapper.vm as any).copyHistory();
+
+      expect(exec).toHaveBeenCalledWith('copy');
+      // The async API is what WebKit rejects — it must not be needed at all.
+      expect(writeTextMock).not.toHaveBeenCalled();
+      expect(wrapper.find('.history-copy').attributes('title')).toBe('Copied!');
+    });
+
+    it('falls back to the async API when the selection copy is unavailable', async () => {
+      stubExecCommand(false);
+      const wrapper = mount(GameHistory, { props: { messages: ['Hello'] } });
+      await nextTick();
+
+      await (wrapper.vm as any).copyHistory();
+
+      expect(writeTextMock).toHaveBeenCalledOnce();
+      expect(wrapper.find('.history-copy').attributes('title')).toBe('Copied!');
+    });
+
+    it('reports failure visibly when BOTH paths are refused', async () => {
+      stubExecCommand(false);
+      writeTextMock.mockRejectedValue(
+        new DOMException('The request is not allowed by the user agent', 'NotAllowedError'),
+      );
+      const wrapper = mount(GameHistory, { props: { messages: ['Hello'] } });
+      await nextTick();
+
+      await (wrapper.vm as any).copyHistory();
+      await nextTick();
+
+      // The reported bug was a button that did nothing at all on failure.
+      const button = wrapper.find('.history-copy');
+      expect(button.classes()).toContain('history-copy--failed');
+      expect(button.attributes('title')).toContain('Copy failed');
+      expect(button.attributes('aria-label')).toContain('Copy failed');
+      expect(wrapper.find('[role="status"]').text()).toContain('failed');
     });
   });
 

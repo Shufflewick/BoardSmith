@@ -71,7 +71,74 @@ function clearHistory() {
   // messageCounter stays monotonic so message IDs remain unique after clear.
 }
 
-const copyStatus = ref<'idle' | 'copied'>('idle');
+type CopyStatus = 'idle' | 'copied' | 'failed';
+
+const copyStatus = ref<CopyStatus>('idle');
+
+const COPY_TITLES: Record<CopyStatus, string> = {
+  idle: 'Copy log',
+  copied: 'Copied!',
+  failed: 'Copy failed — your browser blocked clipboard access',
+};
+const COPY_LABELS: Record<CopyStatus, string> = {
+  idle: 'Copy entire log',
+  copied: 'Log copied',
+  failed: 'Copy failed — your browser blocked clipboard access',
+};
+const COPY_ANNOUNCE: Record<CopyStatus, string> = {
+  idle: '',
+  copied: 'Log copied to clipboard',
+  failed: 'Copying the log failed — your browser blocked clipboard access',
+};
+
+/**
+ * Copy via a hidden textarea + `document.execCommand('copy')`.
+ *
+ * This is tried BEFORE `navigator.clipboard`, which reads as backwards until you
+ * see where this component actually runs: inside a cross-origin iframe on the
+ * platform. WebKit does not implement Permissions Policy delegation for the
+ * clipboard, so `allow="clipboard-write"` on the host iframe buys nothing there
+ * and the async API rejects outright — "NotAllowedError: The request is not
+ * allowed by the user agent or the platform in the current context". This path
+ * is not permission-gated; it only needs the user gesture that just fired.
+ *
+ * It also has to run FIRST rather than as a catch handler: it is synchronous, so
+ * it still holds the click's user activation. Awaiting the async API's rejection
+ * first would resume in a microtask, where WebKit no longer considers the
+ * gesture live, and the fallback would fail too.
+ */
+function copyViaSelection(text: string): boolean {
+  if (typeof document.execCommand !== 'function') return false;
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  // Off-screen but still rendered: `display:none` / `visibility:hidden` cannot
+  // hold a selection, and without a selection there is nothing to copy.
+  textarea.style.cssText =
+    'position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:none;opacity:0;';
+  document.body.appendChild(textarea);
+
+  // Preserve whatever the player had selected — copying must not steal it.
+  const selection = document.getSelection();
+  const previousRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+  let copied = false;
+  try {
+    textarea.select();
+    textarea.setSelectionRange(0, text.length); // iOS Safari ignores select() alone
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  }
+
+  textarea.remove();
+  if (previousRange && selection) {
+    selection.removeAllRanges();
+    selection.addRange(previousRange);
+  }
+  return copied;
+}
 
 async function copyHistory() {
   if (processedMessages.value.length === 0) return;
@@ -91,15 +158,28 @@ async function copyHistory() {
 
   const text = lines.join('\n');
 
-  try {
-    await navigator.clipboard.writeText(text);
-    copyStatus.value = 'copied';
-    setTimeout(() => {
-      copyStatus.value = 'idle';
-    }, 2000);
-  } catch (err) {
-    console.error('Failed to copy log:', err);
+  // Synchronous path first (see copyViaSelection): it keeps the click's user
+  // activation and is the only one WebKit allows in a cross-origin iframe.
+  let copied = copyViaSelection(text);
+
+  // Modern API as the fallback, for anywhere the selection path is unavailable
+  // (a locked-down execCommand, a non-DOM host) but the permission is granted.
+  if (!copied) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch (err) {
+      console.error('Failed to copy log:', err);
+    }
   }
+
+  // Always report the outcome. A silent failure is indistinguishable from a
+  // dead button — which is exactly how this surfaced: the player clicked, the
+  // clipboard write was refused, and nothing on screen changed.
+  copyStatus.value = copied ? 'copied' : 'failed';
+  setTimeout(() => {
+    copyStatus.value = 'idle';
+  }, 2000);
 }
 
 // Exposed so GameShell (on behalf of DebugPanel) can drive copy/clear and
@@ -121,19 +201,26 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
       <button
         type="button"
         class="history-copy"
+        :class="{ 'history-copy--failed': copyStatus === 'failed' }"
         :disabled="!hasMessages"
-        :title="copyStatus === 'copied' ? 'Copied!' : 'Copy log'"
-        :aria-label="copyStatus === 'copied' ? 'Log copied' : 'Copy entire log'"
+        :title="COPY_TITLES[copyStatus]"
+        :aria-label="COPY_LABELS[copyStatus]"
         @click="copyHistory"
       >
         <svg v-if="copyStatus === 'copied'" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <!-- Copy was refused by the platform: say so rather than sit silent. -->
+        <svg v-else-if="copyStatus === 'failed'" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
         </svg>
         <svg v-else viewBox="0 0 24 24" aria-hidden="true">
           <rect x="9" y="9" width="11" height="11" rx="2" />
           <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke-linecap="round" />
         </svg>
       </button>
+      <!-- Announced to assistive tech; the icon alone is not an outcome report. -->
+      <span class="sr-only" role="status" aria-live="polite">{{ COPY_ANNOUNCE[copyStatus] }}</span>
     </div>
 
     <!-- Messages: role=log so screen readers announce new entries as they arrive -->
@@ -211,6 +298,24 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
 .history-copy:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* Copy was refused by the platform — colour the outcome, don't just swap glyphs. */
+.history-copy--failed {
+  color: var(--bsg-danger);
+}
+
+/* Screen-reader only (mirrors AutoRenderer's helper; scoped styles don't share). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .history-copy svg {
