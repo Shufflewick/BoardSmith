@@ -415,7 +415,11 @@ one-week-old mechanism (173-08 landed 2026-07-29, same day as this phase's conte
 | A3 | `Derived (p.N) — diagram description` / `— art` (old-schema) should be excluded from rule-delta comparison identically to `Visual (p.N):` (new-schema) | Common Pitfalls #2 | High if wrong — SC-2's 90% cosmetic bar is directly threatened by NOT making this exclusion, since real data shows this pattern in 5/12 one-two-punch Derived lines |
 | A4 | Determinism check (decision 16) has no reusable CLI command precedent and should be built as a proof-script harness, not a first-class command | Common Pitfalls #5 | Low — worst case a planner builds a small reusable command instead, which is strictly additive |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All three questions below were open at the time this research was written and are now closed. Each
+carries an inline **RESOLUTION** line naming the decision or plan that closed it; the original
+"what's unclear" / "recommendation" text is retained as the reasoning trail, not as live uncertainty.
 
 1. **Which reference game should Wave 1's real pass-1-vs-pass-2 data come from?**
    - What we know: CONTEXT.md decision 13 nominates `one-two-punch` as primary (12 chunks, already
@@ -427,6 +431,11 @@ one-week-old mechanism (173-08 landed 2026-07-29, same day as this phase's conte
    - Recommendation: make it an explicit Wave 1 task with its own exit condition (N real staged
      files recorded, byte-identical originals confirmed before/after), exactly mirroring
      `173-06-PLAN.md`'s SC-2/SC-3 methodology, before any classifier code is written.
+   - **RESOLUTION (closed):** CONTEXT.md decision 13 (AMENDED 2026-07-29) adopts the recommendation.
+     Regenerating real pass-2 data is an explicit, separately-scoped Wave 1 task with its own exit
+     condition — `174-01-PLAN.md`, which runs the full Phase 173 adoption + transcription pipeline
+     against a `cp -R` copy and asserts the originals are byte-identical before and after. No
+     classifier code depends on data that does not exist yet.
 
 2. **What does "the provenance dimension" mean precisely for a FIRST-EVER verify pass on a
    pre-provenance project (both reference games' actual current state)?**
@@ -441,6 +450,12 @@ one-week-old mechanism (173-08 landed 2026-07-29, same day as this phase's conte
    - Recommendation: treat this as a real design question for the plan, not resolved by this
      research — CONTEXT.md's decisions assume provenance is always computable, but the two real
      reference games are BOTH in the state where no prior hash exists yet.
+   - **RESOLUTION (closed):** CONTEXT.md decision 2b, added in direct response to this question.
+     Provenance gains a THIRD state, `unknown`, for a first-ever verify pass; it is never collapsed
+     into `source-changed` or `source-unchanged`, and per decision 3 it is not an input to the
+     staleness map. The enum is `source-changed | source-unchanged | unknown`, pinned in
+     `ClassificationRecord` (`174-02-PLAN.md` Task 2) and tested in `174-03-PLAN.md`'s provenance
+     block. The rejected default-to-`source-unchanged` option is explicitly ruled out.
 
 3. **Module-boundary decision for the ledger helper exports (Pitfall 1)** — flagged as Claude's
    Discretion in CONTEXT.md; this research recommends exporting from `verify-run.ts` rather than
@@ -448,6 +463,12 @@ one-week-old mechanism (173-08 landed 2026-07-29, same day as this phase's conte
    take (e.g., whether `parseLedgerBody`'s `ParsedLine` union should itself become an open,
    extensible discriminated union that a sibling file can add a case to, or whether classification
    should maintain its own parallel parse of the SAME file's classification-only lines).
+   - **RESOLUTION (closed):** `174-02-PLAN.md` decides it. The seven helpers plus the `ParsedLine`
+     union are exported from `verify-run.ts` unchanged in signature and body (Task 1), and `ParsedLine`
+     is widened in place with a `ParsedClassificationLine` case parsed by the SAME `parseLedgerBody`
+     (Task 2) — NOT a parallel classification-only parse, which would be a second reader of one file
+     and could disagree with the first. `EXPORT-1` pins the export surface so an accidental un-export
+     fails in `verify-run.test.ts` rather than in a sibling module's build.
 
 ## Validation Architecture
 
