@@ -138,7 +138,7 @@ case behaves exactly as documented).
 
 Plans:
 - [x] 174-01-PLAN.md — produce the real pass-1-vs-pass-2 material (adopt + re-transcribe `cp -R` copies of both reference games), archive it as in-repo fixtures, measure the presentation-marker inventory (wave 1)
-- [ ] 174-02-PLAN.md — export `verify-run.ts`'s seven ledger helpers + teach its record union the `classification` kind (wave 1)
+- [x] 174-02-PLAN.md — export `verify-run.ts`'s seven ledger helpers + teach its record union the `classification` kind (wave 1)
 - [ ] 174-03-PLAN.md — mechanical core: enumerated codes, dual-schema presentation filter, m:n page-overlap pairing, staleness map, three-state provenance (wave 2)
 - [ ] 174-04-PLAN.md — `verify-classify-pairs` / `-record` / `-status` + CLI registration + per-chunk verdict roll-up (wave 3)
 - [ ] 174-05-PLAN.md — classification subagent contract + `classification-dispatch.md` + `verify-game.md` Step 4 in-place rewrite + rewritten drift pins (wave 4)
@@ -206,7 +206,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
 | 173. Verify Pipeline Core | 8/8 | Complete   | 2026-07-29 |
-| 174. Verify Classifier | 1/7 | In Progress|  |
+| 174. Verify Classifier | 2/7 | In Progress|  |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |
 | 176. Stale-Chunk Repair | 0/TBD | Not started | - |
 | 177. Derived-Line Re-Derivation | 0/TBD | Not started | - |

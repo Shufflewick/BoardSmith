@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 174-01-PLAN.md — produced real pass-1-vs-pass-2 fixtures for seven & one-two-punch, measured the presentation-marker inventory (decision 12b basis)
-last_updated: "2026-07-29T23:37:04.637Z"
-last_activity: 2026-07-29
+stopped_at: Completed 173-08-PLAN.md — closed CR-01 crash-safety + Finding 1 resume determinism, re-proved SC-4, VERIFY-08 re-confirmed
+last_updated: "2026-07-29T23:45:46.411Z"
+last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 37
-  completed_plans: 28
+  completed_plans: 30
   percent: 30
 ---
 
@@ -25,8 +25,21 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 174 (verify-classifier) — IN PROGRESS (1/7 plans)
-Next: Phase 174 plan 02 (VERIFY-03 mechanical CLI extension — ledger helper exports)
+Phase: 174 (verify-classifier) — IN PROGRESS (2/7 plans)
+Next: Phase 174 plan 03 (VERIFY-03 mechanical CLI extension — page-span-overlap slice pairing)
+
+`174-02-PLAN.md` widened `verify-run.ts`'s ledger surface: exported the seven module-private
+atomic-write/parse helpers (`atomicWriteFile`, `appendLedgerLine`, `locateFences`,
+`parseLedgerBody`, `resolveLedgerState`, `ledgerFilePath`, `readLedgerOrThrow`) plus the
+`ParsedLine` union unchanged in behavior, so `verify-classify.ts` (plans 174-03/174-04) can
+genuinely reuse the one hardened atomic ledger write path (173-08/CR-01) instead of a second copy.
+Taught `parseLedgerBody`/`resolveLedgerState` a fourth record kind, `classification`, with a
+PLURAL schema (`units[]`/`liveSlices[]`/`stagedSlices[]`) matching `SlicePair.stagedUnits[]`
+field-for-field per CONTEXT.md decision 6 (amended) — no collapsing step, so no recorded unit of
+an m:n pair group is discarded. Kind isolation (a classification line never contaminates
+`recorded[]`; `range-reset` stays unit-scoped) falls out of the existing filter logic. 43/43
+ledger tests pass, `npm test` 3624/3624 green, typecheck clean. See
+`.planning/phases/174-verify-classifier/174-02-SUMMARY.md`.
 
 `174-01-PLAN.md` closed the phase's Wave-1 gate: neither reference game had any real
 pass-1-vs-pass-2 material on disk (`174-RESEARCH.md`'s biggest finding), so this plan produced it
@@ -622,6 +635,7 @@ Recent decisions affecting current work:
 - [Phase 173]: VERIFY-01 and VERIFY-07 left open — per-chunk-verdict/classification-in-subagents halves depend on Phase 174's classifier, which does not exist yet; marking complete now would be a third premature completion mark this phase caught
 - [Phase 173]: VERIFY-08 marked complete despite a real finding (range-level resume re-dispatch is not idempotent) because the requirement's core no-data-loss guarantee holds under two real interruption mechanisms; the idempotency gap is tracked as an open item in 173-PROOF.md, not hidden
 - [Phase 173]: Closed CR-01 (crash-unsafe ledger write) and PROOF.md Finding 1 (non-idempotent range resume) via plan 173-08, before Phase 174 build — 173-07 marked VERIFY-08 complete on a crash-safety guarantee code review then showed was false; fixing both defects together (same subsystem, same commits) before Phase 174's classifier builds on the corrected guarantee was cheaper than a third premature-completion correction.
+- [Phase 174]: ClassificationRecord slot fields are plural (units[]/liveSlices[]/stagedSlices[]) mirroring SlicePair.stagedUnits[] with no collapsing step
 
 ### Pending Todos
 
@@ -633,7 +647,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-29T23:37:04.627Z
+Last session: 2026-07-29T23:43:55.604Z
 Stopped at: Completed 173-08-PLAN.md — closed CR-01 crash-safety + Finding 1 resume determinism, re-proved SC-4, VERIFY-08 re-confirmed
 Resume file: 
 None
