@@ -138,10 +138,18 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
 
 6. **Verdict records are enumerated codes, pinned by a test** (172 decision 7; F-1 in
    `170-PROOF-RUN-2.md` showed free text displacing a machine-checkable sentinel within one run).
-   Record shape: `{ pairId, unit, liveSlice, stagedSlice, provenance, ruleDelta, stale, evidence }`
-   where `provenance` ∈ `source-changed` | `source-unchanged`, `ruleDelta` ∈ `cosmetic` | `sharper` |
-   `contradictory` | `unclassified`, and `stale` is derived (decision 3), never supplied. Prose is
-   confined to `evidence`, which nothing parses.
+   Record shape: `{ pairId, units[], liveSlices[], stagedSlices[], provenance, ruleDelta, stale,
+   evidence }` where `provenance` ∈ `source-changed` | `source-unchanged` | `unknown` (decision 2b),
+   `ruleDelta` ∈ `cosmetic` | `sharper` | `contradictory` | `unclassified`, and `stale` is derived
+   (decision 3), never supplied. Prose is confined to `evidence`, which nothing parses.
+
+   **AMENDED 2026-07-29 — the three slot fields are PLURAL.** This decision originally wrote them as
+   singular (`unit`, `liveSlice`, `stagedSlice`), which decision 4's later m:n amendment supersedes: a
+   real `seven` fixture produces a 1-live/3-staged group, so a singular field cannot represent a pair
+   that actually occurs. Any collapse rule — first unit, joined string, drop the rest — would discard
+   recorded units, which is precisely the silent-under-recording defect class decision 4 exists to
+   prevent, relocated one layer up into the ledger schema. The record mirrors the pairing output
+   faithfully: `units[]` ← `SlicePair.stagedUnits[]`, with no transformation.
 
 7. **Findings exit 0.** Non-zero is reserved for tool failure — unparseable project, missing run,
    missing archive, not a bs- project. Held from 172 decision 6: these are advisory inputs a pipeline
