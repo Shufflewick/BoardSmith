@@ -607,6 +607,25 @@ function findLabelLine(
 }
 
 /**
+ * The insertion point for a header sentinel line when its anchor label is entirely absent from
+ * the document: immediately after the `# ` title line (and the blank line that follows it, if
+ * present) — never offset 0 (WR-01: a sentinel prepended at offset 0 landed ABOVE the document's
+ * own `# Rulebook Index — <name>` title). Falls back to offset 0 only when there is no title line
+ * either, which should not occur for a real INDEX.md but is a harmless degrade if it ever did.
+ */
+function afterTitleInsertionPoint(text: string): number {
+  const titleMatch = /^# .*\r?\n/m.exec(text);
+  if (!titleMatch) return 0;
+  let insertAt = titleMatch.index + titleMatch[0].length;
+  // Skip the single blank line immediately following the title, if present, so the sentinel lands
+  // below that separator rather than jammed directly under the title line.
+  if (text.slice(insertAt, insertAt + 1) === '\n') {
+    insertAt += 1;
+  }
+  return insertAt;
+}
+
+/**
  * Repairs an existing INDEX.md's provenance header in place, per CONTEXT.md decision 1b. Returns
  * whether the header was actually brought to the `HEADER_LABELS` contract (so the caller can stop
  * printing an unconditional success line).
@@ -655,8 +674,9 @@ async function repairExistingIndex(
     }
   } else if (!editionLine) {
     // No --edition supplied AND no existing Edition: line — insert the sentinel so the header
-    // still converges on the HEADER_LABELS contract.
-    text = `Edition: ${EDITION_UNKNOWN}\n\n${text}`;
+    // still converges on the HEADER_LABELS contract. Below the title line (WR-01), never above it.
+    const at = afterTitleInsertionPoint(text);
+    text = text.slice(0, at) + `Edition: ${EDITION_UNKNOWN}\n\n` + text.slice(at);
   }
   // Else: a real Edition: line already exists and --edition was omitted — leave it byte-identical,
   // including any adjacent Edition note: line.
@@ -672,7 +692,10 @@ async function repairExistingIndex(
       const at = insertAt === -1 ? text.length : insertAt + 1;
       text = text.slice(0, at) + `Source: ${relArchivePath}\n` + text.slice(at);
     } else {
-      text = `Source: ${relArchivePath}\n\n${text}`;
+      // Defensive fallback only — step 1 above always leaves an Edition: line in place, so this
+      // branch should be unreachable in practice. Below the title line (WR-01) if it ever runs.
+      const at = afterTitleInsertionPoint(text);
+      text = text.slice(0, at) + `Source: ${relArchivePath}\n\n` + text.slice(at);
     }
   } else if (sourceLine.value === relArchivePath) {
     // Already canonical — leave untouched. Load-bearing for idempotence (B9/B11): after a first
@@ -680,7 +703,6 @@ async function repairExistingIndex(
     // continuation line, which is non-blank and would otherwise look like wrapped prose again.
   } else {
     const lineEnd = text.indexOf('\n', sourceLine.end);
-    const restOfLine = lineEnd === -1 ? '' : text.slice(sourceLine.end, lineEnd);
     const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
     const isBarePath =
       !/\s/.test(sourceLine.value) &&
@@ -693,13 +715,13 @@ async function repairExistingIndex(
       text = text.slice(0, sourceLine.start) + `Source: ${relArchivePath}` + text.slice(sourceLine.end);
     } else {
       // wrapped prose — never truncate. Strip only the "Source: " label prefix from the first
-      // physical line (leaving the prose intact, rejoined with its continuation) and insert a new
-      // canonical bare-path line immediately above it.
-      const strippedFirstLine = sourceLine.value + restOfLine;
+      // physical line (leaving the prose intact via `text.slice(lineEnd)`, which preserves
+      // everything after the label line, continuation included) and insert a new canonical
+      // bare-path line immediately above it.
       text =
         text.slice(0, sourceLine.start) +
         `Source: ${relArchivePath}\n` +
-        strippedFirstLine +
+        sourceLine.value +
         text.slice(lineEnd === -1 ? sourceLine.end : lineEnd);
     }
   }

@@ -528,19 +528,24 @@ describe('ingest-archive — existing INDEX.md adoption (decision 1b)', () => {
       sourceLines?: string[];
       sliceMarker?: string;
       projectName?: string;
+      /** WR-01 fixture: omit the Edition: line entirely (not merely stale) from the header. */
+      noEdition?: boolean;
+      /** WR-01 fixture: omit the Source: line entirely (not merely stale) from the header. */
+      noSource?: boolean;
     } = {},
   ): Promise<string> {
     const gameName = opts.gameName ?? 'seven';
     const edition = opts.edition ?? SEVEN_EDITION;
     const sourceLines = opts.sourceLines ?? [WRAPPED_SOURCE_LINE1, WRAPPED_SOURCE_LINE2];
     const sliceRow = `| \`01-core.md\` | p.1 | ${opts.sliceMarker ?? 'core rules'} |`;
+    const headerLines = [
+      ...(opts.noEdition ? [] : [`Edition: ${edition}`, '']),
+      ...(opts.noSource ? [] : [...sourceLines, '']),
+    ];
     const content = [
       `# Rulebook Index — ${gameName}`,
       '',
-      `Edition: ${edition}`,
-      '',
-      ...sourceLines,
-      '',
+      ...headerLines,
       '## Slices',
       '',
       '| slice | pages | covers |',
@@ -673,6 +678,35 @@ describe('ingest-archive — existing INDEX.md adoption (decision 1b)', () => {
     expect(afterSecond).toBe(afterFirst);
     // And it must not have accumulated a duplicate canonical Source: line either.
     expect((afterSecond.match(/^Source:/gm) ?? [])).toHaveLength(1);
+  });
+
+  it('WR-01: with Edition: absent entirely, the inserted sentinel lands BELOW the # title line, never above it', async () => {
+    const project = await writePreProvenanceIndex(dir, { noEdition: true });
+    const before = await readIndex(project);
+    expect(before.indexOf('# Rulebook Index')).toBe(0); // fixture sanity: title is truly first
+
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+
+    const titleAt = index.indexOf('# Rulebook Index');
+    const editionAt = index.search(/^Edition:/m);
+    expect(titleAt).toBe(0);
+    expect(editionAt).toBeGreaterThan(titleAt);
+    expect(index).toMatch(/^Edition: not stated in the rulebook$/m);
+  });
+
+  it('WR-01: with Source: absent entirely (and no Edition: either), the inserted Source: sentinel also lands BELOW the title', async () => {
+    const project = await writePreProvenanceIndex(dir, { noEdition: true, noSource: true });
+    const before = await readIndex(project);
+    expect(before.indexOf('# Rulebook Index')).toBe(0);
+
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+
+    const titleAt = index.indexOf('# Rulebook Index');
+    const sourceAt = index.search(/^Source: rulebook\/source\/rules\.pdf$/m);
+    expect(titleAt).toBe(0);
+    expect(sourceAt).toBeGreaterThan(titleAt);
   });
 
   it('B12a no scaffold-overwrite: a normal run leaves a distinctive existing marker untouched', async () => {

@@ -79,9 +79,10 @@ function excludeTestFiles(src: string): boolean {
 }
 
 /**
- * Every filesystem path this installer owns under `targetDir`: the 5 `bs-<name>/` skill dirs
- * plus the single `bs-shared/` namespace root. Every entry is `bs-`-prefixed, so the pre-copy
- * clean and the uninstaller can never recursively delete an unrelated user skill.
+ * Every filesystem path this installer owns under `targetDir`: the `SKILL_ENTRY_POINTS.length`
+ * `bs-<name>/` skill dirs plus the single `bs-shared/` namespace root. Every entry is
+ * `bs-`-prefixed, so the pre-copy clean and the uninstaller can never recursively delete an
+ * unrelated user skill.
  */
 function ownedPaths(targetDir: string): string[] {
   return [
@@ -116,7 +117,8 @@ async function isFullyInstalled(targetDir: string): Promise<boolean> {
 }
 
 /**
- * Copy the Agent Skills tree (5 SKILL.md entry points + shared reference tree) into targetDir.
+ * Copy the Agent Skills tree (`SKILL_ENTRY_POINTS.length` SKILL.md entry points + shared
+ * reference tree) into targetDir.
  *
  * Returns true if anything was installed, false if it already existed and force was not set.
  */
@@ -270,8 +272,8 @@ export async function uninstallClaudeCommand(options: { local?: boolean } = {}):
 
   let removedAny = false;
 
-  // Only ever remove installer-owned `bs-`-prefixed roots (the 5 skill dirs + the single
-  // bs-shared/ namespace). Never a generic top-level name like `templates`/`build`, so
+  // Only ever remove installer-owned `bs-`-prefixed roots (the SKILL_ENTRY_POINTS skill dirs +
+  // the single bs-shared/ namespace). Never a generic top-level name like `templates`/`build`, so
   // uninstall cannot wipe an unrelated user skill that happens to share that name.
   const itemsToRemove = [
     ...SKILL_ENTRY_POINTS.map(({ skillName }) => skillName),
