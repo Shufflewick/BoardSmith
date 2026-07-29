@@ -356,6 +356,11 @@ Deferred out of this phase:
 - Worked-example replay (CHECK-06) — Phase 178.
 - Source-free MODE assembly (VERIFY-09) — Phase 179. No mode flag here.
 - Repairing findings this classifier surfaces on the reference games.
+- **Surfacing classification verdicts in `/bs-check-status`** — raised as an Integration Points note
+  above, deliberately NOT planned into this phase (decided 2026-07-29 at the planning gate). It was
+  never a locked decision, and `check-status` is not run-scoped: surfacing verdicts in project status
+  needs a cross-run verdict source this phase's boundary excludes, and the marker/reporting surface is
+  exactly what VERIFY-05 owns in Phase 175. Revisit there, not here.
 
 Standing policy from 170 (recorded in STATE.md): **the ingest harness may inform, and must never
 again gate whether a manual pass is run.**
