@@ -125,6 +125,17 @@ the tag.
       documented invariant (crash-safety, no lost/duplicated work) is what `173-VALIDATION.md`'s own
       SC-4 truths enumerate and what this requirement is actually protecting; the range-level
       idempotency gap is tracked as an open item, not smoothed into the checkbox.)*
+      *(UPDATE 173-08: code review (`173-REVIEW.md` CR-01) subsequently showed the ledger write this
+      completion rested on was NOT crash-safe as claimed — `fs.writeFile`'s default flag truncates
+      and rewrites the WHOLE file on every append, so a crash could destroy prior, already-recorded
+      units, not merely the newest one. 173-08 replaced the write with an atomic temp-file+`fsync`+
+      `rename()` (proven via a real `SIGKILL` mid-write, `verify-run.test.ts` CR-B, plus a live
+      32-real-kill hammer test, `173-PROOF.md` §5 — zero torn ledgers) and closed the range-level
+      idempotency gap the caveat above named (a persisted dispatch-plan manifest + range-complete/
+      range-reset markers make resume deterministic — the killed-then-resumed run's `recorded[]` now
+      matches a clean run's exactly, where the original proof measured 9-vs-4). VERIFY-08 is
+      RE-CONFIRMED complete against the corrected guarantee, not merely left checked on the disproven
+      one — see `173-PROOF.md` §5.)*
 - [ ] **VERIFY-09**: The skill runs against a project whose source rulebook is unavailable, in
       source-free mode, reporting which defect class went unchecked.
 
@@ -191,7 +202,7 @@ the tag.
 | VERIFY-01 | Phase 173 | Partial — install+run proven (173-06/173-07); per-chunk verdict awaits Phase 174 classification |
 | VERIFY-02 | Phase 173 | Complete (173-06/173-07 proof) |
 | VERIFY-07 | Phase 173 | Partial — re-transcription absence proven (173-06/173-07); classification-in-subagent awaits Phase 174 |
-| VERIFY-08 | Phase 173 | Complete (173-07 proof; range-level re-dispatch efficiency caveat noted, not blocking) |
+| VERIFY-08 | Phase 173 | Complete (173-07 proof; re-confirmed 173-08 against a corrected crash-safety guarantee + closed range-level resume determinism — see `173-PROOF.md` §5) |
 | VERIFY-03 | Phase 174 | Pending |
 | VERIFY-04 | Phase 175 | Pending |
 | VERIFY-05 | Phase 175 | Pending |

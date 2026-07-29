@@ -974,6 +974,10 @@ range-level resume re-dispatch is not idempotent (Finding 1), and the torn-ledge
 guarantee's literal wording does not cover the case where a crash also destroys the trailing fence
 (Finding 2).
 
+**RESOLVED by plan 173-08 — see §5 below for the re-proof against the fixed code.** Finding 1 (range
+resume determinism) and Finding 2 (the fence-destroying crash shape) are both closed. This section
+is left in place, unedited, because the record of what was wrong is the point of this document.
+
 ---
 
 ## What is still unproven (final, phase-wide)
@@ -987,12 +991,26 @@ guarantee's literal wording does not cover the case where a crash also destroys 
    boundary, or is bounded re-transcription of an already-covered range an accepted cost of the
    crash-safety trade-off?). Recorded here for a future phase or human decision, not silently
    resolved.
+
+   **RESOLVED (173-08 Task 2) — see §5.** The dispatch-plan manifest is now persisted at
+   `verify-run-init` time and read on resume; range-level completion/reset markers make resume
+   dispatch decisions deterministic. Re-proven live against `one-two-punch` below: the
+   killed-then-resumed run's final `recorded[]` set is IDENTICAL to a clean run's, where the
+   original proof measured 9-vs-4.
 2. **The torn-ledger crash-safety guarantee's stated wording does not cover a fence-destroying
    crash (Finding 2, this plan).** The actual behavior (a hard, actionable throw) is safe but not
    what "an unparseable trailing line reads as NOT recorded" implies for every crash shape. Worth a
    documentation fix to `verify-run.ts`'s own comment in a later phase; not fixed here because it is
    a documentation-precision gap, not a behavioral defect (the actual behavior never silently
    corrupts state).
+
+   **RESOLVED (173-08 Task 1, CR-01) — see §5.** The write is now atomic (temp file + `fsync` +
+   `rename()`), so the fence-destroying crash shape (Case B) is unreachable from a real crash — a
+   crash can only ever leave `RUN.md` byte-identical to its pre-call state or fully updated, never
+   torn. Case B is still reachable via HAND-CORRUPTION (a human/script editing `RUN.md` directly,
+   which is out of scope for a crash-safety guarantee) and still throws the same actionable error in
+   that case — unchanged, correct, defensive behavior. The module's doc comment is corrected to say
+   this precisely rather than the disproven "at most the final line" claim.
 3. **The Git Protocol mechanism at Step 3 close** (write order, commit message shape) — still
    unexercised. Neither plan 173-06 nor this plan committed inside a scratch copy; both are
    disposable harnesses never pushed or merged, so committing would add no evidence value. Remains
@@ -1025,6 +1043,251 @@ guarantee's literal wording does not cover the case where a crash also destroys 
    followed exactly as written, apart from the harness's directory-sweep recording expedience
    (disclosed in section 4 above).
 
+## 5. 173-08 re-proof — CR-01 and Finding 1 against the fixed code
+
+Re-runs the SC-4 kill-and-resume proof's load-bearing claims against the fixed
+`src/cli/commands/verify-run.ts`, through the REAL `boardsmith` CLI (`node bin/boardsmith.js`,
+which runs the TypeScript source directly via `tsx` in this dev repo — the exact code path a real
+invocation uses, not a mock).
+
+**Scope difference from the original proof, disclosed up front:** the original SC-4 proof
+dispatched real `claude -p` LLM subprocesses to transcribe `one-two-punch`'s pages. Re-running that
+exact mechanism here — for every kill point, twice, plus a clean-run comparison — was judged not to
+add evidence value for what this plan actually changed: CR-01 and Finding 1 are both properties of
+the LEDGER/MANIFEST MECHANISM (crash-safety of the write, and range-level dispatch-decision
+determinism), not of the LLM's transcription content. The original proof itself already established
+that exact section-boundary matching between two live LLM passes is not a sound comparison target
+(§4, "Clean-run comparison" section, above). This re-proof instead drives the real CLI commands with
+real, non-trivial, deterministic slice content standing in for a subagent's return — isolating the
+mechanism's determinism from content non-determinism, which is exactly what Task 2's fix claims to
+guarantee. Every kill below is a REAL process termination (`kill -9` on a real PID, confirmed via
+`ps`), never a simulated/mocked one — the "prove before fix, prove after" discipline is honored at
+the mechanism level, not skipped.
+
+### Preflight (on the ORIGINALS, before any copy)
+
+```
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(empty)
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9
+```
+Both pinned commits match the read-only invariant exactly. Two fresh `cp -R` copies of
+`one-two-punch` were made under the scratchpad (never under `~/BoardSmithGames/`): `otp-kill` (the
+interrupted-run target) and `otp-clean` (a second copy, dispatched once, uninterrupted, for
+end-state comparison) — same structure as the original SC-4 proof.
+
+### Setup — adoption + run-init with a persisted manifest on both copies
+
+```
+$ node bin/boardsmith.js ingest-archive <otp-kill>/rules.pdf --project <otp-kill> --json
+{"archivedPath":"rulebook/source/rules.pdf","sourceHash":"e28d18756e...4358eea", ...}
+$ node bin/boardsmith.js ingest-archive <otp-clean>/rules.pdf --project <otp-clean> --json
+{"archivedPath":"rulebook/source/rules.pdf","sourceHash":"e28d18756e...4358eea", ...}   (same source, same hash)
+
+$ node bin/boardsmith.js verify-run-init --project <otp-kill> --run-id 2026-01-01T00-00-00Z --ranges '["1-1","2-2"]' --json
+{"runId":"2026-01-01T00-00-00Z", ..., "ranges":["1-1","2-2"]}
+$ node bin/boardsmith.js verify-run-init --project <otp-clean> --run-id 2026-01-02T00-00-00Z --ranges '["1-1","2-2"]' --json
+{"runId":"2026-01-02T00-00-00Z", ..., "ranges":["1-1","2-2"]}
+```
+The manifest (`["1-1","2-2"]`) is now a durable fact in each run's `RUN.md`, in its own fenced
+section (`RUN_MANIFEST_BEGIN`/`END`), written once — confirmed by reading `RUN.md` directly (not
+trusting the command's own echoed JSON) in the ledger dump below.
+
+### Dispatch 1 (`kill-01`) — page range 1-1, real subprocess, real SIGKILL
+
+A driver script wrote both of range 1-1's slice files, then invoked the real CLI
+(`verify-run-record --unit 01-overview-contents-setup ... --range 1-1`) as an `execFileSync` child,
+then wrote a ready-sentinel and blocked. The PARENT waited for the sentinel (confirming the FIRST
+unit's `verify-run-record` call had already returned — durably recorded), then killed the driver's
+PID with `kill -9`:
+
+```
+$ date -u +%Y-%m-%dT%H:%M:%SZ
+2026-07-29T03:42:30Z
+$ kill -9 80364
+$ ps -p 80364
+(no such process)   -> confirmed: a real, killed OS process, not simulated
+```
+
+### The kill — one of two units recorded, the second staged but never recorded, exactly like the original proof
+
+```
+$ node bin/boardsmith.js verify-run-status --project <otp-kill> --run-id 2026-01-01T00-00-00Z --json
+{"runId":"2026-01-01T00-00-00Z","recorded":["01-overview-contents-setup"],"count":1,
+ "ranges":["1-1","2-2"],"rangesRecorded":[],"rangesPending":["1-1","2-2"]}
+```
+Independently confirmed on disk: both `01-overview-contents-setup.md` (101 bytes) and
+`01-starting-a-new-round.md` (79 bytes, real content, `Derived (p.1):` prefix) exist in staging;
+only the first is in `recorded[]`. `rangesPending` correctly lists BOTH ranges — range 1-1 has a
+unit recorded but no `range-complete` marker, so it is NOT treated as done.
+
+### Resume 1 — reset the interrupted range, then redispatch it fresh (the mechanism Finding 1's fix adds)
+
+```
+$ node bin/boardsmith.js verify-run-record --project <otp-kill> --run-id 2026-01-01T00-00-00Z --reset-range 1-1 --json
+{"runId":"2026-01-01T00-00-00Z","rangeId":"1-1","action":"range-reset","alreadyRecorded":false}
+$ node bin/boardsmith.js verify-run-status --project <otp-kill> --run-id 2026-01-01T00-00-00Z --json
+{"recorded":[],"count":0,"rangesRecorded":[],"rangesPending":["1-1","2-2"]}
+```
+The reset is a real, appended tombstone line (verified in the raw `RUN.md` dump below) — it does not
+rewrite or delete the stale `01-overview-contents-setup` record, it supersedes it. `recorded[]`
+correctly drops to `[]` (the one prior unit is now excluded).
+
+Range 1-1 is then redispatched fresh — ONE consolidated unit (`01-overview-and-setup`, deterministic
+content for this proof), recorded and completed:
+
+```
+$ node bin/boardsmith.js verify-run-record --project <otp-kill> --run-id 2026-01-01T00-00-00Z --unit 01-overview-and-setup --slice 01-overview-and-setup.md --range 1-1 --json
+{"unitId":"01-overview-and-setup", "sha256":"98ea1bab51d8...6544e8", "alreadyRecorded":false, "rangeId":"1-1"}
+$ node bin/boardsmith.js verify-run-record --project <otp-kill> --run-id 2026-01-01T00-00-00Z --complete-range 1-1 --json
+{"rangeId":"1-1","action":"range-complete","alreadyRecorded":false}
+```
+
+### The second, deliberate `kill -9` — page range 2-2, never dispatched at all before termination
+
+```
+$ ps aux | grep kill-02-driver    -> PID 82632, real background node process
+$ date -u +%Y-%m-%dT%H:%M:%SZ
+2026-07-29T03:42:58Z
+$ kill -9 82632
+$ ps -p 82632
+(no such process)   -> confirmed
+```
+Post-kill: staging directory unchanged (still exactly the 1-1 files); `verify-run-status --json`
+unchanged (`count: 1`, `rangesPending: ["2-2"]`). Cleanest possible negative control — zero trace
+from a genuinely undispatched range.
+
+### Resume 2 — range 2-2, to completion
+
+```
+$ node bin/boardsmith.js verify-run-record --project <otp-kill> --run-id 2026-01-01T00-00-00Z --unit 02-action-cards --slice 02-action-cards.md --range 2-2 --json
+$ node bin/boardsmith.js verify-run-record --project <otp-kill> --run-id 2026-01-01T00-00-00Z --unit 02-punch-examples-discard-and-end-of-game --slice ... --range 2-2 --json
+$ node bin/boardsmith.js verify-run-record --project <otp-kill> --run-id 2026-01-01T00-00-00Z --complete-range 2-2 --json
+
+$ node bin/boardsmith.js verify-run-status --project <otp-kill> --run-id 2026-01-01T00-00-00Z --json
+{"recorded":["01-overview-and-setup","02-action-cards","02-punch-examples-discard-and-end-of-game"],
+ "count":3,"rangesRecorded":["1-1","2-2"],"rangesPending":[]}
+```
+
+### Clean-run comparison (`otp-clean`, one uninterrupted dispatch, same deterministic content plan)
+
+```
+$ node bin/boardsmith.js verify-run-status --project <otp-clean> --run-id 2026-01-02T00-00-00Z --json
+{"recorded":["01-overview-and-setup","02-action-cards","02-punch-examples-discard-and-end-of-game"],
+ "count":3,"rangesRecorded":["1-1","2-2"],"rangesPending":[]}
+```
+
+**Independent diff (not trusting either command's own equality claim):**
+
+```python
+clean recorded  : ['01-overview-and-setup', '02-action-cards', '02-punch-examples-discard-and-end-of-game']
+killed recorded : ['01-overview-and-setup', '02-action-cards', '02-punch-examples-discard-and-end-of-game']
+MATCH recorded[]: True
+MATCH count     : True 3 3
+```
+
+**Finding 1 does not reproduce.** The original proof measured 9 recorded units on the killed-then-
+resumed run against 4 on the clean run (>2x, from range 1-1 re-fragmenting into 5 overlapping units
+across two dispatches). Here, the killed-then-resumed run's final `recorded[]` set is IDENTICAL,
+unit-for-unit, to the clean run's — 3 and 3, not 9 and 4.
+
+The raw `RUN.md` (read directly, not through the status command) shows exactly what happened,
+including the superseded record surviving in the file (append-only, never deleted) but excluded from
+`recorded[]`:
+
+```
+{"unitId":"01-overview-contents-setup", ..., "rangeId":"1-1"}          <- stale, from the killed attempt
+{"kind":"range-reset","rangeId":"1-1", ...}                            <- tombstone: supersedes the line above
+{"unitId":"01-overview-and-setup", ..., "rangeId":"1-1"}               <- the fresh, post-reset redispatch
+{"kind":"range-complete","rangeId":"1-1", ...}
+{"unitId":"02-action-cards", ..., "rangeId":"2-2"}
+{"unitId":"02-punch-examples-discard-and-end-of-game", ..., "rangeId":"2-2"}
+{"kind":"range-complete","rangeId":"2-2", ...}
+```
+`grep -o '"unitId":"[^"]*"' RUN.md | sort | uniq -c` confirms every unitId (including the stale,
+superseded one) appears exactly once — no duplicate ledger record was ever written, matching Task
+1's crash-safety guarantee.
+
+### Torn-ledger cases, re-run against the fixed code
+
+**Case A — final line torn, END fence preserved (hand-corrupted fixture, not a live crash):**
+```
+$ node bin/boardsmith.js verify-run-status --project <otp-kill-tornA> --run-id 2026-01-01T00-00-00Z --json
+⚠ 1 ledger line(s) ... could not be parsed as a complete record — treating as NOT recorded
+{"recorded":["01-overview-and-setup","02-action-cards","02-punch-examples-discard-and-end-of-game"],
+ "count":3, "rangesRecorded":["1-1"], "rangesPending":["2-2"]}
+```
+Exit 0. Unchanged from the original proof's Case A: the torn record (here, the 2-2 `range-complete`
+marker) demotes gracefully — `rangesPending` correctly re-lists `2-2` (its completion marker was the
+torn line; its two units are still individually recorded and unaffected).
+
+**Case B — final line torn AND the END fence itself also destroyed (still only reachable via
+hand-corruption, confirmed below to be unreachable from a real crash):**
+```
+$ node bin/boardsmith.js verify-run-status --project <otp-kill-tornB> --run-id 2026-01-01T00-00-00Z --json
+rulebook/.verify/.../RUN.md is missing its machine-owned fences. ...
+$ echo $?
+1
+```
+Unchanged, actionable throw — exactly as before. This is the ONE case this plan's own doc comment
+flags as still reachable via hand-tampering (never via a real crash) and states so explicitly.
+
+### Live crash-hammer — 32 real `kill -9`s against real `verify-run-record` invocations, targeted at the write window
+
+A third scratch copy (`crash-hammer`) ran 20 real subprocess kills timed during process startup
+(0.5-20ms delay — confirmed to land before any write, 0 recorded, 0 fence loss) plus 12 more timed
+in the 700-900ms window bracketing the actual write+rename (calibrated against a measured ~894ms
+unkilled call). Every single one of the 32 real kills was asserted against two properties
+immediately after the kill:
+
+1. `RUN.md` still contains BOTH fences (`grep -q` for each) — **32/32 PASS**.
+2. `verify-run-status --json` exits 0, never throws the "missing machine-owned fences" error (the
+   Case B shape) — **32/32 PASS**.
+
+2 of the 12 near-write-window kills landed AFTER the real `rename()` had already completed (the unit
+shows up in the final `recorded[]`); the other 10 landed before it (the unit is absent, exactly as if
+never dispatched). Zero torn ledgers, zero fence loss, across every real kill — Case B is
+unreachable from a genuine crash under the fixed write, matching the corrected doc comment's claim.
+
+### Originals re-verification (post-run)
+
+```
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd   (unchanged)
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(still empty)
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9   (unchanged)
+```
+No background processes left running (`ps aux` confirmed clean after every kill in this section).
+
+### VERIFY-08 re-assessment (honest, per this plan's own instruction)
+
+VERIFY-08 was marked complete by 173-07 on the strength of a crash-safety guarantee CR-01 showed was
+false, and on a resume mechanism Finding 1 showed was non-deterministic at range granularity. Both
+are now re-proven, live, against the fixed code, above:
+
+- The ledger write is atomic (temp file + `fsync` + `rename()`); a real crash — 32 live `kill -9`s,
+  including several deliberately timed near the write itself — never produced a torn or
+  fence-missing `RUN.md`, and already-durable records from earlier calls survive a later crash
+  (confirmed both by unit test CR-A/CR-B and live here).
+- Range-level resume is now deterministic: a killed-then-resumed run's final recorded-unit set is
+  identical to a clean run's (3-and-3, where the pre-fix mechanism measured 9-vs-4 on the same
+  source).
+- The one remaining gap (Case B, reachable only via direct hand-tampering with `RUN.md`, never via a
+  crash) is a documented, intentional, safe failure mode (a hard actionable throw, never silent
+  corruption) — not a crash-safety gap.
+
+**VERIFY-08 is CONFIRMED complete**, on the corrected guarantee stated in `verify-run.ts`'s own doc
+comment as of 173-08, not the disproven one 173-07 relied on. This is a re-justification against new
+evidence, not a rubber stamp of the prior mark — see 173-REVIEW.md's CR-01/WR-01 entries for the
+defects this plan closed to earn it.
+
+---
+
 ## How to re-run every proof
 
 Four re-runnable scripts, each asserting against this phase's own captured artifacts (none of them
@@ -1037,6 +1300,13 @@ call; re-running the SCRIPTS re-validates the EVIDENCE, not the live event itsel
   absence), against `seven`.
 - `${TMPDIR:-/tmp}/173-proof/173-sc4.sh` — SC-4 (kill-and-resume) + the torn-ledger-line cases,
   against `one-two-punch`.
+
+**173-08's re-proof (§5) was run ad hoc against ephemeral scratch-dir copies (never committed as a
+reusable script) — the automated regression coverage for both defects lives in
+`src/cli/commands/verify-run.test.ts`'s `CR-01` describe block (CR-static/CR-A/CR-B) and `173-08
+Task 2` describe block (M1-M9), run via `npx vitest run src/cli/commands/verify-run.test.ts`. §5's
+live run is the one-time crash-safety/determinism proof against the real CLI and real reference-game
+copies; the vitest suite is what re-verifies both properties on every future change.**
 
 All four exit 0 with a `PASS:` line per assertion, or exit non-zero with the first `FAIL:` line
 naming exactly which assertion broke, against the artifacts as they exist right now.

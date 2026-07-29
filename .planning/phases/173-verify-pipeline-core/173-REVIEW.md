@@ -24,6 +24,10 @@ findings:
   info: 3
   total: 5
 status: issues_found
+resolution:
+  resolved_by: "173-08"
+  resolved: 2026-07-28
+  status: all_resolved
 ---
 
 # Phase 173: Code Review Report
@@ -108,6 +112,16 @@ new file, never a mix) so a crash mid-write can never regress previously-durable
 the doc comment's "at most the final line" claim needs correcting to match what `fs.writeFile`
 actually guarantees, since Phase 174 is likely to build resume-safety assumptions on this text.
 
+**RESOLVED (173-08 Task 1, commit `b6f115a8`).** Implemented via the second option this finding
+names: `appendLedgerLine` is unchanged (still builds the whole new file text in memory, fences
+intact), but the WRITE is now `atomicWriteFile` — a same-directory temp file, `fsync`'d, then
+`fs.rename()`'d over the target — never `fs.writeFile(ledgerFile, ...)` directly. POSIX `rename()`
+is atomic, so the interrupted state is always either the complete pre-call file or the complete
+post-call file, never a mix. The doc comment's "at most the final line" claim is corrected to state
+this precisely. Proven via a mocked rename-failure injection and a genuine `SIGKILL` of a real child
+process mid-write (`CR-A`/`CR-B` in `verify-run.test.ts`), plus a live 32-real-kill hammer test
+against the actual CLI (`173-PROOF.md` §5) — zero torn ledgers, zero fence loss across every kill.
+
 ## Warnings
 
 ### WR-01: `repairExistingIndex` can corrupt document structure when `Edition:`/`Source:` are both absent from an existing INDEX.md
@@ -148,6 +162,13 @@ edge is inside the stated scope, not outside it.
 title line exists either), the same way the `Source:`-absent-but-`Edition:`-present branch already
 inserts relative to a located anchor rather than at a fixed offset.
 
+**RESOLVED (173-08 Task 3, commit `d07f3493`).** Added `afterTitleInsertionPoint()`, exactly as the
+fix above describes: locates the `# ` title line and inserts after it (and its blank line), falling
+back to offset 0 only if no title line exists. Applied at both insertion sites — the reachable
+`!editionLine` branch and the unreachable-in-practice `Source:`-and-`Edition:`-both-absent branch.
+Two new fixtures (`noEdition`/`noSource` options on `writePreProvenanceIndex`) reproduce the bug
+against pre-fix code (both failed, confirming the defect) and pass after the fix.
+
 ## Info
 
 ### IN-01: Dead/misleading `restOfLine` computation in the wrapped-prose `Source:` repair branch
@@ -170,6 +191,10 @@ person who touches this function under time pressure.
 directly, and let the comment describe the real mechanism (`text.slice(lineEnd)` preserving
 everything after the label line).
 
+**RESOLVED (173-08 Task 3, commit `d07f3493`).** Removed exactly as the fix describes:
+`restOfLine`/its `lineEnd`-derived computation are gone, `sourceLine.value` is used directly, and the
+comment now attributes continuation-preservation to `text.slice(lineEnd)` where it actually happens.
+
 ### IN-02: Stale "5 skill dirs" counts left in three comments after this phase raised the count to 7
 
 **File:** `src/cli/commands/install-claude-command.ts:84`, `118`, `313`
@@ -186,6 +211,10 @@ touched this exact file and fixed one of the four stale-count sites without fixi
 drop the specific number from the prose entirely, so a future addition can't strand a fourth stale
 count.
 
+**RESOLVED (173-08 Task 3, commit `d07f3493`).** All three sites now reference
+`SKILL_ENTRY_POINTS`/`SKILL_ENTRY_POINTS.length` in prose rather than a hardcoded number, per the
+fix's second option — `grep -n "the 5\|5 SKILL\|5 skill"` against the file returns nothing.
+
 ### IN-03: `runDir` computed and discarded via `void` in `verifyRunInitCommand`
 
 **File:** `src/cli/commands/verify-run.ts:248`, `279`
@@ -198,8 +227,16 @@ object) rather than an intentional no-op.
 **Fix:** Delete both the declaration and the `void` statement; `runRootDir` is only needed inside
 `ledgerFilePath`, which already computes it independently.
 
+**RESOLVED (173-08 Task 2, commit `293afaa6`).** Deleted, as the fix describes. Folded into Task 2's
+commit rather than Task 3's — Task 2 already fully rewrites `verifyRunInitCommand` (adding the
+`ranges` manifest handling), and this is the exact function IN-03 lives in, so fixing it there avoided
+a churn-only follow-up edit to a function Task 3's own file list didn't otherwise touch.
+
 ---
 
 _Reviewed: 2026-07-28_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Findings CR-01, WR-01, IN-01, IN-02, IN-03 resolved 2026-07-28 by plan 173-08 (commits `b6f115a8`,
+`293afaa6`, `d07f3493`) — see per-finding RESOLVED notes above and `173-PROOF.md` §5 for the live
+re-proof._
