@@ -1,0 +1,33 @@
+# Definitions and Distribution of Cards
+
+p.1, Definitions:
+"Hand: The cards each player holds. Each starts with 3 and ends the game with 10."
+"Set: 2+ cards with matching numbers."
+"example: 5, 5, 5"
+
+Derived (p.1): The Set example is illustrated by three card images side by side: a green 5, a red 5, and a purple 5.
+
+p.1, Definitions:
+"Run: 3+ cards in numeric order."
+"example: 5, 6, 7"
+
+Derived (p.1): The Run example is illustrated by three card images side by side: a red 1, a blue 2, and a red 3 (the printed example text reads 5, 6, 7 while the accompanying card images show 1, 2, 3).
+
+p.1, Distribution of Cards:
+"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card. In addition, there are 7 bonus point cards."
+
+Derived (p.1): The Distribution of Cards diagram shows four rows of cards numbered 1 through 7, one row per color — red, green, blue, and purple — each row annotated "x 4". Below them is a single black card showing "+1" annotated "x 7".
+
+Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 "+1" bonus point cards.
+
+Named-but-undefined (p.1): bonus point cards (depicted as a black "+1" card; the text does not define its scoring effect beyond Game End's instruction to add bonus point cards to your score)
+
+p.1, Designer:
+"JT Smith"
+
+p.1, Play Testers:
+"Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof"
+
+## Visual notes (p.1)
+
+Derived (p.1): Card art is minimal and bold: rounded-corner rectangles in flat saturated color (red, green, blue, purple) with a large white number centered, plus small white pip dots in the corners. Bonus cards are black with a white "+1". Aspect ratio of the depicted cards is roughly portrait, approximately 2:3.
