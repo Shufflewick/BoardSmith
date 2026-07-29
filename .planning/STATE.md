@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 173-07-PLAN.md — Phase 173 (verify-pipeline-core) COMPLETE, 7/7 plans
-last_updated: "2026-07-28T23:50:28.766Z"
+stopped_at: Completed 173-08-PLAN.md — closed CR-01 crash-safety + Finding 1 resume determinism, re-proved SC-4, VERIFY-08 re-confirmed
+last_updated: "2026-07-29T03:53:39.732Z"
 last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 3
-  total_plans: 29
-  completed_plans: 26
+  total_plans: 30
+  completed_plans: 27
   percent: 30
 ---
 
@@ -25,8 +25,20 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 173 (verify-pipeline-core) — COMPLETE (7/7 plans)
+Phase: 173 (verify-pipeline-core) — COMPLETE (8/8 plans)
 Next: Phase 174 (verify-classifier) — not yet planned
+
+`173-08-PLAN.md` was a follow-up closing two defects the phase's own evidence chain surfaced AFTER
+173-07 marked the phase complete: CR-01 (Critical — the ledger write was a full truncate+rewrite,
+not crash-safe as the module's own doc comment claimed) and `173-PROOF.md` §4 Finding 1
+(range-level resume re-dispatch was not idempotent — 9 recorded units vs. 4 for a clean run). Both
+fixed before Phase 174 builds on the guarantee: atomic temp-file+`fsync`+`rename()` ledger writes,
+and a persisted page-range dispatch-plan manifest + range-complete/range-reset markers making
+resume deterministic. Re-proven live against a real `cp -R` copy of `one-two-punch` with real
+process kills — the killed-then-resumed run's final recorded-unit set now matches a clean run's
+exactly. Also closed WR-01 and the three Info items from `173-REVIEW.md`. VERIFY-08 re-confirmed
+complete against the corrected guarantee (`173-PROOF.md` §5). `npm test`: 3611/3611. See
+`.planning/phases/173-verify-pipeline-core/173-08-SUMMARY.md`.
 
 `173-07-PLAN.md` closed the phase: a REAL kill-and-resume proof for SC-4/VERIFY-08 against a fresh
 `cp -R` copy of `one-two-punch`, split into two single-page dispatches so a kill could land between
@@ -585,6 +597,7 @@ Recent decisions affecting current work:
 - [Phase 173]: 173-06: source-resolution.md's post-adoption re-check used the wrong provenance field (chunk-provenance-status's projectProvenanceState, which never flips from ingest-archive alone) — found live, fixed to check rulebook/INDEX.md's Source hash: directly
 - [Phase 173]: VERIFY-01 and VERIFY-07 left open — per-chunk-verdict/classification-in-subagents halves depend on Phase 174's classifier, which does not exist yet; marking complete now would be a third premature completion mark this phase caught
 - [Phase 173]: VERIFY-08 marked complete despite a real finding (range-level resume re-dispatch is not idempotent) because the requirement's core no-data-loss guarantee holds under two real interruption mechanisms; the idempotency gap is tracked as an open item in 173-PROOF.md, not hidden
+- [Phase 173]: Closed CR-01 (crash-unsafe ledger write) and PROOF.md Finding 1 (non-idempotent range resume) via plan 173-08, before Phase 174 build — 173-07 marked VERIFY-08 complete on a crash-safety guarantee code review then showed was false; fixing both defects together (same subsystem, same commits) before Phase 174's classifier builds on the corrected guarantee was cheaper than a third premature-completion correction.
 
 ### Pending Todos
 
@@ -596,10 +609,10 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-28T23:50:28.758Z
-Stopped at: Completed 173-07-PLAN.md — Phase 173 (verify-pipeline-core) COMPLETE, 7/7 plans
+Last session: 2026-07-29T03:53:39.721Z
+Stopped at: Completed 173-08-PLAN.md — closed CR-01 crash-safety + Finding 1 resume determinism, re-proved SC-4, VERIFY-08 re-confirmed
 Resume file: 
-None (phase closed; Phase 174 not yet planned)
+None
 
 ## Operator Next Steps
 

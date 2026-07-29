@@ -196,7 +196,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
-| 173. Verify Pipeline Core | 7/7 | Complete   | 2026-07-28 |
+| 173. Verify Pipeline Core | 8/8 | Complete   | 2026-07-29 |
 | 174. Verify Classifier | 0/TBD | Not started | - |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |
 | 176. Stale-Chunk Repair | 0/TBD | Not started | - |
