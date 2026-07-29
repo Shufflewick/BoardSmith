@@ -78,6 +78,20 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
    (PROV-01) compared against the current archived source's hash. It is never the subagent's opinion.
    The subagent has no access to, and no say in, provenance.
 
+2b. **Provenance has a THIRD state, `unknown`, for a first-ever verify pass.** Decided 2026-07-29;
+   `174-RESEARCH.md` raised this as an open question after measuring that NEITHER reference game
+   currently has a recorded `Source hash:` line — so on the very first verify pass of any
+   pre-provenance project there is no prior hash to compare against, and both `source-changed` and
+   `source-unchanged` would be claims the tool cannot support.
+
+   `unknown` is never collapsed into either populated state. This is the same call 172 decision 10
+   made for `drift-unknown` and PROV-03 made for its `unknown` — reporting a verdict where the tool is
+   blind is the failure mode this milestone keeps catching. And per decision 3 it changes nothing about
+   staleness: provenance is not an input to the staleness map, so `unknown` provenance with a
+   `cosmetic` delta is NOT stale, exactly like `source-changed` with a `cosmetic` delta. It is reported
+   to the human as provenance and nothing more. The enum is therefore
+   `source-changed` | `source-unchanged` | `unknown`.
+
 3. **Staleness is derived by the CLI, mechanically, from the rule delta ALONE**, through an
    enumerated map: `cosmetic` → not stale, `sharper` → stale, `contradictory` → stale,
    `unclassified` → stale. Provenance is not an input to that map — `source-changed` with a
@@ -85,16 +99,30 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
    subagent never emits a staleness verdict and skill prose never derives one; SC-4 is enforced in
    one place, in code, with a test.
 
-4. **The CLI pairs live↔staged slices**, from the run ledger's recorded staged units plus `INDEX.md`'s
-   Slices table for the live side. A slice present on only one side is an enumerated
+4. **The CLI pairs live↔staged slices** by **PAGE-SPAN OVERLAP**, derived independently from each
+   side's own content — `p.N` citation lines on the live side, the ledger's `rangeId` tag on the
+   staged side. A slice present on only one side is an enumerated
    `unpaired-slice` finding naming which side it is missing from — never silently skipped. Silent
    under-recording is the defect class Phase 170 spent itself on (and the direct parallel of 172
    decision 2 and PROV-01 decision 8).
+
+   **AMENDED 2026-07-29 after `174-RESEARCH.md` measured the real data — the original form of this
+   decision named `INDEX.md`'s Slices table as the live-side key and was made on a false premise.**
+   That table exists (with page data) in `seven` but is **entirely absent** in `one-two-punch`, so an
+   INDEX-keyed pairing is blind on one of the two reference games. Filenames do not work either: a
+   real Phase 173 re-transcription of `seven` produced **6** differently-named and differently-bounded
+   staged files against **3** live rule slices, so the two sides do not correspond 1:1 by name or by
+   count. Page-span overlap is the only key both sides carry independently.
+
+   A consequence to plan for, not paper over: because the split is m:n, the pair unit is a
+   page-overlapping GROUP, and a group where the two sides carry different numbers of files is normal,
+   not a finding. Only a page span present on exactly one side is `unpaired-slice`.
 
    Rejected: letting the subagent infer pairing — pairing is mechanical and a subagent that guesses
    it can silently drop a pair.
    Rejected: filename-glob matching in skill prose — an instruction-shaped mechanism, the exact
    thing 170 disproved.
+   Rejected (superseded): `INDEX.md`'s Slices table as the live-side key — absent in `one-two-punch`.
 
 ### Area 2 — Command surface & data contract (accepted 2026-07-29)
 
@@ -155,12 +183,52 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
     way. Independent re-derivation of `Derived` lines remains Phase 177's separate check; this phase
     only compares them.
 
+12b. **The exclusion filter must recognise the PRE-170 form of a presentation note, not just
+    `Visual (p.N):`.** Measured in `174-RESEARCH.md`: **zero** `Visual (p.` lines exist in either
+    reference game's live slices — both games' live slices predate the Phase 170 split entirely, and
+    every diagram/art observation there is written as `Derived (p.N) — diagram description:` or
+    `Derived (p.N) — art:` (5 of 12 `Derived` lines in `one-two-punch`). A pass-2 re-transcription run
+    under the CURRENT contract DOES emit real `Visual (p.N):` lines (observed live in
+    `173-PROOF.md` — `seven`'s staged `01-round.md` carries `Visual (p.1): The heading "Round"…`).
+
+    So the two sides of every real pair are on DIFFERENT SCHEMAS, and a filter that only knows the new
+    prefix would read the old side's diagram notes as rule-bearing content, count purely
+    presentational differences as consequence differences, and manufacture `sharper` verdicts from
+    schema drift alone. That failure lands directly on SC-2's 90%-`cosmetic` bar — it would look like
+    classifier over-flagging when it is really a filter bug.
+
+    Therefore: presentation-note detection excludes BOTH `Visual (p.N):` AND the legacy
+    `Derived (p.N) — diagram description:` / `— art:` forms. **This exclusion set is a test-pinned
+    enumerated constant**, measured against the real slices, not a regex invented from the template.
+    A `Derived` line NOT carrying a presentation marker stays rule-bearing and is compared.
+
 ### Area 4 — Validation (accepted 2026-07-29)
 
-13. **Proof target: a `cp -R` copy of `~/BoardSmithGames/one-two-punch`** — 173's dispatch proof
-    already produced real staged slices there, so real pass-1-vs-pass-2 material exists. `seven`
-    (READ-ONLY, pinned at `a03f38d4792af9dfc7c798be69686fc3230f54dd`) as a second target if cheap.
-    Same copy-based discipline as 171/172/173: confirm originals byte-identical before and after.
+13. **Proof target: `cp -R` copies of the reference games — but the pass-1-vs-pass-2 material does
+    NOT exist yet and PRODUCING IT IS IN SCOPE FOR THIS PHASE.**
+
+    **AMENDED 2026-07-29 — the original form of this decision rested on a false premise.**
+    `174-RESEARCH.md` checked the real repos directly: neither `one-two-punch` nor `seven` has a
+    `rulebook/.verify/` staging directory, an archived `rulebook/source/`, or a `Source hash:` line.
+    Every artifact Phase 173's proof produced lived in `/tmp` scratch copies that have since been
+    cleaned up. There is no free real data anywhere on disk.
+
+    Consequences, both load-bearing for planning:
+
+    - **The FIRST wave's only job is producing real pass-1-vs-pass-2 material** — adopt the source and
+      re-run the Phase 173 re-transcription pipeline against a fresh `cp -R` copy, reusing that
+      mechanism exactly rather than reimplementing it. No classifier logic is built until real pairs
+      exist. This also front-loads the phase's highest-risk unknown, which is what SC-2's bar is for.
+    - **Anchor game: a copy of `seven`.** It carries the `INDEX.md` page data the page-overlap pairing
+      (decision 4) needs on the live side, and Phase 173 already measured a real re-transcription of
+      it (6 staged files vs. 3 live rule slices), so the m:n grouping case is present rather than
+      hypothetical. A copy of `one-two-punch` is the SECOND target, and it is not optional-if-cheap:
+      it is the game carrying the legacy `Derived — diagram description:` presentation form
+      (decision 12b) and the game with NO `INDEX.md` Slices table, so it is the only place decision 4's
+      and 12b's amended forms actually get exercised.
+
+    `seven` stays READ-ONLY at `a03f38d4792af9dfc7c798be69686fc3230f54dd`; all work is on copies, with
+    the 171/172/173 discipline of confirming the originals byte-identical before and after.
 
 14. **SC-2's bar is pre-declared and numeric, recorded in `174-PROOF.md`: ≥90% of paired slices
     classify `cosmetic`, with zero `contradictory`.** Missing the bar is a phase BLOCKER, not a note
@@ -177,9 +245,20 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
     verdicts, recording the comparison. A classifier whose verdicts move between runs cannot support
     a staleness marker anything downstream trusts.
 
+17. **The SC-2 bar is measured on RULE-BEARING content only** — a corollary of 12b, stated explicitly
+    because it is the difference between a meaningful bar and a meaningless one. Presentation notes
+    excluded per 12b never contribute to a delta, so they can neither inflate nor deflate the
+    `cosmetic` percentage. If the bar is missed, the first thing to check is whether the exclusion
+    filter is complete, before concluding the classifier over-flags.
+
 ### Claude's Discretion
 
 - Module boundaries and file placement within `src/cli/commands/` and `src/cli/slash-command/bs/`.
+- Whether the classification ledger records live in the existing `RUN.md` ledger fence as a third
+  record `kind` or in a sibling file — provided the atomic write path is the SAME one (research found
+  `atomicWriteFile`, `appendLedgerLine`, `locateFences`, `parseLedgerBody`, `resolveLedgerState`,
+  `ledgerFilePath`, `readLedgerOrThrow` are module-private in `verify-run.ts` today, so genuine reuse
+  means EXPORTING them, never copying them).
 - Exact ledger line format for classification records, provided it reuses the existing append-only
   atomic-write mechanism and its enumerated codes are test-pinned.
 - Human-readable (non-`--json`) report formatting and grouping. Note 172's finding that report
