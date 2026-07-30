@@ -233,7 +233,15 @@ Plans:
   1. Every `RULINGS.md` entry is re-checked against the fresh transcription and reported as still-needed, resolved-by-source, or contradicted, respecting supersession chains.
   2. The three audit lenses (fidelity, visibility, undo) run against raw slices plus `RULINGS.md` for every stale chunk, feeding the existing bounded repair loop.
   3. Run against seven's Ruling 1 — the designer-statement scoring table with no source card — this produces a defensible still-needed/resolved/contradicted verdict, proving the highest-consequence ruling re-validation target in either reference game.
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [ ] 176-01-PLAN.md — CHECK-01 mechanics: `parseRulings` body-text extension, `RULING_VERDICTS` enum, supersession skip/report, scope-limited, atomic verdict recording (CHECK-01, wave 1)
+- [ ] 176-02-PLAN.md — CHECK-02 mechanics: stale-chunk → fresh staged slice resolution, verify-episode round bookkeeping (decision 17), POST-repair `computeRepairGate` re-derivation (CHECK-02, wave 1)
+- [ ] 176-03-PLAN.md — skill text: `verify/ruling-recheck.md` judgment contract + `verify/repair-dispatch.md` delegating to `build/audit.md`/`build/repair.md` by reference, CLI registration, installer probes (CHECK-01, CHECK-02, wave 2)
+- [ ] 176-04-PLAN.md — `verify-game.md` full stale-claim sweep + repair routing, and the no-fork drift guards proven to fail when violated (CHECK-01, CHECK-02, wave 3)
+- [ ] 176-05-PLAN.md — live proof: all ~62 rulings re-validated with measured per-verdict counts, SC-3's Ruling 1 verdict AND reasoning (CHECK-01, wave 4)
+- [ ] 176-06-PLAN.md — live proof: real lens run on a STATED subset of the 12 stale chunks, paired pre/post-repair gate readings, phase closeout (CHECK-02, wave 5)
 
 ### Phase 177: Derived-Line Re-Derivation
 **Goal**: Rule-bearing inferences get an independent second opinion, separate from the presentation notes the Phase 170 split now keeps out of the way.
