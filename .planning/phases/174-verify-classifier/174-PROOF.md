@@ -505,3 +505,177 @@ over-flags.
 
 This block is committed in isolation, before the reconstituted material is even restored, so the
 git history on this file itself is the evidence the bar was not retrofitted to the result.
+`git log --oneline -- .planning/phases/174-verify-classifier/174-PROOF.md` shows this commit
+strictly before the measurement commit that follows it.
+
+### Reconstituting the real pass-2 material
+
+`SCRATCH="${TMPDIR:-/tmp}/174-proof"` (fresh — the plan-174-01 harness directory no longer existed
+on disk, so **path B (rebuild) was taken for both games**, not path A).
+
+Preflight, on the ORIGINALS, before any copy:
+
+```
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(empty)
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9
+```
+Both match the pinned/recorded values from every prior plan. Whole-tree sha256 manifests captured
+to `$SCRATCH/seven.before` (5342 files) and `$SCRATCH/otp.before` (5400 files).
+
+`cp -R` both originals into `$SCRATCH`, then a real `npx boardsmith claude --local --force` install
+on each (7 skills listed, same as every prior plan's install). Filesystem assertions — the new
+classification files, never trusted from install console output:
+
+```
+$ test -f "$SCRATCH/seven/.claude/skills/bs-shared/verify/classification-dispatch.md" && echo FOUND
+FOUND
+$ test -f "$SCRATCH/seven/.claude/skills/bs-shared/verify/classification-subagent.md" && echo FOUND
+FOUND
+$ test -f "$SCRATCH/one-two-punch/.claude/skills/bs-shared/verify/classification-dispatch.md" && echo FOUND
+FOUND
+$ test -f "$SCRATCH/one-two-punch/.claude/skills/bs-shared/verify/classification-subagent.md" && echo FOUND
+FOUND
+```
+
+**This is SC-1's install half for the new files** — both copies carry the new contract and
+delegate that `174-05-PLAN.md` added to `SHARED_LEAF_PROBES`.
+
+Source adoption via the same real `boardsmith ingest-archive` call plan 174-01 used (same input
+bytes → same hash):
+
+```
+$ (cd "$SCRATCH/seven" && boardsmith ingest-archive rules.pdf --project . --json)
+{"archivedPath":"rulebook/source/rules.pdf","sourceHash":"5138858e789452d6d366e3ba3a898b5d5417a3561ee23bd53123fd98fe337880","indexPath":"rulebook/INDEX.md","wroteIndex":false}
+$ (cd "$SCRATCH/one-two-punch" && boardsmith ingest-archive rules.pdf --project . --json)
+{"archivedPath":"rulebook/source/rules.pdf","sourceHash":"e28d18756e976a437b81e10e6944f90842e7aa1d26b8102221a54769b4358eea","indexPath":"rulebook/INDEX.md","wroteIndex":false}
+```
+
+Both hashes are byte-identical to `174-FIXTURES/MANIFEST.md`'s recorded values — same unmodified
+`rules.pdf` files, hashed the same way.
+
+Then the archived staged tree and `RUN.md` were restored from `174-FIXTURES/<game>/staged/` and
+`174-FIXTURES/<game>/RUN.md` into `rulebook/.verify/<runId>/` (run-ids taken from
+`MANIFEST.md`: `seven` → `2026-07-29T23-25-24Z`, `one-two-punch` → `2026-07-29T23-28-06Z`).
+
+**Every one of the 23 restored/adopted files' `shasum -a 256` independently recomputed and
+compared against `174-FIXTURES/MANIFEST.md`'s table — 23/23 match**, live files, staged files,
+both `INDEX.md`s (post-adoption), and both `RUN.md`s. (Full per-file comparison run and confirmed
+directly against the manifest table; every value recomputed in this session matched the table row
+naming it, reproducing plan 174-01's own 23/23 result exactly.)
+
+**GATE: PASSED (reconstitution — path B taken for both games, all 23 hashes verified)**
+
+### Real classification pass — `verify-classify-pairs` / `-status` / dispatch / `-record`
+
+Per `classification-dispatch.md` exactly, both games:
+
+```
+$ (cd "$SCRATCH/seven" && boardsmith verify-classify-pairs --project . --run-id 2026-07-29T23-25-24Z --json)
+{
+  "runId": "2026-07-29T23-25-24Z",
+  "pairs": [{
+    "pairId": "pages-1-2", "kind": "paired", "span": {"first":1,"last":2},
+    "liveSlices": ["rulebook/01-definitions-and-components.md","rulebook/01-overview-setup-and-play.md","rulebook/02-solo-variant.md"],
+    "stagedSlices": ["01-about-and-setup.md","01-round.md","01-game-end-and-match.md","01-definitions.md","01-distribution-of-cards.md","02-solo-variant.md"],
+    "liveRuleBearingLines": 43, "stagedRuleBearingLines": 103
+  }],
+  "provenance": {"pages-1-2": {"provenance":"unknown","currentHash":"5138858e...337880","recordedHashes":[],"reason":"no chunk citing these live slices records a Source hash — a first-ever verify pass, not a claim this tool can support"}},
+  "warnings": [],
+  "summary": {"paired":1,"presentationOnly":0,"unpaired":0,"ruleBearingPairs":1}
+}
+$ (cd "$SCRATCH/one-two-punch" && boardsmith verify-classify-pairs --project . --run-id 2026-07-29T23-28-06Z --json)
+{
+  "runId": "2026-07-29T23-28-06Z",
+  "pairs": [{
+    "pairId": "pages-1-2", "kind": "paired", "span": {"first":1,"last":2},
+    "liveSlices": ["rulebook/01-setup-and-round-structure.md","rulebook/02-action-cards-and-resolution.md"],
+    "stagedSlices": ["01-overview-setup.md","01-round-structure.md","02-action-cards.md","02-end-of-game.md","02-punch-examples-discard.md","02-tips.md"],
+    "liveRuleBearingLines": 74, "stagedRuleBearingLines": 105
+  }],
+  "provenance": {"pages-1-2": {"provenance":"unknown","currentHash":"e28d1875...358eea","recordedHashes":[],"reason":"no chunk citing these live slices records a Source hash — a first-ever verify pass, not a claim this tool can support"}},
+  "warnings": [],
+  "summary": {"paired":1,"presentationOnly":0,"unpaired":0,"ruleBearingPairs":1}
+}
+```
+
+Both games pair into exactly ONE group, exactly as decision 4's second amendment and
+174-03-SUMMARY.md's corrective follow-up measured — reproduced here, not merely predicted.
+
+```
+$ boardsmith verify-classify-status --project . --run-id <runId> --json   (both, pre-dispatch)
+pendingPairs: ["pages-1-2"]   (both games)
+```
+
+**Dispatch** — one real Task-tool-equivalent subagent per pending pair. **Dispatch mechanism used,
+reported honestly, matching every prior plan's documented constraint:** this executor's available
+tools are Read/Write/Edit/Bash — no internal Task/Agent tool is exposed to this session, the exact
+constraint `173-PROOF.md` §3 and `174-01-PLAN.md`'s execution both already documented and resolved
+the same way. A real `claude -p` subprocess (`--allowedTools Read`, since the subagent only needs
+to read the two slice sets and return text) stood in as the closest faithful equivalent.
+
+The `BS-CLASSIFY-V1` pointer block, copied byte-identical from `classification-dispatch.md`'s
+"Dispatch" section with only the three named fields substituted (full text preserved verbatim in
+`$SCRATCH/dispatch-prompt-seven-pages-1-2.txt` and `$SCRATCH/dispatch-prompt-otp-pages-1-2.txt`):
+
+```
+BS-CLASSIFY-V1
+
+Read `.claude/skills/bs-shared/verify/classification-subagent.md` in full and follow it
+exactly.
+
+Pair id:      pages-1-2
+Live slices:  rulebook/01-definitions-and-components.md, rulebook/01-overview-setup-and-play.md, rulebook/02-solo-variant.md
+Staged slices: rulebook/.verify/2026-07-29T23-25-24Z/slices/01-about-and-setup.md, ... (all 6)
+```
+(one-two-punch's dispatch prompt is identical in shape, its own pair's fields substituted.)
+
+```
+$ (cd "$SCRATCH/seven" && claude -p "$(cat dispatch-prompt-seven-pages-1-2.txt)" --allowedTools Read \
+    > subagent-seven-pages-1-2-return.txt)
+Exit 0.
+$ (cd "$SCRATCH/one-two-punch" && claude -p "$(cat dispatch-prompt-otp-pages-1-2.txt)" --allowedTools Read \
+    > subagent-otp-pages-1-2-return.txt)
+Exit 0.
+```
+
+Both raw returns preserved verbatim in `$SCRATCH/subagent-{seven,otp}-pages-1-2-return.txt`
+(captured before any summarizing) — full structured objects with `pairId`, `label`, `evidence`,
+`quotedPass1`, `quotedPass2`, `lineFindings[]`, exactly the RETURN shape
+`classification-subagent.md` specifies. **`seven`'s subagent returned `label: sharper`**
+(one genuine rule-bearing delta: pass 1 leaves the bonus point card's scoring value undefined,
+pass 2 supplies +1 point — compatible, not contradicted, so `sharper`). **`one-two-punch`'s
+subagent returned `label: cosmetic`** (every rule-bearing line agrees after dual-schema exclusion;
+one inert credit-spelling discrepancy inside a rule-bearing block, correctly scored `cosmetic`
+under the consequence test).
+
+Recording, from the subagent's own returned fields only (never re-opening a slice to check them):
+
+```
+$ (cd "$SCRATCH/seven" && boardsmith verify-classify-record --project . --run-id 2026-07-29T23-25-24Z \
+    --pair-id pages-1-2 --label sharper --evidence "<verbatim from return.evidence>" \
+    --quoted-pass1 "<verbatim from return.quotedPass1>" --quoted-pass2 "<verbatim from return.quotedPass2>" --json)
+{"ruleDelta":"sharper","stale":true,"provenance":"unknown", ...}
+$ (cd "$SCRATCH/one-two-punch" && boardsmith verify-classify-record --project . --run-id 2026-07-29T23-28-06Z \
+    --pair-id pages-1-2 --label cosmetic --evidence "<verbatim from return.evidence>" \
+    --quoted-pass1 "<verbatim from return.quotedPass1>" --quoted-pass2 "<verbatim from return.quotedPass2>" --json)
+{"ruleDelta":"cosmetic","stale":false,"provenance":"unknown", ...}
+```
+
+Final status, both games:
+
+```
+$ (cd "$SCRATCH/seven" && boardsmith verify-classify-status --project . --run-id 2026-07-29T23-25-24Z --json)
+pendingPairs: []
+summary: {"pairs":1,"paired":1,"presentationOnly":0,"unpaired":0,"classified":1,"cosmetic":0,"sharper":1,"contradictory":0,"unclassified":0,"stale":1,"cosmeticPct":0}
+$ (cd "$SCRATCH/one-two-punch" && boardsmith verify-classify-status --project . --run-id 2026-07-29T23-28-06Z --json)
+pendingPairs: []
+summary: {"pairs":1,"paired":1,"presentationOnly":0,"unpaired":0,"classified":1,"cosmetic":1,"sharper":0,"contradictory":0,"unclassified":0,"stale":0,"cosmeticPct":100}
+```
+
+`pendingPairs: []` for both — the real classification pass is complete.
+
+**GATE: PASSED (Task 1 — real classification pass, both games, raw prompts and returns captured)**
