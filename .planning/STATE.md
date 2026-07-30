@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 174-03-PLAN.md — verify-classifier core (enumerated codes, presentation filter, m:n pairing, staleness, provenance)"
-last_updated: "2026-07-30T01:17:19.396Z"
-last_activity: 2026-07-28
+stopped_at: "Completed 174-07-PLAN.md — phase closeout: SC-3 real source mutation, VERIFY-01 per-chunk verdict, chunk-level staleness measurement (phase goal NOT MET, reported honestly), VERIFY-01/03/07 closed"
+last_updated: "2026-07-30T02:05:00.000Z"
+last_activity: 2026-07-30
 progress:
   total_phases: 10
-  completed_phases: 3
+  completed_phases: 5
   total_plans: 37
-  completed_plans: 33
-  percent: 30
+  completed_plans: 35
+  percent: 50
 ---
 
 # Project State
@@ -21,12 +21,48 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 174 — verify-classifier
+**Current focus:** Phase 175 — impact-map-and-repair-gating (next)
 
 ## Current Position
 
-Phase: 174 (verify-classifier) — IN PROGRESS (6/7 plans)
-Next: Phase 174 plan 07 (SC-3 real source mutation, VERIFY-01 per-chunk-verdict close, official REQUIREMENTS.md/ROADMAP.md closeout for VERIFY-01/VERIFY-03/VERIFY-07)
+Phase: 174 (verify-classifier) — **COMPLETE (7/7 plans)**
+Next: Phase 175 (Impact Map & Repair Gating) — VERIFY-04/05/06, per `ROADMAP.md`
+
+`174-07-PLAN.md` closed the phase. **SC-3** proven via a real archived-source mutation through the
+REAL pipeline (not a hand-edited slice): `one-two-punch`'s image/vector `rules.pdf` (no text layer)
+was mutated by rasterizing page 1 (`pdftoppm`), compositing a real Ghostscript-rendered patch that
+reverses the Fight-phase timing precedence ("lower"→"higher" timing resolves first), and
+reassembling with the untouched page 2 (`magick`) — no package installs, only tools already on the
+machine. A real provenance baseline was established via the REAL `boardsmith chunk-check` command
+before mutating, so the affected pair's provenance mechanically resolved to `source-changed`. Real
+`verify-run-init` + real `claude -p` re-transcription dispatch against the mutated source + real
+`BS-CLASSIFY-V1` classification dispatch landed **`contradictory`, `stale:true`,
+`provenance:source-changed`** — both readings quoted verbatim. SC-4's independence corroborated via
+cross-run comparison (no naturally-occurring `source-changed`+`cosmetic` pair existed in this
+1-group-per-game run) plus `deriveStale`'s one-argument arity.
+
+**VERIFY-01's per-chunk verdict** proven live on both real reference games (`chunkVerdicts[]` via
+`verify-classify-status`), no-build confirmed by a whole-tree sha256 diff excluding
+`rulebook/.verify/`.
+
+**Added and ran the phase's missing chunk-level staleness measurement — the phase goal's own unit —
+and it does NOT MEET the goal, reported honestly rather than smoothed over:** `one-two-punch` marks
+11/11 (100%) of citing chunks stale from this plan's one real `contradictory` finding; `seven` marks
+14/16 (87.5%) stale from its one real `sharper` finding (174-06). Diagnosis: live-slice granularity
+is too coarse for these two short (2-3 live-slice) reference games — decision 18's per-quote
+narrowing IS working correctly (it carved out a real 2-chunk exemption on `seven` a naive
+group-level rollup would not have), but most chunks in a short rulebook cross-cite the same few
+slices, so a delta anywhere in one still reaches most/all of them. This is NOT an SC-1..SC-5 failure
+(all measured PASS) — it is an open risk carried forward explicitly for Phase 175/176 to weigh
+(they own repair scoping / VERIFY-06), not fixed or tuned away here.
+
+`VERIFY-01`, `VERIFY-03`, `VERIFY-07` all closed `[x]` in `REQUIREMENTS.md` with section-and-number
+citations. `174-VALIDATION.md` signed off (`nyquist_compliant: true`, `status: complete`).
+`ROADMAP.md` Phase 174 marked complete (7/7) with a `**Result:**` paragraph naming every measured
+number and the chunk-staleness finding. `174-PROOF.md` gained `## What is still unproven` (10 items)
+and `## How to re-run every proof`. Both `~/BoardSmithGames` originals confirmed byte-identical
+before/after. `npm test`: 3691/3691 green. See
+`.planning/phases/174-verify-classifier/174-07-SUMMARY.md`.
 
 `174-06-PLAN.md` ran the phase's live proof. The SC-2 bar was declared in its own commit
 (`fc030f17`) before any verdict existed, then a real classification pass was run against both
@@ -742,8 +778,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-30T01:17:19.387Z
-Stopped at: Completed 174-03-PLAN.md — verify-classifier core (enumerated codes, presentation filter, m:n pairing, staleness, provenance)
+Last session: 2026-07-30T02:05:00.000Z
+Stopped at: Completed 174-07-PLAN.md — phase closeout, Phase 174 COMPLETE (7/7). Next: Phase 175 (Impact Map & Repair Gating).
 Resume file: 
 None
 
