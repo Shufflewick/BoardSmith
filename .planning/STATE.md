@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 174-07-PLAN.md — phase closeout: SC-3 real source mutation, VERIFY-01 per-chunk verdict, chunk-level staleness measurement (phase goal NOT MET, reported honestly), VERIFY-01/03/07 closed"
-last_updated: "2026-07-30T02:05:00.000Z"
-last_activity: 2026-07-30
+stopped_at: "Completed 174-08-PLAN.md — gap closure: decision 19 per-citation attribution ladder implemented + wired, citation-resolution rate measured on real chunks (§7), phase goal re-measured on both real games (§8) — NOT MET on either game, though both stale fractions roughly halved (seven 87.5%→37.5%, one-two-punch 100%→54.5%). Reported honestly, no tuning."
+last_updated: "2026-07-31T03:30:00.000Z"
+last_activity: 2026-07-31
 progress:
   total_phases: 10
   completed_phases: 5
-  total_plans: 37
-  completed_plans: 35
+  total_plans: 38
+  completed_plans: 36
   percent: 50
 ---
 
@@ -25,10 +25,42 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 174 (verify-classifier) — **COMPLETE (7/7 plans)**
-Next: Phase 175 (Impact Map & Repair Gating) — VERIFY-04/05/06, per `ROADMAP.md`
+Phase: 174 (verify-classifier) — **REOPENED, gap-closure plan 174-08 executed (8/8 plans) — phase
+GOAL still NOT MET, reported honestly**
+Next: Phase 175 (Impact Map & Repair Gating) — VERIFY-04/05/06, per `ROADMAP.md`. Phase 174 is not
+marked `[x]` in `ROADMAP.md` (its own literal goal is unmet), but VERIFY-01/03/07 remain closed in
+`REQUIREMENTS.md` (their own text is about verdict-production mechanics, proven) and are not
+re-litigated by this gap-closure plan.
 
-`174-07-PLAN.md` closed the phase. **SC-3** proven via a real archived-source mutation through the
+`174-08-PLAN.md` (2026-07-31) implemented `174-CONTEXT.md` decision 19 — attribution narrows from
+"the live SLICE a chunk cites" (decision 18) to "the specific CITATION a chunk names" (its own
+`## Interpretation` claim's quoted fragment or page reference), via a deterministic 3-rung ladder
+(`quoted-fragment` > `cited-page` > `slice-fallback`, modelled on 172 decision 3). Both 174-04
+guardrails (no false-clean; pair-level blindness checks outrank the ladder) are preserved and pinned
+by dedicated tests (`decision-19-guard-1`/`-2`); all seven pre-existing chunk/decision-18 tests pass
+UNMODIFIED. `ChunkVerdict` gained `attributions[]` so every clean chunk's cleanliness is nameable
+from `--json` output. The citation-resolution rate was measured on real chunks BEFORE the narrowing
+was trusted (`174-PROOF.md` §7): `quoted-fragment` is the dominant real rung on both games, with a
+disclosed `slice-fallback` share (21.4% seven, 9.1% one-two-punch evaluations) — a real limitation,
+not tuned away.
+
+**Phase-goal re-measurement (`174-PROOF.md` §8), replaying the exact real dispatch returns (no new
+LLM judgment) through the new code:** `seven` dropped from 87.5% to **37.5%** (14/16 → 6/16) citing
+chunks stale; `one-two-punch` dropped from 100% to **54.5%** (11/11 → 6/11). Both real,
+non-tuned, roughly-halved improvements — but **the phase goal's own bar is still NOT MET on either
+game**: neither fraction is a small, explainable subset. Diagnosis (not a defect in the ladder): an
+anchor-density property of these two short, tightly cross-referenced rulebooks — several chunks
+independently quote the exact same central, changed rule because it is genuinely foundational to
+what they build. No threshold was tuned in response. Both `~/BoardSmithGames` originals confirmed
+byte-identical before/after this plan's whole session; determinism re-confirmed (two
+`verify-classify-status --json` calls per game, byte-identical). `npm test`: 3706/3706 green (3691
+baseline + 15 new `decision-19-*` tests). See
+`.planning/phases/174-verify-classifier/174-08-SUMMARY.md`.
+
+---
+
+`174-07-PLAN.md` (superseded by 174-08 above for the phase-goal number; SC-3/VERIFY-01 findings below
+remain accurate) closed the phase's prior wave. **SC-3** proven via a real archived-source mutation through the
 REAL pipeline (not a hand-edited slice): `one-two-punch`'s image/vector `rules.pdf` (no text layer)
 was mutated by rasterizing page 1 (`pdftoppm`), compositing a real Ghostscript-rendered patch that
 reverses the Fight-phase timing precedence ("lower"→"higher" timing resolves first), and

@@ -28,7 +28,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 171: Provenance Recording** - `## Verified Against` block at close, code-conformance-only scope recording, `/bs-check-status` drift reporting (completed 2026-07-28)
 - [x] **Phase 172: Source-Free Conformance Checks** - Traceability sweep + code drift, proven immediately against the two reference games with zero source dependency (completed 2026-07-28)
 - [x] **Phase 173: Verify Pipeline Core** - `/bs-verify-game` skill entry, non-destructive re-transcription staging, subagent-only context economics, crash resumability (completed 2026-07-28)
-- [ ] **Phase 174: Verify Classifier** - Two-dimension classification (provenance + rule delta), tuned and validated against real pass-1-vs-pass-2 output (REOPENED 2026-07-30: all 5 success criteria pass on real data, but the phase GOAL is measurably not met — one real finding marks 11/11 of `one-two-punch`'s and 14/16 of `seven`'s citing chunks stale. Root cause is live-slice attribution granularity, not classifier accuracy. Gap-closure plan adds per-citation attribution.)
+- [ ] **Phase 174: Verify Classifier** - Two-dimension classification (provenance + rule delta), tuned and validated against real pass-1-vs-pass-2 output (REOPENED 2026-07-30, gap-closure plan 174-08 executed 2026-07-31: per-citation attribution (decision 19) roughly HALVED both games' stale fractions on real data — `one-two-punch` 100%→54.5% (11/11→6/11), `seven` 87.5%→37.5% (14/16→6/16) — but the phase GOAL still measures NOT MET on either game: neither fraction is a small, explainable subset. Diagnosed as an anchor-density property of these two short, cross-referenced rulebooks, not a defect in the ladder; no threshold tuned. See `174-PROOF.md` §7/§8. Not marked complete — the phase's own literal goal remains unmet.)
 - [ ] **Phase 175: Impact Map & Repair Gating** - Contradictory human gate, cross-file staleness flip, scoped re-playtest (code-changed chunks only)
 - [ ] **Phase 176: Stale-Chunk Repair** - Ruling re-validation against fresh transcription + the three audit lenses re-run per stale chunk
 - [ ] **Phase 177: Derived-Line Re-Derivation** - Independent re-derivation of rule-bearing `Derived` lines, disagreements reported
@@ -144,7 +144,7 @@ Plans:
 - [x] 174-05-PLAN.md — classification subagent contract + `classification-dispatch.md` + `verify-game.md` Step 4 in-place rewrite + rewritten drift pins (wave 4)
 - [x] 174-06-PLAN.md — live proof: SC-1/SC-2 with the bar declared before measuring, VERIFY-07 transcript grep, determinism + lexicon regression (wave 5)
 - [x] 174-07-PLAN.md — live proof: SC-3 real source mutation through the real pipeline, VERIFY-01 per-chunk verdict, phase closeout (wave 6)
-- [ ] 174-08-PLAN.md — GAP CLOSURE: decision 19 per-citation attribution (claim-level anchor ladder), both 174-04 guardrails pinned, citation-resolution rate measured on real chunks, phase-goal re-measured on both real games with an explicit MET/NOT-MET verdict (wave 7)
+- [x] 174-08-PLAN.md — GAP CLOSURE: decision 19 per-citation attribution (claim-level anchor ladder), both 174-04 guardrails pinned, citation-resolution rate measured on real chunks, phase-goal re-measured on both real games with an explicit MET/NOT-MET verdict (wave 7)
 
 **Result:** All five success criteria proven live on real data (`174-PROOF.md`). SC-1/SC-2:
 provenance and rule-delta are independently derived on real pairs; SC-2's pre-declared bar (≥90%
@@ -163,20 +163,26 @@ arity). SC-5: validated against BOTH real reference games, not synthetic example
 games. VERIFY-01, VERIFY-03, and VERIFY-07 all CLOSED in `REQUIREMENTS.md` with section-and-number
 citations.
 
-**One finding reported but NOT fixed in this phase, the most consequential of the whole phase:** a
-new added measurement (this plan, not in the original plan text) computed REAL per-CHUNK staleness
-— the phase goal's own unit — on both reference games, and it does **NOT** meet the phase goal as
-literally stated ("a second run does not flag every chunk as stale"): `one-two-punch` marks
-**11/11 (100%)** of its citing chunks stale from one real `contradictory` finding; `seven` marks
-**14/16 (87.5%)** stale from one real `sharper` finding. This is not an SC-1..SC-5 failure (all
-measured PASS) and not a defect in decision 18's group-vs-chunk narrowing (independently proven
-correct — it produced a real, non-trivial 2-chunk carve-out on `seven` that a naive group-level
-rollup would not have). The root cause is live-slice GRANULARITY: both reference games concentrate
-almost all rulebook content into 2-3 live slices that most chunks cross-cite, so a delta anywhere in
-one of those few slices still reaches most/all of its citing chunks. Left as an explicit open risk
-for Phase 175/176 to weigh (they own the consequence of a staleness verdict — repair scoping,
-VERIFY-06) rather than tuned or hidden here. Full diagnosis, the stale/total tables, and the named
-attributing chunks are in `174-PROOF.md` §6.
+**Gap-closure plan 174-08 (2026-07-31): decision 19 per-citation attribution implemented and
+re-measured — the phase GOAL is STILL NOT MET, reported plainly, not smoothed over.** Plan 174-08
+implemented 174-CONTEXT.md decision 19 (a deterministic 3-rung citation-level ladder —
+`quoted-fragment` > `cited-page` > `slice-fallback`, modelled on 172 decision 3), with both 174-04
+guardrails (no false-clean, blindness-before-ladder ordering) pinned by dedicated tests
+(`decision-19-guard-1`/`-2`). The citation-resolution rate was measured on real chunks BEFORE the
+narrowing was trusted (`174-PROOF.md` §7): `quoted-fragment` is the dominant real rung on both
+games, with a real, disclosed `slice-fallback` share (21.4% seven, 9.1% one-two-punch evaluations).
+Re-measuring the phase goal by replaying the exact real dispatch returns through the new code
+(`174-PROOF.md` §8): `seven` dropped from 87.5% to **37.5%** (14/16 → 6/16) citing chunks stale;
+`one-two-punch` dropped from 100% to **54.5%** (11/11 → 6/11). Both are real, non-tuned, roughly-
+halved improvements, and every clean chunk's cleanliness is nameable from real `attributions[]`
+output (e.g. `discard`/`scoring-declaration`/etc. on `seven` — "cites N quoted fragment(s) found in
+this live slice, but none overlaps the changed line"). **The phase goal's own bar is still NOT MET
+on either game** — neither 37.5% nor 54.5% is a small, explainable subset. Diagnosed (not tuned) as
+an anchor-density property of these two short, tightly cross-referenced reference rulebooks: several
+chunks independently quote the exact same central, changed rule because it is genuinely foundational
+to what they build. This is left as an explicit, still-open risk for Phase 175/176 to weigh — full
+diagnosis, the stale/total tables, every clean chunk's reason, and every stale chunk's attributing
+rung are in `174-PROOF.md` §8.
 
 ### Phase 175: Impact Map & Repair Gating
 **Goal**: A classified slice pair produces the right downstream consequence — human adjudication for genuine contradictions, visible staleness for affected chunks, and repair effort scoped to what actually changed.
@@ -239,7 +245,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
 | 173. Verify Pipeline Core | 8/8 | Complete   | 2026-07-29 |
-| 174. Verify Classifier | 7/7 | Complete   | 2026-07-30 |
+| 174. Verify Classifier | 8/8 | Reopened — goal NOT MET (decision 19 applied, §8) | - |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |
 | 176. Stale-Chunk Repair | 0/TBD | Not started | - |
 | 177. Derived-Line Re-Derivation | 0/TBD | Not started | - |

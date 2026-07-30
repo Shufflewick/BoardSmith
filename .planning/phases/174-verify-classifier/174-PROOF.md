@@ -1577,17 +1577,253 @@ anchor real `## Interpretation` claims actually carry.
 
 ---
 
+## 8. Phase-goal re-measurement after per-citation attribution (decision 19)
+
+Reproduces §6's measurement method exactly, on FRESH `cp -R` copies of both reference games (never
+the originals), using the exact real `174-FIXTURES/` archived materials (never a new `claude -p`
+dispatch) and the exact real `--label`/`--quoted-pass1`/`--quoted-pass2` values §2's real `sharper`
+dispatch (`seven`) and §5's real `contradictory` dispatch (`one-two-punch`) actually returned.
+
+**Disclosed replay, not a fresh judgment.** No new LLM dispatch occurs in this section. Both
+verdicts are REPLAYED from the recorded real dispatch returns already quoted verbatim in §2 (seven's
+sharper finding) and §5 (one-two-punch's contradictory finding). This is what makes this
+re-measurement a deterministic A/B against §6's numbers on the SAME inputs — the only thing that
+changed between §6 and here is the code under test (`computeChunkVerdicts`), never the classification
+labels or quotes. `one-two-punch`'s copy here is UN-mutated (a fresh `cp -R` of the real, current
+archived source, confirmed by the `ingest-archive` hash below matching `174-FIXTURES/MANIFEST.md`'s
+recorded `e28d1875...358eea`) whereas §6's copy had its archived PDF genuinely mutated. Per decision
+3/SC-4, provenance is never an input to staleness or to citation attribution — only `quotedPass1`
+(the live-side quote, itself unaffected by the source mutation, since the mutation only changed the
+STAGED/pass-2 re-transcription) drives the ladder. So this changes only the reported PROVENANCE value
+(`unknown` here vs. `source-changed` in §6, since no chunk in either fresh copy has a recorded
+`Source hash:`), never the attribution the recorded `quotedPass1` drives.
+
+### Reconstitution — real commands, real output
+
+```
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(empty)
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9
+
+$ cp -R ~/BoardSmithGames/seven "$SCRATCH/seven"
+$ cp -R ~/BoardSmithGames/one-two-punch "$SCRATCH/one-two-punch"
+$ ( cd "$SCRATCH/seven" && npx boardsmith claude --local --force )        # real skill install
+$ ( cd "$SCRATCH/one-two-punch" && npx boardsmith claude --local --force ) # real skill install
+
+$ ( cd "$SCRATCH/seven" && boardsmith ingest-archive rules.pdf --project . --json )
+{"archivedPath":"rulebook/source/rules.pdf","sourceHash":"5138858e789452d6d366e3ba3a898b5d5417a3561ee23bd53123fd98fe337880","indexPath":"rulebook/INDEX.md","wroteIndex":false}
+$ ( cd "$SCRATCH/one-two-punch" && boardsmith ingest-archive rules.pdf --project . --json )
+{"archivedPath":"rulebook/source/rules.pdf","sourceHash":"e28d18756e976a437b81e10e6944f90842e7aa1d26b8102221a54769b4358eea","indexPath":"rulebook/INDEX.md","wroteIndex":false}
+```
+
+Both hashes match `174-FIXTURES/MANIFEST.md`'s recorded values exactly — confirming the fresh copy
+is bit-for-bit the same archived source `174-01`/`174-06`/`174-07` worked against.
+
+**Restored `174-FIXTURES/<game>/staged/*.md` + `RUN.md`** into
+`rulebook/.verify/<runId>/{slices/,RUN.md}` for `seven` (`2026-07-29T23-25-24Z`) and `one-two-punch`
+(`2026-07-29T23-28-06Z`) — all 13 restored file hashes (6 staged + `RUN.md` each) independently
+re-checked with `shasum -a 256` against the manifest table and confirmed identical, verbatim:
+
+```
+seven:      08845c69... 0c335361... d05fe4f1... f9f321ba... 5d372026... 3070a094... 0a870470...(RUN.md)
+one-two-punch: 522e0316... e5db38c9... 86f91e3b... ce93f0e9... 11542ee0... bce4e25a... 3534f23d...(RUN.md)
+```
+(full 64-char hashes match `174-FIXTURES/MANIFEST.md`'s table exactly, row for row — verified by
+direct diff, not re-typed by hand.)
+
+**Real `verify-classify-pairs`** on both — each resolves to exactly ONE `paired` rule-bearing group
+(`pages-1-2`), matching §1/§2's measured m:n structure (`seven`: 3 live/6 staged; `one-two-punch`: 2
+live/6 staged).
+
+**Real `verify-classify-record`**, replaying the exact recorded dispatch returns:
+
+```
+$ boardsmith verify-classify-record --project . --run-id 2026-07-29T23-25-24Z --pair-id pages-1-2 \
+    --label sharper \
+    --quoted-pass1 'Named-but-undefined (p.1): bonus point cards (depicted as a black "+1" card; the text does not define its scoring effect beyond Game End'"'"'s instruction to add bonus point cards to your score)' \
+    --quoted-pass2 'Derived (p.1): Each bonus point card is worth +1 point, as printed on its face.' \
+    --json
+{"runId":"2026-07-29T23-25-24Z","record":{"kind":"classification","pairId":"pages-1-2", ...
+ "ruleDelta":"sharper","stale":true,"provenance":"unknown", ...},"warnings":[]}
+
+$ boardsmith verify-classify-record --project . --run-id 2026-07-29T23-28-06Z --pair-id pages-1-2 \
+    --label contradictory \
+    --quoted-pass1 "The player with the lower timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time." \
+    --quoted-pass2 "The player with the higher timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time." \
+    --json
+{"runId":"2026-07-29T23-28-06Z","record":{"kind":"classification","pairId":"pages-1-2", ...
+ "ruleDelta":"contradictory","stale":true,"provenance":"unknown", ...},"warnings":[]}
+```
+
+### (c) No build ran — whole-tree sha256 diff, excluding `rulebook/.verify/`
+
+```
+$ find . -type f -not -path './rulebook/.verify/*' -not -path './.git/*' -print0 | xargs -0 shasum -a 256 | sort > before.hash
+$ boardsmith verify-classify-status --project . --run-id <runId> --json > run1.json
+$ boardsmith verify-classify-status --project . --run-id <runId> --json > run2.json
+$ find . -type f -not -path './rulebook/.verify/*' -not -path './.git/*' -print0 | xargs -0 shasum -a 256 | sort > after.hash
+$ diff before.hash after.hash && echo IDENTICAL
+IDENTICAL   # both seven and one-two-punch
+```
+
+### Determinism — run twice, compare `(slug, ruleDelta, stale)` per game
+
+```
+$ diff run1.json run2.json && echo DETERMINISTIC-IDENTICAL
+DETERMINISTIC-IDENTICAL   # both seven and one-two-punch — full JSON byte-identical, not just the triple set
+```
+
+### §6-vs-§8 side-by-side: the same table, before and after decision 19
+
+| Game | Total chunks | Citing chunks | §6 `stale: true` (decision 18 only) | §8 `stale: true` (decision 19) | §6 `stale: false` | §8 `stale: false` |
+|---|---|---|---|---|---|---|
+| `seven` | 17 | 16 | **14** (87.5%) | **6** (37.5%) | 2 | 10 |
+| `one-two-punch` | 12 | 11 | **11** (100%) | **6** (54.5%) | 0 | 5 |
+
+Both numbers dropped substantially and in the same direction the phase goal names: `seven` from
+87.5% to 37.5% stale (more than halved), `one-two-punch` from 100% to 54.5% stale (nearly halved).
+Neither game's `ruleDelta`/`provenance` distribution beyond `stale` changed shape (still exactly one
+classified pair each, one `sharper`/`contradictory` label, `unknown` provenance — `cosmeticPct: 0`
+in both since the sole classified pair is non-cosmetic).
+
+### Every clean chunk named, with its citation-level reason quoted from real `attributions[]` output
+
+**`seven` — 10 of 16 citing chunks now clean** (up from 2 in §6):
+
+| Chunk | Rung (if evaluated) | Reason (verbatim, or structural if never evaluated) |
+|---|---|---|
+| `game-score-and-winner` | — (never cites `01-definitions-and-components.md` at all) | Structural, as in §6: `citedLiveSlices` are `01-overview-setup-and-play.md`/`02-solo-variant.md` only — `attributions: []`, the sole real counter-example carried forward, rung now moot since the citation-level ladder never even runs for a slice the chunk never cites. |
+| `scoring-combo-sets-and-runs` | — (cites only `rulebook/INDEX.md`, never a paired rule slice) | Structural, as in §6: `citedLiveSlices: ["rulebook/INDEX.md"]`, `attributions: []`. |
+| `discard` | `quoted-fragment`, not attributed | *"Not attributed: this chunk cites 3 quoted fragment(s) found in this live slice, but none overlaps the changed line (\"Named-but-undefined (p.1): bonus point cards...\")."* |
+| `scoring-declaration` | `quoted-fragment`, not attributed | *"...this chunk cites 1 quoted fragment(s) found in this live slice, but none overlaps the changed line..."* |
+| `scoring-engine-and-parity` | `quoted-fragment`, not attributed | *"...cites 1 quoted fragment(s)...none overlaps..."* |
+| `scoring-one-color` | `quoted-fragment`, not attributed | *"...cites 3 quoted fragment(s)...none overlaps..."* |
+| `scoring-run-of-7-one-color` | `quoted-fragment`, not attributed | *"...cites 3 quoted fragment(s)...none overlaps..."* |
+| `scoring-set-5-plus-set-2` | `quoted-fragment`, not attributed | *"...cites 3 quoted fragment(s)...none overlaps..."* |
+| `scoring-set-of-7` | `quoted-fragment`, not attributed | *"...cites 3 quoted fragment(s)...none overlaps..."* |
+| `simultaneous-round-loop` | `quoted-fragment`, not attributed | *"...cites 3 quoted fragment(s)...none overlaps..."* |
+
+Every newly-clean `seven` chunk carries at least one real claim-level quoted fragment INTO
+`01-definitions-and-components.md` (proving it genuinely engaged with that slice's content, not
+merely citing it in passing), and none of those fragments overlaps the specific changed line
+(`quotedPass1`'s bonus-point-cards sentence) — a citation-level fact each chunk's own
+`## Interpretation` text supports, nameable directly from `--json` output, exactly as decision 19
+requires.
+
+**`one-two-punch` — 5 of 11 citing chunks now clean** (up from 0 in §6):
+
+| Chunk | Rung | Reason (verbatim, truncated) |
+|---|---|---|
+| `discard-phase-and-reclaim` | `quoted-fragment`, not attributed | *"...this chunk cites 2 quoted fragment(s) found in this live slice, but none overlaps the changed line (\"...lower timing...\")."* |
+| `game-end` | `quoted-fragment`, not attributed | *"...cites 1 quoted fragment(s)...none overlaps..."* |
+| `plan-and-reveal` | `quoted-fragment`, not attributed | *"...cites 15 quoted fragment(s)...none overlaps..."* |
+| `punch` | `quoted-fragment`, not attributed | *"...cites 2 quoted fragment(s)...none overlaps..."* |
+| `setup-opening-discards` | `quoted-fragment`, not attributed | *"...cites 20 quoted fragment(s)...none overlaps..."* |
+
+### Every stale chunk named, with the attributing rung
+
+**`seven` — 6 stale** (down from 14): `best-seven-selection` (`quoted-fragment`, attributed — its
+own claim quotes the exact changed sentence), `game-end-trigger` (`quoted-fragment`, attributed),
+`match-best-of-7` (`cited-page`, attributed — cites page 1, no quote, page matches the changed
+line's page), `bonus-point-cards` / `scoring-run-of-7` / `table-and-draw` (`slice-fallback` — no
+claim-level anchor could be resolved for this citation; decision 18's slice-level answer stands,
+each one flagged by its own `[unresolved-citation]` warning below).
+
+**`one-two-punch` — 6 stale** (down from 11): `block`, `jab`, `movement-advance-retreat`, `rest`,
+`second-action-resolution` (all `quoted-fragment`, attributed — each cites the exact FIGHT-phase
+resolution sentence `quotedPass1` names, which is genuinely central to what these five chunks
+build); `final-acceptance` (`slice-fallback` — a coverage-audit chunk with no usable claim-level
+anchor, flagged by its own `[unresolved-citation]` warning).
+
+**`[unresolved-citation]` warning count, verbatim per game:**
+
+- `seven`: 3 — `bonus-point-cards`, `scoring-run-of-7`, `table-and-draw` (all citing
+  `rulebook/01-definitions-and-components.md` in pair `pages-1-2`).
+- `one-two-punch`: 1 — `final-acceptance` (citing `rulebook/01-setup-and-round-structure.md` in pair
+  `pages-1-2`).
+
+### Explicit verdict: **NOT MET** on both real reference games, individually and overall
+
+Against decision 19's own standard — a small, EXPLAINABLE stale set, not a small NUMBER:
+
+- **`seven`: NOT MET.** 37.5% (6/16) of citing chunks stale from one real finding is a dramatic,
+  real improvement over §6's 87.5% (more than half the previously-stale chunks are now clean, for a
+  citation-level reason nameable in `--json`), but 6 of 16 is not a small subset by any reasonable
+  reading, and 3 of those 6 are attributed only via the conservative `slice-fallback` rung (no
+  claim-level anchor was available at all) rather than a genuine citation-level finding.
+- **`one-two-punch`: NOT MET.** 54.5% (6/11) stale, down from §6's literal 100%, is the single
+  largest proportional improvement of the two games (every previously-100%-stale chunk had at least
+  a chance to clear), but a majority of citing chunks going stale from one finding is not "a small,
+  explainable subset" under any reading of decision 19's bar.
+- **Overall: NOT MET.** Neither game clears the bar decision 19 sets, though the mechanism is
+  proven to work exactly as designed — real, verifiable, non-tuned narrowing occurred on real data,
+  and every clean chunk's cleanliness is nameable from real `--json` output, which is the phase
+  goal's own observable requirement even where the numeric bar is not cleared.
+
+**Diagnosis, from the measured data — not a defect in the ladder:** §7's rung distribution predicted
+this outcome before Task 3 ran anything: `quoted-fragment` is the dominant, load-bearing rung on
+both games (10/14 `seven`, 10/11 `one-two-punch` (chunk, slice) evaluations in §7's exploratory
+scan), and on BOTH games a substantial share of chunks that cite the affected slice ALSO happen to
+quote the exact changed line, because that line is genuinely central, foundational content
+(`one-two-punch`'s FIGHT-phase timing-resolution rule is the load-bearing mechanic five of its
+twelve chunks build directly on top of; `seven`'s bonus-point-card scoring effect is cited by
+several distinct scoring-variant chunks that each independently quote it while computing their own
+scoring math). This is an ANCHOR-DENSITY property of these two short, tightly-cross-referenced
+reference rulebooks, not a defect in `resolveCitationAttribution`'s ladder logic — the ladder
+correctly narrows every citation it evaluates to exactly the claim-level fact that chunk's own prose
+supports; it cannot manufacture a non-overlap where a chunk's own claim genuinely does quote the
+changed sentence. The `slice-fallback` share (3/6 seven-stale, 1/6 one-two-punch-stale) is the
+already-disclosed §7 limitation showing up in the phase-goal number directly: a fifth to a tenth of
+this milestone's real evaluated attributions carry no claim-level anchor at all, and those default
+conservatively per decision 8 rather than guessing clean.
+
+A larger, less content-concentrated reference game — where most chunks cite a slice for background
+context without independently re-quoting its central rule — would be needed to establish whether a
+still-finer key (e.g. attributing by which specific SENTENCE of a multi-sentence claim a fragment
+comes from, rather than by claim) could narrow further, or whether these two short rulebooks have
+simply exhausted what citation-level narrowing alone can buy on games this size. **No threshold was
+tuned in response to this finding** — `MIN_FRAGMENT_CHARS` is unchanged from Task 1's declared value
+of 12, and no new tunable was added anywhere in this plan's diff (verified: `grep -inE
+"threshold|minOverlap|tolerance|fuzzy" src/cli/commands/verify-classify.ts` returns nothing beyond
+`MIN_FRAGMENT_CHARS`'s own doc comment).
+
+### Small-sample caveat, carried forward honestly
+
+This re-measurement rests on the same small sample §6 warned about: two games, one real
+classification finding each, both verdicts REPLAYED rather than freshly re-judged (disclosed above).
+SC-2's own evidence base (10/11 pooled line-level findings, a one-finding margin) is the same small
+sample this phase-goal number is measured against. A single additional real finding in either game
+— especially a `contradictory` one landing on a slice most chunks cite generically — could move
+either game's stale percentage substantially in either direction. Draw no conclusion stronger than
+what two 2-page rulebooks with one real finding each supports: decision 19's mechanism WORKS (real,
+non-tuned, verifiable narrowing, roughly halving both games' stale fractions) and is NOT SUFFICIENT
+BY ITSELF to meet the phase goal's own bar on rulebooks this short and this cross-referenced. A
+larger, multi-group reference game — ideally one exercising a real SECOND page-overlap group so a
+genuine `source-changed`+`cosmetic`+not-stale 4-tuple (§5's still-open SC-4 structural-only gap) and
+a real `unpaired-slice`→`unclassified` chunk (VERIFY-01 assertion (d)'s still-open structural-only
+gap) could ALSO be exercised live in the same pass — would be needed to establish whether this
+finding generalizes.
+
+---
+
 ## What is still unproven
 
 Carried forward from earlier plans, plus this plan's own gaps — nothing below is silently resolved:
 
-1. **The chunk-level staleness bar itself (added-task measurement, §6).** Both real reference games
-   fail the phase goal's own literal bar (100% and 87.5% of citing chunks go stale from one real
-   finding each) — not an SC-2/SC-3/SC-4/SC-5 failure (all measured PASS on real data), but a real,
-   open risk that live-slice granularity is too coarse for short (2-3 live-slice) rulebooks. No
-   attempt was made to tune the classifier or the attribution mechanism to improve this number —
-   per this plan's explicit instruction, it is reported as a finding for Phase 175/176, not
-   papered over.
+1. **The chunk-level staleness bar itself (§6, re-measured after decision 19 in §8).** Per-citation
+   attribution (174-08) roughly halved both games' stale fractions on real data — `seven` from
+   87.5% to 37.5% (14/16 → 6/16), `one-two-punch` from 100% to 54.5% (11/11 → 6/11) — a real,
+   non-tuned improvement, with every clean chunk's cleanliness nameable from real `attributions[]`
+   output. The phase goal's own bar is still **NOT MET** on either game: neither 37.5% nor 54.5% is
+   a small, explainable subset by any reasonable reading, even though neither is "every chunk"
+   anymore. §8's diagnosis: this is an anchor-density property of these two short,
+   tightly-cross-referenced rulebooks (several chunks independently quote the same central, changed
+   rule), not a defect in the ladder — no attempt was made to tune any threshold to improve this
+   number, per this plan's explicit instruction. Reported as a real, open finding for Phase 175/176
+   to weigh, not papered over.
 2. **True internal Task/Agent-tool dispatch** — carried from every prior plan in this milestone
    (`173-PROOF.md` §3/§4, `174-01`/`174-06`-PROOF.md). No internal Task/Agent tool was exposed to
    this executor; every real dispatch in this plan (transcription and classification alike) used a
@@ -1675,9 +1911,23 @@ cross-check `pairIds`/`citedLiveSlices` against each named chunk's own `CHUNK.md
 shasum -a 256` diff excluding `rulebook/.verify/`, captured immediately before and after the
 `verify-classify-status` call.
 
+**§7 (decision-19 citation-resolution rate):** `npx tsx` the script transcribed verbatim in §7,
+importing `parseClaimCitationAnchors`/`matchedLiveLine`/`citedPageForLine`/
+`resolveCitationAttribution` from `src/cli/commands/verify-classify.ts` and `resolveCitedSlices`
+from `src/cli/commands/chunk-provenance.ts`, read-only against `~/BoardSmithGames/{seven,one-two-
+punch}`; confirm read-only via a whole-tree `find | xargs shasum -a 256` diff before/after.
+
+**§8 (phase-goal re-measurement after decision 19):** identical reconstitution to §6 (fresh `cp -R`,
+real skill install, real `ingest-archive`, restore `174-FIXTURES/<game>/staged/*.md`+`RUN.md`, verify
+all 13 restored hashes), then real `verify-classify-record` REPLAYING the exact `--label`/`--quoted-
+pass1`/`--quoted-pass2` values already quoted verbatim in §2 (`seven` sharper) and §5 (`one-two-
+punch` contradictory) — no new `claude -p` dispatch — then `verify-classify-status --project .
+--run-id <runId> --json` run twice per game (diff byte-identical for determinism), with the same
+whole-tree hash diff (excluding `rulebook/.verify/`) before/after for the no-build proof.
+
 **Regression coverage that runs on every future change (not ad hoc):** `npx vitest run
 src/cli/commands/verify-classify.test.ts` (pairing, provenance, staleness map, presentation filter,
 ledger record/resume, malformed-return handling, `computeChunkVerdicts` including the 174-04
-corrective-follow-up cases `decision-18-corrective-a`/`-b`) and `npx vitest run
-src/cli/commands/chunk-provenance.test.ts` (`chunk-check`/`computeVerificationScope`). Full suite:
-`npm test`.
+corrective-follow-up cases `decision-18-corrective-a`/`-b`, and decision 19's `decision-19-*` ladder/
+guardrail/narrowing tests) and `npx vitest run src/cli/commands/chunk-provenance.test.ts`
+(`chunk-check`/`computeVerificationScope`). Full suite: `npm test`.
