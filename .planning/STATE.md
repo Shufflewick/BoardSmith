@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 174-08-PLAN.md — gap closure: decision 19 per-citation attribution ladder implemented + wired, citation-resolution rate measured on real chunks (§7), phase goal re-measured on both real games (§8) — NOT MET on either game, though both stale fractions roughly halved (seven 87.5%→37.5%, one-two-punch 100%→54.5%). Reported honestly, no tuning."
-last_updated: "2026-07-31T03:30:00.000Z"
-last_activity: 2026-07-31
+stopped_at: "Completed 175-01-PLAN.md — the rules-staleness marker (constants/renderer/strict parser + CHUNK-first/SKETCH-second writer) built and registered in state-machine.md/both templates/pins, in one change. VERIFY-05 partially implemented (this is plan 1 of 8 in Phase 175); requirement stays open in REQUIREMENTS.md pending the remaining wiring plans."
+last_updated: "2026-07-30T06:02:06Z"
+last_activity: 2026-07-30
 progress:
   total_phases: 10
   completed_phases: 5
-  total_plans: 38
-  completed_plans: 36
+  total_plans: 39
+  completed_plans: 37
   percent: 50
 ---
 
@@ -24,6 +24,32 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 **Current focus:** Phase 175 — impact-map-and-repair-gating (next)
 
 ## Current Position
+
+Phase: 175 (Impact Map & Repair Gating) — plan 175-01 of 8 executed.
+Next: Phase 175 plan 175-02 (host-module extensions: `impact`/`adjudication` ledger kinds +
+`Re-verified (no code change):` label), per `ROADMAP.md`.
+
+`175-01-PLAN.md` (2026-07-30) built VERIFY-05's rules-staleness marker as a NEW, ORTHOGONAL,
+machine-owned fenced field in CHUNK.md — never a new Status enum value (175-CONTEXT.md decision
+1) — and registered it in the SAME change (decision 5): `verify-impact.ts` gained
+`RULES_STALENESS_*` constants/renderer/strict-parser (mirroring `chunk-provenance.ts`'s
+`## Verified Against` precedent, its own distinct fence pair) and `writeRulesStalenessMarker`
+(CHUNK-first/SKETCH-second, `Marker:` last, CHUNK.md authority on contradiction, fence-refusal
+throws without touching the file, and — via a type that structurally omits `marker` from its
+input — no code path can write the `clear` value; only Phase 176's repair close will get that
+verb). `state-machine.md` gained a "Rules Staleness Marker" section and a NEW Consistency Check
+item 5 (item 3's Status-enum wording left byte-identical); both templates scaffold the marker.
+`templates.test.ts` gained VERIFY-05 registration pins plus a dedicated decision-1 orthogonality
+guard proving the Status enum's five enumerating/pinning sites did not move. 45 new tests (33 in
+`verify-impact.test.ts`, 12 in `templates.test.ts`), `npm test`: 3751/3751 green (baseline 3706).
+`npx tsc --noEmit` clean (the one remaining error, `docs/seed-to-state.test.ts`'s rootDir
+mismatch, is pre-existing and confirmed present on `main` before this plan via `git stash`).
+VERIFY-05 stays OPEN in `REQUIREMENTS.md` — this is plan 1 of 8 in Phase 175; the marker's
+CLI-level `verify-impact-apply` wiring, the impact map, and the `verify-game.md` skill-text
+integration are later plans (04/05) in this phase. See
+`.planning/phases/175-impact-map-repair-gating/175-01-SUMMARY.md`.
+
+---
 
 Phase: 174 (verify-classifier) — **REOPENED, gap-closure plan 174-08 executed (8/8 plans) — phase
 GOAL still NOT MET, reported honestly**
