@@ -495,22 +495,18 @@ describe('SC-4 — no skill file derives staleness in prose', () => {
 });
 
 describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12b)', () => {
-  it('every marker declared in verify-classify.ts appears verbatim in classification-subagent.md', () => {
+  it('every marker declared in verify-classify.ts appears verbatim in classification-subagent.md', async () => {
     // Two representations exist for the same lexicon: a regex-source array in code, and its
     // literal prefix forms quoted in skill prose. A divergence here would mean the classifier's
     // code excludes a presentation form the prose never tells the subagent about, or vice versa.
-    const src = readFileSync(
-      join(__dirname, '../../commands/verify-classify.ts'),
-      'utf-8',
-    );
-    const decl = /(?:export\s+)?const\s+PRESENTATION_EXCLUSION_MARKERS\s*=\s*(?:Object\.freeze\(\s*)?\[/.exec(
-      src,
-    );
-    if (!decl) throw new Error('PRESENTATION_EXCLUSION_MARKERS declaration not found');
-    const open = decl.index + decl[0].length - 1;
-    const close = src.indexOf(']', open);
-    const arrayBody = src.slice(open + 1, close);
-    const markers = [...arrayBody.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    //
+    // Read the constant through a real import rather than scraping the source text. A prior
+    // source-scrape found the array's closing `]` with `indexOf(']')`, which silently truncated
+    // to zero markers the moment a marker contained a `[^:]` character class — the pin passed
+    // vacuously instead of failing. Importing is also what the sibling DERIVE_VERDICTS pin
+    // below already does.
+    const { PRESENTATION_EXCLUSION_MARKERS } = await import('../../commands/verify-classify.js');
+    const markers = [...PRESENTATION_EXCLUSION_MARKERS];
     expect(markers.length).toBeGreaterThan(0);
 
     // Each regex-source marker names a literal prefix once its regex escaping is undone — assert
