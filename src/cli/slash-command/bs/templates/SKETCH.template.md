@@ -69,6 +69,13 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
      - Tail entry:     "- Status: proposed (sketch-level — no CHUNK.md yet)"
      No other Status-line form is valid in this file.
 
+     Rules-Staleness-line grammar (a SIBLING derived pointer, never folded into the Status line
+     above — see state-machine.md "Rules Staleness Marker"): a detailed entry additionally
+     carries "- Rules Staleness (derived from chunks/<slug>/CHUNK.md): <clear | rules-stale —
+     rulebook moved since this chunk was verified>", immediately after its Status line. Tail
+     entries carry no Rules Staleness line at all — a tail entry has no chunks/<slug>/CHUNK.md
+     to derive it from.
+
      Milestone-flag grammar (SKILLAUTO-01): every chunk entry — detailed or tail — carries a
      `Milestone:` line with exactly one of `none | core-loop | scoring | final-acceptance`. This
      flag is what state-machine.md's human-gate list and build/playtest.md's Verified Gate read
@@ -83,6 +90,7 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
 - ui: <!-- none | touches | major -->
 - Milestone: <!-- none | core-loop | scoring | final-acceptance -->
 - Status (derived from chunks/<!-- slug -->/CHUNK.md): <!-- proposed | approved | built | verified | verified (user-waived) | stale — re-derive before build -->
+- Rules Staleness (derived from chunks/<!-- slug -->/CHUNK.md): <!-- clear | rules-stale — rulebook moved since this chunk was verified -->
 - Test script (outcome-based): <!-- "move a pawn one space; the board reflects it" style description -->
 
 <!-- Repeat one "### <slug>" block per chunk, in list order. Tail entries beyond the next 2-3

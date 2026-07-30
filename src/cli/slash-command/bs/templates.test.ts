@@ -24,6 +24,15 @@ import {
   VERIFIED_AGAINST_BEGIN,
   VERIFIED_AGAINST_END,
 } from '../../commands/chunk-provenance.js';
+import {
+  RULES_STALENESS_HEADING,
+  RULES_STALENESS_BEGIN,
+  RULES_STALENESS_END,
+  RULES_STALENESS_EMPTY,
+  RULES_STALE_MARKER,
+  RULES_STALENESS_CLEAR,
+  SKETCH_RULES_STALENESS_GRAMMAR,
+} from '../../commands/verify-impact.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -509,6 +518,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
       '## Verified Checklist',
       '## Verified Commit Hash',
       '## Verified Against',
+      '## Rules Staleness',
     ],
     'templates/SKETCH.template.md': [
       '## Player Counts',
@@ -549,4 +559,95 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
       }
     });
   }
+});
+
+/**
+ * VERIFY-05 — the rules-staleness marker (175-CONTEXT.md decisions 1, 2, 5, 18) must be
+ * registered EVERYWHERE its Cold-Resume Parse Contract requires, in the SAME change that ships
+ * it (decision 5: an unregistered marker is a project-wide `bs-` skill hard-fail). Constants are
+ * imported from `verify-impact.ts`'s own exports — never re-typed here.
+ */
+describe('VERIFY-05 — the rules-staleness marker is registered everywhere it must be', () => {
+  const stateMachine = read('state-machine.md');
+  const chunkTemplate = read('templates/CHUNK.template.md');
+  const sketchTemplate = read('templates/SKETCH.template.md');
+
+  it('state-machine.md and both templates reference the RULES_STALE_MARKER string', () => {
+    expect(stateMachine).toContain(RULES_STALE_MARKER);
+    expect(chunkTemplate).toContain(RULES_STALE_MARKER);
+    expect(sketchTemplate).toContain(RULES_STALE_MARKER);
+  });
+
+  it('CHUNK.template.md scaffolds the heading, both fences, and the empty-state body', () => {
+    expect(chunkTemplate).toContain(RULES_STALENESS_HEADING);
+    expect(chunkTemplate).toContain(RULES_STALENESS_BEGIN);
+    expect(chunkTemplate).toContain(RULES_STALENESS_END);
+    expect(chunkTemplate).toContain(RULES_STALENESS_EMPTY);
+  });
+
+  it('CHUNK.template.md places the section AFTER "## Verified Against"', () => {
+    const verifiedAgainstIdx = chunkTemplate.indexOf(VERIFIED_AGAINST_HEADING);
+    const rulesStalenessIdx = chunkTemplate.indexOf(RULES_STALENESS_HEADING);
+    expect(verifiedAgainstIdx).toBeGreaterThan(-1);
+    expect(rulesStalenessIdx).toBeGreaterThan(verifiedAgainstIdx);
+  });
+
+  it('SKETCH.template.md carries the derived-pointer grammar', () => {
+    expect(sketchTemplate).toContain(SKETCH_RULES_STALENESS_GRAMMAR);
+  });
+
+  it('state-machine.md has a "## Rules Staleness Marker" heading', () => {
+    expect(actualHeadings(stateMachine)).toContain('## Rules Staleness Marker');
+  });
+
+  it('state-machine.md\'s Consistency Check gains a new item 5 mentioning the marker', () => {
+    const item5Match = /^5\..*$/m.exec(stateMachine);
+    expect(item5Match, 'Consistency Check must gain a new item 5').not.toBeNull();
+    expect(flat(item5Match![0])).toContain('Rules Staleness');
+  });
+
+  it('a Cold-Resume Parse Contract sentence points at Consistency Check item 5', () => {
+    const contractSection = stateMachine.slice(stateMachine.indexOf('## Cold-Resume Parse Contract'));
+    expect(flat(contractSection)).toMatch(/Consistency Check item 5/);
+  });
+});
+
+/**
+ * Decision 18 orthogonality guard — 175-CONTEXT.md's central invariant: rules-staleness is NOT
+ * a Status enum value, so none of the 5 sites that enumerate/pin the Status enum should ever
+ * change as a side effect of this phase. If a future change needs to edit these, that is the
+ * signal that orthogonality broke upstream — not expected work.
+ */
+describe('decision 1 orthogonality guard — the Status enum did not move', () => {
+  const stateMachine = read('state-machine.md');
+  const chunkTemplate = read('templates/CHUNK.template.md');
+  const sketchTemplate = read('templates/SKETCH.template.md');
+
+  it('STATUS_ENUM_VALUES still has exactly five members', () => {
+    expect(STATUS_ENUM_VALUES).toHaveLength(5);
+  });
+
+  it('STATE_MACHINE_ENUM_LINE and TEMPLATE_ENUM_LINE each still appear in their files, unchanged', () => {
+    expect(stateMachine).toContain(STATE_MACHINE_ENUM_LINE);
+    expect(chunkTemplate).toContain(TEMPLATE_ENUM_LINE);
+    expect(sketchTemplate).toContain(TEMPLATE_ENUM_LINE);
+  });
+
+  it('CHUNK.template.md and SKETCH.template.md each contain TEMPLATE_ENUM_LINE exactly once', () => {
+    const countOccurrences = (haystack: string, needle: string): number =>
+      haystack.split(needle).length - 1;
+    expect(countOccurrences(chunkTemplate, TEMPLATE_ENUM_LINE)).toBe(1);
+    expect(countOccurrences(sketchTemplate, TEMPLATE_ENUM_LINE)).toBe(1);
+  });
+
+  it('neither TEMPLATE_ENUM_LINE nor STATE_MACHINE_ENUM_LINE contains the rules-staleness marker or "rules-stale"', () => {
+    expect(TEMPLATE_ENUM_LINE).not.toContain(RULES_STALE_MARKER);
+    expect(TEMPLATE_ENUM_LINE).not.toContain('rules-stale');
+    expect(STATE_MACHINE_ENUM_LINE).not.toContain(RULES_STALE_MARKER);
+    expect(STATE_MACHINE_ENUM_LINE).not.toContain('rules-stale');
+  });
+
+  it('RULES_STALENESS_CLEAR is never the same string as any Status enum value', () => {
+    expect((STATUS_ENUM_VALUES as readonly string[]).includes(RULES_STALENESS_CLEAR)).toBe(false);
+  });
 });

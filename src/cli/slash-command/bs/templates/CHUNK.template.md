@@ -15,7 +15,8 @@ Status: proposed
      "## Ceremony", "## Step Checklist", "## Interpretation", "## Visibility Declaration",
      "## Newly Discovered Citations", "## Redteam Rounds", "## Findings Ledger", "## Revision Rounds",
      "## Build Manifest", "## Playtest Test Script",
-     "## Verified Checklist", "## Verified Commit Hash", "## Verified Against". If any required
+     "## Verified Checklist", "## Verified Commit Hash", "## Verified Against",
+     "## Rules Staleness". If any required
      heading is missing, or the Status line doesn't match a recognized enum value above, a
      resuming session STOPS and asks the user — it never guesses the intended state. See
      state-machine.md "Cold-Resume Parse Contract". -->
@@ -201,3 +202,23 @@ Second-seat leak check (if hidden info): <!-- steps, or "n/a — no hidden info 
 <!-- boardsmith:verified-against:begin -->
 _Not yet recorded._
 <!-- boardsmith:verified-against:end -->
+
+## Rules Staleness
+<!-- MACHINE-OWNED. Written by `boardsmith verify-impact-apply <slug>` and by nothing else —
+     never hand-author anything between the fences below; the next `verify-impact-apply` run
+     overwrites it regardless of what a session puts there. It is fenced for the same reason
+     "## Verified Against" above is: on 2026-07-28 a session filled a machine-owned section
+     (`## Open Rules Gaps`) by hand and the result looked entirely healthy while being wrong —
+     prose asking a session not to do this did not stop it; a fence makes hand-authoring
+     detectable, and `verify-impact-apply` makes it fatal.
+
+     Valid marker values (exact, case-sensitive): clear |
+     rules-stale — rulebook moved since this chunk was verified
+
+     This marker is ORTHOGONAL to the Status line above (state-machine.md "Rules Staleness
+     Marker") — a `verified` chunk stays `verified` even while this marker is set; the two are
+     independent axes and neither is ever folded into the other. -->
+
+<!-- boardsmith:rules-staleness:begin -->
+_Not rules-stale._
+<!-- boardsmith:rules-staleness:end -->

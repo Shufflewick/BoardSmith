@@ -20,6 +20,22 @@ CHUNK-level stale marker (set by `/bs-insert-chunk` when an already-detailed pen
 
 (NOTE: the dash in `stale — re-derive before build` is an em-dash "—", not a hyphen.)
 
+## Rules Staleness Marker
+
+Rules-staleness is a SECOND, INDEPENDENT axis from the Status Enum above — NOT a new enum value. A `verified` chunk that goes rules-stale stays `verified`: a human really did playtest it, and that fact does not change. What changes is that the rulebook basis it was built and verified against has since moved underneath it. Folding the two together would multiply the Status Enum combinatorially (`built`+stale, `verified`+stale, `verified (user-waived)`+stale) and make every consumer parse a product space instead of two orthogonal facts.
+
+The marker's two values:
+
+`clear` | `rules-stale — rulebook moved since this chunk was verified`
+
+(NOTE: the dash in `rules-stale — rulebook moved since this chunk was verified` is an em-dash "—", not a hyphen — the same convention as the stale marker above.)
+
+It lives in a machine-owned fenced `## Rules Staleness` section in the chunk's own CHUNK.md (see `templates/CHUNK.template.md`), and is reflected as a DERIVED pointer in SKETCH.md's detailed entry (`- Rules Staleness (derived from chunks/<slug>/CHUNK.md): <value>`) — never an independently-decided value there, following the same Authority rule the Status line uses.
+
+`boardsmith verify-impact-apply` is this marker's only writer. Only a successful repair close (see the repair-gating phase that owns re-checking stale chunks) clears it back to `clear` — a verify pass never clears it, and there is no manual clear path.
+
+Distinct from the CHUNK-level stale marker above: `stale — re-derive before build` means "a PENDING chunk's CHUNK.md was invalidated by a sketch change — never built." The rules-staleness marker means the opposite situation: an already-built, already-playtested chunk whose rulebook basis has since moved. Both remain independently recognizable; neither is ever mistaken for the other.
+
 ## Step Names (exact, full ceremony)
 
 The 10-step `/bs-build-chunk` pipeline, in order, is exactly:
@@ -82,6 +98,8 @@ Not every state file carries a status. The files that do are CHUNK.md (its autho
 
 **If a state file does not parse against its template — required headings missing, malformed, or a `Status:` line that doesn't match a recognized enum value — the session STOPS and asks the user. It never guesses the intended state.**
 
+Where present, the rules-staleness marker (see "Rules Staleness Marker" above) parses against its own two-value set, independently of the `Status:` line — see Consistency Check item 5 below.
+
 This is the TMPL-02 parse-contract rule. "Guessing" includes silently picking the most likely status, silently repairing the file without telling the user, or proceeding as if the file were valid. All of these are prohibited; the only correct behavior on a parse failure is to stop and ask.
 
 ## Consistency Check (every bs- entry point, before proceeding)
@@ -100,6 +118,12 @@ Every `bs-` skill, on entry, runs a consistency check before doing any other wor
    sketch-level marker `proposed (sketch-level — no CHUNK.md yet)`. Any of these three is a
    valid parse; anything else is a parse failure (stop and ask).
 4. There is no stale session lock (see Session Lock below).
+5. Where a chunk's CHUNK.md carries a `## Rules Staleness` marker (see "Rules Staleness Marker"
+   above), it parses against its own two-value set (`clear` |
+   `rules-stale — rulebook moved since this chunk was verified`) — separately from item 3's
+   Status Enum check, since this marker never touches the `Status:` line. A malformed marker, a
+   missing fence, or an unrecognized value here is ALSO a parse failure (stop and ask), exactly
+   like item 3.
 
 Any problems found are reported to the user, who confirms how to proceed, before the skill continues.
 
