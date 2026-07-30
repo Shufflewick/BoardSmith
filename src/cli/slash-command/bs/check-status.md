@@ -31,10 +31,10 @@ to proceed before continuing — this skill never silently repairs a problem it 
 guesses the intended state. If `SKETCH.md` does not exist at all, report that no project has been
 ingested yet and stop here — there is nothing to report status on.
 
-## Body: Read, Then Synthesize the Eight Items
+## Body: Read, Then Synthesize the Nine Items
 
 Read `SKETCH.md`'s `## Ordered Chunk List`, then the in-progress chunk's `chunks/<slug>/CHUNK.md`
-(derived below), then `ASSETS.md`. Synthesize exactly the following eight items — this is the
+(derived below), then `ASSETS.md`. Synthesize exactly the following nine items — this is the
 canonical contract (see `.planning/bs-skills-plan.md` "/bs-check-status"). Do not add or omit
 items.
 
@@ -101,7 +101,7 @@ from the state just read:
   inserting, splitting, or removing a chunk), the next command is `/bs-insert-chunk` (this
   overrides the build-chunk case above).
 - (Note, not a live branch:) the no-`SKETCH.md` case is terminal at Step 0 — it stops and returns
-  "no project has been ingested yet" before this eight-item synthesis is ever reached, so this item
+  "no project has been ingested yet" before this nine-item synthesis is ever reached, so this item
   never fires for it. Documented here only so the next-command mapping is complete: that case maps
   to `/bs-ingest-rules`.
 
@@ -126,15 +126,46 @@ does not recompute it.
 This command is read-only — item 8 does not violate this skill's no-writes-of-any-kind posture
 (see `## Read-Only Posture (explicit)` below).
 
-Present all eight items together as one report, in the order above, followed by the exact next
+**9. Rules staleness and the repair gate.** Run `boardsmith verify-impact-status --json` and
+FORMAT its output — do not compute any of it here. Distinguish this explicitly from item 8: item 8
+reports what a chunk was verified AGAINST; item 9 reports whether the rulebook underneath it has
+since MOVED. Also distinguish `rules-stale` from `stale — re-derive before build` in one clause,
+citing `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`'s "Rules Staleness Marker" section
+rather than restating it.
+
+Report the fraction as `"N of M chunks rules-stale"`, taken directly from the command's
+`staleFraction` field, and list EVERY slug in `staleSlugs` — never capped, never truncated, never
+"and N more". State the reason in the prose: on short, heavily cross-referenced rulebooks the stale
+set is broader than ideal (Phase 174 measured 6 of 16 on `seven` and 6 of 11 on `one-two-punch`),
+and truncating that list would hide exactly the signal the designer needs.
+
+Group by the command's own `gate.disposition`, consuming `dispositionCounts` rather than
+re-deriving severity — the same discipline item 8 applies to `projectProvenanceState`. Explain each
+group in one clause: `reopen-playtest` (repair will re-open the human playtest gate because the
+chunk's code moved), `close-without-replaytest` (the chunk passes unchanged and closes with no
+re-playtesting), `unknown-drift` (code movement could not be determined — reported as undecided,
+never as clean), `not-applicable` (the chunk never had a playtest gate to re-open).
+
+Report `contradictionsPending` under its own heading when non-empty, naming `/bs-verify-game`'s
+adjudication gate as where they are answered — `check-status.md` reports them, it never answers
+them.
+
+If no verify run exists yet, the command has nothing to report and this item says so plainly
+rather than inventing a zero (never a fabricated clean).
+
+This command is read-only — item 9 does not violate this skill's no-writes-of-any-kind posture
+(see `## Read-Only Posture (explicit)` below).
+
+Present all nine items together as one report, in the order above, followed by the exact next
 command on its own line.
 
 ## Read-Only Posture (explicit)
 
 This skill performs **no writes** of any kind — not to `SKETCH.md`, not to any `CHUNK.md`, not to
 `ASSETS.md`, and not to the session-lock timestamp inside `SKETCH.md`. Item 8's
-`boardsmith chunk-provenance-status --json` call is itself read-only (it aggregates and reports;
-it never writes a `CHUNK.md`), so it does not violate this posture. It may REPORT the
+`boardsmith chunk-provenance-status --json` call and item 9's
+`boardsmith verify-impact-status --json` call are themselves read-only (they aggregate and report;
+neither ever writes a `CHUNK.md` or `SKETCH.md`), so neither violates this posture. It may REPORT the
 `## Session Lock` note it finds (cite `state-machine.md` "Session Lock") — whether a lock exists,
 which chunk it names, and whether it looks stale — but it never takes, refreshes, or clears that
 lock; refreshing a live-resume lock is `/bs-build-chunk`'s job (Step 0's "Same chunk resume"
@@ -147,8 +178,8 @@ skill to fix something it found, direct them to `/bs-build-chunk` or `/bs-insert
 
 This skill cites the shared reference files that ship with every `bs-` skill — it does not
 duplicate their content. Item 8 above additionally runs `boardsmith chunk-provenance-status
---json` — a CLI command, not a file, so it is described in the body where the item is
-synthesized rather than listed here:
+--json`, and item 9 runs `boardsmith verify-impact-status --json` — both CLI commands, not files,
+so each is described in the body where its item is synthesized rather than listed here:
 
 - `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` — status enum, consistency check, session lock, write order, authority
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md` — the `## Ordered Chunk List` / `## Ideas Backlog` grammar this
