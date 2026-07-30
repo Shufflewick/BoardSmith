@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-01-PLAN.md — fixed decision 13's PRESENTATION_EXCLUSION_MARKERS regex gap. Widened the two dash-qualified patterns in verify-classify.ts with an optional parenthetical-qualifier group before the colon, closing the gap where 4 real one-two-punch lines (— diagram description (Plan phase)/(Fight phase)/(first Punch example)/(second Punch example)) slipped through as rule-bearing even though classification-subagent.md's prose already stated the qualifier-presence rule correctly. Pinned by the 4 real lines (read from the committed 174-FIXTURES, not retyped) plus a negative sweep proving the widened set excludes exactly those 4 and nothing else across both reference games' live Derived lines (seven's 10 remain untouched). Kept the cross-file lexicon pin in verify.test.ts a verbatim-prose-containment assertion (never loosened) by extending its normalization to erase the new optional group before the literal-prefix check, and added a new assertion driving the real isPresentationLine against classification-subagent.md's own worked example. Appended an additive-only note to 174-PROOF.md (git diff --numstat confirmed zero deletions) documenting that Phase 174's recorded lineFindings[] came from the subagent judgment layer, not the mechanical constant, so no recorded number needed re-measuring. npm test: 3896/3896 green throughout, zero regressions. See .planning/phases/177-derived-line-re-derivation/177-01-SUMMARY.md."
-last_updated: "2026-07-30T21:45:00Z"
-last_activity: 2026-07-30 -- Phase 177 plan 01 executed
+stopped_at: "Completed 177-02-PLAN.md — built CHECK-04's mechanical core in a new src/cli/commands/verify-derive-recheck.ts. DERIVE_VERDICTS (agrees/disagrees/underivable/not-rule-bearing) is frozen and validated at exactly one choke point, createDeriveVerdictRecord, which additionally requires disagrees to carry both originalReading and rederivedReading non-empty and verbatim (decision 8's stricter bar). quoteLinesOnly — the phase's one genuinely new engineering piece — selects only directly-quoted rulebook content and citation headers, excluding Derived/Visual lines entirely (per the plan) plus Named-but-undefined lines (a Rule 2 deviation beyond the plan's literal text, since 177-RESEARCH.md's own Question 1 answer names it as inferential ingest output that must also be excluded from a 'quote lines only' payload). buildBlindDerivePayload is the single BS-DERIVE-V1 dispatch-prompt construction site; a corpus-wide counting test proves zero 'Derived (p.' and zero 'Visual (p.' occurrences across all 22 real Derived lines in both reference games' committed 174-FIXTURES live corpus (10 seven + 12 one-two-punch, matching 177-CONTEXT.md's measured reality exactly). enumerateDerivedLines mirrors verify-ruling-recheck.ts's enumerate-and-report-never-silently-drop posture. readLiveSlices reads the live rulebook/*.md tree directly (never the staged .verify/ tree), pinned by a comment-stripped source assertion and an import-line-only check that resolveFreshTranscription is never imported. Both tasks committed atomically (944f133b enum/choke-point, 1e3e749d payload filter/enumeration). npm test: 3918/3918 green (baseline 3896 + 22 new tests), zero regressions. npx tsc --noEmit clean except the pre-existing permitted docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN in REQUIREMENTS.md — this is mechanics only (plan 2 of 7); CLI registration/ledger (177-03), judgment contracts (177-04), skill-text wiring (177-05), and the live proof (177-06/07) remain. See .planning/phases/177-derived-line-re-derivation/177-02-SUMMARY.md."
+last_updated: "2026-07-30T21:33:00Z"
+last_activity: 2026-07-30 -- Phase 177 plan 02 executed
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 54
-  completed_plans: 48
+  completed_plans: 49
   percent: 70
 ---
 
@@ -25,7 +25,37 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 1/7 plans complete.
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 2/7 plans complete.
+
+`177-02-PLAN.md` (2026-07-30) built CHECK-04's mechanical core in a new
+`src/cli/commands/verify-derive-recheck.ts`: `DERIVE_VERDICTS` — the frozen four-verdict enum
+`agrees`/`disagrees`/`underivable`/`not-rule-bearing` (177-CONTEXT.md decision 6, `underivable`
+and `not-rule-bearing` both first-class, never collapsed) — with `createDeriveVerdictRecord` as
+the ONE choke point: throws on out-of-enum verdict, empty reasoning, and (decision 8's stricter
+bar over Phase 176's plain-reasoning rule) a `disagrees` verdict missing either `originalReading`
+or `rederivedReading` verbatim. `quoteLinesOnly` — the phase's one genuinely new engineering piece
+with no prior structural analog — selects only directly-quoted rulebook content and citation
+headers, excluding `Derived`/`Visual` lines entirely per the plan plus `Named-but-undefined`
+lines (a Rule 2 deviation: 177-RESEARCH.md's own answer to Question 1 names it as ingest-time
+inference that must also be kept out of a "quote lines only" payload). `buildBlindDerivePayload`
+is the single `BS-DERIVE-V1` dispatch-prompt construction site — a corpus-wide COUNTING test (not
+a truthiness check) proves zero `Derived (p.` and zero `Visual (p.` occurrences across all 22 real
+`Derived` lines in both reference games' committed `174-FIXTURES/*/live` corpus (10 `seven` + 12
+`one-two-punch`, matching Context's measured reality exactly). `enumerateDerivedLines` mirrors
+`verify-ruling-recheck.ts`'s enumerate-and-report-never-silently-drop posture, splitting every
+live-tree `Derived` line into `isPresentationLine`-excluded and surviving-candidate buckets, both
+reported. `readLiveSlices` reads the live `rulebook/*.md` tree directly (excluding `INDEX.md`/
+`00-visual-survey.md`), never the staged `.verify/<runId>/` tree (177-RESEARCH.md Pitfall 3) —
+pinned by a comment-stripped source assertion (no `.verify` literal in code) and an import-line
+check that `resolveFreshTranscription` is never imported. Both tasks committed atomically
+(`944f133b` enum/choke-point, `1e3e749d` payload filter/enumeration), reconstructed as two
+task-scoped commits from a single authored pass so per-task atomicity held even though Task 2's
+filter references Task 1's `isPresentationLine` import. `npm test`: 3918/3918 green (baseline
+3896 + 22 new tests, zero regressions); `npx tsc --noEmit` clean except the pre-existing permitted
+`docs/seed-to-state.test.ts` rootDir error. **CHECK-04 stays OPEN in `REQUIREMENTS.md`** — this
+plan is mechanics only (2 of 7); CLI registration/ledger (177-03), the two judgment contracts
+(177-04), skill-text wiring (177-05), and the live `claude -p` dispatch proof (177-06/07) remain.
+See `.planning/phases/177-derived-line-re-derivation/177-02-SUMMARY.md`.
 
 `177-01-PLAN.md` (2026-07-30) fixed decision 13: `PRESENTATION_EXCLUSION_MARKERS` was stricter than
 its own subagent contract stated, letting 4 real `one-two-punch` lines carrying a parenthetical
