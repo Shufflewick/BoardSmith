@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 176-06-PLAN.md — CHECK-02's live proof and phase 176 closeout. Fixed ADDED ITEM 1 (resolveFreshTranscription's superseded/ subfolder exclusion, promoted from 176-05's reported finding, regression-tested against the real committed fixture). Closed ADDED ITEM 2 (CHECK-01's verdict-distribution gap) with 2 hand-built CONSTRUCTED lexicon pairs (resolved-by-source, contradicted), both real claude -p dispatches matching EXPECTED.md 2/2 — still-needed remains the only label proven on real data (60/60), CHECK-01 stays Complete on the same disposition basis Phase 174 used for VERIFY-03. Found and fixed TWO live bugs discovered while running this plan's own real lens-dispatch tooling for the first time: ImpactMapEntry dropped ChunkVerdict's own pairIds field (made verify-repair --json throw on every real stale chunk); verify-repair --json's stdout was contaminated by nested commands' human reports regardless of the composing caller's own --json flag (fixed via a quiet option cascaded across 4 command modules, mirroring ingest-archive.ts's precedent). A third bug found the same way: appendAuditRoundHeading appended past a real CHUNK.md's trailing sections instead of within Findings Ledger — fixed to insert before the next top-level heading, demonstrated corrected on the real seven/best-seven-selection and one-two-punch/block CHUNK.md files via a real diff. Real lens run: 2 of 12 stale chunks audited (best-seven-selection, block — both already at 3 build-era audit rounds AND both ui:touches|major), 6 real fresh-context claude -p dispatches (fidelity/visibility/undo), 15 real findings recorded (0 fixed, decision 16), decision 17's fresh-episode-budget rule proven live in BOTH reference games (absolute round 4 on first verify dispatch, never triaged). Paired pre/post-repair gate readings: 0 of 2 audited chunks changed disposition (both reopen-playtest/drifted throughout, since decision 16 forbids code changes) — restates 175-PROOF.md section 5's own 1-of-12 baseline rather than manufacturing a payoff. Phase 176 CLOSED: CHECK-01 and CHECK-02 both marked Complete in REQUIREMENTS.md with section citations, 176-VALIDATION.md signed off (nyquist_compliant true), ROADMAP.md Result paragraph recorded. Both ~/BoardSmithGames originals confirmed byte-identical across the entire phase. npm test 3893/3893 green throughout, zero regressions. See .planning/phases/176-stale-chunk-repair/176-06-SUMMARY.md."
-last_updated: "2026-07-30T21:30:00Z"
-last_activity: 2026-07-30
+stopped_at: "Completed 177-01-PLAN.md — fixed decision 13's PRESENTATION_EXCLUSION_MARKERS regex gap. Widened the two dash-qualified patterns in verify-classify.ts with an optional parenthetical-qualifier group before the colon, closing the gap where 4 real one-two-punch lines (— diagram description (Plan phase)/(Fight phase)/(first Punch example)/(second Punch example)) slipped through as rule-bearing even though classification-subagent.md's prose already stated the qualifier-presence rule correctly. Pinned by the 4 real lines (read from the committed 174-FIXTURES, not retyped) plus a negative sweep proving the widened set excludes exactly those 4 and nothing else across both reference games' live Derived lines (seven's 10 remain untouched). Kept the cross-file lexicon pin in verify.test.ts a verbatim-prose-containment assertion (never loosened) by extending its normalization to erase the new optional group before the literal-prefix check, and added a new assertion driving the real isPresentationLine against classification-subagent.md's own worked example. Appended an additive-only note to 174-PROOF.md (git diff --numstat confirmed zero deletions) documenting that Phase 174's recorded lineFindings[] came from the subagent judgment layer, not the mechanical constant, so no recorded number needed re-measuring. npm test: 3896/3896 green throughout, zero regressions. See .planning/phases/177-derived-line-re-derivation/177-01-SUMMARY.md."
+last_updated: "2026-07-30T21:45:00Z"
+last_activity: 2026-07-30 -- Phase 177 plan 01 executed
 progress:
   total_phases: 10
   completed_phases: 7
-  total_plans: 47
-  completed_plans: 47
+  total_plans: 54
+  completed_plans: 48
   percent: 70
 ---
 
@@ -21,13 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 177 — derived-line-re-derivation (not yet planned)
+**Current focus:** Phase 177 — Derived-Line Re-Derivation (CHECK-04) — EXECUTING
 
 ## Current Position
 
-Phase: 176 (Stale-Chunk Repair) — COMPLETE, 6/6 plans executed. CHECK-01 and CHECK-02 both closed
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 1/7 plans complete.
+
+`177-01-PLAN.md` (2026-07-30) fixed decision 13: `PRESENTATION_EXCLUSION_MARKERS` was stricter than
+its own subagent contract stated, letting 4 real `one-two-punch` lines carrying a parenthetical
+qualifier slip through unclassified. Widened the shared constant (not a 177-local fork), pinned by
+the 4 real lines plus a negative over-exclusion guard, kept the cross-file lexicon pin honest, and
+noted in `174-PROOF.md` (additive-only) why Phase 174's recorded results stand unaffected. See
+`.planning/phases/177-derived-line-re-derivation/177-01-SUMMARY.md`.
+
+Phase 176 (Stale-Chunk Repair) — COMPLETE, 6/6 plans executed. CHECK-01 and CHECK-02 both closed
 in `REQUIREMENTS.md` with `176-PROOF.md` section-and-number citations.
-Next: Phase 177 (Derived-Line Re-Derivation) — CHECK-04, not yet planned.
 
 `176-04-PLAN.md` (2026-07-30) swept `verify-game.md` for stale cross-file claims beyond the two
 named in advance, added CHECK-01/CHECK-02's routing, and pinned the result with drift guards.

@@ -271,7 +271,7 @@ Plans:
 **Plans**: 7 plans
 
 Plans:
-- [ ] 177-01-PLAN.md — Widen `PRESENTATION_EXCLUSION_MARKERS` (decision 13), pinned by the 4 real slipping lines + a negative over-exclusion test; keep the cross-file lexicon pin honest; note 174's results stand
+- [x] 177-01-PLAN.md — Widen `PRESENTATION_EXCLUSION_MARKERS` (decision 13), pinned by the 4 real slipping lines + a negative over-exclusion test; keep the cross-file lexicon pin honest; note 174's results stand
 - [ ] 177-02-PLAN.md — CHECK-04's mechanical core: frozen four-verdict enum, single record choke point, and the quote-lines-only blind payload filter proven leak-free on all 22 real lines
 - [ ] 177-03-PLAN.md — Project-level ledger through the one atomic write path, the report command, and `verify-derive-recheck`'s CLI registration (no `--run-id`, findings exit 0)
 - [ ] 177-04-PLAN.md — The two judgment contracts (`BS-DERIVE-V1` blind, `BS-DERIVE-COMPARE-V1` comparison), installer leaf probes, and drift pins
@@ -313,7 +313,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 174. Verify Classifier | 8/8 | Reopened — goal NOT MET (decision 19 applied, §8) | - |
 | 175. Impact Map & Repair Gating | 8/8 | Complete   | 2026-07-30 |
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
-| 177. Derived-Line Re-Derivation | 0/7   | Planned    | - |
+| 177. Derived-Line Re-Derivation | 1/7 | In Progress|  |
 | 178. Worked-Example Tests | 0/TBD | Not started | - |
 | 179. Source-Free Verification Mode | 0/TBD | Not started | - |
 
