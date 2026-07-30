@@ -139,6 +139,45 @@ Out of scope:
     ("the checks report; nothing in this phase fixes reference-game content"). Expect real findings —
     172 surfaced substantial genuine gaps on these same games.
 
+### Decisions added 2026-07-30 after research
+
+17. **The max-3-audit-round bound is PER-VERIFY-EPISODE, not per-chunk-lifetime.** Decided by the user
+    at the post-research gate, after research measured that **4 of the 12 real stale chunks already
+    carry exactly 3 recorded `### Audit Round` entries** from their original build
+    (`best-seven-selection`, `table-and-draw` in `seven`; `block`, `jab` in `one-two-punch`).
+
+    Under a per-lifetime reading those 4 chunks would receive ZERO lens dispatches and route straight
+    to round-3 triage — CHECK-02 would be permanently unavailable to exactly the chunks with the most
+    audit history, and the affected fraction would grow as chunks mature. That is backwards: the bound
+    exists as a LOOP GUARD, to stop audit→repair spinning forever inside one session, not as a lifetime
+    quota. A chunk audited three times during its original build and now re-checked against a CHANGED
+    rulebook is a new question, not a continuation of the old loop.
+
+    So each verify pass opens a fresh 3-round budget for a chunk. Two consequences to honour:
+    - Round entries remain **append-only across the chunk's whole life** (`state-machine.md` Write
+      Order) — a verify episode's rounds are appended alongside the build's, never renumbered over them.
+      The episode boundary is a counting rule, not a licence to rewrite history.
+    - The distinction must be visible in the artifact: a reader of CHUNK.md should be able to tell which
+      rounds belong to which episode. Do not blur a verify round into the build's round sequence.
+
+18. **`parseRulings` gets an ADDITIVE extension; it is not replaced and no second parser is written.**
+    Research measured that `build-manifest.ts:326`'s `parseRulings` returns only
+    `{number, supersededBy?, unparsedSupersession[]}` — it does not expose per-ruling body text, which
+    CHECK-01's judgment subagent needs (Decision/Citation/Rationale). Extend it to carry the body text;
+    do not fork it. Phase 175-03 already reused this same parser under a grep gate forbidding a second
+    `Ruling (\d+)` regex, and that gate stays.
+
+19. **Decision 9's fresh-transcription input is ALREADY SATISFIED by committed fixtures — no
+    re-transcription is in scope.** Research verified on disk that
+    `.planning/phases/175-impact-map-repair-gating/175-FIXTURES/174-07-contradictory/staged/{seven,one-two-punch}/slices/`
+    contains full-coverage fresh staged transcriptions of BOTH games' entire live rulebooks — broader
+    than the single delta each originating pass targeted. Use these.
+
+    Do NOT rely on the larger uncommitted copy in OS scratch (`${TMPDIR}174-07-proof/`, 323MB): that is
+    the same loss exposure Phase 174 already paid for once and Phase 175's research caught a repeat of
+    just in time. If something needed is only in scratch, archive it into the repo first, as Phase 175
+    did.
+
 ### Claude's Discretion
 
 - Module boundaries and file placement within `src/cli/commands/` and `src/cli/slash-command/bs/`.
