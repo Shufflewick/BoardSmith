@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-03-PLAN.md — gave CHECK-04 its CLI surface in src/cli/commands/verify-derive-recheck.ts. recordDeriveVerdicts/readDeriveVerdicts write and round-trip a PROJECT-LEVEL ledger at rulebook/.derive-recheck/DERIVE-VERDICTS.md — no .verify/<runId>/ segment, no runId parameter anywhere in either signature (decision 14), matching CHECK-03/CHECK-05's read-only run-less shape — through atomicWriteFile only (source-guard test proves zero direct fs.writeFile/writeFileSync calls); a before/after whole-project byte-hash test (T-171-19 class) proves recording touches only rulebook/.derive-recheck/, a live slice and an archive-shaped decoy file both confirmed byte-identical. verifyDeriveRecheckCommand enumerates every live-tree Derived line, joins each candidate to whatever the ledger already holds, and reports one finding per candidate (pending when unrecorded, never a manufactured default); verdictCounts always includes all four DERIVE_VERDICTS with zeros written explicitly; a disagrees finding always carries both originalReading/rederivedReading verbatim (decision 8); never sets process.exitCode anywhere (findings exit 0, decision 15, pinned by source inspection); --json emits exactly one console.log call that parses as JSON. boardsmith verify-derive-recheck registered in cli.ts with exactly --project and --json (confirmed via a real --help invocation), no --run-id, no bypass option. Both tasks committed atomically (3c43bb36 ledger, b4318f46 report command + CLI registration). npm test: 3931/3931 green (baseline 3918 + 13 new tests), zero regressions. npx tsc --noEmit clean except the pre-existing permitted docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN in REQUIREMENTS.md — this is plan 3 of 7; the two judgment-subagent contracts (177-04), verify-game.md skill-text wiring (177-05), and the live claude -p dispatch proof (177-06/07) remain. See .planning/phases/177-derived-line-re-derivation/177-03-SUMMARY.md."
-last_updated: "2026-07-30T21:43:15Z"
-last_activity: 2026-07-30 -- Phase 177 plan 03 executed
+stopped_at: "Completed 177-04-PLAN.md — wrote CHECK-04's two judgment-subagent contracts. src/cli/slash-command/bs/verify/derive-recheck.md (BS-DERIVE-V1, blind derivation): dispatch-token validation block copying ruling-recheck.md's shape; states in one place that the subagent is NEVER given the Derived line under test, any other Derived line, or any Visual line — structural, not instructional, because buildBlindDerivePayload (177-02) is incapable of emitting the target line's own text; teaches not-rule-bearing and underivable via two real worked examples quoted byte-identical from 174-FIXTURES/seven/live/ (02-solo-variant.md's unqualified page-layout line; 01-definitions-and-components.md's deck-math line whose only support is itself a stripped Derived diagram-description line), no keyword/trigger-phrase list for either; RETURNs { rederivedValue, sourceQuotes } with explicitly no verdict field. src/cli/slash-command/bs/verify/derive-compare.md (BS-DERIVE-COMPARE-V1, comparison, distinct token — file contains zero occurrences of BS-DERIVE-V1): takes exactly two inputs (the original line verbatim, the blind subagent's already-recorded rederivedValue/sourceQuotes); states all four DERIVE_VERDICTS verdicts matching the code enum exactly; states the never-collapse rule for underivable/not-rule-bearing (never folded into agrees/disagrees) citing the milestone's existing first-class-blindness precedent; RETURN requires originalReading/rederivedReading byte-for-byte verbatim for a disagrees verdict (mirrors classification-subagent.md's quotedPass1/quotedPass2); carries the Context-Economics carve-out sentence citing 174-PROOF.md §3's precedent. SHARED_LEAF_PROBES gained both files; a real installer run into a temp dir confirms both land under .claude/skills/bs-shared/verify/, and deleting one proves a non-force reinstall detects the partial tree and repopulates exactly the missing leaf. verify.test.ts gained a dedicated describe block: token/DISPATCH-REJECTED pins, distinct-token assertion, never-given-list pin, RETURN-object-shape pin scoped to the fenced code block only (so derive-recheck.md's own explanatory 'NO verdict field' prose doesn't self-invalidate the guard), a cross-file DERIVE_VERDICTS lexicon pin read from verify-derive-recheck.ts at test time, fixture-verbatim worked-example pins asserted against the real fixture files, never-collapse-rule pin, and both scope-limit pins. npm test: 3946/3946 green (baseline 3931 + 15 new tests), zero regressions. npx tsc --noEmit clean except the pre-existing permitted docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN in REQUIREMENTS.md — this is plan 4 of 7; verify-game.md's skill-text wiring that actually dispatches these two contracts (177-05), the 22-line distribution prediction committed before measuring (177-06), and the live claude -p dispatch proof against both reference games (177-07) remain. See .planning/phases/177-derived-line-re-derivation/177-04-SUMMARY.md."
+last_updated: "2026-07-30T22:33:00Z"
+last_activity: 2026-07-30 -- Phase 177 plan 04 executed
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 54
-  completed_plans: 50
+  completed_plans: 51
   percent: 70
 ---
 
@@ -25,7 +25,44 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 3/7 plans complete.
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 4/7 plans complete.
+
+`177-04-PLAN.md` (2026-07-30) wrote CHECK-04's two judgment-subagent contracts:
+`src/cli/slash-command/bs/verify/derive-recheck.md` (`BS-DERIVE-V1`, blind derivation) and
+`src/cli/slash-command/bs/verify/derive-compare.md` (`BS-DERIVE-COMPARE-V1`, comparison) — two
+genuinely separate files with distinct handshake tokens and non-overlapping inputs, so the
+"independent second opinion" 177-CONTEXT.md decision 5/7 requires is structural rather than an
+instruction a composed prompt could silently drop. `derive-recheck.md` states, in one place, that
+the subagent is NEVER given the `Derived` line it is re-deriving, any other `Derived` line, or any
+`Visual` line — enforced structurally by `buildBlindDerivePayload` (177-02), which is incapable of
+emitting the target line's own text, not merely instructed to withhold it. Teaches `not-rule-
+bearing`/`underivable` via two real worked examples quoted byte-identical from
+`174-FIXTURES/seven/live/` (an unqualified page-layout line; a deck-math line whose only support is
+itself a stripped `Derived` diagram-description line), with no keyword/trigger-phrase list for
+either — the same defect class `verify/ruling-recheck.md`'s absence-of-source trap already forbids.
+RETURNs `{ rederivedValue, sourceQuotes }` with explicitly no verdict field: deciding agreement is
+`derive-compare.md`'s separate job. `derive-compare.md` states all four `DERIVE_VERDICTS` verdicts
+matching the code enum exactly, states the never-collapse rule for `underivable`/`not-rule-bearing`
+explicitly, and requires `originalReading`/`rederivedReading` byte-for-byte verbatim for a
+`disagrees` verdict (mirroring `classification-subagent.md`'s `quotedPass1`/`quotedPass2`
+discipline), plus the Context-Economics carve-out sentence citing `174-PROOF.md` §3's precedent.
+`SHARED_LEAF_PROBES` gained both files; a real installer run into a temp dir confirms both land
+under `.claude/skills/bs-shared/verify/`, and deleting one proves a non-force reinstall detects the
+partial tree and repopulates exactly the missing leaf. `verify.test.ts` gained a dedicated describe
+block pinning both files' tokens (distinct, asserted directly — `derive-compare.md` contains zero
+occurrences of `BS-DERIVE-V1`), the never-given list, a RETURN-object-shape pin scoped to the
+fenced code block only (so `derive-recheck.md`'s own "NO verdict field" explanatory prose doesn't
+self-invalidate the guard), a cross-file `DERIVE_VERDICTS` lexicon pin read from
+`verify-derive-recheck.ts` at test time, fixture-verbatim worked-example pins, the never-collapse
+rule, and both scope-limit sentences. `npm test`: 3946/3946 green (baseline 3931 + 15 new tests,
+zero regressions); `npx tsc --noEmit` clean except the pre-existing permitted
+`docs/seed-to-state.test.ts` rootDir error. **CHECK-04 stays OPEN in `REQUIREMENTS.md`** — this
+plan is 4 of 7; `verify-game.md`'s skill-text wiring that actually dispatches these two contracts
+and calls `recordDeriveVerdicts` (177-05), the 22-line distribution prediction committed before
+measuring (177-06), and the live `claude -p` dispatch proof against both reference games (177-07)
+remain. See `.planning/phases/177-derived-line-re-derivation/177-04-SUMMARY.md`.
+
+---
 
 `177-03-PLAN.md` (2026-07-30) gave CHECK-04 its CLI surface in the existing
 `src/cli/commands/verify-derive-recheck.ts`: `recordDeriveVerdicts(projectDir, records)` /
