@@ -12,12 +12,19 @@ import {
   PRESENTATION_EXCLUSION_MARKERS,
   PAIR_KINDS,
   RULE_DELTA_SEVERITY,
+  CITATION_ANCHOR_RUNGS,
+  CHUNK_ATTRIBUTION_WARNING_KINDS,
+  MIN_FRAGMENT_CHARS,
   isPresentationLine,
   ruleBearingLines,
   deriveStale,
   livePageSpan,
   pairSlices,
   resolveProvenance,
+  parseClaimCitationAnchors,
+  matchedLiveLine,
+  citedPageForLine,
+  resolveCitationAttribution,
   verifyClassifyPairsCommand,
   verifyClassifyRecordCommand,
   verifyClassifyStatusCommand,
@@ -1016,6 +1023,26 @@ async function writeChunkCiting(project: string, slug: string, citedNames: strin
   await fs.writeFile(join(chunkDir, 'CHUNK.md'), `# ${slug}\n\n${citations}\n`);
 }
 
+/**
+ * Writes `chunks/<slug>/CHUNK.md` with a top-level citation line (for the main
+ * `resolveCitedSlices` pass) AND a real `## Interpretation` section body (decision 19's
+ * claim-level anchors) — for tests that need per-citation attribution, not just slice-level.
+ */
+async function writeChunkCitingWithInterpretation(
+  project: string,
+  slug: string,
+  citedNames: string[],
+  interpretationBody: string,
+): Promise<void> {
+  const chunkDir = join(project, 'chunks', slug);
+  await fs.mkdir(chunkDir, { recursive: true });
+  const citations = citedNames.map((n) => `Cites rulebook/${n}.`).join('\n');
+  await fs.writeFile(
+    join(chunkDir, 'CHUNK.md'),
+    `# ${slug}\n\n${citations}\n\n## Interpretation\n${interpretationBody}\n\n## Visibility Declaration\nnone\n`,
+  );
+}
+
 describe('verifyClassifyStatusCommand — pending pairs, summary counts, resume-safety', () => {
   it('status-1: three pairs, one recorded — pendingPairs holds the two unrecorded ids, classified holds the one recorded verdict', async () => {
     const { project, runId, pairIdA } = await threeGroupProject();
@@ -1387,6 +1414,479 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
       ).toBe(true);
     } finally {
       spy.mockRestore();
+    }
+  });
+});
+
+describe('decision-19 — claim-level citation anchors (parseClaimCitationAnchors)', () => {
+  // Transcribed verbatim 2026-07-30 from the REAL
+  // ~/BoardSmithGames/one-two-punch/chunks/second-action-resolution/CHUNK.md `## Interpretation`
+  // section (claims 1-4 plus the file's own carried-citations guidance comment) — never invented.
+  const SECOND_ACTION_RESOLUTION_INTERPRETATION = `<!-- Numbered list of factual claims this chunk's design rests on, each with a citation into
+     the rulebook (via INDEX.md) or RULINGS.md. Every agent that reads a rulebook slice
+     (investigate, redteam, audit) also reads RULINGS.md — the rulebook plus RULINGS.md together
+     form the composite source of truth. Append new claims as investigate discovers them; never
+     renumber existing claims.
+
+     Cited slices carried from the SKETCH.md tail entry when this chunk was detailed (investigate
+     confirms and expands these):
+       - rulebook/01-setup-and-round-structure.md — "2) Fight" (timing comparison / resolution order)
+       - rulebook/02-action-cards-and-resolution.md — second-action resolution procedure
+         ("When you are done comparing and resolving the first action cards, DO NOT discard them
+         yet. Leave them in place and flip the second action cards face up. Then, compare and
+         resolve the second action cards just like you did with the first action cards.") and the
+         Tips bullet "the first set of action cards are always completely resolved before the
+         second set of action cards." -->
+
+1. **A round's Fight phase resolves TWO sets of action cards — first, then second — and the second set only reveals and resolves after the first set is fully resolved.** This chunk builds the SECOND set's reveal and resolution; the first set's reveal/resolution machinery already exists. — cites rulebook/02-action-cards-and-resolution.md, Fight-phase continuation under REST (p.2): "When you are done comparing and resolving the first action cards, DO NOT discard them yet. Leave them in place and flip the second action cards face up. Then, compare and resolve the second action cards just like you did with the first action cards."
+
+2. **The boundary between the two sets is exact and printed:** once the first action cards are done resolving, they are (a) NOT discarded, (b) left in place, and (c) the second action cards are flipped face up — and only then compared and resolved. — cites rulebook/02, Fight-phase continuation under REST (p.2), quoted in full at claim 1.
+
+3. **The first set of action cards is ALWAYS completely resolved before the second set** — the two sets are strictly sequential, never interleaved by timing. — cites rulebook/02, Tips bullet 5 (p.2): "In the fight phase, the first set of action cards are always completely resolved before the second set of action cards. For example, a Block from the first action will not stop a Punch from the second action."
+
+4. **The second set is resolved by the SAME procedure as the first**: both players flip their second action cards face up together, timings are compared, the lower timing resolves first, and equal timings resolve simultaneously. — cites rulebook/02, Fight-phase continuation under REST (p.2): "compare and resolve the second action cards just like you did with the first action cards"; and rulebook/01-setup-and-round-structure.md, "2) Fight" (p.1): "You and your opponent must flip your first action card face up at the same time and compare their timings to determine the order they are resolved." / "The player with the lower timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time."`;
+
+  const SLICE_FILENAMES = [
+    '01-setup-and-round-structure.md',
+    '02-action-cards-and-resolution.md',
+  ];
+
+  it('decision-19-anchors-1: claim 4 of the REAL second-action-resolution chunk resolves both cited slices, pages 1 and 2, and the verbatim "lower timing" fragment', () => {
+    const chunkText = `# Chunk: second-action-resolution\n\n## Interpretation\n${SECOND_ACTION_RESOLUTION_INTERPRETATION}\n`;
+    const anchors = parseClaimCitationAnchors(chunkText, SLICE_FILENAMES);
+    expect(anchors.slices).toEqual(
+      ['01-setup-and-round-structure.md', '02-action-cards-and-resolution.md'].map(
+        (n) => `rulebook/${n}`,
+      ),
+    );
+    expect(anchors.pages).toEqual([1, 2]);
+    expect(anchors.fragments.some((f) => f.includes('lower timing'))).toBe(true);
+  });
+
+  it('decision-19-anchors-2: a rulebook/ token, a (p.N), and a "quoted" fragment placed in Redteam Rounds / Findings Ledger / an HTML comment above the claim list contribute nothing', () => {
+    const chunkText = [
+      '# Chunk: noise-test',
+      '',
+      '## Interpretation',
+      '<!-- example anchor that must NOT be parsed: rulebook/noise.md (p.99): "this is inside an HTML comment and must be ignored entirely" -->',
+      '',
+      '1. **A real claim with no anchor at all.** Nothing cited here.',
+      '',
+      '## Redteam Rounds',
+      'Discusses rulebook/noise.md (p.99): "this text is outside Interpretation and must be ignored".',
+      '',
+      '## Findings Ledger',
+      'References rulebook/noise.md (p.99) again: "also outside Interpretation, also ignored".',
+      '',
+    ].join('\n');
+    const anchors = parseClaimCitationAnchors(chunkText, ['noise.md']);
+    expect(anchors.slices).toEqual([]);
+    expect(anchors.pages).toEqual([]);
+    expect(anchors.fragments).toEqual([]);
+  });
+
+  it('decision-19-anchors-3: a claim that quotes verbatim rulebook text but names no rulebook/ token still yields that fragment (the `seven` shape) — fragments are not gated on a co-located slice token', () => {
+    const chunkText = [
+      '# Chunk: seven-shape',
+      '',
+      '## Interpretation',
+      '1. **Bonus point cards score at Game End.** "the text does not define its scoring effect beyond Game End instruction to add bonus point cards to your score" (p.1)',
+      '',
+    ].join('\n');
+    const anchors = parseClaimCitationAnchors(chunkText, ['01-definitions-and-components.md']);
+    expect(anchors.slices).toEqual([]);
+    expect(anchors.pages).toEqual([1]);
+    expect(
+      anchors.fragments.some((f) =>
+        f.includes('the text does not define its scoring effect'),
+      ),
+    ).toBe(true);
+  });
+
+  it('decision-19-anchors-4: short scraps are rejected — a "+1"-length quoted token never becomes an anchor', () => {
+    const chunkText = [
+      '# Chunk: short-scrap',
+      '',
+      '## Interpretation',
+      '1. **Bonus cards show a "+1" marker.** cites rulebook/x.md (p.1): a black "+1" card.',
+      '',
+    ].join('\n');
+    const anchors = parseClaimCitationAnchors(chunkText, ['x.md']);
+    expect(anchors.fragments).toEqual([]);
+    expect(MIN_FRAGMENT_CHARS).toBeGreaterThan('+1'.length);
+  });
+});
+
+describe('decision-19 — matchedLiveLine / citedPageForLine', () => {
+  it('decision-19-line-1: matchedLiveLine finds the single line containing a quote (incl. mid-line substring), citedPageForLine reads an inline page or the nearest preceding header', () => {
+    const sliceText = [
+      'p.3, Round Structure:',
+      '"The player with the lower timing on their card must resolve their action first."',
+      'Derived (p.4): a later, unrelated line.',
+    ].join('\n');
+
+    expect(matchedLiveLine(sliceText, 'lower timing on their card must resolve')).toBe(
+      '"The player with the lower timing on their card must resolve their action first."',
+    );
+    expect(matchedLiveLine(sliceText, 'a phrase that appears nowhere')).toBeUndefined();
+
+    const quotedLine = matchedLiveLine(sliceText, 'lower timing on their card must resolve')!;
+    expect(citedPageForLine(sliceText, quotedLine)).toBe(3);
+
+    const derivedLine = 'Derived (p.4): a later, unrelated line.';
+    expect(citedPageForLine(sliceText, derivedLine)).toBe(4);
+  });
+});
+
+describe('decision-19 — resolveCitationAttribution (the deterministic 3-rung ladder)', () => {
+  it('decision-19-rung-1: a fragment overlapping the delta line attributes; fragments present for the slice but none overlapping do not attribute, with a reason naming the non-overlap', () => {
+    const liveSliceText = '"The lower timing resolves first."\n"An unrelated sentence."';
+    const overlapping = resolveCitationAttribution({
+      liveSlice: 'rulebook/x.md',
+      liveSliceText,
+      deltaLine: '"The lower timing resolves first."',
+      deltaLinePage: 1,
+      anchors: { slices: [], pages: [], fragments: ['The lower timing resolves first.'] },
+    });
+    expect(overlapping).toEqual({
+      attributed: true,
+      rung: 'quoted-fragment',
+      reason: expect.stringContaining('overlaps'),
+    });
+
+    const nonOverlapping = resolveCitationAttribution({
+      liveSlice: 'rulebook/x.md',
+      liveSliceText,
+      deltaLine: '"The lower timing resolves first."',
+      deltaLinePage: 1,
+      anchors: { slices: [], pages: [], fragments: ['An unrelated sentence.'] },
+    });
+    expect(nonOverlapping.attributed).toBe(false);
+    expect(nonOverlapping.rung).toBe('quoted-fragment');
+    expect(nonOverlapping.reason).toEqual(expect.stringContaining('none overlaps'));
+  });
+
+  it('decision-19-rung-2: no fragments for the slice but cited pages present — attributed iff the delta line\'s page is in the cited page set, reason names both pages', () => {
+    const liveSliceText = '"Some sentence with no matching fragment anywhere."';
+    const attributed = resolveCitationAttribution({
+      liveSlice: 'rulebook/x.md',
+      liveSliceText,
+      deltaLine: '"Some sentence with no matching fragment anywhere."',
+      deltaLinePage: 1,
+      anchors: { slices: [], pages: [1, 2], fragments: [] },
+    });
+    expect(attributed).toEqual({
+      attributed: true,
+      rung: 'cited-page',
+      reason: expect.stringContaining('1'),
+    });
+
+    const notAttributed = resolveCitationAttribution({
+      liveSlice: 'rulebook/x.md',
+      liveSliceText,
+      deltaLine: '"Some sentence with no matching fragment anywhere."',
+      deltaLinePage: 3,
+      anchors: { slices: [], pages: [1, 2], fragments: [] },
+    });
+    expect(notAttributed.attributed).toBe(false);
+    expect(notAttributed.rung).toBe('cited-page');
+    expect(notAttributed.reason).toEqual(expect.stringContaining('1, 2'));
+    expect(notAttributed.reason).toEqual(expect.stringContaining('3'));
+  });
+
+  it('decision-19-rung-3: neither fragments nor pages for that slice — slice-fallback, always attributed, reason names the unresolved anchor', () => {
+    const result = resolveCitationAttribution({
+      liveSlice: 'rulebook/x.md',
+      liveSliceText: '"Some sentence."',
+      deltaLine: '"Some sentence."',
+      deltaLinePage: undefined,
+      anchors: { slices: [], pages: [], fragments: [] },
+    });
+    expect(result).toEqual({
+      attributed: true,
+      rung: 'slice-fallback',
+      reason: expect.stringContaining('could be resolved'),
+    });
+  });
+});
+
+describe('decision-19-enum-1 (pin): CITATION_ANCHOR_RUNGS and CHUNK_ATTRIBUTION_WARNING_KINDS are frozen arrays, asserted member-for-member', () => {
+  it('is frozen and exactly the three deterministic rungs, in order', () => {
+    expect(Object.isFrozen(CITATION_ANCHOR_RUNGS)).toBe(true);
+    expect([...CITATION_ANCHOR_RUNGS]).toEqual(['quoted-fragment', 'cited-page', 'slice-fallback']);
+  });
+
+  it('is frozen and exactly the three enumerated warning kinds', () => {
+    expect(Object.isFrozen(CHUNK_ATTRIBUTION_WARNING_KINDS)).toBe(true);
+    expect([...CHUNK_ATTRIBUTION_WARNING_KINDS]).toEqual([
+      'unattributable-quote',
+      'unreadable-live-slice',
+      'unresolved-citation',
+    ]);
+  });
+});
+
+describe('decision-19 — wiring into computeChunkVerdicts: per-citation narrowing + both guardrails outrank it', () => {
+  async function onePairTwoSliceProject(): Promise<{
+    project: string;
+    runId: string;
+    pairId: string;
+  }> {
+    const project = join(dir, `decision19-${Math.random().toString(36).slice(2)}`);
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    await fs.writeFile(
+      join(rulebookDir, 'x.md'),
+      'p.1, X:\n"The lower timing on their card resolves first."\n"A second, unrelated live line."\n',
+    );
+    await fs.writeFile(
+      join(rulebookDir, 'y.md'),
+      'p.1, Y:\n"A second, unrelated live line." (restated on the y side)\n',
+    );
+
+    const initResult = await verifyRunInitCommand({ project, json: true });
+    const runId = initResult.runId;
+    const stagingDirAbs = join(project, initResult.stagingDir);
+    await fs.writeFile(
+      join(stagingDirAbs, 'uxy.md'),
+      'p.1, XY:\n"The lower timing on their card resolves first, staged." "A second, unrelated live line, staged."\n',
+    );
+    await verifyRunRecordCommand({ project, runId, unit: 'uxy', slice: 'uxy.md', json: true });
+
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'sharper',
+      quotedPass1: 'The lower timing on their card resolves first.',
+      quotedPass2: 'The lower timing on their card resolves first, staged.',
+      json: true,
+    });
+
+    return { project, runId, pairId };
+  }
+
+  it('decision-19-narrow-1: two chunks citing the SAME live slice land on DIFFERENT staleness — chunk A quotes the changed line, chunk B quotes a different line of the same slice (impossible under decision 18 alone)', async () => {
+    const { project, runId, pairId } = await onePairTwoSliceProject();
+
+    await writeChunkCitingWithInterpretation(
+      project,
+      'chunk-a',
+      ['x.md'],
+      '1. **A quotes the exact changed line.** "The lower timing on their card resolves first." (p.1)',
+    );
+    await writeChunkCitingWithInterpretation(
+      project,
+      'chunk-b',
+      ['x.md'],
+      '1. **B quotes a different line of the same slice.** "A second, unrelated live line." (p.1)',
+    );
+
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const a = result.chunkVerdicts.find((c) => c.slug === 'chunk-a')!;
+    const b = result.chunkVerdicts.find((c) => c.slug === 'chunk-b')!;
+
+    expect(a.stale).toBe(true);
+    const aAttr = a.attributions.find((att) => att.pairId === pairId && att.liveSlice === 'rulebook/x.md')!;
+    expect(aAttr.rung).toBe('quoted-fragment');
+    expect(aAttr.attributed).toBe(true);
+
+    expect(b.stale).toBe(false);
+    const bAttr = b.attributions.find((att) => att.pairId === pairId && att.liveSlice === 'rulebook/x.md')!;
+    expect(bAttr.rung).toBe('quoted-fragment');
+    expect(bAttr.attributed).toBe(false);
+    expect(bAttr.reason.length).toBeGreaterThan(0);
+  });
+
+  it('decision-19-narrow-2: page-anchored — chunk A cites (p.1), chunk B cites only (p.2), neither quotes anything; the delta line is on p.1 — A stale via cited-page, B clean via cited-page', async () => {
+    const project = join(dir, `decision19-page-${Math.random().toString(36).slice(2)}`);
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    await fs.writeFile(join(rulebookDir, 'x.md'), 'p.1, X:\nDerived (p.1): x original derived line.\n');
+
+    const initResult = await verifyRunInitCommand({ project, json: true });
+    const runId = initResult.runId;
+    const stagingDirAbs = join(project, initResult.stagingDir);
+    await fs.writeFile(
+      join(stagingDirAbs, 'ux.md'),
+      'p.1, X:\nDerived (p.1): x changed derived line.\n',
+    );
+    await verifyRunRecordCommand({ project, runId, unit: 'ux', slice: 'ux.md', json: true });
+
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'sharper',
+      quotedPass1: 'Derived (p.1): x original derived line.',
+      quotedPass2: 'Derived (p.1): x changed derived line.',
+      json: true,
+    });
+
+    await writeChunkCitingWithInterpretation(
+      project,
+      'chunk-a',
+      ['x.md'],
+      '1. **A cites page 1, no quote.** general reference (p.1)',
+    );
+    await writeChunkCitingWithInterpretation(
+      project,
+      'chunk-b',
+      ['x.md'],
+      '1. **B cites only page 2, no quote.** general reference (p.2)',
+    );
+
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const a = result.chunkVerdicts.find((c) => c.slug === 'chunk-a')!;
+    const b = result.chunkVerdicts.find((c) => c.slug === 'chunk-b')!;
+
+    expect(a.stale).toBe(true);
+    expect(a.attributions.find((att) => att.pairId === pairId)?.rung).toBe('cited-page');
+    expect(b.stale).toBe(false);
+    expect(b.attributions.find((att) => att.pairId === pairId)?.rung).toBe('cited-page');
+  });
+
+  it('decision-19-guard-1: a chunk with an Interpretation section carrying NO usable anchor still goes stale via slice-fallback, AND an [unresolved-citation] warning names the chunk and slice', async () => {
+    const { project, runId, pairId } = await onePairTwoSliceProject();
+
+    await writeChunkCitingWithInterpretation(
+      project,
+      'chunk-no-anchor',
+      ['x.md'],
+      '1. **A claim with no page and no quoted fragment at all.**',
+    );
+
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const chunk = result.chunkVerdicts.find((c) => c.slug === 'chunk-no-anchor')!;
+    expect(chunk.stale).toBe(true);
+    const attribution = chunk.attributions.find(
+      (att) => att.pairId === pairId && att.liveSlice === 'rulebook/x.md',
+    )!;
+    expect(attribution.rung).toBe('slice-fallback');
+    expect(attribution.attributed).toBe(true);
+    expect(
+      result.warnings.some(
+        (w) => w.includes('[unresolved-citation]') && w.includes('chunk-no-anchor') && w.includes('x.md'),
+      ),
+    ).toBe(true);
+  });
+
+  it('decision-19-guard-2: the pair-level blindness checks (unattributable quote, unreadable slice) still broaden to stale and still warn even with claim-level anchors present and non-overlapping — they outrank the ladder', async () => {
+    // Unattributable quote shape (174-04 corrective-a), with a chunk carrying an Interpretation
+    // section whose claim anchors do NOT overlap — rung 1 would say "not attributed" if the ladder
+    // ran, but it must never run here: the pair-level check fires first.
+    const projectA = join(dir, `decision19-guard2a-${Math.random().toString(36).slice(2)}`);
+    const rulebookDirA = join(projectA, 'rulebook');
+    await fs.mkdir(rulebookDirA, { recursive: true });
+    await fs.writeFile(join(rulebookDirA, 'x.md'), 'p.8, X:\n"X original text."\n');
+    await fs.writeFile(join(rulebookDirA, 'y.md'), 'p.8, Y:\n"Y original text."\n');
+    const initA = await verifyRunInitCommand({ project: projectA, json: true });
+    const runIdA = initA.runId;
+    await fs.writeFile(
+      join(projectA, initA.stagingDir, 'uxy.md'),
+      'p.8, XY:\n"X changed text."\n"Y original text restated."\n',
+    );
+    await verifyRunRecordCommand({ project: projectA, runId: runIdA, unit: 'uxy', slice: 'uxy.md', json: true });
+    const pairsA = await verifyClassifyPairsCommand({ project: projectA, runId: runIdA, json: true });
+    const pairIdA = pairsA.pairs[0].pairId;
+    await verifyClassifyRecordCommand({
+      project: projectA,
+      runId: runIdA,
+      pairId: pairIdA,
+      label: 'sharper',
+      // Paraphrased — matches neither x.md nor y.md verbatim (case (b), unattributable).
+      quotedPass1: 'The rule about X was tightened somewhat.',
+      quotedPass2: 'X changed text.',
+      json: true,
+    });
+    await writeChunkCitingWithInterpretation(
+      projectA,
+      'chunk-x',
+      ['x.md'],
+      '1. **A claim whose anchor cannot possibly overlap the never-matched quote.** "Something entirely different and unrelated to X." (p.1)',
+    );
+    const resultA = await verifyClassifyStatusCommand({ project: projectA, runId: runIdA, json: true });
+    const chunkX = resultA.chunkVerdicts.find((c) => c.slug === 'chunk-x')!;
+    expect(chunkX.stale).toBe(true);
+    expect(
+      resultA.warnings.some((w) => w.includes('[unattributable-quote]') && w.includes(pairIdA)),
+    ).toBe(true);
+    // The ladder never ran for this pair on this chunk — no attribution entry was pushed at all.
+    expect(chunkX.attributions.filter((att) => att.pairId === pairIdA)).toHaveLength(0);
+
+    // Unreadable-slice shape (174-04 corrective-b).
+    const projectB = join(dir, `decision19-guard2b-${Math.random().toString(36).slice(2)}`);
+    const rulebookDirB = join(projectB, 'rulebook');
+    await fs.mkdir(rulebookDirB, { recursive: true });
+    await fs.writeFile(join(rulebookDirB, 'x.md'), 'p.8, X:\n"X original text."\n');
+    await fs.writeFile(join(rulebookDirB, 'y.md'), 'p.8, Y:\n"Y original text."\n');
+    const initB = await verifyRunInitCommand({ project: projectB, json: true });
+    const runIdB = initB.runId;
+    await fs.writeFile(
+      join(projectB, initB.stagingDir, 'uxy.md'),
+      'p.8, XY:\n"X changed text."\n"Y original text restated."\n',
+    );
+    await verifyRunRecordCommand({ project: projectB, runId: runIdB, unit: 'uxy', slice: 'uxy.md', json: true });
+    const pairsB = await verifyClassifyPairsCommand({ project: projectB, runId: runIdB, json: true });
+    const pairIdB = pairsB.pairs[0].pairId;
+    await verifyClassifyRecordCommand({
+      project: projectB,
+      runId: runIdB,
+      pairId: pairIdB,
+      label: 'sharper',
+      quotedPass1: 'X original text.',
+      quotedPass2: 'X changed text.',
+      json: true,
+    });
+    await writeChunkCitingWithInterpretation(
+      projectB,
+      'chunk-y',
+      ['y.md'],
+      '1. **A claim citing y.md with an anchor that would not overlap x.md\'s quote anyway.** "Something entirely unrelated." (p.1)',
+    );
+    const yPath = join(rulebookDirB, 'y.md');
+    const originalReadFile = fs.readFile;
+    let yReadCount = 0;
+    const spy = vi
+      .spyOn(fs, 'readFile')
+      .mockImplementation((async (...args: Parameters<typeof fs.readFile>) => {
+        const [target] = args;
+        if (target === yPath) {
+          yReadCount += 1;
+          if (yReadCount === 1) return originalReadFile(...args);
+          throw new Error(`EACCES: permission denied, open '${yPath}' (simulated)`);
+        }
+        return originalReadFile(...args);
+      }) as typeof fs.readFile);
+    try {
+      const resultB = await verifyClassifyStatusCommand({ project: projectB, runId: runIdB, json: true });
+      const chunkY = resultB.chunkVerdicts.find((c) => c.slug === 'chunk-y')!;
+      expect(chunkY.stale).toBe(true);
+      expect(
+        resultB.warnings.some((w) => w.includes('[unreadable-live-slice]') && w.includes(pairIdB)),
+      ).toBe(true);
+      expect(chunkY.attributions.filter((att) => att.pairId === pairIdB)).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('decision-19-attrib-1: chunkVerdicts[].attributions[] carries one entry per (pairId, cited live slice) evaluated, each with a rung, attributed, and a non-empty reason', async () => {
+    const { project, runId, pairId } = await onePairTwoSliceProject();
+    await writeChunkCiting(project, 'chunk-a', ['x.md']); // no Interpretation section — fallback rung
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const a = result.chunkVerdicts.find((c) => c.slug === 'chunk-a')!;
+    expect(a.attributions.length).toBeGreaterThan(0);
+    for (const attribution of a.attributions) {
+      expect(attribution.pairId).toBe(pairId);
+      expect(CITATION_ANCHOR_RUNGS as readonly string[]).toContain(attribution.rung);
+      expect(typeof attribution.attributed).toBe('boolean');
+      expect(attribution.reason.length).toBeGreaterThan(0);
     }
   });
 });

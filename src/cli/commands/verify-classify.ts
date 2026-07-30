@@ -7,6 +7,7 @@ import {
   resolveCitedSlices,
   SCOPE_FULL,
 } from './chunk-provenance.js';
+import { extractSection } from './build-manifest.js';
 import {
   type ClassificationRecord,
   type VerifyRunOptions,
@@ -883,26 +884,276 @@ export interface ChunkVerdict {
   pairIds: string[];
   ruleDelta: RuleDelta;
   stale: boolean;
+  attributions: Array<{
+    pairId: string;
+    liveSlice: string;
+    rung: CitationAnchorRung;
+    attributed: boolean;
+    reason: string;
+  }>;
+}
+
+// -------------------------------------------------------------------------------------------
+// Per-citation attribution (174-CONTEXT.md decision 19) — a deterministic 3-rung ladder,
+// modelled on 172-CONTEXT.md decision 3's resolution ladder, that narrows a delta's attribution
+// from "the live SLICE a chunk cites" (decision 18) down to "the specific CITATION a chunk
+// names" — its own `## Interpretation` claim-level quoted fragments and page references.
+// -------------------------------------------------------------------------------------------
+
+/**
+ * The three deterministic rungs, in the order they are tried (174-CONTEXT.md decision 19). Never
+ * a hand-written union — every caller narrows against this frozen array.
+ */
+export const CITATION_ANCHOR_RUNGS = Object.freeze([
+  'quoted-fragment',
+  'cited-page',
+  'slice-fallback',
+] as const);
+
+export type CitationAnchorRung = (typeof CITATION_ANCHOR_RUNGS)[number];
+
+/**
+ * The three enumerated warning kinds `computeChunkVerdicts` can push. `unattributable-quote` and
+ * `unreadable-live-slice` name the two 174-04 corrective conditions (pair-level blindness, which
+ * outranks this ladder entirely — see `computeChunkVerdicts`'s doc comment). `unresolved-citation`
+ * is new: it fires when the ladder itself falls all the way to `slice-fallback` for lack of any
+ * claim-level anchor. Every warning string this module pushes for chunk attribution is prefixed
+ * `[<kind>] ` — the 174-04 tests substring-match on `does not match verbatim` and
+ * `could not be read`, which survive unchanged after the prefix.
+ */
+export const CHUNK_ATTRIBUTION_WARNING_KINDS = Object.freeze([
+  'unattributable-quote',
+  'unreadable-live-slice',
+  'unresolved-citation',
+] as const);
+
+export type ChunkAttributionWarningKind = (typeof CHUNK_ATTRIBUTION_WARNING_KINDS)[number];
+
+/**
+ * Long enough that a scrap like `"+1"` cannot match nearly every line in a live slice — measured
+ * reality (174-CONTEXT.md decision 19's `<measured_reality>`) shows real quoted anchors are full
+ * clauses or sentences, never single-token asides. Not a tuned threshold: it exists to reject
+ * degenerate matches, not to move a measured percentage.
+ */
+export const MIN_FRAGMENT_CHARS = 12;
+
+function normalizeWhitespace(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/** Splits an `## Interpretation` section body into one text span per `^N. **` claim item, so a
+ * multi-line claim's continuation lines stay attached to their own claim — the same claim shape
+ * `parseInterpretationClaims` (`build-manifest.ts`) uses for numbering. */
+function splitInterpretationClaims(body: string): string[] {
+  const CLAIM_START = /^(\d+)\.\s+\*\*/gm;
+  const starts: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = CLAIM_START.exec(body)) !== null) {
+    starts.push(m.index);
+  }
+  const claims: string[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const start = starts[i];
+    const end = i + 1 < starts.length ? starts[i + 1] : body.length;
+    claims.push(body.slice(start, end));
+  }
+  return claims;
+}
+
+export interface ClaimCitationAnchors {
+  slices: string[];
+  pages: number[];
+  fragments: string[];
 }
 
 /**
- * **174-CONTEXT.md decision 18 — the most goal-critical decision in this phase.** Chunk staleness
- * is derived from the LINE-LEVEL deltas attributable to a chunk's OWN cited content, never from
- * the group/pair verdict wholesale. Why: pairing groups by page-overlap (decision 4, amended), and
- * real rulebooks measurably collapse to very few groups — genuine cross-page prose bridges page
- * spans through the overlap join, so both real reference games pair into exactly ONE group each
- * (174-03-SUMMARY.md's corrective follow-up). If chunk staleness keyed off the GROUP verdict, one
- * `sharper` line anywhere in the rulebook would mark the game's only group `sharper` (decision 11's
- * MAX-severity roll-up), and therefore mark EVERY chunk citing anything in that group stale — the
- * exact failure this phase exists to prevent, reached through the roll-up instead of the
- * classifier.
+ * The claim-level citation anchors a chunk's `## Interpretation` claims actually name — never
+ * scanned from `chunkText` directly (that would also pick up the redteam/findings-ledger/HTML-
+ * comment prose 174-CONTEXT.md's `decision-19-anchors-2` measured as noise). Reuses
+ * `extractSection` (the `f73153a3`-safe by-line heading lookup) and `resolveCitedSlices` (the
+ * shorthand-resolving citation parser) rather than inventing a second convention.
  *
- * The fix: a classification record's `quotedPass1` (decision 9's mandatory verbatim live-side
- * quote) is retained on the record (widened in 174-02/this plan) and used here to find WHICH of
- * the pair's own `liveSlices` actually contains that quoted line. Only chunks citing THAT specific
- * live slice inherit the delta — not every chunk citing any live slice in the same page-overlap
- * group. Two chunks citing the SAME group but DIFFERENT live slices within it can therefore land
- * on DIFFERENT verdicts.
+ * HTML comments (`<!-- ... -->`) are stripped from the body before parsing — the template's own
+ * guidance comment inside `## Interpretation` names example `rulebook/...` tokens (measured
+ * against `second-action-resolution`'s carried-citations comment) and must not become an anchor.
+ *
+ * Fragments below `MIN_FRAGMENT_CHARS` are rejected (a degenerate scrap like `"+1"` would match
+ * nearly every line). Anchors are unioned across all claims into one chunk-wide set — never bound
+ * to a specific slice at parse time (measured reality: many real fragments carry no co-located
+ * slice token); binding happens at attribution time, by asking whether the fragment occurs in a
+ * given slice's own text.
+ */
+export function parseClaimCitationAnchors(
+  chunkText: string,
+  sliceFilenames: string[],
+): ClaimCitationAnchors {
+  const body = extractSection(chunkText, '## Interpretation');
+  if (body === undefined) return { slices: [], pages: [], fragments: [] };
+
+  const withoutComments = body.replace(/<!--[\s\S]*?-->/g, '');
+  const claims = splitInterpretationClaims(withoutComments);
+
+  const slices = new Set<string>();
+  const pages = new Set<number>();
+  const fragments = new Set<string>();
+
+  const PAGE_RE = /\(p\.(\d+)\)/g;
+  const STRAIGHT_QUOTE_RE = /"([^"]+)"/g;
+  const CURLY_QUOTE_RE = /“([^”]+)”/g;
+
+  for (const claimText of claims) {
+    const { resolved } = resolveCitedSlices(claimText, sliceFilenames);
+    for (const s of resolved) slices.add(s);
+
+    let pm: RegExpExecArray | null;
+    while ((pm = PAGE_RE.exec(claimText)) !== null) pages.add(Number(pm[1]));
+
+    for (const re of [STRAIGHT_QUOTE_RE, CURLY_QUOTE_RE]) {
+      let fm: RegExpExecArray | null;
+      while ((fm = re.exec(claimText)) !== null) {
+        const frag = fm[1].trim();
+        if (frag.length >= MIN_FRAGMENT_CHARS) fragments.add(frag);
+      }
+    }
+  }
+
+  return {
+    slices: [...slices].sort(),
+    pages: [...pages].sort((a, b) => a - b),
+    fragments: [...fragments],
+  };
+}
+
+/**
+ * The single line of `sliceText` containing `quote` — whitespace-normalized comparison so a
+ * re-wrapped quote still lands. First match; `undefined` when the quote appears nowhere.
+ */
+export function matchedLiveLine(sliceText: string, quote: string): string | undefined {
+  const normalizedQuote = normalizeWhitespace(quote);
+  if (!normalizedQuote) return undefined;
+  for (const line of sliceText.split('\n')) {
+    if (normalizeWhitespace(line).includes(normalizedQuote)) return line;
+  }
+  return undefined;
+}
+
+/**
+ * The page a live line belongs to: a `p.N` on the line itself wins; otherwise the nearest
+ * PRECEDING bare `p.N,` citation header (`CITATION_HEADER_RE`'s shape); otherwise `undefined`.
+ */
+export function citedPageForLine(sliceText: string, line: string): number | undefined {
+  const inline = /p\.(\d+)/.exec(line);
+  if (inline) return Number(inline[1]);
+
+  const lines = sliceText.split('\n');
+  const idx = lines.findIndex((l) => l === line);
+  const start = (idx === -1 ? lines.length : idx) - 1;
+  for (let i = start; i >= 0; i--) {
+    const trimmed = lines[i].trim();
+    const m = /^p\.(\d+),.*:$/.exec(trimmed);
+    if (m) return Number(m[1]);
+  }
+  return undefined;
+}
+
+export interface CitationAttribution {
+  attributed: boolean;
+  rung: CitationAnchorRung;
+  reason: string;
+}
+
+/**
+ * The deterministic 3-rung ladder (174-CONTEXT.md decision 19), modelled on 172-CONTEXT.md
+ * decision 3's ladder — no heuristics, no proximity guessing.
+ *
+ * - **`quoted-fragment`:** this slice's fragment set (this chunk's anchor fragments that occur
+ *   verbatim, whitespace-normalized, in `liveSliceText`) DECIDES when non-empty — `attributed` iff
+ *   some fragment overlaps `deltaLine` (containment either direction, whitespace-normalized). A
+ *   non-empty, non-overlapping fragment set returns `attributed: false` — the narrowing decision
+ *   19 asks for, and the `reason` is what makes a clean chunk's cleanliness nameable.
+ * - **`cited-page`:** only tried when this slice's fragment set is empty — `attributed` iff
+ *   `anchors.pages` is non-empty, `deltaLinePage` is known, and the page is among the cited pages.
+ * - **`slice-fallback`:** neither anchor kind is usable for this slice → `attributed: true` always
+ *   — a finer key has strictly more ways to fail to resolve, so the fallback must be exactly as
+ *   conservative as decision 18's shipped slice-level answer, never more permissive.
+ */
+export function resolveCitationAttribution(input: {
+  liveSlice: string;
+  liveSliceText: string;
+  deltaLine: string;
+  deltaLinePage: number | undefined;
+  anchors: ClaimCitationAnchors;
+}): CitationAttribution {
+  const { liveSliceText, deltaLine, deltaLinePage, anchors } = input;
+  const normalizedDeltaLine = normalizeWhitespace(deltaLine);
+
+  const sliceFragments = anchors.fragments.filter((f) => liveSliceText.includes(f));
+
+  if (sliceFragments.length > 0) {
+    const overlapping = sliceFragments.filter((f) => {
+      const nf = normalizeWhitespace(f);
+      return normalizedDeltaLine.includes(nf) || nf.includes(normalizedDeltaLine);
+    });
+    if (overlapping.length > 0) {
+      return {
+        attributed: true,
+        rung: 'quoted-fragment',
+        reason:
+          `Attributed: this chunk's cited quoted fragment ("${overlapping[0]}") overlaps the ` +
+          `changed line.`,
+      };
+    }
+    return {
+      attributed: false,
+      rung: 'quoted-fragment',
+      reason:
+        `Not attributed: this chunk cites ${sliceFragments.length} quoted fragment(s) found in ` +
+        `this live slice, but none overlaps the changed line ("${normalizedDeltaLine}").`,
+    };
+  }
+
+  if (anchors.pages.length > 0 && deltaLinePage !== undefined) {
+    const attributed = anchors.pages.includes(deltaLinePage);
+    return {
+      attributed,
+      rung: 'cited-page',
+      reason: attributed
+        ? `Attributed: this chunk cites page ${deltaLinePage}, which matches the changed line's page.`
+        : `Not attributed: this chunk cites page(s) ${anchors.pages.join(', ')}, which do not ` +
+          `include the changed line's page (${deltaLinePage}).`,
+    };
+  }
+
+  return {
+    attributed: true,
+    rung: 'slice-fallback',
+    reason:
+      'Attributed: no claim-level citation anchor (quoted fragment or page) could be resolved ' +
+      'for this slice — decision 18\'s slice-level attribution stands (conservative fallback).',
+  };
+}
+
+/**
+ * Chunk staleness narrows through THREE successive decisions, applied in order, each one level
+ * finer than the last:
+ *
+ *   1. **Decision 11** — a pair/group verdict rolls up to MAX severity over its line-level deltas.
+ *   2. **Decision 18 — the most goal-critical decision in the phase up to this point.** Chunk
+ *      staleness is derived from the LINE-LEVEL deltas attributable to a chunk's OWN cited
+ *      content, never from the group/pair verdict wholesale. Why: pairing groups by page-overlap
+ *      (decision 4, amended), and real rulebooks measurably collapse to very few groups — genuine
+ *      cross-page prose bridges page spans through the overlap join, so both real reference games
+ *      pair into exactly ONE group each (174-03-SUMMARY.md's corrective follow-up). If chunk
+ *      staleness keyed off the GROUP verdict, one `sharper` line anywhere in the rulebook would
+ *      mark the game's only group `sharper`, and therefore mark EVERY chunk citing anything in
+ *      that group stale. The fix: a classification record's `quotedPass1` (decision 9's mandatory
+ *      verbatim live-side quote) is used to find WHICH of the pair's own `liveSlices` actually
+ *      contains that quoted line — only chunks citing THAT specific live slice inherit the delta.
+ *   3. **Decision 19** — narrows one level further, from "the live SLICE a chunk cites" to "the
+ *      specific CITATION a chunk names" (its own `## Interpretation` claim's quoted fragment or
+ *      page reference). Two chunks citing the SAME live slice can land on DIFFERENT verdicts when
+ *      one's claim quotes the changed line and the other's claim quotes something else in that
+ *      slice entirely — a distinction decision 18 alone cannot express.
  *
  * `cosmetic` never contributes (nothing to attribute). A record with NO quote at all — an
  * `unclassified` verdict demoted for a missing quote, or a malformed-label `unclassified` the
@@ -913,9 +1164,10 @@ export interface ChunkVerdict {
  * contribute nothing, matching decision 17's treatment of presentation content as outside the
  * rule-bearing comparison entirely.
  *
- * **Corrective follow-up (174-04 FALSE-CLEAN fix):** narrowing to "does this chunk's OWN cited
- * live slice contain the quote" is only correct once you already know the quote lands SOMEWHERE
- * in the pair. `affected.length === 0` is NOT a single situation — it conflates two:
+ * **Corrective follow-up (174-04 FALSE-CLEAN fix), and why it OUTRANKS decision 19's ladder:**
+ * narrowing to "does this chunk's OWN cited live slice contain the quote" is only correct once you
+ * already know the quote lands SOMEWHERE in the pair. The pair-level check is NOT a single
+ * situation — it conflates two:
  *   (a) the quote matches some OTHER live slice in the pair, one this chunk does not cite —
  *       genuinely not this chunk's problem, the narrowing working exactly as designed; or
  *   (b) the quote matches NO live slice in the pair AT ALL — a paraphrase instead of a verbatim
@@ -923,12 +1175,17 @@ export interface ChunkVerdict {
  *       even be read. This is not proof the chunk is unaffected; it is the tool being blind, and
  *       the delta must not evaporate silently.
  * Distinguishing them requires checking the quote against the PAIR's whole `liveSlices` set, not
- * just this chunk's citations. Case (b) — the UNATTRIBUTABLE quote — broadens conservatively to
- * every one of this chunk's own cited live slices (the same fallback the no-quote branch already
- * uses) and is additionally surfaced in the returned `warnings`, never silently absorbed. A live
- * slice that cannot be read is treated the same way: it is never silently cached as `''` (which
- * would make it match no quote by construction and feed straight back into the same false-clean),
- * it is surfaced and the affected chunk conservatively broadened.
+ * just this chunk's citations, and this check runs BEFORE decision 19's per-citation ladder ever
+ * does — never inside it. A citation-level "not attributed" answer computed from a quote that
+ * matches nothing in the pair would be a FABRICATED EXEMPTION: it would silently re-open exactly
+ * the false-clean 174-04 closed, while looking like an improvement because the stale count would
+ * drop. Case (b) — the UNATTRIBUTABLE quote — broadens conservatively to every one of this chunk's
+ * own cited live slices (the same fallback the no-quote branch already uses) and is additionally
+ * surfaced in the returned `warnings`, never silently absorbed. A live slice that cannot be read is
+ * treated the same way: it is never silently cached as `''` (which would make it match no quote by
+ * construction and feed straight back into the same false-clean), it is surfaced and the affected
+ * chunk conservatively broadened. Only case (a) — the quote genuinely lands somewhere in the pair —
+ * reaches decision 19's ladder, per live slice this chunk cites that the quote actually matches.
  */
 async function computeChunkVerdicts(
   projectDir: string,
@@ -983,9 +1240,11 @@ async function computeChunkVerdicts(
     const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
     if (resolved.length === 0) continue;
     const citedBare = new Set(resolved.map((r) => bareSliceName(r)));
+    const anchors = parseClaimCitationAnchors(chunkText, sliceFilenames);
 
     let ruleDelta: RuleDelta = 'cosmetic';
     const pairIds = new Set<string>();
+    const attributions: ChunkVerdict['attributions'] = [];
 
     for (const pair of pairs) {
       const pairCitedLiveSlices = pair.liveSlices.filter((s) => citedBare.has(bareSliceName(s)));
@@ -1033,31 +1292,63 @@ async function computeChunkVerdicts(
         }
 
         if (unreadableInPair.length > 0) {
-          // An unreadable/missing live slice can never rule itself out as the one that would have
+          // PAIR-LEVEL BLINDNESS — checked BEFORE decision 19's ladder, never inside it. An
+          // unreadable/missing live slice can never rule itself out as the one that would have
           // matched — surface it and broaden conservatively rather than guess it read empty.
           affected = pairCitedLiveSlices;
           warningSet.add(
-            `Pair "${pair.pairId}": ${unreadableInPair.length} live slice(s) could not be read ` +
-              `(${unreadableInPair.join(', ')}) while attributing a "${record.ruleDelta}" delta — ` +
-              `broadened to every cited live slice for chunk "${slug}" rather than reported clean.`,
+            `[unreadable-live-slice] Pair "${pair.pairId}": ${unreadableInPair.length} live ` +
+              `slice(s) could not be read (${unreadableInPair.join(', ')}) while attributing a ` +
+              `"${record.ruleDelta}" delta — broadened to every cited live slice for chunk ` +
+              `"${slug}" rather than reported clean.`,
           );
         } else if (!matchedAnywhereInPair) {
-          // Case (b): the recorded quote is UNATTRIBUTABLE — it matches no live slice in this pair
-          // at all (paraphrase, re-wrap, or drift). Broaden conservatively and surface it; this is
-          // exactly the false-clean this fix exists to close.
+          // PAIR-LEVEL BLINDNESS, case (b) — checked BEFORE decision 19's ladder, never inside it.
+          // The recorded quote is UNATTRIBUTABLE — it matches no live slice in this pair at all
+          // (paraphrase, re-wrap, or drift). Broaden conservatively and surface it; a citation-level
+          // "not attributed" answer computed from this quote would be a fabricated exemption.
           affected = pairCitedLiveSlices;
           warningSet.add(
-            `Pair "${pair.pairId}": the recorded quote for a "${record.ruleDelta}" delta does not ` +
-              `match verbatim in any live slice of this pair (paraphrase or drift) — broadened to ` +
-              `every cited live slice for chunk "${slug}" rather than reported clean.`,
+            `[unattributable-quote] Pair "${pair.pairId}": the recorded quote for a ` +
+              `"${record.ruleDelta}" delta does not match verbatim in any live slice of this pair ` +
+              `(paraphrase or drift) — broadened to every cited live slice for chunk "${slug}" ` +
+              `rather than reported clean.`,
           );
         } else {
-          // Case (a): the quote lands somewhere in the pair, so narrow to only THIS chunk's own
-          // cited live slices that actually contain it.
+          // Case (a): the quote lands somewhere in the pair. ONLY here does decision 19's
+          // per-citation ladder run — one evaluation per cited live slice the quote actually lands
+          // on, never per slice the quote does not touch (that slice is genuinely not this chunk's
+          // problem, exactly as decision 18 already established).
           affected = [];
           for (const liveSlice of pairCitedLiveSlices) {
             const text = await liveText(bareSliceName(liveSlice));
-            if (text !== null && text.includes(quote)) affected.push(liveSlice);
+            if (text === null || !text.includes(quote)) continue;
+
+            const line = matchedLiveLine(text, quote) ?? quote;
+            const page = citedPageForLine(text, line);
+            const attribution = resolveCitationAttribution({
+              liveSlice,
+              liveSliceText: text,
+              deltaLine: line,
+              deltaLinePage: page,
+              anchors,
+            });
+            attributions.push({
+              pairId: pair.pairId,
+              liveSlice,
+              rung: attribution.rung,
+              attributed: attribution.attributed,
+              reason: attribution.reason,
+            });
+            if (attribution.rung === 'slice-fallback') {
+              warningSet.add(
+                `[unresolved-citation] Chunk "${slug}" cites live slice "${liveSlice}" in pair ` +
+                  `"${pair.pairId}", but no claim-level citation anchor (quoted fragment or page) ` +
+                  `could be resolved — broadened to decision 18's slice-level attribution rather ` +
+                  `than reported clean.`,
+              );
+            }
+            if (attribution.attributed) affected.push(liveSlice);
           }
         }
       } else {
@@ -1066,7 +1357,8 @@ async function computeChunkVerdicts(
         affected = pairCitedLiveSlices;
       }
       // Only reachable via case (a): the quote matched elsewhere in the pair, not on any live slice
-      // this chunk itself cites — genuinely not this chunk's problem.
+      // this chunk itself cites — genuinely not this chunk's problem — OR every one of this
+      // chunk's cited live slices resolved to `attributed: false` at rung `quoted-fragment`.
       if (affected.length === 0) continue;
 
       pairIds.add(pair.pairId);
@@ -1081,6 +1373,7 @@ async function computeChunkVerdicts(
       pairIds: [...pairIds].sort(),
       ruleDelta,
       stale: ruleDelta !== 'cosmetic',
+      attributions,
     });
   }
   return { verdicts: results, warnings: [...warningSet] };
