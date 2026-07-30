@@ -366,3 +366,233 @@ $ ls evidence/blind__*.txt | wc -l
 ```
 
 Zero leaks across the full real corpus, not just the one chosen worked example.
+
+## 3. The full 22-line corpus run and the measured distribution
+
+**Dispatch count and skip rule, stated before the results:** all 16 real dispatch candidates (10
+`seven` + 6 `one-two-punch`, per §1's reconciliation) received a `BS-DERIVE-V1` blind dispatch. A
+`BS-DERIVE-COMPARE-V1` comparison dispatch followed for every line whose blind stage returned an
+actual derived value — i.e. every line EXCEPT the ones the blind stage itself resolved as
+`not-rule-bearing` or `underivable`, per `derive-compare.md`'s own pass-through rule. **3 of the 16
+blind dispatches resolved without a comparison dispatch** (`one-two-punch:49` → `underivable`,
+`one-two-punch:82` → `not-rule-bearing`, `one-two-punch:89` → `not-rule-bearing`); the other 13
+proceeded to a comparison dispatch. Total real `claude -p` dispatches: **16 blind + 13 compare = 29**
+(not ~44 — the prediction's `~44` estimate assumed 22 blind + 22 compare before the 6-line
+mechanical-exclusion correction §1 already reconciled).
+
+Full corpus, no sampling — every one of the 22 real `Derived` lines is accounted for below, either as
+a mechanically-excluded exclusion (§1) or a dispatched candidate.
+
+### Arithmetic — reconciled against the 22-line total
+
+```
+seven:          enumeratedCount 10 + presentationExcludedCount 0  = 10
+one-two-punch:  enumeratedCount  6 + presentationExcludedCount 6  = 12
+                                                          TOTAL   = 22
+```
+
+### Real `verify-derive-recheck --json` per-verdict counts, zeros explicit
+
+```
+$ boardsmith verify-derive-recheck --project <scratch>/seven --json
+  verdictCounts: { "agrees": 3, "disagrees": 7, "underivable": 0, "not-rule-bearing": 0 }
+  (sum 10, matches seven's enumeratedCount)
+
+$ boardsmith verify-derive-recheck --project <scratch>/one-two-punch --json
+  verdictCounts: { "agrees": 1, "disagrees": 2, "underivable": 1, "not-rule-bearing": 2 }
+  (sum 6, matches one-two-punch's enumeratedCount)
+```
+
+**Combined, real-dispatch-only (16 candidates):**
+
+| Verdict | Count | % of 16 |
+|---|---|---|
+| `agrees` | 4 | 25% |
+| `disagrees` | 9 | 56% |
+| `underivable` | 1 | 6% |
+| `not-rule-bearing` | 2 | 13% |
+| **Total** | **16** | **100%** |
+
+4 + 9 + 1 + 2 = 16. Matches the 16-candidate dispatch total exactly.
+
+**Combined across all 22 lines** (folding in the 6 mechanically-excluded `one-two-punch` lines, which
+never receive a subagent verdict at all and are counted here as `not-rule-bearing` — the closest
+available bucket, per `177-PREDICTION.md`'s own labelling convention, though the real pipeline assigns
+them literally no verdict):
+
+| Verdict | Count | % of 22 |
+|---|---|---|
+| `agrees` | 4 | 18% |
+| `disagrees` | 9 | 41% |
+| `underivable` | 1 | 5% |
+| `not-rule-bearing` (2 dispatched + 6 mechanical) | 8 | 36% |
+| **Total** | **22** | **100%** |
+
+4 + 9 + 1 + 8 = 22.
+
+### Prediction commit predates this section
+
+```
+$ git log --oneline -1 -- .planning/phases/177-derived-line-re-derivation/177-PREDICTION.md
+913bfe7d docs(177-06): commit pre-dispatch distribution prediction for CHECK-04
+```
+
+`913bfe7d` is 3 commits behind this section's own work (`bffc72e5` §2, and this commit), and no
+dispatch, `claude -p` invocation, or verdict record for CHECK-04 exists anywhere in this repository's
+history before it. The prediction genuinely predates the measurement.
+
+### Predicted vs. measured — per verdict
+
+| Verdict | Predicted (22-line file, all buckets) | Predicted (16 real-candidate subset) | Measured (16 real candidates) |
+|---|---|---|---|
+| `agrees` | 9 | 5 | 4 |
+| `not-rule-bearing` | 9 | 7 | 2 |
+| `underivable` | 3 | 3 | 1 |
+| `disagrees` | 1 | 1 | 9 |
+
+The 16-real-candidate predicted subset is computed by removing the prediction's 4 now-mechanically-
+excluded lines (`one-two-punch:68`, `:79`, `:56` first-Punch, `:61` second-Punch — all predicted
+`agrees` in `177-PREDICTION.md`, all moot per §1's reconciliation) from the 22-line total: 9 − 4 = 5
+`agrees` remain in the 16-candidate subset; the other three buckets are unaffected since none of the
+4 removed lines were predicted `not-rule-bearing`/`underivable`/`disagrees`.
+
+**`disagrees` is 9x the predicted count (1 → 9). This is the single largest miss in this proof and is
+the real finding this section exists to surface — not smoothed into a percentage.**
+
+### Predicted vs. measured — per line, every miss named
+
+| Line | Predicted | Measured | Hit/Miss |
+|---|---|---|---|
+| `seven:8` | `not-rule-bearing` | `disagrees` | **MISS** |
+| `seven:14` | `not-rule-bearing` | `disagrees` | **MISS** |
+| `seven:19` | `agrees` | `agrees` | Hit |
+| `seven:21` | `agrees` | `agrees` | Hit |
+| `seven:33` | `not-rule-bearing` | `disagrees` | **MISS** |
+| `seven:36` | `agrees` | `agrees` | Hit |
+| `seven:38` | `underivable` | `disagrees` | **MISS** |
+| `seven:42` | `not-rule-bearing` | `disagrees` | **MISS** |
+| `seven:11` (02-solo-variant) | `disagrees` | `disagrees` | Hit (see caveat below) |
+| `seven:17` | `not-rule-bearing` | `disagrees` | **MISS** |
+| `one-two-punch:30` | `agrees` | `agrees` | Hit |
+| `one-two-punch:52` | `underivable` | `disagrees` | **MISS** |
+| `one-two-punch:49` | `not-rule-bearing` | `underivable` | **MISS** |
+| `one-two-punch:82` | `agrees` | `not-rule-bearing` | **MISS** |
+| `one-two-punch:89` | `underivable` | `not-rule-bearing` | **MISS** |
+| `one-two-punch:95` | `not-rule-bearing` | `disagrees` | **MISS** |
+
+**5 hits, 11 misses, out of 16.** The prediction's own defended divergences from `177-RESEARCH.md`'s
+hedge (`seven:21` predicted `agrees` against research's `underivable` worked example; `one-two-punch:82`
+predicted `agrees` against research's non-quote-line-context concern) — `seven:21` landed correctly;
+`one-two-punch:82` did not (measured `not-rule-bearing`, not `agrees` — see below for why).
+
+### Interpretation rules — applied honestly; NONE of the three pre-committed rules fires as anticipated
+
+**(a) A large `underivable` share as a real ingest-contract finding: DOES NOT FIRE.** Measured
+`underivable` is 1/16 (6%), well under any threshold that would trigger this rule — the opposite of
+what research most worried about.
+
+**(b) A uniform distribution proving consistency, not discrimination: DOES NOT FIRE.** The measured
+distribution is not uniform — it is dominated by `disagrees` (56%) but includes all four verdicts,
+unlike Phase 176's real 60/60 single-verdict corpus.
+
+**(c) Zero `not-rule-bearing` as suspicious: DOES NOT FIRE.** 2 of 16 dispatched candidates (plus 6
+mechanically-excluded) returned `not-rule-bearing` — non-zero, so this rule's concern is not
+triggered.
+
+**None of the three rules committed in advance explains what actually happened. A fourth,
+un-anticipated cause does, and it is reported here as a genuine finding rather than forced into one
+of the three pre-committed buckets:**
+
+**A REAL, STRUCTURAL FINDING: `buildBlindDerivePayload`'s "Target line" identifier carries no
+information the blind subagent can actually use to distinguish WHICH fact is under test when a slice
+contains more than one candidate `Derived` line — and the measured 56% `disagrees` rate is dominated
+by this targeting collapse, not by genuine mismatches between the original derivation and an
+independently re-derived reading of the SAME fact.**
+
+The evidence: `seven`'s `01-definitions-and-components.md` slice has 5 candidate lines (8, 14, 19,
+21, 33), each dispatched with an IDENTICAL quote-line payload — differing only in the line stated at
+`Target line: rulebook/01-definitions-and-components.md:{8,14,19,21,33}`, a raw line number from the
+ORIGINAL file that has no meaning inside the quote-only payload (which strips every `Derived`/
+`Visual` line and does not renumber or otherwise mark position). All 5 dispatches returned
+functionally the SAME rederived value — the "7 x 4 x 4 = 112 numbered cards, + 7 bonus, 119 total"
+deck-composition arithmetic — regardless of which line was nominally the target:
+
+```
+seven:8   rederivedValue: "A player's hand grows by a net 7 cards... starts at 3, ends at 10." (an
+          OUTLIER on this specific dispatch, but see seven:14/33 below — this is the same collapse
+          pattern landing on a different single dominant fact in the same slice, hand-size math
+          instead of deck math, still unrelated to line 8's actual content about card-art imagery)
+seven:14  rederivedValue: "The full deck is 7 numbers x 4 colors x 4 copies = 112 numbered cards,
+          plus 7 bonus point cards, for 119 cards total."
+seven:19  rederivedValue: "The numbered deck is 7 numbers x 4 colors x 4 copies = 112 numbered
+          cards; adding the 7 bonus point cards gives 119 cards in total."
+seven:21  rederivedValue: "The deck totals 7 numbers x 4 colors x 4 copies = 112 numbered cards,
+          plus 7 bonus point cards, for 119 cards in all."
+seven:33  rederivedValue: "The deck is 7 numbers × 4 colors × 4 copies = 112 numbered cards, plus
+          7 bonus point cards, for 119 cards total."
+```
+
+Lines 19 and 21 are ACTUALLY about deck composition, so the collapsed derivation happens to coincide
+with them — both correctly landed `agrees`. Lines 8, 14, and 33 are about card-image illustrations
+and card-art styling — NOT deck composition — so the same collapsed derivation lands `disagrees`
+against them, not because the original derivation was wrong, but because the blind stage never
+attempted to derive what lines 8/14/33 actually assert. The same pattern repeats in
+`01-overview-setup-and-play.md` (lines 36/38/42 all converge on "7 rounds" round-structure or
+match-structure arithmetic; only 36 is actually about that), `02-solo-variant.md` (lines 11/17 both
+converge on the solo variant's three-escalating-goals structure; neither line's own specific claim —
+sentence attribution for 11, page layout for 17 — is what got re-derived), and
+`02-action-cards-and-resolution.md` (line 95 converges on the Guard-card knockout rule, unrelated to
+its own claim about the Variants section).
+
+**`one-two-punch:52` is the one exception worth naming separately — a genuine, on-topic content
+disagreement, not a targeting-collapse artifact.** Its slice has only 2 candidate lines (30, 52), both
+legitimately about Action Card counts, and the compare dispatch caught a real, specific numeric
+conflict:
+
+```
+Original (verbatim):   Derived (p.1): Each player has 8 Action Cards (16 total across two colors)
+                        and 3 Guard Cards.
+Rederived (verbatim):  Each player starts the first round holding 6 action cards. The 16 Action
+                        Cards split evenly by color, so each player takes 8; each player then
+                        places one of their Rest cards face up as their own discard pile, leaving
+                        7 in hand; the blue player then discards one non-Rest card of their choice
+                        and the red player discards one non-Rest card named by blue, leaving each
+                        player with 6 action cards in hand.
+Reasoning: The two readings state incompatible facts about how many Action Cards each player has.
+The original line asserts a flat 8 per player. The blind re-derivation's stated value is 6 per
+player at the start of round 1, after Setup's discard steps are applied.
+```
+
+This is a genuine finding, citing both derivations verbatim (SC-2's requirement) — the original line
+states the box-split total (8) without noting that Setup immediately discards 2 of those 8 before
+round 1 begins (per the quoted Setup steps), while the blind re-derivation, working only from the
+same quote lines, tracked the discard-adjusted round-1 hand size (6). Both readings are individually
+supportable from the quoted material; they answer slightly different questions (post-Setup total vs.
+round-1 starting hand), which is exactly the kind of substantive disagreement CHECK-04 exists to
+surface for designer adjudication — this one is NOT a payload-targeting artifact.
+
+### `one-two-punch:49` — the one `underivable` finding, both stages shown
+
+```
+Original (verbatim): Derived (p.2): Each Action Card entry is headed by a small red icon (lightning
+bolt for Jab, chevron/arrow shapes for Retreat and Advance, an "X" for Block, a hand/glove mark for
+Punch, a dot for Rest).
+Blind stage returned: { rederivedValue: "underivable", sourceQuotes: [] }
+```
+
+No comparison dispatch followed, per the pass-through rule — `verify-derive-recheck --json` records
+verdict `underivable` directly from the blind stage's own return, reasoning: `"Blind derivation stage
+itself returned 'underivable'; passed through unchanged per derive-compare.md's never-re-adjudicate
+rule — comparison dispatch skipped."` No quoted text on this page describes icon shapes at all — a
+genuine, structurally correct `underivable`, matching the prediction's own reasoning for this line
+almost exactly (prediction: `not-rule-bearing`; measured: `underivable` — a miss in label, but both
+readings agree the icon claim has zero quoted support; the difference is whether "icon glyph shape"
+counts as a game rule at all (predicted judgment) vs. an unsupportable-but-potentially-rule-bearing
+claim (measured judgment) — a genuine, reasonable disagreement between two honest judgment calls, not
+an error in either).
+
+### Reporting only — no repair performed
+
+Both reference games' `rulebook/*.md` slice content is unchanged by this task (confirmed byte-identical
+in §4 below). No disagreement or underivable finding above was fixed in either game — findings are
+recorded to the ledger and reported here, exactly per the plan's scope boundary.
