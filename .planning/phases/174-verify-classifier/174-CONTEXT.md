@@ -118,11 +118,31 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
    page-overlapping GROUP, and a group where the two sides carry different numbers of files is normal,
    not a finding. Only a page span present on exactly one side is `unpaired-slice`.
 
+   **AMENDED AGAIN 2026-07-29 (second amendment) after plan 174-03 executed against the real
+   fixtures — the staged-side key is the staged file's OWN `p.N` citation lines, NOT the ledger
+   `rangeId`.** The first amendment named `rangeId` as the staged-side key. Executing against real
+   data exposed why that is wrong: `rangeId` records which DISPATCH produced a unit, and dispatch
+   granularity is an unrelated engineering decision, not a content fact. Both reference rulebooks are
+   2-page books, so Phase 173's pipeline dispatched each as a SINGLE range — which tags every staged
+   unit with the same `rangeId`, makes the staged span identical for all of them, overlaps every live
+   span, and collapses the entire game into ONE pair group (measured: 3 live + 6 staged as a single
+   group for `seven`). That destroys pairing granularity outright, and with it any ability to measure
+   decision 14's bar.
+
+   Verified before deciding: every staged slice carries its own `p.N` citation lines (checked across
+   all 6 staged `seven` files — `p.1` on five of them, `p.2` on the sixth, and `01-about-and-setup.md`
+   spanning `p.1`–`p.2`). So the staged side can derive its span from content exactly as the live side
+   does, making the pairing key SYMMETRIC and independent of how coarsely any dispatch happened to be
+   split. `rangeId` is retained on the record for traceability and provenance — it is simply not the
+   pairing key.
+
    Rejected: letting the subagent infer pairing — pairing is mechanical and a subagent that guesses
    it can silently drop a pair.
    Rejected: filename-glob matching in skill prose — an instruction-shaped mechanism, the exact
    thing 170 disproved.
    Rejected (superseded): `INDEX.md`'s Slices table as the live-side key — absent in `one-two-punch`.
+   Rejected (superseded): the ledger `rangeId` as the staged-side key — couples pairing granularity to
+   dispatch granularity, and collapses to one group on both real reference games.
 
 ### Area 2 — Command surface & data contract (accepted 2026-07-29)
 
@@ -238,10 +258,24 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
     `seven` stays READ-ONLY at `a03f38d4792af9dfc7c798be69686fc3230f54dd`; all work is on copies, with
     the 171/172/173 discipline of confirming the originals byte-identical before and after.
 
-14. **SC-2's bar is pre-declared and numeric, recorded in `174-PROOF.md`: ≥90% of paired slices
-    classify `cosmetic`, with zero `contradictory`.** Missing the bar is a phase BLOCKER, not a note
-    — the whole milestone rests on a second run not flagging everything. Declare the bar before
-    measuring, then record actual counts, never "ran clean".
+14. **SC-2's bar is pre-declared and numeric, recorded in `174-PROOF.md`: ≥90% `cosmetic`, with zero
+    `contradictory`.** Missing the bar is a phase BLOCKER, not a note — the whole milestone rests on a
+    second run not flagging everything. Declare the bar before measuring, then record actual counts,
+    never "ran clean".
+
+14b. **The bar's DENOMINATOR is rule-bearing line-level comparisons, not pair groups.** Decided
+    2026-07-29 after decision 4's second amendment measured the real granularity ceiling. A pair group
+    is a page-span overlap group, so the number of groups is bounded by the rulebook's PAGE COUNT —
+    and both reference games are 2-page books, yielding at most 2 rule-bearing groups each. A "≥90%"
+    threshold over 2 groups is arithmetic theatre: one group flipping moves the number 50 points, and
+    the bar can literally not be met at 90% except by scoring 100%.
+
+    Decision 11 already requires line-level comparison with the line-level evidence retained, so the
+    honest denominator already exists — use it. Report BOTH numbers (group-level verdicts and
+    line-level percentages) since the group verdict is what downstream staleness keys off, but the
+    ≥90%-cosmetic / zero-`contradictory` BAR is evaluated against rule-bearing line comparisons,
+    pooled across both reference games. Per decision 17, presentation lines excluded by 12b are in
+    neither numerator nor denominator.
 
 15. **SC-3 mutates the REAL archived source and runs a real re-transcription dispatch.** Hand-editing
     a staged slice tests only the comparator; the requirement is that the *pipeline* catches a
