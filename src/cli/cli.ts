@@ -25,6 +25,11 @@ import {
   verifyRunRecordCommand,
   verifyRunStatusCommand,
 } from './commands/verify-run.js';
+import {
+  verifyClassifyPairsCommand,
+  verifyClassifyRecordCommand,
+  verifyClassifyStatusCommand,
+} from './commands/verify-classify.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -262,6 +267,57 @@ program
   .option('--run-id <id>', 'Report on a specific run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyRunStatusCommand);
+
+// Verify classification: VERIFY-03's recordable, resumable verdicts on top of the same run-scoped
+// ledger (174-CONTEXT.md decision 5). Findings exit 0 (decision 7) — only a tool failure (unknown
+// run, no rulebook/) is non-zero.
+program
+  .command('verify-classify-pairs')
+  .description(
+    "Enumerate a verify run's live/staged slice pairs with provenance and rule-bearing line " +
+      'counts (read-only, machine-readable)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+  .option('--live-slice <path>', 'Restrict the report to pairs containing this rulebook/ slice')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyClassifyPairsCommand);
+
+program
+  .command('verify-classify-record')
+  .description(
+    'Record one classification verdict for a pair, atomically appended to the run\'s ledger ' +
+      '(stale and provenance are derived, never supplied)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--run-id <id>', 'The run to record against')
+  .requiredOption('--pair-id <id>', 'The pair id to classify (see verify-classify-pairs)')
+  .option(
+    '--label <value>',
+    'cosmetic | sharper | contradictory — missing or unrecognized records "unclassified"',
+  )
+  .option('--evidence <text>', 'Free-prose evidence — nothing parses this')
+  .option(
+    '--quoted-pass1 <text>',
+    'Verbatim quote from the live (pass-1) slice — required for sharper/contradictory',
+  )
+  .option(
+    '--quoted-pass2 <text>',
+    'Verbatim quote from the staged (pass-2) slice — required for sharper/contradictory',
+  )
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyClassifyRecordCommand);
+
+program
+  .command('verify-classify-status')
+  .description(
+    'Report which pairs still need classifying, summary counts, and per-chunk staleness ' +
+      'verdicts (read-only, machine-readable)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyClassifyStatusCommand);
 
 // Claude Code integration
 const claudeCmd = program

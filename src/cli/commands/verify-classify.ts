@@ -857,3 +857,286 @@ export async function verifyClassifyRecordCommand(
   );
   return result;
 }
+
+// -------------------------------------------------------------------------------------------
+// verify-classify-status + per-chunk verdict roll-up (174-CONTEXT.md decisions 11, 18)
+// -------------------------------------------------------------------------------------------
+
+/**
+ * The one shared severity-order constant every MAX-severity roll-up in this module reads from —
+ * never a duplicated if/else chain that can silently drift from decision 11's pair-level order.
+ * `unclassified` ranks ABOVE `cosmetic` (decision 8: a pair/chunk the tool could not classify can
+ * never be reported clean) but the exact ordering against `sharper` is not specified by any test;
+ * placed just below `sharper` so `contradictory > sharper > unclassified > cosmetic` holds and
+ * `unclassified` still always beats `cosmetic`.
+ */
+export const RULE_DELTA_SEVERITY: Record<RuleDelta, number> = Object.freeze({
+  cosmetic: 0,
+  unclassified: 1,
+  sharper: 2,
+  contradictory: 3,
+});
+
+export interface ChunkVerdict {
+  slug: string;
+  citedLiveSlices: string[];
+  pairIds: string[];
+  ruleDelta: RuleDelta;
+  stale: boolean;
+}
+
+/**
+ * **174-CONTEXT.md decision 18 — the most goal-critical decision in this phase.** Chunk staleness
+ * is derived from the LINE-LEVEL deltas attributable to a chunk's OWN cited content, never from
+ * the group/pair verdict wholesale. Why: pairing groups by page-overlap (decision 4, amended), and
+ * real rulebooks measurably collapse to very few groups — genuine cross-page prose bridges page
+ * spans through the overlap join, so both real reference games pair into exactly ONE group each
+ * (174-03-SUMMARY.md's corrective follow-up). If chunk staleness keyed off the GROUP verdict, one
+ * `sharper` line anywhere in the rulebook would mark the game's only group `sharper` (decision 11's
+ * MAX-severity roll-up), and therefore mark EVERY chunk citing anything in that group stale — the
+ * exact failure this phase exists to prevent, reached through the roll-up instead of the
+ * classifier.
+ *
+ * The fix: a classification record's `quotedPass1` (decision 9's mandatory verbatim live-side
+ * quote) is retained on the record (widened in 174-02/this plan) and used here to find WHICH of
+ * the pair's own `liveSlices` actually contains that quoted line. Only chunks citing THAT specific
+ * live slice inherit the delta — not every chunk citing any live slice in the same page-overlap
+ * group. Two chunks citing the SAME group but DIFFERENT live slices within it can therefore land
+ * on DIFFERENT verdicts.
+ *
+ * `cosmetic` never contributes (nothing to attribute). A record with NO quote at all — an
+ * `unclassified` verdict demoted for a missing quote, or a malformed-label `unclassified` the
+ * subagent never quoted anything for — cannot be narrowed, so conservatively every one of the
+ * pair's live slices the chunk cites is treated as affected (decision 8: never silently clean
+ * where the tool is blind). An `unpaired-slice` group (nothing was ever compared for it) always
+ * contributes `unclassified` to any chunk citing its live slice(s); `presentation-only` groups
+ * contribute nothing, matching decision 17's treatment of presentation content as outside the
+ * rule-bearing comparison entirely.
+ */
+async function computeChunkVerdicts(
+  projectDir: string,
+  pairs: SlicePair[],
+  classifications: ClassificationRecord[],
+): Promise<ChunkVerdict[]> {
+  const chunksDir = join(projectDir, 'chunks');
+  let slugs: string[] = [];
+  try {
+    const entries = await fs.readdir(chunksDir, { withFileTypes: true });
+    slugs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
+  } catch {
+    slugs = [];
+  }
+
+  const rulebookDir = join(projectDir, 'rulebook');
+  let sliceFilenames: string[] = [];
+  try {
+    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
+    sliceFilenames = entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+  } catch {
+    sliceFilenames = [];
+  }
+
+  const liveTextCache = new Map<string, string>();
+  async function liveText(bareName: string): Promise<string> {
+    if (!liveTextCache.has(bareName)) {
+      try {
+        liveTextCache.set(bareName, await fs.readFile(join(rulebookDir, bareName), 'utf-8'));
+      } catch {
+        liveTextCache.set(bareName, '');
+      }
+    }
+    return liveTextCache.get(bareName)!;
+  }
+
+  const classificationsByPairId = new Map(classifications.map((c) => [c.pairId, c]));
+
+  const results: ChunkVerdict[] = [];
+  for (const slug of slugs) {
+    let chunkText: string;
+    try {
+      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
+    } catch {
+      continue;
+    }
+    const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
+    if (resolved.length === 0) continue;
+    const citedBare = new Set(resolved.map((r) => bareSliceName(r)));
+
+    let ruleDelta: RuleDelta = 'cosmetic';
+    const pairIds = new Set<string>();
+
+    for (const pair of pairs) {
+      const pairCitedLiveSlices = pair.liveSlices.filter((s) => citedBare.has(bareSliceName(s)));
+      if (pairCitedLiveSlices.length === 0) continue;
+
+      if (pair.kind === 'presentation-only') continue; // decision 17: never a stale contribution
+
+      if (pair.kind === 'unpaired-slice') {
+        // Nothing was ever compared for this content — never silently clean (decision 8).
+        pairIds.add(pair.pairId);
+        if (RULE_DELTA_SEVERITY.unclassified > RULE_DELTA_SEVERITY[ruleDelta]) {
+          ruleDelta = 'unclassified';
+        }
+        continue;
+      }
+
+      const record = classificationsByPairId.get(pair.pairId);
+      if (!record) continue; // not yet classified — pendingPairs, not this chunk's problem yet
+
+      if (record.ruleDelta === 'cosmetic') {
+        // Cosmetic carries no quote to narrow by — it is reported as "nothing changed here" for
+        // every citing chunk uniformly, never severity-bumped, but still a classified pair this
+        // chunk's verdict was actually evaluated against.
+        pairIds.add(pair.pairId);
+        continue;
+      }
+
+      // Decision 18: narrow to only the live slice(s) whose OWN text contains the recorded quote —
+      // never broaden the whole group's citing chunks by default. A record with no quote at all
+      // (an unclassified verdict with nothing to attribute) cannot be narrowed, so conservatively
+      // every one of this chunk's cited live slices in the pair is treated as affected (decision 8).
+      const quote = record.quotedPass1?.trim();
+      let affected: string[];
+      if (quote && quote.length > 0) {
+        affected = [];
+        for (const liveSlice of pairCitedLiveSlices) {
+          const text = await liveText(bareSliceName(liveSlice));
+          if (text.includes(quote)) affected.push(liveSlice);
+        }
+      } else {
+        affected = pairCitedLiveSlices;
+      }
+      if (affected.length === 0) continue; // this delta does not land on THIS chunk's own citations
+
+      pairIds.add(pair.pairId);
+      if (RULE_DELTA_SEVERITY[record.ruleDelta] > RULE_DELTA_SEVERITY[ruleDelta]) {
+        ruleDelta = record.ruleDelta;
+      }
+    }
+
+    results.push({
+      slug,
+      citedLiveSlices: resolved,
+      pairIds: [...pairIds].sort(),
+      ruleDelta,
+      stale: ruleDelta !== 'cosmetic',
+    });
+  }
+  return results;
+}
+
+export interface VerifyClassifyStatusResult {
+  runId: string;
+  pendingPairs: string[];
+  classified: ClassificationRecord[];
+  warnings: string[];
+  summary: {
+    pairs: number;
+    paired: number;
+    presentationOnly: number;
+    unpaired: number;
+    classified: number;
+    cosmetic: number;
+    sharper: number;
+    contradictory: number;
+    unclassified: number;
+    stale: number;
+    cosmeticPct: number;
+  };
+  chunkVerdicts: ChunkVerdict[];
+}
+
+/**
+ * `boardsmith verify-classify-status` — which pairs still need classifying (the resume decision),
+ * summary counts, and the per-chunk verdict roll-up (VERIFY-01's remaining half). Read-only; a
+ * pure function of the ledger (`status-5`) — never a directory scan.
+ *
+ * `pendingPairs` covers only `paired`-kind groups — there is nothing to classify in an
+ * `unpaired-slice`/`presentation-only` group, but both are still reported in `summary` rather than
+ * dropped (decision 4/17). `cosmeticPct` is computed over classified verdicts on `paired`,
+ * rule-bearing pairs ONLY — `presentation-only` groups never enter numerator or denominator
+ * (decision 17).
+ */
+export async function verifyClassifyStatusCommand(
+  options: VerifyRunOptions & { runId?: string } = {},
+): Promise<VerifyClassifyStatusResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  const runId = await resolveRunId(projectDir, options.runId);
+  const { pairs, warnings } = await computeRunPairs(projectDir, runId);
+
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const relLedgerPath = relative(projectDir, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+  const { classifications } = resolveLedgerState(lines);
+  const classifiedByPairId = new Map(classifications.map((c) => [c.pairId, c]));
+
+  const pairedPairs = pairs.filter((p) => p.kind === 'paired');
+  const pendingPairs = pairedPairs
+    .filter((p) => !classifiedByPairId.has(p.pairId))
+    .map((p) => p.pairId);
+
+  const cosmetic = classifications.filter((c) => c.ruleDelta === 'cosmetic').length;
+  const sharper = classifications.filter((c) => c.ruleDelta === 'sharper').length;
+  const contradictory = classifications.filter((c) => c.ruleDelta === 'contradictory').length;
+  const unclassified = classifications.filter((c) => c.ruleDelta === 'unclassified').length;
+  const stale = classifications.filter((c) => c.stale).length;
+
+  const pairedRuleBearingClassified = classifications.filter(
+    (c) => pairs.find((p) => p.pairId === c.pairId)?.kind === 'paired',
+  );
+  const cosmeticOverRuleBearing = pairedRuleBearingClassified.filter(
+    (c) => c.ruleDelta === 'cosmetic',
+  ).length;
+  const cosmeticPct =
+    pairedRuleBearingClassified.length > 0
+      ? Math.round((cosmeticOverRuleBearing / pairedRuleBearingClassified.length) * 1000) / 10
+      : 0;
+
+  const summary = {
+    pairs: pairs.length,
+    paired: pairedPairs.length,
+    presentationOnly: pairs.filter((p) => p.kind === 'presentation-only').length,
+    unpaired: pairs.filter((p) => p.kind === 'unpaired-slice').length,
+    classified: classifications.length,
+    cosmetic,
+    sharper,
+    contradictory,
+    unclassified,
+    stale,
+    cosmeticPct,
+  };
+
+  const chunkVerdicts = await computeChunkVerdicts(projectDir, pairs, classifications);
+
+  const result: VerifyClassifyStatusResult = {
+    runId,
+    pendingPairs,
+    classified: classifications,
+    warnings,
+    summary,
+    chunkVerdicts,
+  };
+
+  for (const w of warnings) console.error(chalk.yellow(`⚠ ${w}`));
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  console.log(chalk.green(`✓ Verify-classify status — run ${runId}`));
+  console.log(
+    `  ${chalk.gray('classified:')} ${summary.classified}/${summary.paired} paired group(s) — ` +
+      `${summary.cosmetic} cosmetic, ${summary.sharper} sharper, ${summary.contradictory} contradictory, ` +
+      `${summary.unclassified} unclassified (cosmeticPct: ${summary.cosmeticPct}%)`,
+  );
+  if (pendingPairs.length > 0) {
+    console.log(`  ${chalk.yellow('pending:')} ${pendingPairs.join(', ')}`);
+  }
+  const staleChunks = chunkVerdicts.filter((c) => c.stale);
+  if (staleChunks.length > 0) {
+    console.log(`  ${chalk.yellow('stale chunks:')} ${staleChunks.map((c) => c.slug).join(', ')}`);
+  }
+  return result;
+}

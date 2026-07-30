@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +11,7 @@ import {
   RULE_DELTA_KINDS,
   PRESENTATION_EXCLUSION_MARKERS,
   PAIR_KINDS,
+  RULE_DELTA_SEVERITY,
   isPresentationLine,
   ruleBearingLines,
   deriveStale,
@@ -17,6 +20,7 @@ import {
   resolveProvenance,
   verifyClassifyPairsCommand,
   verifyClassifyRecordCommand,
+  verifyClassifyStatusCommand,
   type RuleDelta,
 } from './verify-classify.js';
 import { renderIndex } from './ingest-archive.js';
@@ -941,4 +945,375 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
     expect(code).not.toMatch(/options\.stale\b/);
     expect(code).not.toMatch(/options\.provenance\b/);
   });
+});
+
+// -------------------------------------------------------------------------------------------
+// verify-classify-status + per-chunk verdict roll-up (Task 3, decisions 11 and 18)
+// -------------------------------------------------------------------------------------------
+
+/**
+ * A hand-built project with THREE independent, non-bridging single-page paired groups
+ * (pages-1-1/2-2/3-3), one presentation-only group (pages-4-4), and one unpaired-slice live-only
+ * group (pages-5-5) — deliberately NOT the real `seven`/`one-two-punch` fixtures, which collapse
+ * to one group each (174-03-SUMMARY.md's corrective follow-up) and so cannot exercise a
+ * multi-group `status`/`pendingPairs` scenario. Returns the project, run-id, and each group's
+ * `pairId` for direct classification in a test.
+ */
+async function threeGroupProject(): Promise<{
+  project: string;
+  runId: string;
+  pairIdA: string;
+  pairIdB: string;
+  pairIdC: string;
+  pairIdPresentation: string;
+  pairIdUnpaired: string;
+}> {
+  const project = join(dir, 'edge3');
+  const rulebookDir = join(project, 'rulebook');
+  await fs.mkdir(rulebookDir, { recursive: true });
+  await fs.writeFile(join(rulebookDir, 'a.md'), 'p.1, A:\n"Rule A live text."\n');
+  await fs.writeFile(join(rulebookDir, 'b.md'), 'p.2, B:\n"Rule B live text."\n');
+  await fs.writeFile(join(rulebookDir, 'c.md'), 'p.3, C:\n"Rule C live text."\n');
+  await fs.writeFile(
+    join(rulebookDir, 'd.md'),
+    'p.4, D:\nDerived (p.4) — diagram description: A purely decorative note.\n',
+  );
+  await fs.writeFile(join(rulebookDir, 'e.md'), 'p.5, E:\n"Rule E live text, unpaired."\n');
+
+  const initResult = await verifyRunInitCommand({ project, json: true });
+  const runId = initResult.runId;
+  const stagingDirAbs = join(project, initResult.stagingDir);
+
+  async function recordStaged(unit: string, file: string, text: string): Promise<void> {
+    await fs.writeFile(join(stagingDirAbs, file), text);
+    await verifyRunRecordCommand({ project, runId, unit, slice: file, json: true });
+  }
+  await recordStaged('ua', 'ua.md', 'p.1, A:\n"Rule A staged text."\n');
+  await recordStaged('ub', 'ub.md', 'p.2, B:\n"Rule B staged text."\n');
+  await recordStaged('uc', 'uc.md', 'p.3, C:\n"Rule C staged text."\n');
+  await recordStaged('ud', 'ud.md', 'p.4, D:\nVisual (p.4): The same decorative layout, restated.\n');
+
+  const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+  const byLive = (name: string) =>
+    pairsResult.pairs.find((p) => p.liveSlices.includes(`rulebook/${name}`))!.pairId;
+
+  return {
+    project,
+    runId,
+    pairIdA: byLive('a.md'),
+    pairIdB: byLive('b.md'),
+    pairIdC: byLive('c.md'),
+    pairIdPresentation: byLive('d.md'),
+    pairIdUnpaired: byLive('e.md'),
+  };
+}
+
+/** Writes `chunks/<slug>/CHUNK.md` with plain prose citing every `rulebook/<name>` in `citedNames`. */
+async function writeChunkCiting(project: string, slug: string, citedNames: string[]): Promise<void> {
+  const chunkDir = join(project, 'chunks', slug);
+  await fs.mkdir(chunkDir, { recursive: true });
+  const citations = citedNames.map((n) => `Cites rulebook/${n}.`).join('\n');
+  await fs.writeFile(join(chunkDir, 'CHUNK.md'), `# ${slug}\n\n${citations}\n`);
+}
+
+describe('verifyClassifyStatusCommand — pending pairs, summary counts, resume-safety', () => {
+  it('status-1: three pairs, one recorded — pendingPairs holds the two unrecorded ids, classified holds the one recorded verdict', async () => {
+    const { project, runId, pairIdA } = await threeGroupProject();
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
+
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    expect(result.pendingPairs).toHaveLength(2);
+    expect(result.classified).toHaveLength(1);
+    expect(result.classified[0].pairId).toBe(pairIdA);
+  });
+
+  it('status-2: presentation-only and unpaired-slice groups are excluded from pendingPairs but reported in summary', async () => {
+    const { project, runId, pairIdPresentation, pairIdUnpaired } = await threeGroupProject();
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    expect(result.pendingPairs).not.toContain(pairIdPresentation);
+    expect(result.pendingPairs).not.toContain(pairIdUnpaired);
+    expect(result.summary.presentationOnly).toBe(1);
+    expect(result.summary.unpaired).toBe(1);
+  });
+
+  it('status-3: cosmeticPct is computed over classified verdicts on paired, rule-bearing pairs only — presentation-only never enters numerator or denominator', async () => {
+    const { project, runId, pairIdA, pairIdB, pairIdC } = await threeGroupProject();
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdB, label: 'cosmetic', json: true });
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId: pairIdC,
+      label: 'contradictory',
+      quotedPass1: 'Rule C live text.',
+      quotedPass2: 'Rule C staged text.',
+      json: true,
+    });
+
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    // 2 cosmetic out of 3 classified paired-rule-bearing pairs = 66.7%. The presentation-only
+    // group (pages-4-4) was never classified nor counted here.
+    expect(result.summary.cosmeticPct).toBeCloseTo(66.7, 1);
+    expect(result.summary.contradictory).toBe(1);
+  });
+
+  it('status-4: a run with findings (unpaired slices, unclassified, non-zero contradictory) resolves without throwing — only a tool failure is non-zero', async () => {
+    const { project, runId, pairIdC } = await threeGroupProject();
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId: pairIdC,
+      label: 'contradictory',
+      quotedPass1: 'Rule C live text.',
+      quotedPass2: 'Rule C staged text.',
+      json: true,
+    });
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdC, label: 'bogus-label', json: true });
+    await expect(verifyClassifyStatusCommand({ project, runId, json: true })).resolves.toBeTruthy();
+
+    await expect(
+      verifyClassifyStatusCommand({ project, runId: '2020-01-01T00-00-00Z', json: true }),
+    ).rejects.toThrow();
+  });
+
+  it('status-5: two successive calls over an unchanged ledger return identical results', async () => {
+    const { project, runId, pairIdA } = await threeGroupProject();
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
+    const first = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const second = await verifyClassifyStatusCommand({ project, runId, json: true });
+    expect(second).toEqual(first);
+  });
+});
+
+describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attribution, not group verdict', () => {
+  it('chunk-1: chunk A cites a live slice in a sharper pair and is stale; chunk B cites only a cosmetic pair and is not stale', async () => {
+    const { project, runId, pairIdA, pairIdB } = await threeGroupProject();
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId: pairIdA,
+      label: 'sharper',
+      quotedPass1: 'Rule A live text.',
+      quotedPass2: 'Rule A staged text.',
+      json: true,
+    });
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdB, label: 'cosmetic', json: true });
+
+    await writeChunkCiting(project, 'chunk-a', ['a.md']);
+    await writeChunkCiting(project, 'chunk-b', ['b.md']);
+
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const a = result.chunkVerdicts.find((c) => c.slug === 'chunk-a')!;
+    const b = result.chunkVerdicts.find((c) => c.slug === 'chunk-b')!;
+    expect(a.stale).toBe(true);
+    expect(a.ruleDelta).toBe('sharper');
+    expect(a.pairIds).toContain(pairIdA);
+    expect(b.stale).toBe(false);
+    expect(b.ruleDelta).toBe('cosmetic');
+  });
+
+  it('chunk-1b: a chunk citing several pairs rolls up to MAX severity — contradictory > sharper > cosmetic, unclassified beats cosmetic', async () => {
+    const { project, runId, pairIdA, pairIdB, pairIdC } = await threeGroupProject();
+
+    // Escalating case: sharper, then adding contradictory — both cited by the SAME chunk from the
+    // start, so the roll-up is re-measured as more of what it cites gets classified.
+    await writeChunkCiting(project, 'escalate', ['a.md', 'b.md', 'c.md']);
+
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId: pairIdB,
+      label: 'sharper',
+      quotedPass1: 'Rule B live text.',
+      quotedPass2: 'Rule B staged text.',
+      json: true,
+    });
+    const afterSharper = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const escalateAfterSharper = afterSharper.chunkVerdicts.find((c) => c.slug === 'escalate')!;
+    expect(escalateAfterSharper.ruleDelta).toBe('sharper');
+    expect(escalateAfterSharper.stale).toBe(true);
+    expect(new Set(escalateAfterSharper.pairIds)).toEqual(new Set([pairIdA, pairIdB]));
+
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId: pairIdC,
+      label: 'contradictory',
+      quotedPass1: 'Rule C live text.',
+      quotedPass2: 'Rule C staged text.',
+      json: true,
+    });
+    const afterContradictory = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const escalateAfterContradictory = afterContradictory.chunkVerdicts.find(
+      (c) => c.slug === 'escalate',
+    )!;
+    expect(escalateAfterContradictory.ruleDelta).toBe('contradictory');
+    expect(new Set(escalateAfterContradictory.pairIds)).toEqual(new Set([pairIdA, pairIdB, pairIdC]));
+
+    // Independent mix: cosmetic + unclassified — decision 8: unclassified always beats cosmetic,
+    // since a malformed/blind verdict can never be reported clean.
+    const rulebookDir = join(project, 'rulebook');
+    await fs.writeFile(join(rulebookDir, 'g.md'), 'p.7, G:\n"Rule G live text."\n');
+    const stagingDirAbs = join(
+      project,
+      (await verifyRunInitCommand({ project, runId, json: true })).stagingDir,
+    );
+    await fs.writeFile(join(stagingDirAbs, 'ug.md'), 'p.7, G:\n"Rule G staged text."\n');
+    await verifyRunRecordCommand({ project, runId, unit: 'ug', slice: 'ug.md', json: true });
+    const pairsAfterG = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairIdG = pairsAfterG.pairs.find((p) => p.liveSlices.includes('rulebook/g.md'))!.pairId;
+    // No --label at all — normalizes to unclassified (decision 8), never guessed as cosmetic.
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdG, json: true });
+
+    await writeChunkCiting(project, 'mixed', ['a.md', 'g.md']);
+    const finalStatus = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const mixed = finalStatus.chunkVerdicts.find((c) => c.slug === 'mixed')!;
+    expect(mixed.ruleDelta).toBe('unclassified');
+    expect(mixed.stale).toBe(true);
+    expect(RULE_DELTA_SEVERITY.unclassified).toBeGreaterThan(RULE_DELTA_SEVERITY.cosmetic);
+  });
+
+  it('chunk-2: a chunk citing a live slice in an unpaired-slice group is reported unclassified — nothing was ever compared for it', async () => {
+    const { project, runId, pairIdUnpaired } = await threeGroupProject();
+    await writeChunkCiting(project, 'chunk-e', ['e.md']);
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const e = result.chunkVerdicts.find((c) => c.slug === 'chunk-e')!;
+    expect(e.ruleDelta).toBe('unclassified');
+    expect(e.stale).toBe(true);
+    expect(e.pairIds).toContain(pairIdUnpaired);
+  });
+
+  it('chunk-3: no CHUNK.md/SKETCH.md file is written or modified by verify-classify-status or verify-classify-record', async () => {
+    const { project, runId, pairIdA } = await threeGroupProject();
+    await writeChunkCiting(project, 'chunk-a', ['a.md']);
+
+    async function hashAll(): Promise<Map<string, string>> {
+      const map = new Map<string, string>();
+      async function walk(current: string): Promise<void> {
+        const entries = await fs.readdir(current, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = join(current, entry.name);
+          if (entry.isDirectory()) {
+            await walk(full);
+          } else {
+            map.set(full, createHash('sha256').update(await fs.readFile(full)).digest('hex'));
+          }
+        }
+      }
+      await walk(project);
+      return map;
+    }
+
+    const before = await hashAll();
+    await verifyClassifyStatusCommand({ project, runId, json: true });
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
+    await verifyClassifyStatusCommand({ project, runId, json: true });
+    const after = await hashAll();
+
+    for (const [path, hash] of before) {
+      if (path.includes('CHUNK.md') || path.includes('SKETCH.md')) {
+        expect(after.get(path)).toBe(hash);
+      }
+    }
+    // The ledger IS expected to change (that's the record write); assert no CHUNK.md/SKETCH.md
+    // file appeared that did not exist before, either.
+    for (const path of after.keys()) {
+      if (path.includes('CHUNK.md') || path.includes('SKETCH.md')) {
+        expect(before.has(path)).toBe(true);
+      }
+    }
+  });
+
+  it('decision-18: two chunks citing the SAME pair group, where a sharper delta intersects only the first chunk\'s cited live slice — the first chunk is stale, the second is NOT (the phase goal in miniature)', async () => {
+    const project = join(dir, 'bridge');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    await fs.writeFile(join(rulebookDir, 'x.md'), 'p.8, X:\n"X original text."\n');
+    await fs.writeFile(join(rulebookDir, 'y.md'), 'p.8, Y:\n"Y original text."\n');
+
+    const initResult = await verifyRunInitCommand({ project, json: true });
+    const runId = initResult.runId;
+    const stagingDirAbs = join(project, initResult.stagingDir);
+    await fs.writeFile(
+      join(stagingDirAbs, 'uxy.md'),
+      'p.8, XY:\n"X changed text."\n"Y original text restated."\n',
+    );
+    await verifyRunRecordCommand({ project, runId, unit: 'uxy', slice: 'uxy.md', json: true });
+
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    expect(pairsResult.pairs).toHaveLength(1);
+    const pairId = pairsResult.pairs[0].pairId;
+    expect(pairsResult.pairs[0].liveSlices.sort()).toEqual(['rulebook/x.md', 'rulebook/y.md']);
+
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'sharper',
+      quotedPass1: 'X original text.',
+      quotedPass2: 'X changed text.',
+      json: true,
+    });
+
+    await writeChunkCiting(project, 'chunk-x', ['x.md']);
+    await writeChunkCiting(project, 'chunk-y', ['y.md']);
+
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const chunkX = result.chunkVerdicts.find((c) => c.slug === 'chunk-x')!;
+    const chunkY = result.chunkVerdicts.find((c) => c.slug === 'chunk-y')!;
+    expect(chunkX.stale).toBe(true);
+    expect(chunkX.ruleDelta).toBe('sharper');
+    expect(chunkX.pairIds).toContain(pairId);
+    expect(chunkY.stale).toBe(false);
+    expect(chunkY.ruleDelta).toBe('cosmetic');
+    expect(chunkY.pairIds).not.toContain(pairId);
+  });
+});
+
+describe('CLI registration — real entry point', () => {
+  const execFileAsync = promisify(execFile);
+  const __filename2 = fileURLToPath(import.meta.url);
+  const REPO_ROOT = join(dirname(__filename2), '..', '..', '..');
+  const CLI_BIN = join(REPO_ROOT, 'bin', 'boardsmith.js');
+
+  async function spawnCli(
+    args: string[],
+    cwd: string = REPO_ROOT,
+  ): Promise<{ code: number; stdout: string; stderr: string }> {
+    try {
+      const { stdout, stderr } = await execFileAsync(process.execPath, [CLI_BIN, ...args], { cwd });
+      return { code: 0, stdout, stderr };
+    } catch (err) {
+      const e = err as { code?: number; stdout?: string; stderr?: string };
+      return { code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
+    }
+  }
+
+  it('cli-1: all three commands\' --help exits 0 through the real entry point and names their documented options', async () => {
+    const pairs = await spawnCli(['verify-classify-pairs', '--help']);
+    expect(pairs.code).toBe(0);
+    expect(pairs.stdout).toMatch(/--run-id/);
+    expect(pairs.stdout).toMatch(/--json/);
+
+    const record = await spawnCli(['verify-classify-record', '--help']);
+    expect(record.code).toBe(0);
+    expect(record.stdout).toMatch(/--pair-id/);
+    expect(record.stdout).toMatch(/--label/);
+    expect(record.stdout).toMatch(/--quoted-pass1/);
+    expect(record.stdout).toMatch(/--quoted-pass2/);
+
+    const status = await spawnCli(['verify-classify-status', '--help']);
+    expect(status.code).toBe(0);
+    expect(status.stdout).toMatch(/--run-id/);
+  }, 30000);
+
+  it('cli-2: verify-classify-status --json run as a real child process prints parseable JSON and exits 0', async () => {
+    const { project, runId } = await threeGroupProject();
+    const result = await spawnCli(['verify-classify-status', '--project', project, '--run-id', runId, '--json']);
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.runId).toBe(runId);
+    expect(Array.isArray(parsed.pendingPairs)).toBe(true);
+  }, 30000);
 });
