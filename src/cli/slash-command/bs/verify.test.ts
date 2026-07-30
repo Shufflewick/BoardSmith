@@ -45,6 +45,8 @@ const ALL_VERIFY_FILES = [
   'verify/classification-dispatch.md',
   'verify/classification-subagent.md',
   'verify/adjudication-gate.md',
+  'verify/ruling-recheck.md',
+  'verify/repair-dispatch.md',
 ];
 
 describe('verify-game.md — entry point shape (VERIFY-01)', () => {
@@ -521,5 +523,129 @@ describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12
     for (const literal of literalPrefixes) {
       expect(doc).toContain(literal);
     }
+  });
+});
+
+describe('CHECK-02 no-fork guard — lens/repair prose sourced from build/*.md at test time (176-04)', () => {
+  /** Every `bs/verify/*.md` file, absolute paths. */
+  function verifyFiles(): string[] {
+    const verifyDir = join(__dirname, 'verify');
+    return readdirSync(verifyDir, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .map((e) => join(verifyDir, e.name));
+  }
+
+  it('no file under bs/verify/ contains a lens-template marker phrase (read from build/audit.md, not re-typed)', () => {
+    const audit = flat(read('build/audit.md'));
+    // Two stable sentences unique to the fidelity and visibility templates. Read out of the real
+    // file's own content (companion assertions below) rather than trusted-blind literals, so a
+    // reworded template fails this test loudly instead of silently disarming the guard. Matched
+    // against `flat()`-collapsed text on both sides so hand-wrapped line breaks inside the
+    // template's own prose can't defeat either the presence or absence check.
+    const fidelityMarker = 'you are checking the CODE against the RAW SOURCE';
+    const visibilityMarker = 'These raw sources, NOT the Visibility Declaration';
+    expect(audit).toContain(fidelityMarker);
+    expect(audit).toContain(visibilityMarker);
+
+    const files = verifyFiles();
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const text = flat(readFileSync(file, 'utf-8'));
+      expect(text).not.toContain(fidelityMarker);
+      expect(text).not.toContain(visibilityMarker);
+    }
+  });
+
+  it('no file under bs/verify/ restates build/repair.md\'s round-bound sentence or its three triage option labels as its own policy', () => {
+    const repair = read('build/repair.md');
+    const boundSentence = 'Maximum 3 audit rounds per chunk.';
+    const triageLabels = ['Real blocker', 'Defer to a later chunk', 'Auditor was wrong (refuted)'];
+    // Companion assertion: fail loudly if build/repair.md itself stops carrying this exact
+    // sentence/labels, rather than let the guard below pass vacuously against a moved target.
+    expect(repair).toContain(boundSentence);
+    for (const label of triageLabels) expect(repair).toContain(label);
+
+    const files = verifyFiles();
+    for (const file of files) {
+      const text = readFileSync(file, 'utf-8');
+      expect(text).not.toContain(boundSentence);
+      // All three triage labels co-occurring in one verify/ file would mean a forked restatement
+      // of the round-3 triage script; any single label alone is plausible incidental prose (e.g.
+      // "real blocker" used generically), so the fork signal is all three appearing together.
+      const allThreePresent = triageLabels.every((label) => text.includes(label));
+      expect(allThreePresent).toBe(false);
+    }
+  });
+
+  it('repair-dispatch.md DOES contain both build/audit.md and build/repair.md delegation paths (positive pin)', () => {
+    // A no-fork guard that would also pass if the delegation itself were deleted is worthless —
+    // pin that the by-reference pointers actually exist.
+    const doc = read('verify/repair-dispatch.md');
+    expect(doc).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md');
+    expect(doc).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md');
+  });
+
+  it('no file under bs/verify/ instructs reading ## Interpretation (decision 11)', () => {
+    const NEGATORS = /\b(not|never|forbidden|do not|does not|no)\b/i;
+    const files = verifyFiles();
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const text = readFileSync(file, 'utf-8');
+      let idx = text.indexOf('## Interpretation');
+      while (idx !== -1) {
+        const window = text.slice(Math.max(0, idx - 150), idx);
+        expect(NEGATORS.test(window)).toBe(true);
+        idx = text.indexOf('## Interpretation', idx + 1);
+      }
+    }
+  });
+});
+
+describe('verify-game.md — repair/ruling-recheck routing and swept boundary claims (176-04)', () => {
+  it('does not contain either retired boundary sentence', () => {
+    const skill = read('verify-game.md');
+    expect(skill).not.toContain("never edits a chunk's design");
+    expect(skill).not.toContain("Performing the repair itself is Phase 176's job");
+  });
+
+  it('has a step dispatching verify/repair-dispatch.md and a route to verify/ruling-recheck.md', () => {
+    const skill = read('verify-game.md');
+    expect(skill).toMatch(/^## Step \d+: Repair Dispatch/m);
+    expect(skill).toMatch(/^## Step \d+: Ruling Re-Check/m);
+    expect(skill).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/repair-dispatch.md');
+    expect(skill).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/ruling-recheck.md');
+  });
+
+  it('lists both new routes in Reference Files, in the existing one-line bullet style', () => {
+    const skill = read('verify-game.md');
+    const refSection = skill.slice(skill.indexOf('## Reference Files'));
+    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/repair-dispatch.md');
+    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/ruling-recheck.md');
+  });
+
+  it('step headings are contiguous and 0-indexed with no gap or duplicate', () => {
+    const skill = read('verify-game.md');
+    const nums = [...skill.matchAll(/^## Step (\d+):/gm)].map((m) => Number(m[1]));
+    expect(nums.length).toBeGreaterThan(0);
+    expect(nums[0]).toBe(0);
+    for (let i = 1; i < nums.length; i++) {
+      expect(nums[i]).toBe(nums[i - 1] + 1);
+    }
+  });
+
+  it('does not reintroduce a hardcoded step count or reference-file count', () => {
+    const skill = read('verify-game.md');
+    expect(skill).not.toMatch(/\b(five|six|seven|eight|nine)[- ]step/i);
+    expect(skill).not.toMatch(/\b(five|six|seven|eight|nine)\s+reference\s+files/i);
+  });
+
+  it('does not restate a hardcoded repair-gate disposition list; cites the source array instead', () => {
+    // 175's own "four items" defect class: an inline three-value (or any-value) enumeration of
+    // REPAIR_GATE_DISPOSITIONS would go stale the next time that array gains or loses a member.
+    const skill = read('verify-game.md');
+    expect(skill).not.toMatch(
+      /\(`reopen-playtest`,\s*`close-without-replaytest`,\s*or\s*`unknown-drift`\)/,
+    );
+    expect(skill).toMatch(/REPAIR_GATE_DISPOSITIONS/);
   });
 });
