@@ -868,3 +868,125 @@ line*" is.
    recording looks like (the lexicon regression pairs in section 4 cover that path syntheticaly).
 4. **The `evidence` field's freedom from ALL slice-body-shaped text**, only from quoted RULE
    lines outside `quotedPass1`/`quotedPass2` — see the Artifact 2 finding above.
+
+---
+
+## 4. Determinism and lexicon regression
+
+### Determinism (decision 16) — classify the same pair set twice, fresh dispatches both times
+
+A SECOND, independent `verify-run-init` was created per game over the SAME reconstituted staged
+material (the identical archived `174-FIXTURES/<game>/staged/*.md` bytes copied into the new run's
+staging directory and recorded via real `verify-run-record` calls — never a hand-edited ledger),
+then a fresh `BS-CLASSIFY-V1` dispatch (a brand-new `claude -p` subprocess, no shared context with
+the first dispatch) classified the resulting pair.
+
+| Game | Run 1 (first classification pass, section 2) | Run 2 (fresh dispatch, this section) |
+|---|---|---|
+| `seven` | `2026-07-29T23-25-24Z` | `2026-07-30T01-06-00Z` |
+| `one-two-punch` | `2026-07-29T23-28-06Z` | `2026-07-30T01-06-19Z` |
+
+**`pairId` stability confirmed first** — `verify-classify-pairs --json` against both run-2 run-ids
+returns the identical `pairId` (`pages-1-2`) both games produced under run 1, confirming
+`pairSlices()`'s content-derived pairing is stable across independent runs of the same material, as
+decision 4's amendment promises.
+
+Fresh dispatch, run 2, `seven`: real subagent return, exit 0, `label: sharper` (verbatim quote
+`"Named-but-undefined (p.1): bonus point cards..."` / `"Derived (p.1): Each bonus point card is
+worth +1 point, as printed on its face."` — the SAME top-level quote pair the first dispatch chose,
+independently, out of a larger candidate set). Recorded via `verify-classify-record`.
+
+Fresh dispatch, run 2, `one-two-punch`: real subagent return, exit 0, `label: cosmetic` (same
+top-level quote pair as run 1 — the CHARACTER ART credit-spelling discrepancy). Recorded via
+`verify-classify-record`.
+
+**External diff of the `(pairId, ruleDelta, stale)` triple sets** — extracted independently from
+each run's own `verify-classify-status --json` `classified[]` array via a standalone Python script,
+never trusting either run's own "matched" framing:
+
+```
+seven run1:         [('pages-1-2', 'sharper', True)]
+seven run2:         [('pages-1-2', 'sharper', True)]
+seven: IDENTICAL
+
+one-two-punch run1: [('pages-1-2', 'cosmetic', False)]
+one-two-punch run2: [('pages-1-2', 'cosmetic', False)]
+one-two-punch: IDENTICAL
+```
+
+**Verdict: IDENTICAL, both games.** The `(pairId, ruleDelta, stale)` triple decision 16 asks to
+compare is byte-identical across two fully independent dispatches of the same real content, for
+both games. `pairId` values are also identical across runs (`pages-1-2` both times, both games),
+confirming the stability decision 4's `pairSlices` promises.
+
+**A real, honest caveat, not smoothed over: the underlying `lineFindings[]` are NOT identical
+between the two runs, even though the top-level triple is.** `seven` run 1 returned 6 line-level
+findings (1 `sharper` + 5 `cosmetic`); run 2 returned 9 (3 `sharper` + 6 `cosmetic`) — the second
+dispatch additionally flagged a "color is not part of the Set/Run condition" delta and a
+"who chooses the scored 7 cards" delta that the first dispatch did not surface as separate line
+findings (though its `evidence` prose touches similar territory in places). `one-two-punch` run 1
+returned 6 line-level findings (5 rule-bearing `cosmetic` + 1 presentation-recognition entry); run
+2 returned 4 (all rule-bearing `cosmetic`, no presentation-recognition entry included). **In both
+games, every line-level finding present in EITHER run was labeled `cosmetic` except the same one
+`sharper` cluster in `seven` (the bonus-card-value delta), so the MAX-severity rollup that produces
+the top-level triple was never at risk of disagreeing** — but decision 16's literal ask (the
+coarse triple) and a stronger, un-asked "identical line-level evidence set" property are two
+different claims, and only the first is proven here. This is reported plainly per the plan's own
+instruction not to smooth a mover into a match.
+
+### Lexicon regression (decision 15's second half) — all 7 hand-built pairs, real dispatches
+
+Each of the 7 pairs under `174-FIXTURES/lexicon/` was dispatched to a real, fresh classification
+subagent (`claude -p`, `--allowedTools Read`, pointed at
+`src/cli/slash-command/bs/verify/classification-subagent.md` — the canonical contract source,
+byte-identical to the installed copy) with the same `BS-CLASSIFY-V1` pointer block shape, `live.md`/
+`staged.md` as the two slice paths:
+
+| Pair | Expected (`EXPECTED.md`) | Returned label | Match |
+|---|---|---|---|
+| `cosmetic-reword` | `cosmetic` | `cosmetic` | YES |
+| `cosmetic-reorder` | `cosmetic` | `cosmetic` | YES |
+| `cosmetic-schema-asymmetry` | `cosmetic` | `cosmetic` | YES |
+| `sharper-added-bound` | `sharper` | `sharper` | YES |
+| `sharper-added-tiebreak` | `sharper` | `sharper` | YES |
+| `contradictory-changed-number` | `contradictory` | `contradictory` | YES |
+| `contradictory-reversed-precedence` | `contradictory` | `contradictory` | YES |
+
+**Hit rate: 7/7 (100%). Zero misses to report.**
+
+**The schema-asymmetry trap pair, called out by name**, returned `cosmetic` with `evidence`
+explicitly walking through the exclusion of both schemas' presentation lines (the live side's
+qualified `Derived (p.2) — diagram description:` line, the staged side's `Visual (p.2):` line),
+correctly identifying the wide wording divergence between them as "pure schema drift... not a rule
+delta," and correctly landing on the byte-identical rule-bearing remainder ("A player may attack
+once per turn.") — `quotedPass1`/`quotedPass2` are the identical sentence, `lineFindings: []` (zero
+line-level deltas once presentation is excluded, matching the fixture's own design). This is the
+one pair the plan calls out as the direct evidence for decision 12b/17's exclusion-filter
+completeness, and it passed cleanly.
+
+### Originals re-verification (post-run, this plan's own pass)
+
+```
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd   (unchanged)
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(still empty)
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9   (unchanged)
+```
+
+Whole-tree sha256 manifest diff, before vs. after THIS PLAN's entire run (both games, freshly
+captured at the start of this plan's own execution, not reused from a prior plan's capture):
+
+```
+$ diff "$SCRATCH/seven.before" "$SCRATCH/seven.after"
+(empty, exit 0)
+$ diff "$SCRATCH/otp.before" "$SCRATCH/otp.after"
+(empty, exit 0)
+```
+
+Both originals byte-identical before and after this plan's entire run — reconstitution, the real
+classification pass, the determinism double-run, and the lexicon regression combined touched
+nothing outside `$SCRATCH` copies and the in-repo `174-FIXTURES`/`174-PROOF.md` artifacts.
+
+**GATE: PASSED (Task 3 — determinism identical both games, lexicon 7/7, originals untouched)**
