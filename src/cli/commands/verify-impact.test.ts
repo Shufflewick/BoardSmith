@@ -1116,6 +1116,18 @@ describe('repair-gate — computeRepairGate (pure, total)', () => {
       }
     }
   });
+
+  // Phase 176 Plan 02 (Pitfall 1 / Assumption A3) — `computeRepairGate` must be safe to invoke a
+  // SECOND time post-repair (`verify-repair.ts`'s `recomputeRepairGatePostRepair`). This proves
+  // the assumption RESEARCH.md flagged as unverified: two calls with identical input are deeply
+  // equal, and the function performs no I/O (it takes no path/handle and awaits nothing).
+  it('idempotence (176-02 Pitfall 1 / Assumption A3): two computeRepairGate calls with equal input are deeply equal, and the function is synchronous (no I/O)', () => {
+    const input = { status: 'verified', stale: true, driftState: 'clean' as const };
+    const first = computeRepairGate(input);
+    const second = computeRepairGate(input);
+    expect(second).toEqual(first);
+    expect(computeRepairGate.constructor.name).not.toBe('AsyncFunction');
+  });
 });
 
 /**

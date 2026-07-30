@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,7 @@ import {
   resolveVerifyEpisodeNumber,
   appendAuditRoundHeading,
   writeAppendedAuditRound,
+  recomputeRepairGatePostRepair,
   VERIFY_EPISODE_ROUND_BUDGET,
 } from './verify-repair.js';
 import {
@@ -353,4 +355,101 @@ describe('episode — writeAppendedAuditRound routes through atomicWriteFile onl
     expect(nonCommentLines).not.toMatch(/writeFileSync/);
     expect(nonCommentLines).toMatch(/atomicWriteFile\(/);
   });
+});
+
+// -------------------------------------------------------------------------------------------
+// Task 3 — recomputeRepairGatePostRepair
+// -------------------------------------------------------------------------------------------
+
+async function buildRepairGateTestProject(
+  root: string,
+  opts: { validHash?: boolean } = {},
+): Promise<{ project: string; slug: string; firstSha: string }> {
+  const project = join(root, `repair-gate-project-${Math.random().toString(36).slice(2)}`);
+  await fs.mkdir(project, { recursive: true });
+  await fs.mkdir(join(project, 'src'), { recursive: true });
+  await fs.writeFile(join(project, 'src', 'thing.ts'), 'export const thing = 1;\n');
+
+  execSync('git init', { cwd: project, stdio: 'ignore' });
+  execSync('git add -A', { cwd: project, stdio: 'ignore' });
+  execSync('git -c user.email=t@t -c user.name=t commit -m first', { cwd: project, stdio: 'ignore' });
+  const firstSha = execSync('git rev-parse HEAD', { cwd: project }).toString().trim();
+
+  const slug = 'movement';
+  const chunkDir = join(project, 'chunks', slug);
+  await fs.mkdir(chunkDir, { recursive: true });
+  const hash = opts.validHash === false ? 'not-a-hash' : firstSha;
+  await fs.writeFile(
+    join(chunkDir, 'CHUNK.md'),
+    `# Chunk: ${slug}\n\nStatus: verified\n\n` +
+      `## Build Manifest\n\n| File | Status |\n|---|---|\n| src/thing.ts | NEW |\n\n` +
+      `## Verified Commit Hash\n\n${hash}\n`,
+  );
+
+  return { project, slug, firstSha };
+}
+
+describe('post-repair gate — recomputeRepairGatePostRepair, over a real git fixture', () => {
+  let root: string;
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(join(tmpdir(), 'bs-verify-repair-gate-'));
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+    logSpy.mockRestore();
+  });
+
+  it('clean → drifted flip: first reading close-without-replaytest, second (after a real file modification) reopen-playtest', async () => {
+    const { project, slug } = await buildRepairGateTestProject(root);
+
+    const first = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
+    expect(first.disposition).toBe('close-without-replaytest');
+
+    await fs.writeFile(join(project, 'src', 'thing.ts'), 'export const thing = 2;\n');
+    execSync('git add -A', { cwd: project, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m second', { cwd: project, stdio: 'ignore' });
+
+    const second = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
+    expect(second.disposition).toBe('reopen-playtest');
+    expect(second.nextStatus).toBe('built');
+  });
+
+  it('unchanged case preserves disposition across two invocations (not gratuitously destabilising)', async () => {
+    const { project, slug } = await buildRepairGateTestProject(root);
+
+    const first = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
+    const second = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
+
+    expect(first.disposition).toBe(second.disposition);
+    expect(first.disposition).toBe('close-without-replaytest');
+  });
+
+  it("driftState === 'unknown' still short-circuits first on the second invocation", async () => {
+    const { project, slug } = await buildRepairGateTestProject(root, { validHash: false });
+
+    const first = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
+    const second = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
+
+    expect(first.disposition).toBe('unknown-drift');
+    expect(second.disposition).toBe('unknown-drift');
+  });
+
+  it(
+    "structural guard: recomputeRepairGatePostRepair's parameter object has no driftState/gate member " +
+      '— the pre-repair snapshot is unpassable',
+    async () => {
+      const source = await fs.readFile(join(__dirname, 'verify-repair.ts'), 'utf-8');
+      const match = source.match(
+        /export async function recomputeRepairGatePostRepair\(input: \{([\s\S]*?)\}\): Promise<RepairGate>/,
+      );
+      expect(match).not.toBeNull();
+      const paramBlock = match![1];
+      expect(paramBlock).not.toMatch(/driftState/);
+      expect(paramBlock).not.toMatch(/\bgate\b/);
+    },
+  );
 });

@@ -1,5 +1,6 @@
 import { atomicWriteFile, type ClassificationRecord } from './verify-run.js';
-import type { ImpactMapEntry } from './verify-impact.js';
+import { driftCheckCommand } from './drift-check.js';
+import { computeRepairGate, type ImpactMapEntry, type RepairGate } from './verify-impact.js';
 
 /**
  * `verify-repair.ts` — CHECK-02's mechanical core (176-CONTEXT.md decisions 5, 8, 9, 12, 17, 19).
@@ -10,10 +11,12 @@ import type { ImpactMapEntry } from './verify-impact.js';
  *
  *   1. `selectStaleChunks`/`resolveStagedSlicePaths` — which chunks are in scope, and which
  *      FRESH STAGED slice paths (never live `rulebook/` slices, decision 9) a lens must read.
- *   2. (Task 2) verify-episode round bookkeeping — a fresh 3-round budget per verify pass,
- *      appended after a chunk's build-era rounds without renumbering them.
- *   3. (Task 3) `recomputeRepairGatePostRepair` — re-derives `computeRepairGate` from POST-repair
- *      code state; the pre-repair snapshot is structurally unpassable to it.
+ *   2. `parseAuditRounds`/`planVerifyEpisodeRound`/`appendAuditRoundHeading` — a verify episode's
+ *      own fresh 3-round budget (decision 17), appended after a chunk's build-era rounds without
+ *      renumbering them, legible in CHUNK.md as its own episode.
+ *   3. `recomputeRepairGatePostRepair` — re-derives `computeRepairGate` from POST-repair code
+ *      state; the pre-repair snapshot (`ImpactMapEntry.gate`) is structurally unpassable to it
+ *      (Pitfall 1 — the whole reason this module exists).
  *
  * Every write in this module routes through `verify-run.ts`'s `atomicWriteFile` — the ONE atomic
  * ledger/artifact write path in the repo (173-REVIEW.md CR-01's defect class). No second parser,
@@ -251,4 +254,33 @@ export async function writeAppendedAuditRound(
   const updated = appendAuditRoundHeading(chunkMd, heading);
   await atomicWriteFile(chunkMdPath, updated);
   return updated;
+}
+
+// -------------------------------------------------------------------------------------------
+// Task 3 — post-repair repair-gate re-derivation (Pitfall 1)
+// -------------------------------------------------------------------------------------------
+
+/**
+ * Re-derives the repair gate AFTER repair has had a chance to move code (Pitfall 1: Step 4's
+ * pre-repair `ImpactMapEntry.gate` snapshot answers a DIFFERENT question — "had code changed
+ * BEFORE repair" — and would route every repaired chunk wrongly if reused here).
+ *
+ * Structurally, this function's input has no `driftState`/`gate` field — there is no way for a
+ * caller to pass Step 4's stale snapshot through it. `driftState` is always freshly re-derived,
+ * in this call, from `drift-check.ts` — the SOLE authority for "did this chunk's code move"
+ * (175-CONTEXT.md decision 10) — never re-implemented here.
+ */
+export async function recomputeRepairGatePostRepair(input: {
+  projectDir: string;
+  slug: string;
+  stale: boolean;
+  status: string;
+}): Promise<RepairGate> {
+  const { projectDir, slug, stale, status } = input;
+
+  const drift = await driftCheckCommand({ project: projectDir, json: true });
+  const chunkDrift = drift.chunks.find((c) => c.chunk === slug);
+  const driftState = chunkDrift?.state ?? 'unknown';
+
+  return computeRepairGate({ status, stale, driftState });
 }
