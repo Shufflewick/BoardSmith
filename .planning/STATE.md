@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 175-07-PLAN.md — the live VERIFY-04 gate proof (175-PROOF.md), fully closed including the human checkpoint. Re-verified the 174-07-contradictory fixture's 24 MANIFEST sha256s, quoted the real contradictory ClassificationRecord verbatim, and proved a real verify-impact-apply on a cp -R copy of one-two-punch is measurably BLOCKED (whole-copy sha256 diff: 0 files changed) while the real finding is pending, then proved both terminal answers on fresh copies: UNADJUDICATED writes no RULINGS.md entry (hash-identical before/after) and leaves the pair pending on re-run; resolved appends a real Ruling 27 (26 pre-existing + 1) that trace-check re-parses (totals.rulings: 27, plus the expected ruling-untested finding for the new entry). A real live-discovered bug was found and fixed under deviation Rule 1: all four verify-impact-* commands were double-printing verifyClassifyStatusCommand's own JSON as a stdout side effect (breaking --json's JSON.parse contract) — fixed by switching their internal composition calls to json:false, matching the file's own established driftCheckCommand/chunkProvenanceStatusCommand convention. The Task 3 human-verify checkpoint was genuinely answered (not self-certified): the designer reviewed the real rendered gate output plus the real UNADJUDICATED/Ruling-27 fenced bodies and approved without naming any missing field, recorded verbatim in 175-PROOF.md §3d. npm test 3825/3825 green; both ~/BoardSmithGames originals confirmed byte-identical before/after. VERIFY-04 is intentionally left OPEN in REQUIREMENTS.md — this plan's own evidence is complete, but 175-08 owns the phase's official cross-file closeout, per explicit instruction and this milestone's own established discipline (175-06's bare-checkbox closure of VERIFY-05/06 was reverted for the same reason). This is plan 7 of 8 in Phase 175. See .planning/phases/175-impact-map-repair-gating/175-07-SUMMARY.md."
-last_updated: "2026-07-30T15:45:00Z"
+stopped_at: "Completed 175-08-PLAN.md — the phase's final plan: VERIFY-05's REAL cross-file staleness write on both live reference games (seven 6/16, one-two-punch 6/11 marked, exactly matching 174-PROOF.md §8's predicted stale sets with zero symmetric difference), the VERIFY-06 payoff MEASURED on the real stale sets, decision 13's waived path proven LIVE, and the phase closeout. A real live bug was found and fixed under deviation Rule 1: writeRulesStalenessMarker's SKETCH.md pointer-insertion fused the new line onto the very next real bullet with no newline between them whenever no blank line separated the Status line from what followed (the real, more common shape) — fixed by never slicing past the Status line's own trailing newline; new regression test added; npm test 3826/3826 green. VERIFY-06's honest verdict: the payoff is NOT demonstrated on real data — 1 of 12 real rules-stale chunks across both games closes without re-playtesting; 11 of 12 re-open the gate because most stale chunks' code genuinely drifted for reasons unrelated to the rules finding (not because drift-check returned unknown, the originally-anticipated failure mode — unknown-drift is 0 in both games' real dispositions). Decision 13's verified(user-waived)+stale+code-changed path occurs naturally (LIVE, not constructed) on 8 real chunks across both games. Both ~/BoardSmithGames originals confirmed byte-identical throughout (whole-tree sha256 diff empty). VERIFY-04, VERIFY-05, and VERIFY-06 are now all CLOSED in REQUIREMENTS.md with 175-PROOF.md section-and-number citations; Phase 175 is marked complete in ROADMAP.md. Phase 175 (Impact Map & Repair Gating) is now fully complete, 8/8 plans. See .planning/phases/175-impact-map-repair-gating/175-08-SUMMARY.md."
+last_updated: "2026-07-30T16:30:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
-  completed_phases: 5
-  total_plans: 40
-  completed_plans: 40
-  percent: 50
+  completed_phases: 6
+  total_plans: 41
+  completed_plans: 41
+  percent: 60
 ---
 
 # Project State
@@ -21,14 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 175 — impact-map-and-repair-gating (next)
+**Current focus:** Phase 176 — stale-chunk-repair (next)
 
 ## Current Position
 
-Phase: 175 (Impact Map & Repair Gating) — plan 175-07 of 8 executed (human checkpoint genuinely
-answered, not self-certified — see `175-PROOF.md` §3d).
-Next: Phase 175 plan 175-08, per `ROADMAP.md` — the phase's live cross-file write and official
-closeout, including marking VERIFY-04/05/06 complete in `REQUIREMENTS.md` with citations.
+Phase: 175 (Impact Map & Repair Gating) — COMPLETE, all 8 plans executed, all 3 requirements
+(VERIFY-04, VERIFY-05, VERIFY-06) CLOSED in `REQUIREMENTS.md` with `175-PROOF.md` section-and-number
+citations.
+Next: Phase 176 (Stale-Chunk Repair), per `ROADMAP.md` — ruling re-validation (CHECK-01) and the
+three audit lenses (CHECK-02) re-run per stale chunk, consuming this phase's impact map and
+line-level attributions.
 
 `175-06-PLAN.md` (2026-07-30) added `/bs-check-status` item 9 — "Rules staleness and the repair
 gate" — formatting `boardsmith verify-impact-status --json` (format-never-compute, mirroring item

@@ -277,7 +277,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
 | 173. Verify Pipeline Core | 8/8 | Complete   | 2026-07-29 |
 | 174. Verify Classifier | 8/8 | Reopened — goal NOT MET (decision 19 applied, §8) | - |
-| 175. Impact Map & Repair Gating | 7/8 | In Progress|  |
+| 175. Impact Map & Repair Gating | 8/8 | Complete   | 2026-07-30 |
 | 176. Stale-Chunk Repair | 0/TBD | Not started | - |
 | 177. Derived-Line Re-Derivation | 0/TBD | Not started | - |
 | 178. Worked-Example Tests | 0/TBD | Not started | - |
