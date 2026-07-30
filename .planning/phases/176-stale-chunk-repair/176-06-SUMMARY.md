@@ -202,3 +202,10 @@ None — no external service configuration required.
 ---
 *Phase: 176-stale-chunk-repair*
 *Completed: 2026-07-30*
+
+## Self-Check: PASSED
+
+All key files confirmed present on disk (176-06-SUMMARY.md, 176-PROOF.md, 176-VALIDATION.md, both
+constructed lexicon fixture dirs, verify-repair.ts, verify-impact.ts, REQUIREMENTS.md, ROADMAP.md,
+STATE.md). All 7 commit hashes (`e2ca4f6e`, `55a04baf`, `33973995`, `da65cffb`, `12bb2271`,
+`d2c0432e`, `611907a2`) confirmed present in `git log --oneline --all`.
