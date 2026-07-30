@@ -147,6 +147,15 @@ export interface ClassificationRecord {
   stale: boolean;
   evidence: string;
   recordedAt: string;
+  /**
+   * 174-CONTEXT.md decision 9's verbatim quotes, retained on the record itself — added by plan
+   * 174-04 after decision 18 made this retention LOAD-BEARING rather than merely informative:
+   * chunk-level staleness is attributed to only the live slice(s) whose own text contains
+   * `quotedPass1`, never to every live slice in the pair's group. Absent for `cosmetic` verdicts
+   * (no quote required) and for an `unclassified` verdict demoted for a missing quote.
+   */
+  quotedPass1?: string;
+  quotedPass2?: string;
 }
 
 function sha256(buf: Buffer): string {
@@ -446,7 +455,9 @@ export function parseLedgerBody(
           typeof rec.ruleDelta === 'string' &&
           typeof rec.stale === 'boolean' &&
           typeof rec.evidence === 'string' &&
-          typeof rec.recordedAt === 'string'
+          typeof rec.recordedAt === 'string' &&
+          (rec.quotedPass1 === undefined || typeof rec.quotedPass1 === 'string') &&
+          (rec.quotedPass2 === undefined || typeof rec.quotedPass2 === 'string')
         ) {
           lines.push({
             type: 'classification',
@@ -462,6 +473,8 @@ export function parseLedgerBody(
               stale: rec.stale,
               evidence: rec.evidence,
               recordedAt: rec.recordedAt,
+              ...(typeof rec.quotedPass1 === 'string' ? { quotedPass1: rec.quotedPass1 } : {}),
+              ...(typeof rec.quotedPass2 === 'string' ? { quotedPass2: rec.quotedPass2 } : {}),
             },
           });
         } else {

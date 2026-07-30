@@ -736,3 +736,124 @@ export async function verifyClassifyPairsCommand(
   }
   return result;
 }
+
+export interface VerifyClassifyRecordResult {
+  runId: string;
+  record: ClassificationRecord;
+  warnings: string[];
+}
+
+const RULE_DELTA_SET: ReadonlySet<string> = new Set(RULE_DELTA_KINDS);
+
+/**
+ * `boardsmith verify-classify-record` — append exactly ONE verdict for a pair through the SAME
+ * atomic ledger write `verify-run-record` hardened (173-08/CR-01). `stale` and `provenance` are
+ * NOT options on this command — both are derived here, never accepted from a caller (decision 3;
+ * the options interface below deliberately carries no field for either, and `options.stale`/
+ * `options.provenance` are never read anywhere in this module).
+ *
+ * A missing or out-of-enum `--label` is never thrown on — it is a subagent-fidelity failure, not
+ * a caller bug (decision 8) — it silently normalizes to `unclassified` with a
+ * `console.error(chalk.yellow(...))` warning naming what was received verbatim. `sharper`/
+ * `contradictory` additionally REQUIRE both `--quoted-pass1` and `--quoted-pass2` non-empty
+ * (decision 9); either missing (or whitespace-only) demotes the same way, naming which quote was
+ * absent, never recording an evidence-free `sharper`/`contradictory`.
+ */
+export async function verifyClassifyRecordCommand(
+  options: VerifyRunOptions & {
+    runId?: string;
+    pairId?: string;
+    label?: string;
+    evidence?: string;
+    quotedPass1?: string;
+    quotedPass2?: string;
+  } = {},
+): Promise<VerifyClassifyRecordResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  if (!options.runId) throw new Error('verify-classify-record requires --run-id <id>.');
+  const runId = await resolveRunId(projectDir, options.runId);
+  if (!options.pairId) throw new Error('verify-classify-record requires --pair-id <id>.');
+
+  const { pairs } = await computeRunPairs(projectDir, runId);
+  const pair = pairs.find((p) => p.pairId === options.pairId);
+  if (!pair) {
+    throw new Error(
+      `Unknown --pair-id "${options.pairId}" for run "${runId}".\n` +
+        `Valid pair ids: ${pairs.map((p) => p.pairId).join(', ') || '(none)'}.\n` +
+        `Run \`boardsmith verify-classify-pairs --run-id ${runId}\` to list them.`,
+    );
+  }
+
+  const warnings: string[] = [];
+  let ruleDelta: RuleDelta;
+  if (options.label !== undefined && RULE_DELTA_SET.has(options.label)) {
+    ruleDelta = options.label as RuleDelta;
+  } else {
+    ruleDelta = 'unclassified';
+    const received = options.label === undefined ? '(missing)' : `"${options.label}"`;
+    const warning =
+      `--label ${received} is not one of ${RULE_DELTA_KINDS.join(', ')} — recording ` +
+      `"unclassified" rather than guessing (decision 8: a malformed subagent return is never ` +
+      `silently "cosmetic").`;
+    warnings.push(warning);
+    console.error(chalk.yellow(`⚠ ${warning}`));
+  }
+
+  const quotedPass1 = (options.quotedPass1 ?? '').trim();
+  const quotedPass2 = (options.quotedPass2 ?? '').trim();
+  if (ruleDelta === 'sharper' || ruleDelta === 'contradictory') {
+    const missing: string[] = [];
+    if (quotedPass1.length === 0) missing.push('quotedPass1');
+    if (quotedPass2.length === 0) missing.push('quotedPass2');
+    if (missing.length > 0) {
+      const warning =
+        `--label "${ruleDelta}" requires both --quoted-pass1 and --quoted-pass2 non-empty ` +
+        `(decision 9) — ${missing.join(' and ')} was empty/whitespace-only. Recording ` +
+        `"unclassified" rather than an evidence-free "${ruleDelta}".`;
+      warnings.push(warning);
+      console.error(chalk.yellow(`⚠ ${warning}`));
+      ruleDelta = 'unclassified';
+    }
+  }
+
+  const stale = deriveStale(ruleDelta);
+  const provenanceResult = await resolveProvenance(projectDir, pair.liveSlices);
+
+  const evidenceParts: string[] = [];
+  if (options.evidence && options.evidence.trim().length > 0) evidenceParts.push(options.evidence.trim());
+  if (quotedPass1.length > 0) evidenceParts.push(`Pass 1 quote: "${quotedPass1}"`);
+  if (quotedPass2.length > 0) evidenceParts.push(`Pass 2 quote: "${quotedPass2}"`);
+
+  const record: ClassificationRecord = {
+    kind: 'classification',
+    pairId: pair.pairId,
+    // Assigned straight across from the pair, no collapsing step (decision 4/6 amended) — even
+    // when this group is 1-live/N-staged or vice versa.
+    units: pair.stagedUnits,
+    liveSlices: pair.liveSlices,
+    stagedSlices: pair.stagedSlices,
+    provenance: provenanceResult.provenance,
+    ruleDelta,
+    stale,
+    evidence: evidenceParts.join(' | '),
+    recordedAt: new Date().toISOString(),
+    ...(quotedPass1.length > 0 ? { quotedPass1 } : {}),
+    ...(quotedPass2.length > 0 ? { quotedPass2 } : {}),
+  };
+
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const relLedgerPath = relative(projectDir, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  const newText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
+  await atomicWriteFile(ledgerFile, newText);
+
+  const result: VerifyClassifyRecordResult = { runId, record, warnings };
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+  console.log(
+    chalk.green(`✓ Recorded classification for pair "${pair.pairId}": ${ruleDelta} (stale: ${stale})`),
+  );
+  return result;
+}

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -16,6 +16,7 @@ import {
   pairSlices,
   resolveProvenance,
   verifyClassifyPairsCommand,
+  verifyClassifyRecordCommand,
   type RuleDelta,
 } from './verify-classify.js';
 import { renderIndex } from './ingest-archive.js';
@@ -26,7 +27,15 @@ import {
   renderVerifiedAgainst,
   SCOPE_FULL,
 } from './chunk-provenance.js';
-import { verifyRunInitCommand, verifyRunRecordCommand } from './verify-run.js';
+import {
+  verifyRunInitCommand,
+  verifyRunRecordCommand,
+  ledgerFilePath,
+  parseLedgerBody,
+  resolveLedgerState,
+  RUN_LEDGER_BEGIN,
+  RUN_LEDGER_END,
+} from './verify-run.js';
 
 /**
  * `verify-classify.ts` is the mechanical core of VERIFY-03. Every fixture here is either a real
@@ -699,5 +708,237 @@ describe('verifyClassifyPairsCommand — enumerate pairs with provenance, over a
     // A run with findings (unpaired-slice/presentation-only groups) still resolves — decision 7:
     // findings exit 0, never a thrown tool failure.
     await expect(verifyClassifyPairsCommand({ project, runId, json: true })).resolves.toBeTruthy();
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// verify-classify-record (Task 2) — one verdict, atomically appended, stale/provenance derived
+// -------------------------------------------------------------------------------------------
+
+async function ledgerBody(project: string, runId: string): Promise<string> {
+  const ledgerFile = ledgerFilePath(project, runId);
+  const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+  return ledgerText.slice(
+    ledgerText.indexOf(RUN_LEDGER_BEGIN) + RUN_LEDGER_BEGIN.length,
+    ledgerText.indexOf(RUN_LEDGER_END),
+  );
+}
+
+describe('verifyClassifyRecordCommand — one verdict, atomically appended, stale/provenance derived', () => {
+  it('ledger-1: recording cosmetic appends exactly one classification line inside the fences, stale:false, provenance derived', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    const result = await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'cosmetic',
+      evidence: 'every consequence identical',
+      json: true,
+    });
+    expect(result.record.kind).toBe('classification');
+    expect(result.record.pairId).toBe(pairId);
+    expect(result.record.ruleDelta).toBe('cosmetic');
+    expect(result.record.stale).toBe(false);
+    expect(typeof result.record.provenance).toBe('string');
+
+    const body = await ledgerBody(project, runId);
+    const classificationLines = body
+      .split('\n')
+      .filter((l) => l.trim().length > 0)
+      .filter((l) => JSON.parse(l).kind === 'classification');
+    expect(classificationLines).toHaveLength(1);
+  });
+
+  it('ledger-2: sharper and contradictory both record stale:true', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    const sharper = await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'sharper',
+      quotedPass1: 'Live text one.',
+      quotedPass2: 'Staged text one.',
+      json: true,
+    });
+    expect(sharper.record.ruleDelta).toBe('sharper');
+    expect(sharper.record.stale).toBe(true);
+
+    const contradictory = await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'contradictory',
+      quotedPass1: 'Live text two.',
+      quotedPass2: 'Staged text two.',
+      json: true,
+    });
+    expect(contradictory.record.ruleDelta).toBe('contradictory');
+    expect(contradictory.record.stale).toBe(true);
+  });
+
+  it('unclassified-1: an out-of-enum --label records unclassified/stale, warns naming the received value verbatim, never throws', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'maybe-cosmetic?',
+      json: true,
+    });
+    expect(result.record.ruleDelta).toBe('unclassified');
+    expect(result.record.stale).toBe(true);
+    expect(result.warnings.some((w) => w.includes('maybe-cosmetic?'))).toBe(true);
+    expect(errSpy.mock.calls.some((c) => String(c[0]).includes('maybe-cosmetic?'))).toBe(true);
+    errSpy.mockRestore();
+  });
+
+  it('unclassified-2: a missing --label behaves identically to an out-of-enum label, never defaulting to cosmetic', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    const result = await verifyClassifyRecordCommand({ project, runId, pairId, json: true });
+    expect(result.record.ruleDelta).toBe('unclassified');
+    expect(result.record.stale).toBe(true);
+  });
+
+  it('unclassified-3: sharper with an empty --quoted-pass1 demotes to unclassified, naming quotedPass1', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    const result = await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'sharper',
+      quotedPass1: '   ',
+      quotedPass2: 'Staged text.',
+      json: true,
+    });
+    expect(result.record.ruleDelta).toBe('unclassified');
+    expect(result.record.stale).toBe(true);
+    expect(result.warnings.some((w) => w.includes('quotedPass1'))).toBe(true);
+  });
+
+  it('unclassified-4: contradictory with a non-empty pass1 but empty --quoted-pass2 demotes to unclassified, naming quotedPass2', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    const result = await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'contradictory',
+      quotedPass1: 'Live text.',
+      json: true,
+    });
+    expect(result.record.ruleDelta).toBe('unclassified');
+    expect(result.record.stale).toBe(true);
+    expect(result.warnings.some((w) => w.includes('quotedPass2'))).toBe(true);
+  });
+
+  it('unclassified-5: cosmetic with both quotes empty stays cosmetic — the quote requirement is scoped to sharper/contradictory only', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    const result = await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
+    expect(result.record.ruleDelta).toBe('cosmetic');
+    expect(result.record.stale).toBe(false);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('ledger-3: pre-existing ledger content is byte-identical before/after, except for the one added line', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+    const bodyBefore = await ledgerBody(project, runId);
+
+    await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
+
+    const bodyAfter = await ledgerBody(project, runId);
+    expect(bodyAfter.startsWith(bodyBefore)).toBe(true);
+    const added = bodyAfter.slice(bodyBefore.length);
+    expect(added.trim().length).toBeGreaterThan(0);
+    expect(JSON.parse(added.trim()).kind).toBe('classification');
+  });
+
+  it('ledger-4: re-recording the same pairId appends a second line; resolveLedgerState reports only the newer verdict', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'sharper',
+      quotedPass1: 'Live text.',
+      quotedPass2: 'Staged text.',
+      json: true,
+    });
+
+    const body = await ledgerBody(project, runId);
+    const classificationLines = body
+      .split('\n')
+      .filter((l) => l.trim().length > 0)
+      .filter((l) => JSON.parse(l).kind === 'classification');
+    expect(classificationLines).toHaveLength(2);
+
+    const ledgerFile = ledgerFilePath(project, runId);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const relLedgerPath = ledgerFile;
+    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+    const { classifications } = resolveLedgerState(lines);
+    const resolved = classifications.find((c) => c.pairId === pairId);
+    expect(resolved?.ruleDelta).toBe('sharper');
+  });
+
+  it('ledger-5: an unknown --pair-id is a tool failure with an actionable error listing valid pair ids', async () => {
+    const { project, runId } = await recordedSevenRun();
+    await expect(
+      verifyClassifyRecordCommand({ project, runId, pairId: 'pages-99-99', label: 'cosmetic', json: true }),
+    ).rejects.toThrow(/pages-99-99/);
+  });
+
+  it('ledger-6: there is no CLI option through which stale or provenance can be supplied — passing them has no effect on the derived values', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    const result = await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'cosmetic',
+      json: true,
+      // @ts-expect-error — stale/provenance are not part of the options interface.
+      stale: true,
+      // @ts-expect-error — stale/provenance are not part of the options interface.
+      provenance: 'source-changed',
+    });
+    // A forced stale:true was ignored — cosmetic still derives to stale:false.
+    expect(result.record.stale).toBe(false);
+
+    const src = await fs.readFile(join(__dirname, 'verify-classify.ts'), 'utf-8');
+    const code = src
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('*') && !l.trim().startsWith('//'))
+      .join('\n');
+    expect(code).not.toMatch(/options\.stale\b/);
+    expect(code).not.toMatch(/options\.provenance\b/);
   });
 });
