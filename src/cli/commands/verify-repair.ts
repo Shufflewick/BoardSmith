@@ -1,4 +1,4 @@
-import { type ClassificationRecord } from './verify-run.js';
+import { atomicWriteFile, type ClassificationRecord } from './verify-run.js';
 import type { ImpactMapEntry } from './verify-impact.js';
 
 /**
@@ -96,4 +96,159 @@ export function resolveStagedSlicePaths(
 function joinStagedPath(dir: string, relPath: string): string {
   const dirNormalized = dir.endsWith('/') ? dir.slice(0, -1) : dir;
   return `${dirNormalized}/${relPath}`;
+}
+
+// -------------------------------------------------------------------------------------------
+// Task 2 — verify-episode round bookkeeping (decision 17)
+// -------------------------------------------------------------------------------------------
+
+/** Every existing `### Audit Round N` heading, matching all three real precedent shapes:
+ *   `### Audit Round 3 (final round — ...)`
+ *   `### Audit Round 3 (FINAL — ...)`
+ *   `### Audit Round 3 (the last permitted — ...)`
+ * plus a bare `### Audit Round N` with no parenthetical at all. */
+export interface AuditRoundHeading {
+  absolute: number;
+  /** The full trailing parenthetical text (without the surrounding parens), if present. */
+  parenthetical?: string;
+}
+
+const AUDIT_ROUND_HEADING_RE = /^### Audit Round (\d+)(?:\s*\(([^)]*)\))?\s*$/gm;
+
+/** Every `### Audit Round N` heading in `chunkMd`, in document order. Pure, no I/O. */
+export function parseAuditRounds(chunkMd: string): AuditRoundHeading[] {
+  const rounds: AuditRoundHeading[] = [];
+  for (const match of chunkMd.matchAll(AUDIT_ROUND_HEADING_RE)) {
+    rounds.push({
+      absolute: Number(match[1]),
+      ...(match[2] !== undefined ? { parenthetical: match[2] } : {}),
+    });
+  }
+  return rounds;
+}
+
+/** The verify-episode parenthetical shape this module writes: `verify-repair episode E, round R of 3`. */
+const EPISODE_PARENTHETICAL_RE = /^verify-repair episode (\d+), round (\d+) of 3$/;
+
+interface EpisodeRoundEntry {
+  episode: number;
+  episodeRound: number;
+}
+
+function parseEpisodeRounds(chunkMd: string): EpisodeRoundEntry[] {
+  const entries: EpisodeRoundEntry[] = [];
+  for (const round of parseAuditRounds(chunkMd)) {
+    const match = round.parenthetical !== undefined ? EPISODE_PARENTHETICAL_RE.exec(round.parenthetical) : null;
+    if (match) {
+      entries.push({ episode: Number(match[1]), episodeRound: Number(match[2]) });
+    }
+  }
+  return entries;
+}
+
+/** Decision 17: the max-3-round bound is per-verify-episode, not per-chunk-lifetime. */
+export const VERIFY_EPISODE_ROUND_BUDGET = 3;
+
+export type VerifyEpisodeRoundPlan =
+  | {
+      disposition: 'round';
+      absoluteRound: number;
+      episode: number;
+      episodeRound: number;
+      heading: string;
+    }
+  | {
+      disposition: 'triage';
+      episode: number;
+      reason: string;
+    };
+
+/**
+ * Plans the next verify-episode audit round for `episode` against `chunkMd`'s CURRENT round
+ * history. Pure — no I/O.
+ *
+ * The absolute round number is `max(every existing ### Audit Round N) + 1` — a chunk with three
+ * build-era rounds (`best-seven-selection`, `table-and-draw`, `block`, `jab` — the four real
+ * chunks research measured already at round 3) gets absolute round 4 on its FIRST verify
+ * dispatch, never routed to triage on arrival (decision 17's whole point: the bound is a loop
+ * guard against one session spinning forever, not a lifetime quota).
+ *
+ * The episode-relative round number is `(count of this episode's own prior rounds) + 1`. Once
+ * that would exceed `VERIFY_EPISODE_ROUND_BUDGET`, this returns the `triage` disposition instead
+ * of a heading — the episode's own budget is exhausted, regardless of the absolute round number.
+ */
+export function planVerifyEpisodeRound(chunkMd: string, episode: number): VerifyEpisodeRoundPlan {
+  const allRounds = parseAuditRounds(chunkMd);
+  const nextAbsolute = allRounds.length > 0 ? Math.max(...allRounds.map((r) => r.absolute)) + 1 : 1;
+
+  const episodeRoundsSoFar = parseEpisodeRounds(chunkMd).filter((r) => r.episode === episode).length;
+  const nextEpisodeRound = episodeRoundsSoFar + 1;
+
+  if (nextEpisodeRound > VERIFY_EPISODE_ROUND_BUDGET) {
+    return {
+      disposition: 'triage',
+      episode,
+      reason:
+        `Verify episode ${episode} has already used its ${VERIFY_EPISODE_ROUND_BUDGET}-round ` +
+        `budget (\`state-machine.md\` "Repair Loop Bound") — remaining findings are triaged with ` +
+        `the user rather than dispatching a further round.`,
+    };
+  }
+
+  const heading =
+    `### Audit Round ${nextAbsolute} (verify-repair episode ${episode}, round ${nextEpisodeRound} ` +
+    `of ${VERIFY_EPISODE_ROUND_BUDGET})`;
+
+  return {
+    disposition: 'round',
+    absoluteRound: nextAbsolute,
+    episode,
+    episodeRound: nextEpisodeRound,
+    heading,
+  };
+}
+
+/**
+ * Derives which verify episode a resumed dispatch continues, from the count of existing
+ * episode-labelled headings already present (so a resumed pass continues its own episode rather
+ * than opening a new one, mirroring `build/audit.md`'s cold-resume rule for a partial round).
+ *
+ * No episode-labelled heading at all → episode 1 (a fresh verify pass). Otherwise: if the
+ * highest-numbered episode present has not yet used its full round budget, that same episode
+ * number is returned (resume it); if it has, the next episode number is returned (a genuinely new
+ * verify pass opens its own fresh budget, per decision 17).
+ */
+export function resolveVerifyEpisodeNumber(chunkMd: string): number {
+  const episodeRounds = parseEpisodeRounds(chunkMd);
+  if (episodeRounds.length === 0) return 1;
+
+  const maxEpisode = Math.max(...episodeRounds.map((r) => r.episode));
+  const roundsInMaxEpisode = episodeRounds.filter((r) => r.episode === maxEpisode).length;
+  return roundsInMaxEpisode < VERIFY_EPISODE_ROUND_BUDGET ? maxEpisode : maxEpisode + 1;
+}
+
+/**
+ * Append-only: the produced document's prefix up to the insertion point is byte-identical to the
+ * input (`output.startsWith(input.trimEnd())`), and every pre-existing round heading string
+ * survives unchanged (`state-machine.md` Write Order — round entries are append-only, never
+ * overwritten or renumbered). Pure — no I/O.
+ */
+export function appendAuditRoundHeading(chunkMd: string, heading: string): string {
+  const trimmed = chunkMd.trimEnd();
+  return `${trimmed}\n\n${heading}\n`;
+}
+
+/**
+ * Writes a planned verify-episode round's heading into `chunkMdPath`, through `atomicWriteFile` —
+ * the ONE atomic write path in the repo (T-176-06: a torn `CHUNK.md` on crash mid-append is
+ * mitigated only by never writing any other way).
+ */
+export async function writeAppendedAuditRound(
+  chunkMdPath: string,
+  chunkMd: string,
+  heading: string,
+): Promise<string> {
+  const updated = appendAuditRoundHeading(chunkMd, heading);
+  await atomicWriteFile(chunkMdPath, updated);
+  return updated;
 }

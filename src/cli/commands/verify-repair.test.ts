@@ -3,7 +3,16 @@ import { promises as fs } from 'node:fs';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { selectStaleChunks, resolveStagedSlicePaths } from './verify-repair.js';
+import {
+  selectStaleChunks,
+  resolveStagedSlicePaths,
+  parseAuditRounds,
+  planVerifyEpisodeRound,
+  resolveVerifyEpisodeNumber,
+  appendAuditRoundHeading,
+  writeAppendedAuditRound,
+  VERIFY_EPISODE_ROUND_BUDGET,
+} from './verify-repair.js';
 import {
   readLedgerOrThrow,
   parseLedgerBody,
@@ -187,5 +196,161 @@ describe('staged-slice resolution — resolveStagedSlicePaths, over the real com
     await loadClassifications();
     const after = await fixtureSha256Tree(FIXTURE_ROOT);
     expect(after).toEqual(before);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// Task 2 — verify-episode round bookkeeping
+// -------------------------------------------------------------------------------------------
+
+const TABLE_AND_DRAW_ROUND_3 =
+  '### Audit Round 3 (final round — `state-machine.md` "Repair Loop Bound": max 3)';
+const BLOCK_ROUND_3 = '### Audit Round 3 (FINAL — the round bound is 3; state-machine.md "Repair Loop Bound")';
+const JAB_ROUND_3 = '### Audit Round 3 (the last permitted — round bound is 3)';
+
+function threeBuildRoundChunkMd(headingRound3: string): string {
+  return (
+    `# Chunk: test-chunk\n\nStatus: verified\n\n## Findings Ledger\n\n` +
+    `### Audit Round 1\n\n| ID | ... |\n|---|---|\n| F1 | ... |\n\n` +
+    `### Repair Round 1\n\nF1 fixed.\n\n` +
+    `### Audit Round 2\n\n| ID | ... |\n|---|---|\n| F2 | ... |\n\n` +
+    `### Repair Round 2\n\nF2 fixed.\n\n` +
+    `${headingRound3}\n\n| ID | ... |\n|---|---|\n| F3 | ... |\n`
+  );
+}
+
+describe('episode — parseAuditRounds finds all three real heading precedents plus a zero-round chunk', () => {
+  it('finds 3 rounds with trailing parentheticals in a table-and-draw-shaped fixture', () => {
+    const md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    const rounds = parseAuditRounds(md);
+    expect(rounds.map((r) => r.absolute)).toEqual([1, 2, 3]);
+    expect(rounds[2].parenthetical).toBe('final round — `state-machine.md` "Repair Loop Bound": max 3');
+  });
+
+  it('finds 3 rounds in a block-shaped fixture', () => {
+    const rounds = parseAuditRounds(threeBuildRoundChunkMd(BLOCK_ROUND_3));
+    expect(rounds).toHaveLength(3);
+    expect(rounds[2].parenthetical).toBe('FINAL — the round bound is 3; state-machine.md "Repair Loop Bound"');
+  });
+
+  it('finds 3 rounds in a jab-shaped fixture', () => {
+    const rounds = parseAuditRounds(threeBuildRoundChunkMd(JAB_ROUND_3));
+    expect(rounds).toHaveLength(3);
+    expect(rounds[2].parenthetical).toBe('the last permitted — round bound is 3');
+  });
+
+  it('a zero-round chunk parses to an empty list', () => {
+    const md = '# Chunk: fresh\n\nStatus: built\n\n## Findings Ledger\n\n_No rounds yet._\n';
+    expect(parseAuditRounds(md)).toEqual([]);
+  });
+});
+
+describe('episode — planVerifyEpisodeRound', () => {
+  it("a 3-build-round chunk's first verify round is absolute 4, episode 1, round 1", () => {
+    const md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    const plan = planVerifyEpisodeRound(md, 1);
+    expect(plan.disposition).toBe('round');
+    if (plan.disposition !== 'round') throw new Error('unreachable');
+    expect(plan.absoluteRound).toBe(4);
+    expect(plan.episode).toBe(1);
+    expect(plan.episodeRound).toBe(1);
+    expect(plan.heading).toMatch(/^### Audit Round 4 \(verify-repair episode 1, round 1 of 3\)$/m);
+  });
+
+  it('the 4th episode-round request returns the triage disposition and produces no heading', () => {
+    let md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    for (let i = 0; i < VERIFY_EPISODE_ROUND_BUDGET; i++) {
+      const plan = planVerifyEpisodeRound(md, 1);
+      expect(plan.disposition).toBe('round');
+      if (plan.disposition !== 'round') throw new Error('unreachable');
+      md = appendAuditRoundHeading(md, plan.heading);
+    }
+    const fourth = planVerifyEpisodeRound(md, 1);
+    expect(fourth.disposition).toBe('triage');
+    expect((fourth as { heading?: string }).heading).toBeUndefined();
+  });
+
+  it('a zero-round chunk gets absolute round 1, episode 1, round 1', () => {
+    const md = '# Chunk: fresh\n\nStatus: built\n\n## Findings Ledger\n\n_No rounds yet._\n';
+    const plan = planVerifyEpisodeRound(md, 1);
+    expect(plan.disposition).toBe('round');
+    if (plan.disposition !== 'round') throw new Error('unreachable');
+    expect(plan.absoluteRound).toBe(1);
+    expect(plan.episodeRound).toBe(1);
+  });
+
+  it('append-only: output.startsWith(input.trimEnd()), and every original heading string survives exactly once', () => {
+    const md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    const plan = planVerifyEpisodeRound(md, 1);
+    if (plan.disposition !== 'round') throw new Error('unreachable');
+    const output = appendAuditRoundHeading(md, plan.heading);
+
+    expect(output.startsWith(md.trimEnd())).toBe(true);
+    for (const original of ['### Audit Round 1', '### Audit Round 2', TABLE_AND_DRAW_ROUND_3]) {
+      const count = output.split(original).length - 1;
+      expect(count).toBe(1);
+    }
+    expect(output).toContain(plan.heading);
+  });
+
+  it('resolveVerifyEpisodeNumber: a zero-round chunk resolves to episode 1', () => {
+    const md = '# Chunk: fresh\n\nStatus: built\n\n## Findings Ledger\n\n_No rounds yet._\n';
+    expect(resolveVerifyEpisodeNumber(md)).toBe(1);
+  });
+
+  it('resolveVerifyEpisodeNumber: an in-progress episode 1 (1 of 3 rounds used) resumes as episode 1', () => {
+    let md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    const plan = planVerifyEpisodeRound(md, 1);
+    if (plan.disposition !== 'round') throw new Error('unreachable');
+    md = appendAuditRoundHeading(md, plan.heading);
+    expect(resolveVerifyEpisodeNumber(md)).toBe(1);
+  });
+
+  it('resolveVerifyEpisodeNumber: an exhausted episode 1 (3 of 3 rounds used) opens episode 2', () => {
+    let md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    for (let i = 0; i < VERIFY_EPISODE_ROUND_BUDGET; i++) {
+      const plan = planVerifyEpisodeRound(md, 1);
+      if (plan.disposition !== 'round') throw new Error('unreachable');
+      md = appendAuditRoundHeading(md, plan.heading);
+    }
+    expect(resolveVerifyEpisodeNumber(md)).toBe(2);
+  });
+});
+
+describe('episode — writeAppendedAuditRound routes through atomicWriteFile only', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(join(tmpdir(), 'bs-verify-repair-write-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('writes the appended heading to disk and returns the same content it wrote', async () => {
+    const chunkMdPath = join(root, 'CHUNK.md');
+    const original = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    await fs.writeFile(chunkMdPath, original, 'utf-8');
+
+    const plan = planVerifyEpisodeRound(original, 1);
+    if (plan.disposition !== 'round') throw new Error('unreachable');
+
+    const written = await writeAppendedAuditRound(chunkMdPath, original, plan.heading);
+    const onDisk = await fs.readFile(chunkMdPath, 'utf-8');
+    expect(onDisk).toBe(written);
+    expect(onDisk).toContain(plan.heading);
+    expect(onDisk.startsWith(original.trimEnd())).toBe(true);
+  });
+
+  it('the module contains no hand-rolled fs.writeFile/writeFileSync and calls atomicWriteFile', async () => {
+    const source = await fs.readFile(join(__dirname, 'verify-repair.ts'), 'utf-8');
+    const nonCommentLines = source
+      .split('\n')
+      .filter((l) => !/^\s*\*/.test(l) && !/^\s*\/\//.test(l))
+      .join('\n');
+    expect(nonCommentLines).not.toMatch(/fs\.writeFile\(/);
+    expect(nonCommentLines).not.toMatch(/writeFileSync/);
+    expect(nonCommentLines).toMatch(/atomicWriteFile\(/);
   });
 });
