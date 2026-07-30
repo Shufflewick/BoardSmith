@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 173-08-PLAN.md — closed CR-01 crash-safety + Finding 1 resume determinism, re-proved SC-4, VERIFY-08 re-confirmed
-last_updated: "2026-07-29T23:45:46.411Z"
-last_activity: 2026-07-28
+stopped_at: Completed 174-03-PLAN.md — verify-classifier core (enumerated codes, presentation filter, m:n pairing, staleness, provenance)
+last_updated: "2026-07-30T00:02:08.000Z"
+last_activity: 2026-07-29
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 37
-  completed_plans: 30
+  completed_plans: 31
   percent: 30
 ---
 
@@ -25,8 +25,33 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 174 (verify-classifier) — IN PROGRESS (2/7 plans)
-Next: Phase 174 plan 03 (VERIFY-03 mechanical CLI extension — page-span-overlap slice pairing)
+Phase: 174 (verify-classifier) — IN PROGRESS (3/7 plans)
+Next: Phase 174 plan 04 (VERIFY-03 CLI surface — verify-classify-status/-record ledger commands, wiring pairSlices/resolveProvenance/deriveStale into ClassificationRecord)
+
+`174-03-PLAN.md` built the mechanical classifier core as pure functions in
+`src/cli/commands/verify-classify.ts`, colocated with `verify-classify.test.ts`. Three frozen
+enumerated constants (`PROVENANCE_KINDS`, `RULE_DELTA_KINDS`, `PRESENTATION_EXCLUSION_MARKERS`),
+each test-pinned. `isPresentationLine()`/`ruleBearingLines()` exclude BOTH the post-170
+`Visual (p.N):` form and the legacy `Derived (p.N) — diagram description:`/`— art:` forms
+(decision 12b) — verified exactly against the real `one-two-punch` live slices in
+`174-FIXTURES/`, where `ruleBearingLines()`'s output length matches (total content lines − citation
+headers − legacy-qualified lines) precisely for both real rule slices. `deriveStale()` is a
+single-parameter function (SC-4 pinned: `deriveStale.length === 1`, `PROVENANCE_KINDS` absent from
+its source region). `livePageSpan()` derives a live slice's page span from its own `p.N,` citation
+lines only — never `INDEX.md`, verified on `one-two-punch` (no Slices table at all). `pairSlices()`
+unions live/staged spans via union-find over page overlap into m:n groups — proven against the real
+`seven` fixture (3 live rule slices + 6 staged units, all under the archived ledger's single
+`rangeId: "1-2"`) producing exactly one `paired` group holding all 9 files, the real 6-vs-3
+asymmetry both `174-01-SUMMARY.md` and `174-RESEARCH.md` measured, handled as normal rather than a
+finding; a one-sided group is `unpaired-slice` naming the missing side, an all-zero-rule-bearing
+group is `presentation-only` — nothing silently dropped; `pairId` proven stable across shuffled
+input order. `resolveProvenance()` composes `chunk-provenance.ts`'s exported
+`computeVerificationScope`/`resolveCitedSlices`/`parseVerifiedAgainst` into the three-state ladder
+(decision 2b) — no archive or no recorded hash → `unknown` (the actual current state of both
+reference games), any recorded hash differing from current → `source-changed`, all matching →
+`source-unchanged`; structurally incapable of feeding `deriveStale` (two parameters, no label
+input). 23/23 new tests pass, `npm test` 3647/3647 green (baseline 3624 + 23), typecheck clean. See
+`.planning/phases/174-verify-classifier/174-03-SUMMARY.md`.
 
 `174-02-PLAN.md` widened `verify-run.ts`'s ledger surface: exported the seven module-private
 atomic-write/parse helpers (`atomicWriteFile`, `appendLedgerLine`, `locateFences`,
@@ -636,6 +661,8 @@ Recent decisions affecting current work:
 - [Phase 173]: VERIFY-08 marked complete despite a real finding (range-level resume re-dispatch is not idempotent) because the requirement's core no-data-loss guarantee holds under two real interruption mechanisms; the idempotency gap is tracked as an open item in 173-PROOF.md, not hidden
 - [Phase 173]: Closed CR-01 (crash-unsafe ledger write) and PROOF.md Finding 1 (non-idempotent range resume) via plan 173-08, before Phase 174 build — 173-07 marked VERIFY-08 complete on a crash-safety guarantee code review then showed was false; fixing both defects together (same subsystem, same commits) before Phase 174's classifier builds on the corrected guarantee was cheaper than a third premature-completion correction.
 - [Phase 174]: ClassificationRecord slot fields are plural (units[]/liveSlices[]/stagedSlices[]) mirroring SlicePair.stagedUnits[] with no collapsing step
+- [Phase 174]: ruleBearingLines() excludes bare "p.N, <label>:" citation headers in addition to blank/heading/presentation lines — derived from measuring that real one-two-punch live slices' total content-line count equals exactly (citation headers + quoted lines + Derived lines)
+- [Phase 174]: pairing-3's test proves the real seven fixture's actual outcome (one paired group, 3 live + 6 staged, since the archived ledger tags every staged unit with the same rangeId "1-2") rather than 174-03-PLAN.md's illustrative "1 live, 3 staged" example, which does not occur under a rangeId-keyed join over the real ledger data
 
 ### Pending Todos
 
@@ -647,8 +674,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-29T23:43:55.604Z
-Stopped at: Completed 173-08-PLAN.md — closed CR-01 crash-safety + Finding 1 resume determinism, re-proved SC-4, VERIFY-08 re-confirmed
+Last session: 2026-07-30T00:02:08.000Z
+Stopped at: Completed 174-03-PLAN.md — verify-classifier core (enumerated codes, presentation filter, m:n pairing, staleness, provenance)
 Resume file: 
 None
 
