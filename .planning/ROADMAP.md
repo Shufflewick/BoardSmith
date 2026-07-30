@@ -134,7 +134,7 @@ case behaves exactly as documented).
   3. A genuine rules change introduced between pass 1 and pass 2 is correctly classified `sharper` or `contradictory`.
   4. Staleness keys off the rule delta ALONE — `sharper` and `contradictory` mark chunks stale whether or not the source bytes moved, and `cosmetic` never does even when the source changed. `source-changed` is reported to the human as provenance but is never itself a staleness verdict.
   5. The classifier is validated against real pass-1-vs-pass-2 output from at least one reference game, not synthetic examples alone.
-**Plans**: 7 plans in 6 waves
+**Plans**: 8 plans in 7 waves (08 is the gap-closure plan for the phase GOAL)
 
 Plans:
 - [x] 174-01-PLAN.md — produce the real pass-1-vs-pass-2 material (adopt + re-transcribe `cp -R` copies of both reference games), archive it as in-repo fixtures, measure the presentation-marker inventory (wave 1)
@@ -144,6 +144,7 @@ Plans:
 - [x] 174-05-PLAN.md — classification subagent contract + `classification-dispatch.md` + `verify-game.md` Step 4 in-place rewrite + rewritten drift pins (wave 4)
 - [x] 174-06-PLAN.md — live proof: SC-1/SC-2 with the bar declared before measuring, VERIFY-07 transcript grep, determinism + lexicon regression (wave 5)
 - [x] 174-07-PLAN.md — live proof: SC-3 real source mutation through the real pipeline, VERIFY-01 per-chunk verdict, phase closeout (wave 6)
+- [ ] 174-08-PLAN.md — GAP CLOSURE: decision 19 per-citation attribution (claim-level anchor ladder), both 174-04 guardrails pinned, citation-resolution rate measured on real chunks, phase-goal re-measured on both real games with an explicit MET/NOT-MET verdict (wave 7)
 
 **Result:** All five success criteria proven live on real data (`174-PROOF.md`). SC-1/SC-2:
 provenance and rule-delta are independently derived on real pairs; SC-2's pre-declared bar (≥90%
