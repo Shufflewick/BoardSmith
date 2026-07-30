@@ -1,9 +1,19 @@
 import { promises as fs } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { findHeadingIndex } from './build-manifest.js';
+import { join, relative, resolve } from 'node:path';
+import chalk from 'chalk';
+import { findHeadingIndex, parseRulings } from './build-manifest.js';
 import { VERIFIED_AGAINST_HEADING, VERIFIED_AGAINST_END } from './chunk-provenance.js';
-import { RULE_DELTA_KINDS, type RuleDelta } from './verify-classify.js';
-import { atomicWriteFile } from './verify-run.js';
+import { RULE_DELTA_KINDS, type RuleDelta, type ChunkVerdict, verifyClassifyStatusCommand } from './verify-classify.js';
+import {
+  atomicWriteFile,
+  appendLedgerLine,
+  ledgerFilePath,
+  readLedgerOrThrow,
+  parseLedgerBody,
+  resolveLedgerState,
+  type ClassificationRecord,
+  type AdjudicationRecord,
+} from './verify-run.js';
 
 /**
  * `verify-impact.ts` — Phase 175's impact-map / repair-gating surface: VERIFY-05's
@@ -422,4 +432,216 @@ export async function writeRulesStalenessMarker(
   }
 
   return { chunkWritten: chunkChanged, sketchWritten, sketchRepaired };
+}
+
+// -------------------------------------------------------------------------------------------
+// VERIFY-04's gate: contradiction collection, both-readings formatting, and the RULINGS.md
+// append / UNADJUDICATED record (175-CONTEXT.md decisions 6, 7, 8, 9, 14, 15)
+//
+// NO BYPASS ANYWHERE IN THIS SECTION (decision 9). VERIFY-04 says a contradictory classification
+// ALWAYS stops and asks; the pit-of-success reading of "always" is that no representable option
+// skips it — no `force`/`skip`/`yes`/`assumeResolved`/`autoAdjudicate` flag, and no
+// `process.env` read anywhere in this module. `verifyImpactAdjudicateCommand`'s `outcome:
+// 'resolved'` path REQUIRES the human's own `decision`/`citation`/`rationale` prose — there is no
+// code path that marks a contradiction resolved without it, exactly as `build/ask.md`'s
+// Gate-Before-Write never writes a durable record before an explicit yes.
+// -------------------------------------------------------------------------------------------
+
+/**
+ * The placeholder rendered for a missing verbatim reading — a contradictory classification
+ * record missing `quotedPass1`/`quotedPass2` is still surfaced (decision 6/14 — "always stops the
+ * pass"), never dropped, and never silently synthesized into a fabricated quote.
+ */
+const NO_VERBATIM_READING = '(no verbatim reading recorded)';
+
+/**
+ * One collected contradiction — one entry per PAIR (finding), never per affected chunk
+ * (175-CONTEXT.md decision 14). `adjudication` mirrors the recorded `AdjudicationRecord.outcome`
+ * for this pair, or `'pending'` when no adjudication has been recorded yet. `rulingNumber` is
+ * present only when `adjudication === 'resolved'`.
+ */
+export interface Contradiction {
+  pairId: string;
+  liveSlices: string[];
+  stagedSlices: string[];
+  provenance: string;
+  quotedPass1: string;
+  quotedPass2: string;
+  evidence: string;
+  affectedSlugs: string[];
+  adjudication: 'pending' | 'resolved' | 'UNADJUDICATED';
+  rulingNumber?: number;
+}
+
+/**
+ * Pure. Selects every `ClassificationRecord` whose `ruleDelta === 'contradictory'` and joins each
+ * to its recorded `AdjudicationRecord` (if any) by `pairId`.
+ *
+ * ONE ENTRY PER FINDING, NEVER PER CHUNK (decision 14): Phase 174 measured a single finding
+ * touching 6+ chunks (`174-PROOF.md` §8) — per-chunk prompting would ask the same question six
+ * times and train the designer to click through it. `affectedSlugs` instead carries every chunk
+ * this one finding touches, derived from `chunkVerdicts` by membership of `pairId` in
+ * `ChunkVerdict.pairIds`.
+ *
+ * A pair whose recorded adjudication `outcome` is `'resolved'` is marked `adjudication:
+ * 'resolved'` (excluded from the PENDING set a caller derives from the result — see
+ * `verifyImpactGateCommand`'s `pending`). A pair whose recorded outcome is `'UNADJUDICATED'`
+ * stays `adjudication: 'UNADJUDICATED'` and remains pending — a deferral is not a resolution and
+ * does not close the gate on a later run (decision 8). A pair with no recorded adjudication at
+ * all is `'pending'`.
+ *
+ * A contradictory record missing `quotedPass1` or `quotedPass2` is still returned, with the
+ * missing side rendered as `NO_VERBATIM_READING` — never dropped, never silently synthesized.
+ */
+export function collectContradictions(input: {
+  classifications: ClassificationRecord[];
+  adjudications: AdjudicationRecord[];
+  chunkVerdicts: ChunkVerdict[];
+}): Contradiction[] {
+  const adjudicationByPairId = new Map(input.adjudications.map((a) => [a.pairId, a] as const));
+
+  return input.classifications
+    .filter((c) => c.ruleDelta === 'contradictory')
+    .map((c): Contradiction => {
+      const adjudicationRecord = adjudicationByPairId.get(c.pairId);
+      const affectedSlugs = input.chunkVerdicts
+        .filter((v) => v.pairIds.includes(c.pairId))
+        .map((v) => v.slug);
+
+      let adjudication: Contradiction['adjudication'] = 'pending';
+      let rulingNumber: number | undefined;
+      if (adjudicationRecord?.outcome === 'resolved') {
+        adjudication = 'resolved';
+        rulingNumber = adjudicationRecord.rulingNumber;
+      } else if (adjudicationRecord?.outcome === 'UNADJUDICATED') {
+        adjudication = 'UNADJUDICATED';
+      }
+
+      return {
+        pairId: c.pairId,
+        liveSlices: c.liveSlices,
+        stagedSlices: c.stagedSlices,
+        provenance: c.provenance,
+        quotedPass1: c.quotedPass1 ?? NO_VERBATIM_READING,
+        quotedPass2: c.quotedPass2 ?? NO_VERBATIM_READING,
+        evidence: c.evidence,
+        affectedSlugs,
+        adjudication,
+        ...(rulingNumber !== undefined ? { rulingNumber } : {}),
+      };
+    });
+}
+
+/**
+ * Pure. Formats one contradiction's both-readings block: pair id, provenance, each verbatim
+ * reading under its own distinct label, then every affected chunk slug — UNCAPPED, no ellipsis,
+ * no "and N more" (decision 15 — report VOLUME must never be suppressed).
+ */
+export function formatBothReadings(c: Contradiction): string {
+  const lines: string[] = [];
+  lines.push(`Pair ${c.pairId} (provenance: ${c.provenance})`);
+  lines.push('');
+  lines.push('Reading as built (pass 1):');
+  lines.push(`  "${c.quotedPass1}"`);
+  lines.push('');
+  lines.push('Reading in the fresh transcription (pass 2):');
+  lines.push(`  "${c.quotedPass2}"`);
+  lines.push('');
+  lines.push(`Affected chunks (${c.affectedSlugs.length}):`);
+  if (c.affectedSlugs.length > 0) {
+    for (const slug of c.affectedSlugs) lines.push(`  - ${slug}`);
+  } else {
+    lines.push('  (none recorded)');
+  }
+  return lines.join('\n');
+}
+
+export interface VerifyImpactGateResult {
+  runId: string;
+  contradictions: Contradiction[];
+  pending: string[];
+  summary: { contradictory: number; pending: number; resolved: number; unadjudicated: number };
+  warnings: string[];
+}
+
+/**
+ * `boardsmith verify-impact-gate` — VERIFY-04's read side: collects every un-adjudicated
+ * `contradictory` verdict in a run and formats both readings side by side.
+ *
+ * Read-only. Reads the run's classifications and adjudications through the SAME ledger authority
+ * every other command in this milestone shares (`readLedgerOrThrow` / `parseLedgerBody` /
+ * `resolveLedgerState` — `verify-run.ts`) and gets `chunkVerdicts` from
+ * `verifyClassifyStatusCommand` (`verify-classify.ts`) — never re-derives staleness or
+ * re-classifies a pair.
+ *
+ * NEVER SETS `process.exitCode`. A pending contradiction is a finding, not a tool failure — exit
+ * 0 always (172-CONTEXT.md decision 6). Throws only for a structural tool failure (unknown run,
+ * no `rulebook/`), matching `drift-check.ts`'s convention, never from the normal report path.
+ *
+ * The options object has EXACTLY `project`, `runId`, and `json` — no `force`/`skip`/`yes`/
+ * `assumeResolved`/`bypass`/`autoAdjudicate` option exists here or anywhere else in this module,
+ * and no `process.env` is read anywhere in it (decision 9 — no representable bypass).
+ */
+export async function verifyImpactGateCommand(
+  options: { project?: string; runId?: string; json?: boolean } = {},
+): Promise<VerifyImpactGateResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  // `verifyClassifyStatusCommand` is the single existing authority for both the resolved runId
+  // (most-recent-run resolution) and the per-chunk verdict roll-up — never re-derived here.
+  const classifyStatus = await verifyClassifyStatusCommand({
+    project: projectDir,
+    runId: options.runId,
+    json: true,
+  });
+  const runId = classifyStatus.runId;
+
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const relLedgerPath = relative(projectDir, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+  const { adjudications } = resolveLedgerState(lines);
+
+  const contradictions = collectContradictions({
+    classifications: classifyStatus.classified,
+    adjudications,
+    chunkVerdicts: classifyStatus.chunkVerdicts,
+  });
+
+  const pending = contradictions.filter((c) => c.adjudication !== 'resolved').map((c) => c.pairId);
+  const summary = {
+    contradictory: contradictions.length,
+    pending: pending.length,
+    resolved: contradictions.filter((c) => c.adjudication === 'resolved').length,
+    unadjudicated: contradictions.filter((c) => c.adjudication === 'UNADJUDICATED').length,
+  };
+
+  const result: VerifyImpactGateResult = {
+    runId,
+    contradictions,
+    pending,
+    summary,
+    warnings: classifyStatus.warnings,
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  if (contradictions.length === 0) {
+    console.log(chalk.green(`✓ No contradictory findings pending adjudication — run ${runId}`));
+    return result;
+  }
+
+  console.log(
+    chalk.yellow(
+      `⚠ ${pending.length} of ${contradictions.length} contradictory finding(s) pending adjudication — run ${runId}`,
+    ),
+  );
+  for (const c of contradictions) {
+    console.log('');
+    console.log(formatBothReadings(c));
+  }
+  return result;
 }

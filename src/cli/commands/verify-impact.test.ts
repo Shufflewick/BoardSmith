@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import {
   RULES_STALENESS_HEADING,
   RULES_STALENESS_BEGIN,
@@ -17,13 +18,36 @@ import {
   renderRulesStalenessSection,
   parseRulesStaleness,
   writeRulesStalenessMarker,
+  collectContradictions,
+  formatBothReadings,
+  verifyImpactGateCommand,
   type RulesStalenessRecord,
+  type Contradiction,
 } from './verify-impact.js';
 import {
   VERIFIED_AGAINST_HEADING,
   VERIFIED_AGAINST_BEGIN,
   VERIFIED_AGAINST_END,
 } from './chunk-provenance.js';
+import {
+  verifyRunInitCommand,
+  verifyRunRecordCommand,
+  parseLedgerBody,
+  resolveLedgerState,
+  type ClassificationRecord,
+  type AdjudicationRecord,
+} from './verify-run.js';
+import {
+  verifyClassifyPairsCommand,
+  verifyClassifyRecordCommand,
+  type ChunkVerdict,
+} from './verify-classify.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const CONTRADICTORY_FIXTURE_ROOT = join(
+  __dirname,
+  '../../../.planning/phases/175-impact-map-repair-gating/175-FIXTURES/174-07-contradictory',
+);
 
 /**
  * `verify-impact.test.ts` — Task 1: the rules-staleness marker's constants, renderer, and
@@ -449,5 +473,227 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
 
     const sketchAfter = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
     expect(sketchAfter).toBe(tailSketch);
+  });
+});
+
+/**
+ * Task 1 — VERIFY-04's read side: contradiction collection and both-readings formatting. Test
+ * names below carry the tokens `contradictory` and `no-bypass` per the plan's `-t` selection
+ * convention.
+ */
+
+async function readRealContradictoryClassification(): Promise<ClassificationRecord> {
+  const runMdText = await fs.readFile(
+    join(CONTRADICTORY_FIXTURE_ROOT, 'staged/one-two-punch/RUN.md'),
+    'utf-8',
+  );
+  const { lines } = parseLedgerBody(runMdText, 'RUN.md');
+  const { classifications } = resolveLedgerState(lines);
+  const contradictory = classifications.find((c) => c.ruleDelta === 'contradictory');
+  if (!contradictory) {
+    throw new Error('fixture RUN.md has no contradictory classification record');
+  }
+  return contradictory;
+}
+
+describe('contradictory — collectContradictions, over the REAL 174-07 contradictory verdict', () => {
+  it('contradictory: the real fixture ledger line yields exactly one entry with both verbatim readings', async () => {
+    const record = await readRealContradictoryClassification();
+    const contradictions = collectContradictions({
+      classifications: [record],
+      adjudications: [],
+      chunkVerdicts: [],
+    });
+    expect(contradictions).toHaveLength(1);
+    expect(contradictions[0].quotedPass1).toContain('lower timing');
+    expect(contradictions[0].quotedPass2).toContain('higher timing');
+    expect(contradictions[0].adjudication).toBe('pending');
+  });
+
+  it('contradictory: one entry per FINDING, never per affected chunk — 6 synthetic ChunkVerdicts collapse to one Contradiction carrying all 6 slugs', async () => {
+    const record = await readRealContradictoryClassification();
+    const chunkVerdicts: ChunkVerdict[] = Array.from({ length: 6 }, (_, i) => ({
+      slug: `chunk-${i}`,
+      citedLiveSlices: record.liveSlices,
+      pairIds: [record.pairId],
+      ruleDelta: 'contradictory',
+      stale: true,
+      attributions: [],
+    }));
+    const contradictions = collectContradictions({
+      classifications: [record],
+      adjudications: [],
+      chunkVerdicts,
+    });
+    expect(contradictions).toHaveLength(1);
+    expect(contradictions[0].affectedSlugs).toHaveLength(6);
+    expect(new Set(contradictions[0].affectedSlugs).size).toBe(6);
+  });
+
+  it('contradictory: a pair recorded UNADJUDICATED stays pending; a pair recorded resolved does not', async () => {
+    const record = await readRealContradictoryClassification();
+    const otherRecord: ClassificationRecord = { ...record, pairId: 'pages-9-9' };
+    const adjudications: AdjudicationRecord[] = [
+      {
+        kind: 'adjudication',
+        pairId: record.pairId,
+        outcome: 'UNADJUDICATED',
+        quotedPass1: record.quotedPass1!,
+        quotedPass2: record.quotedPass2!,
+        recordedAt: new Date().toISOString(),
+      },
+      {
+        kind: 'adjudication',
+        pairId: otherRecord.pairId,
+        outcome: 'resolved',
+        rulingNumber: 27,
+        quotedPass1: otherRecord.quotedPass1!,
+        quotedPass2: otherRecord.quotedPass2!,
+        recordedAt: new Date().toISOString(),
+      },
+    ];
+    const contradictions = collectContradictions({
+      classifications: [record, otherRecord],
+      adjudications,
+      chunkVerdicts: [],
+    });
+    const pending = contradictions
+      .filter((c) => c.adjudication !== 'resolved')
+      .map((c) => c.pairId);
+    expect(pending).toContain(record.pairId);
+    expect(pending).not.toContain(otherRecord.pairId);
+    const resolvedEntry = contradictions.find((c) => c.pairId === otherRecord.pairId);
+    expect(resolvedEntry?.adjudication).toBe('resolved');
+    expect(resolvedEntry?.rulingNumber).toBe(27);
+  });
+
+  it('contradictory: formatBothReadings lists every affected chunk uncapped — no ellipsis, no "and N more"', async () => {
+    const record = await readRealContradictoryClassification();
+    const contradiction: Contradiction = {
+      pairId: record.pairId,
+      liveSlices: record.liveSlices,
+      stagedSlices: record.stagedSlices,
+      provenance: record.provenance,
+      quotedPass1: record.quotedPass1!,
+      quotedPass2: record.quotedPass2!,
+      evidence: record.evidence,
+      affectedSlugs: Array.from({ length: 9 }, (_, i) => `chunk-${i}`),
+      adjudication: 'pending',
+    };
+    const formatted = formatBothReadings(contradiction);
+    expect(formatted).toContain('Affected chunks (9):');
+    for (let i = 0; i < 9; i++) expect(formatted).toContain(`chunk-${i}`);
+    expect(formatted).not.toMatch(/and \d+ more/i);
+    expect(formatted).not.toContain('…');
+    expect(formatted).toContain(record.quotedPass1!);
+    expect(formatted).toContain(record.quotedPass2!);
+  });
+});
+
+async function sha256OfDir(root: string): Promise<Record<string, string>> {
+  const map: Record<string, string> = {};
+  async function walk(current: string): Promise<void> {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const abs = join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(abs);
+      } else if (entry.isFile()) {
+        const buf = await fs.readFile(abs);
+        map[relative(root, abs)] = createHash('sha256').update(buf).digest('hex');
+      }
+    }
+  }
+  await walk(root);
+  return map;
+}
+
+async function singleContradictoryPairProject(
+  projectRoot: string,
+): Promise<{ project: string; runId: string; pairId: string }> {
+  const project = join(projectRoot, 'gate-project');
+  const rulebookDir = join(project, 'rulebook');
+  await fs.mkdir(rulebookDir, { recursive: true });
+  await fs.writeFile(
+    join(rulebookDir, 'a.md'),
+    'p.1, A:\n"The player with the lower timing on their card must resolve their action first."\n',
+  );
+
+  const initResult = await verifyRunInitCommand({ project, json: true });
+  const runId = initResult.runId;
+  const stagingDirAbs = join(project, initResult.stagingDir);
+  await fs.writeFile(
+    join(stagingDirAbs, 'ua.md'),
+    'p.1, A:\n"The player with the higher timing on their card must resolve their action first."\n',
+  );
+  await verifyRunRecordCommand({ project, runId, unit: 'ua', slice: 'ua.md', json: true });
+
+  const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+  const pairId = pairsResult.pairs[0].pairId;
+
+  await verifyClassifyRecordCommand({
+    project,
+    runId,
+    pairId,
+    label: 'contradictory',
+    quotedPass1: 'The player with the lower timing on their card must resolve their action first.',
+    quotedPass2: 'The player with the higher timing on their card must resolve their action first.',
+    json: true,
+  });
+
+  return { project, runId, pairId };
+}
+
+describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypass', () => {
+  let gateDir: string;
+
+  beforeEach(async () => {
+    gateDir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-gate-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(gateDir, { recursive: true, force: true });
+  });
+
+  it('contradictory: verifyImpactGateCommand surfaces the recorded contradictory pair, pending, exit 0', async () => {
+    const { project, runId, pairId } = await singleContradictoryPairProject(gateDir);
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    const result = await verifyImpactGateCommand({ project, runId, json: true });
+
+    expect(result.contradictions).toHaveLength(1);
+    expect(result.contradictions[0].pairId).toBe(pairId);
+    expect(result.pending).toContain(pairId);
+    expect(result.summary.contradictory).toBe(1);
+    expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
+
+    process.exitCode = previousExitCode;
+  });
+
+  it('contradictory: verifyImpactGateCommand is read-only — a whole-project sha256 map is byte-identical before and after', async () => {
+    const { project, runId } = await singleContradictoryPairProject(gateDir);
+    const before = await sha256OfDir(project);
+
+    await verifyImpactGateCommand({ project, runId, json: true });
+
+    const after = await sha256OfDir(project);
+    expect(after).toEqual(before);
+  });
+
+  it('no-bypass: verifyImpactGateCommand has exactly project/runId/json options — no force/skip/yes/assumeResolved/bypass/autoAdjudicate anywhere in this module', async () => {
+    const fs2 = await import('node:fs/promises');
+    const moduleSource = await fs2.readFile(
+      join(__dirname, 'verify-impact.ts'),
+      'utf-8',
+    );
+    const nonCommentLines = moduleSource
+      .split('\n')
+      .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+      .join('\n');
+    expect(
+      (nonCommentLines.match(/process\.env|force|bypass|--yes|assumeResolved|autoAdjudicate/gi) ?? [])
+        .length,
+    ).toBe(0);
   });
 });
