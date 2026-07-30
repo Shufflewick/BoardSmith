@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 175-01-PLAN.md — the rules-staleness marker (constants/renderer/strict parser + CHUNK-first/SKETCH-second writer) built and registered in state-machine.md/both templates/pins, in one change. VERIFY-05 partially implemented (this is plan 1 of 8 in Phase 175); requirement stays open in REQUIREMENTS.md pending the remaining wiring plans."
-last_updated: "2026-07-30T06:02:06Z"
+stopped_at: "Completed 175-02-PLAN.md — impact/adjudication ledger kinds widened into verify-run.ts's single atomic fence pair, plus the 'Re-verified (no code change):' stamp appended to chunk-provenance.ts's VERIFIED_AGAINST_LABELS. This is plan 2 of 8 in Phase 175; VERIFY-05/VERIFY-06 stay open in REQUIREMENTS.md pending the remaining wiring plans."
+last_updated: "2026-07-30T14:11:58Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
   completed_phases: 5
   total_plans: 39
-  completed_plans: 37
+  completed_plans: 38
   percent: 50
 ---
 
@@ -25,9 +25,8 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 175 (Impact Map & Repair Gating) — plan 175-01 of 8 executed.
-Next: Phase 175 plan 175-02 (host-module extensions: `impact`/`adjudication` ledger kinds +
-`Re-verified (no code change):` label), per `ROADMAP.md`.
+Phase: 175 (Impact Map & Repair Gating) — plan 175-02 of 8 executed.
+Next: Phase 175 plan 175-03, per `ROADMAP.md`.
 
 `175-01-PLAN.md` (2026-07-30) built VERIFY-05's rules-staleness marker as a NEW, ORTHOGONAL,
 machine-owned fenced field in CHUNK.md — never a new Status enum value (175-CONTEXT.md decision
