@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   RULES_STALENESS_HEADING,
@@ -21,6 +21,10 @@ import {
   collectContradictions,
   formatBothReadings,
   verifyImpactGateCommand,
+  nextRulingNumber,
+  renderRuling,
+  appendRuling,
+  verifyImpactAdjudicateCommand,
   type RulesStalenessRecord,
   type Contradiction,
 } from './verify-impact.js';
@@ -695,5 +699,280 @@ describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypas
       (nonCommentLines.match(/process\.env|force|bypass|--yes|assumeResolved|autoAdjudicate/gi) ?? [])
         .length,
     ).toBe(0);
+  });
+});
+
+/**
+ * Task 2 — the RULINGS.md append and the UNADJUDICATED record. Test names below carry the
+ * tokens `contradictory`, `unadjudicated`, and `no-bypass` per the plan's `-t` selection
+ * convention.
+ */
+
+/**
+ * A hand-built 26-entry corpus mirroring the real `~/BoardSmithGames/one-two-punch/RULINGS.md`
+ * shape exactly (three fields, no supersede verb) — used when the sibling game repo is not
+ * reachable in this environment. Tests below prefer the REAL file when present.
+ */
+function syntheticRulingsCorpus(): string {
+  const header =
+    '# Rulings\n\n' +
+    '<!-- This is an append-only ledger of designer decisions. -->\n\n';
+  const blocks: string[] = [];
+  for (let i = 1; i <= 26; i++) {
+    blocks.push(
+      `### Ruling ${i}\n` +
+        `- Decision: **Synthetic decision ${i}.**\n` +
+        `- Citation interpreted or overridden: rulebook/section-${i}.md, p.${i} — ` +
+        `"Synthetic citation text ${i}."\n` +
+        `- Rationale: Synthetic rationale ${i}.\n`,
+    );
+  }
+  return header + blocks.join('\n');
+}
+
+async function realOrSyntheticRulingsCorpus(): Promise<{ text: string; real: boolean }> {
+  const realPath = join(homedir(), 'BoardSmithGames', 'one-two-punch', 'RULINGS.md');
+  try {
+    const text = await fs.readFile(realPath, 'utf-8');
+    return { text, real: true };
+  } catch {
+    return { text: syntheticRulingsCorpus(), real: false };
+  }
+}
+
+describe('contradictory — nextRulingNumber / appendRuling — over a real 26-entry RULINGS.md (or a hand-built 26-entry stand-in, named per test)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-rulings-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('contradictory: nextRulingNumber returns 27 on a 26-entry corpus (real one-two-punch RULINGS.md when reachable, else a hand-built 26-entry stand-in)', async () => {
+    const { text } = await realOrSyntheticRulingsCorpus();
+    expect(nextRulingNumber(text)).toBe(27);
+  });
+
+  it('contradictory: renderRuling emits exactly the three real field labels, never a supersession field', () => {
+    const block = renderRuling({
+      number: 27,
+      decision: 'A test decision.',
+      citation: 'rulebook/test.md, p.1 — "test citation".',
+      rationale: 'A test rationale.',
+    });
+    expect(block).toMatch(
+      /^### Ruling 27\n- Decision: .+\n- Citation interpreted or overridden: .+\n- Rationale: .+$/m,
+    );
+    expect(block).not.toMatch(/supersede[sd]?/i);
+  });
+
+  it('contradictory: nextRulingNumber returns 1 for a corpus with no entries', () => {
+    expect(nextRulingNumber('# Rulings\n\nNo rulings yet.\n')).toBe(1);
+  });
+
+  it('contradictory: appendRuling is append-only — the new file content startsWith the original byte-for-byte', async () => {
+    const { text } = await realOrSyntheticRulingsCorpus();
+    await fs.writeFile(join(dir, 'RULINGS.md'), text);
+
+    const result = await appendRuling(dir, {
+      decision: 'A test decision.',
+      citation: 'rulebook/test.md, p.1 — "test citation".',
+      rationale: 'A test rationale.',
+    });
+    expect(result.number).toBe(27);
+
+    const newText = await fs.readFile(join(dir, 'RULINGS.md'), 'utf-8');
+    expect(newText.startsWith(text)).toBe(true);
+  });
+
+  it('contradictory: the appended block matches the corpus\'s own three-field ### Ruling N shape', async () => {
+    const { text } = await realOrSyntheticRulingsCorpus();
+    await fs.writeFile(join(dir, 'RULINGS.md'), text);
+
+    await appendRuling(dir, {
+      decision: 'A test decision.',
+      citation: 'rulebook/test.md, p.1 — "test citation".',
+      rationale: 'A test rationale.',
+    });
+
+    const newText = await fs.readFile(join(dir, 'RULINGS.md'), 'utf-8');
+    expect(newText).toMatch(
+      /^### Ruling 27\n- Decision: .+\n- Citation interpreted or overridden: .+\n- Rationale: .+$/m,
+    );
+  });
+
+  it('contradictory: the appended entry contains both real quotedPass1 and quotedPass2 verbatim, and does NOT match /supersede[sd]?/i', async () => {
+    const { text } = await realOrSyntheticRulingsCorpus();
+    await fs.writeFile(join(dir, 'RULINGS.md'), text);
+    const record = await readRealContradictoryClassification();
+
+    await appendRuling(dir, {
+      decision: 'The higher-timing reading applies going forward.',
+      citation: `Reading as built: "${record.quotedPass1}" — Reading in the fresh transcription: "${record.quotedPass2}"`,
+      rationale: 'Designer confirmed at the adjudication gate.',
+    });
+
+    const newText = await fs.readFile(join(dir, 'RULINGS.md'), 'utf-8');
+    const appendedBlock = newText.slice(newText.indexOf('### Ruling 27'));
+    expect(appendedBlock).toContain(record.quotedPass1);
+    expect(appendedBlock).toContain(record.quotedPass2);
+    expect(appendedBlock).not.toMatch(/supersede[sd]?/i);
+  });
+
+  it('appendRuling throws an actionable error when RULINGS.md does not exist, and never creates one', async () => {
+    await expect(
+      appendRuling(dir, { decision: 'x', citation: 'y', rationale: 'z' }),
+    ).rejects.toThrow(/No RULINGS\.md found/);
+    await expect(fs.access(join(dir, 'RULINGS.md'))).rejects.toThrow();
+  });
+});
+
+describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires human prose, UNADJUDICATED writes no ruling, idempotent per pair', () => {
+  let adjDir: string;
+
+  beforeEach(async () => {
+    adjDir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-adjudicate-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(adjDir, { recursive: true, force: true });
+  });
+
+  async function contradictoryProjectWithRulings(): Promise<{
+    project: string;
+    runId: string;
+    pairId: string;
+  }> {
+    const { project, runId, pairId } = await singleContradictoryPairProject(adjDir);
+    const { text } = await realOrSyntheticRulingsCorpus();
+    await fs.writeFile(join(project, 'RULINGS.md'), text);
+    return { project, runId, pairId };
+  }
+
+  it('unadjudicated: outcome "resolved" with no --decision rejects with a message naming the missing field', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    await expect(
+      verifyImpactAdjudicateCommand({
+        project,
+        runId,
+        pairId,
+        outcome: 'resolved',
+        citation: 'some citation',
+        rationale: 'some rationale',
+        json: true,
+      }),
+    ).rejects.toThrow(/decision/);
+  });
+
+  it('unadjudicated: outcome "UNADJUDICATED" writes NO RULINGS.md entry (sha256 unchanged) and records an AdjudicationRecord with that outcome', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const before = await fs.readFile(join(project, 'RULINGS.md'));
+    const beforeHash = createHash('sha256').update(before).digest('hex');
+
+    const result = await verifyImpactAdjudicateCommand({
+      project,
+      runId,
+      pairId,
+      outcome: 'UNADJUDICATED',
+      json: true,
+    });
+    expect(result.outcome).toBe('UNADJUDICATED');
+    expect(result.rulingNumber).toBeUndefined();
+
+    const after = await fs.readFile(join(project, 'RULINGS.md'));
+    const afterHash = createHash('sha256').update(after).digest('hex');
+    expect(afterHash).toBe(beforeHash);
+
+    const gateResult = await verifyImpactGateCommand({ project, runId, json: true });
+    const entry = gateResult.contradictions.find((c) => c.pairId === pairId);
+    expect(entry?.adjudication).toBe('UNADJUDICATED');
+    expect(gateResult.pending).toContain(pairId);
+  });
+
+  it('unadjudicated: outcome "resolved" appends a Ruling N entry and marks the pair resolved (not pending)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+
+    const result = await verifyImpactAdjudicateCommand({
+      project,
+      runId,
+      pairId,
+      outcome: 'resolved',
+      decision: 'The higher-timing reading applies going forward.',
+      citation: 'rulebook/a.md, p.1',
+      rationale: 'Designer confirmed at the adjudication gate.',
+      json: true,
+    });
+    expect(result.outcome).toBe('resolved');
+    expect(result.rulingNumber).toBe(27);
+
+    const rulingsText = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
+    expect(rulingsText).toContain('### Ruling 27');
+
+    const gateResult = await verifyImpactGateCommand({ project, runId, json: true });
+    const entry = gateResult.contradictions.find((c) => c.pairId === pairId);
+    expect(entry?.adjudication).toBe('resolved');
+    expect(gateResult.pending).not.toContain(pairId);
+  });
+
+  it('unadjudicated: a second "resolved" call for the same pair reuses the same ruling number and does NOT append a second RULINGS.md entry', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+
+    const first = await verifyImpactAdjudicateCommand({
+      project,
+      runId,
+      pairId,
+      outcome: 'resolved',
+      decision: 'First resolution text.',
+      citation: 'rulebook/a.md, p.1',
+      rationale: 'First rationale.',
+      json: true,
+    });
+
+    const second = await verifyImpactAdjudicateCommand({
+      project,
+      runId,
+      pairId,
+      outcome: 'resolved',
+      decision: 'Second resolution text (idempotent re-run).',
+      citation: 'rulebook/a.md, p.1',
+      rationale: 'Second rationale.',
+      json: true,
+    });
+
+    expect(second.rulingNumber).toBe(first.rulingNumber);
+
+    const rulingsText = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
+    const occurrences = rulingsText.match(/^### Ruling 27$/gm) ?? [];
+    expect(occurrences).toHaveLength(1);
+
+    // A second ledger line IS appended (last-write-wins per pairId), even though RULINGS.md
+    // gains no second entry.
+    const ledgerText = await fs.readFile(
+      join(project, 'rulebook', '.verify', runId, 'RUN.md'),
+      'utf-8',
+    );
+    const { lines } = parseLedgerBody(ledgerText, 'RUN.md');
+    const adjudicationLines = lines.filter(
+      (l) => l.type === 'adjudication' && l.record.pairId === pairId,
+    );
+    expect(adjudicationLines.length).toBe(2);
+  });
+
+  it('no-bypass: verifyImpactAdjudicateCommand rejects an --outcome value other than "resolved"/"UNADJUDICATED"', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    await expect(
+      verifyImpactAdjudicateCommand({
+        project,
+        runId,
+        pairId,
+        // @ts-expect-error — intentionally passing a non-representable outcome to prove no
+        // bypass value is accepted at runtime either.
+        outcome: 'skip',
+        json: true,
+      }),
+    ).rejects.toThrow(/resolved.*UNADJUDICATED|UNADJUDICATED.*resolved/s);
   });
 });

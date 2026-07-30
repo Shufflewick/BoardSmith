@@ -645,3 +645,248 @@ export async function verifyImpactGateCommand(
   }
   return result;
 }
+
+// -------------------------------------------------------------------------------------------
+// The RULINGS.md append and the UNADJUDICATED record — decision 6/14's gate's write side
+// (175-CONTEXT.md decisions 7, 8, 9)
+// -------------------------------------------------------------------------------------------
+
+/** `RULINGS.md`'s real, human-authored `### Ruling N` entry's three field labels, in order. */
+const RULING_LABELS = Object.freeze([
+  '- Decision:',
+  '- Citation interpreted or overridden:',
+  '- Rationale:',
+] as const);
+
+/**
+ * `nextRulingNumber` is implemented on top of `parseRulings` (`build-manifest.ts`) — the ONE
+ * existing `### Ruling (\d+)` matching authority. Two different `### Ruling (\d+)` regexes
+ * existing simultaneously is the defect this import exists to prevent (Pitfall 2,
+ * 175-RESEARCH.md): a second, subtly-different regex could disagree with `parseRulings` about
+ * which number is highest, silently mis-numbering a new entry or colliding with an existing one.
+ */
+export function nextRulingNumber(rulingsText: string): number {
+  const parsed = parseRulings(rulingsText);
+  if (parsed.length === 0) return 1;
+  return Math.max(...parsed.map((r) => r.number)) + 1;
+}
+
+/**
+ * Pure. Renders one `### Ruling N` block using EXACTLY the three field labels this corpus already
+ * uses (`- Decision:` / `- Citation interpreted or overridden:` / `- Rationale:`) — never a
+ * structured supersession field, never a `supersedes`/`superseded by` construction. Research
+ * measured that only ~3 of 62 real rulings across both reference games use a supersede verb at
+ * all, and one of those is direction-reversed — inventing syntax the corpus does not use would
+ * break CHECK-01's ruling re-validation (Phase 176), which reads this same corpus.
+ */
+export function renderRuling(input: {
+  number: number;
+  decision: string;
+  citation: string;
+  rationale: string;
+}): string {
+  return (
+    `### Ruling ${input.number}\n` +
+    `${RULING_LABELS[0]} ${input.decision}\n` +
+    `${RULING_LABELS[1]} ${input.citation}\n` +
+    `${RULING_LABELS[2]} ${input.rationale}\n`
+  );
+}
+
+/**
+ * `boardsmith verify-impact-adjudicate`'s core write path for `outcome: 'resolved'` — appends a
+ * new `### Ruling N` entry to `RULINGS.md`, `N` assigned by `nextRulingNumber`.
+ *
+ * APPEND-ONLY (T-175-09): reads the existing text, computes the new block, and writes
+ * `existingText + separator + newBlock` through `atomicWriteFile` (`verify-run.ts`) — the ONE
+ * atomic write path this repo has, never a second `fs.writeFile`. A caller-side test proves this
+ * is truly append-only by asserting the new file content `startsWith` the original byte-for-byte.
+ *
+ * `RULINGS.md`'s absence is a TOOL FAILURE, not a case to paper over: a bs-built project always
+ * has one (scaffolded at `init` time), so a missing file here means this command is being run
+ * against the wrong project directory, or the corpus was deleted — either way, this throws an
+ * actionable error rather than silently creating a fresh, empty `RULINGS.md` that would erase the
+ * project's own convention header and every prior human decision it never had.
+ */
+export async function appendRuling(
+  projectDir: string,
+  entry: { decision: string; citation: string; rationale: string },
+): Promise<{ number: number; path: string }> {
+  const dir = resolve(projectDir);
+  const rulingsPath = join(dir, 'RULINGS.md');
+  const relRulingsPath = 'RULINGS.md';
+
+  let rulingsText: string;
+  try {
+    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
+  } catch {
+    throw new Error(
+      `No ${relRulingsPath} found in ${dir}.\n` +
+        `A bs-built project always has one, scaffolded at \`boardsmith init\` time — this command\n` +
+        `never creates it. Confirm --project points at the right game directory, or restore\n` +
+        `${relRulingsPath} before recording an adjudication resolution.`,
+    );
+  }
+
+  const number = nextRulingNumber(rulingsText);
+  const block = renderRuling({ number, ...entry });
+  const separator = rulingsText.endsWith('\n\n') ? '' : rulingsText.endsWith('\n') ? '\n' : '\n\n';
+  const newText = rulingsText + separator + block;
+
+  await atomicWriteFile(rulingsPath, newText);
+
+  return { number, path: relRulingsPath };
+}
+
+export interface VerifyImpactAdjudicateResult {
+  pairId: string;
+  outcome: 'resolved' | 'UNADJUDICATED';
+  rulingNumber?: number;
+}
+
+/**
+ * `boardsmith verify-impact-adjudicate` — records the human's answer for one contradictory
+ * finding. There is NO option, environment variable, or argument on this command — or anywhere
+ * else in this module — that marks a contradiction resolved without a supplied human decision
+ * (decision 9). `outcome: 'resolved'` REQUIRES non-empty `decision`/`citation`/`rationale`; the
+ * absence of any is a thrown, actionable tool failure naming the missing field, never a silent
+ * default or a tool-authored ruling — exactly `build/ask.md`'s Gate-Before-Write discipline: only
+ * an explicit human answer authorizes the durable write.
+ *
+ * `outcome: 'UNADJUDICATED'` writes NO `RULINGS.md` entry: it is decision 8's honest terminal
+ * state for a deferred or aborted adjudication, recorded as a first-class `AdjudicationRecord`
+ * so the pair stays PENDING on a later run — never silence, never treated as resolved.
+ *
+ * IDEMPOTENT PER PAIR: if this pair already carries a recorded `outcome: 'resolved'`
+ * `AdjudicationRecord` with a `rulingNumber`, a second `resolved` call reuses that SAME ruling
+ * number and does NOT call `appendRuling` again — a re-run (or a retried call after a partial
+ * crash) never appends a second `### Ruling N` entry for one already-recorded resolution. A new
+ * `AdjudicationRecord` ledger line is still appended (last-write-wins per pairId, 175-02),
+ * matching the run ledger's own append-only discipline.
+ *
+ * WRITE ORDER: `RULINGS.md` first, the ledger record second (T-175-13) — a crash between the two
+ * leaves the ruling durable and the pair still PENDING (re-runnable), never a recorded resolution
+ * with no ruling behind it.
+ */
+export async function verifyImpactAdjudicateCommand(options: {
+  project?: string;
+  runId?: string;
+  pairId: string;
+  outcome: 'resolved' | 'UNADJUDICATED';
+  decision?: string;
+  citation?: string;
+  rationale?: string;
+  json?: boolean;
+}): Promise<VerifyImpactAdjudicateResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  const { pairId, outcome } = options;
+
+  if (outcome !== 'resolved' && outcome !== 'UNADJUDICATED') {
+    throw new Error(
+      `--outcome must be exactly "resolved" or "UNADJUDICATED" — got "${outcome}".\n` +
+        `There is no other representable adjudication outcome. A deferred or aborted\n` +
+        `adjudication must be recorded explicitly as "UNADJUDICATED", never left unset.`,
+    );
+  }
+
+  if (outcome === 'resolved') {
+    const missing = (['decision', 'citation', 'rationale'] as const).filter(
+      (field) => !options[field] || !options[field]!.trim(),
+    );
+    if (missing.length > 0) {
+      throw new Error(
+        `--outcome resolved requires non-empty --${missing.join(', --')}.\n` +
+          `A resolution is the human's own words recorded in RULINGS.md — never inferred, never\n` +
+          `supplied by the tool. Provide the missing field(s), or record --outcome UNADJUDICATED\n` +
+          `to defer this adjudication to a later run.`,
+      );
+    }
+  }
+
+  // `verifyClassifyStatusCommand` is the single existing authority for both the resolved runId
+  // and the recorded classification verdicts — never re-derived here.
+  const classifyStatus = await verifyClassifyStatusCommand({
+    project: projectDir,
+    runId: options.runId,
+    json: true,
+  });
+  const runId = classifyStatus.runId;
+
+  const classification = classifyStatus.classified.find((c) => c.pairId === pairId);
+  if (!classification || classification.ruleDelta !== 'contradictory') {
+    throw new Error(
+      `Pair "${pairId}" has no recorded "contradictory" classification in run ${runId}.\n` +
+        `Run \`boardsmith verify-impact-gate --run-id ${runId}\` to list pending contradictions.`,
+    );
+  }
+
+  const quotedPass1 = classification.quotedPass1 ?? NO_VERBATIM_READING;
+  const quotedPass2 = classification.quotedPass2 ?? NO_VERBATIM_READING;
+
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const relLedgerPath = relative(projectDir, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+  const { adjudications } = resolveLedgerState(lines);
+  const existing = adjudications.find((a) => a.pairId === pairId);
+
+  let rulingNumber: number | undefined;
+
+  if (outcome === 'resolved') {
+    if (existing?.outcome === 'resolved' && existing.rulingNumber !== undefined) {
+      // Idempotent: this pair already has a recorded ruling — reuse it, never append a second
+      // RULINGS.md entry for an already-recorded resolution.
+      rulingNumber = existing.rulingNumber;
+    } else {
+      // RULINGS.md write FIRST (T-175-13) — both verbatim readings embedded into the Citation
+      // field, matching the real corpus's own convention of quoting the interpreted rulebook
+      // text inside "Citation interpreted or overridden:" (e.g. one-two-punch Ruling 22).
+      const appended = await appendRuling(projectDir, {
+        decision: options.decision!.trim(),
+        citation:
+          `${options.citation!.trim()} — Reading as built (pass 1): "${quotedPass1}" | ` +
+          `Reading in the fresh transcription (pass 2): "${quotedPass2}"`,
+        rationale: options.rationale!.trim(),
+      });
+      rulingNumber = appended.number;
+    }
+  }
+
+  const record: AdjudicationRecord = {
+    kind: 'adjudication',
+    pairId,
+    outcome,
+    ...(rulingNumber !== undefined ? { rulingNumber } : {}),
+    quotedPass1,
+    quotedPass2,
+    recordedAt: new Date().toISOString(),
+  };
+
+  // Ledger record SECOND (T-175-13) — a crash between the RULINGS.md write above and this append
+  // leaves the ruling durable and the pair still pending, never a recorded resolution with no
+  // ruling behind it.
+  const newLedgerText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
+  await atomicWriteFile(ledgerFile, newLedgerText);
+
+  const result: VerifyImpactAdjudicateResult = {
+    pairId,
+    outcome,
+    ...(rulingNumber !== undefined ? { rulingNumber } : {}),
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  if (outcome === 'resolved') {
+    console.log(
+      chalk.green(`✓ Recorded Ruling ${rulingNumber} for pair ${pairId} (run ${runId})`),
+    );
+  } else {
+    console.log(
+      chalk.yellow(`⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
+    );
+  }
+  return result;
+}
