@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 174-05-PLAN.md — classification subagent contract + classification-dispatch.md + verify-game.md Step 3 rewrite"
-last_updated: "2026-07-30T00:00:00.000Z"
-last_activity: 2026-07-30
+stopped_at: "Completed 174-03-PLAN.md — verify-classifier core (enumerated codes, presentation filter, m:n pairing, staleness, provenance)"
+last_updated: "2026-07-30T01:17:19.396Z"
+last_activity: 2026-07-28
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 37
   completed_plans: 33
-  percent: 33
+  percent: 30
 ---
 
 # Project State
@@ -25,8 +25,26 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 174 (verify-classifier) — IN PROGRESS (5/7 plans)
-Next: Phase 174 plan 06 (live proof: dispatch a real classification subagent against the archived fixtures + hand-built lexicon regression pairs — VERIFY-03/VERIFY-07)
+Phase: 174 (verify-classifier) — IN PROGRESS (6/7 plans)
+Next: Phase 174 plan 07 (SC-3 real source mutation, VERIFY-01 per-chunk-verdict close, official REQUIREMENTS.md/ROADMAP.md closeout for VERIFY-01/VERIFY-03/VERIFY-07)
+
+`174-06-PLAN.md` ran the phase's live proof. The SC-2 bar was declared in its own commit
+(`fc030f17`) before any verdict existed, then a real classification pass was run against both
+reference games' reconstituted pass-1-vs-pass-2 material (all 23 restored bytes re-verified
+against `174-FIXTURES/MANIFEST.md`): a real `BS-CLASSIFY-V1` dispatch per game returned `seven` →
+`sharper` (bonus-point-card scoring value: undefined in pass 1, `+1` in pass 2) and
+`one-two-punch` → `cosmetic`. Measured against decision 14b's amended line-level bar: **90.9%
+cosmetic (10/11 pooled rule-bearing line-level findings), 0 contradictory — PASS.** VERIFY-07's
+transcript observable was grepped across dispatch prompts (zero matches), raw subagent returns
+(matches accounted for via the `quotedPass1`/`quotedPass2` exception, with one honest exception
+found in a free-prose `evidence` field), and the orchestrator's own transcript (1 match, inside a
+recording-step `--quoted-pass2` argument forwarding the subagent's own field). A determinism
+double-run (fresh independent dispatches, both games) produced identical
+`(pairId, ruleDelta, stale)` triples both times. All 7 hand-built lexicon regression pairs matched
+`EXPECTED.md` (7/7), including the schema-asymmetry trap. Both `~/BoardSmithGames` originals
+confirmed byte-identical before/after. VERIFY-01/VERIFY-03/VERIFY-07 remain open in
+`REQUIREMENTS.md` — 174-07 owns SC-3 and the official closeout. See
+`.planning/phases/174-verify-classifier/174-06-SUMMARY.md`.
 
 `174-05-PLAN.md` wrote the judgment half as skill text:
 `src/cli/slash-command/bs/verify/classification-subagent.md` (the `BS-CLASSIFY-V1` handshake, the
@@ -724,7 +742,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-30T00:02:08.000Z
+Last session: 2026-07-30T01:17:19.387Z
 Stopped at: Completed 174-03-PLAN.md — verify-classifier core (enumerated codes, presentation filter, m:n pairing, staleness, provenance)
 Resume file: 
 None
