@@ -1268,6 +1268,126 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
     expect(chunkY.stale).toBe(false);
     expect(chunkY.ruleDelta).toBe('cosmetic');
     expect(chunkY.pairIds).not.toContain(pairId);
+    // Case (a) narrowing is proven correct, not just "not over-broadened" — no unattributable
+    // warning fires here, since the quote DID land on a live slice in the pair (just not chunk-y's).
+    expect(result.warnings.some((w) => w.includes('unattributable') || w.includes('does not match verbatim'))).toBe(
+      false,
+    );
+  });
+
+  it('decision-18-corrective-a: quote matches NO live slice in the pair at all — every citing chunk is stale AND the unattributable condition is reported (FALSE-CLEAN closed)', async () => {
+    const project = join(dir, 'bridge-unattributable');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    await fs.writeFile(join(rulebookDir, 'x.md'), 'p.8, X:\n"X original text."\n');
+    await fs.writeFile(join(rulebookDir, 'y.md'), 'p.8, Y:\n"Y original text."\n');
+
+    const initResult = await verifyRunInitCommand({ project, json: true });
+    const runId = initResult.runId;
+    const stagingDirAbs = join(project, initResult.stagingDir);
+    await fs.writeFile(
+      join(stagingDirAbs, 'uxy.md'),
+      'p.8, XY:\n"X changed text."\n"Y original text restated."\n',
+    );
+    await verifyRunRecordCommand({ project, runId, unit: 'uxy', slice: 'uxy.md', json: true });
+
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    // A paraphrased "quote" that matches neither x.md nor y.md verbatim — the subagent summarized
+    // instead of quoting, which the code cannot tell apart from a genuinely blind attribution
+    // without checking the whole pair first.
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'sharper',
+      quotedPass1: 'The rule about X was tightened somewhat.',
+      quotedPass2: 'X changed text.',
+      json: true,
+    });
+
+    await writeChunkCiting(project, 'chunk-x', ['x.md']);
+    await writeChunkCiting(project, 'chunk-y', ['y.md']);
+
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    const chunkX = result.chunkVerdicts.find((c) => c.slug === 'chunk-x')!;
+    const chunkY = result.chunkVerdicts.find((c) => c.slug === 'chunk-y')!;
+    // Unattributable — broadened conservatively, NOT silently absorbed. Both citing chunks go stale.
+    expect(chunkX.stale).toBe(true);
+    expect(chunkX.ruleDelta).toBe('sharper');
+    expect(chunkY.stale).toBe(true);
+    expect(chunkY.ruleDelta).toBe('sharper');
+    expect(
+      result.warnings.some(
+        (w) => w.includes(pairId) && w.includes('does not match verbatim') && w.includes('sharper'),
+      ),
+    ).toBe(true);
+  });
+
+  it('decision-18-corrective-b: a cited live slice that cannot be read is surfaced and treated conservatively, never silently reported clean', async () => {
+    const project = join(dir, 'bridge-unreadable');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    await fs.writeFile(join(rulebookDir, 'x.md'), 'p.8, X:\n"X original text."\n');
+    await fs.writeFile(join(rulebookDir, 'y.md'), 'p.8, Y:\n"Y original text."\n');
+
+    const initResult = await verifyRunInitCommand({ project, json: true });
+    const runId = initResult.runId;
+    const stagingDirAbs = join(project, initResult.stagingDir);
+    await fs.writeFile(
+      join(stagingDirAbs, 'uxy.md'),
+      'p.8, XY:\n"X changed text."\n"Y original text restated."\n',
+    );
+    await verifyRunRecordCommand({ project, runId, unit: 'uxy', slice: 'uxy.md', json: true });
+
+    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const pairId = pairsResult.pairs[0].pairId;
+
+    // Quote matches x.md verbatim — under normal narrowing chunk-y (citing only y.md) would NOT be
+    // affected (case a). Simulate y.md becoming unreadable at the moment computeChunkVerdicts
+    // re-reads it: it must never be silently treated as "read fine, matched nothing".
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId,
+      label: 'sharper',
+      quotedPass1: 'X original text.',
+      quotedPass2: 'X changed text.',
+      json: true,
+    });
+
+    await writeChunkCiting(project, 'chunk-y', ['y.md']);
+
+    const yPath = join(rulebookDir, 'y.md');
+    const originalReadFile = fs.readFile;
+    let yReadCount = 0;
+    const spy = vi
+      .spyOn(fs, 'readFile')
+      .mockImplementation((async (...args: Parameters<typeof fs.readFile>) => {
+        const [target] = args;
+        if (target === yPath) {
+          yReadCount += 1;
+          // Let the FIRST read (computeRunPairs building the pair/page-span set) succeed so
+          // pairing itself is unaffected; fail every subsequent read (computeChunkVerdicts'
+          // independent re-read) to simulate the slice going unreadable in between.
+          if (yReadCount === 1) return originalReadFile(...args);
+          throw new Error(`EACCES: permission denied, open '${yPath}' (simulated)`);
+        }
+        return originalReadFile(...args);
+      }) as typeof fs.readFile);
+
+    try {
+      const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+      const chunkY = result.chunkVerdicts.find((c) => c.slug === 'chunk-y')!;
+      expect(chunkY.stale).toBe(true);
+      expect(chunkY.ruleDelta).toBe('sharper');
+      expect(
+        result.warnings.some((w) => w.includes(pairId) && w.includes('could not be read')),
+      ).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

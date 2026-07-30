@@ -912,12 +912,29 @@ export interface ChunkVerdict {
  * contributes `unclassified` to any chunk citing its live slice(s); `presentation-only` groups
  * contribute nothing, matching decision 17's treatment of presentation content as outside the
  * rule-bearing comparison entirely.
+ *
+ * **Corrective follow-up (174-04 FALSE-CLEAN fix):** narrowing to "does this chunk's OWN cited
+ * live slice contain the quote" is only correct once you already know the quote lands SOMEWHERE
+ * in the pair. `affected.length === 0` is NOT a single situation — it conflates two:
+ *   (a) the quote matches some OTHER live slice in the pair, one this chunk does not cite —
+ *       genuinely not this chunk's problem, the narrowing working exactly as designed; or
+ *   (b) the quote matches NO live slice in the pair AT ALL — a paraphrase instead of a verbatim
+ *       quote, a re-wrapped line, drifted whitespace/punctuation, or a live slice that could not
+ *       even be read. This is not proof the chunk is unaffected; it is the tool being blind, and
+ *       the delta must not evaporate silently.
+ * Distinguishing them requires checking the quote against the PAIR's whole `liveSlices` set, not
+ * just this chunk's citations. Case (b) — the UNATTRIBUTABLE quote — broadens conservatively to
+ * every one of this chunk's own cited live slices (the same fallback the no-quote branch already
+ * uses) and is additionally surfaced in the returned `warnings`, never silently absorbed. A live
+ * slice that cannot be read is treated the same way: it is never silently cached as `''` (which
+ * would make it match no quote by construction and feed straight back into the same false-clean),
+ * it is surfaced and the affected chunk conservatively broadened.
  */
 async function computeChunkVerdicts(
   projectDir: string,
   pairs: SlicePair[],
   classifications: ClassificationRecord[],
-): Promise<ChunkVerdict[]> {
+): Promise<{ verdicts: ChunkVerdict[]; warnings: string[] }> {
   const chunksDir = join(projectDir, 'chunks');
   let slugs: string[] = [];
   try {
@@ -936,19 +953,24 @@ async function computeChunkVerdicts(
     sliceFilenames = [];
   }
 
-  const liveTextCache = new Map<string, string>();
-  async function liveText(bareName: string): Promise<string> {
+  // `null` means "could not be read" — NEVER collapsed to `''`. A live slice cached as `''` on a
+  // read failure would match no quote by construction, which is indistinguishable from "read fine,
+  // genuinely doesn't contain this quote" — precisely the false-clean this fix closes. Callers
+  // below must handle `null` as its own, surfaced condition.
+  const liveTextCache = new Map<string, string | null>();
+  async function liveText(bareName: string): Promise<string | null> {
     if (!liveTextCache.has(bareName)) {
       try {
         liveTextCache.set(bareName, await fs.readFile(join(rulebookDir, bareName), 'utf-8'));
       } catch {
-        liveTextCache.set(bareName, '');
+        liveTextCache.set(bareName, null);
       }
     }
     return liveTextCache.get(bareName)!;
   }
 
   const classificationsByPairId = new Map(classifications.map((c) => [c.pairId, c]));
+  const warningSet = new Set<string>();
 
   const results: ChunkVerdict[] = [];
   for (const slug of slugs) {
@@ -992,21 +1014,60 @@ async function computeChunkVerdicts(
       }
 
       // Decision 18: narrow to only the live slice(s) whose OWN text contains the recorded quote —
-      // never broaden the whole group's citing chunks by default. A record with no quote at all
-      // (an unclassified verdict with nothing to attribute) cannot be narrowed, so conservatively
-      // every one of this chunk's cited live slices in the pair is treated as affected (decision 8).
+      // never broaden the whole group's citing chunks by default. But before narrowing, check
+      // whether the quote lands ANYWHERE in the pair's live slices at all — that single check is
+      // what tells case (a) (matches elsewhere in the pair) apart from case (b) (matches nothing —
+      // unattributable).
       const quote = record.quotedPass1?.trim();
       let affected: string[];
       if (quote && quote.length > 0) {
-        affected = [];
-        for (const liveSlice of pairCitedLiveSlices) {
+        let matchedAnywhereInPair = false;
+        const unreadableInPair: string[] = [];
+        for (const liveSlice of pair.liveSlices) {
           const text = await liveText(bareSliceName(liveSlice));
-          if (text.includes(quote)) affected.push(liveSlice);
+          if (text === null) {
+            unreadableInPair.push(liveSlice);
+            continue;
+          }
+          if (text.includes(quote)) matchedAnywhereInPair = true;
+        }
+
+        if (unreadableInPair.length > 0) {
+          // An unreadable/missing live slice can never rule itself out as the one that would have
+          // matched — surface it and broaden conservatively rather than guess it read empty.
+          affected = pairCitedLiveSlices;
+          warningSet.add(
+            `Pair "${pair.pairId}": ${unreadableInPair.length} live slice(s) could not be read ` +
+              `(${unreadableInPair.join(', ')}) while attributing a "${record.ruleDelta}" delta — ` +
+              `broadened to every cited live slice for chunk "${slug}" rather than reported clean.`,
+          );
+        } else if (!matchedAnywhereInPair) {
+          // Case (b): the recorded quote is UNATTRIBUTABLE — it matches no live slice in this pair
+          // at all (paraphrase, re-wrap, or drift). Broaden conservatively and surface it; this is
+          // exactly the false-clean this fix exists to close.
+          affected = pairCitedLiveSlices;
+          warningSet.add(
+            `Pair "${pair.pairId}": the recorded quote for a "${record.ruleDelta}" delta does not ` +
+              `match verbatim in any live slice of this pair (paraphrase or drift) — broadened to ` +
+              `every cited live slice for chunk "${slug}" rather than reported clean.`,
+          );
+        } else {
+          // Case (a): the quote lands somewhere in the pair, so narrow to only THIS chunk's own
+          // cited live slices that actually contain it.
+          affected = [];
+          for (const liveSlice of pairCitedLiveSlices) {
+            const text = await liveText(bareSliceName(liveSlice));
+            if (text !== null && text.includes(quote)) affected.push(liveSlice);
+          }
         }
       } else {
+        // No quote recorded at all — cannot be narrowed, so conservatively treat every one of this
+        // chunk's cited live slices in the pair as affected (decision 8).
         affected = pairCitedLiveSlices;
       }
-      if (affected.length === 0) continue; // this delta does not land on THIS chunk's own citations
+      // Only reachable via case (a): the quote matched elsewhere in the pair, not on any live slice
+      // this chunk itself cites — genuinely not this chunk's problem.
+      if (affected.length === 0) continue;
 
       pairIds.add(pair.pairId);
       if (RULE_DELTA_SEVERITY[record.ruleDelta] > RULE_DELTA_SEVERITY[ruleDelta]) {
@@ -1022,7 +1083,7 @@ async function computeChunkVerdicts(
       stale: ruleDelta !== 'cosmetic',
     });
   }
-  return results;
+  return { verdicts: results, warnings: [...warningSet] };
 }
 
 export interface VerifyClassifyStatusResult {
@@ -1062,7 +1123,7 @@ export async function verifyClassifyStatusCommand(
 ): Promise<VerifyClassifyStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
   const runId = await resolveRunId(projectDir, options.runId);
-  const { pairs, warnings } = await computeRunPairs(projectDir, runId);
+  const { pairs, warnings: pairingWarnings } = await computeRunPairs(projectDir, runId);
 
   const ledgerFile = ledgerFilePath(projectDir, runId);
   const relLedgerPath = relative(projectDir, ledgerFile);
@@ -1107,7 +1168,12 @@ export async function verifyClassifyStatusCommand(
     cosmeticPct,
   };
 
-  const chunkVerdicts = await computeChunkVerdicts(projectDir, pairs, classifications);
+  const { verdicts: chunkVerdicts, warnings: chunkWarnings } = await computeChunkVerdicts(
+    projectDir,
+    pairs,
+    classifications,
+  );
+  const warnings = [...pairingWarnings, ...chunkWarnings];
 
   const result: VerifyClassifyStatusResult = {
     runId,
