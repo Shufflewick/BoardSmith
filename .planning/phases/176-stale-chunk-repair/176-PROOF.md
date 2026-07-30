@@ -258,3 +258,46 @@ copies and read-only against BoardSmith's own `src/`; no source file under `src/
 3886/3886 green (confirmed by re-run at the end of this plan, see below).
 
 **Task 1 GATE: PASSED**, with the honest distribution caveat above recorded, not hidden.
+
+---
+
+## 3. SC-3 — `seven`'s Ruling 1: verdict AND reasoning
+
+### The bar, declared and committed BEFORE dispatch (174-PROOF.md's precedent)
+
+Per `176-CONTEXT.md` decision 4 and `176-05-PLAN.md` Task 2, the expected verdict is declared here,
+in a commit that predates the dispatch record below (git ordering is the evidence the bar was not
+retrofitted to the result):
+
+> **Expected verdict: `still-needed`.**
+>
+> `seven`'s Ruling 1 supplies a complete scoring table for a "Ways to Score" card that is **absent
+> from the rulebook PDF entirely** — its own Citation field records that absence directly ("The
+> rulebook names this card and depends on it for all scoring, but never reproduces its face"), and
+> its Rationale states it is the **sole authority for scoring values** ("Without it the game has no
+> scoring rules at all and cannot reach an outcome... nothing in the build may infer a scoring table
+> from any other source"). A fresh transcription of the same 2-page PDF cannot contain a card face
+> the PDF itself never printed — nothing about a second, independent transcription pass changes what
+> is physically on the page.
+>
+> Two wrong answers are both plausible and both catastrophic if returned:
+> - `contradicted` — reasoning shaped like "I could not find this card in the fresh transcription
+>   either." WRONG: not finding something is not the same as the fresh source stating something
+>   incompatible with the ruling's Decision. Nothing in a silent source contradicts anything.
+> - `resolved-by-source` — reasoning shaped like "no gap detected in the fresh transcription." WRONG,
+>   and the dangerous one: it would read downstream as license to delete the ruling, because
+>   `resolved-by-source` means the source itself now supplies what the ruling had to. `seven` has no
+>   other scoring rule for this card — a `resolved` verdict here would invite deleting the game's
+>   only scoring authority for it.
+>
+> The reasoning must independently identify BOTH: (a) that the ruling's own Citation asserts a
+> source absence, and (b) that the fresh staged transcription still does not contain the card's
+> face. A verdict of `still-needed` with reasoning that does not name both is not a passing result —
+> a right label with hand-wavy or absent reasoning would not prove the classifier understood the
+> case; it could have guessed.
+
+**This declaration is committed as a separate commit BEFORE the dispatch below is run.** See the
+commit hash cited at the end of this section (recorded after the fact, since a commit cannot cite
+its own hash from within itself) — the file history shows this section existed, staged and
+committed, prior to the "Dispatch and result" subsection being appended.
+
