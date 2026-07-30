@@ -116,7 +116,7 @@ that the disposition is computed entirely by the command and only formatted here
 performing the repair itself — walking the audit lenses, clearing the marker, flipping the chunk's
 status — is Phase 176's job, never this step's.
 
-## No Bypass, By Construction
+## No Skip Path, By Construction
 
 There is no flag, option, or unattended-mode carve-out anywhere in this file's prose, and none in
 the four commands it drives: `verify-impact-gate` and `verify-impact-status` are read-only reports;

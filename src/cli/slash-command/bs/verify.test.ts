@@ -44,6 +44,7 @@ const ALL_VERIFY_FILES = [
   'verify/staging-dispatch.md',
   'verify/classification-dispatch.md',
   'verify/classification-subagent.md',
+  'verify/adjudication-gate.md',
 ];
 
 describe('verify-game.md — entry point shape (VERIFY-01)', () => {
@@ -73,12 +74,12 @@ describe('verify-game.md — entry point shape (VERIFY-01)', () => {
     expect(skill).toMatch(/does NOT rebuild the project/);
   });
 
-  it('has exactly five numbered steps, each tagged with a VERIFY requirement ID', () => {
+  it('has exactly six numbered steps, each tagged with a VERIFY requirement ID', () => {
     const skill = read('verify-game.md');
     const stepHeadings = skill.match(/^## Step \d+:.*$/gm) ?? [];
-    expect(stepHeadings.length).toBe(5);
+    expect(stepHeadings.length).toBe(6);
     for (const heading of stepHeadings) {
-      expect(heading).toMatch(/VERIFY-0[12378]/);
+      expect(heading).toMatch(/VERIFY-0[1-8]/);
     }
   });
 
@@ -309,6 +310,72 @@ describe('verify-game.md — Step 3 classification routing (VERIFY-03)', () => {
   it('states Close formats, never computes, the verdict report', () => {
     const skill = flat(read('verify-game.md'));
     expect(skill).toMatch(/formatting\s*`verify-classify-status --json`|formatted, never computed/);
+  });
+});
+
+describe('verify-game.md — Step 0 citing without a hardcoded item count (VERIFY-01)', () => {
+  // Plan 175-01 added a 5th item to state-machine.md's Consistency Check. Step 0 used to cite
+  // "its four items" — that count is now false. Rather than bump the number to five (a
+  // self-invalidating claim that falsifies itself on the NEXT addition too), the count was
+  // dropped outright. Pin against ANY hardcoded count re-appearing, not just the stale "four".
+  it('cites the Consistency Check without restating a hardcoded item count', () => {
+    const skill = read('verify-game.md');
+    expect(skill).not.toMatch(/restate its (four|five|\d+) items/);
+    expect(skill).toMatch(/restate its items/);
+  });
+});
+
+describe('VERIFY-04/05/06 — Step 4 exists and the Phase 175 boundary statement is gone', () => {
+  // 174-05 made this identical class of fix to this identical file for Phase 173's boundary
+  // statements, and Phase 170 found (fourteen live runs) that self-contradicting skill text gets
+  // half-followed rather than fully ignored. These negatives are what stop the same defect
+  // recurring for Phase 175's boundary claim.
+  it('has a Step 4 naming the Adjudication Gate and Impact Map, pointing at adjudication-gate.md', () => {
+    const skill = read('verify-game.md');
+    expect(skill).toMatch(/^## Step 4: Adjudication Gate and Impact Map/m);
+    expect(skill).toContain(
+      '${CLAUDE_SKILL_DIR}/../bs-shared/verify/adjudication-gate.md',
+    );
+  });
+
+  it('has a Step 5 naming Close', () => {
+    const skill = read('verify-game.md');
+    expect(skill).toMatch(/^## Step 5: Close/m);
+  });
+
+  it('deletes the now-false Phase 175 no-staleness-marker/no-repair-loop boundary claim', () => {
+    const skill = read('verify-game.md');
+    expect(skill).not.toContain('flips no staleness marker');
+    expect(skill).not.toContain('Phase 175');
+    expect(skill).not.toContain('opens no repair loop');
+    expect(skill).not.toContain('records verdicts only: it flips');
+  });
+
+  it('names all four verify-impact-* commands between the router and its delegate', () => {
+    const skill = read('verify-game.md');
+    const gate = read('verify/adjudication-gate.md');
+    const combined = skill + gate;
+    for (const cmd of [
+      'verify-impact-gate',
+      'verify-impact-adjudicate',
+      'verify-impact-apply',
+      'verify-impact-status',
+    ]) {
+      expect(combined).toContain(cmd);
+    }
+  });
+
+  it('adjudication-gate.md carries the hard-gate discipline and both terminal answers, with no bypass vocabulary', () => {
+    const doc = read('verify/adjudication-gate.md');
+    expect(doc).toContain('Presenting is not');
+    expect(doc).toContain('UNADJUDICATED');
+    expect(doc).toContain('formatted, never computed');
+    expect(doc).toMatch(/no flag, option, or unattended/);
+
+    const stripped = stripComments(doc);
+    for (const forbidden of ['--force', '--yes', '--skip', 'bypass']) {
+      expect(stripped.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    }
   });
 });
 
