@@ -296,6 +296,46 @@ describe('episode — planVerifyEpisodeRound', () => {
     expect(output).toContain(plan.heading);
   });
 
+  it('inserts BEFORE a trailing section, never after the document end (176-06-discovered bug fix — a real CHUNK.md has sections after ## Findings Ledger; a naive EOF append would detach the new heading from it)', () => {
+    // Mirrors the REAL best-seven-selection/block CHUNK.md shape: ## Findings Ledger is followed
+    // by ## Revision Rounds, ## Build Manifest, ## Verified Commit Hash — never the last section.
+    const md =
+      `# Chunk: test-chunk\n\nStatus: verified\n\n## Findings Ledger\n\n` +
+      `${TABLE_AND_DRAW_ROUND_3}\n\n| ID | ... |\n|---|---|\n| F1 | ... |\n\n` +
+      `## Revision Rounds\n\nSome revision text.\n\n` +
+      `## Build Manifest\n\n| File | Status |\n|---|---|\n| a.ts | NEW |\n\n` +
+      `## Verified Commit Hash\n\nabc123\n`;
+
+    const plan = planVerifyEpisodeRound(md, 1);
+    if (plan.disposition !== 'round') throw new Error('unreachable');
+    const output = appendAuditRoundHeading(md, plan.heading);
+
+    const headingIndex = output.indexOf(plan.heading);
+    const revisionRoundsIndex = output.indexOf('## Revision Rounds');
+    const verifiedCommitHashIndex = output.indexOf('## Verified Commit Hash');
+
+    expect(headingIndex).toBeGreaterThan(-1);
+    expect(revisionRoundsIndex).toBeGreaterThan(-1);
+    // The new heading lands BEFORE ## Revision Rounds — not after ## Verified Commit Hash.
+    expect(headingIndex).toBeLessThan(revisionRoundsIndex);
+    expect(headingIndex).toBeLessThan(verifiedCommitHashIndex);
+    // Every trailing section's own text survives, byte-identical, unmoved relative to each other.
+    expect(output).toContain('Some revision text.');
+    expect(output).toContain('| a.ts | NEW |');
+    expect(output.trimEnd().endsWith('abc123')).toBe(true);
+    // Pre-existing round headings still survive exactly once.
+    expect(output.split(TABLE_AND_DRAW_ROUND_3).length - 1).toBe(1);
+  });
+
+  it('falls back to end-of-document append when ## Findings Ledger is the LAST section (matches every existing synthetic fixture\'s shape, unchanged behavior)', () => {
+    const md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    const plan = planVerifyEpisodeRound(md, 1);
+    if (plan.disposition !== 'round') throw new Error('unreachable');
+    const output = appendAuditRoundHeading(md, plan.heading);
+    expect(output.startsWith(md.trimEnd())).toBe(true);
+    expect(output.trimEnd().endsWith(plan.heading)).toBe(true);
+  });
+
   it('resolveVerifyEpisodeNumber: a zero-round chunk resolves to episode 1', () => {
     const md = '# Chunk: fresh\n\nStatus: built\n\n## Findings Ledger\n\n_No rounds yet._\n';
     expect(resolveVerifyEpisodeNumber(md)).toBe(1);

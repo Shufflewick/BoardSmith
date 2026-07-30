@@ -247,12 +247,37 @@ export function resolveVerifyEpisodeNumber(chunkMd: string): number {
 }
 
 /**
- * Append-only: the produced document's prefix up to the insertion point is byte-identical to the
- * input (`output.startsWith(input.trimEnd())`), and every pre-existing round heading string
- * survives unchanged (`state-machine.md` Write Order — round entries are append-only, never
- * overwritten or renumbered). Pure — no I/O.
+ * Append-only, WITHIN the `## Findings Ledger` section — not necessarily at the document's
+ * absolute end (176-06-discovered bug fix). A real `CHUNK.md` has sections AFTER `## Findings
+ * Ledger` (`## Revision Rounds`, `## Build Manifest`, `## Playtest Test Script`, `## Verified
+ * Checklist`, `## Verified Commit Hash` — confirmed on real fixtures, e.g. `best-seven-selection`
+ * and `block`'s real `CHUNK.md`). A naive end-of-document append would land the new round heading
+ * AFTER `## Verified Commit Hash`, structurally detached from the Findings Ledger it is meant to
+ * extend — this was never caught by this module's own tests because every synthetic fixture ended
+ * right after `## Findings Ledger`, with no trailing section to expose the defect.
+ *
+ * The new heading is inserted immediately before the next top-level `## ` heading that follows
+ * `## Findings Ledger`, if one exists; if `## Findings Ledger` is the LAST section (as every
+ * existing synthetic test fixture models, and as a document with no trailing content would),
+ * this falls back to the original end-of-document append — unchanged behavior for that shape.
+ *
+ * Append-only in the sense that matters: every byte before the insertion point and every byte
+ * after it survive unchanged, and every pre-existing round heading string survives unchanged
+ * (`state-machine.md` Write Order — round entries are append-only, never overwritten or
+ * renumbered). Pure — no I/O.
  */
 export function appendAuditRoundHeading(chunkMd: string, heading: string): string {
+  const findingsLedgerMatch = /^## Findings Ledger\s*$/m.exec(chunkMd);
+  if (findingsLedgerMatch) {
+    const searchFrom = findingsLedgerMatch.index + findingsLedgerMatch[0].length;
+    const nextHeadingMatch = /^## /m.exec(chunkMd.slice(searchFrom));
+    if (nextHeadingMatch) {
+      const insertAt = searchFrom + nextHeadingMatch.index;
+      const before = chunkMd.slice(0, insertAt).trimEnd();
+      const after = chunkMd.slice(insertAt);
+      return `${before}\n\n${heading}\n\n${after}`;
+    }
+  }
   const trimmed = chunkMd.trimEnd();
   return `${trimmed}\n\n${heading}\n`;
 }
