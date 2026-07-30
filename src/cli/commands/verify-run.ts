@@ -158,6 +158,49 @@ export interface ClassificationRecord {
   quotedPass2?: string;
 }
 
+/**
+ * One recorded per-chunk impact verdict (175-CONTEXT.md decision 17). `slug` identifies the
+ * chunk; `attributions` mirrors `ChunkVerdict.attributions[]` (verify-classify.ts) field-for-field
+ * with NO collapsing step, so a Phase 176 consumer never has to re-derive what changed from the
+ * boolean `stale` flag alone (decision 16). `ruleDelta` is typed as `string` here for the SAME
+ * reason `ClassificationRecord.ruleDelta` is: enum membership is the producing command's
+ * normalization job, not this parser's — see the `classification` branch below.
+ */
+export interface ImpactRecord {
+  kind: 'impact';
+  slug: string;
+  ruleDelta: string;
+  stale: boolean;
+  attributions: Array<{
+    pairId: string;
+    liveSlice: string;
+    rung: string;
+    attributed: boolean;
+    reason: string;
+  }>;
+  chunkStatus: string;
+  driftState: 'clean' | 'drifted' | 'unknown';
+  markerWritten: boolean;
+  recordedAt: string;
+}
+
+/**
+ * One recorded adjudication outcome for a `contradictory` finding (175-CONTEXT.md decisions 6-9).
+ * `outcome: 'UNADJUDICATED'` is decision 8's honest terminal state for a deferred or aborted
+ * adjudication — the same never-report-clean-where-blind principle as 174's `unclassified` and
+ * 172's `drift-unknown`. It is a first-class recorded outcome, never silence, and `rulingNumber`
+ * is absent for it by construction (there is no `RULINGS.md` entry to point at).
+ */
+export interface AdjudicationRecord {
+  kind: 'adjudication';
+  pairId: string;
+  outcome: 'resolved' | 'UNADJUDICATED';
+  rulingNumber?: number;
+  quotedPass1: string;
+  quotedPass2: string;
+  recordedAt: string;
+}
+
 function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex');
 }
@@ -387,8 +430,25 @@ export interface ParsedClassificationLine {
   index: number;
   record: ClassificationRecord;
 }
+/** Exported (175-02) — a fifth ledger-line kind, `impact`, in the SAME fence pair. */
+export interface ParsedImpactLine {
+  type: 'impact';
+  index: number;
+  record: ImpactRecord;
+}
+/** Exported (175-02) — a sixth ledger-line kind, `adjudication`, in the SAME fence pair. */
+export interface ParsedAdjudicationLine {
+  type: 'adjudication';
+  index: number;
+  record: AdjudicationRecord;
+}
 /** Exported (174-02) — see `ParsedUnitLine`. Widened to include `ParsedClassificationLine`. */
-export type ParsedLine = ParsedUnitLine | ParsedMarkerLine | ParsedClassificationLine;
+export type ParsedLine =
+  | ParsedUnitLine
+  | ParsedMarkerLine
+  | ParsedClassificationLine
+  | ParsedImpactLine
+  | ParsedAdjudicationLine;
 
 /**
  * Parses every in-fence line as either a `LedgerRecord` (unit) or a `RangeMarkerRecord`
@@ -482,6 +542,86 @@ export function parseLedgerBody(
         }
         return;
       }
+      if (rec.kind === 'impact') {
+        // T-175-06: every field type-validated; a torn or malformed impact line lands in
+        // malformedLines and is never thrown — the T-173-13 discipline the classification branch
+        // above already follows. `driftState` is validated as a string only, consistent with the
+        // classification branch's stated non-validation of enum membership (that is the
+        // producing command's normalization job, not the parser's).
+        const isAttributionArray = (
+          v: unknown,
+        ): v is ImpactRecord['attributions'] =>
+          Array.isArray(v) &&
+          v.every(
+            (a) =>
+              a &&
+              typeof a === 'object' &&
+              typeof (a as Record<string, unknown>).pairId === 'string' &&
+              typeof (a as Record<string, unknown>).liveSlice === 'string' &&
+              typeof (a as Record<string, unknown>).rung === 'string' &&
+              typeof (a as Record<string, unknown>).attributed === 'boolean' &&
+              typeof (a as Record<string, unknown>).reason === 'string',
+          );
+        if (
+          typeof rec.slug === 'string' &&
+          typeof rec.ruleDelta === 'string' &&
+          typeof rec.stale === 'boolean' &&
+          isAttributionArray(rec.attributions) &&
+          typeof rec.chunkStatus === 'string' &&
+          typeof rec.driftState === 'string' &&
+          typeof rec.markerWritten === 'boolean' &&
+          typeof rec.recordedAt === 'string'
+        ) {
+          lines.push({
+            type: 'impact',
+            index,
+            record: {
+              kind: 'impact',
+              slug: rec.slug,
+              ruleDelta: rec.ruleDelta,
+              stale: rec.stale,
+              attributions: rec.attributions,
+              chunkStatus: rec.chunkStatus,
+              driftState: rec.driftState as ImpactRecord['driftState'],
+              markerWritten: rec.markerWritten,
+              recordedAt: rec.recordedAt,
+            },
+          });
+        } else {
+          malformedLines.push(line);
+        }
+        return;
+      }
+      if (rec.kind === 'adjudication') {
+        // T-175-06: same malformed-line discipline. `outcome` is validated as a string only —
+        // enum membership is the record command's job, not the parser's (matching the
+        // classification/impact branches' stated policy).
+        if (
+          typeof rec.pairId === 'string' &&
+          typeof rec.outcome === 'string' &&
+          (rec.rulingNumber === undefined || typeof rec.rulingNumber === 'number') &&
+          typeof rec.quotedPass1 === 'string' &&
+          typeof rec.quotedPass2 === 'string' &&
+          typeof rec.recordedAt === 'string'
+        ) {
+          lines.push({
+            type: 'adjudication',
+            index,
+            record: {
+              kind: 'adjudication',
+              pairId: rec.pairId,
+              outcome: rec.outcome as AdjudicationRecord['outcome'],
+              ...(typeof rec.rulingNumber === 'number' ? { rulingNumber: rec.rulingNumber } : {}),
+              quotedPass1: rec.quotedPass1,
+              quotedPass2: rec.quotedPass2,
+              recordedAt: rec.recordedAt,
+            },
+          });
+        } else {
+          malformedLines.push(line);
+        }
+        return;
+      }
       if (
         (rec.kind === undefined || rec.kind === 'unit') &&
         typeof rec.unitId === 'string' &&
@@ -528,11 +668,20 @@ export function parseLedgerBody(
  * append-only ledger's re-classification path). Classification lines are a DISTINCT kind from
  * unit lines: they are never counted in `recorded[]`, and a `range-reset` marker — which is
  * unit-scoped only — never supersedes one, matching decision 4/6's kind-isolation requirement.
+ *
+ * `impacts` (175-02) resolves to one `ImpactRecord` per `slug`, and `adjudications` (175-02)
+ * resolves to one `AdjudicationRecord` per `pairId` — both last-write-wins in file-`index` order
+ * (the ledger's own append order), copying the classification resolution's comment above about
+ * why file order is the append order. Neither new kind is counted in `recorded[]`, and
+ * `range-reset` (unit-scoped only) never supersedes either — the same kind-isolation requirement
+ * `classifications` already satisfies.
  */
 export function resolveLedgerState(lines: ParsedLine[]): {
   recorded: LedgerRecord[];
   completeRanges: Set<string>;
   classifications: ClassificationRecord[];
+  impacts: ImpactRecord[];
+  adjudications: AdjudicationRecord[];
 } {
   const lastResetIndex = new Map<string, number>();
   const lastCompleteIndex = new Map<string, number>();
@@ -571,7 +720,27 @@ export function resolveLedgerState(lines: ParsedLine[]): {
     classificationsByPairId.set(line.record.pairId, line.record);
   }
 
-  return { recorded, completeRanges, classifications: [...classificationsByPairId.values()] };
+  // Last-write-wins per slug — same file-order rationale as classifications above.
+  const impactsBySlug = new Map<string, ImpactRecord>();
+  for (const line of lines) {
+    if (line.type !== 'impact') continue;
+    impactsBySlug.set(line.record.slug, line.record);
+  }
+
+  // Last-write-wins per pairId — same file-order rationale as classifications above.
+  const adjudicationsByPairId = new Map<string, AdjudicationRecord>();
+  for (const line of lines) {
+    if (line.type !== 'adjudication') continue;
+    adjudicationsByPairId.set(line.record.pairId, line.record);
+  }
+
+  return {
+    recorded,
+    completeRanges,
+    classifications: [...classificationsByPairId.values()],
+    impacts: [...impactsBySlug.values()],
+    adjudications: [...adjudicationsByPairId.values()],
+  };
 }
 
 // -------------------------------------------------------------------------------------------

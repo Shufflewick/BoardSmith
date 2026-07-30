@@ -20,6 +20,8 @@ import {
   ledgerFilePath,
   readLedgerOrThrow,
   type ClassificationRecord,
+  type ImpactRecord,
+  type AdjudicationRecord,
 } from './verify-run.js';
 import { computeVerificationScope } from './chunk-provenance.js';
 import { chunkProvenanceStatusCommand } from './chunk-provenance.js';
@@ -928,5 +930,261 @@ describe('verify-run.ts — classification record kind (174-02)', () => {
 
     expect(classifications).toHaveLength(1);
     expect(classifications[0].units).toEqual(['03-setup']);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// 175-02 Task 1 — the ledger union's fifth and sixth kinds, 'impact' and 'adjudication'
+// -------------------------------------------------------------------------------------------
+
+/**
+ * Appends one impact or adjudication line to a run's RUN.md via the SAME exported append +
+ * atomic-write path a real command uses — never a hand-written whole-file replace.
+ */
+async function appendLine(
+  project: string,
+  runId: string,
+  record: ImpactRecord | AdjudicationRecord | Record<string, unknown>,
+): Promise<void> {
+  const ledgerFile = ledgerFilePath(project, runId);
+  const relLedgerPath = relative(project, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, project);
+  const newText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
+  await atomicWriteFile(ledgerFile, newText);
+}
+
+function impactFixture(overrides: Partial<ImpactRecord> = {}): ImpactRecord {
+  return {
+    kind: 'impact',
+    slug: 'chunk-a',
+    ruleDelta: 'sharper',
+    stale: true,
+    attributions: [
+      {
+        pairId: 'pair-1',
+        liveSlice: 'rulebook/01-round.md',
+        rung: 'quoted-fragment',
+        attributed: true,
+        reason: 'quoted text found in this chunk',
+      },
+    ],
+    chunkStatus: 'verified',
+    driftState: 'unknown',
+    markerWritten: true,
+    recordedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function adjudicationFixture(overrides: Partial<AdjudicationRecord> = {}): AdjudicationRecord {
+  return {
+    kind: 'adjudication',
+    pairId: 'pair-1',
+    outcome: 'resolved',
+    rulingNumber: 5,
+    quotedPass1: 'Fight phase resolves before movement.',
+    quotedPass2: 'Movement resolves before the Fight phase.',
+    recordedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+describe('verify-run.ts — impact/adjudication record kinds (175-02)', () => {
+  it('grep guard: no second RUN_LEDGER_BEGIN fence pair was introduced', async () => {
+    const { fileURLToPath } = await import('node:url');
+    const srcPath = join(fileURLToPath(new URL('.', import.meta.url)), 'verify-run.ts');
+    const src = await fs.readFile(srcPath, 'utf-8');
+    const declarations = (src.match(/RUN_LEDGER_BEGIN/g) ?? []).length;
+    expect(declarations).toBeGreaterThan(0);
+    // Only one string literal constant is ever defined for this fence.
+    expect((src.match(/export const RUN_LEDGER_BEGIN =/g) ?? []).length).toBe(1);
+  });
+
+  it('IMPACT-1: a well-formed impact line parses as type "impact" from the same fence pair', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    await appendLine(project, init.runId, impactFixture());
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines, malformedLines } = parseLedgerBody(ledgerText, relLedgerPath);
+
+    expect(malformedLines).toEqual([]);
+    const impactLines = lines.filter((l) => l.type === 'impact');
+    expect(impactLines).toHaveLength(1);
+    expect(impactLines[0].record).toMatchObject({ kind: 'impact', slug: 'chunk-a' });
+  });
+
+  it('ADJUDICATION-1: a well-formed adjudication line parses as type "adjudication" from the same fence pair', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    await appendLine(project, init.runId, adjudicationFixture());
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines, malformedLines } = parseLedgerBody(ledgerText, relLedgerPath);
+
+    expect(malformedLines).toEqual([]);
+    const adjudicationLines = lines.filter((l) => l.type === 'adjudication');
+    expect(adjudicationLines).toHaveLength(1);
+    expect(adjudicationLines[0].record).toMatchObject({ kind: 'adjudication', pairId: 'pair-1' });
+  });
+
+  it('ADJUDICATION-2: outcome "UNADJUDICATED" with no rulingNumber parses as a valid adjudication (decision 8)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const record = adjudicationFixture({ outcome: 'UNADJUDICATED' });
+    delete (record as Partial<AdjudicationRecord>).rulingNumber;
+    await appendLine(project, init.runId, record);
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines, malformedLines } = parseLedgerBody(ledgerText, relLedgerPath);
+
+    expect(malformedLines).toEqual([]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].type).toBe('adjudication');
+    expect((lines[0].record as AdjudicationRecord).rulingNumber).toBeUndefined();
+    expect((lines[0].record as AdjudicationRecord).outcome).toBe('UNADJUDICATED');
+  });
+
+  it('IMPACT-2: two impact lines for the same slug resolve to the LATER record, last-write-wins', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    await appendLine(project, init.runId, impactFixture({ stale: true, ruleDelta: 'sharper' }));
+    await appendLine(project, init.runId, impactFixture({ stale: false, ruleDelta: 'cosmetic' }));
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+    const { impacts } = resolveLedgerState(lines);
+
+    expect(impacts).toHaveLength(1);
+    expect(impacts[0].stale).toBe(false);
+    expect(impacts[0].ruleDelta).toBe('cosmetic');
+  });
+
+  it('ADJUDICATION-3: two adjudication lines for the same pairId resolve to the LATER record, last-write-wins', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    await appendLine(project, init.runId, adjudicationFixture({ outcome: 'UNADJUDICATED', rulingNumber: undefined }));
+    await appendLine(project, init.runId, adjudicationFixture({ outcome: 'resolved', rulingNumber: 9 }));
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+    const { adjudications } = resolveLedgerState(lines);
+
+    expect(adjudications).toHaveLength(1);
+    expect(adjudications[0].outcome).toBe('resolved');
+    expect(adjudications[0].rulingNumber).toBe(9);
+  });
+
+  it('IMPACT-3: a malformed impact line (truncated JSON) lands in malformedLines, never thrown', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+
+    let ledgerText = await readLedgerOrThrow(ledgerFile, init.runId, project);
+    const tornLine = '{"kind":"impact","slug":"x"';
+    ledgerText = appendLedgerLine(ledgerText, relLedgerPath, tornLine);
+    // Also a well-formed-JSON-but-wrong-shape impact line (attributions not an array).
+    const wrongShape = { ...impactFixture(), attributions: 'not-an-array' };
+    ledgerText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(wrongShape));
+    await atomicWriteFile(ledgerFile, ledgerText);
+
+    const finalText = await fs.readFile(ledgerFile, 'utf-8');
+    expect(() => parseLedgerBody(finalText, relLedgerPath)).not.toThrow();
+    const { lines, malformedLines } = parseLedgerBody(finalText, relLedgerPath);
+    expect(lines.filter((l) => l.type === 'impact')).toHaveLength(0);
+    expect(malformedLines).toHaveLength(2);
+  });
+
+  it('ADJUDICATION-4: a malformed adjudication line (missing required field) lands in malformedLines, never thrown', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+
+    const missingQuote = { ...adjudicationFixture() } as Record<string, unknown>;
+    delete missingQuote.quotedPass2;
+
+    let ledgerText = await readLedgerOrThrow(ledgerFile, init.runId, project);
+    ledgerText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(missingQuote));
+    await atomicWriteFile(ledgerFile, ledgerText);
+
+    const finalText = await fs.readFile(ledgerFile, 'utf-8');
+    expect(() => parseLedgerBody(finalText, relLedgerPath)).not.toThrow();
+    const { lines, malformedLines } = parseLedgerBody(finalText, relLedgerPath);
+    expect(lines.filter((l) => l.type === 'adjudication')).toHaveLength(0);
+    expect(malformedLines).toHaveLength(1);
+  });
+
+  it('IMPACT-4: neither impact nor adjudication lines contaminate recorded[] — kind isolation both ways', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const stagingAbs = join(project, init.stagingDir);
+    await fs.writeFile(join(stagingAbs, '03-setup.md'), LIVE_03);
+    await verifyRunRecordCommand({
+      project,
+      runId: init.runId,
+      unit: '03-setup',
+      slice: '03-setup.md',
+    });
+    // Impact/adjudication records name the SAME id — must not be double-counted in recorded[].
+    await appendLine(project, init.runId, impactFixture({ slug: '03-setup' }));
+    await appendLine(project, init.runId, adjudicationFixture({ pairId: '03-setup' }));
+
+    const status = await verifyRunStatusCommand({ project, runId: init.runId, json: true });
+    expect(status.recorded).toEqual(['03-setup']);
+    expect(status.count).toBe(1);
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+    const { recorded, impacts, adjudications } = resolveLedgerState(lines);
+    expect(recorded.map((r) => r.unitId)).toEqual(['03-setup']);
+    expect(impacts).toHaveLength(1);
+    expect(adjudications).toHaveLength(1);
+  });
+
+  it('IMPACT-5: a range-reset marker does not supersede an impact record — reset is unit-scoped only', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({
+      project,
+      runId: undefined,
+      json: true,
+      ranges: ['1-2'],
+    });
+    const stagingAbs = join(project, init.stagingDir);
+    await fs.writeFile(join(stagingAbs, '03-setup.md'), LIVE_03);
+    await verifyRunRecordCommand({
+      project,
+      runId: init.runId,
+      unit: '03-setup',
+      slice: '03-setup.md',
+      range: '1-2',
+    });
+    await appendLine(project, init.runId, impactFixture({ slug: 'chunk-b' }));
+    await verifyRunRecordCommand({ project, runId: init.runId, resetRange: '1-2' });
+
+    const ledgerFile = ledgerFilePath(project, init.runId);
+    const relLedgerPath = relative(project, ledgerFile);
+    const ledgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+    const { impacts, recorded } = resolveLedgerState(lines);
+
+    // The unit is superseded by the reset (unit-scoped)...
+    expect(recorded).toHaveLength(0);
+    // ...but the impact record, appended before the reset, is unaffected by it.
+    expect(impacts).toHaveLength(1);
+    expect(impacts[0].slug).toBe('chunk-b');
   });
 });
