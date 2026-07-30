@@ -12,6 +12,7 @@ import {
   quoteLinesOnly,
   enumerateDerivedLines,
   buildBlindDerivePayload,
+  annotationBody,
   recordDeriveVerdicts,
   readDeriveVerdicts,
   verifyDeriveRecheckCommand,
@@ -50,12 +51,6 @@ async function loadGameSlices(game: string): Promise<{ path: string; text: strin
       text: await readFixture(`${game}/live/${name}`),
     })),
   );
-}
-
-/** Strips `/* *\/` block comments and `//` line comments so a source assertion never
- * false-positives on this module's own doc comments (176-01's established technique). */
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
 // ===========================================================================================
@@ -159,6 +154,10 @@ describe('createDeriveVerdictRecord', () => {
     expect(record.rederivedReading).toBe('96 cards.');
   });
 
+  // 177-08 (closing WR-11): this genuinely IS a source-text property with no behavioral
+  // equivalent, so it is deliberately kept — the sole surviving source-text assertion in this
+  // file. The four tautological `readFileSync`-and-grep tests in "module source guarantees" below
+  // were replaced with behavioral assertions; this one has no behavior to assert instead.
   it('verify-derive-recheck.ts contains no rule-bearingness keyword or phrase-list (no-phrase-list)', () => {
     const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
     const RULE_BEARINGNESS_PHRASE_MARKERS = [
@@ -325,31 +324,215 @@ describe('buildBlindDerivePayload', () => {
     const payload = buildBlindDerivePayload(slice, entry);
     expect(payload).not.toContain(entry.text);
   });
+
+  // 177-08 (closing CR-01/WR-11): the `>` blockquote decoration shape below is not invented — it
+  // is the SAME decoration the real committed live corpus already emits at
+  // 174-FIXTURES/seven/live/01-overview-setup-and-play.md:30 (`> Variant (p.1): Match Length — ...`).
+  // That proves blockquote-decorated annotation lines are a real transcription output of this
+  // pipeline, not a hypothetical. This case applies the identical decoration to a `Derived` line.
+  it('174-FIXTURES/seven/live/01-overview-setup-and-play.md:30 proves the blockquote decoration shape is real: a blockquote-decorated Derived line leaks zero annotation-family matches into the payload and is enumerated as a candidate', () => {
+    const decoratedLine = '> Derived (p.1): SECRET blockquote derivation, never dispatched.';
+    const slice = {
+      path: 'rulebook/01-y.md',
+      text: `p.1, X:\n"A real quoted sentence."\n\n${decoratedLine}`,
+    };
+    const { candidates, excluded } = enumerateDerivedLines([slice]);
+    const all = [...candidates, ...excluded];
+    expect(all).toHaveLength(1);
+    expect(all[0].text).toBe(decoratedLine);
+    expect(candidates).toHaveLength(1);
+
+    const payload = buildBlindDerivePayload(slice, all[0]);
+    expect(payload.match(/Derived \(p\./g)).toBeNull();
+    expect(payload.match(/Visual \(p\./g)).toBeNull();
+    expect(payload).not.toContain('SECRET blockquote derivation');
+  });
+
+  it('a slice with three Derived lines — bare, blockquote-decorated, list-decorated — enumerates all three as candidates, not one (silent-drop regression)', () => {
+    const slice = {
+      path: 'rulebook/01-z.md',
+      text: [
+        'p.1, X:',
+        '"A quoted sentence."',
+        '',
+        'Derived (p.1): bare line, rule-bearing.',
+        '> Derived (p.1): blockquote-decorated, rule-bearing.',
+        '- Derived (p.1): list-decorated, rule-bearing.',
+      ].join('\n'),
+    };
+    const { candidates, excluded } = enumerateDerivedLines([slice]);
+    expect(candidates.length + excluded.length).toBe(3);
+    expect(candidates).toHaveLength(3);
+  });
+
+  it('a `Derived (p.1, continues on p.2):` multi-page citation line is a candidate and is absent from the payload (WR-01)', () => {
+    const decoratedLine = 'Derived (p.1, continues on p.2): a multi-page citation body.';
+    const slice = {
+      path: 'rulebook/01-w.md',
+      text: `p.1, X:\n"A real quoted sentence."\n\n${decoratedLine}`,
+    };
+    const { candidates } = enumerateDerivedLines([slice]);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].text).toBe(decoratedLine);
+
+    const payload = buildBlindDerivePayload(slice, candidates[0]);
+    expect(payload).not.toContain('a multi-page citation body');
+    expect(payload.match(/Derived \(p\./g)).toBeNull();
+  });
+
+  // The construction-site backstop (177-08, closing CR-01) is independent of the prefix regexes:
+  // it must catch a leak `quoteLinesOnly` itself cannot anticipate — here, a directly-quoted
+  // sentence whose OWN prose happens to mention "Derived (p." mid-sentence, which is not
+  // line-initial and so is never a decoration form `annotationBody` strips. This is exactly the
+  // "decoration form nobody anticipated" case the backstop exists for, proven by execution rather
+  // than asserted.
+  it('buildBlindDerivePayload throws (never silently emits) when the assembled payload still matches an annotation family after quoteLinesOnly — the construction-site backstop', () => {
+    const slice = {
+      path: 'rulebook/01-y.md',
+      text: 'p.1, X:\n"See also Derived (p.2): as noted above."',
+    };
+    const entry: DerivedLineEntry = {
+      slicePath: slice.path,
+      lineNumber: 2,
+      text: 'Derived (p.1): unrelated original line',
+    };
+    expect(() => buildBlindDerivePayload(slice, entry)).toThrow(
+      /still matches an annotation family/,
+    );
+  });
+});
+
+describe('annotationBody', () => {
+  it('strips a leading blockquote marker', () => {
+    expect(annotationBody('> Derived (p.1): x')).toBe('Derived (p.1): x');
+  });
+
+  it('strips a leading list bullet', () => {
+    expect(annotationBody('- Derived (p.1): x')).toBe('Derived (p.1): x');
+  });
+
+  it('strips repeated decoration (blockquote + list)', () => {
+    expect(annotationBody('> - Derived (p.1): x')).toBe('Derived (p.1): x');
+  });
+
+  it('strips a leading ordered-list marker', () => {
+    expect(annotationBody('1. Derived (p.1): x')).toBe('Derived (p.1): x');
+  });
+
+  it('leaves a quoted sentence unchanged — quote lines are not decoration-stripped into something else', () => {
+    expect(annotationBody('"A quoted sentence."')).toBe('"A quoted sentence."');
+  });
 });
 
 describe('module source guarantees', () => {
-  it('never constructs a .verify/ staging path in code, and does not import resolveFreshTranscription (live)', () => {
-    const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
-    const codeOnly = stripComments(src);
-    expect(codeOnly).not.toContain('.verify');
-    const importLines = src
-      .split('\n')
-      .filter((l) => l.trim().startsWith('import'))
-      .join('\n');
-    expect(importLines).not.toContain('resolveFreshTranscription');
+  // The no-phrase-list test above (`createDeriveVerdictRecord` describe block) is the ONLY
+  // surviving source-text assertion in this file (177-08, closing WR-11) — every guarantee below
+  // is now pinned behaviorally, not by grepping the module's own spelling.
+
+  it('behavioral replacement for "never constructs a .verify/ staging path": a run against a temp project with BOTH a populated rulebook/.verify/<run-id>/slices/ tree and a rulebook/source/ decoy present produces a result deeply equal to the same run with those trees absent', async () => {
+    const withoutDecoys = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-nodecoy-'));
+    const withDecoys = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-decoy-'));
+    try {
+      const sliceContent = [
+        'p.1, X:',
+        '"A quoted sentence."',
+        '',
+        'Derived (p.1): a rule-bearing inference.',
+      ].join('\n');
+
+      await fs.mkdir(join(withoutDecoys, 'rulebook'), { recursive: true });
+      await fs.writeFile(join(withoutDecoys, 'rulebook', '01-x.md'), sliceContent);
+
+      await fs.mkdir(join(withDecoys, 'rulebook'), { recursive: true });
+      await fs.writeFile(join(withDecoys, 'rulebook', '01-x.md'), sliceContent);
+      // A populated staged-slices tree the module must never read (source-free by construction).
+      await fs.mkdir(join(withDecoys, 'rulebook', '.verify', 'run-abc123', 'slices'), {
+        recursive: true,
+      });
+      await fs.writeFile(
+        join(withDecoys, 'rulebook', '.verify', 'run-abc123', 'slices', '01-x.md'),
+        'Derived (p.1): a DIFFERENT staged inference that must never be read.',
+      );
+      // The archived source rulebook — must also never be read.
+      await fs.mkdir(join(withDecoys, 'rulebook', 'source'), { recursive: true });
+      await fs.writeFile(join(withDecoys, 'rulebook', 'source', 'rules.pdf'), 'not a real pdf');
+
+      const resultWithout = await verifyDeriveRecheckCommand({ project: withoutDecoys });
+      const resultWithDecoys = await verifyDeriveRecheckCommand({ project: withDecoys });
+
+      expect({ ...resultWithDecoys, project: '' }).toEqual({ ...resultWithout, project: '' });
+    } finally {
+      await fs.rm(withoutDecoys, { recursive: true, force: true });
+      await fs.rm(withDecoys, { recursive: true, force: true });
+    }
   });
 
-  it('never calls fs.writeFile/writeFileSync directly — atomicWriteFile is the only durable write', () => {
-    const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
-    const codeOnly = stripComments(src);
-    expect(codeOnly).not.toMatch(/[^.]writeFile\(/);
-    expect(codeOnly).not.toContain('writeFileSync(');
+  it('behavioral replacement for "atomicWriteFile is the only durable write": the post-record whole-project file inventory differs only under rulebook/.derive-recheck/, and no .tmp/partial file survives', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-write-'));
+    try {
+      await fs.mkdir(join(dir, 'rulebook'), { recursive: true });
+      await fs.writeFile(join(dir, 'rulebook', '01-x.md'), 'p.1, X:\n"112 cards total."');
+
+      const before = await hashProject(dir);
+      await recordDeriveVerdicts(dir, [sampleUnderivableRecord()]);
+      const after = await hashProject(dir);
+      expect(after).not.toBe(before);
+
+      const walk = async (current: string, acc: string[]): Promise<string[]> => {
+        const entries = await fs.readdir(current, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = join(current, entry.name);
+          if (entry.isDirectory()) await walk(full, acc);
+          else acc.push(full);
+        }
+        return acc;
+      };
+      const allFiles = await walk(dir, []);
+      const outsideLedgerDir = allFiles.filter(
+        (f) => !f.includes(join('rulebook', '.derive-recheck')),
+      );
+      expect(outsideLedgerDir).toEqual([join(dir, 'rulebook', '01-x.md')]);
+
+      const ledgerFiles = allFiles.filter((f) => f.includes(join('rulebook', '.derive-recheck')));
+      expect(ledgerFiles.some((f) => f.endsWith('.tmp'))).toBe(false);
+      expect(ledgerFiles.some((f) => f.includes('.tmp'))).toBe(false);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
-  it('never sets process.exitCode anywhere in the module (findings exit 0, decision 15)', () => {
-    const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
-    const codeOnly = stripComments(src);
-    expect(codeOnly).not.toContain('process.exitCode');
+  it('behavioral replacement for "never sets process.exitCode": process.exitCode is undefined after a run that produces a disagrees finding', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-exitcode-'));
+    try {
+      await fs.mkdir(join(dir, 'rulebook'), { recursive: true });
+      await fs.writeFile(
+        join(dir, 'rulebook', '01-x.md'),
+        [
+          'p.1, Distribution:',
+          '"Each player has 7 Action Cards."',
+          '',
+          'Derived (p.1): Each player has 8 Action Cards.',
+        ].join('\n'),
+      );
+      await recordDeriveVerdicts(dir, [
+        createDeriveVerdictRecord({
+          slicePath: 'rulebook/01-x.md',
+          lineNumber: 4,
+          originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
+          verdict: 'disagrees',
+          reasoning: 'The quote lines say 7, not 8.',
+          originalReading: 'Each player has 8 Action Cards.',
+          rederivedReading: 'Each player has 7 Action Cards.',
+        }),
+      ]);
+
+      expect(process.exitCode).toBeUndefined();
+      const result = await verifyDeriveRecheckCommand({ project: dir });
+      expect(result.findings.some((f) => f.verdict === 'disagrees')).toBe(true);
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -550,10 +733,9 @@ describe('verifyDeriveRecheckCommand', () => {
     const disagreement = result.findings.find((f) => f.verdict === 'disagrees')!;
     expect(disagreement.originalReading).toBe('Each player has 8 Action Cards.');
     expect(disagreement.rederivedReading).toBe('Each player has 7 Action Cards.');
-
-    // Source inspection: process.exitCode appears zero times in the module (decision 15).
-    const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
-    expect(stripComments(src)).not.toContain('process.exitCode');
+    // The source-text check formerly here (grepping for a literal "process.exitCode" absence) is
+    // now covered behaviorally by "module source guarantees"' exitCode replacement test (177-08,
+    // closing WR-11) — this test asserts the runtime behavior only.
   });
 
   it('throws one actionable line naming --project when rulebook/ is missing, no stack/.ts: leak', async () => {
