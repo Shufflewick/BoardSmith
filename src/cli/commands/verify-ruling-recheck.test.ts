@@ -3,6 +3,7 @@ import { promises as fs, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import {
   RULING_VERDICTS,
   createRulingVerdictRecord,
@@ -16,6 +17,25 @@ import {
  * `verify-ruling-recheck.ts` is CHECK-01's mechanical half (176-CONTEXT.md decision 2). Every
  * fixture here is a real filesystem temp dir (no mocks), mirroring `verify-run.test.ts`.
  */
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+
+// The real committed fixture (176-CONTEXT.md decision 19) — `one-two-punch`'s staged tree
+// genuinely retains a `slices/superseded/` subfolder with 2 files, confirmed on disk.
+const FIXTURE_SUPERSEDED_DIR = join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  '.planning',
+  'phases',
+  '175-impact-map-repair-gating',
+  '175-FIXTURES',
+  '174-07-contradictory',
+  'staged',
+  'one-two-punch',
+  'slices',
+);
 
 let dir: string;
 
@@ -190,6 +210,64 @@ describe('resolveFreshTranscription', () => {
       expect(result.slicePaths).toEqual(['01-setup.md']);
       expect(result.stagingDir).not.toMatch(LIVE_RULEBOOK_SLICE_PATTERN);
       for (const p of result.slicePaths) expect(p).not.toMatch(LIVE_RULEBOOK_SLICE_PATTERN);
+    }
+  });
+
+  it('excludes a real superseded/ subfolder from resolved slicePaths (176-06 ADDED ITEM 1, promoted from 176-05\'s reported finding)', async () => {
+    const project = join(dir, 'game');
+    const runId = '2026-07-30T10-00-00Z';
+    const stagingDir = join(project, 'rulebook', '.verify', runId, 'slices');
+    await fs.mkdir(stagingDir, { recursive: true });
+
+    // Copy the REAL committed fixture layout byte-for-byte, including its `superseded/`
+    // subfolder — not a hand-built approximation.
+    async function copyDir(src: string, dest: string): Promise<void> {
+      await fs.mkdir(dest, { recursive: true });
+      for (const entry of await fs.readdir(src, { withFileTypes: true })) {
+        const s = join(src, entry.name);
+        const d = join(dest, entry.name);
+        if (entry.isDirectory()) {
+          await copyDir(s, d);
+        } else {
+          await fs.copyFile(s, d);
+        }
+      }
+    }
+    await copyDir(FIXTURE_SUPERSEDED_DIR, stagingDir);
+
+    // Sanity: the fixture really does carry a superseded/ subfolder with .md files, or this
+    // test would pass vacuously.
+    const supersededFiles = await fs.readdir(join(stagingDir, 'superseded'));
+    expect(supersededFiles.filter((f) => f.endsWith('.md')).length).toBeGreaterThan(0);
+
+    const result = await resolveFreshTranscription(project, runId);
+    expect(result.scopeLimited).toBe(false);
+    if (!result.scopeLimited) {
+      for (const p of result.slicePaths) {
+        expect(p.split(/[\\/]/)).not.toContain('superseded');
+      }
+      // Every non-superseded slice from the fixture is still resolved — this is an exclusion
+      // of the superseded subfolder specifically, not an accidental narrowing of the whole set.
+      const nonSupersededSourceCount = (await fs.readdir(FIXTURE_SUPERSEDED_DIR)).filter((n) =>
+        n.endsWith('.md'),
+      ).length;
+      expect(result.slicePaths.length).toBe(nonSupersededSourceCount);
+    }
+  });
+
+  it('does NOT exclude a legitimately-named slice containing the substring "superseded" with no directory component', async () => {
+    const project = join(dir, 'game');
+    const runId = '2026-07-30T10-00-00Z';
+    const stagingDir = join(project, 'rulebook', '.verify', runId, 'slices');
+    await fs.mkdir(stagingDir, { recursive: true });
+    await fs.writeFile(
+      join(stagingDir, '01-superseded-cards.md'),
+      '## Superseded Cards\n\ntext\n',
+    );
+    const result = await resolveFreshTranscription(project, runId);
+    expect(result.scopeLimited).toBe(false);
+    if (!result.scopeLimited) {
+      expect(result.slicePaths).toEqual(['01-superseded-cards.md']);
     }
   });
 

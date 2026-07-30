@@ -177,6 +177,11 @@ async function listRunIds(projectDir: string): Promise<string[]> {
  * Every path this function can return is rooted at the dot-prefixed `rulebook/.verify/` staging
  * tree (`stagingSlicesDir`'s own convention: "dot-prefixed so no walker mistakes a staged slice
  * for a live one") — never a bare `rulebook/<file>.md` live-slice path.
+ *
+ * A retired `slices/superseded/` subfolder (real data: `one-two-punch`'s committed
+ * `174-07-contradictory` fixture) is EXCLUDED from the returned `slicePaths` — a judgment
+ * subagent must never be handed stale, deliberately-retired transcription content alongside the
+ * current staged slices (176-06 ADDED ITEM 1; found and reported, not yet fixed, by 176-05).
  */
 export async function resolveFreshTranscription(
   projectDir: string,
@@ -214,7 +219,18 @@ export async function resolveFreshTranscription(
   } catch {
     entryNames = [];
   }
-  const slicePaths = entryNames.filter((n) => n.endsWith('.md')).sort();
+  // Exclude any path with a `superseded/` directory component (176-06 ADDED ITEM 1, promoted
+  // from 176-05's reported finding). A staged tree MAY retain a `slices/superseded/` subfolder
+  // for retired transcription drafts — real data confirmed on `one-two-punch`'s committed
+  // 174-07-contradictory fixture. Handing that content to a judgment subagent alongside the
+  // CURRENT staged transcription would let it check code/rulings against text the project
+  // itself has already marked retired, which can only produce confidently-wrong findings.
+  // Filtered on path segments, not a substring match, so a real slice legitimately named e.g.
+  // `01-superseded-cards.md` (no `superseded/` directory component) is never excluded.
+  const slicePaths = entryNames
+    .filter((n) => n.endsWith('.md'))
+    .filter((n) => !n.split(/[\\/]/).includes('superseded'))
+    .sort();
 
   if (slicePaths.length === 0) {
     return {
