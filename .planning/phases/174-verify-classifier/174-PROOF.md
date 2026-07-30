@@ -754,6 +754,29 @@ still at or above the bar in the first case and below it in the second. The bar 
 comfortably cleared; it is cleared. No exclusion-filter diagnosis was needed since the bar passed
 (decision 17's diagnostic step is a FAIL-path requirement).
 
+### Note (2026-07-30, Phase 177) — `PRESENTATION_EXCLUSION_MARKERS`' regex gap does not invalidate
+these results
+
+Phase 177 widened `verify-classify.ts`'s `PRESENTATION_EXCLUSION_MARKERS` to tolerate an optional
+parenthetical qualifier between `description`/`art` and the colon (e.g. `— diagram description
+(Plan phase):`). Before that widening, the mechanical constant missed 4 real `one-two-punch` lines
+carrying such a qualifier — `— diagram description (Plan phase):`, `— diagram description (Fight
+phase):`, `— diagram description (first Punch example):`, `— diagram description (second Punch
+example):` (all in `one-two-punch`; `seven` has zero dash-qualified lines and was unaffected).
+
+**This plan's `lineFindings[]` results above (SC-2's 10/11 cosmetic, 90.9%) came from the SUBAGENT
+layer, not the mechanical constant.** The classification subagent's own prose contract
+(`classification-subagent.md`, "What is rule-bearing, and what is excluded") already stated the
+correct rule — exclude on the QUALIFIER's presence, not on the colon sitting immediately after
+`description`/`art` — and the real dispatches this section reports were judged by that subagent
+reading real slice text directly, not filtered through `isPresentationLine()` first. The mechanical
+constant is a SECOND gate downstream of that judgment (used by later phases' enumeration, e.g.
+177's own CHECK-04), not the source of the `lineFindings[]` this section measured.
+
+Therefore: **this plan's recorded results STAND and were not re-measured.** No SC-1/SC-2 number
+above is revised. See `177-01-SUMMARY.md` for the fix and its own regression pins (the 4 real lines,
+read from the committed fixture, plus a negative over-exclusion guard).
+
 ---
 
 ## 3. VERIFY-07 — the orchestrator never opened a slice
