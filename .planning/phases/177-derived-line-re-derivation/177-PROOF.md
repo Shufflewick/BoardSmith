@@ -596,3 +596,144 @@ an error in either).
 Both reference games' `rulebook/*.md` slice content is unchanged by this task (confirmed byte-identical
 in §4 below). No disagreement or underivable finding above was fixed in either game — findings are
 recorded to the ledger and reported here, exactly per the plan's scope boundary.
+
+## 4. Closure, limitations, and originals re-verification
+
+### Both originals: whole-tree sha256 diff, empty
+
+```
+$ cd ~/BoardSmithGames/seven && find . -type f -not -path './.git/*' -print0 | sort -z | xargs -0 shasum -a 256 > manifest-seven.after
+$ diff manifest-seven.before manifest-seven.after
+(empty diff)
+$ cd ~/BoardSmithGames/one-two-punch && find . -type f -not -path './.git/*' -print0 | sort -z | xargs -0 shasum -a 256 > manifest-otp.after
+$ diff manifest-otp.before manifest-otp.after
+(empty diff)
+```
+
+Both originals confirmed byte-identical, whole-tree, before and after every real command this entire
+plan (§§1-4) ran, including all 29 real `claude -p` dispatches — every dispatch and every ledger write
+touched only the `cp -R` scratch copies, never `~/BoardSmithGames/*` directly.
+
+### CHECK-04's three success criteria — assessed against the evidence actually produced
+
+**SC-1 — "Every rule-bearing `Derived` line in a verified project is re-derived independently of the
+original transcription pass, using only quote lines present in the current slice."**
+
+**NOT MET**, in the sense that matters for the requirement's own purpose, though a narrower structural
+claim within it IS proven. Two separate things are bundled in SC-1's text, and they diverge:
+
+- **"Independently of the original transcription pass" — MET, and proven structurally (§2).** The
+  blind-derivation payload never contains the target line's own text, verified by real grep on all 16
+  dispatched prompts (zero `Derived (p.`/`Visual (p.` matches, plus a distinctive-substring grep) — a
+  re-derivation genuinely cannot have anchored on the original, because the original was never sent.
+- **"Re-derived... using only quote lines present in the current slice" as a genuine PER-LINE
+  judgment — NOT MET, and disproven by real dispatch data (§3).** `buildBlindDerivePayload`'s
+  `Target line: {slicePath}:{lineNumber}` identifies the target ONLY by a raw line number from the
+  ORIGINAL file, which carries no locatable meaning inside the quote-only payload the subagent
+  actually receives (that payload strips every `Derived`/`Visual` line and does not renumber or mark
+  position). Measured on real data: when a slice has more than one candidate line — true for every
+  multi-candidate slice in this corpus (`01-definitions-and-components.md`'s 5, `01-overview-setup-
+  and-play.md`'s 3, `02-solo-variant.md`'s 2, `02-action-cards-and-resolution.md`'s 4, `01-setup-and-
+  round-structure.md`'s 2) — the blind stage repeatedly re-derives the SAME single dominant fact
+  regardless of which line is nominally the target, rather than a fact specific to that line. This is
+  not a defect in the reference games' content; it is a defect in the target-identification mechanism
+  the dispatch payload uses. It means most of this run's `disagrees` verdicts are not "the original
+  and the independent re-derivation disagree about fact X" but "the blind subagent derived a DIFFERENT
+  fact than line X asserts," which is not the finding SC-1 promises a designer.
+
+**SC-2 — "A disagreement between the original and re-derived value is reported as a finding, citing
+both derivations."**
+
+**MET, mechanically.** Every `disagrees` record in the ledger carries `originalReading` and
+`rederivedReading` verbatim — enforced by `createDeriveVerdictRecord`, which throws on a `disagrees`
+record missing either field (no such throw occurred across all 9 real `disagrees` verdicts recorded
+this run). §3 shows one genuine on-topic disagreement (`one-two-punch:52`) and the one `underivable`
+finding (`one-two-punch:49`) with both readings quoted verbatim, satisfying the plan's "at least one
+finding shows BOTH derivations verbatim" requirement. This criterion is about the REPORTING mechanism,
+which works correctly and unconditionally — it does not require that every reported disagreement be
+substantively meaningful, which is SC-1's concern, not SC-2's.
+
+**SC-3 — "The check runs with no source rulebook present and correctly ignores `Visual` lines as out
+of scope."**
+
+**MET, with the same disclosed limitation Phase 176 named for its own analogous criterion.**
+Source-freeness is structural: `readLiveSlices` reads only `rulebook/*.md`, and no function in
+`verify-derive-recheck.ts` ever joins `projectDir` with `rulebook/source` — confirmed by direct code
+read (module comment, §1's earlier reading), not re-derived from a live run in this proof. Both
+reference games' live slices carry **zero `Visual (p.` lines** (re-confirmed directly this task:
+`grep -c "^Visual (p\." rulebook/*.md` returns 0 for every file in both games), matching Phase 174's
+own measurement. **This means SC-3's `Visual`-ignoring half is proven by unit test against
+constructed input, not by live dispatch data** — the same disposition basis `176-VERIFICATION.md`
+used for its own real-corpus gap ("proven correct-when-called-for only on constructed cases; neither
+reference game's committed content produces those labels").
+
+### What is still unproven
+
+- **The target-identification gap named above is the single largest open item this proof surfaces.**
+  It has not been fixed here — this plan's file scope is proof/bookkeeping only
+  (`177-PROOF.md`/`REQUIREMENTS.md`/`ROADMAP.md`/`177-VALIDATION.md`/`STATE.md`), and
+  `buildBlindDerivePayload`/the dispatch-prompt construction live in `verify-derive-recheck.ts`,
+  out of this plan's file list. It is reported here, to the ledger, and (via Task 4 below) to
+  `REQUIREMENTS.md`'s CHECK-04 row — the same "report to the owner, not just record here" question
+  the plan's own read-first list asked. A fix would need the dispatch to give the blind subagent some
+  way to distinguish which of several candidate facts in a shared slice is under test — for example
+  including a redacted-but-positioned marker at the target line's location, or narrowing the
+  quote-line payload to only the quotes immediately local to the target — without reintroducing the
+  target line's own text. That redesign is out of scope for this proof-only plan.
+- **Dispatch mechanism, stated per `173-PROOF.md` §6's precedent:** all 29 real dispatches this task
+  ran used a `claude -p "<prompt>" --allowedTools Read` OS subprocess — this execution session exposes
+  no native Task/Agent tool. This is NOT native Task/Agent-tool dispatch. `173-PROOF.md` §6 remains the
+  only session in this milestone that ever exercised native dispatch, and only for one transcription
+  unit — unresolved, carried forward unchanged.
+- **The `underivable` finding (`one-two-punch:49`) was not reported anywhere beyond this proof and the
+  project's own ledger** — it is a single line (not a substantial share, per interpretation rule (a)'s
+  own "large share" threshold, which did not fire), so it does not rise to the "report to the ingest
+  contract's owner" bar decision 11 sets. It is recorded in `rulebook/.derive-recheck/DERIVE-VERDICTS.md`
+  in the scratch copy only (never written to either original, per the read-only invariant); a live
+  project running this check for real would accumulate it in its own project-level ledger.
+- **SC-3's `Visual`-ignoring half remains proven only on constructed/absent-case input**, as stated
+  above — no real `Visual (p.` line exists in either reference game to dispatch against.
+- **The 22-line/16-candidate reconciliation from §1 (already-fixed regex, 16 not 20 real candidates)
+  is now doubly confirmed** — both by the mechanical enumeration in §1 and by this section's real
+  dispatch count (16 blind dispatches, matching `enumeratedCount` exactly in both games' `--json`
+  output).
+
+### Cross-reference: `177-SWEEP.md`
+
+`177-SWEEP.md` records this phase's router stale-claim sweep (`verify-game.md`'s Step 7 wiring,
+Context-Economics carve-out, and cross-file claim audit, from `177-05`) — a separate, prose-level
+audit from this proof's live-dispatch measurement. Both records are needed to close CHECK-04
+honestly: `177-SWEEP.md` confirms the skill TEXT is wired correctly and makes no stale claims; this
+proof (`177-PROOF.md` §§1-4) confirms the underlying MECHANISM's real behavior, including the
+target-identification gap the skill text does not (and could not) surface on its own.
+
+### How to re-run every proof in this document
+
+```bash
+# §1 — setup, sha256 baselines, install, enumeration
+git -C ~/BoardSmithGames/seven rev-parse HEAD && git -C ~/BoardSmithGames/seven status --porcelain
+git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD && git -C ~/BoardSmithGames/one-two-punch status --porcelain
+cd ~/BoardSmithGames/seven && find . -type f -not -path './.git/*' -print0 | sort -z | xargs -0 shasum -a 256 > manifest-seven.before
+cd ~/BoardSmithGames/one-two-punch && find . -type f -not -path './.git/*' -print0 | sort -z | xargs -0 shasum -a 256 > manifest-otp.before
+cp -R ~/BoardSmithGames/seven "$SCRATCH/seven"
+cp -R ~/BoardSmithGames/one-two-punch "$SCRATCH/one-two-punch"
+cd "$SCRATCH/seven" && npx boardsmith claude --local --force
+cd "$SCRATCH/one-two-punch" && npx boardsmith claude --local --force
+npx boardsmith verify-derive-recheck --project "$SCRATCH/seven" --json
+npx boardsmith verify-derive-recheck --project "$SCRATCH/one-two-punch" --json
+
+# §2/§3 — real dispatch driver (imports buildBlindDerivePayload/enumerateDerivedLines/
+# createDeriveVerdictRecord/recordDeriveVerdicts directly from verify-derive-recheck.ts; dispatches
+# every candidate blind, then every non-terminal blind result through a compare dispatch, recording
+# through the one atomic ledger write path)
+cd "$SCRATCH" && npx tsx driver.ts
+
+# §4 — re-verify originals byte-identical
+cd ~/BoardSmithGames/seven && find . -type f -not -path './.git/*' -print0 | sort -z | xargs -0 shasum -a 256 > manifest-seven.after
+diff manifest-seven.before manifest-seven.after
+cd ~/BoardSmithGames/one-two-punch && find . -type f -not -path './.git/*' -print0 | sort -z | xargs -0 shasum -a 256 > manifest-otp.after
+diff manifest-otp.before manifest-otp.after
+
+# Full suite
+npm test
+```
