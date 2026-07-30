@@ -110,10 +110,26 @@ the tag.
       are unit-pinned in `src/cli/commands/verify-classify.test.ts`.)*
 - [ ] **VERIFY-04**: A `contradictory` classification always stops and asks the human, with both
       readings quoted side by side; the resolution is recorded in `RULINGS.md`.
-- [x] **VERIFY-05**: Chunks affected by a changed slice flip to a rules-staleness marker visible in
+- [ ] **VERIFY-05**: Chunks affected by a changed slice flip to a rules-staleness marker visible in
       both CHUNK.md and SKETCH.md, following the existing authority and write-order rules.
-- [x] **VERIFY-06**: Only chunks whose code changed during repair re-open the human playtest gate;
+      *(Mechanically implemented and unit-proven across plans 175-01 (marker + writer + registration),
+      175-02 (ledger kinds), 175-04 (impact map + gate-guarded apply), 175-05 (skill-text wiring) and
+      175-06 (`/bs-check-status` item 9) — 3825/3825 green. Left OPEN because the REAL cross-file write
+      against a live project has not happened yet: plan 175-08 owns it and still carries VERIFY-05 in
+      its frontmatter. Briefly marked complete by 175-06 with no evidence pointer and reverted the same
+      day — plans 175-01 through 175-05 each deliberately left it open for this reason, and 175-04's
+      executor caught and reverted the identical premature mark. The requirement says chunks "flip to a
+      marker visible in both CHUNK.md and SKETCH.md"; unit fixtures are not a live project.)*
+- [ ] **VERIFY-06**: Only chunks whose code changed during repair re-open the human playtest gate;
       chunks that pass the audit lenses unchanged close without re-playtesting.
+      *(Mechanically implemented and unit-proven — `computeRepairGate`'s four dispositions, the
+      `Re-verified (no code change):` stamp, and the waived-reopen path all covered in 175-04. Left OPEN
+      for the same reason as VERIFY-05, plus one specific to this requirement: its real-data payoff is
+      NOT yet measured, and may not be demonstrable on these fixtures at all. Both reference games are
+      pre-provenance with no `## Verified Commit Hash`, so `drift-check` is expected to return `unknown`
+      for most chunks — which is neither "code changed" nor "code unchanged", and must never be rendered
+      as `clean`. Plan 175-08 measures this and is required to report "payoff not demonstrated" if that
+      is what the data shows.)*
 - [x] **VERIFY-07**: The orchestrator never reads a full slice — re-transcription and classification
       both run in subagents, preserving the context-economics rule.
       *(Both halves now proven live. Re-transcription: `173-PROOF.md` section 3 (`seven`) and section
@@ -226,8 +242,8 @@ the tag.
 | VERIFY-08 | Phase 173 | Complete (173-07 proof; re-confirmed 173-08 against a corrected crash-safety guarantee + closed range-level resume determinism — see `173-PROOF.md` §5) |
 | VERIFY-03 | Phase 174 | Complete — the CLI surface (174-04), the classification subagent contract (174-05), and every real-data bar (SC-1 through SC-5) proven live (`174-PROOF.md` §2, §4, §5): SC-2 90.9% cosmetic PASS, SC-3 real mutation → `contradictory` PASS, determinism identical, 7/7 lexicon regression |
 | VERIFY-04 | Phase 175 | Pending |
-| VERIFY-05 | Phase 175 | Complete |
-| VERIFY-06 | Phase 175 | Complete |
+| VERIFY-05 | Phase 175 | Partial — mechanically unit-proven (175-01/02/04/05/06); live cross-file write awaits 175-08 |
+| VERIFY-06 | Phase 175 | Partial — dispositions unit-proven (175-04); real-data payoff awaits 175-08 and may report not-demonstrated |
 | CHECK-01 | Phase 176 | Pending |
 | CHECK-02 | Phase 176 | Pending |
 | CHECK-04 | Phase 177 | Pending |
