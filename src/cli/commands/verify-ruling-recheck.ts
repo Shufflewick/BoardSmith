@@ -1,7 +1,8 @@
 import { promises as fs } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
+import chalk from 'chalk';
 import { parseRulings } from './build-manifest.js';
-import { RUN_ID_RE, stagingSlicesDir } from './verify-run.js';
+import { atomicWriteFile, RUN_ID_RE, stagingSlicesDir } from './verify-run.js';
 
 /**
  * `verify-ruling-recheck.ts` — CHECK-01's mechanical half (176-CONTEXT.md decision 2): the CLI
@@ -231,4 +232,141 @@ export async function resolveFreshTranscription(
     stagingDir: relative(projectDir, stagingDir),
     slicePaths,
   };
+}
+
+// -------------------------------------------------------------------------------------------
+// verifyRulingRecheckCommand — report + record (176-CONTEXT.md decisions 14, 16)
+// -------------------------------------------------------------------------------------------
+
+export interface RulingRecheckReportRow {
+  number: number;
+  verdict: RulingVerdict | 'pending';
+  reasoning: string;
+  supersededBy?: number;
+}
+
+export interface VerifyRulingRecheckResult {
+  runId?: string;
+  scopeLimited: boolean;
+  scopeLimitedReason?: string;
+  rows: RulingRecheckReportRow[];
+  skipped: SkippedRuling[];
+  unparsedSupersession: UnparsedSupersessionEntry[];
+  verdictCounts: Record<RulingVerdict, number>;
+}
+
+function emptyVerdictCounts(): Record<RulingVerdict, number> {
+  const counts = {} as Record<RulingVerdict, number>;
+  for (const v of RULING_VERDICTS) counts[v] = 0;
+  return counts;
+}
+
+/**
+ * `boardsmith verify-ruling-recheck` — CHECK-01's report: one row per non-superseded ruling
+ * (number, verdict-or-`pending`, reasoning), the skipped/unparsed-supersession sets, and
+ * `verdictCounts` computed here so a caller never has to count a measured distribution by hand
+ * (PROV-03's compute/format split). Uncapped — never truncated (decision 15).
+ *
+ * `options.verdicts` carries whatever the judgment subagent has already returned for this run
+ * (keyed by ruling number); a ruling with no entry reports `pending`, never a manufactured
+ * default verdict.
+ *
+ * This command is READ-ONLY against `RULINGS.md`: it enumerates and reports, it never writes a
+ * verdict into the file itself (decision 16 — this phase reports, it does not repair reference
+ * content). Recording a subagent's returned verdicts durably is `recordRulingVerdicts`, below,
+ * which persists through `atomicWriteFile` — the ONE atomic ledger write path in the repo.
+ *
+ * Findings exit 0 (never sets `process.exitCode`). Tool failure (missing project, unreadable
+ * `RULINGS.md`) throws with a single actionable line naming the directory and `--project` — no
+ * stack frame, no `.ts:` reference, no repo `src/` path.
+ */
+export async function verifyRulingRecheckCommand(
+  options: {
+    project?: string;
+    runId?: string;
+    verdicts?: Map<number, { verdict: RulingVerdict; reasoning: string }>;
+    json?: boolean;
+  } = {},
+): Promise<VerifyRulingRecheckResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  const rulingsPath = join(projectDir, 'RULINGS.md');
+
+  let rulingsText: string;
+  try {
+    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
+  } catch {
+    throw new Error(
+      `No RULINGS.md found in this project directory.\n` +
+        `Pass --project <dir> to target the bs-project this run should read.`,
+    );
+  }
+
+  const { enumerated, skipped, unparsedSupersession } = enumerateRulingsForRecheck(rulingsText);
+  const transcription = await resolveFreshTranscription(projectDir, options.runId);
+
+  const supersededByNumber = new Map(skipped.map((s) => [s.number, s.supersededBy] as const));
+  const verdictCounts = emptyVerdictCounts();
+  const rows: RulingRecheckReportRow[] = enumerated.map((entry) => {
+    const supplied = options.verdicts?.get(entry.number);
+    if (supplied) {
+      verdictCounts[supplied.verdict]++;
+      return {
+        number: entry.number,
+        verdict: supplied.verdict,
+        reasoning: supplied.reasoning,
+        supersededBy: supersededByNumber.get(entry.number),
+      };
+    }
+    return { number: entry.number, verdict: 'pending', reasoning: '' };
+  });
+
+  const result: VerifyRulingRecheckResult = {
+    runId: transcription.scopeLimited ? undefined : transcription.runId,
+    scopeLimited: transcription.scopeLimited,
+    scopeLimitedReason: transcription.scopeLimited ? transcription.reason : undefined,
+    rows,
+    skipped,
+    unparsedSupersession,
+    verdictCounts,
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  if (transcription.scopeLimited) {
+    console.log(chalk.yellow(`⚠ Scope-limited: ${transcription.reason}`));
+  }
+  console.log(
+    chalk.green(`✓ Ruling re-check — ${rows.length} ruling(s), ${skipped.length} skipped`),
+  );
+  for (const row of rows) {
+    console.log(`  Ruling ${row.number}: ${row.verdict}`);
+  }
+  return result;
+}
+
+/**
+ * Persists a batch of subagent-returned verdicts to this run's own
+ * `rulebook/.verify/<runId>/RULING-VERDICTS.md` ledger, through `atomicWriteFile` — the ONE
+ * atomic ledger write path in the repo (`verify-run.ts`). Never `fs.writeFile`/`writeFileSync`
+ * directly, and never a write into `RULINGS.md` itself (decision 16).
+ */
+export async function recordRulingVerdicts(
+  projectDir: string,
+  runId: string,
+  records: RulingVerdictRecord[],
+): Promise<{ ledgerPath: string }> {
+  const runRoot = join(stagingSlicesDir(projectDir, runId), '..');
+  const ledgerPath = join(runRoot, 'RULING-VERDICTS.md');
+  const lines = records.map((r) => JSON.stringify(r));
+  const content =
+    `# Ruling Verdicts — run ${runId}\n\n` +
+    `<!-- boardsmith:ruling-verdicts:begin -->\n` +
+    lines.join('\n') +
+    (lines.length > 0 ? '\n' : '') +
+    `<!-- boardsmith:ruling-verdicts:end -->\n`;
+  await atomicWriteFile(ledgerPath, content);
+  return { ledgerPath: relative(projectDir, ledgerPath) };
 }

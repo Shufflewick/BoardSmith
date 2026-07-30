@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -7,6 +8,8 @@ import {
   createRulingVerdictRecord,
   enumerateRulingsForRecheck,
   resolveFreshTranscription,
+  recordRulingVerdicts,
+  verifyRulingRecheckCommand,
 } from './verify-ruling-recheck.js';
 
 /**
@@ -219,6 +222,120 @@ describe('No absence-phrase list in this module (176-RESEARCH.md Pitfall 4)', ()
     ];
     for (const phrase of ABSENCE_PHRASES) {
       expect(src.toLowerCase()).not.toContain(phrase);
+    }
+  });
+});
+
+describe('recordRulingVerdicts — the one atomic write path (176-CONTEXT.md decision, CR-01)', () => {
+  it('never calls a hand-rolled fs.writeFile/writeFileSync — routes through atomicWriteFile only', () => {
+    const src = readFileSync(join(__dirname, 'verify-ruling-recheck.ts'), 'utf-8');
+    expect(src).not.toMatch(/\bfs\.writeFile\(/);
+    expect(src).not.toMatch(/\bwriteFileSync\(/);
+    expect(src).not.toMatch(/\bfsPromises\.writeFile\(/);
+    expect(src).toMatch(/\batomicWriteFile\(/);
+  });
+
+  it('persists verdict records to the run-scoped ledger, never touching RULINGS.md', async () => {
+    const project = join(dir, 'game');
+    const runId = '2026-07-30T10-00-00Z';
+    await fs.mkdir(join(project, 'rulebook', '.verify', runId, 'slices'), { recursive: true });
+    await fs.writeFile(join(project, 'RULINGS.md'), '### Ruling 1\n\nDecision: x.\n');
+    const before = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
+
+    const record = createRulingVerdictRecord({
+      number: 1,
+      verdict: 'still-needed',
+      reasoning: 'The fresh transcription still does not contain this content.',
+    });
+    const { ledgerPath } = await recordRulingVerdicts(project, runId, [record]);
+
+    const after = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
+    expect(after).toBe(before);
+
+    const ledgerText = await fs.readFile(join(project, ledgerPath), 'utf-8');
+    expect(ledgerText).toContain('"verdict":"still-needed"');
+  });
+});
+
+describe('verifyRulingRecheckCommand', () => {
+  /** A fixture RULINGS.md with `count` simple, non-superseded entries. */
+  function manyRulingsText(count: number): string {
+    const parts: string[] = [];
+    for (let i = 1; i <= count; i++) {
+      parts.push(`### Ruling ${i}`, '', `Decision: ruling number ${i} stands.`, '');
+    }
+    return parts.join('\n');
+  }
+
+  async function sha256OfDir(root: string): Promise<Record<string, string>> {
+    const map: Record<string, string> = {};
+    async function walk(d: string): Promise<void> {
+      for (const entry of await fs.readdir(d, { withFileTypes: true })) {
+        const full = join(d, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (entry.isFile()) {
+          const buf = await fs.readFile(full);
+          map[full] = createHash('sha256').update(buf).digest('hex');
+        }
+      }
+    }
+    await walk(root);
+    return map;
+  }
+
+  it('is read-only against RULINGS.md — whole-directory sha256 map is byte-identical before/after', async () => {
+    const project = join(dir, 'game');
+    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, 'RULINGS.md'), manyRulingsText(5));
+
+    const before = await sha256OfDir(project);
+    await verifyRulingRecheckCommand({ project, json: true });
+    const after = await sha256OfDir(project);
+
+    expect(after).toEqual(before);
+  });
+
+  it('--json output carries verdictCounts summing to the enumerated (non-skipped) ruling count', async () => {
+    const project = join(dir, 'game');
+    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, 'RULINGS.md'), manyRulingsText(4));
+
+    const verdicts = new Map<number, { verdict: 'still-needed' | 'contradicted'; reasoning: string }>([
+      [1, { verdict: 'still-needed', reasoning: 'still needed' }],
+      [2, { verdict: 'still-needed', reasoning: 'still needed' }],
+      [3, { verdict: 'contradicted', reasoning: 'contradicted' }],
+      [4, { verdict: 'contradicted', reasoning: 'contradicted' }],
+    ]);
+    const result = await verifyRulingRecheckCommand({ project, verdicts, json: true });
+
+    const total = Object.values(result.verdictCounts).reduce((a, b) => a + b, 0);
+    expect(total).toBe(4);
+    expect(result.verdictCounts['still-needed']).toBe(2);
+    expect(result.verdictCounts['contradicted']).toBe(2);
+  });
+
+  it('emits one row per ruling with no cap — 30+ rulings emits 30+ rows', async () => {
+    const project = join(dir, 'game');
+    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, 'RULINGS.md'), manyRulingsText(35));
+
+    const result = await verifyRulingRecheckCommand({ project, json: true });
+    expect(result.rows.length).toBe(35);
+  });
+
+  it('a non-bs-project (no RULINGS.md) throws an actionable message naming --project, no stack/path leak', async () => {
+    const project = join(dir, 'not-a-project');
+    await fs.mkdir(project, { recursive: true });
+
+    await expect(verifyRulingRecheckCommand({ project })).rejects.toThrow(/--project/);
+    try {
+      await verifyRulingRecheckCommand({ project });
+      expect.unreachable();
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).not.toMatch(/\.ts:\d/);
+      expect(message).not.toMatch(/\bsrc\//);
     }
   });
 });
