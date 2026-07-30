@@ -472,3 +472,36 @@ Both originals byte-identical before and after this plan's entire run.
 3. **A third or later re-transcription of the same source.** Only one pass-2 run per game was
    produced — sufficient for this plan's fixture-production purpose, but not a repeated-dispatch
    determinism measurement (that is plan 174-0x's later job per decision 16).
+
+---
+
+## 2. SC-1 / SC-2 — a real classification pass
+
+### The bar, declared before measuring
+
+Verbatim, written and committed before any verdict from this pass exists:
+
+> ≥90% of paired, rule-bearing slice pairs classify `cosmetic`, and zero classify `contradictory`.
+> Missing the bar is a phase BLOCKER, not a note. The percentage is computed over paired
+> rule-bearing pairs only, so presentation-only groups can neither inflate nor deflate it.
+
+**Amendment applied (CONTEXT.md decision 14b, added after this plan was authored — supersedes the
+bar's DENOMINATOR, not its threshold or its blocker status):** decision 4's second amendment
+(174-03-SUMMARY.md's corrective follow-up) measured that both reference games' real transcribed
+content pairs into exactly ONE rule-bearing group each — genuine cross-page prose bridges every
+page span into a single connected component, not a fixable pairing-algorithm defect. A "≥90%"
+threshold evaluated over 1-2 groups is arithmetic theatre: one group flipping moves the number
+50-100 points, and the bar is literally unreachable at 90% except by scoring 100%.
+
+Therefore, per decision 14b: **the ≥90%-cosmetic / zero-`contradictory` bar above is evaluated
+against RULE-BEARING LINE-LEVEL comparisons, pooled across both reference games — not pair-group
+counts.** Group-level verdicts are still reported below (decision 18: they are what downstream
+staleness keys off structurally, even though decision 18 also requires chunk-level staleness to be
+computed from line-level quote attribution, never from the group verdict wholesale), but the BAR
+itself is the line-level percentage. Per decision 17, presentation lines excluded by decision 12b's
+dual-schema filter are in NEITHER numerator nor denominator of either count. If the bar is missed,
+decision 17 requires checking the exclusion filter's completeness before concluding the classifier
+over-flags.
+
+This block is committed in isolation, before the reconstituted material is even restored, so the
+git history on this file itself is the evidence the bar was not retrofitted to the result.
