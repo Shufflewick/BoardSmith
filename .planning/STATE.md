@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 175-06-PLAN.md — added /bs-check-status item 9 ('Rules staleness and the repair gate'), formatting boardsmith verify-impact-status --json (format-never-compute, mirroring item 8's chunk-provenance-status pattern): reports the uncapped staleFraction as 'N of M chunks rules-stale', lists every staleSlugs entry with no cap, groups by gate.disposition consuming dispositionCounts, and surfaces contradictionsPending naming /bs-verify-game's adjudication gate. Closed Phase 174's 'revisit there, not here' carry-forward (decision 19) — the deferred rules-staleness reporting item now lives on the surface a designer actually reads. Full-file swept the eight-item count family (4 occurrences, 3 spellings including the hyphenated-singular 'eight-item' trap) to nine items, verified with a combined grep -ciE catching every spelling. Pinned item 9 in status-tools.test.ts against the real exported RULES_STALE_MARKER/REPAIR_GATE_DISPOSITIONS constants, added the Rules Staleness Marker heading to the cited-heading guard, and empirically proved the renamed count pin regresses on a temporary revert. This is plan 6 of 8 in Phase 175; VERIFY-05/VERIFY-06's reporting surface is now complete; Phase 176 owns performing the actual repair."
-last_updated: "2026-07-30T14:55:00Z"
+stopped_at: "175-07-PLAN.md IN PROGRESS — Tasks 1-2 (the live VERIFY-04 gate proof) complete; Task 3 (checkpoint:human-verify, the human adjudicability check) REACHED and awaiting the designer's answer, recorded in 175-PROOF.md §3d as REACHED-AND-PENDING, never self-certified. Tasks 1-2 re-verified the 174-07-contradictory fixture's 24 MANIFEST sha256s, quoted the real contradictory ClassificationRecord verbatim, and proved a real verify-impact-apply on a cp -R copy of one-two-punch is measurably BLOCKED (whole-copy sha256 diff: 0 files changed) while the real finding is pending, then proved both terminal answers on fresh copies: UNADJUDICATED writes no RULINGS.md entry (hash-identical before/after) and leaves the pair pending on re-run; resolved appends a real Ruling 27 (26 pre-existing + 1) that trace-check re-parses (totals.rulings: 27, plus the expected ruling-untested finding for the new entry). A real live-discovered bug was found and fixed under deviation Rule 1: all four verify-impact-* commands were double-printing verifyClassifyStatusCommand's own JSON as a stdout side effect (breaking --json's JSON.parse contract) — fixed by switching their internal composition calls to json:false, matching the file's own established driftCheckCommand/chunkProvenanceStatusCommand convention. npm test 3825/3825 green; both ~/BoardSmithGames originals confirmed byte-identical before/after. Commit 1e6f5f1a. NEXT ACTION: present 175-PROOF.md §2/§3's verbatim gate output to the designer, ask the six questions in 175-07-PLAN.md Task 3's <how-to-verify>, and record the answer in §3d before this plan can be marked complete."
+last_updated: "2026-07-30T15:10:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
@@ -25,8 +25,9 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 175 (Impact Map & Repair Gating) — plan 175-06 of 8 executed.
-Next: Phase 175 plan 175-07, per `ROADMAP.md`.
+Phase: 175 (Impact Map & Repair Gating) — plan 175-07 of 8 IN PROGRESS (checkpoint reached, awaiting
+human adjudicability verdict — see `stopped_at` above and `175-PROOF.md` §3d).
+Next: answer 175-07 Task 3's checkpoint, then Phase 175 plan 175-08, per `ROADMAP.md`.
 
 `175-06-PLAN.md` (2026-07-30) added `/bs-check-status` item 9 — "Rules staleness and the repair
 gate" — formatting `boardsmith verify-impact-status --json` (format-never-compute, mirroring item
