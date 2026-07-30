@@ -126,6 +126,50 @@ Out of scope:
     project, so live slices are the real subject — not Phase 175's staged fixtures, which exist for
     pass-1-vs-pass-2 comparison.
 
+### Decisions added 2026-07-30 after research
+
+13. **FIX `PRESENTATION_EXCLUSION_MARKERS`' regex gap in this phase.** Decided by the user at the
+    post-research gate.
+
+    Research measured, and I confirmed directly, that the constant is STRICTER than the rule its own
+    subagent contract states. Its patterns require the colon immediately after `description`/`art`:
+
+    ```
+    ^Derived \(p\.\d+\) — diagram description:
+    ```
+
+    so any parenthetical qualifier breaks the match. Measured on real data: **4 of `one-two-punch`'s 6
+    dash-qualified lines slip the filter** — `— diagram description (Plan phase):`, `(Fight phase):`,
+    `(first Punch example):`, `(second Punch example):`. `seven` has zero dash-qualified lines and is
+    unaffected.
+
+    Meanwhile `classification-subagent.md` line 88 states the rule correctly, keying on the QUALIFIER's
+    presence ("no ` — diagram description` or ` — art` qualifier"). So the same rule has two divergent
+    expressions in the codebase, and the mechanical one is wrong. That is exactly the two-definitions
+    drift decision 1 exists to prevent — except the drift is inside the pair decision 1 treats as
+    canonical.
+
+    **Phase 174's recorded results STAND and do not need re-measuring.** Its `lineFindings[]` came from
+    the subagent layer, whose prose rule was already correct; the mechanical constant is a second gate,
+    not the source of those findings. Document that in `174-PROOF.md` rather than re-running a closed
+    phase's proof.
+
+    Fix by widening the patterns to allow an optional parenthetical before the colon, with test cases
+    drawn from the 4 real slipping lines (not invented ones). This is not a fork — it is correcting the
+    single shared definition, which is what decision 1 assumed it was reusing.
+
+14. **CHECK-04 is PROJECT-LEVEL with no run concept — no `--run-id` scope.** (Research open question 1.)
+    It is source-free by construction and independent of any verify run's staleness verdicts (decisions
+    3 and 4), so it has nothing to scope to a run. This matches CHECK-03/CHECK-05's shape exactly —
+    `trace-check` and `drift-check` are read-only project-level sweeps with no run identity. Ledger
+    records, if any, are project-scoped and reuse the single atomic write path.
+
+15. **CHECK-04 REPORTS; it does not gate `/bs-verify-game`'s Close.** (Research open question 2.)
+    Findings exit 0; non-zero is reserved for tool failure (172 decision 6 — "these are advisory sweeps
+    a verify pipeline consumes, not gates", and a check that fires on correct work gets waived). It may
+    be invoked from the pipeline and its `--json` formatted there, but a disagreement finding does not
+    block a close. Phase 179 assembles the source-free mode from checks of exactly this shape.
+
 ### Claude's Discretion
 
 - Module boundaries and file placement within `src/cli/commands/` and `src/cli/slash-command/bs/`.
