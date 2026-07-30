@@ -1417,3 +1417,37 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     expect((nonCommentLines.match(/process\.exitCode/g) ?? []).length).toBe(0);
   });
 });
+
+/**
+ * Task 3 — CLI registration (`cli.ts`). Greps the real entry-point source rather than importing
+ * it, since `cli.ts` calls `program.parse()` at module scope (a side-effecting import).
+ */
+
+describe('cli.ts — verify-impact-* registration', () => {
+  it('registers all four verify-impact-* commands, chunk-check gains --reverified-no-code-change, and no command declares a bypass option', async () => {
+    const cliSource = await fs.readFile(join(__dirname, '..', 'cli.ts'), 'utf-8');
+
+    for (const name of [
+      'verify-impact-gate',
+      'verify-impact-adjudicate',
+      'verify-impact-apply',
+      'verify-impact-status',
+    ]) {
+      expect(cliSource).toContain(`.command('${name}')`);
+    }
+
+    expect((cliSource.match(/verify-impact-/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    expect(cliSource).toContain('--reverified-no-code-change');
+
+    // Scoped to the verify-impact-* registration block only — `--force` legitimately exists
+    // elsewhere in cli.ts (the unrelated `claude` command's `--force` to overwrite skills).
+    const blockStart = cliSource.indexOf("verify-impact-gate'");
+    const blockEnd = cliSource.indexOf('// Claude Code integration');
+    expect(blockStart).toBeGreaterThan(-1);
+    expect(blockEnd).toBeGreaterThan(blockStart);
+    const block = cliSource.slice(blockStart, blockEnd);
+    for (const bypass of ['--force', '--yes', '--skip-gate', '--clear']) {
+      expect(block).not.toContain(bypass);
+    }
+  });
+});

@@ -30,6 +30,12 @@ import {
   verifyClassifyRecordCommand,
   verifyClassifyStatusCommand,
 } from './commands/verify-classify.js';
+import {
+  verifyImpactGateCommand,
+  verifyImpactAdjudicateCommand,
+  verifyImpactApplyCommand,
+  verifyImpactStatusCommand,
+} from './commands/verify-impact.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -180,6 +186,10 @@ program
   .command('chunk-check <slug>')
   .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale")
   .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option(
+    '--reverified-no-code-change <range>',
+    'Record a re-verification that found no code change (e.g. <verified-hash>..<head> — 0 manifest files changed)',
+  )
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(chunkCheckCommand);
 
@@ -318,6 +328,60 @@ program
   .option('--run-id <id>', 'Report on a specific run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyClassifyStatusCommand);
+
+// Verify impact / repair gating: VERIFY-04's contradiction gate, VERIFY-05's staleness write, and
+// VERIFY-06's repair-gate disposition (175-CONTEXT.md). Findings exit 0 (172-CONTEXT.md decision
+// 6) — only a tool failure (unknown run, no chunks/, missing RULINGS.md) is non-zero. None of
+// these commands registers a bypass option of any kind (decision 9) — a contradictory finding
+// always stops the pass and a stale write always refuses while any contradiction is pending.
+program
+  .command('verify-impact-gate')
+  .description(
+    'Report every contradictory verdict awaiting human adjudication, with both readings ' +
+      'quoted side by side (read-only, machine-readable)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyImpactGateCommand);
+
+program
+  .command('verify-impact-adjudicate')
+  .description(
+    "Record the human's resolution of one contradictory finding: append a RULINGS.md entry, " +
+      'or record it UNADJUDICATED',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+  .requiredOption('--pair-id <id>', 'The contradictory pair id to adjudicate (see the pending-adjudication report)')
+  .requiredOption('--outcome <resolved|UNADJUDICATED>', 'The recorded adjudication outcome')
+  .option('--decision <text>', "The human's decision, required for --outcome resolved")
+  .option('--citation <text>', 'Citation interpreted or overridden, required for --outcome resolved')
+  .option('--rationale <text>', 'Rationale, required for --outcome resolved')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyImpactAdjudicateCommand);
+
+program
+  .command('verify-impact-apply')
+  .description(
+    "Write the rules-staleness marker into every affected chunk's CHUNK.md then SKETCH.md, and " +
+      "record the run's impact map (refuses while any contradiction is un-adjudicated)",
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyImpactApplyCommand);
+
+program
+  .command('verify-impact-status')
+  .description(
+    "Report the run's impact map: which chunks are rules-stale, each one's line-level " +
+      "attributions, and whether repair re-opens its playtest gate (read-only, machine-readable)",
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyImpactStatusCommand);
 
 // Claude Code integration
 const claudeCmd = program
