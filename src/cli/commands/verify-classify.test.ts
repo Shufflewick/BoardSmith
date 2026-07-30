@@ -15,6 +15,7 @@ import {
   livePageSpan,
   pairSlices,
   resolveProvenance,
+  verifyClassifyPairsCommand,
   type RuleDelta,
 } from './verify-classify.js';
 import { renderIndex } from './ingest-archive.js';
@@ -25,6 +26,7 @@ import {
   renderVerifiedAgainst,
   SCOPE_FULL,
 } from './chunk-provenance.js';
+import { verifyRunInitCommand, verifyRunRecordCommand } from './verify-run.js';
 
 /**
  * `verify-classify.ts` is the mechanical core of VERIFY-03. Every fixture here is either a real
@@ -519,5 +521,183 @@ describe('provenance — three states, hash-only, never the subagent\'s opinion'
   it('PROVENANCE_KINDS is the frozen three-state enum', () => {
     expect(Object.isFrozen(PROVENANCE_KINDS)).toBe(true);
     expect([...PROVENANCE_KINDS]).toEqual(['source-changed', 'source-unchanged', 'unknown']);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// verify-classify-pairs (Task 1) — a real recorded run against the real `seven` fixture
+// -------------------------------------------------------------------------------------------
+
+const SEVEN_LIVE_FILES = [
+  '00-visual-survey.md',
+  '01-definitions-and-components.md',
+  '01-overview-setup-and-play.md',
+  '02-solo-variant.md',
+];
+const SEVEN_STAGED_FILES = [
+  '01-about-and-setup.md',
+  '01-definitions.md',
+  '01-distribution-of-cards.md',
+  '01-game-end-and-match.md',
+  '01-round.md',
+  '02-solo-variant.md',
+];
+
+/**
+ * A real project — real `rulebook/*.md` live tree from the archived `seven` fixture, and a real
+ * recorded `verify-run` (init + record, the actual commands, never hand-written ledger JSON) whose
+ * staged units are the real archived `seven` staged fixture files. Returns the project dir, the
+ * run-id, and the absolute staging dir so a test can additionally corrupt/omit a staged file.
+ */
+async function recordedSevenRun(opts?: {
+  /** Recorded normally, then the staged file is DELETED afterward (crash/tamper simulation). */
+  deleteAfterRecording?: string[];
+  skipRecordingUnits?: string[];
+}): Promise<{ project: string; runId: string; stagingDirAbs: string }> {
+  const project = join(dir, 'game');
+  const rulebookDir = join(project, 'rulebook');
+  await fs.mkdir(rulebookDir, { recursive: true });
+  for (const name of SEVEN_LIVE_FILES) {
+    const text = await readFixture(`seven/live/${name}`);
+    await fs.writeFile(join(rulebookDir, name), text);
+  }
+
+  const initResult = await verifyRunInitCommand({ project, json: true });
+  const runId = initResult.runId;
+  const stagingDirAbs = join(project, initResult.stagingDir);
+
+  const deleteAfter = new Set(opts?.deleteAfterRecording ?? []);
+  const skipRecord = new Set(opts?.skipRecordingUnits ?? []);
+  for (const name of SEVEN_STAGED_FILES) {
+    const text = await readFixture(`seven/staged/${name}`);
+    await fs.writeFile(join(stagingDirAbs, name), text);
+    const unit = name.replace(/\.md$/, '');
+    if (skipRecord.has(name)) continue;
+    await verifyRunRecordCommand({ project, runId, unit, slice: name, range: '1-2', json: true });
+    if (deleteAfter.has(name)) {
+      await fs.rm(join(stagingDirAbs, name));
+    }
+  }
+
+  return { project, runId, stagingDirAbs };
+}
+
+describe('verifyClassifyPairsCommand — enumerate pairs with provenance, over a real recorded run', () => {
+  it('pairs-1: every pair carries live/staged arrays and rule-bearing counts; provenance is a sibling map keyed identically', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const result = await verifyClassifyPairsCommand({ project, runId, json: true });
+
+    expect(result.pairs.length).toBeGreaterThan(0);
+    for (const pair of result.pairs) {
+      expect(pair).toHaveProperty('pairId');
+      expect(pair).toHaveProperty('kind');
+      expect(Array.isArray(pair.liveSlices)).toBe(true);
+      expect(Array.isArray(pair.stagedSlices)).toBe(true);
+      expect(Array.isArray(pair.stagedUnits)).toBe(true);
+      expect(typeof pair.liveRuleBearingLines).toBe('number');
+      expect(typeof pair.stagedRuleBearingLines).toBe('number');
+      // Provenance is NOT a field on the pair object itself.
+      expect(pair).not.toHaveProperty('provenance');
+    }
+
+    expect(Object.keys(result.provenance).sort()).toEqual(result.pairs.map((p) => p.pairId).sort());
+    for (const p of result.pairs) {
+      expect(result.provenance[p.pairId]).toHaveProperty('provenance');
+      expect(result.provenance[p.pairId]).toHaveProperty('recordedHashes');
+    }
+
+    // The real seven fixture collapses to one paired group (174-03-SUMMARY.md's corrective
+    // follow-up) carrying all 3 rule-bearing live slices and all 6 staged units.
+    const paired = result.pairs.filter((p) => p.kind === 'paired');
+    expect(paired).toHaveLength(1);
+    expect(paired[0].liveSlices.sort()).toEqual(
+      [
+        'rulebook/01-definitions-and-components.md',
+        'rulebook/01-overview-setup-and-play.md',
+        'rulebook/02-solo-variant.md',
+      ].sort(),
+    );
+    expect(paired[0].stagedUnits).toHaveLength(6);
+  });
+
+  it('pairs-2: a staged file present on disk but NOT recorded in the ledger never appears in any pair; a recorded unit whose file is missing is reported as a warning, never silently dropped', async () => {
+    const { project, runId } = await recordedSevenRun({ skipRecordingUnits: ['02-solo-variant.md'] });
+    const result = await verifyClassifyPairsCommand({ project, runId, json: true });
+
+    const allStagedUnitsSeen = result.pairs.flatMap((p) => p.stagedUnits);
+    expect(allStagedUnitsSeen).not.toContain('02-solo-variant');
+
+    const { runId: runId2, project: project2 } = await recordedSevenRun({
+      deleteAfterRecording: ['01-round.md'],
+    });
+    const result2 = await verifyClassifyPairsCommand({ project: project2, runId: runId2, json: true });
+    expect(result2.warnings.some((w) => w.includes('01-round') && w.includes('not found'))).toBe(true);
+    // Reported, not dropped: the recorded-but-missing unit still surfaces somewhere in the pair set.
+    const allUnitsSeen2 = result2.pairs.flatMap((p) => p.stagedUnits);
+    expect(allUnitsSeen2).toContain('01-round');
+  });
+
+  it('pairs-3: unpaired-slice and presentation-only groups carry kind/missingSide and roll up into summary', async () => {
+    const project = join(dir, 'edge');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    await fs.writeFile(join(rulebookDir, '03-only-live.md'), 'p.3, Something:\n"A live-only rule."\n');
+    await fs.writeFile(
+      join(rulebookDir, '04-visual-only.md'),
+      'p.4, Cover:\nDerived (p.4) — diagram description: A purely decorative note.\n',
+    );
+
+    const initResult = await verifyRunInitCommand({ project, json: true });
+    const runId = initResult.runId;
+    const stagingDirAbs = join(project, initResult.stagingDir);
+    await fs.writeFile(
+      join(stagingDirAbs, '09-only-staged.md'),
+      'p.9, Something else:\n"A staged-only rule."\n',
+    );
+    await verifyRunRecordCommand({
+      project,
+      runId,
+      unit: '09-only-staged',
+      slice: '09-only-staged.md',
+      json: true,
+    });
+    await fs.writeFile(
+      join(stagingDirAbs, '04-visual-only-staged.md'),
+      'p.4, Cover:\nVisual (p.4): The same decorative layout, restated.\n',
+    );
+    await verifyRunRecordCommand({
+      project,
+      runId,
+      unit: '04-visual-only-staged',
+      slice: '04-visual-only-staged.md',
+      json: true,
+    });
+
+    const result = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const unpaired = result.pairs.filter((p) => p.kind === 'unpaired-slice');
+    const presentationOnly = result.pairs.filter((p) => p.kind === 'presentation-only');
+    expect(unpaired.length).toBeGreaterThan(0);
+    expect(presentationOnly.length).toBeGreaterThan(0);
+    for (const p of unpaired) expect(p.missingSide).toBeDefined();
+    expect(result.summary.unpaired).toBe(unpaired.length);
+    expect(result.summary.presentationOnly).toBe(presentationOnly.length);
+  });
+
+  it('pairs-4: a --live-slice path escaping rulebook/ is refused with an actionable error naming the offending value', async () => {
+    const { project, runId } = await recordedSevenRun();
+    await expect(
+      verifyClassifyPairsCommand({ project, runId, liveSlice: '../../etc/passwd', json: true }),
+    ).rejects.toThrow(/\.\.\/\.\.\/etc\/passwd/);
+  });
+
+  it('pairs-5: an unknown --run-id is an actionable tool failure listing the runs that DO exist; a normal call with findings resolves without throwing', async () => {
+    const { project, runId } = await recordedSevenRun();
+    await expect(
+      verifyClassifyPairsCommand({ project, runId: '2020-01-01T00-00-00Z', json: true }),
+    ).rejects.toThrow(/No verify run/);
+
+    // A run with findings (unpaired-slice/presentation-only groups) still resolves — decision 7:
+    // findings exit 0, never a thrown tool failure.
+    await expect(verifyClassifyPairsCommand({ project, runId, json: true })).resolves.toBeTruthy();
   });
 });

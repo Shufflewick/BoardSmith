@@ -1,11 +1,24 @@
 import { promises as fs } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import chalk from 'chalk';
 import {
   computeVerificationScope,
   parseVerifiedAgainst,
   resolveCitedSlices,
   SCOPE_FULL,
 } from './chunk-provenance.js';
+import {
+  type ClassificationRecord,
+  type VerifyRunOptions,
+  RUN_ID_RE,
+  appendLedgerLine,
+  atomicWriteFile,
+  ledgerFilePath,
+  parseLedgerBody,
+  readLedgerOrThrow,
+  resolveLedgerState,
+  stagingSlicesDir,
+} from './verify-run.js';
 
 /**
  * `verify-classify.ts` — the mechanical, judgment-free half of VERIFY-03: enumerated codes, the
@@ -498,4 +511,228 @@ export async function resolveProvenance(
       'at least one citing chunk\'s recorded Source hash differs from the current archived ' +
       'source — any disagreement is a change the designer must see',
   };
+}
+
+// -------------------------------------------------------------------------------------------
+// Run-scoped commands (174-CONTEXT.md decision 5): verify-classify-pairs, -record, -status.
+// -------------------------------------------------------------------------------------------
+
+/** All run-ids present under this project's `rulebook/.verify/`, sorted (empty if none). */
+async function listRunIds(projectDir: string): Promise<string[]> {
+  const verifyRoot = join(projectDir, 'rulebook', '.verify');
+  let entries: Array<{ name: string; isDirectory(): boolean }>;
+  try {
+    entries = await fs.readdir(verifyRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
+    .map((e) => e.name)
+    .sort();
+}
+
+/**
+ * Mirrors `verifyRunStatusCommand`'s "most recent run" resolution — never a second lookup style.
+ * An explicit `--run-id` naming a run that does not exist on disk is an actionable tool failure
+ * naming the run and listing the runs that DO exist (174-PLAN.md pairs-5), never a bare "not
+ * found" with no way forward.
+ */
+async function resolveRunId(projectDir: string, runId?: string): Promise<string> {
+  if (runId) {
+    if (!RUN_ID_RE.test(runId)) {
+      throw new Error(
+        `Invalid --run-id "${runId}".\n` +
+          `Expected the shape YYYY-MM-DDTHH-MM-SSZ (UTC, colons replaced by "-"), e.g.\n` +
+          `2026-07-28T22-18-00Z — the exact value \`boardsmith verify-run-init\` printed.`,
+      );
+    }
+    const existing = await listRunIds(projectDir);
+    if (!existing.includes(runId)) {
+      throw new Error(
+        `No verify run "${runId}" found in ${projectDir}.\n` +
+          (existing.length > 0
+            ? `Runs that do exist: ${existing.join(', ')}.`
+            : `No verify runs exist yet — run \`boardsmith verify-run-init\` first.`),
+      );
+    }
+    return runId;
+  }
+  const runIds = await listRunIds(projectDir);
+  if (runIds.length === 0) {
+    throw new Error(
+      `No verify runs found under rulebook/.verify/ in ${projectDir}.\n` +
+        `Run \`boardsmith verify-run-init\` first.`,
+    );
+  }
+  return runIds[runIds.length - 1];
+}
+
+/**
+ * Reads the run's ledger and the live rulebook tree, then computes the pair set once — the shared
+ * path both `verifyClassifyPairsCommand` and `verifyClassifyRecordCommand`/`verifyClassifyStatusCommand`
+ * build on (174-PLAN.md Task 2's "resolve the run and its pair set by calling the pairing path from
+ * Task 1"). **The staged side is the ledger's recorded units, never a directory scan** —
+ * `staging-dispatch.md`'s discipline, restated for classification.
+ */
+async function computeRunPairs(
+  projectDir: string,
+  runId: string,
+): Promise<{ pairs: SlicePair[]; provenance: Record<string, ProvenanceResult>; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  const rulebookDir = join(projectDir, 'rulebook');
+  let ruleFileNames: string[] = [];
+  try {
+    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
+    ruleFileNames = entries
+      .filter(
+        // ingest-archive.ts's own exclusion: 00-visual-survey.md is presentation-by-design (the
+        // UI-ask handoff artifact), never a rule slice a classifier compares. INDEX.md is the
+        // archive manifest, not a slice either.
+        (e) =>
+          e.isFile() &&
+          e.name.endsWith('.md') &&
+          e.name !== 'INDEX.md' &&
+          e.name !== '00-visual-survey.md',
+      )
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    throw new Error(
+      `No rulebook/ directory in ${projectDir}.\n` +
+        `A verify pass compares against an existing rulebook — nothing to pair here.`,
+    );
+  }
+  const liveSlices = await Promise.all(
+    ruleFileNames.map(async (name) => ({
+      path: `rulebook/${name}`,
+      text: await fs.readFile(join(rulebookDir, name), 'utf-8'),
+    })),
+  );
+
+  const stagingDir = stagingSlicesDir(projectDir, runId);
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const relLedgerPath = relative(projectDir, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+  const { recorded } = resolveLedgerState(lines);
+
+  const stagedUnits: { unit: string; slicePath: string; rangeId?: string; text: string }[] = [];
+  for (const rec of recorded) {
+    const abs = resolve(stagingDir, rec.slicePath);
+    let text: string;
+    try {
+      text = await fs.readFile(abs, 'utf-8');
+    } catch {
+      // Recorded in the ledger but missing on disk: reported, never silently dropped from the
+      // pair set (174-PLAN.md pairs-2). An empty text has no derivable p.N span, so pairSlices()
+      // reports it as its own unpaired-slice group rather than pretending it does not exist.
+      warnings.push(
+        `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — ` +
+          `reporting it as an unpaired finding rather than silently dropping it`,
+      );
+      text = '';
+    }
+    stagedUnits.push({
+      unit: rec.unitId,
+      slicePath: rec.slicePath,
+      ...(rec.rangeId ? { rangeId: rec.rangeId } : {}),
+      text,
+    });
+  }
+
+  const pairs = pairSlices({ liveSlices, stagedUnits });
+
+  const provenanceEntries = await Promise.all(
+    pairs.map(async (p) => [p.pairId, await resolveProvenance(projectDir, p.liveSlices)] as const),
+  );
+  const provenance: Record<string, ProvenanceResult> = Object.fromEntries(provenanceEntries);
+
+  return { pairs, provenance, warnings };
+}
+
+export interface VerifyClassifyPairsResult {
+  runId: string;
+  pairs: SlicePair[];
+  /** Keyed by `pairId` — provenance is deliberately NOT a field on `SlicePair` itself (see doc). */
+  provenance: Record<string, ProvenanceResult>;
+  warnings: string[];
+  summary: { paired: number; presentationOnly: number; unpaired: number; ruleBearingPairs: number };
+}
+
+/**
+ * `boardsmith verify-classify-pairs` — enumerate a run's live↔staged pair GROUPS, with provenance
+ * (a sibling map, never embedded in `SlicePair` — `pairSlices()` stays pure/no-I/O) and rule-bearing
+ * line counts. Read-only; findings (unpaired slices, presentation-only groups, a missing staged
+ * file) exit 0 (decision 7) — only a tool failure (unknown run, no rulebook/) is non-zero.
+ */
+export async function verifyClassifyPairsCommand(
+  options: VerifyRunOptions & { runId?: string; liveSlice?: string } = {},
+): Promise<VerifyClassifyPairsResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  // T-174-14: --live-slice must resolve inside this project's rulebook dir, validated before any
+  // read. Mirrors verify-run.ts:756-763's path-escape guard verbatim.
+  if (options.liveSlice !== undefined) {
+    const rulebookDir = join(projectDir, 'rulebook');
+    const abs = resolve(rulebookDir, options.liveSlice);
+    const rel = relative(rulebookDir, abs);
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
+      throw new Error(
+        `--live-slice "${options.liveSlice}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
+          `Pass a path relative to the project's rulebook directory.`,
+      );
+    }
+  }
+
+  const runId = await resolveRunId(projectDir, options.runId);
+  const { pairs: allPairs, provenance: allProvenance, warnings } = await computeRunPairs(projectDir, runId);
+
+  const pairs = options.liveSlice
+    ? allPairs.filter((p) =>
+        p.liveSlices.some((s) => s === `rulebook/${options.liveSlice}` || s === options.liveSlice),
+      )
+    : allPairs;
+  const provenance: Record<string, ProvenanceResult> = Object.fromEntries(
+    pairs.map((p) => [p.pairId, allProvenance[p.pairId]]),
+  );
+
+  const summary = {
+    paired: pairs.filter((p) => p.kind === 'paired').length,
+    presentationOnly: pairs.filter((p) => p.kind === 'presentation-only').length,
+    unpaired: pairs.filter((p) => p.kind === 'unpaired-slice').length,
+    ruleBearingPairs: pairs.filter(
+      (p) => p.kind === 'paired' && (p.liveRuleBearingLines > 0 || p.stagedRuleBearingLines > 0),
+    ).length,
+  };
+
+  const result: VerifyClassifyPairsResult = { runId, pairs, provenance, warnings, summary };
+
+  for (const w of warnings) console.error(chalk.yellow(`⚠ ${w}`));
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  console.log(chalk.green(`✓ Verify-classify pairs — run ${runId}`));
+  console.log(
+    `  ${chalk.gray('paired:')} ${summary.paired}  ${chalk.gray('presentation-only:')} ` +
+      `${summary.presentationOnly}  ${chalk.gray('unpaired:')} ${summary.unpaired}`,
+  );
+  // Report volume, not emptiness (172's finding): one line per pair, grouped by kind, never a
+  // per-line body dump.
+  for (const kind of PAIR_KINDS) {
+    const group = pairs.filter((p) => p.kind === kind);
+    if (group.length === 0) continue;
+    console.log(`  ${chalk.gray(`${kind}:`)} ${group.length} group(s)`);
+    for (const p of group) {
+      console.log(
+        `    - ${p.pairId} (live:${p.liveSlices.length} staged:${p.stagedSlices.length}` +
+          `${p.missingSide ? `, missing:${p.missingSide}` : ''})`,
+      );
+    }
+  }
+  return result;
 }
