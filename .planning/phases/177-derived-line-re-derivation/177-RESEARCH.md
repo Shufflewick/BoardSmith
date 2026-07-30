@@ -46,6 +46,12 @@ attempt to reuse Phase 176's one-dispatch-per-item shape unmodified, since 176's
 and judges in one call and this phase's independence guarantee depends on those being different
 processes with different inputs.
 
+   **RESOLVED — reports, does not gate Close.** See `177-CONTEXT.md` decision 15. Findings exit 0;
+   non-zero is reserved for tool failure (172 decision 6: these are advisory sweeps a verify pipeline
+   consumes, not gates, and a check that fires on correct work gets waived). CHECK-04 may be invoked
+   from the pipeline and its `--json` formatted there, but a disagreement finding never blocks a close.
+   Phase 179 assembles the source-free mode from checks of exactly this shape.
+
 ## Architectural Responsibility Map
 
 | Capability | Primary Tier | Secondary Tier | Rationale |
@@ -629,7 +635,11 @@ verify pipeline; it is purely additive (a new, independent check).
 | A2 | CHECK-04 needs no `verify-run-init`-scoped run-id at all, since it targets live slices directly with no staged prerequisite | Pitfall 3 / Open Questions | If a run-id scope IS required (e.g. to tie CHECK-04's ledger into the same run as Steps 2-6), the CLI needs `--run-id` plumbing this research did not scope |
 | A3 | `seven`'s three unqualified page-layout/art `Derived` lines (36/42 area, `02-solo-variant.md:17`, `01-definitions-and-components.md:33`) will be judged `not-rule-bearing` by a competent subagent | Pitfall 1 | If the subagent instead attempts to derive a "value" for a pure art/layout description, the resulting `underivable` or spurious-agreement verdict would misrepresent what happened — worth naming as a specific worked example in the contract text, mirroring the absence-of-source trap's style |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> Both were resolved before task planning; the original text is retained as the reasoning trail and
+> the `RESOLVED` line under each is authoritative.
+
 
 1. **Does CHECK-04 need its own `--run-id` scope, or does it operate project-wide with no run
    concept at all?**
@@ -644,6 +654,13 @@ verify pipeline; it is purely additive (a new, independent check).
      ledger's shape), or (b) design a project-level ledger location outside any run-id (e.g.
      `rulebook/.derive-recheck/`) if the phase goal implies this check should be runnable with zero
      interaction with the staging pipeline. Decide this explicitly before planning the CLI surface.
+
+
+   **RESOLVED — project-level, no `--run-id` scope.** See `177-CONTEXT.md` decision 14. CHECK-04 is
+   source-free by construction and independent of any verify run's staleness verdicts, so it has
+   nothing to scope to a run. This matches CHECK-03/CHECK-05 (`trace-check`, `drift-check`) exactly:
+   read-only project-level sweeps with no run identity. Ledger records are project-scoped and reuse the
+   single atomic write path.
 
 2. **Does CHECK-04 gate `/bs-verify-game`'s Close step (Step 7/8), or run independently?**
    - What we know: `verify-game.md`'s current Close condition checks only
