@@ -418,22 +418,154 @@ $ npm test
 
 ---
 
+## 3b. Lexicon regression — `resolved-by-source` and `contradicted` on CONSTRUCTED data (176-06 ADDED ITEM 2)
+
+### Why this section exists
+
+176-05 honestly recorded that all 60 dispatched real rulings verdicted `still-needed` (§2's
+caveat), and investigated why: the reused committed fixture (decision 19) happens not to contain
+content bearing on any of the 62 real rulings in a way that resolves or contradicts them, for a
+reason unrelated to the classifier's own quality. That is a real evidence gap against decision
+14's own rationale — the full corpus was demanded specifically because the verdict DISTRIBUTION is
+what shows the classifier neither over- nor under-flags, and a 60/60 single-label result cannot
+show that by itself.
+
+This section closes that gap the same way `174-PROOF.md` §4 closed an analogous one for the
+classification subagent: **hand-built CONSTRUCTED lexicon pairs**, dispatched through the real
+contract, never blended into the real-corpus counts above.
+
+### The two constructed cases
+
+Both fixtures live at
+`.planning/phases/176-stale-chunk-repair/176-FIXTURES/lexicon/<case>/{RULING.md,TRANSCRIPTION.md,EXPECTED.md}`
+— every file explicitly labeled CONSTRUCTED in its own header, never presented as a real game
+ruling. The transcription text follows the real fixture's own line-kind convention (unprefixed
+`p.N, Heading:` lines are literal source quotes; `Derived (p.N):` lines are the transcriber's own
+inference) — this distinction is load-bearing, see below.
+
+| Case | Ruling's Decision | Fresh transcription states | Expected verdict |
+|---|---|---|---|
+| `resolved-by-source-discard-draw-limit` | Player may draw at most 1 card from the discard pile/turn; rulebook cited as silent | `p.3, Discard Pile:` (literal source quote) states the identical one-draw-per-turn limit | `resolved-by-source` |
+| `contradicted-bid-tiebreak` | Tied bids broken by whoever bid FIRST; rulebook cited as silent | `p.5, Bidding:` (literal source quote) breaks ties by SEAT PROXIMITY to the dealer and explicitly states bid order "has no bearing" | `contradicted` |
+
+### First attempt — a real miss that sharpened the fixture, not discarded
+
+The `resolved-by-source` case's first-drafted transcription used a `Derived (p.3):` line reading
+"a player may draw at most one card from the discard pile" — a close paraphrase of the ruling's
+own Decision. Dispatched as-is, the real subagent correctly returned `still-needed`, reasoning
+that a `Derived` line is "the transcriber's inference, not text the source itself states," so the
+rulebook remained exactly as silent as the ruling's own Citation recorded — and further flagged
+that a derived line merely echoing the ruling's own Decision would let the ruling be removed while
+leaving only a self-referential derivation behind it. This is the ruling-recheck contract's own
+absence-of-source trap working correctly on a case this plan did not intend to construct. The
+fixture was corrected to state the limit as literal `p.3` source prose (matching the real fixture's
+own untagged/`p.N, Heading:` convention for source quotes), not fixed by relaxing the judgment.
+This miss is recorded here rather than silently discarded, because it is itself evidence the
+classifier respects the Derived/literal-source distinction Phase 170 built the pipeline around.
+
+### Real dispatch and result — both cases
+
+Real `claude -p` OS subprocess dispatch (same mechanism as §1/§2/§3 — see the dispatch-mechanism
+statement above; NOT native Task/Agent-tool dispatch), each pointed at
+`src/cli/slash-command/bs/verify/ruling-recheck.md` (the canonical contract source, byte-identical
+to the installed copy) with the `BS-RULING-RECHECK-V1` token, the constructed ruling body, and the
+constructed transcription — no reference-game project involved, no scratch copy needed for this
+section.
+
+**`resolved-by-source-discard-draw-limit` — returned:**
+```
+{
+  number: 101,
+  verdict: 'resolved-by-source',
+  reasoning: "...the fresh staged transcription now CONTAINS the previously-absent content,
+  quoted directly from the source at p.3, Discard Pile: 'On your turn, you may draw at most one
+  card from the discard pile.' That is the same one-draw-per-turn limit the ruling had to supply,
+  stated in the source itself rather than by the designer, so the ruling's own reason for existing
+  ... is now met by the rulebook. ... this is not a contradiction. The 'Derived (p.3)' line is a
+  transcriber-derived restatement and carries no independent weight; the verdict rests solely on
+  the directly-quoted p.3 source line."
+}
+```
+**Match: YES** (expected `resolved-by-source`, returned `resolved-by-source`).
+
+**`contradicted-bid-tiebreak` — returned:**
+```
+{
+  number: 202,
+  verdict: 'contradicted',
+  reasoning: "...The fresh staged transcription is no longer silent: p.5 Bidding now states the
+  tie 'is broken in favor of the player seated closest to the dealer's left' and adds that 'the
+  order in which the tied bids were placed has no bearing on who wins the tie.' ... this is not an
+  absence-of-source case ... But the content it now supplies is not what the ruling supplied:
+  seat-position tiebreak cannot both be true alongside first-bidder-wins ... Because the fresh
+  source states something incompatible with the Decision rather than merely restating it, the
+  verdict is contradicted, not resolved-by-source."
+}
+```
+**Match: YES** (expected `contradicted`, returned `contradicted`).
+
+**Hit rate: 2/2 (100%). Zero misses to report** (the corrected-fixture miss above was a fixture
+defect the subagent correctly caught, not a classifier miss).
+
+### Independent validation against the real enum/reasoning gate
+
+Both returned records were fed through the real, unmodified `createRulingVerdictRecord` (the same
+enum/reasoning validation every one of §2/§3's 60 real dispatches went through) — neither call
+threw:
+```
+OK {"number":101,"verdict":"resolved-by-source","reasoning":"present"}
+OK {"number":202,"verdict":"contradicted","reasoning":"present"}
+```
+
+### Honest distribution — real vs. constructed, never blended
+
+| Source | still-needed | resolved-by-source | contradicted | undetermined |
+|---|---|---|---|---|
+| **Real corpus (62 rulings, §2+§3)** | 60 | 0 | 0 | 0 |
+| **Constructed lexicon (2 cases, this section)** | 0 | 1 | 1 | 0 |
+
+The real-corpus row and the constructed row are never summed into one total anywhere in this
+proof or in `REQUIREMENTS.md` — a constructed pass proves the classifier CAN produce the other two
+labels correctly when the input actually calls for them; it does not, and is not represented as,
+evidence about the real corpus's own distribution.
+
+### CHECK-01 closure — re-assessed, not left as a comfortable checkbox
+
+176-05 marked CHECK-01 complete. Re-assessed here against its own requirement text: "every
+`RULINGS.md` entry is re-checked against the fresh transcription and reported as still-needed /
+resolved-by-source / contradicted, respecting supersession chains." All 62 real entries in both
+reference games WERE re-checked and reported (60 dispatched, 2 correctly skipped via a resolved
+`supersededBy`, both directions proven, unparsed supersession sentences reported rather than
+assumed) — the requirement's own text asks for every entry to be re-checked and reported, not for
+the real corpus itself to exercise every verdict label.
+
+This is the same shape of judgment call `174-PROOF.md` made for VERIFY-03's own real-data gap
+(quoted from `REQUIREMENTS.md`'s traceability table: *"VERIFY-03 | Phase 174 | Complete — the CLI
+surface (174-04), the classification subagent contract (174-05), and every real-data bar (SC-1
+through SC-5) proven live... 7/7 lexicon regression"* — that Complete disposition also rested
+partly on synthetic lexicon coverage for a label the real corpus's own real dispatch never
+produced). Decision: **CHECK-01 remains Complete**, on the same basis 174 used, with this explicit
+provenance note carried into `REQUIREMENTS.md`'s traceability row (below): `still-needed` is
+proven on real data (60/60 dispatched); `resolved-by-source` and `contradicted` are proven
+correct-when-called-for only on constructed lexicon input, never on real data in either reference
+game, because neither game's committed fixture contains content that would produce those labels
+(reason: decision 19's reused fixture was built for a different check, §2's investigated finding).
+A future phase touching either reference game's rulebook content could still produce a real
+`resolved-by-source`/`contradicted` case; none exists in the current fixture set.
+
+---
+
 ## What this plan did NOT prove
 
-1. **Native Task/Agent-tool dispatch for CHECK-01.** Every one of this plan's 60 dispatches used a
-   `claude -p` OS subprocess (§1), for the reason `173-PROOF.md` §§2–5 already gave: this executing
-   session exposes Read/Write/Edit/Bash only. `173-PROOF.md` §6 closed the analogous gap for
-   VERIFY-07's transcription-return contract, in a session that DID have the Agent tool, for a
-   single unit. No equivalent native-dispatch closure was performed here — the deferred item stands,
-   unresolved for CHECK-01, exactly as `176-CONTEXT.md`'s "Deferred" section already anticipated
-   ("this phase dispatches audit lenses, so the same caveat applies to them" — the same applies to
-   ruling-recheck dispatch).
-2. **`resolved-by-source` and `contradicted` verdicts on real data.** This corpus's reused fixture
-   (decision 19) happens not to contain content bearing on any of these 62 rulings in a way that
-   resolves or contradicts them (§2's honest caveat) — so while the mechanism ran to completion and
-   every verdict is individually grounded and reasoned, no case in this run exercises the classifier
-   actually returning `resolved-by-source` or `contradicted`. Only `still-needed` (60/60 dispatched)
-   and the mechanical `skipped` path (2/62) are exercised on real data in this plan.
-3. **CHECK-02's audit-lens re-run and the repair loop** — explicitly out of scope for this plan
-   (owned by `176-06`, per this plan's own frontmatter and `176-CONTEXT.md` decision 15).
+1. **Native Task/Agent-tool dispatch for CHECK-01/CHECK-02.** Every dispatch in this proof (176-05's
+   60 real-corpus dispatches, this section's 2 constructed-lexicon dispatches, and §4/§5's lens
+   dispatches below) used a `claude -p` OS subprocess, for the reason `173-PROOF.md` §§2–5 already
+   gave: this executing session exposes Read/Write/Edit/Bash only. `173-PROOF.md` §6 closed the
+   analogous gap for VERIFY-07's transcription-return contract, in a session that DID have the
+   Agent tool, for a single unit. No equivalent native-dispatch closure was performed anywhere in
+   this phase — the deferred item stands, unresolved, exactly as `176-CONTEXT.md`'s "Deferred"
+   section already anticipated.
+2. **`resolved-by-source` and `contradicted` verdicts on REAL data** (as opposed to constructed
+   lexicon input) — see the CHECK-01 closure note directly above. This remains a real, named gap,
+   not smoothed over by the constructed pass.
 

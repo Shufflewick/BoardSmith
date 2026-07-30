@@ -265,7 +265,7 @@ the tag.
 | VERIFY-04 | Phase 175 | Complete — `175-PROOF.md` §§1–3d |
 | VERIFY-05 | Phase 175 | Complete — `175-PROOF.md` §4 (real cross-file write, both games) |
 | VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
-| CHECK-01 | Phase 176 | Complete |
+| CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
 | CHECK-02 | Phase 176 | Pending |
 | CHECK-04 | Phase 177 | Pending |
 | CHECK-06 | Phase 178 | Pending |
