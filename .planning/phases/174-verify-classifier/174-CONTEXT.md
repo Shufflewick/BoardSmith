@@ -349,6 +349,32 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
       push the percentage down. Every non-stale chunk must be non-stale for a citation-level reason
       that can be named, exactly as `game-score-and-winner`'s exemption can be.
 
+    **RESOLVED 2026-07-30 (user decision at the post-gap-closure gate) — the governing bar is the
+    ROADMAP's literal wording, and by it the goal is MET.** Measured after implementing this decision:
+    `seven` 6/16 (37.5%) and `one-two-punch` 6/11 (54.5%) of citing chunks stale, down from 16/16 and
+    11/11 at group level and 14/16 and 11/11 at slice level — each narrowing roughly halving the set,
+    untuned.
+
+    The ambiguity this resolves was of my own making, and is recorded rather than quietly dropped: the
+    ROADMAP goal says "does not flag EVERY chunk as stale," which 6/16 and 6/11 plainly satisfy, while
+    the "small, explainable subset" phrasing above — which I introduced AT THE REOPEN, not in the
+    original specification — they do not. `174-PROOF.md` §8 names the discrepancy directly ("neither
+    37.5% nor 54.5% is a small, explainable subset by any reasonable reading, even though neither is
+    'every chunk' either"). Holding a phase to a bar tightened mid-flight, by me, after the criteria
+    were already written, is not a standard — it is moving the goalposts.
+
+    What the evidence supports: the residual stale chunks genuinely quote or cite the changed rule,
+    attributed through the `quoted-fragment` and `cited-page` rungs. Marking those stale is the tool
+    working correctly, not over-flagging. The remaining density is a property of two short, heavily
+    cross-referenced rulebooks (2-3 live slices carrying nearly all content), diagnosed as anchor
+    density rather than a ladder defect.
+
+    A fourth narrowing was considered and rejected: diagnosis points at anchor density, so returns
+    would be small while false-clean risk grows — and this mechanism has already produced exactly that
+    failure once (the 174-04 corrective). The "small, explainable subset" phrasing is retained above as
+    the aspiration it was, NOT as the phase gate. Anchor density carries forward to Phase 175/176 as a
+    known input property of the staleness set they consume.
+
     Rejected: revising the phase goal to match the architecture — the goal is the milestone's actual
     requirement, and a verify pass that marks everything stale is one a designer learns to ignore,
     which is the lexicon-waiving failure this milestone keeps citing.
