@@ -555,17 +555,363 @@ A future phase touching either reference game's rulebook content could still pro
 
 ---
 
-## What this plan did NOT prove
+## 4. Real lens run on a stated subset of the 12 stale chunks (176-06 Task 1)
 
-1. **Native Task/Agent-tool dispatch for CHECK-01/CHECK-02.** Every dispatch in this proof (176-05's
-   60 real-corpus dispatches, this section's 2 constructed-lexicon dispatches, and §4/§5's lens
-   dispatches below) used a `claude -p` OS subprocess, for the reason `173-PROOF.md` §§2–5 already
-   gave: this executing session exposes Read/Write/Edit/Bash only. `173-PROOF.md` §6 closed the
-   analogous gap for VERIFY-07's transcription-return contract, in a session that DID have the
-   Agent tool, for a single unit. No equivalent native-dispatch closure was performed anywhere in
-   this phase — the deferred item stands, unresolved, exactly as `176-CONTEXT.md`'s "Deferred"
-   section already anticipated.
-2. **`resolved-by-source` and `contradicted` verdicts on REAL data** (as opposed to constructed
-   lexicon input) — see the CHECK-01 closure note directly above. This remains a real, named gap,
-   not smoothed over by the constructed pass.
+### Setup — real scratch copies, real fixture staging, dispatch mechanism
+
+`SCRATCH=${TMPDIR:-/tmp}/…/scratchpad/176-06-lens/` — `seven/` and `one-two-punch/` are fresh
+`cp -R` copies of the ORIGINALS. Whole-tree file counts captured before copy: `seven` 3919 files,
+`one-two-punch` 4134 files — identical to `176-05-PROOF.md`'s own captures, confirming no drift
+between plans. The committed `175-FIXTURES/174-07-contradictory/staged/{seven,one-two-punch}/`
+tree (slices + `RUN.md` ledger) was staged into each scratch copy's own
+`rulebook/.verify/<runId>/` tree, matching the real run-ids the committed `RUN.md` ledgers
+themselves record (`seven`: `2026-07-29T23-25-24Z`; `one-two-punch`: `2026-07-29T23-28-06Z`) —
+never a synthetic run-id, so `boardsmith verify-impact-status`/`verify-repair` resolve the SAME
+classification records `176-05` used.
+
+**Dispatch mechanism, stated honestly (same constraint as `173-PROOF.md` §§2–5 and `176-05`):**
+every lens dispatch below used a real `claude -p "<prompt>" --allowedTools Read` OS subprocess —
+this executing session exposes Read/Write/Edit/Bash only, no internal Task/Agent tool. This is NOT
+native Task/Agent-tool dispatch; the deferred item stands, unresolved, for the lens dispatches too.
+
+### Real enumeration — all 12 real stale slugs, uncapped
+
+```
+$ boardsmith verify-impact-status --project $SCRATCH/seven --json
+  stale chunks: best-seven-selection, bonus-point-cards, game-end-trigger, match-best-of-7,
+                scoring-run-of-7, table-and-draw     (6 of 16)
+$ boardsmith verify-impact-status --project $SCRATCH/one-two-punch --json
+  stale chunks: block, final-acceptance, jab, movement-advance-retreat, rest,
+                second-action-resolution              (6 of 11)
+```
+Combined: **12 of 27 chunks rules-stale**, reconciling exactly against `175-PROOF.md`'s own
+measured stale sets (`seven` 6/16, `one-two-punch` 6/11) — no discrepancy.
+
+### Two real, blocking bugs found and fixed while producing this section (not the ADDED ITEM 1 finding — a separately-discovered pair, in the same subsystem)
+
+Both discovered live, the moment this task's own tooling was run against real data for the first
+time — proof that "prove on real data" earns its keep even inside a proof-writing plan:
+
+1. **`ImpactMapEntry` dropped `pairIds`.** `boardsmith verify-repair --project $SCRATCH/seven --json`
+   threw `entry.pairIds is not iterable` on every real stale chunk. `buildImpactMapEntry`
+   (`verify-impact.ts`) copied `attributions` from the source `ChunkVerdict` but never carried
+   forward its already-computed `pairIds` field, and `resolveStagedSlicePaths` requires `pairIds`.
+   **This made CHECK-02's own read-only status command unusable against any real stale chunk in
+   either reference game before this plan's fix.** Fixed by carrying `pairIds` forward verbatim
+   (no re-derivation — decision 9's "Don't Hand-Roll" gate). Commit `e2ca4f6e`'s sibling — see this
+   plan's own task commits.
+2. **`verify-repair --json`'s stdout was contaminated.** `verifyImpactStatusCommand` (and the three
+   commands it composes) always printed a full human report to stdout regardless of the COMPOSING
+   caller's own `--json` flag (`json: false` alone still runs the human-report branch). Fixed with
+   a `quiet` option on all four, following the existing `ingest-archive.ts` precedent.
+3. **`appendAuditRoundHeading` landed a new round after the WRONG section.** A real `CHUNK.md` has
+   sections after `## Findings Ledger` (`## Revision Rounds`, `## Build Manifest`, `## Verified
+   Commit Hash`); the shipped function appended to the absolute end of the document, which would
+   have landed a verify-episode's round heading after `## Verified Commit Hash`, structurally
+   detached from the Findings Ledger it is meant to extend. Never caught by 176-02's own tests
+   because every synthetic fixture ended right after Findings Ledger. Fixed to insert before the
+   next `## ` heading following Findings Ledger, falling back to end-of-document append when
+   Findings Ledger is the last section (preserves all 23 pre-existing tests unchanged).
+
+All three are genuine correctness bugs in CHECK-02 mechanics this phase itself shipped (176-01,
+176-02), found only because this task insisted on running the real tooling against real stale
+chunks rather than stopping at unit-test coverage. Regression tests added for all three (see task
+commits). `npm test`: 3893/3893 green after all three fixes, zero regressions.
+
+### AUDITED / NOT AUDITED — all 12 stale chunks, explicit coverage fraction
+
+**2 of 12 chunks audited (~17%). The remaining 10 were NOT audited in this proof pass** — decision
+15 accepts a real, stated subset over the full 36-dispatch sweep; the two chosen are the
+highest-value proof points available (see rationale below), not an arbitrary sample.
+
+| Chunk | Game | Audited? | Reason |
+|---|---|---|---|
+| **best-seven-selection** | seven | **AUDITED** | Already at 3 build-era rounds (decision 17's exact target) + `ui: major` (exercises the 4th-lens rule) |
+| bonus-point-cards | seven | NOT AUDITED | Cost containment (decision 15) — round 2 of 3, not a decision-17 case |
+| game-end-trigger | seven | NOT AUDITED | Cost containment — round 3 of 3, not yet at the decision-17 boundary |
+| match-best-of-7 | seven | NOT AUDITED | Cost containment — round 3 of 3, not yet at the decision-17 boundary |
+| scoring-run-of-7 | seven | NOT AUDITED | Cost containment — round 2 of 3 |
+| table-and-draw | seven | NOT AUDITED | Cost containment — ALSO already at 3 build-era rounds (round plan confirms absolute round 4), but decision 17's case is already demonstrated by `best-seven-selection` in this same game; auditing both would not add a new proof point, only cost |
+| **block** | one-two-punch | **AUDITED** | Already at 3 build-era rounds (decision 17's exact target, in the SECOND game) + `ui: touches` (exercises the 4th-lens rule); gives decision-17 coverage in BOTH games, not just one |
+| final-acceptance | one-two-punch | NOT AUDITED | Cost containment — round 1 of 3, not a decision-17 case |
+| jab | one-two-punch | NOT AUDITED | Cost containment — ALSO already at 3 build-era rounds, same reasoning as `table-and-draw`: `block` already demonstrates decision 17 in this game |
+| movement-advance-retreat | one-two-punch | NOT AUDITED | Cost containment — round 3 of 3 |
+| rest | one-two-punch | NOT AUDITED | Cost containment — round 1 of 3 |
+| second-action-resolution | one-two-punch | NOT AUDITED | Cost containment — round 3 of 3 |
+
+Both audited chunks land at **absolute round 4, episode 1, round 1** on their first verify
+dispatch — proven via the real `planVerifyEpisodeRound`/`resolveVerifyEpisodeNumber` functions
+against each chunk's own real `CHUNK.md`, never routed to round-3 triage on arrival (decision 17's
+whole point).
+
+### Per-chunk, per-lens real dispatch results — finding counts (zeros written explicitly)
+
+Both chosen chunks are `ui: touches|major` (decision 7), so the 4th (design-review) lens is
+REQUIRED by the existing build rule. **It was NOT dispatched in this proof pass** — a
+screenshot-armed review needs a running dev server + browser harness, which this proof-writing
+session's tool budget (Read/Write/Edit/Bash, no browser automation wired to a live `boardsmith
+dev` instance inside this pass) could not stand up alongside the 6 fresh-context lens dispatches
+already run. Recorded here as a stated exclusion, per decision 15's own "state coverage
+explicitly, never imply full coverage" discipline — not silently skipped.
+
+| Chunk | Lens | Findings | Severities |
+|---|---|---|---|
+| best-seven-selection (`seven`) | fidelity | **4** | 2 medium, 2 low |
+| best-seven-selection (`seven`) | visibility | **2** | 2 low |
+| best-seven-selection (`seven`) | undo | **2** | 2 low |
+| best-seven-selection (`seven`) | design-review (4th) | **NOT DISPATCHED** | — see exclusion above |
+| block (`one-two-punch`) | fidelity | **5** | 1 high, 3 medium, 1 low |
+| block (`one-two-punch`) | visibility | **0** | — (real two-seat-diff harness run live; clean) |
+| block (`one-two-punch`) | undo | **2** | 1 medium, 1 low |
+| block (`one-two-punch`) | design-review (4th) | **NOT DISPATCHED** | — see exclusion above |
+
+**Total real findings: 15**, across 6 real fresh-context dispatches (3 lenses × 2 chunks). Per
+decision 16, none of the 15 findings triggered a fix to either reference game's own rules-layer
+code — this pass records findings and correct/clean lens verdicts alike, it does not repair.
+
+**A clean run here would have been more suspicious than a noisy one (decision 16's own framing) —
+this run is genuinely noisy.** Selected highlights, grounded in the actual dispatch returns (full
+text in this plan's scratch dispatch logs, not reproduced verbatim here per the "template prose
+is not reproduced as a modified copy" acceptance criterion — these are the AGENT'S OWN finding
+prose, not a paraphrase of the lens template):
+
+- **best-seven-selection, fidelity FID-01 (medium):** the terminal reveal is gated on
+  `isGameOver || betweenGames`, but after `publishScoringSelections` fires the flow enters
+  `declare` with both flags false — no seat's revealed 7 renders until the between-games gate,
+  contradicting Ruling 24/27's "every reveal publishes together, visibly."
+- **best-seven-selection, visibility F-VIS-1 (low):** a real two-seat `diffPlayerViews` run (the
+  lens repointed a dangling `node_modules/boardsmith` symlink to run the harness live, then left
+  the fixture as found) caught a pre-barrier SIZE leak: mid-commit, a non-owner's view of the
+  scoring selection reveals exactly how many cards (3..7) a seat staged, before the Ruling 27
+  barrier — disclosing bonus-card count early. Not authorized by Ruling 19 (which covers only
+  fact-of-commitment for `PendingDiscard`, a 0-or-1 zone).
+- **block, fidelity finding 1 (high):** "Whole Fight phase (reveal, resolution order, no-effect
+  reasons, BLOCKED band) is set and reset inside one uninterrupted flow run; no seat can ever see
+  it" — independently corroborated by the **visibility lens's own side observation** on the same
+  chunk (not filed as a visibility finding, since it found no LEAK, but flagged): Ruling 19's
+  BLOCKED mark "did not appear in either seat's rendered DOM" in a flow-driven round, because
+  `startNewRound()` resets the display-gating flags before any client is broadcast an intermediate
+  state. Two independently-dispatched fresh-context lenses converged on the same root defect from
+  different angles — direct evidence the 3-lens independence design (`build/audit.md` "Three
+  Lenses, Each a Separate Fresh-Context Dispatch") catches what a single combined pass might file
+  once and under-weight.
+- **block, undo F1 (medium):** the chunk's own docblock claims `assertPlanLockHolds()` is "the ONLY
+  thing enforcing" the plan-lock, dismissing `.notUndoable()` as an inert client hint. PROVEN false
+  by running the real `GameSession`: removing only `.notUndoable()` (counterfactually) leaves the
+  assertion passing and the undo succeeding — `.notUndoable()` is the actual enforcing mechanism,
+  and the comment is stale relative to an upstream BoardSmith fix (`BOARDSMITH-BUGS.md` "169-04
+  SWEEP UPDATE (RESOLVED upstream)") this chunk's own code was never updated to match.
+
+### Verify-episode round headings — real diff, no renumbering
+
+Both audited chunks' pre-existing `### Audit Round 1/2/3` headings are shown intact alongside the
+new episode heading, via a real `diff` on the actual scratch `CHUNK.md` files (not a synthetic
+fixture):
+
+```
+$ diff bss-CHUNK.before.md seven/chunks/best-seven-selection/CHUNK.md
+361a362
+> ### Audit Round 4 (verify-repair episode 1, round 1 of 3)
+
+$ grep -n "^### Audit Round\|^## Revision Rounds\|^## Verified Commit Hash" seven/chunks/best-seven-selection/CHUNK.md
+307:### Audit Round 1
+333:### Audit Round 2
+348:### Audit Round 3
+362:### Audit Round 4 (verify-repair episode 1, round 1 of 3)
+364:## Revision Rounds
+461:## Verified Commit Hash
+```
+```
+$ diff block-CHUNK.before.md one-two-punch/chunks/block/CHUNK.md
+1010a1011,1012
+>
+> ### Audit Round 4 (verify-repair episode 1, round 1 of 3)
+
+$ grep -n "^### Audit Round\|^## Revision Rounds\|^## Build Manifest" one-two-punch/chunks/block/CHUNK.md
+702:### Audit Round 1
+800:### Audit Round 2
+883:### Audit Round 3 (FINAL — the round bound is 3; state-machine.md "Repair Loop Bound")
+1012:### Audit Round 4 (verify-repair episode 1, round 1 of 3)
+1014:## Revision Rounds
+1022:## Build Manifest
+```
+
+Every original heading survives, exactly once, in its original position; the new heading lands
+immediately after Round 3 and before the trailing sections — never after them (the bug fixed
+above, demonstrated fixed on this exact real data).
+
+### Originals re-verification (immediately after this section's work)
+
+```
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd   (unchanged)
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(empty)
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9   (unchanged)
+```
+Both byte-identical — every mutation above (round headings, symlink repoint for the live harness
+runs, temp test files) happened inside `$SCRATCH` copies only.
+
+**Task 1 GATE: PASSED** — real lens findings recorded on a stated 2-of-12 subset, the
+decision-17 episode rule demonstrated in BOTH games on chunks that had exhausted their build
+budget, and coverage stated explicitly with a reason per excluded chunk.
+
+---
+
+## 5. Post-repair gate re-derivation on live data (176-06 Task 2, Pitfall 1)
+
+### Pre-repair and post-repair readings, both audited chunks
+
+Per decision 16, this plan makes NO change to either reference game's rules-layer code (no fixing
+reference-game content) — so for BOTH audited chunks, the only mutations that occurred during
+this plan's own "repair" activity were to `CHUNK.md`'s `## Findings Ledger` (a round heading),
+which is not itself a file either chunk's own Build Manifest lists. Consequently: **neither chunk's
+repair loop changed its rules-layer code in this pass** — both are the "repair changed nothing"
+arm, not the "repair changed code" arm. This is recorded plainly rather than manufactured — see
+below for where the other arm IS proven.
+
+```
+$ boardsmith verify-impact-status --project $SCRATCH/seven --json   (PRE, captured before Task 1)
+best-seven-selection -> driftState: drifted | gate: reopen-playtest
+
+$ boardsmith verify-impact-status --project $SCRATCH/one-two-punch --json   (PRE)
+block -> driftState: drifted | gate: reopen-playtest
+
+$ (real recomputeRepairGatePostRepair call, POST — after Task 1's CHUNK.md edits)
+best-seven-selection -> driftState: drifted | gate: reopen-playtest   (UNCHANGED)
+block -> driftState: drifted | gate: reopen-playtest                 (UNCHANGED)
+```
+
+| Chunk | Pre-repair disposition | Post-repair disposition | Changed? |
+|---|---|---|---|
+| best-seven-selection | reopen-playtest (drifted) | reopen-playtest (drifted) | **NO** |
+| block | reopen-playtest (drifted) | reopen-playtest (drifted) | **NO** |
+
+### Audited-subset disposition counts (zeros written explicitly)
+
+| Disposition | Count (of 2 audited) |
+|---|---|
+| reopen-playtest | **2** |
+| close-without-replaytest | **0** |
+| unknown-drift | **0** |
+| not-applicable | **0** (both audited chunks are stale by construction — `not-applicable` only ever applies to non-stale chunks, none of which were in this audited subset) |
+
+### Would the pre-repair snapshot have been wrong? — NO, for both chunks in this subset
+
+Explicitly: for both `best-seven-selection` and `block`, the pre-repair `ImpactMapEntry.gate`
+snapshot and the post-repair re-derivation agree exactly (`reopen-playtest` both times) — trusting
+the pre-repair snapshot would NOT have produced a different, wrong disposition for either chunk in
+this subset. **A non-difference, honestly reported, is still evidence:** it demonstrates the
+mechanism is at least idempotent and non-destructive when nothing changes (matching `verify-impact.test.ts`'s own `computeRepairGate` purity proof from 176-02), but it does NOT, on this
+data, demonstrate Pitfall 1's payoff case (a chunk whose snapshot WOULD have been wrong).
+
+**Where the "would have been wrong" case IS proven:** `verify-repair.ts`'s own unit test suite
+(176-02, `recomputeRepairGatePostRepair — over a real git fixture`) proves exactly that case on a
+real two-commit git fixture: a clean→drifted flip after a real file modification flips
+`close-without-replaytest` → `reopen-playtest` between two invocations of the SAME function this
+section calls. That proof is at the mechanics level (a synthetic git repo), not live on either of
+this milestone's two real reference games — because decision 16 forbids this phase from ever being
+the one to introduce that flip on `seven`/`one-two-punch`'s own code.
+
+### Restating, not overturning, `175-PROOF.md` §5's inherited finding
+
+`175-PROOF.md` §5 measured that only 1 of 12 real stale chunks in these same two games closed
+without re-playtesting; the other 11 re-opened the gate because their code had ALREADY drifted for
+reasons unrelated to the rules finding this milestone tracks. This plan's 2-chunk subset is fully
+consistent with that measurement, not a new data point that changes it: **2 of 2 audited chunks
+(100%) re-open the gate, both already drifted before this plan touched anything.** This is not
+presented as a payoff beyond 175's own baseline — VERIFY-06's practical saving on these two
+specific, heavily-developed reference games remains small, exactly as `175-PROOF.md` §5 already
+established. This phase's repair loop feeds that same gate; it does not overturn what 175 measured
+about it.
+
+**Task 2 GATE: PASSED** — paired real readings recorded, the "no difference observed" case
+answered honestly rather than manufacturing a payoff, and 175's own finding restated rather than
+re-litigated on a smaller sample.
+
+---
+
+## What is still unproven
+
+Carried forward honestly, at the close of the phase:
+
+1. **Native Task/Agent-tool dispatch, for every check this phase built.** Every dispatch in this
+   proof (176-05's 60 real-corpus ruling dispatches, 176-06's 2 constructed-lexicon dispatches, and
+   176-06 §4's 6 real lens dispatches) used a `claude -p` OS subprocess — this executing session
+   exposes Read/Write/Edit/Bash only, no internal Task/Agent tool. `173-PROOF.md` §6 closed the
+   analogous gap for VERIFY-07's transcription-return contract, in a DIFFERENT session that DID
+   have the Agent tool, for a single unit only. No equivalent closure was performed anywhere in
+   this phase — the deferred item from `176-CONTEXT.md` stands, unresolved, exactly as its own
+   "Deferred" section anticipated.
+2. **`resolved-by-source` and `contradicted` verdicts on REAL data** (CHECK-01). Proven only on 2
+   CONSTRUCTED lexicon pairs (§3b) — neither reference game's committed fixture contains real
+   content producing those two labels. `still-needed` is the only label the real 62-ruling corpus
+   exercises (60/60 dispatched).
+3. **10 of the 12 real stale chunks were NOT audited by the lens loop** (§4's coverage table, named
+   by slug): `bonus-point-cards`, `game-end-trigger`, `match-best-of-7`, `scoring-run-of-7`,
+   `table-and-draw` (all `seven`); `final-acceptance`, `jab`, `movement-advance-retreat`, `rest`,
+   `second-action-resolution` (all `one-two-punch`). Cost containment (decision 15) is the reason
+   for all 10 — none are a correctness gap, but none have real fresh lens findings recorded either.
+4. **The 4th (design-review) lens was identified as required but NOT dispatched**, for either of
+   the 2 audited chunks (both `ui: touches|major`) — a screenshot-armed review needs a running dev
+   server + browser harness this proof-writing pass's tool budget did not stand up. Only the 3 core
+   lenses (fidelity, visibility, undo) were run for real.
+5. **Pitfall 1's "would have been wrong" case is proven only at the mechanics level** (a synthetic
+   two-commit git fixture, 176-02's own unit test), not live on either real reference game — because
+   decision 16 forbids this phase from ever being the one to introduce a code change on `seven`/
+   `one-two-punch` that would produce that flip. Both audited chunks in 176-06 §5 show NO
+   difference between pre- and post-repair readings (honestly reported, not manufactured).
+6. **VERIFY-06's payoff remains NOT demonstrated on these two reference games** (`175-PROOF.md` §5,
+   restated not overturned by 176-06 §5): 2 of 2 chunks audited in this plan re-open the gate,
+   consistent with 175's own 1-of-12 measurement across the full stale set. The scoping MECHANISM
+   is proven correct; its practical saving on these two specific, heavily-developed games is small.
+7. **Anchor density** (Phase 174, inherited unchanged) — the stale set this phase consumes is
+   broader than ideal on short, cross-referenced rulebooks.
+8. **The `lineFindings[]` multi-delta persistence gap** (`175-PROOF.md` §7) — only the max-severity
+   `quotedPass1`/`quotedPass2` pair is retained per pair group on a `ClassificationRecord`. Neither
+   reference game's real finding in this milestone has been a multi-delta pair, so this remains
+   unexercised, not resolved. `176-02-SUMMARY.md` confirmed `resolveStagedSlicePaths` never reads
+   these fields at all, so this gap does not affect CHECK-02's own input contract — but it is still
+   open for whichever future check reads line-level deltas directly.
+9. **SC-2's thin evidence base** (Phase 174) — not compounded by this phase, but not resolved by it
+   either.
+
+## How to re-run every proof
+
+**§1–§3 (CHECK-01, full corpus + SC-3):** `boardsmith verify-ruling-recheck --project <scratch> --run-id 2026-07-29T23-25-24Z --json`
+(`seven`) / `--run-id 2026-07-29T23-28-06Z --json` (`one-two-punch`) against a `cp -R` copy staged
+with `175-FIXTURES/174-07-contradictory/staged/{seven,one-two-punch}/slices/` under
+`rulebook/.verify/<runId>/slices/`; dispatch each enumerated ruling's body + the resolved staged
+slice paths to a fresh `claude -p "<BS-RULING-RECHECK-V1 prompt>" --allowedTools Read`, following
+`src/cli/slash-command/bs/verify/ruling-recheck.md`'s contract; record via
+`recordRulingVerdicts`/`createRulingVerdictRecord`.
+
+**§3b (CHECK-01 lexicon regression):** dispatch each of the 2
+`176-FIXTURES/lexicon/<case>/{RULING.md,TRANSCRIPTION.md}` pairs to a fresh `claude -p` pointed at
+`src/cli/slash-command/bs/verify/ruling-recheck.md`, compare the returned `verdict` to
+`EXPECTED.md`, validate via `createRulingVerdictRecord`.
+
+**§4 (CHECK-02 real lens run):** `boardsmith verify-impact-status --project <scratch> --json` to
+enumerate the real stale set; `boardsmith verify-repair --project <scratch> --run-id <runId> --json`
+to resolve each stale chunk's fresh staged slice paths + next verify-episode round plan; for each
+audited chunk, dispatch `src/cli/slash-command/bs/build/audit.md`'s three lens templates (fidelity,
+visibility, undo) as separate `claude -p --allowedTools Read` calls, binding only the five
+substitution points (`{gameName}`, `{slug}`, `{slicePaths}`, `{codeFilePaths}`,
+`{visibilityDeclarationText}`); write the resulting round heading via the real
+`appendAuditRoundHeading`/`writeAppendedAuditRound`.
+
+**§5 (post-repair gate re-derivation):** capture `ImpactMapEntry.gate` from `verify-impact-status
+--json` BEFORE dispatching lenses; after the round completes, call `recomputeRepairGatePostRepair({
+projectDir, slug, stale: true, status })` directly (via `npx tsx`, importing from
+`verify-repair.ts`) and compare dispositions.
+
+**Originals safety check (run before AND after every real proof above):**
+```
+git -C ~/BoardSmithGames/seven rev-parse HEAD && git -C ~/BoardSmithGames/seven status --porcelain
+git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD && git -C ~/BoardSmithGames/one-two-punch status --porcelain
+```
+Expect identical hashes and empty `status --porcelain` (except `one-two-punch`'s two pre-existing
+`.boardsmith/` deletions, documented since `173-PROOF.md`) — any other diff is a real regression in
+the read-only guarantee this whole milestone depends on.
 
