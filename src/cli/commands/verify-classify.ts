@@ -89,11 +89,20 @@ export type RuleDelta = (typeof RULE_DELTA_KINDS)[number];
  *
  * Each entry is a regex SOURCE string (not a literal regex), driving `isPresentationLine` below
  * rather than being duplicated as an inline pattern at the call site.
+ *
+ * SCHEMA-SYMMETRIC AND NESTING-TOLERANT (177-08, closing WR-09): the optional parenthetical
+ * qualifier group is applied to all three markers identically — `^Visual \(p\.\d+\):` previously
+ * lacked it, so `Visual (p.1) (Plan phase): ...` classified as rule-bearing while its `Derived`-
+ * schema twin (`Derived (p.1) — art (Plan phase): ...`) correctly excluded, which is exactly the
+ * dual-schema asymmetry this constant exists to eliminate. The qualifier body is also
+ * `\([^:]*\)` rather than `\([^)]+\)`: a qualifier never contains the terminating colon, so this
+ * tolerates a qualifier with its own nested parentheses (`— art (see fig. (a)):`), which `[^)]+`
+ * could never match because it stops at the first `)`.
  */
 export const PRESENTATION_EXCLUSION_MARKERS = Object.freeze([
-  '^Visual \\(p\\.\\d+\\):',
-  '^Derived \\(p\\.\\d+\\) — diagram description(?: \\([^)]+\\))?:',
-  '^Derived \\(p\\.\\d+\\) — art(?: \\([^)]+\\))?:',
+  '^Visual \\(p\\.\\d+\\)(?: \\([^:]*\\))?:',
+  '^Derived \\(p\\.\\d+\\) — diagram description(?: \\([^:]*\\))?:',
+  '^Derived \\(p\\.\\d+\\) — art(?: \\([^:]*\\))?:',
 ] as const);
 
 /**

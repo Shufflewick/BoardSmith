@@ -169,10 +169,48 @@ describe('presentation — dual-schema exclusion filter, over REAL archived fixt
   it('presentation-4 (pin): PRESENTATION_EXCLUSION_MARKERS is exactly the measured set, frozen', () => {
     expect(Object.isFrozen(PRESENTATION_EXCLUSION_MARKERS)).toBe(true);
     expect([...PRESENTATION_EXCLUSION_MARKERS]).toEqual([
-      '^Visual \\(p\\.\\d+\\):',
-      '^Derived \\(p\\.\\d+\\) — diagram description(?: \\([^)]+\\))?:',
-      '^Derived \\(p\\.\\d+\\) — art(?: \\([^)]+\\))?:',
+      '^Visual \\(p\\.\\d+\\)(?: \\([^:]*\\))?:',
+      '^Derived \\(p\\.\\d+\\) — diagram description(?: \\([^:]*\\))?:',
+      '^Derived \\(p\\.\\d+\\) — art(?: \\([^:]*\\))?:',
     ]);
+  });
+
+  // 177-08 (closing WR-09): the qualifier group was applied to the two Derived markers but not
+  // to Visual, and `[^)]+` could never match a qualifier with its own nested parens. Both fixed
+  // symmetrically, pinned together with the 4 real decision-13 lines so neither fix regresses
+  // the other.
+  it('presentation-7: Visual (p.N) with a parenthetical qualifier is now recognized as presentation — the Visual/Derived asymmetry WR-09 named', () => {
+    expect(isPresentationLine('Visual (p.1) (Plan phase): A diagram of the play area.')).toBe(
+      true,
+    );
+  });
+
+  it('presentation-8: a Derived — art qualifier containing its own nested parentheses is recognized as presentation — [^:]* is nesting-tolerant where [^)]+ was not', () => {
+    expect(
+      isPresentationLine(
+        'Derived (p.1) — art (see fig. (a)): A stylized illustration of the box.',
+      ),
+    ).toBe(true);
+  });
+
+  it('presentation-9: the 4 real decision-13 one-two-punch lines still match after the symmetry/nesting fix', async () => {
+    const setupText = await readFixture('one-two-punch/live/01-setup-and-round-structure.md');
+    const actionText = await readFixture('one-two-punch/live/02-action-cards-and-resolution.md');
+    const qualifiedLines = [...setupText.split('\n'), ...actionText.split('\n')]
+      .map((l) => l.trim())
+      .filter((l) => /^Derived \(p\.\d+\) — (?:diagram description|art) \([^)]+\):/.test(l));
+    expect(qualifiedLines).toHaveLength(4);
+    for (const line of qualifiedLines) {
+      expect(isPresentationLine(line)).toBe(true);
+    }
+  });
+
+  it('presentation-10: a genuinely rule-bearing Derived line is still not presentation after the fix', () => {
+    expect(
+      isPresentationLine(
+        'Derived (p.1): The box contains 2 Boxer Cards, 16 Action Cards, 6 Guard Cards, and 1 Rules Sheet.',
+      ),
+    ).toBe(false);
   });
 
   it('presentation-5: the 4 real one-two-punch lines carrying a parenthetical qualifier are recognized as presentation, read from the fixture not retyped', async () => {
