@@ -296,8 +296,144 @@ retrofitted to the result):
 > a right label with hand-wavy or absent reasoning would not prove the classifier understood the
 > case; it could have guessed.
 
-**This declaration is committed as a separate commit BEFORE the dispatch below is run.** See the
-commit hash cited at the end of this section (recorded after the fact, since a commit cannot cite
-its own hash from within itself) — the file history shows this section existed, staged and
-committed, prior to the "Dispatch and result" subsection being appended.
+**This declaration is committed as a separate commit BEFORE the dispatch below is run.** Bar
+declaration commit: `5db4b17f` — `git log --oneline` confirms it is the parent of this plan's next
+commit (the one carrying the dispatch record below), and `git show 5db4b17f:.planning/phases/176-stale-chunk-repair/176-PROOF.md`
+shows the "Dispatch and result" subsection below did not exist in that commit's tree.
+
+### Ruling 1's Citation field, quoted verbatim
+
+> Citation interpreted or overridden: p.1, Setup ("Ways to Score" card) and p.1, Game End ("Each
+> player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of
+> 7) to their score."). The rulebook names this card and depends on it for all scoring, but never
+> reproduces its face — see `rulebook/INDEX.md` "Open Rules Gaps".
+
+### Dispatch and result
+
+Real `claude -p` subprocess dispatch (same mechanism as Task 1 — see §1's dispatch-mechanism
+statement; this is NOT native Task/Agent-tool dispatch), against `<scratch>/seven`, carrying the
+`BS-RULING-RECHECK-V1` token, Ruling 1's full body text (Decision/Citation/Rationale, above), and
+the exact `resolveFreshTranscription`-resolved staged slice paths for `seven`'s run
+`2026-07-30T12-00-00Z`:
+
+```
+rulebook/.verify/2026-07-30T12-00-00Z/slices/01-about-and-setup.md
+rulebook/.verify/2026-07-30T12-00-00Z/slices/01-definitions.md
+rulebook/.verify/2026-07-30T12-00-00Z/slices/01-distribution-of-cards.md
+rulebook/.verify/2026-07-30T12-00-00Z/slices/01-game-end-and-match.md
+rulebook/.verify/2026-07-30T12-00-00Z/slices/01-round.md
+rulebook/.verify/2026-07-30T12-00-00Z/slices/02-solo-variant.md
+```
+All 6 are under the `.verify/` staging path — no live `rulebook/*.md` slice was read.
+
+**Returned, verbatim:**
+
+```
+{
+  number: 1,
+  verdict: 'still-needed',
+  reasoning: 'The fresh staged transcription does NOT contain the previously-absent content — the
+  face of the "Ways to Score" card is still not reproduced anywhere in it. The pass-2 slices
+  confirm the same absence the original Citation named: 01-about-and-setup.md names the card in
+  Setup and flags it "Named-but-undefined (p.1): \'Ways to Score\' card"; 01-game-end-and-match.md
+  carries the same Game End sentence the ruling cites and flags "Named-but-undefined (p.1): scoring
+  values for hands (... the per-hand point values live on the \'Ways to Score\' card, which is not
+  reproduced in the rulebook)"; 02-solo-variant.md likewise flags "Named-but-undefined (p.2): the 7
+  scoring hands". So no point value for any hand type appears in the fresh source, and the ruling
+  remains the sole authority for the scoring table. This is a confirmed source absence, not a
+  resolution — absence of evidence in a second transcription pass is not the source now supplying
+  what the ruling had to supply, so resolved-by-source would be wrong and would license deleting
+  the game'"'"'s only scoring authority. Nor does anything in the fresh transcription state something
+  incompatible with the ruling'"'"'s Decision, so contradicted is wrong: every adjacent fresh statement
+  is consistent with it — 01-distribution-of-cards.md derives "Each bonus point card is worth +1
+  point, as printed on its face" (matching the ruling'"'"'s +1-per-bonus-card clause),
+  01-game-end-and-match.md derives that bonus cards score beyond the 7-card hand, and
+  02-solo-variant.md derives "There are exactly 7 distinct scoring hands", matching the ruling'"'"'s
+  7-row table. The ruling stands exactly as it was.'
+}
+```
+
+### Bar assessment: MET
+
+The returned verdict is exactly `still-needed`, as declared. The reasoning independently names
+BOTH required elements: (a) it identifies the specific `Named-but-undefined` flags in the fresh
+transcription that mirror the ruling's own Citation ("the same absence the original Citation
+named"), and (b) it states plainly that "the fresh staged transcription does NOT contain the
+previously-absent content" — the card's face is still not reproduced. It further explains, in its
+own words, WHY the two catastrophic wrong answers are wrong (`resolved-by-source` "would license
+deleting the game's only scoring authority"; `contradicted` is refuted because "every adjacent
+fresh statement is consistent with" the ruling) — matching the bar's own stated failure-mode
+analysis independently, not by echoing this proof's declared text (the subagent never read
+`176-PROOF.md` or `176-CONTEXT.md`; its only inputs were the ruling body and the staged slices, per
+§1's dispatch construction).
+
+**SC-3 bar: MET.**
+
+### Recording
+
+```
+$ recordRulingVerdicts(<scratch>/seven, "2026-07-30T12-00-00Z", <35 records, Ruling 1 included>)
+ledger written: rulebook/.verify/2026-07-30T12-00-00Z/RULING-VERDICTS.md
+$ boardsmith verify-ruling-recheck --project <scratch>/seven --run-id 2026-07-30T12-00-00Z --json
+verdictCounts: {"still-needed":35,"resolved-by-source":0,"contradicted":0,"undetermined":0}
+rows: 35, skipped: 1, pending: 0
+```
+
+`seven`'s Ruling 1 is byte-identical in the original (`~/BoardSmithGames/seven`) before and after
+this dispatch — the dispatch read only the scratch copy's staged slices, never the live game.
+
+### Combined corpus totals, all 62 rulings accounted for (Task 1 + Task 2)
+
+| Game | still-needed | resolved-by-source | contradicted | undetermined | enumerated (dispatched) | skipped | total |
+|---|---|---|---|---|---|---|---|
+| seven | 35 | 0 | 0 | 0 | 35 | 1 | 36 |
+| one-two-punch | 25 | 0 | 0 | 0 | 25 | 1 | 26 |
+| **Combined** | **60** | **0** | **0** | **0** | **60** | **2** | **62** |
+
+62 reconciles exactly against `176-RESEARCH.md`'s direct count (36 + 26). No discrepancy to report.
+
+### Originals re-verification (post entire plan)
+
+```
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd   (unchanged)
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(empty)
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9   (unchanged)
+```
+Whole-tree sha256 manifest diff, both games, before this entire plan vs. after: **empty** — both
+byte-identical.
+
+### npm test (re-run at the very end of this plan)
+
+```
+$ npm test
+ Test Files  240 passed (240)
+      Tests  3886 passed (3886)
+```
+3886/3886 green — unchanged from `176-04`'s baseline; this plan modified no `src/` file.
+
+**Task 2 / SC-3 GATE: PASSED.**
+
+---
+
+## What this plan did NOT prove
+
+1. **Native Task/Agent-tool dispatch for CHECK-01.** Every one of this plan's 60 dispatches used a
+   `claude -p` OS subprocess (§1), for the reason `173-PROOF.md` §§2–5 already gave: this executing
+   session exposes Read/Write/Edit/Bash only. `173-PROOF.md` §6 closed the analogous gap for
+   VERIFY-07's transcription-return contract, in a session that DID have the Agent tool, for a
+   single unit. No equivalent native-dispatch closure was performed here — the deferred item stands,
+   unresolved for CHECK-01, exactly as `176-CONTEXT.md`'s "Deferred" section already anticipated
+   ("this phase dispatches audit lenses, so the same caveat applies to them" — the same applies to
+   ruling-recheck dispatch).
+2. **`resolved-by-source` and `contradicted` verdicts on real data.** This corpus's reused fixture
+   (decision 19) happens not to contain content bearing on any of these 62 rulings in a way that
+   resolves or contradicts them (§2's honest caveat) — so while the mechanism ran to completion and
+   every verdict is individually grounded and reasoned, no case in this run exercises the classifier
+   actually returning `resolved-by-source` or `contradicted`. Only `still-needed` (60/60 dispatched)
+   and the mechanical `skipped` path (2/62) are exercised on real data in this plan.
+3. **CHECK-02's audit-lens re-run and the repair loop** — explicitly out of scope for this plan
+   (owned by `176-06`, per this plan's own frontmatter and `176-CONTEXT.md` decision 15).
 
