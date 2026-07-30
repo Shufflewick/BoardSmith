@@ -585,16 +585,36 @@ skips the gate) — not a documented-but-present flag a caller could reach for.
 
 ### §3d — Human adjudicability check
 
-**STATUS: REACHED, NOT YET ANSWERED.** This plan's Task 3 is a `checkpoint:human-verify` gate
-(`gate="blocking"`, `autonomous: no`). Per this plan's execution protocol, the rendered gate output
-above (§2 step 2's verbatim `verify-impact-gate` human report, and §3a's verbatim CHUNK.md fenced
-body) is presented to the designer for judgment; the designer's answer is recorded here VERBATIM
-once given. **No self-certification is performed by the executing agent for this section** — the
-whole point of VERIFY-04's human gate is that a human, not the tool, judges adjudicability.
+**STATUS: HUMAN-ANSWERED, APPROVED — recorded 2026-07-30.** This plan's Task 3 is a
+`checkpoint:human-verify` gate (`gate="blocking"`, `autonomous: no`). The rendered gate output above
+(§2 step 2's verbatim `verify-impact-gate` human report, §3a's verbatim `Adjudication: UNADJUDICATED`
+CHUNK.md fenced body, and §3b's verbatim appended `### Ruling 27`) was presented to the designer for
+judgment at the checkpoint. **This verdict is the human's own words, relayed verbatim through the
+orchestrating session — it is not a self-assessment by the executing agent, and it is not restated
+as though the tool concluded it.**
 
-This section is deliberately left as `REACHED-AND-PENDING` rather than marked passed. See the
-completion message for the six verification questions the designer is being asked, taken directly
-from this plan's own `<how-to-verify>` text.
+**Designer's verdict: APPROVED — adjudicable as-is.** No caveats, no missing fields named.
+
+Verbatim answers to the six questions this plan's `<how-to-verify>` posed:
+
+1. "Yes — the changed rule, its prior reading, its fresh reading, and the affected chunks are all
+   determinable from the gate output alone, without opening a slice."
+2. "Yes — the affected-chunk list is complete and untruncated."
+3. "Yes — `Adjudication: UNADJUDICATED` reads as an honest unresolved state."
+4. "Yes — the appended `### Ruling 27` reads consistently with the surrounding human-authored
+   entries."
+5. "Nothing missing — no field or context was named as insufficient."
+
+(Question 6 in the plan's original `<how-to-verify>` text — "if anything is insufficient... say
+exactly which field or context is missing" — is folded into answer 5 above: the designer named
+nothing missing.)
+
+**No finding to route.** Per this plan's own instruction ("If the designer names a missing field or
+context, it is recorded as a real finding with a disposition... never absorbed silently"), the
+absence of any named gap means there is nothing to route forward — recorded explicitly as a genuine
+"nothing found" rather than an omission.
+
+**GATE: PASSED (§3d) — by human judgment, not tool self-certification.**
 
 ---
 
@@ -650,8 +670,9 @@ error TS6059: File '.../docs/seed-to-state.test.ts' is not under 'rootDir' ... (
    `contradictory` finding has more than one non-cosmetic line, so this proof did not exercise (and
    cannot exercise, without a synthetic pair) what happens to a SECOND contradictory line's own
    distinct readings within the same pair. Carried forward to Phase 176 explicitly.
-2. **A genuine human designer's own adjudicability verdict** — §3d is REACHED-AND-PENDING, not
-   answered, per this plan's checkpoint protocol.
+2. ~~A genuine human designer's own adjudicability verdict~~ — **now proven**: §3d records the
+   designer's APPROVED verdict, answered 2026-07-30. (Left struck through rather than deleted, so
+   this list's own history — reached-and-pending, then answered — is visible, not silently tidied.)
 3. **True internal Task/Agent-tool dispatch.** Not applicable to this plan (no subagent dispatch is
    performed here — this plan consumes an already-recorded classification, never re-classifies) but
    carried as a standing milestone-wide item per `MEMORY.md`.
