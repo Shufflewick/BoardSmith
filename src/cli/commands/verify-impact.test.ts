@@ -52,6 +52,7 @@ import {
   verifyClassifyRecordCommand,
   type ChunkVerdict,
 } from './verify-classify.js';
+import { verifyRepairStatusCommand } from './verify-repair.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTRADICTORY_FIXTURE_ROOT = join(
@@ -1314,6 +1315,57 @@ describe('line-level-handoff / repair-gate — verifyImpactStatusCommand over a 
     const entry = result.entries.find((e) => e.slug === 'movement')!;
     expect(entry.attributions).toEqual(sourceVerdict.attributions);
     expect(entry.attributions.some((a) => a.attributed && a.rung === 'quoted-fragment')).toBe(true);
+  });
+
+  it('line-level-handoff: ImpactMapEntry.pairIds deep-equals the source ChunkVerdict.pairIds verbatim (176-06-discovered bug fix — the field was previously dropped, making verify-repair.ts\'s resolveStagedSlicePaths throw "entry.pairIds is not iterable" on any real stale entry)', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const classifyStatus = await import('./verify-classify.js').then((m) =>
+      m.verifyClassifyStatusCommand({ project, runId, json: true }),
+    );
+    const result = await verifyImpactStatusCommand({ project, runId, json: true });
+
+    const sourceVerdict = classifyStatus.chunkVerdicts.find((v) => v.slug === 'movement')!;
+    const entry = result.entries.find((e) => e.slug === 'movement')!;
+    expect(Array.isArray(entry.pairIds)).toBe(true);
+    expect(entry.pairIds).toEqual(sourceVerdict.pairIds);
+    expect(entry.pairIds.length).toBeGreaterThan(0);
+  });
+
+  it('quiet:true suppresses ALL of this command\'s own console output, regardless of json (176-06-discovered bug fix — a composing caller\'s own --json stdout was previously contaminated by this command\'s human report)', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await verifyImpactStatusCommand({ project, runId, json: false, quiet: true });
+
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(result.entries.length).toBeGreaterThan(0);
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('end-to-end through verifyRepairStatusCommand: a real stale ImpactMapEntry resolves staged slice paths without throwing (176-06-discovered regression — previously threw "entry.pairIds is not iterable" on every real stale chunk), and --json-style output is clean JSON with no human-report contamination', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const result = await verifyRepairStatusCommand({ project, runId, json: true });
+
+    // The one real stale chunk this fixture produces ("movement") must resolve cleanly, never
+    // throw, and never report scope-limited (its staged slices genuinely exist).
+    const movementRow = result.rows.find((r) => r.slug === 'movement');
+    expect(movementRow).toBeDefined();
+    expect(movementRow!.scopeLimited).toBe(false);
+    expect(movementRow!.slicePaths!.length).toBeGreaterThan(0);
+
+    // json:true must print EXACTLY one JSON object to stdout — no concatenated human report
+    // from any internally-composed command (verifyImpactStatusCommand and everything it in turn
+    // composes) ahead of it.
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const printed = logSpy.mock.calls[0][0] as string;
+    expect(() => JSON.parse(printed)).not.toThrow();
+
+    logSpy.mockRestore();
   });
 
   it('repair-gate: the human report string contains "1 of 2" and the stale slug, uncapped', async () => {

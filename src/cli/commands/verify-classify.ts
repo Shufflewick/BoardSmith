@@ -1479,6 +1479,8 @@ export async function verifyClassifyStatusCommand(
 
   for (const w of warnings) console.error(chalk.yellow(`⚠ ${w}`));
 
+  if (options.quiet) return result;
+
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;

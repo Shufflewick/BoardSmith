@@ -188,7 +188,7 @@ async function fileExists(absPath: string): Promise<boolean> {
  * Otherwise: a grouped, count-first human report (`printHumanReport` below).
  */
 export async function driftCheckCommand(
-  options: { project?: string; json?: boolean } = {},
+  options: { project?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<DriftCheckResult> {
   const projectDir = pathResolve(options.project ?? process.cwd());
 
@@ -349,6 +349,13 @@ export async function driftCheckCommand(
   }
 
   const result: DriftCheckResult = { chunks, findings, counts, head };
+
+  // `quiet` (176-06-discovered bug fix, mirroring ingest-archive.ts's established precedent):
+  // an internal caller composing this command needs its RESULT without either print branch
+  // firing — `json: false` alone still runs the human-report branch below, which is exactly
+  // what silently contaminated `verify-repair --json`'s stdout (found live: the composed
+  // `verifyImpactStatusCommand` call always printed a full human report ahead of the real JSON).
+  if (options.quiet) return result;
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));

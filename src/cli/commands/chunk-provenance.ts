@@ -768,7 +768,7 @@ export interface ChunkProvenanceStatusResult {
  * before/after whole-project byte-hash test (T-171-19).
  */
 export async function chunkProvenanceStatusCommand(
-  options: { project?: string; json?: boolean } = {},
+  options: { project?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<ChunkProvenanceStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
   const chunksDir = join(projectDir, 'chunks');
@@ -854,6 +854,11 @@ export async function chunkProvenanceStatusCommand(
     verifiedWithoutProvenance,
     projectProvenanceState,
   };
+
+  // `quiet` (176-06-discovered bug fix, mirroring ingest-archive.ts's established precedent):
+  // suppresses BOTH print branches for an internal composing caller — `json: false` alone still
+  // runs the human-report branch below.
+  if (options.quiet) return result;
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));

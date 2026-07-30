@@ -343,6 +343,12 @@ export async function verifyRepairStatusCommand(
     project: projectDir,
     runId: options.runId,
     json: false,
+    // quiet: true (176-06-discovered bug fix) — without this, verifyImpactStatusCommand's own
+    // internal composed calls print a full human report to stdout regardless of THIS command's
+    // own --json flag, silently contaminating verify-repair --json's machine-readable output
+    // (found live: JSON.parse(stdout) failed on real concatenated human-report text ahead of
+    // the real JSON object).
+    quiet: true,
   });
   const runId = impactStatus.runId;
   const staleEntries = selectStaleChunks(impactStatus.entries);

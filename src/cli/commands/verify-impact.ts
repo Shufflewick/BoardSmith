@@ -1047,6 +1047,13 @@ export interface ImpactMapEntry {
   driftState: 'clean' | 'drifted' | 'unknown';
   changedFiles: string[];
   missingFiles: string[];
+  /**
+   * Carried forward verbatim from `ChunkVerdict.pairIds` (176-06-discovered bug fix) — this is
+   * `verify-repair.ts`'s `resolveStagedSlicePaths` input, and it must never be re-derived from
+   * `attributions` (decision 9's "Don't Hand-Roll" gate: `ChunkVerdict` already computed this
+   * exact set once; a second derivation here could silently disagree with it).
+   */
+  pairIds: string[];
   attributions: ChunkVerdict['attributions'];
   gate: RepairGate;
   markerState: 'clear' | 'rules-stale' | 'unknown';
@@ -1084,6 +1091,7 @@ function buildImpactMapEntry(
     driftState,
     changedFiles: drift?.changedFiles ?? [],
     missingFiles: drift?.missingFiles ?? [],
+    pairIds: verdict.pairIds,
     attributions: verdict.attributions,
     gate,
     markerState,
@@ -1128,37 +1136,33 @@ function printImpactHumanReport(result: VerifyImpactStatusResult): void {
  * `Status:`), `parseRulesStaleness` (each CHUNK.md's current marker state), and
  * `collectContradictions` (the pending adjudication gate list) — never re-derives any of them.
  *
- * `driftCheckCommand`/`chunkProvenanceStatusCommand` are called with `{ project, json: false }`;
- * both print their own human-readable report as a side effect of that call (neither offers a
- * "return only, print nothing" mode) — this is accepted, not suppressed: this command's own
- * report below is what a human actually reads, and the printed side effect is otherwise inert
- * (read-only, no state carried between calls).
+ * `driftCheckCommand`/`chunkProvenanceStatusCommand`/`verifyClassifyStatusCommand` are all called
+ * with `quiet: true` — none of their own print branches fire (176-06-discovered bug fix: `json:
+ * false` alone still runs each one's human-report branch, which silently contaminated a REAL
+ * composing caller's own `--json` stdout — found live while wiring `verify-repair --json`'s
+ * output into a JSON parser: stdout contained three concatenated human reports ahead of the real
+ * JSON object). This function's own `quiet` option (below) exists for exactly the same reason,
+ * for callers that compose THIS command in turn (`verify-repair.ts`'s `verifyRepairStatusCommand`).
  *
  * Read-only. Never sets `process.exitCode`; throws only for a structural tool failure (unknown
  * run, not a git repo, no `chunks/`) — the same failures the composed commands already throw.
  */
 export async function verifyImpactStatusCommand(
-  options: { project?: string; runId?: string; json?: boolean } = {},
+  options: { project?: string; runId?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<VerifyImpactStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
 
   const classifyStatus = await verifyClassifyStatusCommand({
     project: projectDir,
     runId: options.runId,
-    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
-    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
-    // (verify-classify.ts's convention), independent of whatever this caller's own --json
-    // handling does below. Passing json:true here would print a second, unrelated top-level
-    // JSON object ahead of this command's own result on every invocation (found live while
-    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
-    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
     json: false,
+    quiet: true,
   });
   const runId = classifyStatus.runId;
 
   const [driftResult, provenanceResult] = await Promise.all([
-    driftCheckCommand({ project: projectDir, json: false }),
-    chunkProvenanceStatusCommand({ project: projectDir, json: false }),
+    driftCheckCommand({ project: projectDir, json: false, quiet: true }),
+    chunkProvenanceStatusCommand({ project: projectDir, json: false, quiet: true }),
   ]);
 
   const driftBySlug = new Map(driftResult.chunks.map((c) => [c.chunk, c] as const));
@@ -1221,6 +1225,8 @@ export async function verifyImpactStatusCommand(
     contradictionsPending,
     warnings,
   };
+
+  if (options.quiet) return result;
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));

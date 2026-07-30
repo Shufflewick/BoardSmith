@@ -72,6 +72,14 @@ export interface VerifyRunOptions {
   project?: string;
   /** Emit machine-readable JSON instead of human output. */
   json?: boolean;
+  /**
+   * Suppress ALL of this command's own console output (neither the `--json` print branch nor
+   * the human-report branch fires) — for an internal caller that composes this command's
+   * RETURN VALUE only. `json: false` alone is not enough: it still runs the human-report
+   * branch, which is exactly what silently contaminated a composing caller's own `--json`
+   * stdout (176-06-discovered bug in `verify-impact-status`'s composition of this command).
+   */
+  quiet?: boolean;
 }
 
 /**

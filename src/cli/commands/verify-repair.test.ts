@@ -70,6 +70,7 @@ function fakeEntry(overrides: Partial<ImpactMapEntry> & { slug: string }): Impac
     driftState: overrides.driftState ?? 'clean',
     changedFiles: overrides.changedFiles ?? [],
     missingFiles: overrides.missingFiles ?? [],
+    pairIds: overrides.pairIds ?? [],
     attributions: overrides.attributions ?? [],
     gate: overrides.gate ?? {
       disposition: 'close-without-replaytest',
