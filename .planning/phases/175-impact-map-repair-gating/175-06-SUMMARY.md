@@ -98,3 +98,12 @@ None - no external service configuration required.
 ---
 *Phase: 175-impact-map-repair-gating*
 *Completed: 2026-07-30*
+
+## Self-Check: PASSED
+
+- FOUND: src/cli/slash-command/bs/check-status.md
+- FOUND: src/cli/slash-command/bs/status-tools.test.ts
+- FOUND: .planning/phases/175-impact-map-repair-gating/175-06-SUMMARY.md
+- FOUND commit: 9f4e68eb
+- FOUND commit: b20852fb
+- FOUND commit: 818742c7
