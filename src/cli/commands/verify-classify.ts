@@ -92,8 +92,8 @@ export type RuleDelta = (typeof RULE_DELTA_KINDS)[number];
  */
 export const PRESENTATION_EXCLUSION_MARKERS = Object.freeze([
   '^Visual \\(p\\.\\d+\\):',
-  '^Derived \\(p\\.\\d+\\) — diagram description:',
-  '^Derived \\(p\\.\\d+\\) — art:',
+  '^Derived \\(p\\.\\d+\\) — diagram description(?: \\([^)]+\\))?:',
+  '^Derived \\(p\\.\\d+\\) — art(?: \\([^)]+\\))?:',
 ] as const);
 
 /**

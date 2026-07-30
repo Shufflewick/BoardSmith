@@ -101,8 +101,8 @@ describe('presentation — dual-schema exclusion filter, over REAL archived fixt
       const headerLines = contentLines.filter((l) => /^p\.\d+,.*:$/.test(l));
       const legacyLines = contentLines.filter(
         (l) =>
-          /^Derived \(p\.\d+\) — diagram description:/i.test(l) ||
-          /^Derived \(p\.\d+\) — art:/i.test(l),
+          /^Derived \(p\.\d+\) — diagram description(?: \([^)]+\))?:/i.test(l) ||
+          /^Derived \(p\.\d+\) — art(?: \([^)]+\))?:/i.test(l),
       );
       const expectedCount = contentLines.length - headerLines.length - legacyLines.length;
 
@@ -170,9 +170,75 @@ describe('presentation — dual-schema exclusion filter, over REAL archived fixt
     expect(Object.isFrozen(PRESENTATION_EXCLUSION_MARKERS)).toBe(true);
     expect([...PRESENTATION_EXCLUSION_MARKERS]).toEqual([
       '^Visual \\(p\\.\\d+\\):',
+      '^Derived \\(p\\.\\d+\\) — diagram description(?: \\([^)]+\\))?:',
+      '^Derived \\(p\\.\\d+\\) — art(?: \\([^)]+\\))?:',
+    ]);
+  });
+
+  it('presentation-5: the 4 real one-two-punch lines carrying a parenthetical qualifier are recognized as presentation, read from the fixture not retyped', async () => {
+    const setupText = await readFixture('one-two-punch/live/01-setup-and-round-structure.md');
+    const actionText = await readFixture('one-two-punch/live/02-action-cards-and-resolution.md');
+    const qualifiedLines = [...setupText.split('\n'), ...actionText.split('\n')]
+      .map((l) => l.trim())
+      .filter(
+        (l) =>
+          /^Derived \(p\.\d+\) — (?:diagram description|art) \([^)]+\):/.test(l),
+      );
+    // 177-RESEARCH.md / 177-CONTEXT.md decision 13: exactly 4 real lines carry a parenthetical
+    // qualifier — (Plan phase), (Fight phase), (first Punch example), (second Punch example).
+    expect(qualifiedLines).toHaveLength(4);
+    for (const line of qualifiedLines) {
+      expect(isPresentationLine(line)).toBe(true);
+    }
+  });
+
+  it('presentation-6 (negative, no-over-exclusion): the widened constant newly excludes exactly the 4 real parenthetical-qualified lines and nothing else, across every Derived (p. line in both games\' live fixtures', async () => {
+    const OLD_MARKERS = [
+      '^Visual \\(p\\.\\d+\\):',
       '^Derived \\(p\\.\\d+\\) — diagram description:',
       '^Derived \\(p\\.\\d+\\) — art:',
-    ]);
+    ];
+    const oldIsPresentationLine = (line: string): boolean =>
+      OLD_MARKERS.some((source) => new RegExp(source, 'i').test(line));
+
+    const gameFiles: Record<string, string[]> = {
+      seven: await listFixtureFiles('seven/live'),
+      'one-two-punch': await listFixtureFiles('one-two-punch/live'),
+    };
+
+    const newlyExcluded: string[] = [];
+    let sevenDerivedCount = 0;
+    let sevenDerivedRemainNonPresentation = true;
+
+    for (const [game, files] of Object.entries(gameFiles)) {
+      for (const file of files) {
+        const text = await readFixture(`${game}/live/${file}`);
+        const derivedLines = text
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => /^Derived \(p\.\d+\)/.test(l));
+        for (const line of derivedLines) {
+          if (game === 'seven') {
+            sevenDerivedCount++;
+            if (isPresentationLine(line)) sevenDerivedRemainNonPresentation = false;
+          }
+          const wasExcluded = oldIsPresentationLine(line);
+          const nowExcluded = isPresentationLine(line);
+          if (nowExcluded && !wasExcluded) newlyExcluded.push(line);
+        }
+      }
+    }
+
+    expect(newlyExcluded).toHaveLength(4);
+    for (const line of newlyExcluded) {
+      expect(
+        /^Derived \(p\.\d+\) — (?:diagram description|art) \([^)]+\):/.test(line),
+      ).toBe(true);
+    }
+    // seven has zero dash-qualified lines (177-CONTEXT.md Measured Reality) — all 10 of its
+    // Derived lines remain non-presentation.
+    expect(sevenDerivedCount).toBe(10);
+    expect(sevenDerivedRemainNonPresentation).toBe(true);
   });
 });
 
