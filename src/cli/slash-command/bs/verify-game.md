@@ -8,8 +8,9 @@ description: Re-verify an existing bs-built game's rulebook against its archived
 Cite `state-machine.md` rather than restating its rules — if you are extending this skill, link
 to the relevant section instead of copying rule text. This file is a lean router: it detects
 state, resolves the source, dispatches to `verify/source-resolution.md`,
-`verify/staging-dispatch.md`, `verify/classification-dispatch.md`, `verify/ruling-recheck.md`, and
-`verify/repair-dispatch.md` for their heavyweight prose, and closes the run. It does not explain
+`verify/staging-dispatch.md`, `verify/classification-dispatch.md`, `verify/ruling-recheck.md`,
+`verify/repair-dispatch.md`, `verify/derive-recheck.md`, and `verify/derive-compare.md` for their
+heavyweight prose, and closes the run. It does not explain
 the status enum, the consistency check, or the session lock inline — see
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
 
@@ -68,7 +69,7 @@ vice versa.
 A lock naming the run being resumed (the same `run-id`) is refreshed and continued — the normal
 resume path. Any other live, non-stale lock warns the user instead of silently proceeding. A lock
 older than 24 hours is reported as stale and the user confirms clearing it before this session
-takes it. A clean close (Step 7, below) releases the line to exactly `none`.
+takes it. A clean close (Step 8, below) releases the line to exactly `none`.
 
 ## Step 1: Source Resolution (VERIFY-01)
 
@@ -143,7 +144,25 @@ re-checked post-repair code state — never Step 4's pre-repair snapshot — bec
 an existing chunk's code: a chunk whose code changed during repair re-opens the human playtest
 gate, and a chunk that passes the lenses unchanged closes without re-playtesting.
 
-## Step 7: Close (VERIFY-02)
+## Step 7: Derived-Line Re-Check (CHECK-04)
+
+In short: this check is independent of staleness and repair — it does not consume Step 4's
+staleness verdicts and does not scope to the chunks Step 6 touched. Every `Derived` line surviving
+`isPresentationLine` exclusion is enumerated PROJECT-WIDE, all of them, never scoped to stale
+chunks. Each survivor is dispatched BLIND, carrying
+`${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-recheck.md`'s `BS-DERIVE-V1` handshake and that
+slice's quote lines only — never the original `Derived` line itself; the payload is built by
+`buildBlindDerivePayload` (`verify-derive-recheck.ts`), which is structurally incapable of emitting
+the target line's own text, not composed by this orchestrator reading a slice. A SEPARATE dispatch
+then carries `${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md`'s `BS-DERIVE-COMPARE-V1`
+handshake, the original line, and the blind subagent's already-recorded reading, and returns one of
+the four `DERIVE_VERDICTS`. Both readings are recorded through `recordDeriveVerdicts`'s one atomic
+ledger write, then reported by formatting `boardsmith verify-derive-recheck --json`'s output —
+**formatted, never computed** by this skill, the same discipline Step 8's Close already holds.
+Findings citing BOTH derivations verbatim are reported and exit 0 — a `disagrees` verdict is
+advisory, never a Close gate.
+
+## Step 8: Close (VERIFY-02)
 
 When `verify-run-status` reports every unit recorded and `verify-classify-status` reports every
 pair classified, the pass closes:
@@ -178,6 +197,12 @@ This skill delegates its heavyweight, step-scoped prose to:
   four-verdict set, the absence-of-source trap, and the `BS-RULING-RECHECK-V1` dispatch handshake
 - `${CLAUDE_SKILL_DIR}/../bs-shared/verify/repair-dispatch.md` — CHECK-02's route into
   `build/audit.md`'s three lenses and `build/repair.md`'s bounded loop, reused by reference
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-recheck.md` — CHECK-04's blind-derivation
+  contract: the `BS-DERIVE-V1` dispatch handshake, the never-given list, and the
+  `not-rule-bearing`/`underivable` non-value outcomes
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md` — CHECK-04's comparison contract:
+  the `BS-DERIVE-COMPARE-V1` dispatch handshake, the four-verdict set, and the never-collapse rule
+  for `underivable`/`not-rule-bearing`
 
 And to the shared reference files that ship with every `bs-` skill:
 

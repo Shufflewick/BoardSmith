@@ -86,16 +86,17 @@ describe('verify-game.md — entry point shape (VERIFY-01)', () => {
     expect(skill).not.toContain("never edits a chunk's design");
   });
 
-  it('has exactly eight numbered steps, each tagged with a VERIFY or CHECK requirement ID', () => {
+  it('has exactly nine numbered steps, each tagged with a VERIFY or CHECK requirement ID', () => {
     // Steps 5 and 6 (Ruling Re-Check / Repair Dispatch) were added by Phase 176 — the count moved
-    // from six to eight. Pinning the exact number is intentional here (unlike the disposition
-    // enumeration): a NEW step is a structural addition this test exists to catch, not a
-    // free-floating count that drifts on its own.
+    // from six to eight. Step 7 (Derived-Line Re-Check, CHECK-04) was added by Phase 177 — the
+    // count moved from eight to nine. Pinning the exact number is intentional here (unlike the
+    // disposition enumeration): a NEW step is a structural addition this test exists to catch, not
+    // a free-floating count that drifts on its own.
     const skill = read('verify-game.md');
     const stepHeadings = skill.match(/^## Step \d+:.*$/gm) ?? [];
-    expect(stepHeadings.length).toBe(8);
+    expect(stepHeadings.length).toBe(9);
     for (const heading of stepHeadings) {
-      expect(heading).toMatch(/VERIFY-0[1-8]|CHECK-0[1-2]/);
+      expect(heading).toMatch(/VERIFY-0[1-8]|CHECK-0[1-4]/);
     }
   });
 
@@ -354,11 +355,12 @@ describe('VERIFY-04/05/06 — Step 4 exists and the Phase 175 boundary statement
     );
   });
 
-  it('has a Step 7 naming Close', () => {
+  it('has a Step 8 naming Close', () => {
     // Renumbered from Step 5 by Phase 176's Step 5 (Ruling Re-Check) and Step 6 (Repair Dispatch)
-    // insertions.
+    // insertions, then from Step 7 to Step 8 by Phase 177's Step 7 (Derived-Line Re-Check)
+    // insertion.
     const skill = read('verify-game.md');
-    expect(skill).toMatch(/^## Step 7: Close/m);
+    expect(skill).toMatch(/^## Step 8: Close/m);
   });
 
   it('deletes the now-false Phase 175 no-staleness-marker/no-repair-loop boundary claim', () => {
@@ -704,6 +706,40 @@ describe('derive-recheck.md / derive-compare.md — the two CHECK-04 judgment co
       await installClaudeCommand({ local: true, force: false, skipLink: true });
       expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-recheck.md'))).toBe(true);
     });
+  });
+});
+
+describe('verify-game.md — CHECK-04 routing and Reference Files (177-05)', () => {
+  it('has a Step naming Derived-Line Re-Check, pointing at derive-recheck.md and derive-compare.md', () => {
+    const skill = read('verify-game.md');
+    expect(skill).toMatch(/^## Step \d+: Derived-Line Re-Check \(CHECK-04\)/m);
+    expect(skill).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-recheck.md');
+    expect(skill).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md');
+  });
+
+  it('names both handshake tokens and the verify-derive-recheck report command', () => {
+    const skill = read('verify-game.md');
+    expect(skill).toContain('BS-DERIVE-V1');
+    expect(skill).toContain('BS-DERIVE-COMPARE-V1');
+    expect(skill).toContain('verify-derive-recheck');
+  });
+
+  it('states the check is project-wide and independent of staleness/repair scoping', () => {
+    const skill = flat(read('verify-game.md'));
+    expect(skill).toMatch(/independent of staleness and repair/);
+    expect(skill).toMatch(/enumerated PROJECT-WIDE, all of them, never scoped to stale\s*chunks/);
+  });
+
+  it('states findings never gate Close', () => {
+    const skill = flat(read('verify-game.md'));
+    expect(skill).toMatch(/reported and exit 0.*never a Close gate/);
+  });
+
+  it('lists both new routes in Reference Files, in the existing one-line bullet style', () => {
+    const skill = read('verify-game.md');
+    const refSection = skill.slice(skill.indexOf('## Reference Files'));
+    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-recheck.md');
+    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md');
   });
 });
 
