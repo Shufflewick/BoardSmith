@@ -1,5 +1,9 @@
+import { promises as fs } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { findHeadingIndex } from './build-manifest.js';
+import { VERIFIED_AGAINST_HEADING, VERIFIED_AGAINST_END } from './chunk-provenance.js';
 import { RULE_DELTA_KINDS, type RuleDelta } from './verify-classify.js';
+import { atomicWriteFile } from './verify-run.js';
 
 /**
  * `verify-impact.ts` — Phase 175's impact-map / repair-gating surface: VERIFY-05's
@@ -263,4 +267,159 @@ export function parseRulesStaleness(chunkText: string): ParsedRulesStaleness {
   };
 
   return { state: markerRaw === RULES_STALENESS_CLEAR ? 'clear' : 'rules-stale', record };
+}
+
+// -------------------------------------------------------------------------------------------
+// The CHUNK-first / SKETCH-second marker writer (175-CONTEXT.md decisions 3, 4, 5, 18)
+// -------------------------------------------------------------------------------------------
+
+function findSketchEntryRange(
+  sketchText: string,
+  slug: string,
+): { start: number; end: number } | undefined {
+  const headingIdx = findHeadingIndex(sketchText, `### ${slug}`);
+  if (headingIdx === -1) return undefined;
+
+  const headingLineEnd = sketchText.indexOf('\n', headingIdx);
+  const bodyStart = headingLineEnd === -1 ? sketchText.length : headingLineEnd + 1;
+  const rest = sketchText.slice(bodyStart);
+  const nextMatch = /^### /m.exec(rest);
+  const end = nextMatch ? bodyStart + nextMatch.index : sketchText.length;
+  return { start: headingIdx, end };
+}
+
+/**
+ * `boardsmith verify-impact-apply <slug>`'s core write path — the marker writer.
+ *
+ * `input` deliberately EXCLUDES `marker` (`Omit<RulesStalenessRecord, 'marker'>`): this function
+ * always writes `RULES_STALE_MARKER`, structurally. There is no parameter, flag, or code path by
+ * which it can write `RULES_STALENESS_CLEAR` (175-CONTEXT.md decision 4 — only a successful
+ * Phase 176 repair close clears the marker, and there is no manual clear path).
+ *
+ * Sequence, citing `state-machine.md` "Write Order" / "Authority" rather than restating them:
+ * CHUNK.md is read, its `## Rules Staleness` section located by line (Task 1's parser helpers);
+ * a section present but missing a fence THROWS the fence-refusal error below and touches
+ * nothing; a section entirely absent is inserted immediately after `## Verified Against` (its
+ * documented end-of-file position); persisted with `atomicWriteFile` (`verify-run.ts`) — never a
+ * bare `fs.writeFile`. `Marker:` is the LAST line inside the fenced body (see
+ * `RULES_STALENESS_LABELS`'s doc comment).
+ *
+ * Only AFTER the CHUNK.md write lands does SKETCH.md's derived pointer get written/repaired —
+ * CHUNK.md wins on contradiction and is never repaired to match SKETCH.md (the TMPL-03 rule). A
+ * sketch-level tail entry (no `chunks/<slug>/` directory, so no `### <slug>` detailed entry) has
+ * no CHUNK.md to derive from and is skipped and reported, never written.
+ */
+export async function writeRulesStalenessMarker(
+  projectDir: string,
+  input: Omit<RulesStalenessRecord, 'marker'> & { slug: string },
+): Promise<{ chunkWritten: boolean; sketchWritten: boolean; sketchRepaired: boolean }> {
+  const { slug, ...rest } = input;
+  const record: RulesStalenessRecord = { ...rest, marker: RULES_STALE_MARKER };
+
+  const dir = resolve(projectDir);
+  const chunkPath = join(dir, 'chunks', slug, 'CHUNK.md');
+  const relChunkPath = join('chunks', slug, 'CHUNK.md');
+
+  const chunkText = await fs.readFile(chunkPath, 'utf-8');
+  const headingIdx = findHeadingIndex(chunkText, RULES_STALENESS_HEADING);
+  const newBody = renderRulesStaleness(record);
+
+  let updatedChunk: string;
+  let chunkChanged: boolean;
+
+  if (headingIdx === -1) {
+    // Insert immediately after "## Verified Against" — its documented end-of-file position.
+    const vaHeadingIdx = findHeadingIndex(chunkText, VERIFIED_AGAINST_HEADING);
+    const vaEndIdx =
+      vaHeadingIdx === -1 ? -1 : chunkText.indexOf(VERIFIED_AGAINST_END, vaHeadingIdx);
+    const insertAt = vaEndIdx === -1 ? chunkText.length : vaEndIdx + VERIFIED_AGAINST_END.length;
+    const before = chunkText.slice(0, insertAt);
+    const after = chunkText.slice(insertAt);
+    const separator = before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+    updatedChunk = before + separator + renderRulesStalenessSection(record) + after;
+    chunkChanged = true;
+  } else {
+    const beginIdx = chunkText.indexOf(RULES_STALENESS_BEGIN, headingIdx);
+    const endIdx = chunkText.indexOf(RULES_STALENESS_END, headingIdx);
+    if (beginIdx === -1 || endIdx === -1 || endIdx < beginIdx) {
+      throw new Error(
+        `${relChunkPath}'s "${RULES_STALENESS_HEADING}" section is missing its machine-owned fences.\n` +
+          `Expected ${RULES_STALENESS_BEGIN} ... ${RULES_STALENESS_END}.\n` +
+          `This section is written by \`boardsmith verify-impact-apply\`, never by hand. Restore it\n` +
+          `by deleting the entire "${RULES_STALENESS_HEADING}" section from ${relChunkPath},\n` +
+          `then re-run \`boardsmith verify-impact-apply ${slug}\`.`,
+      );
+    }
+    const previousBody = chunkText.slice(beginIdx + RULES_STALENESS_BEGIN.length, endIdx);
+    chunkChanged = previousBody !== newBody;
+    updatedChunk =
+      chunkText.slice(0, beginIdx + RULES_STALENESS_BEGIN.length) + newBody + chunkText.slice(endIdx);
+  }
+
+  if (chunkChanged) {
+    await atomicWriteFile(chunkPath, updatedChunk);
+  }
+
+  // CHUNK.md first, SKETCH.md second — never the reverse, never SKETCH.md alone
+  // (state-machine.md "Write Order"). Everything above this line must have already landed on
+  // disk before SKETCH.md is even read.
+  const sketchPath = join(dir, 'SKETCH.md');
+  const sketchText = await fs.readFile(sketchPath, 'utf-8');
+
+  const entryRange = findSketchEntryRange(sketchText, slug);
+  if (!entryRange) {
+    console.warn(
+      `${slug} has no detailed SKETCH.md entry (sketch-level tail entry) — rules-staleness ` +
+        `pointer skipped; there is no chunks/${slug}/ directory to derive it from yet.`,
+    );
+    return { chunkWritten: chunkChanged, sketchWritten: false, sketchRepaired: false };
+  }
+
+  const entryText = sketchText.slice(entryRange.start, entryRange.end);
+  const pointerLine = `- Rules Staleness (derived from chunks/${slug}/CHUNK.md): ${record.marker}`;
+  const pointerRegex = new RegExp(
+    `^- Rules Staleness \\(derived from chunks/${escapeRegExp(slug)}/CHUNK\\.md\\):.*$`,
+    'm',
+  );
+  const existingMatch = pointerRegex.exec(entryText);
+
+  let updatedSketch = sketchText;
+  let sketchWritten = false;
+  let sketchRepaired = false;
+
+  if (existingMatch) {
+    if (existingMatch[0] !== pointerLine) {
+      sketchRepaired = true;
+      sketchWritten = true;
+      const matchStart = entryRange.start + existingMatch.index;
+      const matchEnd = matchStart + existingMatch[0].length;
+      updatedSketch = sketchText.slice(0, matchStart) + pointerLine + sketchText.slice(matchEnd);
+    }
+  } else {
+    const statusRegex = new RegExp(
+      `^- Status \\(derived from chunks/${escapeRegExp(slug)}/CHUNK\\.md\\):.*$`,
+      'm',
+    );
+    const statusMatch = statusRegex.exec(entryText);
+    if (!statusMatch) {
+      throw new Error(
+        `SKETCH.md's "### ${slug}" entry has no "- Status (derived from ...)" line to insert the\n` +
+          `rules-staleness pointer after — this entry does not match SKETCH.template.md's shape.`,
+      );
+    }
+    const statusLineEnd = entryRange.start + statusMatch.index + statusMatch[0].length;
+    const hasNewline = sketchText[statusLineEnd] === '\n';
+    updatedSketch =
+      sketchText.slice(0, statusLineEnd) +
+      (hasNewline ? '\n' : '\n') +
+      pointerLine +
+      sketchText.slice(hasNewline ? statusLineEnd + 1 : statusLineEnd);
+    sketchWritten = true;
+  }
+
+  if (sketchWritten) {
+    await atomicWriteFile(sketchPath, updatedSketch);
+  }
+
+  return { chunkWritten: chunkChanged, sketchWritten, sketchRepaired };
 }

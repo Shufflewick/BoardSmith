@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   RULES_STALENESS_HEADING,
   RULES_STALENESS_BEGIN,
@@ -12,8 +16,14 @@ import {
   renderRulesStaleness,
   renderRulesStalenessSection,
   parseRulesStaleness,
+  writeRulesStalenessMarker,
   type RulesStalenessRecord,
 } from './verify-impact.js';
+import {
+  VERIFIED_AGAINST_HEADING,
+  VERIFIED_AGAINST_BEGIN,
+  VERIFIED_AGAINST_END,
+} from './chunk-provenance.js';
 
 /**
  * `verify-impact.test.ts` — Task 1: the rules-staleness marker's constants, renderer, and
@@ -232,5 +242,212 @@ describe('marker — no bare indexOf on the heading (structural guard)', () => {
     const codeLines = source.split('\n').filter((line) => !/^\s*[*/]/.test(line));
     expect(source).toContain('boardsmith:rules-staleness:begin');
     expect(codeLines.join('\n')).not.toContain('VERIFIED_AGAINST_BEGIN');
+  });
+
+  it('never calls fs.writeFile directly (atomicWriteFile is the one write path)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
+    const codeLines = source.split('\n').filter((line) => !/^\s*[*/]/.test(line));
+    expect(codeLines.join('\n')).not.toContain('fs.writeFile(');
+  });
+
+  it("writeRulesStalenessMarker's own body never mentions RULES_STALENESS_CLEAR or the word clear", async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
+    const start = source.indexOf('export async function writeRulesStalenessMarker');
+    expect(start).toBeGreaterThan(-1);
+    const body = source.slice(start);
+    const codeLines = body.split('\n').filter((line) => !/^\s*[*/]/.test(line));
+    expect(codeLines.join('\n').toLowerCase()).not.toContain('clear');
+  });
+});
+
+/**
+ * Task 2 — the CHUNK-first / SKETCH-second marker writer, over REAL temp-directory project
+ * fixtures (real CHUNK.md/SKETCH.md pairs). Test names below carry the tokens `marker` and
+ * `write-order` per `175-VALIDATION.md`'s `-t` selection convention.
+ */
+
+vi.mock('./verify-run.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./verify-run.js')>();
+  return { ...actual, atomicWriteFile: vi.fn(actual.atomicWriteFile) };
+});
+
+const SLUG = 'movement';
+
+function fixtureChunkText(): string {
+  return (
+    `# Chunk: ${SLUG}\n\n` +
+    `Status: verified\n` +
+    `<!-- Valid values (exact, case-sensitive): proposed | approved | built | verified | verified (user-waived) | stale — re-derive before build -->\n\n` +
+    `## Verified Against\n\n` +
+    `${VERIFIED_AGAINST_BEGIN}\n_Not yet recorded._\n${VERIFIED_AGAINST_END}\n`
+  );
+}
+
+function fixtureSketchText(): string {
+  return (
+    `# Sketch: Test Game\n\n` +
+    `Sketch Version: 1\n\n` +
+    `Session Lock: none\n\n` +
+    `## Ordered Chunk List\n\n` +
+    `### ${SLUG}\n` +
+    `- What it builds: test\n` +
+    `- Citations: none\n` +
+    `- ui: none\n` +
+    `- Milestone: none\n` +
+    `- Status (derived from chunks/${SLUG}/CHUNK.md): verified\n` +
+    `- Test script (outcome-based): n/a\n\n` +
+    `## Mandated Chunks\n`
+  );
+}
+
+function fixtureRecord(): Omit<RulesStalenessRecord, 'marker'> & { slug: string } {
+  return {
+    slug: SLUG,
+    runId: 'run-2026-07-30',
+    ruleDelta: 'sharper',
+    attributedSlices: ['rulebook/02-play.md'],
+    adjudication: 'Designer confirmed the new reading applies.',
+  };
+}
+
+describe('marker write-order — writeRulesStalenessMarker', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-'));
+    await fs.mkdir(join(dir, 'chunks', SLUG), { recursive: true });
+    await fs.writeFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), fixtureChunkText());
+    await fs.writeFile(join(dir, 'SKETCH.md'), fixtureSketchText());
+
+    // Reset the mocked atomicWriteFile back to a plain call-through before every test, so a
+    // prior test's mockImplementation override (the simulated SKETCH.md write failure) never
+    // leaks into the next test.
+    const { atomicWriteFile } = await import('./verify-run.js');
+    const actualModule = await vi.importActual<typeof import('./verify-run.js')>('./verify-run.js');
+    vi.mocked(atomicWriteFile).mockImplementation(actualModule.atomicWriteFile);
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it('marker — inserts the section immediately after "## Verified Against" when absent', async () => {
+    await writeRulesStalenessMarker(dir, fixtureRecord());
+    const chunkText = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    expect(chunkText).toContain(RULES_STALENESS_HEADING);
+    const vaIdx = chunkText.indexOf(VERIFIED_AGAINST_HEADING);
+    const rsIdx = chunkText.indexOf(RULES_STALENESS_HEADING);
+    expect(rsIdx).toBeGreaterThan(vaIdx);
+  });
+
+  it('marker — writes the marker as RULES_STALE_MARKER only, never RULES_STALENESS_CLEAR', async () => {
+    await writeRulesStalenessMarker(dir, fixtureRecord());
+    const chunkText = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    const parsed = parseRulesStaleness(chunkText);
+    expect(parsed.state).toBe('rules-stale');
+    expect(parsed.record?.marker).toBe(RULES_STALE_MARKER);
+  });
+
+  it('write-order — the written CHUNK.md fenced body\'s LAST non-empty line starts with Marker:', async () => {
+    await writeRulesStalenessMarker(dir, fixtureRecord());
+    const chunkText = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    const beginIdx = chunkText.indexOf(RULES_STALENESS_BEGIN);
+    const endIdx = chunkText.indexOf(RULES_STALENESS_END);
+    const body = chunkText.slice(beginIdx + RULES_STALENESS_BEGIN.length, endIdx).trim();
+    const lastLine = body.split('\n').filter(Boolean).pop();
+    expect(lastLine?.startsWith('Marker:')).toBe(true);
+  });
+
+  it('write-order — inserts the SKETCH.md derived pointer immediately after the Status line', async () => {
+    await writeRulesStalenessMarker(dir, fixtureRecord());
+    const sketchText = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    const statusIdx = sketchText.indexOf(`- Status (derived from chunks/${SLUG}/CHUNK.md):`);
+    const pointerIdx = sketchText.indexOf(
+      `- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md):`,
+    );
+    expect(pointerIdx).toBeGreaterThan(statusIdx);
+    const nextLine = sketchText.slice(statusIdx).split('\n')[1];
+    expect(nextLine.startsWith('- Rules Staleness (derived from')).toBe(true);
+  });
+
+  it('write-order — CHUNK.md is written BEFORE SKETCH.md; a failed SKETCH.md write still leaves CHUNK.md written', async () => {
+    const { atomicWriteFile } = await import('./verify-run.js');
+    const mocked = vi.mocked(atomicWriteFile);
+    mocked.mockImplementation(async (filePath: string, content: string) => {
+      if (filePath.endsWith('SKETCH.md')) {
+        throw new Error('simulated SKETCH.md write failure');
+      }
+      const actualModule = await vi.importActual<typeof import('./verify-run.js')>('./verify-run.js');
+      await actualModule.atomicWriteFile(filePath, content);
+    });
+
+    await expect(writeRulesStalenessMarker(dir, fixtureRecord())).rejects.toThrow(
+      'simulated SKETCH.md write failure',
+    );
+
+    const chunkText = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    const parsed = parseRulesStaleness(chunkText);
+    expect(parsed.state).toBe('rules-stale');
+  });
+
+  it('marker — SKETCH.md is repaired to match CHUNK.md when its pointer disagrees; CHUNK.md bytes are unchanged', async () => {
+    await writeRulesStalenessMarker(dir, fixtureRecord());
+    const chunkAfterFirst = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+
+    // Seed SKETCH.md's derived pointer with the WRONG value.
+    let sketchText = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    sketchText = sketchText.replace(
+      `- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md): ${RULES_STALE_MARKER}`,
+      `- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md): ${RULES_STALENESS_CLEAR}`,
+    );
+    await fs.writeFile(join(dir, 'SKETCH.md'), sketchText);
+
+    const result = await writeRulesStalenessMarker(dir, fixtureRecord());
+    expect(result.sketchRepaired).toBe(true);
+    expect(result.chunkWritten).toBe(false);
+
+    const chunkAfterSecond = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    expect(chunkAfterSecond).toBe(chunkAfterFirst);
+
+    const repairedSketch = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    expect(repairedSketch).toContain(
+      `- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md): ${RULES_STALE_MARKER}`,
+    );
+  });
+
+  it('marker — a CHUNK.md missing RULES_STALENESS_END rejects, names both sentinels, and leaves the file untouched', async () => {
+    const brokenText =
+      fixtureChunkText() +
+      `\n${RULES_STALENESS_HEADING}\n\n${RULES_STALENESS_BEGIN}\nbroken, no end fence\n`;
+    await fs.writeFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), brokenText);
+    const before = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'));
+    const beforeHash = createHash('sha256').update(before).digest('hex');
+
+    await expect(writeRulesStalenessMarker(dir, fixtureRecord())).rejects.toThrow(
+      /boardsmith:rules-staleness:begin[\s\S]*boardsmith:rules-staleness:end/,
+    );
+
+    const after = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'));
+    const afterHash = createHash('sha256').update(after).digest('hex');
+    expect(afterHash).toBe(beforeHash);
+  });
+
+  it('marker — a sketch-level tail entry (no chunks/<slug>/ directory reflected in SKETCH.md) is skipped, never written', async () => {
+    const tailSketch =
+      `# Sketch: Test Game\n\nSketch Version: 1\n\nSession Lock: none\n\n## Ordered Chunk List\n\n` +
+      `## Mandated Chunks\n`;
+    await fs.writeFile(join(dir, 'SKETCH.md'), tailSketch);
+
+    const result = await writeRulesStalenessMarker(dir, fixtureRecord());
+    expect(result.sketchWritten).toBe(false);
+    expect(result.sketchRepaired).toBe(false);
+
+    const sketchAfter = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    expect(sketchAfter).toBe(tailSketch);
   });
 });
