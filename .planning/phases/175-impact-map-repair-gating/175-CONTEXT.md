@@ -147,6 +147,49 @@ So this is CLI work plus one genuine stop-and-ask, continuing Phases 171-174's s
     (`173-REVIEW.md` CR-01's defect class); a new standalone artifact would need its own durability and
     resume story, both already solved.
 
+### Decisions added 2026-07-30 after research (closing its two open questions)
+
+18. **The marker is its OWN `##` heading in CHUNK.md**, mirroring `## Verified Against`'s precedent
+    exactly, and it participates in the required-heading parse list. Research measured that this is what
+    the templates and existing parsers already make natural; a bare adjacent line would be the only
+    machine-owned state in the file not carried by a heading.
+
+    Research also measured the registration surface decision 5 warned about, and it is LARGER than the
+    parse contract alone: **3 sites enumerate the Status enum** (`state-machine.md`, plus inline comments
+    in both `CHUNK.template.md` and `SKETCH.template.md`) and **2 test sites pin them**
+    (`templates.test.ts`, `build-chunk.test.ts`). The orthogonal-marker decision (decision 1) is what
+    keeps this cheap: because rules-staleness is NOT an enum value, **none of those 5 sites should
+    change.** If a plan finds itself editing the Status enum or its pinning tests, decision 1 has been
+    violated somewhere upstream — treat that as the signal, not as expected work.
+
+19. **`/bs-check-status` gains a rules-staleness item in THIS phase.** Phase 174 explicitly carried this
+    forward with the words "revisit there, not here" (174-CONTEXT deferred section), and deferring it a
+    second time would make that note a permanent excuse. It is the natural reporting home for decision
+    15's stale-fraction line, and it is the surface a designer actually reads.
+
+### Research findings that constrain the plan (measured, not assumed)
+
+- **`RULINGS.md` is 100% human/skill-authored today — zero code writes it**, confirmed by grep; only
+  `trace-check.ts` READS it. Decision 7's append is therefore the FIRST machine write into a
+  human-authored corpus. Reuse the existing informal 3-field shape (Decision / Citation / Rationale) and
+  do not invent structured supersession syntax: only ~3 of 62 real rulings across both games use a
+  supersede verb at all, and one of those is direction-reversed.
+- **`## Verified Against` today has NO timestamp and NO "no code change" signal.** Decision 11's
+  re-verification stamp needs a genuinely new label in `VERIFIED_AGAINST_LABELS` — and specifically NOT
+  a reuse of `SCOPE_REASONS`, which encodes a different concept (why a verification was scope-limited,
+  not whether code moved).
+- **`verify-game.md`'s Step 3 currently asserts it "flips no staleness marker anywhere and opens no
+  repair loop (that is Phase 175's job)".** This phase makes that false and must rewrite it IN PLACE —
+  the identical class of fix Phase 174 (174-05) had to make to Phase 173's boundary statements. Phase
+  170 proved self-contradicting skill text gets half-followed on a live run.
+- **The real `contradictory` proof material was RESCUED at this gate**, not left in scratch: it lived
+  only in `${TMPDIR}174-07-proof/` (323MB, uncommitted, clearable at any moment) and is now committed at
+  `175-FIXTURES/174-07-contradictory/` — raw dispatch prompts, raw subagent returns with
+  `lineFindings[]`, the final status JSON, both run ledgers, and the pass-2 staged slices, with per-file
+  sha256s in its `MANIFEST.md`. **VERIFY-04's gate can therefore be proven against a real
+  `contradictory` verdict without re-mutating a PDF.** The mutated PDF itself is not archived; its
+  sha256 is recorded for traceability and `174-PROOF.md` §5 documents how to regenerate it.
+
 ### Claude's Discretion
 
 - The marker's exact string, provided it is unmistakably distinct from `stale — re-derive before build`,
