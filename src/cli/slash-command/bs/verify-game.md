@@ -14,10 +14,11 @@ lock inline — see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all 
 
 **This skill does NOT rebuild the project.** It reads the archived rulebook, stages a fresh
 re-transcription into a run-scoped, non-live directory, records each completed unit through the
-ledger CLI, and classifies each staged/live pair's rule delta. It never runs a build, never edits
-a chunk, and never writes a staged slice over a live one — comparison happens in Step 3, below, and
-even there the verdict is only ever recorded, with no staged slice ever taking a live one's place.
-There is no flag or path anywhere in this skill that writes staged output into a live location.
+ledger CLI, classifies each staged/live pair's rule delta, and — since a `contradictory` verdict
+demands it — adjudicates and marks affected chunks rules-stale. It never runs a build and never
+edits a chunk's design. Comparison happens in Step 3, below; no staged slice ever takes a live
+one's place, at that step or any other. There is no flag or path anywhere in this skill that writes
+staged output into a live location.
 
 ## Invocation
 
@@ -42,7 +43,7 @@ strings exist only inside a written slice, staged or live, and this orchestrator
 
 On entry, before any other work, run the consistency check described in
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` ("Consistency Check") — cite it, do not
-restate its four items.
+restate its items.
 
 **If this is not a bs-built project** — no `SKETCH.md`, no `rulebook/` — STOP and say so, naming
 what was missing. Do not offer to build one; that is `/bs-ingest-rules`'s job, not this skill's.
@@ -61,7 +62,7 @@ vice versa.
 A lock naming the run being resumed (the same `run-id`) is refreshed and continued — the normal
 resume path. Any other live, non-stale lock warns the user instead of silently proceeding. A lock
 older than 24 hours is reported as stale and the user confirms clearing it before this session
-takes it. A clean close (Step 4) releases the line to exactly `none`.
+takes it. A clean close (Step 5) releases the line to exactly `none`.
 
 ## Step 1: Source Resolution (VERIFY-01)
 
@@ -90,10 +91,25 @@ short: a `verify-classify-pairs` call groups live and staged slices by page-span
 `verify-classify-status` call decides exactly which pairs still need classifying, each pending pair
 is dispatched to the shared classification-subagent contract (the one place either slice is
 legitimately read), and each returned verdict is recorded via `verify-classify-record` — never by
-the orchestrator opening a slice itself. This step records verdicts only: it flips no staleness
-marker anywhere and opens no repair loop (that is Phase 175's job).
+the orchestrator opening a slice itself. This step records verdicts only; acting on them — the
+adjudication gate and the rules-staleness write — is Step 4's job, below.
 
-## Step 4: Close (VERIFY-02)
+## Step 4: Adjudication Gate and Impact Map (VERIFY-04, VERIFY-05, VERIFY-06)
+
+Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/adjudication-gate.md` for the full
+stop-and-ask presentation, the RULINGS.md/UNADJUDICATED write, the rules-staleness marker write,
+and the impact-map report. In short: classification of all pairs completes first (Step 3, above),
+then every `contradictory` verdict is presented at once and the pass STOPS until the designer
+answers — there is no flag, option, or unattended-mode carve-out that skips this. A resolution
+appends a `RULINGS.md` entry, or is recorded `UNADJUDICATED` if deferred or aborted; either way,
+the rules-staleness marker is then written into each affected chunk's CHUNK.md and SKETCH.md and
+the impact map is appended to the run's ledger. Finally the stale fraction and each chunk's
+repair-gate disposition (`reopen-playtest`, `close-without-replaytest`, or `unknown-drift`) are
+reported. Cite `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` sections by name; restate
+nothing. Performing the repair itself is Phase 176's job — this step decides only which chunks
+need it.
+
+## Step 5: Close (VERIFY-02)
 
 When `verify-run-status` reports every unit recorded and `verify-classify-status` reports every
 pair classified, the pass closes:
@@ -122,6 +138,8 @@ This skill delegates its heavyweight, step-scoped prose to:
   ledger-driven resume, per-pair subagent dispatch, verdict recording
 - `${CLAUDE_SKILL_DIR}/../bs-shared/verify/classification-subagent.md` — the one judgment
   contract: the rule-delta decision procedure and the structured RETURN shape
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/adjudication-gate.md` — the hard adjudication gate,
+  the rules-staleness write, and the impact-map sequence
 
 And to the shared reference files that ship with every `bs-` skill:
 
