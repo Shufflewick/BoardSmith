@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 175-08-PLAN.md — the phase's final plan: VERIFY-05's REAL cross-file staleness write on both live reference games (seven 6/16, one-two-punch 6/11 marked, exactly matching 174-PROOF.md §8's predicted stale sets with zero symmetric difference), the VERIFY-06 payoff MEASURED on the real stale sets, decision 13's waived path proven LIVE, and the phase closeout. A real live bug was found and fixed under deviation Rule 1: writeRulesStalenessMarker's SKETCH.md pointer-insertion fused the new line onto the very next real bullet with no newline between them whenever no blank line separated the Status line from what followed (the real, more common shape) — fixed by never slicing past the Status line's own trailing newline; new regression test added; npm test 3826/3826 green. VERIFY-06's honest verdict: the payoff is NOT demonstrated on real data — 1 of 12 real rules-stale chunks across both games closes without re-playtesting; 11 of 12 re-open the gate because most stale chunks' code genuinely drifted for reasons unrelated to the rules finding (not because drift-check returned unknown, the originally-anticipated failure mode — unknown-drift is 0 in both games' real dispositions). Decision 13's verified(user-waived)+stale+code-changed path occurs naturally (LIVE, not constructed) on 8 real chunks across both games. Both ~/BoardSmithGames originals confirmed byte-identical throughout (whole-tree sha256 diff empty). VERIFY-04, VERIFY-05, and VERIFY-06 are now all CLOSED in REQUIREMENTS.md with 175-PROOF.md section-and-number citations; Phase 175 is marked complete in ROADMAP.md. Phase 175 (Impact Map & Repair Gating) is now fully complete, 8/8 plans. See .planning/phases/175-impact-map-repair-gating/175-08-SUMMARY.md."
-last_updated: "2026-07-30T16:30:00Z"
+stopped_at: "Completed 176-01-PLAN.md — CHECK-01's mechanics: ParsedRuling.body added to the single existing parseRulings parser (populated from the already-computed body local, zero new regex, grep-gated); RULING_VERDICTS frozen four-value enum (still-needed/resolved-by-source/contradicted/undetermined) with pinning test; enumerateRulingsForRecheck's supersession skip/report split (both directions, proven against seven's real direction-reversed Ruling 3 marker; unparseable chains reported, never assumed, and still enumerate); resolveFreshTranscription reports scope-limited (no throw, no live rulebook/ slice fallback) for a missing run, malformed --run-id, or empty staged slices; createRulingVerdictRecord validates the enum + non-empty reasoning; verifyRulingRecheckCommand reports uncapped rows + verdictCounts and is read-only against RULINGS.md (sha256-pinned); recordRulingVerdicts persists through atomicWriteFile only (source-guarded against hand-rolled fs.writeFile). A source assertion proves no absence-phrase list exists anywhere in the module. npm test 3851/3851 green (baseline 3826 + 25 new tests), zero regressions. CHECK-01 intentionally NOT marked complete in REQUIREMENTS.md — ROADMAP.md's own plan breakdown assigns CHECK-01 to three plans (176-01 mechanics, 176-03 skill text, 176-04 live proof/routing); this is 176-01 only. See .planning/phases/176-stale-chunk-repair/176-01-SUMMARY.md."
+last_updated: "2026-07-30T17:10:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
   completed_phases: 6
-  total_plans: 41
-  completed_plans: 41
+  total_plans: 47
+  completed_plans: 42
   percent: 60
 ---
 
@@ -21,16 +21,52 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 176 — stale-chunk-repair (next)
+**Current focus:** Phase 176 — stale-chunk-repair (in progress, 1/6 plans)
 
 ## Current Position
 
-Phase: 175 (Impact Map & Repair Gating) — COMPLETE, all 8 plans executed, all 3 requirements
+Phase: 176 (Stale-Chunk Repair) — IN PROGRESS, 1/6 plans executed.
+Next: 176-02-PLAN.md — CHECK-02 mechanics: stale-chunk → fresh staged slice resolution,
+verify-episode round bookkeeping (decision 17), POST-repair `computeRepairGate` re-derivation.
+
+`176-01-PLAN.md` (2026-07-30) built CHECK-01's mechanical half (176-CONTEXT.md decision 2 — CLI
+enumerates and records, a subagent judges). `parseRulings` (`build-manifest.ts`) was widened
+ADDITIVELY with a `body: string` field per `ParsedRuling`, populated from the `body` local the
+function already computes internally for its supersession scan — zero new regex, zero second
+scan pass, and a grep-gate test proves exactly one `### Ruling (\d+)` heading regex declaration
+exists under `src/cli/` (comments stripped before counting, so this very doc comment and
+`verify-impact.ts`'s prose mention don't false-positive). New module
+`src/cli/commands/verify-ruling-recheck.ts`: `RULING_VERDICTS` — the frozen four-value enum
+`still-needed`/`resolved-by-source`/`contradicted`/`undetermined` (decision 1's first-class
+`undetermined`, never collapsed) — with a pinning test; `enumerateRulingsForRecheck` skips a
+superseded ruling in BOTH directions (proven against `seven`'s real
+`⚠ RATIONALE SUPERSEDED BY RULING 9` marker sitting on Ruling 3's OWN entry) and reports — never
+assumes — an unparseable supersede sentence, which still enumerates for re-check (decision 3);
+`resolveFreshTranscription` reports `scopeLimited: true` (never throws, never falls back to a live
+`rulebook/` slice) for a missing staged run, a malformed `--run-id`, or an empty staged-slices
+directory — every path it can return is rooted at `stagingSlicesDir`'s dot-prefixed
+`rulebook/.verify/` tree, structurally unable to collide with a bare live slice path (decisions 9,
+10); `createRulingVerdictRecord` validates a subagent's returned verdict against the enum and
+requires non-empty `reasoning` (decision 4 — the reasoning is the artifact, not just the label);
+`verifyRulingRecheckCommand` reports one uncapped row per ruling plus a computed `verdictCounts`
+map, proven read-only against `RULINGS.md` via a whole-directory sha256-equality test, and throws
+a single actionable `--project`-naming line (no stack/`.ts:`/`src/` leak) when `RULINGS.md` is
+missing; `recordRulingVerdicts` persists through `atomicWriteFile` only — a source-guard test
+proves no hand-rolled `fs.writeFile`/`writeFileSync` exists in the module. A dedicated source
+assertion proves the module contains NO absence-detection keyword list anywhere (176-RESEARCH.md
+Pitfall 4) — recognizing `seven`'s Ruling 1 (a source-absence citation) as `still-needed` stays
+entirely a subagent judgment call. `npm test`: 3851/3851 green (baseline 3826 + 25 new tests,
+zero regressions); `npx tsc --noEmit`: only the pre-existing permitted `docs/seed-to-state.test.ts`
+rootDir error. **CHECK-01 intentionally left OPEN in `REQUIREMENTS.md`** — `ROADMAP.md`'s own plan
+breakdown assigns CHECK-01 to three plans (176-01 mechanics, 176-03 skill text, 176-04 live
+proof/routing); marking it complete now would misrepresent a mechanics-only plan as a finished
+requirement. See `.planning/phases/176-stale-chunk-repair/176-01-SUMMARY.md`.
+
+---
+
+Phase 175 (Impact Map & Repair Gating) is COMPLETE, all 8 plans executed, all 3 requirements
 (VERIFY-04, VERIFY-05, VERIFY-06) CLOSED in `REQUIREMENTS.md` with `175-PROOF.md` section-and-number
 citations.
-Next: Phase 176 (Stale-Chunk Repair), per `ROADMAP.md` — ruling re-validation (CHECK-01) and the
-three audit lenses (CHECK-02) re-run per stale chunk, consuming this phase's impact map and
-line-level attributions.
 
 `175-06-PLAN.md` (2026-07-30) added `/bs-check-status` item 9 — "Rules staleness and the repair
 gate" — formatting `boardsmith verify-impact-status --json` (format-never-compute, mirroring item
