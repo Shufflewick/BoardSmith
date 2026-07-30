@@ -69,17 +69,28 @@ describe('verify-game.md — entry point shape (VERIFY-01)', () => {
     expect(skill).toContain('/bs-verify-game');
   });
 
-  it('states plainly that it does not rebuild the project', () => {
+  it('states plainly it never scaffolds a new chunk the BUILD pipeline\'s way, but repair MAY change an existing chunk\'s code (176-04)', () => {
+    // Phase 176 made the old "It never runs a build and never edits a chunk's design" claim
+    // false: repair (Step 6) MAY change an existing chunk's already-built code. Pin the narrowed,
+    // still-true claim instead, and pin the absence of the retired absolute claim.
     const skill = flat(read('verify-game.md'));
-    expect(skill).toMatch(/does NOT rebuild the project/);
+    expect(skill).toMatch(
+      /does NOT run the BUILD pipeline's `investigate`\/`redteam`\/`ask`\/`build` steps to scaffold a new chunk/,
+    );
+    expect(skill).toMatch(/Repair \(Step 6, below\) MAY change an EXISTING stale chunk's already-built code/);
+    expect(skill).not.toContain("never edits a chunk's design");
   });
 
-  it('has exactly six numbered steps, each tagged with a VERIFY requirement ID', () => {
+  it('has exactly eight numbered steps, each tagged with a VERIFY or CHECK requirement ID', () => {
+    // Steps 5 and 6 (Ruling Re-Check / Repair Dispatch) were added by Phase 176 — the count moved
+    // from six to eight. Pinning the exact number is intentional here (unlike the disposition
+    // enumeration): a NEW step is a structural addition this test exists to catch, not a
+    // free-floating count that drifts on its own.
     const skill = read('verify-game.md');
     const stepHeadings = skill.match(/^## Step \d+:.*$/gm) ?? [];
-    expect(stepHeadings.length).toBe(6);
+    expect(stepHeadings.length).toBe(8);
     for (const heading of stepHeadings) {
-      expect(heading).toMatch(/VERIFY-0[1-8]/);
+      expect(heading).toMatch(/VERIFY-0[1-8]|CHECK-0[1-2]/);
     }
   });
 
@@ -338,9 +349,11 @@ describe('VERIFY-04/05/06 — Step 4 exists and the Phase 175 boundary statement
     );
   });
 
-  it('has a Step 5 naming Close', () => {
+  it('has a Step 7 naming Close', () => {
+    // Renumbered from Step 5 by Phase 176's Step 5 (Ruling Re-Check) and Step 6 (Repair Dispatch)
+    // insertions.
     const skill = read('verify-game.md');
-    expect(skill).toMatch(/^## Step 5: Close/m);
+    expect(skill).toMatch(/^## Step 7: Close/m);
   });
 
   it('deletes the now-false Phase 175 no-staleness-marker/no-repair-loop boundary claim', () => {

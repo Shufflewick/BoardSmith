@@ -8,15 +8,21 @@ description: Re-verify an existing bs-built game's rulebook against its archived
 Cite `state-machine.md` rather than restating its rules — if you are extending this skill, link
 to the relevant section instead of copying rule text. This file is a lean router: it detects
 state, resolves the source, dispatches to `verify/source-resolution.md`,
-`verify/staging-dispatch.md`, and `verify/classification-dispatch.md` for their heavyweight prose,
-and closes the run. It does not explain the status enum, the consistency check, or the session
-lock inline — see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
+`verify/staging-dispatch.md`, `verify/classification-dispatch.md`, `verify/ruling-recheck.md`, and
+`verify/repair-dispatch.md` for their heavyweight prose, and closes the run. It does not explain
+the status enum, the consistency check, or the session lock inline — see
+`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
 
-**This skill does NOT rebuild the project.** It reads the archived rulebook, stages a fresh
-re-transcription into a run-scoped, non-live directory, records each completed unit through the
-ledger CLI, classifies each staged/live pair's rule delta, and — since a `contradictory` verdict
-demands it — adjudicates and marks affected chunks rules-stale. It never runs a build and never
-edits a chunk's design. Comparison happens in Step 3, below; no staged slice ever takes a live
+**This skill does NOT run the BUILD pipeline's `investigate`/`redteam`/`ask`/`build` steps to
+scaffold a new chunk** — that remains `/bs-build-chunk`'s job, not this skill's. It reads the
+archived rulebook, stages a fresh re-transcription into a run-scoped, non-live directory, records
+each completed unit through the ledger CLI, classifies each staged/live pair's rule delta, and —
+since a `contradictory` verdict demands it — adjudicates and marks affected chunks rules-stale.
+Repair (Step 6, below) MAY change an EXISTING stale chunk's already-built code — that is decision
+12's explicit seam into the impact map's VERIFY-06 gate — but nothing in this skill ever builds a
+brand-new chunk from scratch.
+
+Comparison happens in Step 3, below; no staged slice ever takes a live
 one's place, at that step or any other. There is no flag or path anywhere in this skill that writes
 staged output into a live location.
 
@@ -62,7 +68,7 @@ vice versa.
 A lock naming the run being resumed (the same `run-id`) is refreshed and continued — the normal
 resume path. Any other live, non-stale lock warns the user instead of silently proceeding. A lock
 older than 24 hours is reported as stale and the user confirms clearing it before this session
-takes it. A clean close (Step 5) releases the line to exactly `none`.
+takes it. A clean close (Step 7, below) releases the line to exactly `none`.
 
 ## Step 1: Source Resolution (VERIFY-01)
 
@@ -104,12 +110,40 @@ answers — there is no flag, option, or unattended-mode carve-out that skips th
 appends a `RULINGS.md` entry, or is recorded `UNADJUDICATED` if deferred or aborted; either way,
 the rules-staleness marker is then written into each affected chunk's CHUNK.md and SKETCH.md and
 the impact map is appended to the run's ledger. Finally the stale fraction and each chunk's
-repair-gate disposition (`reopen-playtest`, `close-without-replaytest`, or `unknown-drift`) are
-reported. Cite `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` sections by name; restate
-nothing. Performing the repair itself is Phase 176's job — this step decides only which chunks
-need it.
+repair-gate disposition are reported — cite `verify-impact.ts`'s `REPAIR_GATE_DISPOSITIONS` for
+the full enumerated set rather than restating its members here, since a restated list goes stale
+the moment that array gains or loses a value. Cite `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
+sections by name; restate nothing. This step still only decides WHICH chunks need repair; Step 6,
+below, dispatches `verify/repair-dispatch.md` to actually perform it.
 
-## Step 5: Close (VERIFY-02)
+## Step 5: Ruling Re-Check (CHECK-01)
+
+Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/ruling-recheck.md` for the full judgment
+contract. In short: every `RULINGS.md` entry without a resolved `supersededBy` (parsed once, via
+`parseRulings` — the one ruling parser in this repo, never a second regex path) is dispatched, in
+turn, to a fresh-context subagent carrying the `BS-RULING-RECHECK-V1` handshake token, together
+with that ruling's own full body text (Decision/Citation/Rationale) and the fresh STAGED
+transcription only — never the live `rulebook/` slices. Each subagent returns exactly one of
+`still-needed`, `resolved-by-source`, `contradicted`, or `undetermined`, with mandatory reasoning,
+recorded via `boardsmith verify-ruling-recheck`. This orchestrator never reads a ruling body or a
+slice itself; it dispatches, then records exactly what comes back.
+
+## Step 6: Repair Dispatch (CHECK-02)
+
+Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/repair-dispatch.md` for the full route into
+the existing build-pipeline audit/repair loop. In short: only chunks Step 4's impact map marks
+`stale === true` are dispatched — never every chunk, and never a chunk this skill re-derives
+staleness for on its own. For each, `boardsmith verify-repair`'s helpers resolve the chunk's fresh
+STAGED slice paths and route it through `build/audit.md`'s three lenses (plus the 4th
+design-review lens for `ui: touches|major` chunks) and `build/repair.md`'s bounded loop — reused
+by reference, never forked. Each verify pass opens a fresh 3-round budget per chunk, appended
+after that chunk's existing rounds, never renumbering history. Once every finding across the
+episode's rounds has a disposition, the repair-gate disposition is re-derived from the freshly
+re-checked post-repair code state — never Step 4's pre-repair snapshot — because repair MAY change
+an existing chunk's code: a chunk whose code changed during repair re-opens the human playtest
+gate, and a chunk that passes the lenses unchanged closes without re-playtesting.
+
+## Step 7: Close (VERIFY-02)
 
 When `verify-run-status` reports every unit recorded and `verify-classify-status` reports every
 pair classified, the pass closes:
@@ -140,6 +174,10 @@ This skill delegates its heavyweight, step-scoped prose to:
   contract: the rule-delta decision procedure and the structured RETURN shape
 - `${CLAUDE_SKILL_DIR}/../bs-shared/verify/adjudication-gate.md` — the hard adjudication gate,
   the rules-staleness write, and the impact-map sequence
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/ruling-recheck.md` — CHECK-01's judgment contract: the
+  four-verdict set, the absence-of-source trap, and the `BS-RULING-RECHECK-V1` dispatch handshake
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/repair-dispatch.md` — CHECK-02's route into
+  `build/audit.md`'s three lenses and `build/repair.md`'s bounded loop, reused by reference
 
 And to the shared reference files that ship with every `bs-` skill:
 
