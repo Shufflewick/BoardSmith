@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
+  PROVENANCE_KINDS,
   RULE_DELTA_KINDS,
   PRESENTATION_EXCLUSION_MARKERS,
   PAIR_KINDS,
@@ -14,8 +15,17 @@ import {
   livePageSpan,
   parseRangeId,
   pairSlices,
+  resolveProvenance,
   type RuleDelta,
 } from './verify-classify.js';
+import { renderIndex } from './ingest-archive.js';
+import {
+  VERIFIED_AGAINST_HEADING,
+  VERIFIED_AGAINST_BEGIN,
+  VERIFIED_AGAINST_END,
+  renderVerifiedAgainst,
+  SCOPE_FULL,
+} from './chunk-provenance.js';
 
 /**
  * `verify-classify.ts` is the mechanical core of VERIFY-03. Every fixture here is either a real
@@ -327,5 +337,130 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
   it('PAIR_KINDS is the frozen three-member enum', () => {
     expect(Object.isFrozen(PAIR_KINDS)).toBe(true);
     expect([...PAIR_KINDS]).toEqual(['paired', 'presentation-only', 'unpaired-slice']);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// provenance (Task 3)
+// -------------------------------------------------------------------------------------------
+
+/** A fixture project with an archived source, INDEX.md, and one real live slice, in a temp dir. */
+async function provenanceProject(): Promise<{ project: string; liveSliceRel: string; sourceHash: string }> {
+  const project = join(dir, 'game');
+  const rulebookDir = join(project, 'rulebook');
+  const sourceDir = join(rulebookDir, 'source');
+  await fs.mkdir(sourceDir, { recursive: true });
+
+  const sourceBytes = Buffer.from('a fake but stable archived rulebook source\n');
+  const sourceHash = sha256(sourceBytes);
+  await fs.writeFile(join(sourceDir, 'rules.pdf'), sourceBytes);
+
+  await fs.writeFile(
+    join(rulebookDir, 'INDEX.md'),
+    renderIndex({
+      gameName: 'game',
+      edition: undefined,
+      archivedPath: 'rulebook/source/rules.pdf',
+      sourceHash,
+      transcribed: '2026-07-29',
+    }),
+  );
+
+  const liveSliceName = '01-setup-and-round-structure.md';
+  const liveText = await readFixture(`one-two-punch/live/${liveSliceName}`);
+  await fs.writeFile(join(rulebookDir, liveSliceName), liveText);
+
+  return { project, liveSliceRel: `rulebook/${liveSliceName}`, sourceHash };
+}
+
+/** Writes `chunks/<slug>/CHUNK.md` citing `citedSlice` and recording `recordedSourceHash` (or none). */
+async function writeCitingChunk(
+  project: string,
+  slug: string,
+  citedSlice: string,
+  recordedSourceHash: string | undefined,
+): Promise<void> {
+  const chunkDir = join(project, 'chunks', slug);
+  await fs.mkdir(chunkDir, { recursive: true });
+  const body = renderVerifiedAgainst({
+    scope: SCOPE_FULL,
+    edition: 'none recorded',
+    sourceHash: recordedSourceHash,
+    boardsmithVersion: '9.9.9',
+    skillsTreeHash: 'deadbeef',
+    citedSlices: [],
+    unresolved: [],
+  });
+  const chunkText =
+    `# ${slug}\n\nCites ${citedSlice}.\n\n` +
+    `${VERIFIED_AGAINST_HEADING}\n\n${VERIFIED_AGAINST_BEGIN}${body}${VERIFIED_AGAINST_END}\n`;
+  await fs.writeFile(join(chunkDir, 'CHUNK.md'), chunkText);
+}
+
+
+describe('provenance — three states, hash-only, never the subagent\'s opinion', () => {
+  it('provenance-1: a chunk recording the CURRENT hash resolves to source-unchanged', async () => {
+    const { project, liveSliceRel, sourceHash } = await provenanceProject();
+    await writeCitingChunk(project, 'setup', liveSliceRel, sourceHash);
+
+    const result = await resolveProvenance(project, [liveSliceRel]);
+    expect(result.provenance).toBe('source-unchanged');
+    expect(result.recordedHashes).toEqual([sourceHash]);
+  });
+
+  it('provenance-2: a chunk recording a DIFFERING hash resolves to source-changed', async () => {
+    const { project, liveSliceRel } = await provenanceProject();
+    await writeCitingChunk(project, 'setup', liveSliceRel, 'deadbeefdeadbeef');
+
+    const result = await resolveProvenance(project, [liveSliceRel]);
+    expect(result.provenance).toBe('source-changed');
+    expect(result.recordedHashes).toEqual(['deadbeefdeadbeef']);
+  });
+
+  it('provenance-3: no citing chunk records a source hash — resolves to unknown, never source-unchanged by default', async () => {
+    const { project, liveSliceRel } = await provenanceProject();
+    // A chunk exists but cites nothing and records no hash — the actual current state of both
+    // reference games (174-RESEARCH.md: neither has a recorded Source hash: line anywhere).
+    await writeCitingChunk(project, 'unrelated', 'rulebook/some-other-slice.md', undefined);
+
+    const result = await resolveProvenance(project, [liveSliceRel]);
+    expect(result.provenance).toBe('unknown');
+    expect(result.recordedHashes).toEqual([]);
+  });
+
+  it('provenance-4: two citing chunks recording different hashes, at least one differing from current, resolves to source-changed and names every recorded hash', async () => {
+    const { project, liveSliceRel, sourceHash } = await provenanceProject();
+    await writeCitingChunk(project, 'setup-a', liveSliceRel, sourceHash);
+    await writeCitingChunk(project, 'setup-b', liveSliceRel, 'stalehash0000000');
+
+    const result = await resolveProvenance(project, [liveSliceRel]);
+    expect(result.provenance).toBe('source-changed');
+    expect(result.recordedHashes.sort()).toEqual([sourceHash, 'stalehash0000000'].sort());
+  });
+
+  it('provenance-5: a project with no archived source at all resolves to unknown with a reason, and does not throw', async () => {
+    const project = join(dir, 'bare');
+    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    // No INDEX.md at all.
+    const result = await resolveProvenance(project, ['rulebook/whatever.md']);
+    expect(result.provenance).toBe('unknown');
+    expect(result.reason.length).toBeGreaterThan(0);
+  });
+
+  it('provenance-6 (SC-4 structural): the provenance result cannot be passed to deriveStale, and the staleness call site passes only a rule delta', async () => {
+    const { project, liveSliceRel, sourceHash } = await provenanceProject();
+    await writeCitingChunk(project, 'setup', liveSliceRel, sourceHash);
+    const result = await resolveProvenance(project, [liveSliceRel]);
+    expect(deriveStale.length).toBe(1);
+    // @ts-expect-error — a ProvenanceResult is not a RuleDelta; this must not typecheck.
+    expect(() => deriveStale(result)).not.toThrow();
+
+    const src = await fs.readFile(join(__dirname, 'verify-classify.ts'), 'utf-8');
+    expect(src).not.toMatch(/deriveStale\([^)]*provenance/i);
+  });
+
+  it('PROVENANCE_KINDS is the frozen three-state enum', () => {
+    expect(Object.isFrozen(PROVENANCE_KINDS)).toBe(true);
+    expect([...PROVENANCE_KINDS]).toEqual(['source-changed', 'source-unchanged', 'unknown']);
   });
 });

@@ -1,3 +1,11 @@
+import { promises as fs } from 'node:fs';
+import { isAbsolute, join, relative, resolve } from 'node:path';
+import {
+  computeVerificationScope,
+  parseVerifiedAgainst,
+  resolveCitedSlices,
+  SCOPE_FULL,
+} from './chunk-provenance.js';
 
 /**
  * `verify-classify.ts` — the mechanical, judgment-free half of VERIFY-03: enumerated codes, the
@@ -352,4 +360,142 @@ export function pairSlices(input: PairSlicesInput): SlicePair[] {
 
   results.sort((a, b) => a.pairId.localeCompare(b.pairId));
   return results;
+}
+// -------------------------------------------------------------------------------------------
+// Provenance resolution (174-CONTEXT.md decisions 2, 2b)
+// -------------------------------------------------------------------------------------------
+
+export interface ProvenanceResult {
+  provenance: Provenance;
+  /** The current archived source's hash. Omitted when no archive is available at all. */
+  currentHash?: string;
+  /** Every recorded `Source hash:` value found across chunks citing this pair's live slices. */
+  recordedHashes: string[];
+  /** A short, enumerated, machine-stable phrase — never free prose a human report re-derives. */
+  reason: string;
+}
+
+/** Strips a leading `rulebook/` prefix, if present, for comparing citation names uniformly. */
+function bareSliceName(path: string): string {
+  return path.startsWith('rulebook/') ? path.slice('rulebook/'.length) : path;
+}
+
+/**
+ * Provenance is mechanical CLI, hash-only — never the classification subagent's opinion (decision
+ * 2). This function takes exactly two parameters and has no `label`/`ruleDelta` parameter through
+ * which a subagent's judgment could influence it.
+ *
+ * Resolution ladder (decision 2b), enumerated:
+ *
+ *  1. The CURRENT archived-source hash, via `computeVerificationScope()` — never a re-implemented
+ *     sha256-of-archive, which risks disagreeing with the source-resolution step that already ran
+ *     there. No archive at all (any non-`full` scope) → `unknown`, naming the scope reason.
+ *  2. Every CHUNK.md in the project is scanned via `resolveCitedSlices()` for whether it cites any
+ *     of this pair's live slices; for each that does, `parseVerifiedAgainst()` reads its recorded
+ *     `Source hash:` (if any). All found hashes are collected.
+ *  3. No recorded hash found at all → `unknown` (decision 2b: a first-ever verify pass of a
+ *     pre-provenance project — the actual current state of both reference games — has no prior
+ *     hash, and both populated states would be claims the tool cannot support). Any recorded hash
+ *     differing from current → `source-changed` (any disagreement is a change the designer must
+ *     see). Otherwise (at least one recorded hash, all equal to current) → `source-unchanged`.
+ *
+ * No branch of this function can return `source-unchanged` when `recordedHashes` is empty —
+ * pinned directly by `provenance-3`.
+ */
+export async function resolveProvenance(
+  projectDir: string,
+  liveSlices: string[],
+): Promise<ProvenanceResult> {
+  const dir = resolve(projectDir);
+  const scope = await computeVerificationScope(dir);
+
+  if (scope.scope !== SCOPE_FULL) {
+    return {
+      provenance: 'unknown',
+      recordedHashes: [],
+      reason:
+        `no archived source available to compare against ` +
+        `(${scope.reason ?? 'verification scope is not full'}) — cannot compute a provenance verdict`,
+    };
+  }
+
+  const currentHash = scope.sourceHash;
+
+  const wantedNames = new Set(
+    liveSlices.map((p) => {
+      const rel = relative(dir, resolve(dir, p.startsWith('rulebook/') ? p : join('rulebook', p)));
+      if (rel.startsWith('..') || isAbsolute(rel)) {
+        throw new Error(
+          `Live slice path "${p}" resolves outside ${dir}.\nPass a path relative to the project.`,
+        );
+      }
+      return bareSliceName(p);
+    }),
+  );
+
+  const chunksDir = join(dir, 'chunks');
+  let slugs: string[] = [];
+  try {
+    const entries = await fs.readdir(chunksDir, { withFileTypes: true });
+    slugs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
+  } catch {
+    slugs = [];
+  }
+
+  const rulebookDir = join(dir, 'rulebook');
+  let sliceFilenames: string[] = [];
+  try {
+    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
+    sliceFilenames = entries
+      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .map((e) => e.name);
+  } catch {
+    sliceFilenames = [];
+  }
+
+  const recordedHashes = new Set<string>();
+  for (const slug of slugs) {
+    let chunkText: string;
+    try {
+      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
+    } catch {
+      continue;
+    }
+    const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
+    const citesThisPair = resolved.some((r) => wantedNames.has(bareSliceName(r)));
+    if (!citesThisPair) continue;
+    const parsed = parseVerifiedAgainst(chunkText);
+    if (parsed.sourceHash) recordedHashes.add(parsed.sourceHash);
+  }
+
+  if (recordedHashes.size === 0) {
+    return {
+      provenance: 'unknown',
+      currentHash,
+      recordedHashes: [],
+      reason:
+        'no chunk citing these live slices records a Source hash — a first-ever verify pass, ' +
+        'not a claim this tool can support',
+    };
+  }
+
+  const recordedHashesArr = [...recordedHashes].sort();
+  const allMatchCurrent = recordedHashesArr.every((h) => h === currentHash);
+  if (allMatchCurrent) {
+    return {
+      provenance: 'source-unchanged',
+      currentHash,
+      recordedHashes: recordedHashesArr,
+      reason: 'every citing chunk\'s recorded Source hash matches the current archived source',
+    };
+  }
+
+  return {
+    provenance: 'source-changed',
+    currentHash,
+    recordedHashes: recordedHashesArr,
+    reason:
+      'at least one citing chunk\'s recorded Source hash differs from the current archived ' +
+      'source — any disagreement is a change the designer must see',
+  };
 }
