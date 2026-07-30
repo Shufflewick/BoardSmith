@@ -28,3 +28,27 @@ Specifically:
 should apply the same two fixes: drop the hardcoded three-item disposition list in favor of citing
 `REPAIR_GATE_DISPOSITIONS`, and repoint the "Phase 176's job" sentence at
 `verify/repair-dispatch.md` by name.
+
+---
+
+## RESOLVED 2026-07-30 (orchestrator, between waves 3 and 4)
+
+Both items above are **fixed**. The disposition enumeration in `adjudication-gate.md` was not
+incremented to four values — it was **removed**, and replaced with a pointer to
+`REPAIR_GATE_DISPOSITIONS` plus a note that `printImpactHumanReport` iterates the array in full.
+
+Rationale for removing rather than correcting: a hardcoded enumeration inside a citing file is a
+self-invalidating claim. Correcting it to four values would be right today and wrong at the next
+addition — which is exactly how it reached three-of-four in the first place. This is the same call
+made in plan 175-05 (dropping `verify-game.md`'s "four items" count rather than bumping it to five)
+and again in 176-04 (dropping the disposition list in favour of citing the source array).
+
+The "Phase 176's job" phrasing was also reworded to name the repair STEP rather than a phase number,
+since a phase reference inside shipped skill text goes stale the moment that phase closes.
+
+`npx vitest run src/cli/slash-command/bs/verify.test.ts` → 66/66 green after the edit.
+
+**Standing lesson for later phases:** this was the FIFTH instance of stale cross-file prose in v4.9
+(173's boundary statements, 174's Step 3 claim, 175's "four items" + hyphenated "eight-item" variant,
+176-04's three claims, and this). In every case the survivors were claims nobody had listed in
+advance. Sweep whole files; never fix only the enumerated hits.

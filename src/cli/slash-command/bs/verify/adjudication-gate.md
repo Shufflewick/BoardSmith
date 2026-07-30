@@ -109,12 +109,16 @@ boardsmith verify-impact-status --project <dir> --run-id <runId> --json
 ```
 
 and format it: the `"N of M chunks rules-stale"` fraction (uncapped — every stale slug listed, per
-decision 15), and each chunk's repair-gate disposition — whether repair will re-open its human
-playtest gate (`reopen-playtest`), close it without re-playtesting (`close-without-replaytest`), or
-whether its code movement is `unknown-drift` and therefore undecided pending investigation. State
-that the disposition is computed entirely by the command and only formatted here, and that
+decision 15), and each chunk's repair-gate disposition. **Do not enumerate the disposition values
+here.** They are defined by `REPAIR_GATE_DISPOSITIONS` in `src/cli/commands/verify-impact.ts`, and
+`printImpactHumanReport` iterates that array in full — so any value present in the real report must
+appear in what this step formats. Reproducing a partial list here is how the list goes stale: an
+earlier draft of this paragraph named three of the four and silently omitted one, which is the same
+defect class the `verify-game.md` sweep (plan 176-04) had to fix in three separate places.
+
+State that the disposition is computed entirely by the command and only formatted here, and that
 performing the repair itself — walking the audit lenses, clearing the marker, flipping the chunk's
-status — is Phase 176's job, never this step's.
+status — belongs to the repair step, never this one.
 
 ## No Skip Path, By Construction
 
