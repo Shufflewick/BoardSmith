@@ -268,9 +268,9 @@ Plans:
   1. Every rule-bearing `Derived` line in a verified project is re-derived independently of the original transcription pass, using only quote lines present in the current slice.
   2. A disagreement between the original and re-derived value is reported as a finding, citing both derivations.
   3. The check runs with no source rulebook present and correctly ignores `Visual` lines as out of scope.
-**Plans**: 7 plans
+**Plans**: 13 plans (7 original + 6 gap-closure)
 
-**Result:** NOT MET — SC-1 fails on real dispatch data. All 22 real `Derived` lines were enumerated
+**Result (initial 7 plans):** NOT MET — SC-1 fails on real dispatch data. All 22 real `Derived` lines were enumerated
 (16 real dispatch candidates + 6 mechanically presentation-excluded); 29 real `claude -p` dispatches
 (16 blind + 13 comparison) measured a distribution of `agrees` 4, `disagrees` 9, `underivable` 1,
 `not-rule-bearing` 2 (of 16), against a committed-before-measurement prediction of 5/1/3/7 for the
@@ -296,6 +296,14 @@ Plans:
 - [x] 177-05-PLAN.md — `verify-game.md`: the CHECK-04 step, the Context-Economics carve-out, renumbered Close, and a full stale-claim sweep recording TRUE findings too
 - [x] 177-06-PLAN.md — Commit the 22-line distribution prediction BEFORE dispatching; stage the proof run on `cp -R` copies with sha256 baselines and a named dispatch mechanism
 - [x] 177-07-PLAN.md — The live proof: grep a real blind dispatch prompt for zero `Derived (p.`, run the full 22-line corpus, compare against the prediction, disclose limitations. **Goal NOT MET** — SC-1 fails; CHECK-04 left OPEN (PARTIAL) in `REQUIREMENTS.md`.
+
+Gap-closure plans (from `177-VERIFICATION.md` 3/6 must-haves + `177-REVIEW.md` 7 blockers):
+- [ ] 177-08-PLAN.md — GAP 2 / CR-01: decoration-proof strip + enumerate via one shared `annotationBody`, payload backstop throw, shared citation regex with `ingest-archive.ts` (WR-01), `Visual`-marker symmetry (WR-09), empirically-proven pins
+- [ ] 177-09-PLAN.md — Ledger integrity before exposure: fence-injection rejection (CR-04), read-path revalidation through the single choke point (CR-02), upsert-append `recordDeriveVerdict` (CR-06), evidence requirement (WR-05), blind pass-through cross-check (WR-04)
+- [ ] 177-10-PLAN.md — GAP 3 / CR-05: the missing `verify-derive-record` CLI write surface, `originalLine`-aware join (CR-03), orphan + staleness reporting (WR-03), printer and error-path fixes (WR-06/WR-02/WR-10), Step 7 corrected and pinned
+- [ ] 177-11-PLAN.md — GAP 1: opaque `blindDeriveHandle` replaces the resolvable pointer (CR-07), quote-local focus narrowing so per-candidate payloads differ, mechanical payload-distinctness, and `factAlignment` as the artifact-vs-genuine instrument
+- [ ] 177-12-PLAN.md — Pre-register the targeting metric (committed before any dispatch), then re-run the live proof: real `claude -p` on `cp -R` copies, every verdict recorded through the real CLI, originals byte-identical → `177-PROOF-2.md`
+- [ ] 177-13-PLAN.md — Measure the phase GOAL in its own unit and report it honestly; dispose of CHECK-04 on that evidence alone; account for all 18 review findings as fixed or deferred
 
 ### Phase 178: Worked-Example Tests
 **Goal**: Worked examples in the rulebook stop being a one-time seed for hand-written tests and become an accumulating, automatically-derived executable test suite in both build and verify.
