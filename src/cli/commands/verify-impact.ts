@@ -598,7 +598,14 @@ export async function verifyImpactGateCommand(
   const classifyStatus = await verifyClassifyStatusCommand({
     project: projectDir,
     runId: options.runId,
-    json: true,
+    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
+    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
+    // (verify-classify.ts's convention), independent of whatever this caller's own --json
+    // handling does below. Passing json:true here would print a second, unrelated top-level
+    // JSON object ahead of this command's own result on every invocation (found live while
+    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
+    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
+    json: false,
   });
   const runId = classifyStatus.runId;
 
@@ -814,7 +821,14 @@ export async function verifyImpactAdjudicateCommand(options: {
   const classifyStatus = await verifyClassifyStatusCommand({
     project: projectDir,
     runId: options.runId,
-    json: true,
+    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
+    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
+    // (verify-classify.ts's convention), independent of whatever this caller's own --json
+    // handling does below. Passing json:true here would print a second, unrelated top-level
+    // JSON object ahead of this command's own result on every invocation (found live while
+    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
+    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
+    json: false,
   });
   const runId = classifyStatus.runId;
 
@@ -1123,7 +1137,14 @@ export async function verifyImpactStatusCommand(
   const classifyStatus = await verifyClassifyStatusCommand({
     project: projectDir,
     runId: options.runId,
-    json: true,
+    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
+    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
+    // (verify-classify.ts's convention), independent of whatever this caller's own --json
+    // handling does below. Passing json:true here would print a second, unrelated top-level
+    // JSON object ahead of this command's own result on every invocation (found live while
+    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
+    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
+    json: false,
   });
   const runId = classifyStatus.runId;
 
@@ -1250,7 +1271,14 @@ export async function verifyImpactApplyCommand(
   const classifyStatus = await verifyClassifyStatusCommand({
     project: projectDir,
     runId: options.runId,
-    json: true,
+    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
+    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
+    // (verify-classify.ts's convention), independent of whatever this caller's own --json
+    // handling does below. Passing json:true here would print a second, unrelated top-level
+    // JSON object ahead of this command's own result on every invocation (found live while
+    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
+    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
+    json: false,
   });
   const runId = classifyStatus.runId;
 
