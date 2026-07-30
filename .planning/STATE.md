@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 174-04-PLAN.md — verify-classify-pairs/-record/-status CLI surface + per-chunk verdict roll-up (decision 18)"
-last_updated: "2026-07-30T00:32:23.467Z"
+stopped_at: "Completed 174-05-PLAN.md — classification subagent contract + classification-dispatch.md + verify-game.md Step 3 rewrite"
+last_updated: "2026-07-30T00:00:00.000Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 37
-  completed_plans: 32
-  percent: 30
+  completed_plans: 33
+  percent: 33
 ---
 
 # Project State
@@ -25,8 +25,30 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 174 (verify-classifier) — IN PROGRESS (4/7 plans)
-Next: Phase 174 plan 05 (classification subagent contract + classification-dispatch.md skill delegate + verify-game.md Step 4 rewrite — VERIFY-03/VERIFY-07)
+Phase: 174 (verify-classifier) — IN PROGRESS (5/7 plans)
+Next: Phase 174 plan 06 (live proof: dispatch a real classification subagent against the archived fixtures + hand-built lexicon regression pairs — VERIFY-03/VERIFY-07)
+
+`174-05-PLAN.md` wrote the judgment half as skill text:
+`src/cli/slash-command/bs/verify/classification-subagent.md` (the `BS-CLASSIFY-V1` handshake, the
+dual-schema presentation exclusion rule with a real byte-identical worked example quoted from
+`one-two-punch`'s live fixture, the consequence-vs-wording decision procedure with two worked
+examples per label, line-level MAX-severity rollup, and the enumerated RETURN shape) and
+`verify/classification-dispatch.md` (`verify-game.md` Step 3's delegate — pair enumeration via
+`verify-classify-pairs`, ledger-only resume via `verify-classify-status`, per-pair
+`BS-CLASSIFY-V1` dispatch, verdict recording via `verify-classify-record`, close). Rewrote
+`verify-game.md`'s Phase 173 "there is no classification / the pass ends here" boundary
+statements IN PLACE (deleted, not appended around) and added `## Step 3: Classification`,
+renumbering Close to Step 4 for contiguous 0-1-2-3-4 step numbering. Added
+`classification-subagent.md` to the installer's `SHARED_LEAF_PROBES`. Wrote 7 hand-built lexicon
+regression pairs under `174-FIXTURES/lexicon/` (2 cosmetic + a dedicated schema-asymmetry trap
+case, 2 sharper, 2 contradictory), each with an `EXPECTED.md`. Rewrote `verify.test.ts`'s Decision
+16 boundary pins to match the post-174 state: classification vocabulary now required where it
+belongs, an SC-4 gate forbidding staleness-derivation prose across every verify file, and a
+cross-file `PRESENTATION_EXCLUSION_MARKERS` lexicon pin against `verify-classify.ts`. Two
+verbatim substring collisions with existing drift guards found and fixed along the way (documented
+in 174-05-SUMMARY.md). `npm test`: 3691/3691 (baseline 3678). VERIFY-01/VERIFY-03/VERIFY-07 remain
+open — this plan proves the skill text EXISTS, not that a live session follows it; that live proof
+is 174-06/174-07's job. See `.planning/phases/174-verify-classifier/174-05-SUMMARY.md`.
 
 `174-04-PLAN.md` shipped the three run-scoped commands that make classification recordable and
 resumable — `verify-classify-pairs`/`-record`/`-status` — registered in the real `cli.ts` beside
