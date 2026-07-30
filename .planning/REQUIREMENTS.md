@@ -110,9 +110,9 @@ the tag.
       are unit-pinned in `src/cli/commands/verify-classify.test.ts`.)*
 - [ ] **VERIFY-04**: A `contradictory` classification always stops and asks the human, with both
       readings quoted side by side; the resolution is recorded in `RULINGS.md`.
-- [ ] **VERIFY-05**: Chunks affected by a changed slice flip to a rules-staleness marker visible in
+- [x] **VERIFY-05**: Chunks affected by a changed slice flip to a rules-staleness marker visible in
       both CHUNK.md and SKETCH.md, following the existing authority and write-order rules.
-- [ ] **VERIFY-06**: Only chunks whose code changed during repair re-open the human playtest gate;
+- [x] **VERIFY-06**: Only chunks whose code changed during repair re-open the human playtest gate;
       chunks that pass the audit lenses unchanged close without re-playtesting.
 - [x] **VERIFY-07**: The orchestrator never reads a full slice — re-transcription and classification
       both run in subagents, preserving the context-economics rule.
@@ -226,8 +226,8 @@ the tag.
 | VERIFY-08 | Phase 173 | Complete (173-07 proof; re-confirmed 173-08 against a corrected crash-safety guarantee + closed range-level resume determinism — see `173-PROOF.md` §5) |
 | VERIFY-03 | Phase 174 | Complete — the CLI surface (174-04), the classification subagent contract (174-05), and every real-data bar (SC-1 through SC-5) proven live (`174-PROOF.md` §2, §4, §5): SC-2 90.9% cosmetic PASS, SC-3 real mutation → `contradictory` PASS, determinism identical, 7/7 lexicon regression |
 | VERIFY-04 | Phase 175 | Pending |
-| VERIFY-05 | Phase 175 | Pending |
-| VERIFY-06 | Phase 175 | Pending |
+| VERIFY-05 | Phase 175 | Complete |
+| VERIFY-06 | Phase 175 | Complete |
 | CHECK-01 | Phase 176 | Pending |
 | CHECK-02 | Phase 176 | Pending |
 | CHECK-04 | Phase 177 | Pending |

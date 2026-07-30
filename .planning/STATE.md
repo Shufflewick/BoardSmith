@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 175-05-PLAN.md — deleted verify-game.md Step 3's now-false 'flips no staleness marker anywhere and opens no repair loop (that is Phase 175's job)' boundary claim IN PLACE (not appended around), added Step 4: Adjudication Gate and Impact Map (VERIFY-04/05/06) dispatching to the new verify/adjudication-gate.md reference file (models build/ask.md's Gate-Before-Write, no bypass vocabulary anywhere), renumbered Close to Step 5, and rewrote verify.test.ts's drift pins for the six-step shape — the negative pin proven to fail on temporary reintroduction of the deleted sentence. This is plan 5 of 8 in Phase 175; VERIFY-04/05/06 are now mechanically complete AND wired into the skill text a live session actually follows; Phase 176 owns performing the actual repair."
-last_updated: "2026-07-30T15:40:00Z"
+stopped_at: "Completed 175-06-PLAN.md — added /bs-check-status item 9 ('Rules staleness and the repair gate'), formatting boardsmith verify-impact-status --json (format-never-compute, mirroring item 8's chunk-provenance-status pattern): reports the uncapped staleFraction as 'N of M chunks rules-stale', lists every staleSlugs entry with no cap, groups by gate.disposition consuming dispositionCounts, and surfaces contradictionsPending naming /bs-verify-game's adjudication gate. Closed Phase 174's 'revisit there, not here' carry-forward (decision 19) — the deferred rules-staleness reporting item now lives on the surface a designer actually reads. Full-file swept the eight-item count family (4 occurrences, 3 spellings including the hyphenated-singular 'eight-item' trap) to nine items, verified with a combined grep -ciE catching every spelling. Pinned item 9 in status-tools.test.ts against the real exported RULES_STALE_MARKER/REPAIR_GATE_DISPOSITIONS constants, added the Rules Staleness Marker heading to the cited-heading guard, and empirically proved the renamed count pin regresses on a temporary revert. This is plan 6 of 8 in Phase 175; VERIFY-05/VERIFY-06's reporting surface is now complete; Phase 176 owns performing the actual repair."
+last_updated: "2026-07-30T14:55:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
@@ -25,8 +25,26 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 175 (Impact Map & Repair Gating) — plan 175-05 of 8 executed.
-Next: Phase 175 plan 175-06, per `ROADMAP.md`.
+Phase: 175 (Impact Map & Repair Gating) — plan 175-06 of 8 executed.
+Next: Phase 175 plan 175-07, per `ROADMAP.md`.
+
+`175-06-PLAN.md` (2026-07-30) added `/bs-check-status` item 9 — "Rules staleness and the repair
+gate" — formatting `boardsmith verify-impact-status --json` (format-never-compute, mirroring item
+8's `chunk-provenance-status` pattern): reports `staleFraction` as `"N of M chunks rules-stale"`,
+lists every `staleSlugs` entry uncapped (decision 15), groups by `gate.disposition` consuming
+`dispositionCounts`, and surfaces `contradictionsPending` naming `/bs-verify-game`'s adjudication
+gate as where they are answered. Closes decision 19 — Phase 174's "revisit there, not here"
+carry-forward. Full-file swept the eight-item count family (4 occurrences, 3 spellings including
+the hyphenated-singular `eight-item` trap at line 104) to nine items, verified with a combined
+`grep -ciE "eight[ -]items?"` returning 0. Pinned item 9 in `status-tools.test.ts` against the real
+exported `RULES_STALE_MARKER`/`REPAIR_GATE_DISPOSITIONS` constants rather than re-typed strings,
+added `## Rules Staleness Marker` to the cited-heading guard, and empirically proved the renamed
+count pin regresses (reverting to "eight items" fails with the expected assertion message, then
+reverted). `npm test`: 3825/3825 green (baseline 3817 + 8 new tests). VERIFY-05/VERIFY-06's
+reporting surface is now complete; Phase 176 owns performing the actual repair. See
+`.planning/phases/175-impact-map-repair-gating/175-06-SUMMARY.md`.
+
+---
 
 `175-05-PLAN.md` (2026-07-30) closed the skill-text half of VERIFY-04/05/06: created
 `src/cli/slash-command/bs/verify/adjudication-gate.md`, modelling `build/ask.md`'s
