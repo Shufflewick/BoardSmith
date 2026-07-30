@@ -258,3 +258,5 @@ statement from a call site. Documented here rather than silently declared passin
 - [x] `src/cli/commands/ingest-archive.ts` imports `DERIVED_LINE_RE`
 - [x] `src/cli/commands/verify-classify.ts` `PRESENTATION_EXCLUSION_MARKERS` contains no `[^)]+`
 - [x] Commits `34c4efee`, `6d525314`, `cc7b98c4` exist in `git log`
+
+## Self-Check: PASSED

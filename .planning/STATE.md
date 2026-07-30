@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-07-PLAN.md — the live dispatch proof and Phase 177 closeout, the last plan of the phase. Ran all 29 real claude -p dispatches (16 blind BS-DERIVE-V1 + 13 comparison BS-DERIVE-COMPARE-V1) against fresh cp -R copies of both reference games, covering all 16 real dispatch candidates (10 seven + 6 one-two-punch; the other 6 one-two-punch lines remain mechanically presentation-excluded per 177-06's reconciliation). 177-PROOF.md §2 proved the blind-independence structural guarantee by grepping a real saved dispatch prompt (seven line 21, the most distinctive line): zero Derived (p./Visual (p. matches and zero on a distinctive-substring grep, across all 16 dispatched prompts, not just the one worked example; the comparison prompt's non-zero match accounted for by the Context-Economics carve-out. §3 measured the real 16-candidate distribution — agrees 4, disagrees 9, underivable 1, not-rule-bearing 2 — against 177-PREDICTION.md (commit 913bfe7d, predates this work): 5 hits / 11 misses. None of the three pre-committed interpretation rules fired as anticipated; instead this proof surfaced a genuine, unanticipated structural finding: buildBlindDerivePayload's Target-line identifier carries no information the blind subagent can use to distinguish which candidate fact is under test when a slice has more than one Derived line (true of every multi-candidate slice in the corpus), so the blind stage repeatedly re-derives the single most obviously derivable fact in a shared slice regardless of the nominal target — dominating the measured 56% disagrees rate with targeting-collapse artifacts rather than genuine content mismatches (one genuine on-topic disagreement was found: one-two-punch:52, 8 vs 6 Action Cards). §4 assessed CHECK-04's three success criteria on this evidence: SC-1 NOT MET (the narrower never-sees-the-original independence claim is proven, but the per-line targeting judgment SC-1 promises is not), SC-2 MET (citing-both-derivations mechanism works unconditionally, enforced by createDeriveVerdictRecord), SC-3 MET (source-free by construction; Visual-lines half proven on constructed input only, same disposition Phase 176 used — zero real Visual lines in either game). Both ~/BoardSmithGames originals re-verified byte-identical (whole-tree sha256, empty diff) before and after all 29 dispatches. Phase closeout (Task 4): CHECK-04 left OPEN/PARTIAL in REQUIREMENTS.md with section-and-number citations to 177-PROOF.md (not closed — the phase's own goal is NOT MET per the honesty discipline this milestone holds); ROADMAP.md's Phase 177 section carries a Result paragraph with the measured numbers; 177-VALIDATION.md set status: closed-partial / nyquist_compliant: true (true for how this plan's OWN work was sampled — real dispatch, real grep, real diff — not a claim that CHECK-04 itself is complete). npm test: 3954/3954 green throughout. All 7 plans of Phase 177 are now executed and committed; Phase 178 (Worked-Example Tests) is next, not yet planned. See .planning/phases/177-derived-line-re-derivation/177-07-SUMMARY.md."
-last_updated: "2026-07-30T17:45:00Z"
-last_activity: 2026-07-30 -- Phase 177 plan 07 executed (phase closeout, CHECK-04 left OPEN)
+stopped_at: "Completed 177-08-PLAN.md — the first of six gap-closure plans (177-08..13), closing GAP 2/CR-01 from 177-VERIFICATION.md/177-REVIEW.md. Added annotationBody() as the single decoration-normalization site quoteLinesOnly and enumerateDerivedLines both route through, so a blockquote (>) or list (-, 1.) decorated Derived/Visual/Named-but-undefined line can no longer leak into the blind payload or drop from enumeration — the code reviewer had proven this leak live against a temp project. Widened DERIVED_LINE_RE/VISUAL_LINE_RE/NAMED_BUT_UNDEFINED_LINE_RE to accept any citation body and extracted a shared DERIVED_LINE_RE into a new dependency-free leaf module (derived-line-pattern.ts) so ingest-archive.ts's relabeller consumes the same definition instead of a second literal (WR-01) — a direct import from verify-derive-recheck.ts would have closed a real circular import (ingest-archive -> verify-derive-recheck -> verify-classify -> chunk-provenance -> ingest-archive), observed live via a TypeError before the leaf-module fix. Added a construction-site backstop: buildBlindDerivePayload now throws on any assembled payload still matching an annotation family, independent of which prefix regex missed it — the part that makes the guarantee structural rather than a wider deny-list. Both new negative pins (the decoration-strip fix, the payload backstop) were empirically proven to fail when reverted: reintroducing the pre-fix ^-anchored annotationBody failed 6 tests (the two new leak/silent-drop regressions plus all four annotationBody unit tests); separately deleting the backstop failed the pinned backstop-throw test with 'expected [Function] to throw an error'; both reverts confirmed clean via git diff --stat before proceeding. Replaced the four tautological readFileSync-and-grep 'module source guarantees' tests with behavioral assertions (temp-project decoy trees including a populated rulebook/.verify/<run-id>/slices/ tree, whole-project file inventory, process.exitCode). Also closed WR-09: PRESENTATION_EXCLUSION_MARKERS' optional parenthetical qualifier is now applied symmetrically to the Visual marker (previously only on the two Derived markers) and widened from [^)]+ to [^:]* so a qualifier with its own nested parens is recognized, pinned together with the 4 real decision-13 lines. npm test (src/cli/commands/): 635/635 green (up from before this plan); npx tsc --noEmit clean except the pre-existing unrelated docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 1 of 6 gap-closure plans; 177-09 through 177-13 remain. See .planning/phases/177-derived-line-re-derivation/177-08-SUMMARY.md."
+last_updated: "2026-07-30T23:45:00Z"
+last_activity: 2026-07-30 -- Phase 177 gap-closure plan 08 executed (CR-01/WR-01/WR-09 closed; CHECK-04 stays OPEN/PARTIAL)
 progress:
   total_phases: 10
   completed_phases: 8
-  total_plans: 54
-  completed_plans: 54
-  percent: 100
+  total_plans: 60
+  completed_plans: 55
+  percent: 92
 ---
 
 # Project State
@@ -25,7 +25,49 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 6/7 plans complete.
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 8/13 plans complete (7 original +
+1 of 6 gap-closure plans).
+
+`177-08-PLAN.md` (2026-07-30) is the first of six gap-closure plans (177-08..13) responding to
+`177-VERIFICATION.md` (3/6 must-haves) and `177-REVIEW.md` (7 critical + 11 warning findings, both
+produced against the closed-partial 177-07 state). Closed GAP 2/CR-01: the code reviewer proved by
+direct execution that `DERIVED_LINE_RE`/`VISUAL_LINE_RE`/`NAMED_BUT_UNDEFINED_LINE_RE` were
+`^`-anchored on trimmed text only, so a blockquote (`> Derived (p.1): ...`) or list (`-`, `1.`)
+decorated line both leaked into the blind payload AND silently dropped from enumeration — proven
+against the real committed corpus (`174-FIXTURES/seven/live/01-overview-setup-and-play.md:30`
+already carries exactly this decoration shape on a `Variant` line). Added `annotationBody()` as the
+single decoration-normalization site both `quoteLinesOnly` and `enumerateDerivedLines` route
+through, so the two functions can never diverge on what counts as decoration — mirroring
+`createDeriveVerdictRecord`'s single-choke-point shape. Per the verifier's bar ("structural, not
+merely wider"), also added a construction-site backstop: `buildBlindDerivePayload` now throws on
+any assembled payload still matching an annotation family, independent of which prefix regex
+missed it — proven by a pinned test constructing exactly the case the prefix regexes cannot
+anticipate (a directly-quoted sentence whose own prose mentions "Derived (p." mid-sentence).
+Widened all three regexes to accept any citation body (`\(p\.[^)]*\)`, WR-01) and extracted the
+shared `DERIVED_LINE_RE` into a new dependency-free leaf module (`derived-line-pattern.ts`) so
+`ingest-archive.ts`'s relabeller consumes the same definition rather than a second literal — a
+direct import from `verify-derive-recheck.ts` would have closed a real circular import
+(`ingest-archive` → `verify-derive-recheck` → `verify-classify` → `chunk-provenance` →
+`ingest-archive`), observed live as `TypeError: Cannot read properties of undefined (reading
+'source')` before the leaf-module fix. **Both new negative pins were empirically proven to fail
+when reverted** (the pattern 175-05/176-04 established): reintroducing the pre-fix `^`-anchored
+`annotationBody` failed 6 tests with real recorded output; separately deleting the backstop failed
+the pinned backstop-throw test with `expected [Function] to throw an error`; both reverts confirmed
+`git diff --stat` clean before proceeding. Also replaced the four tautological
+`readFileSync`-and-grep "module source guarantees" tests (WR-11) with behavioral assertions run
+against real temp-project decoy trees (including a populated `rulebook/.verify/<run-id>/slices/`
+tree the module must never read). Also closed WR-09: the optional parenthetical-qualifier group in
+`PRESENTATION_EXCLUSION_MARKERS` is now applied symmetrically to the `Visual` marker (previously
+only on the two `Derived` markers) and widened from `[^)]+` to `[^:]*` (nesting-tolerant), pinned
+together with the 4 real decision-13 `one-two-punch` lines so neither fix regresses the other.
+`npm test` (`src/cli/commands/`): 635/635 green; `npx tsc --noEmit` clean except the pre-existing
+unrelated `docs/seed-to-state.test.ts` rootDir error. WR-07 (inverting `quoteLinesOnly`'s deny-list
+to an allow-list) is deliberately deferred, per plan instructions — NOT implemented here. **CHECK-04
+stays OPEN/PARTIAL in `REQUIREMENTS.md`** — this is 1 of 6 gap-closure plans; `177-09` (ledger
+integrity, CR-02/CR-04/CR-06/WR-04/WR-05) through `177-13` (re-measure the phase goal, dispose of
+CHECK-04) remain. See `.planning/phases/177-derived-line-re-derivation/177-08-SUMMARY.md`.
+
+---
 
 `177-06-PLAN.md` (2026-07-30) committed `177-PREDICTION.md` — a per-line, pre-dispatch verdict
 prediction for all 22 real `Derived` lines (10 `seven`, 12 `one-two-punch`), each quoted verbatim
