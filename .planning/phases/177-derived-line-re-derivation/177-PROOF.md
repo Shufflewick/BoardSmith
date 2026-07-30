@@ -218,3 +218,151 @@ Both originals confirmed byte-identical, whole-tree, before and after every comm
 - The 16-real-candidate figure this section derived (10 `seven` + 6 `one-two-punch`) is a mechanical
   fact about the current `isPresentationLine` filter; it is not itself a claim about how many of
   those 16 will return each verdict once dispatches run.
+
+## 2. The grepped blind-independence observable
+
+**Scratch location for this task's live dispatches:** a fresh `${TMPDIR:-/tmp}/…/scratchpad/177-07-proof/`
+— new `cp -R` copies of both originals were made for this task (the prior task's scratch directory
+no longer existed; a new preflight, sha256 baseline, `cp -R`, and real `npx boardsmith claude --local
+--force` install were re-run identically to `177-06`'s §1 method before any dispatch). Preflight
+confirmed both pinned commits unchanged (`seven` `a03f38d4792af9dfc7c798be69686fc3230f54dd`,
+`one-two-punch` `7e69471bd8980a854f3e351f2f486e1fb6f712b9`), and both whole-tree sha256 manifests
+(3919 / 4134 files) matched `173-PROOF.md`/`176-PROOF.md`/`177-06-PROOF.md`'s own counts exactly
+before the first `cp -R`.
+
+**Dispatch mechanism, stated honestly (unchanged from `177-06-PROOF.md` §1):** this execution
+session exposes Read/Write/Edit/Bash only — no native Task/Agent tool. Every dispatch below is a
+real `claude -p "<prompt>" --allowedTools Read` OS subprocess, run from inside the scratch copy's own
+project directory, each a genuine fresh OS process with no inherited conversation history. This is
+NOT native Task/Agent-tool dispatch and is not represented as such anywhere in this proof —
+`173-PROOF.md` §6 remains the only session in this milestone that ever exercised native dispatch, for
+one transcription unit only.
+
+**The dispatched prompt, per line, carries THREE things** (mirroring the exact shape `176-PROOF.md`
+§1 recorded for `BS-RULING-RECHECK-V1`): an instruction to read the installed contract file in full
+(`.claude/skills/bs-shared/verify/derive-recheck.md` for the blind stage,
+`.claude/skills/bs-shared/verify/derive-compare.md` for the comparison stage — both real installed
+paths, not the repo source, verified present by the `find`/existence check in §1), then the exact
+payload string `buildBlindDerivePayload` constructed (blind stage) or the original line +
+blind-derivation reading (comparison stage). The dispatch driver script imports
+`buildBlindDerivePayload`/`readLiveSlices`/`enumerateDerivedLines`/`createDeriveVerdictRecord`/
+`recordDeriveVerdicts` directly from `src/cli/commands/verify-derive-recheck.ts` — never a
+reimplementation — so the payload construction under test is the shipped code, not a stand-in.
+
+### The chosen line — the most distinctive real `Derived` line in the corpus
+
+**`seven`, `rulebook/01-definitions-and-components.md:21`:** `Derived (p.1): The full deck is
+therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 "+1" bonus point cards.` This
+is the single most distinctive line in either corpus — its own text contains an exact arithmetic
+statement (`"112 numbered cards"`, `"therefore 7 numbers x 4 colors x 4 copies"`) that would be
+unmistakable if it leaked into a supposedly-blind payload, and it is `177-RESEARCH.md`'s own named
+Derived-depends-on-Derived worked example, so proving its independence closes that concern directly
+for the phase's most-discussed line.
+
+**Evidence file (the real, dispatched bytes) saved verbatim at:**
+`${TMPDIR:-/tmp}/…/scratchpad/177-07-proof/evidence/blind__seven__rulebook_01-definitions-and-components.md__L21.txt`
+
+```
+Read in full: <scratch>/seven/.claude/skills/bs-shared/verify/derive-recheck.md
+
+Then apply that contract exactly to the following dispatch payload (verbatim, do not add
+anything to it before applying the contract):
+
+BS-DERIVE-V1
+Slice: rulebook/01-definitions-and-components.md
+Target line: rulebook/01-definitions-and-components.md:21
+Quoted rulebook content for this slice — your ONLY source material. No Derived or Visual
+line from this slice, or any other slice, is included below or anywhere in this prompt:
+p.1, Definitions:
+"Hand: The cards each player holds. Each starts with 3 and ends the game with 10."
+"Set: 2+ cards with matching numbers."
+"example: 5, 5, 5"
+p.1, Definitions:
+"Run: 3+ cards in numeric order."
+"example: 5, 6, 7"
+p.1, Distribution of Cards:
+"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card. In addition, there are 7 bonus point cards."
+p.1, Designer:
+"JT Smith"
+p.1, Play Testers:
+"Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof"
+```
+
+Note the exact `Derived (p.1): The full deck is therefore...` line under test **does not appear
+anywhere above** — the only "112"/"7 numbers"/"4 colors" content present is the raw quoted
+`p.1, Distribution of Cards:` sentence, which is legitimate directly-quoted source material, not the
+target line's own text.
+
+### (a) The blind prompt: two separate zero-expectation greps
+
+**Expectation, stated before running:** the blind-derivation prompt must contain ZERO `Derived (p.`
+matches and ZERO `Visual (p.` matches — no exception applies here, unlike the comparison prompt.
+
+```
+$ grep -c "Derived (p\." <blind-prompt-file>
+0
+$ grep -c "Visual (p\." <blind-prompt-file>
+0
+```
+
+Both zero, exactly as expected.
+
+### (b) The comparison prompt: one non-zero-expectation grep, accounted for by the carve-out
+
+**Expectation, stated before running:** the comparison prompt (`BS-DERIVE-COMPARE-V1`) legitimately
+carries the original `Derived (p.` line — `verify-game.md`'s Context-Economics Hard Rule names this
+exception explicitly (`src/cli/slash-command/bs/verify-game.md` lines 49-57), and `derive-compare.md`
+itself states it (`"this prompt legitimately carries the original Derived (p. line"`) — the identical
+exception `174-PROOF.md` §3 documented for `quotedPass1`/`quotedPass2`: the subagent's dispatch input
+and structured return are the one legitimate place quoted/derived slice content lives; the
+orchestrator's own transcript still never opens a slice.
+
+```
+$ grep -c "Derived (p\." <compare-prompt-file>
+1
+```
+
+Non-zero, exactly as expected, and accounted for: the single match is the `Original Derived line
+(verbatim):` block the comparison contract requires as one of its two inputs.
+
+### The two prompt kinds are checked SEPARATELY, and why
+
+The two checks above have opposite expectations by design (decision 5 vs. the Context-Economics
+carve-out), so running one blanket grep across both prompt kinds would either falsely flag the
+comparison prompt's legitimate quote as a leak, or falsely validate the blind prompt against a
+threshold that tolerates the comparison prompt's expected match. `177-RESEARCH.md` Question 3 names
+this exact split as the reason the observable cannot be a single check.
+
+### Distinctive-substring grep on the blind prompt (not just the `Derived (p.` prefix)
+
+**Expectation, stated before running:** a leak could in principle arrive without the `Derived (p.`
+prefix — e.g. if the target line's own prose were copied into the payload by some other path. Grep
+for the target line's own distinctive substrings directly:
+
+```
+$ grep -c "112 numbered cards" <blind-prompt-file>
+0
+$ grep -c "therefore 7 numbers x 4 colors x 4 copies" <blind-prompt-file>
+0
+```
+
+Both zero. The only "7 x 4 x 4"-shaped content present in the payload is the raw `Distribution of
+Cards` quote (`"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card..."`),
+which is legitimate source material the target line's own re-derivation is SUPPOSED to draw on — not
+the target line's own text.
+
+### Whole-corpus check (not just the one distinctive line)
+
+Beyond the single chosen line above, every one of the 16 real dispatched blind prompts was grepped
+identically:
+
+```
+$ grep -c "Derived (p\." evidence/blind__*.txt | grep -v ":0$"
+(no output — every one of 16 files: 0)
+$ grep -c "Visual (p\." evidence/blind__*.txt | grep -v ":0$"
+(no output — every one of 16 files: 0)
+$ ls evidence/blind__*.txt | wc -l
+16
+```
+
+Zero leaks across the full real corpus, not just the one chosen worked example.
