@@ -199,3 +199,61 @@ None — no external service configuration required.
   pairs/ledger/unclassified/status/chunk/cli-registration — no regression)
 - `npx tsc --noEmit -p .` — clean (only the pre-existing, unrelated
   `docs/seed-to-state.test.ts` rootDir diagnostic)
+
+## Corrective follow-up (2026-07-29): FALSE-CLEAN hole in `computeChunkVerdicts` quote narrowing
+
+Decision 18's narrowing (`if (affected.length === 0) continue;`) treated "the quote doesn't match
+any of THIS chunk's own cited live slices" as a single situation. It is really two, and the code
+could not tell them apart:
+
+- **(a)** the quote matches some OTHER live slice in the pair, one this chunk doesn't cite —
+  genuinely not this chunk's problem, the narrowing working exactly as designed.
+- **(b)** the quote matches NO live slice in the pair AT ALL — the subagent paraphrased instead of
+  quoting verbatim, a line was re-wrapped, whitespace/punctuation drifted, or the live slice could
+  not be read. This is the tool being blind, not proof the chunk is unaffected — and a real
+  `sharper`/`contradictory` verdict evaporated silently, with no trace in `--json`.
+
+(b) is exactly the failure mode this milestone keeps catching (172 decision 10's `drift-unknown`,
+PROV-03's `unknown`, decision 8's `unclassified`-is-stale, decision 2b's `unknown` provenance): a
+verify pass reporting clean precisely where it was blind. A second, smaller instance of the same
+class lived in `liveText()`, which cached a failed `fs.readFile` as `''` — an unreadable or missing
+live slice therefore silently matched no quote, feeding straight into (b) rather than being
+surfaced.
+
+**Fix (`src/cli/commands/verify-classify.ts`, `computeChunkVerdicts`):**
+- Before narrowing, the quote is now checked against the PAIR's whole `liveSlices` set (not just
+  this chunk's citations). That single check distinguishes (a) from (b).
+- Case (b) — the quote matches nothing in the pair — broadens conservatively to every one of the
+  chunk's own cited live slices (the same fallback the no-quote branch already used) and is
+  additionally pushed into a `warnings` set surfaced in the command's `--json` output (the existing
+  `warnings: string[]` convention this module already uses for unpaired slices, malformed labels,
+  and missing quotes — no new channel invented).
+- `liveText()` no longer collapses a read failure to `''`. It now caches `null` (never silently
+  treated as "read fine, empty"), and any live slice that could not be read is treated the same way
+  as an unattributable quote: surfaced in `warnings` and broadened conservatively rather than
+  silently excluded.
+- The `computeChunkVerdicts` doc comment is corrected to explain both branches of
+  `affected.length === 0` instead of asserting the single (now-disproven) meaning.
+- Case (a)'s narrowing is unchanged and still proven correct by both the pre-existing `decision-18`
+  test and a new explicit assertion that no unattributable warning fires when the quote genuinely
+  lands elsewhere in the pair.
+
+**Tests added** (`src/cli/commands/verify-classify.test.ts`, 52 → 54):
+- `decision-18-corrective-a` — a paraphrased quote matching neither live slice in a pair: both
+  citing chunks go stale and the `--json` warnings report the pair id, "does not match verbatim",
+  and the record's rule-delta label.
+- `decision-18-corrective-b` — a cited live slice that becomes unreadable between pairing and
+  chunk-verdict computation (simulated via a `vi.spyOn(fs, 'readFile')` that lets the first,
+  pairing-time read through and rejects the second, chunk-verdict-time read): the citing chunk goes
+  stale and the warnings report "could not be read", proving an unreadable slice is surfaced rather
+  than silently absorbed.
+- The existing `decision-18` test (case a) gained an explicit assertion that no unattributable
+  warning fires — proving the fix does not over-broaden and destroy decision 18's original purpose.
+
+**Verification:**
+- `npx vitest run src/cli/commands/verify-classify.test.ts` — 54/54 passed (52 baseline + 2 new).
+- `npx vitest run` (full suite) — 3678/3678 passed (3676 baseline + 2 new; no regressions).
+- `npx eslint src/cli/commands/verify-classify.ts` — clean.
+
+**Committed in:** `83411485` (fix(174-04): close FALSE-CLEAN hole in computeChunkVerdicts quote
+narrowing).
