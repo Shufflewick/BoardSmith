@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-05-PLAN.md — wired CHECK-04 into /bs-verify-game as Step 7 (Derived-Line Re-Check), renumbering Close to Step 8. Step 7 routes into both 177-04 judgment contracts: dispatches BS-DERIVE-V1 (verify/derive-recheck.md) with a blind quote-lines-only payload built by buildBlindDerivePayload (verify-derive-recheck.ts), then a SEPARATE BS-DERIVE-COMPARE-V1 dispatch (verify/derive-compare.md) carrying the original line and the blind reading, returning one of the four DERIVE_VERDICTS; both recorded through recordDeriveVerdicts's atomic write, reported by formatting `boardsmith verify-derive-recheck --json` (formatted, never computed); findings exit 0 and never gate Close (decision 15). Added an explicit, pinned Context-Economics carve-out directly below the original hard-rule sentence (preserved byte-identical): the orchestrator's own transcript still shows zero quote/Derived/Visual lines (unchanged); the exception belongs to CHECK-04's subagent dispatch prompts/returns, citing 174-PROOF.md §3's quotedPass1/quotedPass2 precedent by name, and naming two SEPARATELY-checked observables (blind prompt: ZERO Derived/Visual, no exception; comparison prompt/return: EXPECTED to carry a Derived line). Full-file swept verify-game.md end to end (177-SWEEP.md, 12 claims: 6 STILL TRUE re-verified, 5 REVISED, 1 CARVE-OUT ADDED, 0 UNRESOLVED) — found Step 0's 'clean close (Step N)' cross-reference had drifted a SECOND time (176-04 fixed it once already, Step 5→7; now 7→8), and confirmed Close's condition is deliberately unchanged since CHECK-04 is report-only (decision 15). verify.test.ts: moved the naming-Close pin to Step 8, bumped the pre-existing structural step-count test 8→9 steps / CHECK-0[1-2]→CHECK-0[1-4] (a deliberate pin per its own comment), added a CHECK-04 routing describe block and a Context-Economics carve-out describe block. npm test: 3954/3954 green (baseline 3951 + 3 net new), zero regressions. CHECK-04 stays OPEN in REQUIREMENTS.md — this is plan 5 of 7; the 22-line distribution prediction committed before measuring (177-06) and the live claude -p dispatch proof against both reference games (177-07) remain. See .planning/phases/177-derived-line-re-derivation/177-05-SUMMARY.md."
-last_updated: "2026-07-30T23:20:00Z"
-last_activity: 2026-07-30 -- Phase 177 plan 05 executed
+stopped_at: "Completed 177-06-PLAN.md — committed the pre-dispatch distribution prediction for CHECK-04's 22-line corpus (177-PREDICTION.md, commit 913bfe7d) BEFORE staging the live proof run (177-PROOF.md §1, commit d8b88198). Prediction: per-line verdict + one-sentence reason for all 22 real Derived lines (10 seven, 12 one-two-punch), quoted verbatim, with three interpretation rules fixed in advance (large underivable = real ingest-contract finding, never tuned away; uniform result proves consistency not discrimination; zero not-rule-bearing would be suspicious). Predicted totals: 9 agrees / 9 not-rule-bearing / 3 underivable (~14%) / 1 disagrees — explicitly defended under the plan's 20% 'looks unsampled' threshold, and explicitly diverging from 177-RESEARCH.md's own underivability hedge on two lines (seven's '112 cards' deck-math line and one-two-punch's 'both rest cards' line) after closer per-line quote reading. Proof-staging task then ran REAL commands against cp -R copies only: preflight confirmed both pinned commits unchanged, whole-tree sha256 baselines captured before any copy (3919/4134 files, matching 173/176-PROOF.md exactly) and re-verified byte-identical after; real `npx boardsmith claude --local --force` install with a direct filesystem check confirming derive-recheck.md/derive-compare.md both land under bs-shared/verify/; dispatch mechanism stated in advance (claude -p OS subprocess — this session has no native Task/Agent tool, per 173-PROOF.md §6 precedent); real `boardsmith verify-derive-recheck --project <copy> --json` enumeration pasted for both games. Surfaced and reconciled a real finding rather than silently absorbing it: 177-RESEARCH.md's regex-gap measurement (decision 13) was written BEFORE that gap was fixed by this phase's own 177-02/177-04 commits, so the real enumeration now mechanically excludes 6 of one-two-punch's 12 Derived lines (not 2) — 16 of 22 lines are real dispatch candidates, not 20. The prediction's committed 22-line total and underivable share are unaffected (none of the 4 newly-excluded lines were predicted underivable); 177-PREDICTION.md was NOT edited to reflect this — the reconciliation lives in 177-PROOF.md only. No dispatch of any kind was performed in this plan. npm test: 3954/3954 green, zero regressions. CHECK-04 stays OPEN in REQUIREMENTS.md — this is plan 6 of 7; the live claude -p dispatch proof measuring the real distribution against this committed prediction (177-07) remains. See .planning/phases/177-derived-line-re-derivation/177-06-SUMMARY.md."
+last_updated: "2026-07-31T00:10:00Z"
+last_activity: 2026-07-30 -- Phase 177 plan 06 executed
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 54
-  completed_plans: 52
-  percent: 70
+  completed_plans: 53
+  percent: 98
 ---
 
 # Project State
@@ -25,7 +25,50 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 5/7 plans complete.
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 6/7 plans complete.
+
+`177-06-PLAN.md` (2026-07-30) committed `177-PREDICTION.md` — a per-line, pre-dispatch verdict
+prediction for all 22 real `Derived` lines (10 `seven`, 12 `one-two-punch`), each quoted verbatim
+with slice path/line number and a one-sentence reason grounded in that slice's actual quoted
+content — in its own commit (`913bfe7d`), before any dispatch, CLI enumeration, or proof-staging
+work. Three interpretation rules are fixed in advance: (a) a large `underivable` share is a real
+finding about the ingest contract, never tuned away; (b) a uniform result in either direction
+proves consistency, not discrimination (176's 60/60 precedent); (c) zero `not-rule-bearing`
+verdicts would be suspicious given known art/layout-only lines. Predicted totals: 9 `agrees`, 9
+`not-rule-bearing`, 3 `underivable` (~14%), 1 `disagrees` — landing deliberately under the plan's
+own 20% "looks unsampled" warning threshold, defended explicitly rather than hedged upward. The
+prediction explicitly diverges from `177-RESEARCH.md`'s own underivability hedge on two lines after
+closer per-line reading: `seven`'s "112 cards" deck-math line is predicted `agrees` (the quoted
+Distribution-of-Cards sentence directly gives 1-7/4 colors/4 copies/7 bonus, not dependent on the
+diagram line research assumed was its sole support), and `one-two-punch`'s "two Rest cards" line is
+predicted `agrees` (the quoted Tip's word "both" is itself sufficient). Task 2 then staged
+`177-PROOF.md` §1 (commit `d8b88198`) with real commands against `cp -R` copies only: preflight
+confirmed both pinned commits unchanged (`one-two-punch`'s pre-existing `.boardsmith/` deletions
+named as the documented Phase 173 exception), whole-tree sha256 baselines captured before any copy
+(3919/4134 files, matching `173-PROOF.md`/`176-PROOF.md`'s own counts exactly) and re-verified
+byte-identical after the entire task; real `npx boardsmith claude --local --force` install into
+each copy, asserted by a direct filesystem check (not console-output trust) confirming both
+`derive-recheck.md` and `derive-compare.md` land under `bs-shared/verify/`; the dispatch mechanism
+stated in advance (`claude -p` OS subprocess — this session exposes no native Task/Agent tool, per
+`173-PROOF.md` §6's precedent, every real dispatch in Phases 173-176 used a subprocess); real
+`boardsmith verify-derive-recheck --project <copy> --json` enumeration output pasted for both
+games. **Surfaced and reconciled a real finding rather than silently absorbing it**:
+`177-RESEARCH.md`'s regex-gap measurement (the basis for decision 13) was made BEFORE that gap was
+actually fixed — the fix had already landed via this phase's own `177-02`/`177-04` commits
+(`06a4fe44`/`8a8f86ad`) — so the real enumeration now mechanically excludes 6 of `one-two-punch`'s
+12 `Derived` lines before dispatch, not the 2 the pre-fix research measurement implied. This means
+16 of the 22 lines (10 `seven` + 6 `one-two-punch`), not 20, are real dispatch candidates once
+re-derivation runs — recorded explicitly in `177-PROOF.md`'s Reconciliation subsection. The
+already-committed `177-PREDICTION.md` was deliberately NOT edited to reflect this (that would defeat
+the whole prediction-before-measurement discipline); its committed 22-line total and `underivable`
+share are unaffected since none of the 4 newly-excluded lines were predicted `underivable`. No
+dispatch, prompt, or verdict distribution appears anywhere in either committed file — every returned
+finding in the real enumeration carries `"verdict": "pending"`. `npm test`: 3954/3954 green, zero
+regressions. **CHECK-04 stays OPEN in `REQUIREMENTS.md`** — this plan is 6 of 7; the live `claude
+-p` dispatch proof measuring the real distribution against this committed prediction (177-07)
+remains. See `.planning/phases/177-derived-line-re-derivation/177-06-SUMMARY.md`.
+
+---
 
 `177-05-PLAN.md` (2026-07-30) wired CHECK-04 into `/bs-verify-game` as Step 7 (Derived-Line
 Re-Check), renumbering Close from Step 7 to Step 8 with a full numeric renumber (every

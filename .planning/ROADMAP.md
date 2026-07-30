@@ -276,7 +276,7 @@ Plans:
 - [x] 177-03-PLAN.md — Project-level ledger through the one atomic write path, the report command, and `verify-derive-recheck`'s CLI registration (no `--run-id`, findings exit 0)
 - [x] 177-04-PLAN.md — The two judgment contracts (`BS-DERIVE-V1` blind, `BS-DERIVE-COMPARE-V1` comparison), installer leaf probes, and drift pins
 - [x] 177-05-PLAN.md — `verify-game.md`: the CHECK-04 step, the Context-Economics carve-out, renumbered Close, and a full stale-claim sweep recording TRUE findings too
-- [ ] 177-06-PLAN.md — Commit the 22-line distribution prediction BEFORE dispatching; stage the proof run on `cp -R` copies with sha256 baselines and a named dispatch mechanism
+- [x] 177-06-PLAN.md — Commit the 22-line distribution prediction BEFORE dispatching; stage the proof run on `cp -R` copies with sha256 baselines and a named dispatch mechanism
 - [ ] 177-07-PLAN.md — The live proof: grep a real blind dispatch prompt for zero `Derived (p.`, run the full 22-line corpus, compare against the prediction, disclose limitations
 
 ### Phase 178: Worked-Example Tests
@@ -313,7 +313,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 174. Verify Classifier | 8/8 | Reopened — goal NOT MET (decision 19 applied, §8) | - |
 | 175. Impact Map & Repair Gating | 8/8 | Complete   | 2026-07-30 |
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
-| 177. Derived-Line Re-Derivation | 5/7 | In Progress|  |
+| 177. Derived-Line Re-Derivation | 6/7 | In Progress|  |
 | 178. Worked-Example Tests | 0/TBD | Not started | - |
 | 179. Source-Free Verification Mode | 0/TBD | Not started | - |
 
