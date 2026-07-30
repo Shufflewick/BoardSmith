@@ -287,6 +287,36 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
     verdicts, recording the comparison. A classifier whose verdicts move between runs cannot support
     a staleness marker anything downstream trusts.
 
+18. **CHUNK staleness derives from the LINE-LEVEL deltas attributable to that chunk's own cited
+    content — never from the group verdict.** Decided 2026-07-29, and it is the most goal-critical
+    decision in this phase.
+
+    Why it is needed: decision 4's second amendment measured that a real game pairs into ONE group,
+    and not as a fixable artifact — genuine cross-page prose ("continues on p.2") bridges page spans
+    through the overlap join, so a 2-page book yields one group and a 30-page book plausibly yields
+    very few large ones. Combined with decision 11's MAX-severity roll-up, a single `sharper` line
+    anywhere in the rulebook would make the game's only group `sharper`, and every chunk citing that
+    group stale. That is EXACTLY the failure the phase goal names — "a second run of the skill does not
+    flag every chunk as stale" — reached through the roll-up rather than through the classifier. A
+    classifier that labels perfectly and a roll-up that smears the label across every chunk fails this
+    phase just as completely as an over-flagging classifier.
+
+    Therefore the two roll-ups are DIFFERENT computations and must not be conflated:
+    - **Group/pair verdict** = MAX severity over the group's line-level deltas (decision 11, unchanged).
+      Its job is REPORTING — telling the designer what happened in this page region.
+    - **Chunk verdict/staleness** = derived from only those line-level deltas that intersect THAT
+      chunk's own cited content. A chunk is stale when a `sharper`/`contradictory`/`unclassified` delta
+      lands on a line that chunk actually cites — not when it merely shares a page group with one.
+
+    Consequence for the record shape: the line-level deltas must be persisted with enough locality to
+    attribute them to citations, not collapsed into a single per-group label before recording.
+    Decision 11 already requires retaining line-level evidence; this decision makes that retention
+    load-bearing rather than merely informative.
+
+    Rejected: chunk verdict = its group's verdict — the over-flagging failure above.
+    Rejected: dropping the group verdict — the designer needs the page-region view, and Phase 175's
+    impact map consumes it.
+
 17. **The SC-2 bar is measured on RULE-BEARING content only** — a corollary of 12b, stated explicitly
     because it is the difference between a meaningful bar and a meaningless one. Presentation notes
     excluded per 12b never contribute to a delta, so they can neither inflate nor deflate the
