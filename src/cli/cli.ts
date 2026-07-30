@@ -38,6 +38,7 @@ import {
 } from './commands/verify-impact.js';
 import { verifyRulingRecheckCommand } from './commands/verify-ruling-recheck.js';
 import { verifyRepairStatusCommand } from './commands/verify-repair.js';
+import { verifyDeriveRecheckCommand } from './commands/verify-derive-recheck.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -411,6 +412,22 @@ program
   .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyRepairStatusCommand);
+
+// CHECK-04 (177-CONTEXT.md): re-derives every rule-bearing Derived line independently of the
+// original transcription pass, using only the current slice's quote lines, and reports any
+// disagreement citing both derivations verbatim. Project-level and source-free BY CONSTRUCTION —
+// this command registers no --run-id (decision 14) and no bypass option of any kind.
+program
+  .command('verify-derive-recheck')
+  .description(
+    "Re-derive every rule-bearing Derived line independently of the original transcription, " +
+      'reporting one of four verdicts (agrees / disagrees / underivable / not-rule-bearing) per ' +
+      'line, citing both derivations on disagreement (read-only, project-level, source-free, ' +
+      'machine-readable)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyDeriveRecheckCommand);
 
 // Claude Code integration
 const claudeCmd = program

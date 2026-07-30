@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
+import chalk from 'chalk';
 import { isPresentationLine } from './verify-classify.js';
 import { atomicWriteFile } from './verify-run.js';
 
@@ -432,4 +433,137 @@ export async function readDeriveVerdicts(projectDir: string): Promise<DeriveVerd
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
     .map((l) => JSON.parse(l) as DeriveVerdictRecord);
+}
+
+// -------------------------------------------------------------------------------------------
+// verifyDeriveRecheckCommand — the report command (decisions 8, 15)
+// -------------------------------------------------------------------------------------------
+
+export interface DeriveRecheckFinding {
+  slicePath: string;
+  lineNumber: number;
+  /** The original `Derived (p.N): ...` line, verbatim. */
+  originalLine: string;
+  verdict: DeriveVerdict | 'pending';
+  reasoning: string;
+  /** Present, verbatim, on every `disagrees` finding (decision 8). */
+  originalReading?: string;
+  /** Present, verbatim, on every `disagrees` finding (decision 8). */
+  rederivedReading?: string;
+}
+
+export interface VerifyDeriveRecheckResult {
+  project: string;
+  /** Every `Derived` line surviving `isPresentationLine` exclusion — the subagent's candidate set. */
+  enumeratedCount: number;
+  /** `Derived` lines the mechanical presentation filter excluded (reported, not silently dropped). */
+  presentationExcludedCount: number;
+  verdictCounts: Record<DeriveVerdict, number>;
+  findings: DeriveRecheckFinding[];
+}
+
+function emptyDeriveVerdictCounts(): Record<DeriveVerdict, number> {
+  const counts = {} as Record<DeriveVerdict, number>;
+  for (const v of DERIVE_VERDICTS) counts[v] = 0;
+  return counts;
+}
+
+/**
+ * `boardsmith verify-derive-recheck` — CHECK-04's report: enumerates every live-tree `Derived`
+ * line, joins each surviving candidate to whatever verdict `recordDeriveVerdicts` has already
+ * persisted to the project-level ledger, and reports one finding per candidate (verdict `pending`
+ * when nothing has been recorded for it yet). `verdictCounts` includes all four `DERIVE_VERDICTS`
+ * with zeros written explicitly — never an omitted key for a verdict that happened not to occur.
+ *
+ * A `disagrees` finding always carries BOTH `originalReading` and `rederivedReading` verbatim
+ * (decision 8 — SC-2 requires citing both derivations, and `createDeriveVerdictRecord` already
+ * guarantees neither field is empty on a `disagrees` record reaching the ledger).
+ *
+ * Runs project-wide with no `--run-id` and no staged run present (decision 14) — this is a
+ * READ-ONLY report: it never calls `recordDeriveVerdicts` itself. Findings exit 0 (this module
+ * never sets `process.exitCode` anywhere — a disagreement is a finding, not a gate, decision 15).
+ * Only an unreadable project/rulebook throws, with a single actionable line naming `--project` —
+ * no stack frame, no `.ts:` reference.
+ */
+export async function verifyDeriveRecheckCommand(
+  options: { project?: string; json?: boolean } = {},
+): Promise<VerifyDeriveRecheckResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  const rulebookDir = join(projectDir, 'rulebook');
+  try {
+    await fs.access(rulebookDir);
+  } catch {
+    throw new Error(
+      `No rulebook/ directory in ${projectDir}.\n` +
+        `Pass --project <dir> to target the bs-project this check should read.`,
+    );
+  }
+
+  const slices = await readLiveSlices(projectDir);
+  const { candidates, excluded } = enumerateDerivedLines(slices);
+  const recorded = await readDeriveVerdicts(projectDir);
+  const recordedByLocation = new Map(
+    recorded.map((r) => [`${r.slicePath}:${r.lineNumber}`, r] as const),
+  );
+
+  const verdictCounts = emptyDeriveVerdictCounts();
+  const findings: DeriveRecheckFinding[] = candidates.map((entry) => {
+    const record = recordedByLocation.get(`${entry.slicePath}:${entry.lineNumber}`);
+    if (record) {
+      verdictCounts[record.verdict]++;
+      return {
+        slicePath: entry.slicePath,
+        lineNumber: entry.lineNumber,
+        originalLine: entry.text,
+        verdict: record.verdict,
+        reasoning: record.reasoning,
+        ...(record.originalReading !== undefined
+          ? { originalReading: record.originalReading }
+          : {}),
+        ...(record.rederivedReading !== undefined
+          ? { rederivedReading: record.rederivedReading }
+          : {}),
+      };
+    }
+    return {
+      slicePath: entry.slicePath,
+      lineNumber: entry.lineNumber,
+      originalLine: entry.text,
+      verdict: 'pending' as const,
+      reasoning: '',
+    };
+  });
+
+  const result: VerifyDeriveRecheckResult = {
+    project: projectDir,
+    enumeratedCount: candidates.length,
+    presentationExcludedCount: excluded.length,
+    verdictCounts,
+    findings,
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  console.log(
+    chalk.green(
+      `✓ Derive re-check — ${candidates.length} rule-bearing candidate(s), ` +
+        `${excluded.length} presentation-excluded`,
+    ),
+  );
+  for (const v of DERIVE_VERDICTS) {
+    console.log(`  ${v}: ${verdictCounts[v]}`);
+  }
+  for (const finding of findings) {
+    if (finding.verdict === 'disagrees') {
+      console.log(chalk.yellow(`  ⚠ DISAGREES — ${finding.slicePath}:${finding.lineNumber}`));
+      console.log(`    Original:   ${finding.originalReading}`);
+      console.log(`    Rederived:  ${finding.rederivedReading}`);
+      console.log(`    Reasoning:  ${finding.reasoning}`);
+    }
+  }
+
+  return result;
 }

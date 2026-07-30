@@ -14,6 +14,7 @@ import {
   buildBlindDerivePayload,
   recordDeriveVerdicts,
   readDeriveVerdicts,
+  verifyDeriveRecheckCommand,
   type DerivedLineEntry,
   type DeriveVerdictRecord,
 } from './verify-derive-recheck.js';
@@ -345,6 +346,11 @@ describe('module source guarantees', () => {
     expect(codeOnly).not.toContain('writeFileSync(');
   });
 
+  it('never sets process.exitCode anywhere in the module (findings exit 0, decision 15)', () => {
+    const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
+    const codeOnly = stripComments(src);
+    expect(codeOnly).not.toContain('process.exitCode');
+  });
 });
 
 // ===========================================================================================
@@ -474,5 +480,129 @@ describe('recordDeriveVerdicts / readDeriveVerdicts', () => {
     expect(outsideLedgerDir.sort()).toEqual(
       [join(dir, 'rulebook', '01-x.md'), join(dir, 'rulebook', 'source', 'rules.pdf')].sort(),
     );
+  });
+});
+
+// ===========================================================================================
+// Task 2 — the report command and its CLI registration
+// ===========================================================================================
+
+describe('verifyDeriveRecheckCommand', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-cmd-'));
+    await fs.mkdir(join(dir, 'rulebook'), { recursive: true });
+    await fs.writeFile(
+      join(dir, 'rulebook', '01-x.md'),
+      [
+        'p.1, Components:',
+        '"The box contains 112 cards."',
+        '',
+        'Derived (p.1): The box contains 112 cards.',
+        '',
+        'p.1, Distribution:',
+        '"Each player has 7 Action Cards."',
+        '',
+        'Derived (p.1): Each player has 8 Action Cards.',
+      ].join('\n'),
+    );
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('runs project-wide with no --run-id and no staged run present, resolving normally with a disagreement finding present', async () => {
+    await recordDeriveVerdicts(dir, [
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
+        verdict: 'disagrees',
+        reasoning: 'The quote lines say 7, not 8.',
+        originalReading: 'Each player has 8 Action Cards.',
+        rederivedReading: 'Each player has 7 Action Cards.',
+      }),
+    ]);
+
+    const result = await verifyDeriveRecheckCommand({ project: dir });
+    expect(result.findings.some((f) => f.verdict === 'disagrees')).toBe(true);
+  });
+
+  it('a disagreement finding cites both derivations verbatim, and process.exitCode stays unset (exit)', async () => {
+    await recordDeriveVerdicts(dir, [
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
+        verdict: 'disagrees',
+        reasoning: 'The quote lines say 7, not 8.',
+        originalReading: 'Each player has 8 Action Cards.',
+        rederivedReading: 'Each player has 7 Action Cards.',
+      }),
+    ]);
+
+    const before = process.exitCode;
+    const result = await verifyDeriveRecheckCommand({ project: dir });
+    expect(process.exitCode).toBe(before);
+
+    const disagreement = result.findings.find((f) => f.verdict === 'disagrees')!;
+    expect(disagreement.originalReading).toBe('Each player has 8 Action Cards.');
+    expect(disagreement.rederivedReading).toBe('Each player has 7 Action Cards.');
+
+    // Source inspection: process.exitCode appears zero times in the module (decision 15).
+    const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
+    expect(stripComments(src)).not.toContain('process.exitCode');
+  });
+
+  it('throws one actionable line naming --project when rulebook/ is missing, no stack/.ts: leak', async () => {
+    const empty = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-empty-'));
+    try {
+      await expect(verifyDeriveRecheckCommand({ project: empty })).rejects.toThrow(
+        /No rulebook\/ directory.*--project/s,
+      );
+      try {
+        await verifyDeriveRecheckCommand({ project: empty });
+      } catch (err) {
+        const message = (err as Error).message;
+        expect(message).not.toMatch(/\.ts:\d+/);
+        expect(message).not.toContain('at ');
+      }
+    } finally {
+      await fs.rm(empty, { recursive: true, force: true });
+    }
+  });
+
+  it('--json emits the result and nothing else on stdout (purity)', async () => {
+    const logs: string[] = [];
+    const spy = (msg?: unknown) => logs.push(String(msg));
+    const original = console.log;
+    console.log = spy;
+    try {
+      await verifyDeriveRecheckCommand({ project: dir, json: true });
+    } finally {
+      console.log = original;
+    }
+    expect(logs).toHaveLength(1);
+    expect(() => JSON.parse(logs[0])).not.toThrow();
+    const parsed = JSON.parse(logs[0]);
+    expect(parsed.findings).toBeDefined();
+  });
+
+  it('per-verdict counts include all four verdicts with zeros written explicitly', async () => {
+    const result = await verifyDeriveRecheckCommand({ project: dir });
+    expect(result.verdictCounts).toEqual({
+      agrees: 0,
+      disagrees: 0,
+      underivable: 0,
+      'not-rule-bearing': 0,
+    });
+  });
+
+  it('a candidate with no recorded verdict reports pending, not a manufactured default', async () => {
+    const result = await verifyDeriveRecheckCommand({ project: dir });
+    expect(result.findings.every((f) => f.verdict === 'pending')).toBe(true);
+    expect(result.findings.length).toBeGreaterThan(0);
   });
 });
