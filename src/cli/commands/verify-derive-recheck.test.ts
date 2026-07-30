@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createHash } from 'node:crypto';
 import { promises as fs, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -11,7 +12,10 @@ import {
   quoteLinesOnly,
   enumerateDerivedLines,
   buildBlindDerivePayload,
+  recordDeriveVerdicts,
+  readDeriveVerdicts,
   type DerivedLineEntry,
+  type DeriveVerdictRecord,
 } from './verify-derive-recheck.js';
 
 /**
@@ -332,5 +336,143 @@ describe('module source guarantees', () => {
       .filter((l) => l.trim().startsWith('import'))
       .join('\n');
     expect(importLines).not.toContain('resolveFreshTranscription');
+  });
+
+  it('never calls fs.writeFile/writeFileSync directly — atomicWriteFile is the only durable write', () => {
+    const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
+    const codeOnly = stripComments(src);
+    expect(codeOnly).not.toMatch(/[^.]writeFile\(/);
+    expect(codeOnly).not.toContain('writeFileSync(');
+  });
+
+});
+
+// ===========================================================================================
+// Task 1 (continued) — the project-level ledger through the one atomic write path
+// ===========================================================================================
+
+/** Whole-project content hash: every file's relative path + bytes, in sorted order. */
+async function hashProject(root: string): Promise<string> {
+  const files: string[] = [];
+  async function walk(current: string): Promise<void> {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else files.push(full);
+    }
+  }
+  await walk(root);
+  files.sort();
+  const hash = createHash('sha256');
+  for (const f of files) {
+    hash.update(f.slice(root.length));
+    hash.update(await fs.readFile(f));
+  }
+  return hash.digest('hex');
+}
+
+function sampleUnderivableRecord(): DeriveVerdictRecord {
+  return createDeriveVerdictRecord({
+    slicePath: 'rulebook/01-x.md',
+    lineNumber: 7,
+    originalLine: 'Derived (p.1): The box contains 112 cards.',
+    verdict: 'underivable',
+    reasoning: 'The supporting fact is itself a diagram-description Derived line, not a quote.',
+  });
+}
+
+function sampleDisagreesRecord(): DeriveVerdictRecord {
+  return createDeriveVerdictRecord({
+    slicePath: 'rulebook/01-x.md',
+    lineNumber: 12,
+    originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
+    verdict: 'disagrees',
+    reasoning: 'The quote lines say 7, not 8.',
+    originalReading: 'Each player has 8 Action Cards.',
+    rederivedReading: 'Each player has 7 Action Cards, per the quoted distribution table.',
+  });
+}
+
+describe('recordDeriveVerdicts / readDeriveVerdicts', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-ledger-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('round-trips exactly what was written, including an underivable record', async () => {
+    const records = [sampleUnderivableRecord(), sampleDisagreesRecord()];
+    await recordDeriveVerdicts(dir, records);
+
+    const read = await readDeriveVerdicts(dir);
+    expect(read).toEqual(records);
+    expect(read.some((r) => r.verdict === 'underivable')).toBe(true);
+  });
+
+  it('returns an empty array when no ledger has ever been written', async () => {
+    const read = await readDeriveVerdicts(dir);
+    expect(read).toEqual([]);
+  });
+
+  it('re-recording REPLACES the body atomically — no leftover from the first write', async () => {
+    await recordDeriveVerdicts(dir, [sampleUnderivableRecord()]);
+    await recordDeriveVerdicts(dir, [sampleDisagreesRecord()]);
+
+    const read = await readDeriveVerdicts(dir);
+    expect(read).toEqual([sampleDisagreesRecord()]);
+    expect(read.some((r) => r.verdict === 'underivable')).toBe(false);
+  });
+
+  it('is project-level: no run-id segment in the ledger path, and neither function accepts a runId', async () => {
+    const { ledgerPath } = await recordDeriveVerdicts(dir, [sampleUnderivableRecord()]);
+    expect(ledgerPath).not.toContain('.verify');
+    expect(ledgerPath).not.toMatch(/run-?[Ii]d/);
+    expect(ledgerPath).toBe('rulebook/.derive-recheck/DERIVE-VERDICTS.md');
+
+    // 2-arity (projectDir, records) / 1-arity (projectDir) — no runId parameter slot exists.
+    expect(recordDeriveVerdicts.length).toBe(2);
+    expect(readDeriveVerdicts.length).toBe(1);
+  });
+
+  it('source-free: a whole-project byte hash before vs. after recording differs ONLY under rulebook/.derive-recheck/, and the archive decoy is never touched', async () => {
+    // Seed a project shaped like a real bs-project: a live slice, plus a decoy at an
+    // archive-shaped path (`rulebook/source/...`) this module must never open or write.
+    await fs.mkdir(join(dir, 'rulebook', 'source'), { recursive: true });
+    await fs.writeFile(join(dir, 'rulebook', '01-x.md'), 'p.1, X:\n"112 cards total."');
+    await fs.writeFile(join(dir, 'rulebook', 'source', 'rules.pdf'), 'not a real pdf, but bytes');
+    const archiveHashBefore = await hashProject(join(dir, 'rulebook', 'source'));
+    const sliceHashBefore = await fs.readFile(join(dir, 'rulebook', '01-x.md'), 'utf-8');
+
+    await recordDeriveVerdicts(dir, [sampleUnderivableRecord()]);
+
+    const archiveHashAfter = await hashProject(join(dir, 'rulebook', 'source'));
+    const sliceHashAfter = await fs.readFile(join(dir, 'rulebook', '01-x.md'), 'utf-8');
+    expect(archiveHashAfter).toBe(archiveHashBefore);
+    expect(sliceHashAfter).toBe(sliceHashBefore);
+
+    // Only rulebook/.derive-recheck/ is new — confirm by walking the whole project and
+    // checking every changed/new file lives under that one directory.
+    const walk = async (current: string, acc: string[]): Promise<string[]> => {
+      const entries = await fs.readdir(current, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = join(current, entry.name);
+        if (entry.isDirectory()) await walk(full, acc);
+        else acc.push(full);
+      }
+      return acc;
+    };
+    const allFiles = await walk(dir, []);
+    const outsideLedgerDir = allFiles.filter(
+      (f) => !f.includes(join('rulebook', '.derive-recheck')),
+    );
+    // Every file outside the ledger dir is one of the two seeded, untouched files.
+    expect(outsideLedgerDir.sort()).toEqual(
+      [join(dir, 'rulebook', '01-x.md'), join(dir, 'rulebook', 'source', 'rules.pdf')].sort(),
+    );
   });
 });

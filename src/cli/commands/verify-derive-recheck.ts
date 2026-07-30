@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { isPresentationLine } from './verify-classify.js';
+import { atomicWriteFile } from './verify-run.js';
 
 /**
  * `verify-derive-recheck.ts` — CHECK-04's mechanical core (177-CONTEXT.md decision 2/5): the
@@ -26,6 +27,21 @@ import { isPresentationLine } from './verify-classify.js';
  * tree (177-CONTEXT.md decision 12; 177-RESEARCH.md Pitfall 3) — `resolveFreshTranscription`
  * (`verify-ruling-recheck.ts`) resolves the STAGED transcription for a different question (Phase
  * 176's ruling re-check) and must not be reused here.
+ *
+ * SOURCE-FREE BY CONSTRUCTION, not by flag (177-CONTEXT.md decision 4, mirroring `trace-check.ts`'s
+ * CHECK-03 posture): this module has no code path that opens the archived source rulebook
+ * (`rulebook/source/*`) at all — `readLiveSlices` reads only `rulebook/*.md`, and no function in
+ * this file ever joins `projectDir` with `rulebook/source`. Source-freeness is structural, never a
+ * `--source-free` mode toggle a caller could forget to pass.
+ *
+ * The ledger this module writes (`recordDeriveVerdicts`/`readDeriveVerdicts`) is PROJECT-LEVEL —
+ * `rulebook/.derive-recheck/DERIVE-VERDICTS.md`, no `.verify/<runId>/` segment, no `runId`
+ * parameter anywhere in either function's signature (177-CONTEXT.md decision 14). CHECK-04 has
+ * nothing to scope to a run: it is source-free by construction and independent of any verify run's
+ * staleness verdicts, exactly like CHECK-03 (`trace-check.ts`) and CHECK-05 (`drift-check.ts`).
+ * Every durable write in this module goes through `atomicWriteFile` (`verify-run.ts`) — the ONE
+ * atomic write path in the repo (`173-REVIEW.md` CR-01's defect class) — never a second
+ * `fs.writeFile`/`writeFileSync` call.
  */
 
 // -------------------------------------------------------------------------------------------
@@ -342,4 +358,78 @@ export function buildBlindDerivePayload(
     'line from this slice, or any other slice, is included below or anywhere in this prompt:',
     ...quotes,
   ].join('\n');
+}
+
+// -------------------------------------------------------------------------------------------
+// recordDeriveVerdicts / readDeriveVerdicts — the PROJECT-LEVEL ledger (decision 14)
+// -------------------------------------------------------------------------------------------
+
+const DERIVE_LEDGER_BEGIN = '<!-- boardsmith:derive-verdicts:begin -->';
+const DERIVE_LEDGER_END = '<!-- boardsmith:derive-verdicts:end -->';
+
+/**
+ * The project-level ledger path — `rulebook/.derive-recheck/DERIVE-VERDICTS.md`. No `.verify/`
+ * segment, no `runId` anywhere in this path: CHECK-04 has nothing to scope to a run (decision 14).
+ */
+function deriveVerdictsLedgerPath(projectDir: string): string {
+  return join(projectDir, 'rulebook', '.derive-recheck', 'DERIVE-VERDICTS.md');
+}
+
+/**
+ * Persists a batch of already-validated `DeriveVerdictRecord`s (every record MUST have already
+ * passed through `createDeriveVerdictRecord` — this function accepts validated records and does
+ * not re-parse verdict strings) to the project-level ledger, through `atomicWriteFile` — the ONE
+ * atomic write path in the repo. Re-recording REPLACES the body atomically: `atomicWriteFile`'s
+ * temp-write-then-rename means no partial file is ever observable, matching
+ * `recordRulingVerdicts`'s (`verify-ruling-recheck.ts`) begin/end fenced JSON-lines shape exactly,
+ * minus the run-scoping this check does not have.
+ *
+ * Accepts no `runId` parameter (2-arity: `projectDir`, `records`) — the ledger path contains no
+ * run-id segment.
+ */
+export async function recordDeriveVerdicts(
+  projectDir: string,
+  records: DeriveVerdictRecord[],
+): Promise<{ ledgerPath: string }> {
+  const ledgerPath = deriveVerdictsLedgerPath(projectDir);
+  const lines = records.map((r) => JSON.stringify(r));
+  const content =
+    `# Derive Verdicts (CHECK-04) — project-level, no run-id\n\n` +
+    `${DERIVE_LEDGER_BEGIN}\n` +
+    lines.join('\n') +
+    (lines.length > 0 ? '\n' : '') +
+    `${DERIVE_LEDGER_END}\n`;
+  await fs.mkdir(dirname(ledgerPath), { recursive: true });
+  await atomicWriteFile(ledgerPath, content);
+  return { ledgerPath: relative(projectDir, ledgerPath) };
+}
+
+/**
+ * Round-trips exactly what `recordDeriveVerdicts` wrote, including a record whose verdict is
+ * `underivable`. Returns an empty array (never throws) when no ledger has been written yet — a
+ * project that has never run `verify-derive-recheck`'s recording step has nothing recorded, which
+ * is not a tool failure. Accepts no `runId` parameter (1-arity: `projectDir`).
+ */
+export async function readDeriveVerdicts(projectDir: string): Promise<DeriveVerdictRecord[]> {
+  const ledgerPath = deriveVerdictsLedgerPath(projectDir);
+  let text: string;
+  try {
+    text = await fs.readFile(ledgerPath, 'utf-8');
+  } catch {
+    return [];
+  }
+  const beginIdx = text.indexOf(DERIVE_LEDGER_BEGIN);
+  const endIdx = text.indexOf(DERIVE_LEDGER_END);
+  if (beginIdx === -1 || endIdx === -1) {
+    throw new Error(
+      `Malformed derive-verdicts ledger at ${relative(projectDir, ledgerPath)}: missing ` +
+        `begin/end fence.`,
+    );
+  }
+  const body = text.slice(beginIdx + DERIVE_LEDGER_BEGIN.length, endIdx);
+  return body
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as DeriveVerdictRecord);
 }
