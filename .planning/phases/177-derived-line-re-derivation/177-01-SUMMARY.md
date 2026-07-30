@@ -92,3 +92,7 @@ None - no external service configuration required.
 ---
 *Phase: 177-derived-line-re-derivation*
 *Completed: 2026-07-30*
+
+## Self-Check: PASSED
+
+All 6 claimed files found on disk; all 4 claimed commit hashes found in `git log --oneline --all`.
