@@ -2,8 +2,13 @@ import { promises as fs } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { findHeadingIndex, parseRulings } from './build-manifest.js';
-import { VERIFIED_AGAINST_HEADING, VERIFIED_AGAINST_END } from './chunk-provenance.js';
+import {
+  VERIFIED_AGAINST_HEADING,
+  VERIFIED_AGAINST_END,
+  chunkProvenanceStatusCommand,
+} from './chunk-provenance.js';
 import { RULE_DELTA_KINDS, type RuleDelta, type ChunkVerdict, verifyClassifyStatusCommand } from './verify-classify.js';
+import { driftCheckCommand, type ChunkDrift } from './drift-check.js';
 import {
   atomicWriteFile,
   appendLedgerLine,
@@ -13,6 +18,7 @@ import {
   resolveLedgerState,
   type ClassificationRecord,
   type AdjudicationRecord,
+  type ImpactRecord,
 } from './verify-run.js';
 
 /**
@@ -887,6 +893,516 @@ export async function verifyImpactAdjudicateCommand(options: {
     console.log(
       chalk.yellow(`⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
     );
+  }
+  return result;
+}
+
+// -------------------------------------------------------------------------------------------
+// `computeRepairGate` + the impact-map status command (175-CONTEXT.md decisions 10, 11, 12, 13,
+// 15, 16)
+// -------------------------------------------------------------------------------------------
+
+/**
+ * The four possible repair-gate outcomes — frozen array + derived type, never a hand-written
+ * union (the established `FINDING_KINDS`/`RULE_DELTA_KINDS`/`PROVENANCE_KINDS` pattern).
+ */
+export const REPAIR_GATE_DISPOSITIONS = Object.freeze([
+  'reopen-playtest',
+  'close-without-replaytest',
+  'unknown-drift',
+  'not-applicable',
+] as const);
+
+export type RepairGateDisposition = (typeof REPAIR_GATE_DISPOSITIONS)[number];
+
+export interface RepairGate {
+  disposition: RepairGateDisposition;
+  /** Present only for `reopen-playtest` / `close-without-replaytest`. */
+  nextStatus?: string;
+  clearMarker: boolean;
+  reverifyStamp: boolean;
+  reason: string;
+}
+
+/**
+ * Pure, total, no I/O. Decides which of the four repair-gate dispositions applies to one chunk,
+ * given: its literal `Status:` value, whether Phase 174 classified it stale, and `drift-check`'s
+ * three-state code-movement verdict (175-CONTEXT.md decision 10 — the SOLE authority for "did
+ * this chunk's code move"; this function never re-derives that fact).
+ *
+ * BRANCH ORDER IS LOAD-BEARING (blindness-before-narrowing, the same discipline 174-04's
+ * guardrail-2 pins): a blind input can never produce a confident disposition.
+ *
+ *   1. `driftState === 'unknown'` is checked FIRST, before anything else — including `stale` and
+ *      `status`. A caller who does not know whether the code moved cannot be told there is
+ *      nothing to gate (a `built`/non-verified status) OR that the gate is closed (`clean`) OR
+ *      that it re-opens (`drifted`) — all three of those are claims about code movement this
+ *      function has no basis for. `unknown-drift` never yields a `nextStatus` and never clears
+ *      the marker (decision 10 — never collapsed into `clean`).
+ *   2. `!stale` — nothing is being repaired, so there is no repair-gate decision to make
+ *      (symmetric with step 3's "no playtest gate to re-open on a chunk that never had one").
+ *   3. `!status.startsWith('verified')` (matching `chunk-provenance.ts` line 766's existing
+ *      check) — a `built`/`approved`/`proposed` chunk has no playtest gate to re-open or close.
+ *   4. `driftState === 'drifted'` — the code moved: `built`, marker cleared, playtest gate
+ *      RE-OPENS (decision 12). A `verified (user-waived)` status is NOT preserved here — decision
+ *      13's waiver is about a specific state of the code, not a standing exemption; the human may
+ *      waive again, explicitly, as a fresh decision.
+ *   5. `driftState === 'clean'` — the code did not move: `nextStatus` preserves `status`
+ *      VERBATIM (including `verified (user-waived)` — decision 13's waiver is not upgraded to a
+ *      bare `verified` just because a later pass re-confirmed no code changed), marker cleared,
+ *      and a re-verification stamp with no code change is recorded (decision 11).
+ */
+export function computeRepairGate(input: {
+  status: string;
+  stale: boolean;
+  driftState: 'clean' | 'drifted' | 'unknown';
+}): RepairGate {
+  const { status, stale, driftState } = input;
+
+  if (driftState === 'unknown') {
+    return {
+      disposition: 'unknown-drift',
+      clearMarker: false,
+      reverifyStamp: false,
+      reason:
+        'drift-check could not determine whether this chunk\'s code moved (state: unknown) — ' +
+        'the playtest-gate decision is deferred until code movement can be resolved. Never ' +
+        'collapsed into "clean" or "drifted".',
+    };
+  }
+
+  if (!stale) {
+    return {
+      disposition: 'not-applicable',
+      clearMarker: false,
+      reverifyStamp: false,
+      reason: 'This chunk was not flagged rules-stale — there is nothing to repair-gate.',
+    };
+  }
+
+  if (!status.startsWith('verified')) {
+    return {
+      disposition: 'not-applicable',
+      clearMarker: false,
+      reverifyStamp: false,
+      reason: `Status "${status}" has no playtest gate to re-open or close — this chunk was never verified.`,
+    };
+  }
+
+  if (driftState === 'drifted') {
+    return {
+      disposition: 'reopen-playtest',
+      nextStatus: 'built',
+      clearMarker: true,
+      reverifyStamp: false,
+      reason:
+        `This chunk's code changed since it was last verified (drift-check: drifted) — the ` +
+        `playtest gate re-opens; status moves to "built" (the code exists and passes automated ` +
+        `test, but no human has confirmed the new behavior). A prior "${status}" waiver, if any, ` +
+        `is not auto-renewed — the human may waive again, explicitly, as a fresh decision.`,
+    };
+  }
+
+  // driftState === 'clean'
+  return {
+    disposition: 'close-without-replaytest',
+    nextStatus: status,
+    clearMarker: true,
+    reverifyStamp: true,
+    reason:
+      `This chunk's code did not change (drift-check: clean) — closes without re-playtesting; ` +
+      `status "${status}" is preserved verbatim (a waiver, if any, is not upgraded) and a ` +
+      `re-verification with no code change is stamped into "## Verified Against".`,
+  };
+}
+
+/** One row of the impact map — Phase 176's `--json` input contract (decision 16). */
+export interface ImpactMapEntry {
+  slug: string;
+  ruleDelta: string;
+  stale: boolean;
+  status: string;
+  driftState: 'clean' | 'drifted' | 'unknown';
+  changedFiles: string[];
+  missingFiles: string[];
+  attributions: ChunkVerdict['attributions'];
+  gate: RepairGate;
+  markerState: 'clear' | 'rules-stale' | 'unknown';
+}
+
+export interface VerifyImpactStatusResult {
+  runId: string;
+  entries: ImpactMapEntry[];
+  /** Decision 15 — never capped or truncated. */
+  staleFraction: { stale: number; total: number };
+  staleSlugs: string[];
+  dispositionCounts: Record<RepairGateDisposition, number>;
+  contradictionsPending: string[];
+  warnings: string[];
+}
+
+/**
+ * Pure. Builds one `ImpactMapEntry` from a `ChunkVerdict` plus the drift/provenance/marker facts
+ * already looked up for its slug — no I/O, so `verifyImpactStatusCommand`'s per-chunk assembly is
+ * directly testable without a real project fixture.
+ */
+function buildImpactMapEntry(
+  verdict: ChunkVerdict,
+  drift: ChunkDrift | undefined,
+  status: string,
+  markerState: 'clear' | 'rules-stale' | 'unknown',
+): ImpactMapEntry {
+  const driftState = drift?.state ?? 'unknown';
+  const gate = computeRepairGate({ status, stale: verdict.stale, driftState });
+  return {
+    slug: verdict.slug,
+    ruleDelta: verdict.ruleDelta,
+    stale: verdict.stale,
+    status,
+    driftState,
+    changedFiles: drift?.changedFiles ?? [],
+    missingFiles: drift?.missingFiles ?? [],
+    attributions: verdict.attributions,
+    gate,
+    markerState,
+  };
+}
+
+function emptyDispositionCounts(): Record<RepairGateDisposition, number> {
+  const counts = {} as Record<RepairGateDisposition, number>;
+  for (const d of REPAIR_GATE_DISPOSITIONS) counts[d] = 0;
+  return counts;
+}
+
+function printImpactHumanReport(result: VerifyImpactStatusResult): void {
+  const { staleFraction, staleSlugs, dispositionCounts, contradictionsPending, entries } = result;
+
+  console.log(chalk.green(`✓ Verify-impact status — run ${result.runId}`));
+  console.log(`  ${chalk.gray('rules-stale:')} ${staleFraction.stale} of ${staleFraction.total} chunks rules-stale`);
+  if (staleSlugs.length > 0) {
+    // Decision 15: EVERY stale slug, no cap, no "and N more".
+    console.log(`  ${chalk.yellow('stale chunks:')} ${staleSlugs.join(', ')}`);
+  }
+  if (contradictionsPending.length > 0) {
+    console.log(
+      `  ${chalk.yellow('contradictions pending adjudication:')} ${contradictionsPending.join(', ')}`,
+    );
+  }
+
+  for (const disposition of REPAIR_GATE_DISPOSITIONS) {
+    const inGroup = entries.filter((e) => e.gate.disposition === disposition);
+    if (inGroup.length === 0) continue;
+    console.log(`\n  ${disposition} (${dispositionCounts[disposition]}):`);
+    for (const e of inGroup) {
+      console.log(`    ${e.slug} — ${e.gate.reason}`);
+    }
+  }
+}
+
+/**
+ * `boardsmith verify-impact-status` — VERIFY-06's read side: the run's impact map. Composes
+ * `verifyClassifyStatusCommand` (chunk verdicts + resolved run id), `driftCheckCommand`
+ * (decision 10's code-movement authority), `chunkProvenanceStatusCommand` (each chunk's literal
+ * `Status:`), `parseRulesStaleness` (each CHUNK.md's current marker state), and
+ * `collectContradictions` (the pending adjudication gate list) — never re-derives any of them.
+ *
+ * `driftCheckCommand`/`chunkProvenanceStatusCommand` are called with `{ project, json: false }`;
+ * both print their own human-readable report as a side effect of that call (neither offers a
+ * "return only, print nothing" mode) — this is accepted, not suppressed: this command's own
+ * report below is what a human actually reads, and the printed side effect is otherwise inert
+ * (read-only, no state carried between calls).
+ *
+ * Read-only. Never sets `process.exitCode`; throws only for a structural tool failure (unknown
+ * run, not a git repo, no `chunks/`) — the same failures the composed commands already throw.
+ */
+export async function verifyImpactStatusCommand(
+  options: { project?: string; runId?: string; json?: boolean } = {},
+): Promise<VerifyImpactStatusResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  const classifyStatus = await verifyClassifyStatusCommand({
+    project: projectDir,
+    runId: options.runId,
+    json: true,
+  });
+  const runId = classifyStatus.runId;
+
+  const [driftResult, provenanceResult] = await Promise.all([
+    driftCheckCommand({ project: projectDir, json: false }),
+    chunkProvenanceStatusCommand({ project: projectDir, json: false }),
+  ]);
+
+  const driftBySlug = new Map(driftResult.chunks.map((c) => [c.chunk, c] as const));
+  const statusBySlug = new Map(provenanceResult.chunks.map((c) => [c.slug, c.status] as const));
+
+  const warnings = [...classifyStatus.warnings];
+  const entries: ImpactMapEntry[] = [];
+
+  for (const verdict of classifyStatus.chunkVerdicts) {
+    const status = statusBySlug.get(verdict.slug);
+    if (status === undefined) {
+      warnings.push(
+        `[impact-status] chunk "${verdict.slug}" has a classification verdict but no ` +
+          `chunk-provenance-status entry (no chunks/${verdict.slug}/CHUNK.md Status: line found) ` +
+          `— its marker state and gate could not be computed.`,
+      );
+      continue;
+    }
+
+    let markerState: 'clear' | 'rules-stale' | 'unknown' = 'unknown';
+    try {
+      const chunkText = await fs.readFile(
+        join(projectDir, 'chunks', verdict.slug, 'CHUNK.md'),
+        'utf-8',
+      );
+      markerState = parseRulesStaleness(chunkText).state;
+    } catch {
+      // No CHUNK.md to read — markerState stays 'unknown' (never collapsed into 'clear').
+    }
+
+    entries.push(buildImpactMapEntry(verdict, driftBySlug.get(verdict.slug), status, markerState));
+  }
+
+  const staleSlugs = entries.filter((e) => e.stale).map((e) => e.slug);
+  const staleFraction = { stale: staleSlugs.length, total: entries.length };
+
+  const dispositionCounts = emptyDispositionCounts();
+  for (const e of entries) dispositionCounts[e.gate.disposition]++;
+
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const relLedgerPath = relative(projectDir, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+  const { adjudications } = resolveLedgerState(lines);
+  const contradictions = collectContradictions({
+    classifications: classifyStatus.classified,
+    adjudications,
+    chunkVerdicts: classifyStatus.chunkVerdicts,
+  });
+  const contradictionsPending = contradictions
+    .filter((c) => c.adjudication !== 'resolved')
+    .map((c) => c.pairId);
+
+  const result: VerifyImpactStatusResult = {
+    runId,
+    entries,
+    staleFraction,
+    staleSlugs,
+    dispositionCounts,
+    contradictionsPending,
+    warnings,
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  printImpactHumanReport(result);
+  return result;
+}
+
+// -------------------------------------------------------------------------------------------
+// `verify-impact-apply` — the staleness write, gated (175-CONTEXT.md decisions 3, 6, 8, 9, 17)
+// -------------------------------------------------------------------------------------------
+
+export interface VerifyImpactApplyResult {
+  runId: string;
+  blocked: boolean;
+  pendingPairs: string[];
+  marked: Array<{ slug: string; chunkWritten: boolean; sketchWritten: boolean }>;
+  skippedTailEntries: string[];
+  warnings: string[];
+}
+
+/**
+ * `boardsmith verify-impact-apply` — VERIFY-05's write orchestration: the staleness write,
+ * refusing structurally while any contradiction is un-adjudicated.
+ *
+ * There is no `--clear`, `--force`, `--skip-gate`, or `--yes` option, and no `process.env` read
+ * anywhere in this function (decision 9's no-bypass discipline, extended from the adjudication
+ * gate to the write it guards).
+ *
+ * Sequence (`build/ask.md`'s Gate-Before-Write applied to a CLI):
+ *   1. Resolve the run, compute `collectContradictions`. Any `adjudication === 'pending'` blocks
+ *      the ENTIRE write — nothing is touched, and the result names every pending pair plus the
+ *      exact next command (decision 6 — the gate fires BEFORE any staleness write).
+ *   2. Otherwise, for each `ChunkVerdict` with `stale === true`: write the marker
+ *      (`writeRulesStalenessMarker`), then append one `ImpactRecord` to the run ledger — CHUNK.md
+ *      then SKETCH.md then the ledger record, so a crash leaves a chunk either
+ *      fully-written-and-recorded or not recorded (never a torn state), and a re-run is
+ *      idempotent (`writeRulesStalenessMarker`'s own idempotent-body-replace semantics).
+ *   3. A stale chunk with no `chunks/<slug>/` directory (a sketch-level tail entry) is collected
+ *      into `skippedTailEntries`, never written — the same skip `writeRulesStalenessMarker`
+ *      itself already performs for `SKETCH.md`, surfaced here at the caller boundary too.
+ *
+ * A recorded `UNADJUDICATED` adjudication does NOT block: the affected chunks are still marked
+ * stale and the marker's `Adjudication:` line reads `UNADJUDICATED` (decision 8 — never silently
+ * clean).
+ *
+ * Never sets `process.exitCode` for a finding; throws only for a structural tool failure.
+ */
+export async function verifyImpactApplyCommand(
+  options: { project?: string; runId?: string; json?: boolean } = {},
+): Promise<VerifyImpactApplyResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  const classifyStatus = await verifyClassifyStatusCommand({
+    project: projectDir,
+    runId: options.runId,
+    json: true,
+  });
+  const runId = classifyStatus.runId;
+
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const relLedgerPath = relative(projectDir, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+  const { adjudications } = resolveLedgerState(lines);
+
+  const contradictions = collectContradictions({
+    classifications: classifyStatus.classified,
+    adjudications,
+    chunkVerdicts: classifyStatus.chunkVerdicts,
+  });
+  const pendingContradictions = contradictions.filter((c) => c.adjudication === 'pending');
+
+  if (pendingContradictions.length > 0) {
+    const pendingPairs = pendingContradictions.map((c) => c.pairId);
+    const result: VerifyImpactApplyResult = {
+      runId,
+      blocked: true,
+      pendingPairs,
+      marked: [],
+      skippedTailEntries: [],
+      warnings: classifyStatus.warnings,
+    };
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return result;
+    }
+    console.log(
+      chalk.yellow(
+        `⚠ ${pendingPairs.length} contradictory finding(s) still pending adjudication — writes ` +
+          `nothing until every one is resolved.\n` +
+          pendingPairs
+            .map(
+              (p) =>
+                `    boardsmith verify-impact-adjudicate --run-id ${runId} --pair-id ${p} ` +
+                `--outcome resolved|UNADJUDICATED ...`,
+            )
+            .join('\n'),
+      ),
+    );
+    return result;
+  }
+
+  const [driftResult, provenanceResult] = await Promise.all([
+    driftCheckCommand({ project: projectDir, json: false }),
+    chunkProvenanceStatusCommand({ project: projectDir, json: false }),
+  ]);
+  const driftBySlug = new Map(driftResult.chunks.map((c) => [c.chunk, c] as const));
+  const statusBySlug = new Map(provenanceResult.chunks.map((c) => [c.slug, c.status] as const));
+
+  const adjudicationByPairId = new Map(adjudications.map((a) => [a.pairId, a] as const));
+  const classificationByPairId = new Map(classifyStatus.classified.map((c) => [c.pairId, c] as const));
+
+  const marked: VerifyImpactApplyResult['marked'] = [];
+  const skippedTailEntries: string[] = [];
+  const warnings = [...classifyStatus.warnings];
+
+  for (const verdict of classifyStatus.chunkVerdicts) {
+    if (!verdict.stale) continue;
+
+    const chunkDir = join(projectDir, 'chunks', verdict.slug);
+    try {
+      await fs.stat(join(chunkDir, 'CHUNK.md'));
+    } catch {
+      skippedTailEntries.push(verdict.slug);
+      continue;
+    }
+
+    // The "governing pair" is the classified pair driving this chunk's rolled-up ruleDelta —
+    // preferring one whose ruleDelta matches the chunk-level roll-up, falling back to the first
+    // classified pair this chunk cites, never fabricated.
+    const governingClassification =
+      classifyStatus.classified.find(
+        (c) => verdict.pairIds.includes(c.pairId) && c.ruleDelta === verdict.ruleDelta,
+      ) ?? verdict.pairIds.map((id) => classificationByPairId.get(id)).find((c) => c !== undefined);
+
+    let adjudication: string;
+    if (!governingClassification || governingClassification.ruleDelta !== 'contradictory') {
+      adjudication = 'n/a';
+    } else {
+      const recorded = adjudicationByPairId.get(governingClassification.pairId);
+      if (recorded?.outcome === 'resolved') {
+        adjudication = `resolved (Ruling ${recorded.rulingNumber})`;
+      } else if (recorded?.outcome === 'UNADJUDICATED') {
+        adjudication = 'UNADJUDICATED';
+      } else {
+        adjudication = 'n/a';
+      }
+    }
+
+    const attributedSlices = verdict.attributions
+      .filter((a) => a.attributed)
+      .map((a) => a.liveSlice);
+
+    const writeResult = await writeRulesStalenessMarker(projectDir, {
+      slug: verdict.slug,
+      runId,
+      ruleDelta: verdict.ruleDelta,
+      attributedSlices,
+      priorReading: governingClassification?.quotedPass1,
+      changedReading: governingClassification?.quotedPass2,
+      adjudication,
+    });
+
+    const chunkStatus = statusBySlug.get(verdict.slug) ?? 'unknown';
+    const driftState = driftBySlug.get(verdict.slug)?.state ?? 'unknown';
+
+    const impactRecord: ImpactRecord = {
+      kind: 'impact',
+      slug: verdict.slug,
+      ruleDelta: verdict.ruleDelta,
+      stale: verdict.stale,
+      attributions: verdict.attributions,
+      chunkStatus,
+      driftState,
+      markerWritten: writeResult.chunkWritten || writeResult.sketchWritten,
+      recordedAt: new Date().toISOString(),
+    };
+
+    // Ledger append AFTER this chunk's writes land (decision 17) — a crash leaves a chunk either
+    // fully-written-and-recorded or not recorded, never a half-written chunk falsely recorded.
+    const currentLedgerText = await fs.readFile(ledgerFile, 'utf-8');
+    const newLedgerText = appendLedgerLine(currentLedgerText, relLedgerPath, JSON.stringify(impactRecord));
+    await atomicWriteFile(ledgerFile, newLedgerText);
+
+    marked.push({
+      slug: verdict.slug,
+      chunkWritten: writeResult.chunkWritten,
+      sketchWritten: writeResult.sketchWritten,
+    });
+  }
+
+  const result: VerifyImpactApplyResult = {
+    runId,
+    blocked: false,
+    pendingPairs: [],
+    marked,
+    skippedTailEntries,
+    warnings,
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  console.log(chalk.green(`✓ Marked ${marked.length} chunk(s) rules-stale — run ${runId}`));
+  if (skippedTailEntries.length > 0) {
+    console.log(`  ${chalk.yellow('skipped (sketch-level tail entries):')} ${skippedTailEntries.join(', ')}`);
   }
   return result;
 }

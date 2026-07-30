@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
@@ -25,8 +26,13 @@ import {
   renderRuling,
   appendRuling,
   verifyImpactAdjudicateCommand,
+  REPAIR_GATE_DISPOSITIONS,
+  computeRepairGate,
+  verifyImpactStatusCommand,
+  verifyImpactApplyCommand,
   type RulesStalenessRecord,
   type Contradiction,
+  type RepairGateDisposition,
 } from './verify-impact.js';
 import {
   VERIFIED_AGAINST_HEADING,
@@ -286,7 +292,11 @@ describe('marker — no bare indexOf on the heading (structural guard)', () => {
     const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
     const start = source.indexOf('export async function writeRulesStalenessMarker');
     expect(start).toBeGreaterThan(-1);
-    const body = source.slice(start);
+    // Bounded to the end of THIS function only (the next `// ---` section divider) — plan
+    // 175-04 added unrelated later functions (e.g. `computeRepairGate`'s `clearMarker` field)
+    // after this one in the same file, so slicing to EOF would false-positive on their names.
+    const nextDividerIdx = source.indexOf('\n// ---', start + 1);
+    const body = nextDividerIdx === -1 ? source.slice(start) : source.slice(start, nextDividerIdx);
     const codeLines = body.split('\n').filter((line) => !/^\s*[*/]/.test(line));
     expect(codeLines.join('\n').toLowerCase()).not.toContain('clear');
   });
@@ -974,5 +984,436 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
         json: true,
       }),
     ).rejects.toThrow(/resolved.*UNADJUDICATED|UNADJUDICATED.*resolved/s);
+  });
+});
+
+/**
+ * Task 1 (second half) — `computeRepairGate`, pure and total, table-driven across every
+ * status × driftState × stale combination. Test names carry the token `repair-gate`.
+ */
+
+describe('repair-gate — computeRepairGate (pure, total)', () => {
+  const STATUSES = ['verified', 'verified (user-waived)', 'built'] as const;
+  const DRIFT_STATES = ['clean', 'drifted', 'unknown'] as const;
+  const STALE_VALUES = [true, false] as const;
+
+  it('repair-gate: driftState unknown never yields nextStatus and never yields clearMarker: true, for every status and stale value', () => {
+    for (const status of STATUSES) {
+      for (const stale of STALE_VALUES) {
+        const gate = computeRepairGate({ status, stale, driftState: 'unknown' });
+        expect(gate.disposition).toBe('unknown-drift');
+        expect(gate.nextStatus).toBeUndefined();
+        expect(gate.clearMarker).toBe(false);
+      }
+    }
+  });
+
+  it('repair-gate: a non-stale chunk is not-applicable regardless of status or driftState (except unknown, which still wins)', () => {
+    for (const status of STATUSES) {
+      for (const driftState of DRIFT_STATES) {
+        const gate = computeRepairGate({ status, stale: false, driftState });
+        if (driftState === 'unknown') {
+          expect(gate.disposition).toBe('unknown-drift');
+        } else {
+          expect(gate.disposition).toBe('not-applicable');
+        }
+      }
+    }
+  });
+
+  it('repair-gate: a non-verified* status (built) is not-applicable when stale and driftState is resolved (clean/drifted)', () => {
+    for (const driftState of ['clean', 'drifted'] as const) {
+      const gate = computeRepairGate({ status: 'built', stale: true, driftState });
+      expect(gate.disposition).toBe('not-applicable');
+      expect(gate.nextStatus).toBeUndefined();
+      expect(gate.clearMarker).toBe(false);
+    }
+  });
+
+  it('repair-gate: verified + stale + drifted -> reopen-playtest, nextStatus built, clearMarker true', () => {
+    const gate = computeRepairGate({ status: 'verified', stale: true, driftState: 'drifted' });
+    expect(gate).toMatchObject({
+      disposition: 'reopen-playtest',
+      nextStatus: 'built',
+      clearMarker: true,
+      reverifyStamp: false,
+    });
+  });
+
+  it('no-code-change: verified + stale + clean -> close-without-replaytest, nextStatus verified, reverifyStamp true', () => {
+    const gate = computeRepairGate({ status: 'verified', stale: true, driftState: 'clean' });
+    expect(gate).toMatchObject({
+      disposition: 'close-without-replaytest',
+      nextStatus: 'verified',
+      clearMarker: true,
+      reverifyStamp: true,
+    });
+  });
+
+  it('waived-reopen: verified (user-waived) + stale + drifted -> reopen-playtest, nextStatus built — the waiver is NOT renewed', () => {
+    const gate = computeRepairGate({
+      status: 'verified (user-waived)',
+      stale: true,
+      driftState: 'drifted',
+    });
+    expect(gate.disposition).toBe('reopen-playtest');
+    expect(gate.nextStatus).toBe('built');
+  });
+
+  it('waived-reopen: verified (user-waived) + stale + clean -> close-without-replaytest, nextStatus preserves the waiver verbatim', () => {
+    const gate = computeRepairGate({
+      status: 'verified (user-waived)',
+      stale: true,
+      driftState: 'clean',
+    });
+    expect(gate.disposition).toBe('close-without-replaytest');
+    expect(gate.nextStatus).toBe('verified (user-waived)');
+  });
+
+  it('repair-gate: REPAIR_GATE_DISPOSITIONS is frozen with exactly the four documented members', () => {
+    expect(Object.isFrozen(REPAIR_GATE_DISPOSITIONS)).toBe(true);
+    expect(REPAIR_GATE_DISPOSITIONS).toEqual([
+      'reopen-playtest',
+      'close-without-replaytest',
+      'unknown-drift',
+      'not-applicable',
+    ]);
+  });
+
+  it('repair-gate: full 3x3x2 table — every combination resolves to one of the four dispositions with a non-empty reason', () => {
+    for (const status of STATUSES) {
+      for (const driftState of DRIFT_STATES) {
+        for (const stale of STALE_VALUES) {
+          const gate = computeRepairGate({ status, stale, driftState });
+          expect(REPAIR_GATE_DISPOSITIONS as readonly RepairGateDisposition[]).toContain(
+            gate.disposition,
+          );
+          expect(gate.reason.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+});
+
+/**
+ * Task 1/2 — `verifyImpactStatusCommand`/`verifyImpactApplyCommand` over a real project fixture:
+ * a real git repo, a real verify-run/verify-classify pipeline, a real `chunks/movement/CHUNK.md`
+ * citing the changed rulebook slice with a quoted-fragment `## Interpretation` anchor (so the
+ * chunk verdict is genuinely `stale: true`), a real `## Build Manifest`/`## Verified Commit Hash`
+ * pair drift-check reads. Test names carry `repair-gate`, `no-code-change`, `waived-reopen`,
+ * `line-level-handoff`, `contradictory`, `marker`, and `no-bypass` per the plan's `-t` convention.
+ */
+
+const IMPACT_QUOTED_PASS1 = 'The lower timing on their card resolves first.';
+
+async function buildImpactTestProject(
+  root: string,
+  opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted' } = {},
+): Promise<{ project: string; runId: string; pairId: string; firstSha: string }> {
+  const project = join(root, `impact-project-${Math.random().toString(36).slice(2)}`);
+  const rulebookDir = join(project, 'rulebook');
+  await fs.mkdir(rulebookDir, { recursive: true });
+  await fs.writeFile(join(rulebookDir, 'x.md'), `p.1, X:\n"${IMPACT_QUOTED_PASS1}"\n`);
+  // A second, unrelated live slice + cosmetic pair, cited by a SECOND chunk that must stay
+  // untouched by `verify-impact-apply` (its `ChunkVerdict.stale` is `false`).
+  await fs.writeFile(join(rulebookDir, 'y.md'), 'p.2, Y:\n"Scoring is unaffected by this change."\n');
+
+  execSync('git init', { cwd: project, stdio: 'ignore' });
+  await fs.mkdir(join(project, 'src'), { recursive: true });
+  await fs.writeFile(join(project, 'src', 'movement.ts'), 'export const movement = 1;\n');
+  execSync('git add -A', { cwd: project, stdio: 'ignore' });
+  execSync('git -c user.email=t@t -c user.name=t commit -m first', { cwd: project, stdio: 'ignore' });
+  const firstSha = execSync('git rev-parse HEAD', { cwd: project }).toString().trim();
+
+  if (opts.drift === 'drifted') {
+    await fs.writeFile(join(project, 'src', 'movement.ts'), 'export const movement = 2;\n');
+    execSync('git add -A', { cwd: project, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m second', { cwd: project, stdio: 'ignore' });
+  }
+
+  const movementChunkDir = join(project, 'chunks', 'movement');
+  await fs.mkdir(movementChunkDir, { recursive: true });
+  await fs.writeFile(
+    join(movementChunkDir, 'CHUNK.md'),
+    `# Chunk: movement\n\n` +
+      `Status: verified\n` +
+      `<!-- Valid values (exact, case-sensitive): proposed | approved | built | verified | verified (user-waived) | stale — re-derive before build -->\n\n` +
+      `Cites rulebook/x.md.\n\n` +
+      `## Interpretation\n1. **Movement resolves by timing.** "${IMPACT_QUOTED_PASS1}" (p.1)\n\n` +
+      `## Verified Against\n\n${VERIFIED_AGAINST_BEGIN}\n_Not yet recorded._\n${VERIFIED_AGAINST_END}\n\n` +
+      `## Build Manifest\n\n| File | Status |\n|---|---|\n| src/movement.ts | NEW |\n\n` +
+      `## Verified Commit Hash\n\n${firstSha}\n`,
+  );
+
+  const scoringChunkDir = join(project, 'chunks', 'scoring');
+  await fs.mkdir(scoringChunkDir, { recursive: true });
+  await fs.writeFile(
+    join(scoringChunkDir, 'CHUNK.md'),
+    `# Chunk: scoring\n\n` +
+      `Status: verified\n` +
+      `<!-- Valid values (exact, case-sensitive): proposed | approved | built | verified | verified (user-waived) | stale — re-derive before build -->\n\n` +
+      `Cites rulebook/y.md.\n\n` +
+      `## Verified Against\n\n${VERIFIED_AGAINST_BEGIN}\n_Not yet recorded._\n${VERIFIED_AGAINST_END}\n\n` +
+      `## Build Manifest\n\n| File | Status |\n|---|---|\n| src/movement.ts | NEW |\n\n` +
+      `## Verified Commit Hash\n\n${firstSha}\n`,
+  );
+
+  await fs.writeFile(
+    join(project, 'SKETCH.md'),
+    `# Sketch: Test Game\n\nSketch Version: 1\n\nSession Lock: none\n\n## Ordered Chunk List\n\n` +
+      `### movement\n- What it builds: test\n- Citations: none\n- ui: none\n- Milestone: none\n` +
+      `- Status (derived from chunks/movement/CHUNK.md): verified\n- Test script (outcome-based): n/a\n\n` +
+      `### scoring\n- What it builds: test\n- Citations: none\n- ui: none\n- Milestone: none\n` +
+      `- Status (derived from chunks/scoring/CHUNK.md): verified\n- Test script (outcome-based): n/a\n\n` +
+      `## Mandated Chunks\n`,
+  );
+
+  const initResult = await verifyRunInitCommand({ project, json: true });
+  const runId = initResult.runId;
+  const stagingDirAbs = join(project, initResult.stagingDir);
+
+  const changedLine =
+    opts.ruleDelta === 'contradictory'
+      ? 'The higher timing on their card resolves first.'
+      : 'The lower timing on their card resolves first, and ties favor the active player.';
+  await fs.writeFile(join(stagingDirAbs, 'ux.md'), `p.1, X:\n"${changedLine}"\n`);
+  await fs.writeFile(join(stagingDirAbs, 'uy.md'), 'p.2, Y:\n"Scoring is unaffected by this change."\n');
+  await verifyRunRecordCommand({ project, runId, unit: 'ux', slice: 'ux.md', json: true });
+  await verifyRunRecordCommand({ project, runId, unit: 'uy', slice: 'uy.md', json: true });
+
+  const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+  const xPair = pairsResult.pairs.find((p) => p.liveSlices.some((s) => s.includes('x.md')));
+  const yPair = pairsResult.pairs.find((p) => p.liveSlices.some((s) => s.includes('y.md')));
+  if (!xPair || !yPair) {
+    throw new Error('fixture bug: expected one pair each for x.md and y.md');
+  }
+
+  await verifyClassifyRecordCommand({
+    project,
+    runId,
+    pairId: xPair.pairId,
+    label: opts.ruleDelta ?? 'sharper',
+    quotedPass1: IMPACT_QUOTED_PASS1,
+    quotedPass2: changedLine,
+    json: true,
+  });
+  await verifyClassifyRecordCommand({
+    project,
+    runId,
+    pairId: yPair.pairId,
+    label: 'cosmetic',
+    json: true,
+  });
+
+  return { project, runId, pairId: xPair.pairId, firstSha };
+}
+
+async function sha256OfProject(root: string): Promise<Record<string, string>> {
+  const map: Record<string, string> = {};
+  async function walk(current: string): Promise<void> {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const abs = join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(abs);
+      } else if (entry.isFile()) {
+        const buf = await fs.readFile(abs);
+        map[relative(root, abs)] = createHash('sha256').update(buf).digest('hex');
+      }
+    }
+  }
+  await walk(root);
+  return map;
+}
+
+describe('line-level-handoff / repair-gate — verifyImpactStatusCommand over a real project', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-status-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('no-code-change: a verified chunk whose code did not change reports close-without-replaytest, nextStatus verified, and 1-of-2 staleFraction', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const result = await verifyImpactStatusCommand({ project, runId, json: true });
+
+    expect(result.staleFraction).toEqual({ stale: 1, total: 2 });
+    expect(result.staleSlugs).toEqual(['movement']);
+
+    const movement = result.entries.find((e) => e.slug === 'movement')!;
+    expect(movement.driftState).toBe('clean');
+    expect(movement.gate.disposition).toBe('close-without-replaytest');
+    expect(movement.gate.nextStatus).toBe('verified');
+
+    const scoring = result.entries.find((e) => e.slug === 'scoring')!;
+    expect(scoring.stale).toBe(false);
+    expect(scoring.gate.disposition).toBe('not-applicable');
+  });
+
+  it('repair-gate: a verified chunk whose code DID change reports reopen-playtest, nextStatus built', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'drifted' });
+
+    const result = await verifyImpactStatusCommand({ project, runId, json: true });
+
+    const movement = result.entries.find((e) => e.slug === 'movement')!;
+    expect(movement.driftState).toBe('drifted');
+    expect(movement.changedFiles).toContain('src/movement.ts');
+    expect(movement.gate.disposition).toBe('reopen-playtest');
+    expect(movement.gate.nextStatus).toBe('built');
+  });
+
+  it('line-level-handoff: ImpactMapEntry.attributions deep-equals the source ChunkVerdict.attributions verbatim', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const classifyStatus = await import('./verify-classify.js').then((m) =>
+      m.verifyClassifyStatusCommand({ project, runId, json: true }),
+    );
+    const result = await verifyImpactStatusCommand({ project, runId, json: true });
+
+    const sourceVerdict = classifyStatus.chunkVerdicts.find((v) => v.slug === 'movement')!;
+    const entry = result.entries.find((e) => e.slug === 'movement')!;
+    expect(entry.attributions).toEqual(sourceVerdict.attributions);
+    expect(entry.attributions.some((a) => a.attributed && a.rung === 'quoted-fragment')).toBe(true);
+  });
+
+  it('repair-gate: the human report string contains "1 of 2" and the stale slug, uncapped', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await verifyImpactStatusCommand({ project, runId });
+
+    const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(printed).toContain('1 of 2');
+    expect(printed).toContain('movement');
+    logSpy.mockRestore();
+  });
+
+  it('verifyImpactStatusCommand is read-only — a whole-project sha256 map is byte-identical before and after', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const before = await sha256OfProject(project);
+
+    await verifyImpactStatusCommand({ project, runId, json: true });
+
+    const after = await sha256OfProject(project);
+    expect(after).toEqual(before);
+  });
+
+  it('no-bypass: the module never re-derives code movement with a second hash scheme (no createHash/git diff/rev-parse call sites outside drift-check.ts)', async () => {
+    const source = await fs.readFile(join(__dirname, 'verify-impact.ts'), 'utf-8');
+    const nonCommentLines = source.split('\n').filter((l) => !/^\s*[*/]/.test(l)).join('\n');
+    expect((nonCommentLines.match(/createHash|git diff|revParse/gi) ?? []).length).toBe(0);
+  });
+});
+
+/**
+ * Task 2 — `verifyImpactApplyCommand`. Test names carry `contradictory`, `unadjudicated`,
+ * `marker`, and `no-bypass` per the plan's `-t` convention.
+ */
+
+describe('contradictory / marker — verifyImpactApplyCommand', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-apply-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('contradictory: a pending contradiction blocks the write entirely — byte-identical project, message names verify-impact-adjudicate', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, {
+      ruleDelta: 'contradictory',
+      drift: 'clean',
+    });
+    const before = await sha256OfProject(project);
+
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
+
+    expect(result.blocked).toBe(true);
+    expect(result.pendingPairs).toContain(pairId);
+    expect(result.marked).toEqual([]);
+
+    const after = await sha256OfProject(project);
+    expect(after).toEqual(before);
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await verifyImpactApplyCommand({ project, runId });
+    const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(printed).toContain('verify-impact-adjudicate');
+    logSpy.mockRestore();
+  });
+
+  it('unadjudicated: a contradiction recorded UNADJUDICATED does not block — the chunk is marked stale with Adjudication: UNADJUDICATED', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, {
+      ruleDelta: 'contradictory',
+      drift: 'clean',
+    });
+
+    await verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true });
+
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
+    expect(result.blocked).toBe(false);
+    expect(result.marked.some((m) => m.slug === 'movement')).toBe(true);
+
+    const chunkText = await fs.readFile(join(project, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
+    const parsed = parseRulesStaleness(chunkText);
+    expect(parsed.state).toBe('rules-stale');
+    expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
+  });
+
+  it('marker: a chunk whose ChunkVerdict.stale is false is left byte-identical after the run', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const before = await fs.readFile(join(project, 'chunks', 'scoring', 'CHUNK.md'));
+    const beforeHash = createHash('sha256').update(before).digest('hex');
+
+    await verifyImpactApplyCommand({ project, runId, json: true });
+
+    const after = await fs.readFile(join(project, 'chunks', 'scoring', 'CHUNK.md'));
+    const afterHash = createHash('sha256').update(after).digest('hex');
+    expect(afterHash).toBe(beforeHash);
+  });
+
+  it('marker: running verifyImpactApplyCommand twice leaves exactly one "## Rules Staleness" heading and one begin sentinel', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    await verifyImpactApplyCommand({ project, runId, json: true });
+    await verifyImpactApplyCommand({ project, runId, json: true });
+
+    const chunkText = await fs.readFile(join(project, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
+    const headingOccurrences = chunkText.match(/^## Rules Staleness$/gm) ?? [];
+    const beginOccurrences = chunkText.match(/boardsmith:rules-staleness:begin/g) ?? [];
+    expect(headingOccurrences).toHaveLength(1);
+    expect(beginOccurrences).toHaveLength(1);
+  });
+
+  it('marker: one ImpactRecord is appended to the run ledger per marked chunk', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    await verifyImpactApplyCommand({ project, runId, json: true });
+
+    const ledgerText = await fs.readFile(join(project, 'rulebook', '.verify', runId, 'RUN.md'), 'utf-8');
+    const { lines } = parseLedgerBody(ledgerText, 'RUN.md');
+    const impactLines = lines.filter((l) => l.type === 'impact');
+    expect(impactLines.some((l: any) => l.record.slug === 'movement')).toBe(true);
+  });
+
+  it('no-bypass: the module registers no --clear/--force/--skip-gate/--yes option and reads no process.env', async () => {
+    const source = await fs.readFile(join(__dirname, 'verify-impact.ts'), 'utf-8');
+    const nonCommentLines = source.split('\n').filter((l) => !/^\s*[*/]/.test(l)).join('\n');
+    expect(
+      (nonCommentLines.match(/--clear|skipGate|--force|--yes|process\.env/gi) ?? []).length,
+    ).toBe(0);
+  });
+
+  it('no-bypass: the module never sets process.exitCode', async () => {
+    const source = await fs.readFile(join(__dirname, 'verify-impact.ts'), 'utf-8');
+    const nonCommentLines = source.split('\n').filter((l) => !/^\s*[*/]/.test(l)).join('\n');
+    expect((nonCommentLines.match(/process\.exitCode/g) ?? []).length).toBe(0);
   });
 });
