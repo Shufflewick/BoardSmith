@@ -1254,3 +1254,263 @@ $ diff "$SCRATCH/seven.before" "$SCRATCH/seven.after"
 Both originals byte-identical before and after — the mutation, the provenance-baseline `chunk-
 check`, the re-transcription dispatch, and the classification dispatch all touched only
 `$SCRATCH` copies.
+
+---
+
+## 6. VERIFY-01 — a per-chunk verdict without rebuilding, and the phase-critical chunk-level
+   staleness measurement
+
+### VERIFY-01's per-chunk-verdict half — `chunkVerdicts[]` on both real reference games
+
+`boardsmith verify-classify-status --project . --run-id <runId> --json` was run against both real
+projects — `seven` (reconstituted from `174-FIXTURES/`, classified `sharper` above and in
+`174-06-PROOF.md` §2) and `one-two-punch` (this section's own SC-3 run, classified `contradictory`
+above) — with **no build step of any kind between adoption and this command**: no `npm install`,
+no game compile, no test run, nothing under `src/`/`chunks/`/`SKETCH.md` touched.
+
+**(c) No build ran — proven by a whole-tree sha256 diff, not by the absence of a build command in
+the transcript.** A fresh manifest of every file under each scratch copy EXCLUDING
+`rulebook/.verify/` (the verify pass's own ledger/staging artifacts, which are expected and
+intended to change) was captured immediately before and after the `verify-classify-status`
+invocation:
+
+```
+$ cd "$SCRATCH/one-two-punch" && find . -type f -not -path './rulebook/.verify/*' -not -path './.git/*' -print0 | xargs -0 shasum -a 256 | sort > before.hash
+$ boardsmith verify-classify-status --project . --run-id 2026-07-30T01-31-49Z --json > /dev/null
+$ find . -type f -not -path './rulebook/.verify/*' -not -path './.git/*' -print0 | xargs -0 shasum -a 256 | sort > after.hash
+$ diff before.hash after.hash
+(empty, exit 0) — "OTP-COPY: IDENTICAL"
+```
+
+Identical result for `seven` against its own run-id (`2026-07-29T23-25-24Z`). No `chunks/*/CHUNK.md`,
+no `SKETCH.md`, no `src/` file, and no test file changed in either copy as a result of running
+`verify-classify-status` — the command is genuinely read-only over the game's build artifacts (it
+only reads the ledger and the live/staged slice trees it already had access to).
+
+**(a) Every citing chunk appears exactly once — with an honest correction to the literal claim.**
+`seven` has 17 real chunk directories; `chunkVerdicts` returned **16** entries. `one-two-punch` has
+12; `chunkVerdicts` returned **11**. This is not a bug or a silent drop: `computeChunkVerdicts`
+excludes a chunk entirely when `resolveCitedSlices` resolves ZERO rulebook citations for it
+(`if (resolved.length === 0) continue`), and both excluded chunks are genuinely citation-free by
+design, verified by reading each directly —
+
+- `seven`'s `final-acceptance` (a coverage-audit chunk; its own text: "coverage check confirming
+  every non-variant rulebook slice was built" — discusses rulebook coverage in prose but cites no
+  `rulebook/<file>.md` path).
+- `one-two-punch`'s `ai-opponent` (explicitly marked LIGHT in its own file: "this chunk interprets
+  NO rulebook rule — it has no Citations line in SKETCH.md"; "none — no rulebook slices are cited
+  by this chunk").
+
+So the honest form of assertion (a) is: **every chunk that cites at least one rulebook slice
+appears in `chunkVerdicts` exactly once; a chunk that cites none is correctly absent, not silently
+dropped** (verified directly against each excluded chunk's own CHUNK.md, not inferred from the
+command's own behavior).
+
+**(b) `pairIds`/citations spot-checked directly against each chunk's own CHUNK.md prose** (not
+trusted from the command's own output):
+
+| Chunk | Game | `citedLiveSlices` (reported) | Verified in CHUNK.md |
+|---|---|---|---|
+| `second-action-resolution` | one-two-punch | `01-setup-and-round-structure.md`, `02-action-cards-and-resolution.md` | Matches: `"...cites rulebook/02, Fight-phase continuation...; and rulebook/01-setup-and-round-structure.md, '2) Fight' (p.1)..."` |
+| `bonus-point-cards` | seven | `01-definitions-and-components.md`, `01-overview-setup-and-play.md` | Matches: `"INDEX.md search...surfaces only rulebook/01-overview-setup-and-play.md...and rulebook/01-definitions-and-components.md"` |
+| `game-score-and-winner` | seven | `01-overview-setup-and-play.md`, `02-solo-variant.md` (never `01-definitions-and-components.md`) | Matches: 5 direct `rulebook/01-overview-setup-and-play.md`/`rulebook/02-solo-variant.md` citations found by `grep`; zero `rulebook/01-definitions-and-components.md` citations found |
+
+The third row is also the direct, real corroboration of decision 18's narrowing: `game-score-and-
+winner` genuinely never cites the live slice the `sharper` quote landed in, and is reported
+`cosmetic`/`stale: false` — not because the tool guessed, but because that citation is genuinely
+absent from the chunk's own text.
+
+**(d) A chunk whose cited slices land ONLY in an `unpaired-slice` group reads `unclassified`, not
+clean.** Neither real reference game produced an `unpaired-slice` group in this phase's real runs
+(`summary.unpaired: 0` for both games, both runs) — every live/staged slice paired into the single
+real group each 2-page rulebook produces. This specific real-data case is therefore **not
+exercised live** in this phase; it is proven structurally instead, by
+`src/cli/commands/verify-classify.test.ts`'s `chunk-2` test ("a chunk citing a live slice in an
+unpaired-slice group is reported unclassified — nothing was ever compared for it"), which asserts
+exactly this branch of `computeChunkVerdicts` directly. Stated honestly per this plan's own
+discipline: real-data coverage of (d) does not exist; the unit test is what pins the property.
+
+**GATE: PASSED (VERIFY-01's per-chunk-verdict half — `chunkVerdicts[]` proven on two real, distinct
+reference games, without any build step, with (a)/(b)/(c) independently confirmed on real data and
+(d) honestly cited to its unit test rather than claimed live.)**
+
+### The ADDED measurement — chunk-level staleness, the phase goal's own unit of measure
+
+The phase goal is "a second run of the skill does not flag every chunk as stale," and its unit is
+CHUNKS, not line-level findings and not group verdicts. Measured directly from the real
+`chunkVerdicts[]` output above:
+
+| Game | Total chunks | Citing chunks (in `chunkVerdicts`) | `stale: true` | `stale: false` | `ruleDelta` distribution (citing chunks) |
+|---|---|---|---|---|---|
+| `seven` (natural `sharper` finding, §2/§4) | 17 | 16 | **14** | **2** | `sharper`: 14, `cosmetic`: 2, `contradictory`: 0, `unclassified`: 0 |
+| `one-two-punch` (this section's `contradictory` SC-3 mutation) | 12 | 11 | **11** | **0** | `contradictory`: 11, `cosmetic`: 0, `sharper`: 0, `unclassified`: 0 |
+
+**Named, with the exact attributing delta:**
+
+- **`seven` — the 2 chunks that stayed clean:** `game-score-and-winner` and `scoring-combo-sets-and-
+  runs`. Both were checked directly (row 3 of the table above, and `scoring-combo-sets-and-runs`
+  cites only `rulebook/INDEX.md`, which is never a paired rule slice at all — nothing to compare it
+  against, correctly `cosmetic`/not-stale by construction, not by narrowing). **The 14 stale
+  chunks** all cite `rulebook/01-definitions-and-components.md` — the live slice containing
+  `quotedPass1`'s exact text (`"Named-but-undefined (p.1): bonus point cards (depicted as a black
+  \"+1\" card...)"`) — and inherit the `sharper` delta via decision 18's per-quote narrowing exactly
+  as designed.
+- **`one-two-punch` — 0 chunks stayed clean.** All 11 citing chunks cite BOTH
+  `rulebook/01-setup-and-round-structure.md` (where `quotedPass1`'s exact text — the FIGHT-phase
+  resolution rule — lives) AND `rulebook/02-action-cards-and-resolution.md`, so every one of them
+  inherits the `contradictory` delta. No warnings fired (`unattributable-quote` or unreadable-slice
+  — the 174-04 corrective-follow-up conditions) in either game's real run; the quote matched its
+  live slice cleanly both times, so no conservative broadening was needed or triggered.
+
+### Explicit verdict: the phase goal is **NOT MET** on these two real reference games — reported
+    plainly, not smoothed over
+
+Per the plan's own standard ("a run that marks a small, explainable subset stale MEETS it; a run
+that marks every chunk stale FAILS it, regardless of the 90.9% SC-2 figure"):
+
+- `one-two-punch`: **100% of citing chunks (11/11) go stale** from a single real `contradictory`
+  finding. This is literally "every chunk," the exact failure the phase goal names.
+- `seven`: **87.5% of citing chunks (14/16) go stale** from a single real `sharper` finding. Not
+  literally every chunk — decision 18's per-quote narrowing IS doing real, verifiable work here (2
+  chunks stay clean where a naive group-level rollup would have marked all 16 stale, per decision
+  18's own worked rationale) — but "nearly every chunk," which the added-task instructions
+  explicitly name as a case not to smooth over.
+
+**Diagnosis: this is NOT an SC-2 classifier-accuracy failure (SC-2 measured 90.9% cosmetic, PASS,
+in §2) and NOT a failure of decision 18's group-vs-chunk fix (which is independently proven correct
+above — it narrows to real citation facts, not a global rollup, and produced a real, non-trivial 2-
+chunk carve-out on `seven`).** The root cause is **live-slice GRANULARITY**, one level finer than
+the page-GROUP granularity decision 18 was designed to fix, but still too coarse for these two
+particular reference games: both `seven` (3 live rule slices for 17 chunks) and `one-two-punch` (2
+live rule slices for 12 chunks) concentrate almost their entire rulebook's content into a
+handful of slices that most chunks cross-cite for general context (definitions, components, round
+structure), so a single line-level delta anywhere in one of those few slices still reaches most or
+all of the chunks that ever cite it — decision 18 narrows correctly from "the whole page-overlap
+GROUP" down to "the specific live SLICE the quote is in," but on a rulebook this short, "the
+specific slice" is still most of the rulebook. A finer per-citation-LINE attribution (matching a
+quote not just to a live SLICE but to the specific citation the chunk actually names) would narrow
+further, but that is a real architectural extension beyond this phase's scope — not built here, and
+explicitly flagged below as an open item for Phase 175/176 to weigh, since those phases own the
+consequence of a staleness verdict (repair scoping, VERIFY-06).
+
+This is reported as a genuine, unresolved phase-goal risk — not tuned, not hidden, and not treated
+as disqualifying the classifier itself (SC-1 through SC-5 as literally specified all measure real
+and pass on real data). It is the single most important finding this plan produced, named exactly
+as the added-task instructions required.
+
+### `game-score-and-winner`, the sole real counter-example — proof the mechanism is not vacuous
+
+Worth stating plainly: `game-score-and-winner`'s real, live-cited-fact-driven exemption from
+`seven`'s `sharper` verdict is direct proof decision 18's mechanism is not decorative — a global
+group-level rollup (decision 11 alone, without decision 18's later narrowing) would have marked ALL
+16 citing chunks `sharper`/stale with no distinction at all. The measured real outcome (14 of 16,
+not 16 of 16) is strictly better than the pre-decision-18 architecture would have produced on this
+exact data, even though it still falls short of the phase goal's own bar on these two short
+rulebooks.
+
+---
+
+## What is still unproven
+
+Carried forward from earlier plans, plus this plan's own gaps — nothing below is silently resolved:
+
+1. **The chunk-level staleness bar itself (added-task measurement, §6).** Both real reference games
+   fail the phase goal's own literal bar (100% and 87.5% of citing chunks go stale from one real
+   finding each) — not an SC-2/SC-3/SC-4/SC-5 failure (all measured PASS on real data), but a real,
+   open risk that live-slice granularity is too coarse for short (2-3 live-slice) rulebooks. No
+   attempt was made to tune the classifier or the attribution mechanism to improve this number —
+   per this plan's explicit instruction, it is reported as a finding for Phase 175/176, not
+   papered over.
+2. **True internal Task/Agent-tool dispatch** — carried from every prior plan in this milestone
+   (`173-PROOF.md` §3/§4, `174-01`/`174-06`-PROOF.md). No internal Task/Agent tool was exposed to
+   this executor; every real dispatch in this plan (transcription and classification alike) used a
+   `claude -p` OS-subprocess as the closest faithful equivalent — a genuine process boundary with no
+   inherited conversation history. Not separately confirmed under native Task-tool access.
+3. **`source-changed` + `cosmetic` + not-stale as a naturally-occurring real 4-tuple** (§5's SC-4
+   discussion). Both real reference games pair into exactly one page-overlap group each, and this
+   plan's SC-3 mutation necessarily lands on that same one group, so no second, unaffected real pair
+   existed in this run to carry the combination. Corroborated instead via cross-run/cross-game
+   comparison (§5) and the structural unit tests pinning `deriveStale`'s one-argument arity. A
+   larger reference game with 2+ real page-overlap groups, one mutated and one untouched, would be
+   needed to exhibit this literal 4-tuple live.
+4. **Assertion (d) of VERIFY-01's per-chunk verdict** (a chunk citing only an `unpaired-slice`
+   group reads `unclassified`) — not exercised live; neither real game produced an `unpaired-slice`
+   group in any run this milestone has performed. Proven structurally by
+   `verify-classify.test.ts`'s `chunk-2` test only.
+5. **Multi-range / multi-dispatch fan-out and parallel-dispatch races** — carried from every prior
+   plan (`173-PROOF.md` §what-this-plan-did-not-prove item 6; `174-01-PROOF.md`). Both reference
+   rulebooks are 2-page books dispatched as a single range every time; large-rulebook range division
+   and concurrent-dispatch collisions remain unexercised anywhere in this milestone.
+6. **A genuine human designer's response at any designer-confirmation gate** (carried from Phase
+   173) — every live pass across both phases has had no human present; the executing agent stood in
+   as a proxy, recorded explicitly at each occurrence, including this plan's own `chunk-check`
+   provenance-baseline step.
+7. **Case 1 and Case 3 of `source-resolution.md`** (already-archived proceed-straight;
+   multiple-candidates stop-and-ask) — carried from `173-PROOF.md` item 7, still unexercised. Case 2
+   (single unarchived candidate) and Case 4 (hash mismatch — this plan's own SC-3 mutation, though
+   handled via the disclosed manual `INDEX.md` edit rather than the skill's own live Step-1 logic,
+   since no real `/bs-verify-game` session ran end-to-end in this milestone) are the only cases any
+   real run has touched.
+8. **An automated re-adoption path for a genuinely changed archived source.** This plan's SC-3
+   provenance flip required a manual `rulebook/INDEX.md` edit (disclosed in §5) because
+   `boardsmith ingest-archive` deliberately refuses to overwrite an existing archive
+   ("Never clobber"), and no other command in the current codebase re-syncs `INDEX.md`'s recorded
+   hash after a Case-4 mismatch. This is a real gap for whichever future phase owns closing the loop
+   on a genuine rulebook-edition change (not assigned to any phase in the current roadmap as of this
+   writing) — recorded here so it is visible rather than rediscovered.
+9. **`/bs-build-chunk` Step 0's `ingest-check` call** — carried from Phase 170/171/172/173, still
+   never exercised by a live session.
+10. **The Git Protocol mechanism at Step 3 close** (write order, commit message shape) — carried
+    from `173-PROOF.md` item 3, still unexercised; no plan in this milestone has committed inside a
+    scratch copy (all scratch work is disposable and never pushed/merged).
+
+## How to re-run every proof
+
+No proof in this phase was captured as a reusable shell script (matching `174-06-PROOF.md`'s own
+precedent — every dispatch is a real, non-idempotent `claude -p` subprocess call, so re-running a
+script re-validates the EVIDENCE captured above, not the live event itself). The exact reproducible
+command sequence, in order, for every section:
+
+**§1 (fixture production) / §2 (SC-1/SC-2):** see `174-FIXTURES/MANIFEST.md`'s own command block
+and `174-06-PROOF.md`'s "Reconstituting the real pass-2 material" subsection — `cp -R` both
+`~/BoardSmithGames/{seven,one-two-punch}` originals into a fresh `$SCRATCH`, real
+`npx boardsmith claude --local --force`, real `boardsmith ingest-archive rules.pdf --project . --json`
+(confirms the same hash every time — same unmodified `rules.pdf` bytes), restore
+`174-FIXTURES/<game>/staged/*.md` + `RUN.md` into `rulebook/.verify/<runId>/` using the run-ids in
+`174-FIXTURES/MANIFEST.md`, verify all 23 restored file hashes against the manifest table, then
+`boardsmith verify-classify-pairs`/`verify-classify-record`/`verify-classify-status --run-id <runId>
+--project . --json`.
+
+**§4 (determinism / lexicon regression):** repeat the reconstitution above into a SECOND fresh
+`verify-run-init`, dispatch a fresh `claude -p "$(cat classification-dispatch-prompt.txt)"
+--allowedTools Read` per pair, diff the `(pairId, ruleDelta, stale)` triple sets externally; for the
+lexicon pairs, dispatch each of the 7 `174-FIXTURES/lexicon/<pair>/{live,staged}.md` pairs against
+`src/cli/slash-command/bs/verify/classification-subagent.md` directly and compare the returned
+`label` to `EXPECTED.md`.
+
+**§5 (SC-3 mutation):** on a FRESH `cp -R` copy of `one-two-punch`, real skill install, real
+`ingest-archive` (confirms hash `e28d1875...358eea`), real `boardsmith chunk-check second-action-
+resolution --project . --json` (writes the pre-mutation `Source hash:` baseline), then: rasterize
+page 1 of `rulebook/source/rules.pdf` at 300dpi (`pdftoppm`), composite a Ghostscript-rendered patch
+(`gs -sDEVICE=png16m -r300`) reversing "lower"→"higher" in the FIGHT-phase paragraph at pixel
+offset `+1292+2029` (a 300×55pt / 1250×229px patch), reassemble with the untouched page 2
+(`magick -units PixelsPerInch -density 300 fixed1.png fixed2.png mutated-rules.pdf`), overwrite
+`rulebook/source/rules.pdf` with the mutated bytes, manually update `rulebook/INDEX.md`'s `Source
+hash:` line to the mutated file's hash (documented departure — no automated re-adopt command
+exists), then real `verify-run-init` + real `claude -p` transcription dispatch (`BS-DISPATCH-V2`,
+range `1-2`) + real recording + real `verify-classify-pairs`/classification dispatch
+(`BS-CLASSIFY-V1`)/`-record`/`-status`.
+
+**§6 (VERIFY-01 / chunk-level staleness):** against either reconstituted run above, run
+`boardsmith verify-classify-status --project . --run-id <runId> --json` and read `chunkVerdicts[]`;
+cross-check `pairIds`/`citedLiveSlices` against each named chunk's own `CHUNK.md` via `grep -n
+"rulebook/<slice>" chunks/<slug>/CHUNK.md`; confirm the no-build claim via a whole-tree `find | xargs
+shasum -a 256` diff excluding `rulebook/.verify/`, captured immediately before and after the
+`verify-classify-status` call.
+
+**Regression coverage that runs on every future change (not ad hoc):** `npx vitest run
+src/cli/commands/verify-classify.test.ts` (pairing, provenance, staleness map, presentation filter,
+ledger record/resume, malformed-return handling, `computeChunkVerdicts` including the 174-04
+corrective-follow-up cases `decision-18-corrective-a`/`-b`) and `npx vitest run
+src/cli/commands/chunk-provenance.test.ts` (`chunk-check`/`computeVerificationScope`). Full suite:
+`npm test`.

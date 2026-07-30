@@ -66,16 +66,22 @@ the tag.
 
 ### Verify Pipeline (VERIFY)
 
-- [ ] **VERIFY-01**: A designer can run `/bs-verify-game` on an existing bs-built project and get a
+- [x] **VERIFY-01**: A designer can run `/bs-verify-game` on an existing bs-built project and get a
       per-chunk verdict without rebuilding the game.
-      *(Left OPEN — only partially established. The install-and-run half is proven live: `173-PROOF.md`
-      section 2 (SC-1, a real `npx boardsmith claude --local --force` install into a copy of `seven`)
-      and section 4 (this plan's own real adoption + dispatch pass against a copy of `one-two-punch`,
-      run without rebuilding either project). The "get a per-chunk verdict" half genuinely does not
-      exist yet — `173-CONTEXT.md`'s own Phase Boundary excludes all classification (VERIFY-03) from
-      this phase and assigns it to Phase 174; there is no code path in this phase that produces a
-      verdict. Marking this complete now would be the third premature completion mark this phase has
-      had to catch — left open for Phase 174 to close once classification exists.)*
+      *(Both halves now proven live. Install-and-run: `173-PROOF.md` section 2 (SC-1, `seven`) and
+      section 4 (`one-two-punch`). Per-chunk verdict: `174-PROOF.md` section 6 — real
+      `boardsmith verify-classify-status --json`'s `chunkVerdicts[]` on both real reference games
+      (`seven`: 16 citing chunks, 14 `sharper`/stale, 2 `cosmetic`/clean; `one-two-punch`: 11 citing
+      chunks, all 11 `contradictory`/stale from this phase's real SC-3 mutation), with no build step
+      between adoption and the verdict — confirmed by a whole-tree sha256 diff excluding
+      `rulebook/.verify/`, not by the absence of a build command in the transcript. Citations/pairIds
+      spot-checked directly against each named chunk's own CHUNK.md prose. **Open caveat carried
+      forward, not smoothed over:** the phase-goal-level chunk staleness RATE on these two short
+      (2-3 live-slice) reference games is high (87.5%/100% of citing chunks go stale from one real
+      finding each) — see `174-PROOF.md` section 6's added measurement and `ROADMAP.md`'s Phase 174
+      Result for the full diagnosis. This does not block VERIFY-01's own requirement text (a
+      per-chunk verdict without rebuilding), which is proven; it is recorded as an open risk for
+      Phase 175/176.)*
 - [x] **VERIFY-02**: The skill re-transcribes the full rulebook from archived source into a staging
       tree non-destructively — existing slices are never overwritten before the pass closes.
       *(Proven live twice: `173-PROOF.md` section 3 (SC-2, `seven` — whole-tree manifest diff shows
@@ -83,7 +89,7 @@ the tag.
       and section 4 (this plan, `one-two-punch` — 9 staged slice files across 4 real dispatches, zero
       writes outside `rulebook/.verify/`, confirmed via `find`/`shasum`, never trusted from the
       command's own output).)*
-- [ ] **VERIFY-03**: Each slice pair is classified on two independent dimensions — **provenance**
+- [x] **VERIFY-03**: Each slice pair is classified on two independent dimensions — **provenance**
       (`source-changed` or `source-unchanged`, from the archived source hash) and **rule delta**
       (`cosmetic` / `sharper` / `contradictory`, from semantic comparison of the two
       transcriptions). Staleness keys off the rule delta alone: `sharper` or `contradictory` marks
@@ -91,22 +97,37 @@ the tag.
       every chunk and a genuine edition change is not missed. `source-changed` is recorded
       provenance and is always reported to the human — an edition change is a fact the designer
       must see — but it is not itself a staleness verdict.
+      *(Proven real, on real data, across the two-dimension mechanism and both real classification
+      bars: `174-PROOF.md` section 2 (SC-1 dimension independence + SC-2 measured at **90.9%**
+      pooled rule-bearing line-level cosmetic, 0 contradictory — PASS against the pre-declared ≥90%
+      bar), section 4 (determinism — identical `(pairId, ruleDelta, stale)` triples across two fully
+      independent real dispatches, both games; 7/7 lexicon regression pairs), and section 5 (SC-3 —
+      a real archived-source mutation, real re-transcription, real classification dispatch classified
+      `contradictory`/`stale:true`/`provenance:source-changed`; SC-4's independence corroborated via
+      cross-run comparison since no naturally-occurring `source-changed`+`cosmetic` real pair existed
+      in this run — stated honestly rather than implied, and pinned structurally by
+      `deriveStale`'s one-argument arity). Staleness-map/presentation-filter/pairing/ledger mechanics
+      are unit-pinned in `src/cli/commands/verify-classify.test.ts`.)*
 - [ ] **VERIFY-04**: A `contradictory` classification always stops and asks the human, with both
       readings quoted side by side; the resolution is recorded in `RULINGS.md`.
 - [ ] **VERIFY-05**: Chunks affected by a changed slice flip to a rules-staleness marker visible in
       both CHUNK.md and SKETCH.md, following the existing authority and write-order rules.
 - [ ] **VERIFY-06**: Only chunks whose code changed during repair re-open the human playtest gate;
       chunks that pass the audit lenses unchanged close without re-playtesting.
-- [ ] **VERIFY-07**: The orchestrator never reads a full slice — re-transcription and classification
+- [x] **VERIFY-07**: The orchestrator never reads a full slice — re-transcription and classification
       both run in subagents, preserving the context-economics rule.
-      *(Left OPEN — only partially established, same reasoning as VERIFY-01. The re-transcription
-      half is proven live and repeatedly: `173-PROOF.md` section 3 (SC-3, `seven` — zero
-      slice-body-shaped lines across a 731-line transcript, the raw dispatch prompt, and the raw
-      subagent return) and section 4 (this plan, `one-two-punch` — zero slice-body-shaped lines
-      across all four real dispatch events of the kill-and-resume pass). The classification half
-      cannot be proven because classification does not exist yet — `173-CONTEXT.md` excludes it from
-      this phase entirely (Phase 174). Left open for Phase 174 to close once a classification
-      subagent exists to prove the same property against.)*
+      *(Both halves now proven live. Re-transcription: `173-PROOF.md` section 3 (`seven`) and section
+      4 (`one-two-punch`). Classification: `174-PROOF.md` section 3 — grepped across three real
+      artifacts per dispatch (dispatch prompts: zero matches, both games; raw subagent returns:
+      matches present but accounted for by the documented `quotedPass1`/`quotedPass2` exception —
+      `sharper`/`contradictory` verdicts REQUIRE both readings quoted verbatim by design; orchestrator
+      transcript: one match, located precisely inside a `--quoted-pass2` recording argument
+      forwarding the subagent's own returned field, zero matches anywhere else). **One honest
+      exception beyond the stated scope, reported rather than absorbed:** 2 of `one-two-punch`'s raw
+      subagent-return matches fall inside the free-prose `evidence` field, describing schema prefixes
+      generically rather than quoting rule content — "evidence never contains a slice-body-shaped
+      line" is not literally true of this real dispatch, only "evidence never contains a *quoted rule
+      line*" is (`174-PROOF.md` section 3, Artifact 2).)*
 - [x] **VERIFY-08**: A verify pass is resumable — a crash mid-pass resumes at the first unrecorded
       step rather than re-running the re-transcription.
       *(Proven with a REAL kill-and-resume, not a unit test: `173-PROOF.md` section 4. A harness-
@@ -199,11 +220,11 @@ the tag.
 | PROV-03 | Phase 171 | Complete |
 | CHECK-03 | Phase 172 | Complete |
 | CHECK-05 | Phase 172 | Complete |
-| VERIFY-01 | Phase 173 | Partial — install+run proven (173-06/173-07); per-chunk verdict now COMPUTED (174-04's `chunkVerdicts[]`), but not yet reachable from a live `/bs-verify-game` run — awaits 174-05/06/07's skill-text/subagent-dispatch integration |
+| VERIFY-01 | Phase 173 (closed 174-07) | Complete — install+run proven (173-06/173-07); per-chunk verdict proven live on real data (`174-PROOF.md` §6). Chunk-level staleness RATE on both real reference games is an open risk carried to Phase 175/176 (see ROADMAP Phase 174 Result), not a gap in this requirement's own text |
 | VERIFY-02 | Phase 173 | Complete (173-06/173-07 proof) |
-| VERIFY-07 | Phase 173 | Partial — re-transcription absence proven (173-06/173-07); classification-in-subagent contract/dispatch is 174-05's scope, not yet built |
+| VERIFY-07 | Phase 173 (closed 174-07) | Complete — re-transcription absence proven (173-06/173-07); classification-in-subagent absence proven live (`174-PROOF.md` §3), one honest exception beyond the stated scope reported (free-prose `evidence` schema-mentions) |
 | VERIFY-08 | Phase 173 | Complete (173-07 proof; re-confirmed 173-08 against a corrected crash-safety guarantee + closed range-level resume determinism — see `173-PROOF.md` §5) |
-| VERIFY-03 | Phase 174 | Partial — the CLI surface (`verify-classify-pairs`/`-record`/`-status`, provenance + rule-delta + staleness derivation) is built and tested (174-04); the classification subagent contract that supplies the judgment label is 174-05's scope |
+| VERIFY-03 | Phase 174 | Complete — the CLI surface (174-04), the classification subagent contract (174-05), and every real-data bar (SC-1 through SC-5) proven live (`174-PROOF.md` §2, §4, §5): SC-2 90.9% cosmetic PASS, SC-3 real mutation → `contradictory` PASS, determinism identical, 7/7 lexicon regression |
 | VERIFY-04 | Phase 175 | Pending |
 | VERIFY-05 | Phase 175 | Pending |
 | VERIFY-06 | Phase 175 | Pending |

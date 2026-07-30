@@ -143,7 +143,39 @@ Plans:
 - [x] 174-04-PLAN.md — `verify-classify-pairs` / `-record` / `-status` + CLI registration + per-chunk verdict roll-up (wave 3)
 - [x] 174-05-PLAN.md — classification subagent contract + `classification-dispatch.md` + `verify-game.md` Step 4 in-place rewrite + rewritten drift pins (wave 4)
 - [x] 174-06-PLAN.md — live proof: SC-1/SC-2 with the bar declared before measuring, VERIFY-07 transcript grep, determinism + lexicon regression (wave 5)
-- [ ] 174-07-PLAN.md — live proof: SC-3 real source mutation through the real pipeline, VERIFY-01 per-chunk verdict, phase closeout (wave 6)
+- [x] 174-07-PLAN.md — live proof: SC-3 real source mutation through the real pipeline, VERIFY-01 per-chunk verdict, phase closeout (wave 6)
+
+**Result:** All five success criteria proven live on real data (`174-PROOF.md`). SC-1/SC-2:
+provenance and rule-delta are independently derived on real pairs; SC-2's pre-declared bar (≥90%
+cosmetic, zero contradictory, evaluated per decision 14b over pooled rule-bearing LINE-LEVEL
+comparisons) measured **90.9%** (10/11), **PASS**. SC-3: a real archived-source mutation (a genuine
+Fight-phase precedence reversal, "lower"→"higher" timing resolves first, edited into
+`one-two-punch`'s image/vector rulebook PDF via rasterize+Ghostscript-font-composite, no package
+installs) run through the REAL pipeline — real re-transcription dispatch, real classification
+dispatch — classified **`contradictory`**, `stale:true`, `provenance:source-changed`, **PASS**. SC-4:
+provenance never feeds the staleness map, corroborated on real data by two different runs of the
+same pair landing different provenance values with different staleness outcomes purely as a
+function of rule delta (no naturally-occurring `source-changed`+`cosmetic` real pair existed in this
+run — a genuine data-availability gap stated honestly, backstopped by `deriveStale`'s one-argument
+arity). SC-5: validated against BOTH real reference games, not synthetic examples alone. Determinism
+(decision 16): identical `(pairId, ruleDelta, stale)` triples across independent dispatches, both
+games. VERIFY-01, VERIFY-03, and VERIFY-07 all CLOSED in `REQUIREMENTS.md` with section-and-number
+citations.
+
+**One finding reported but NOT fixed in this phase, the most consequential of the whole phase:** a
+new added measurement (this plan, not in the original plan text) computed REAL per-CHUNK staleness
+— the phase goal's own unit — on both reference games, and it does **NOT** meet the phase goal as
+literally stated ("a second run does not flag every chunk as stale"): `one-two-punch` marks
+**11/11 (100%)** of its citing chunks stale from one real `contradictory` finding; `seven` marks
+**14/16 (87.5%)** stale from one real `sharper` finding. This is not an SC-1..SC-5 failure (all
+measured PASS) and not a defect in decision 18's group-vs-chunk narrowing (independently proven
+correct — it produced a real, non-trivial 2-chunk carve-out on `seven` that a naive group-level
+rollup would not have). The root cause is live-slice GRANULARITY: both reference games concentrate
+almost all rulebook content into 2-3 live slices that most chunks cross-cite, so a delta anywhere in
+one of those few slices still reaches most/all of its citing chunks. Left as an explicit open risk
+for Phase 175/176 to weigh (they own the consequence of a staleness verdict — repair scoping,
+VERIFY-06) rather than tuned or hidden here. Full diagnosis, the stale/total tables, and the named
+attributing chunks are in `174-PROOF.md` §6.
 
 ### Phase 175: Impact Map & Repair Gating
 **Goal**: A classified slice pair produces the right downstream consequence — human adjudication for genuine contradictions, visible staleness for affected chunks, and repair effort scoped to what actually changed.
@@ -206,7 +238,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
 | 173. Verify Pipeline Core | 8/8 | Complete   | 2026-07-29 |
-| 174. Verify Classifier | 6/7 | In Progress|  |
+| 174. Verify Classifier | 7/7 | Complete   | 2026-07-30 |
 | 175. Impact Map & Repair Gating | 0/TBD | Not started | - |
 | 176. Stale-Chunk Repair | 0/TBD | Not started | - |
 | 177. Derived-Line Re-Derivation | 0/TBD | Not started | - |

@@ -1,9 +1,9 @@
 ---
 phase: 174
 slug: verify-classifier
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-29
 ---
 
@@ -41,17 +41,18 @@ created: 2026-07-29
 
 | Req | Behavior | Test Type | Automated Command | File Exists | Status |
 |---|---|---|---|---|---|
-| VERIFY-03 (pairing) | Live↔staged pairing by page-span overlap; m:n groups normal; one-sided span → `unpaired-slice` | unit | `npx vitest run src/cli/commands/verify-classify.test.ts -t "pairing"` | ❌ W0 | ⬜ pending |
-| VERIFY-03 (provenance) | `source-changed`/`source-unchanged`/`unknown` from hash compare; `unknown` never collapsed | unit | `... -t "provenance"` | ❌ W0 | ⬜ pending |
-| VERIFY-03 (staleness map) | `cosmetic`→false; `sharper`/`contradictory`/`unclassified`→true; **provenance never an input** | unit | `... -t "staleness"` | ❌ W0 | ⬜ pending |
-| VERIFY-03 (presentation filter) | Both `Visual (p.N):` and legacy `Derived (p.N) — diagram description:`/`— art:` excluded; enum test-pinned | unit | `... -t "presentation"` | ❌ W0 | ⬜ pending |
-| VERIFY-03 (ledger record/resume) | Records append via the SAME atomic write; resume skips already-classified pairs | unit | `... -t "ledger"` | ❌ W0 | ⬜ pending |
-| VERIFY-03 (malformed return) | Non-enum/missing label → `unclassified` → stale; never thrown, never `cosmetic` | unit | `... -t "unclassified"` | ❌ W0 | ⬜ pending |
-| VERIFY-03 · SC-2 | ≥90% of real pairs `cosmetic`, zero `contradictory` | integration (real run) | real `cp -R` copy proof, recorded in `174-PROOF.md` | ❌ W0/W1 | ⬜ pending |
-| VERIFY-03 · SC-3 | Genuine injected rules change → `sharper`/`contradictory` | integration (real run) | real archived-source mutation + re-transcription dispatch | ❌ W0/W1 | ⬜ pending |
-| VERIFY-07 (classification half) | Zero slice-body-shaped lines across orchestrator transcript, raw dispatch prompt, raw subagent return | live proof (grep) | mirror `173-PROOF.md` §3 SC-3 method | ❌ W0 | ⬜ pending |
-| VERIFY-01 (verdict half) | A real run produces a per-chunk verdict without rebuilding | integration (real run) | recorded in `174-PROOF.md` | ❌ W0 | ⬜ pending |
-| Determinism (decision 16) | Same pair set classified twice → identical verdicts | integration | ad hoc harness, mirroring `173-PROOF.md` §5 | ❌ W0 | ⬜ pending |
+| VERIFY-03 (pairing) | Live↔staged pairing by page-span overlap; m:n groups normal; one-sided span → `unpaired-slice` | unit | `npx vitest run src/cli/commands/verify-classify.test.ts -t "pairing"` | ✅ | ✅ green |
+| VERIFY-03 (provenance) | `source-changed`/`source-unchanged`/`unknown` from hash compare; `unknown` never collapsed | unit | `... -t "provenance"` | ✅ | ✅ green |
+| VERIFY-03 (staleness map) | `cosmetic`→false; `sharper`/`contradictory`/`unclassified`→true; **provenance never an input** | unit | `... -t "staleness"` | ✅ | ✅ green |
+| VERIFY-03 (presentation filter) | Both `Visual (p.N):` and legacy `Derived (p.N) — diagram description:`/`— art:` excluded; enum test-pinned | unit | `... -t "presentation"` | ✅ | ✅ green |
+| VERIFY-03 (ledger record/resume) | Records append via the SAME atomic write; resume skips already-classified pairs | unit | `... -t "ledger"` | ✅ | ✅ green |
+| VERIFY-03 (malformed return) | Non-enum/missing label → `unclassified` → stale; never thrown, never `cosmetic` | unit | `... -t "unclassified"` | ✅ | ✅ green |
+| VERIFY-03 · SC-2 | ≥90% of real pairs `cosmetic`, zero `contradictory` | integration (real run) | real `cp -R` copy proof, recorded in `174-PROOF.md` §2 | ✅ | ✅ PASS — 90.9% pooled cosmetic, 0 contradictory |
+| VERIFY-03 · SC-3 | Genuine injected rules change → `sharper`/`contradictory` | integration (real run) | real archived-source mutation + re-transcription dispatch, `174-PROOF.md` §5 | ✅ | ✅ PASS — `contradictory`, `stale:true` |
+| VERIFY-07 (classification half) | Zero slice-body-shaped lines across orchestrator transcript, raw dispatch prompt, raw subagent return | live proof (grep) | mirror `173-PROOF.md` §3 SC-3 method, `174-PROOF.md` §3 | ✅ | ✅ green — clean except the documented `quotedPass1`/`quotedPass2` exception (and one honestly-reported free-prose `evidence` schema-mention edge case) |
+| VERIFY-01 (verdict half) | A real run produces a per-chunk verdict without rebuilding | integration (real run) | recorded in `174-PROOF.md` §6 | ✅ | ✅ green — `chunkVerdicts[]` on both real games, no-build confirmed via whole-tree sha256 diff |
+| Determinism (decision 16) | Same pair set classified twice → identical verdicts | integration | ad hoc harness, mirroring `173-PROOF.md` §5; `174-PROOF.md` §4 | ✅ | ✅ green — identical `(pairId, ruleDelta, stale)` triples, both games |
+| Added: chunk-level staleness | Real per-chunk stale/total measured on both games against the phase goal | integration (real run) | `174-PROOF.md` §6 | ✅ | ⚠️ measured — goal NOT MET on these two real games (100%/87.5% of citing chunks stale); reported as an open risk, not a defect in what this phase built |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -59,17 +60,14 @@ created: 2026-07-29
 
 ## Wave 0 Requirements
 
-- [ ] `src/cli/commands/verify-classify.test.ts` — does not exist; covers every unit-level row above.
-- [ ] **Real pass-1-vs-pass-2 fixture data — does not exist anywhere on disk.** A first wave must
-      produce it via a real adoption + re-transcription run against `cp -R` copies (anchor: `seven`;
-      second target: `one-two-punch`) before any SC-2/SC-3/SC-5 proof can run. This is the phase's
-      hardest Wave 0 dependency, not a test-file gap.
-- [ ] `src/cli/slash-command/bs/verify/classification-dispatch.md` — new delegate, does not exist.
-- [ ] Classification subagent contract — new; must carry the Visual/Derived schema-asymmetry
-      exclusion rule as an explicit worked example, since no existing contract covers this ground.
-- [ ] Export the module-private ledger helpers from `verify-run.ts` (`atomicWriteFile`,
-      `appendLedgerLine`, `locateFences`, `parseLedgerBody`, `resolveLedgerState`, `ledgerFilePath`,
-      `readLedgerOrThrow`) — reuse means exporting, never copying.
+- [x] `src/cli/commands/verify-classify.test.ts` — built (174-03/174-04); covers every unit-level row above.
+- [x] **Real pass-1-vs-pass-2 fixture data** — produced live (174-01), archived at `174-FIXTURES/`,
+      reconstituted and re-verified against `MANIFEST.md` in every later plan (174-06, this plan).
+- [x] `src/cli/slash-command/bs/verify/classification-dispatch.md` — built (174-05).
+- [x] Classification subagent contract (`classification-subagent.md`) — built (174-05); carries the
+      Visual/Derived schema-asymmetry exclusion rule and worked examples; exercised for real in
+      `174-06-PROOF.md` §2 and this plan's §5.
+- [x] Export the module-private ledger helpers from `verify-run.ts` — done (174-02).
 
 ---
 
@@ -85,12 +83,15 @@ created: 2026-07-29
 
 ## Validation Sign-Off
 
-- [ ] All tasks have automated verify or a declared Wave 0 dependency
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (including the real-fixture dependency)
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 10s for unit work
-- [ ] SC-2 numeric bar recorded in `174-PROOF.md`
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have automated verify or a declared Wave 0 dependency
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (including the real-fixture dependency)
+- [x] No watch-mode flags
+- [x] Feedback latency < 10s for unit work
+- [x] SC-2 numeric bar recorded in `174-PROOF.md` (90.9%, PASS)
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** signed off 2026-07-30 (174-07). All rows real/green except the added chunk-level
+staleness measurement, which is real and measured but reports the phase goal NOT MET on both real
+reference games — recorded honestly in `174-PROOF.md` §6 as an open risk for Phase 175/176, not
+papered over. `npm test`: 3691/3691 green.
