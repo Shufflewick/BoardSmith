@@ -30,6 +30,10 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import {
+  RULES_STALE_MARKER,
+  REPAIR_GATE_DISPOSITIONS,
+} from '../../commands/verify-impact.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -64,6 +68,7 @@ const REFERENCED_SECTIONS = [
   '## Consistency Check (every bs- entry point, before proceeding)',
   '## Status Enum (exact)',
   '## Session Lock',
+  '## Rules Staleness Marker',
 ] as const;
 
 /**
@@ -209,11 +214,71 @@ describe('PROV-03 — check-status.md item 8: verification provenance and drift'
     expect(checkStatus).toContain('verifiedWithoutProvenance');
   });
 
-  it('the count sentences say "eight items", never "seven items"', () => {
+  it('the count sentences say "nine items", never "eight items" or "seven items"', () => {
     const checkStatus = read('check-status.md');
     expect(checkStatus).not.toMatch(/seven items/i);
-    const matches = checkStatus.match(/eight items/gi) ?? [];
+    expect(checkStatus).not.toMatch(/eight items/i);
+    const matches = checkStatus.match(/nine items/gi) ?? [];
     expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('still contains no instruction to write a state file (read-only posture preserved)', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).not.toMatch(/write .*SKETCH|edit .*CHUNK|mutate|bump .*version/i);
+    expect(checkStatus).toMatch(/read-only|no writes|never (mutate|write)/i);
+  });
+});
+
+/**
+ * Decision 19 (175-CONTEXT.md) — item 9, rules staleness and the repair gate, backed by
+ * `boardsmith verify-impact-status --json`. Pinned against the real exported constants from
+ * `verify-impact.ts` (`RULES_STALE_MARKER`, `REPAIR_GATE_DISPOSITIONS`) rather than re-typed
+ * strings, so a disposition rename or marker-string change cannot silently desync this skill's
+ * prose from the command it formats.
+ */
+describe('decision 19 — item 9 reports rules staleness', () => {
+  it('enumerates report item 9: rules staleness and the repair gate', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).toMatch(/^\*\*9\. /m);
+  });
+
+  it('runs `boardsmith verify-impact-status --json` and formats it, never computes', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).toContain('boardsmith verify-impact-status --json');
+  });
+
+  it('names the uncapped staleFraction, staleSlugs, dispositionCounts, and contradictionsPending fields', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).toContain('staleFraction');
+    expect(checkStatus).toContain('staleSlugs');
+    expect(checkStatus).toContain('dispositionCounts');
+    expect(checkStatus).toContain('contradictionsPending');
+  });
+
+  it('contains every REPAIR_GATE_DISPOSITIONS member — never a re-typed list', () => {
+    const checkStatus = read('check-status.md');
+    for (const disposition of REPAIR_GATE_DISPOSITIONS) {
+      expect(checkStatus).toContain(disposition);
+    }
+  });
+
+  it('contains RULES_STALE_MARKER\'s exact string', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).toContain(RULES_STALE_MARKER);
+  });
+
+  it('separately still contains STALE_MARKER\'s exact string (the two are distinct)', () => {
+    const checkStatus = read('check-status.md');
+    expect(checkStatus).toContain(STALE_MARKER);
+  });
+
+  it('never describes RULES_STALE_MARKER and STALE_MARKER as the same thing on one line', () => {
+    const checkStatus = read('check-status.md');
+    for (const line of checkStatus.split('\n')) {
+      if (line.includes(RULES_STALE_MARKER)) {
+        expect(line).not.toContain(STALE_MARKER);
+      }
+    }
   });
 
   it('still contains no instruction to write a state file (read-only posture preserved)', () => {

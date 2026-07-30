@@ -129,9 +129,11 @@ This command is read-only — item 8 does not violate this skill's no-writes-of-
 **9. Rules staleness and the repair gate.** Run `boardsmith verify-impact-status --json` and
 FORMAT its output — do not compute any of it here. Distinguish this explicitly from item 8: item 8
 reports what a chunk was verified AGAINST; item 9 reports whether the rulebook underneath it has
-since MOVED. Also distinguish `rules-stale` from `stale — re-derive before build` in one clause,
-citing `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`'s "Rules Staleness Marker" section
-rather than restating it.
+since MOVED. The chunk-level marker's value is `rules-stale — rulebook moved since this chunk was verified`.
+
+This is an entirely different, unrelated marker from item 2's Status-line carve-out above — the
+two describe opposite situations (never built, vs. already built and rules-stale) and are never
+described as the same thing. See `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`'s "Rules Staleness Marker" section rather than restating it here.
 
 Report the fraction as `"N of M chunks rules-stale"`, taken directly from the command's
 `staleFraction` field, and list EVERY slug in `staleSlugs` — never capped, never truncated, never
