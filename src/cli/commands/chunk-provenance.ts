@@ -231,6 +231,16 @@ export const VERIFIED_AGAINST_END = '<!-- boardsmith:verified-against:end -->';
  * copy. Changing one is a breaking change, mirroring `INDEX_HEADINGS`/`HEADER_LABELS` in
  * `ingest-archive.ts`.
  */
+/**
+ * The ninth label, appended (175-CONTEXT.md decision 11), is a genuinely NEW concept — not a
+ * reuse of `SCOPE_REASONS` above. Research measured that `## Verified Against` today has NO
+ * timestamp and NO signal for "this run found no code change", and that `SCOPE_REASONS` encodes
+ * something else entirely: WHY a verification's SCOPE was reduced (source unreadable/missing/
+ * mismatched), never WHETHER a chunk's code moved. The stamp's value embeds its own evidence
+ * (`<recorded-verified-hash>..<head> — 0 manifest files changed`) rather than asserting a bare
+ * boolean (T-175-07), because the block itself carries no timestamp — a human reading CHUNK.md
+ * cannot otherwise tell how fresh the claim is without a `git blame`.
+ */
 export const VERIFIED_AGAINST_LABELS = Object.freeze([
   'Scope:',
   'Reason:',
@@ -240,6 +250,7 @@ export const VERIFIED_AGAINST_LABELS = Object.freeze([
   'Skills tree hash:',
   'Cited slices:',
   'Unresolved citations:',
+  'Re-verified (no code change):',
 ] as const);
 
 const [
@@ -251,6 +262,7 @@ const [
   LABEL_SKILLS_HASH,
   LABEL_CITED,
   LABEL_UNRESOLVED,
+  LABEL_REVERIFIED,
 ] = VERIFIED_AGAINST_LABELS;
 
 /**
@@ -272,6 +284,15 @@ export interface VerifiedAgainstRecord {
   skillsTreeHash: string;
   citedSlices: Array<{ path: string; hash: string }>;
   unresolved: string[];
+  /**
+   * 175-CONTEXT.md decision 11's re-verification stamp — present ONLY when this run re-verified a
+   * chunk whose code did NOT move. The value names its own evidence (the drift comparison that
+   * justifies the claim), formatted `<recorded-verified-hash>..<head> — 0 manifest files changed`,
+   * rather than asserting a bare boolean. Omitted entirely (never rendered as an empty line) when
+   * absent — this run either did not re-verify, or found code that DID change (decision 12: goes
+   * to `built` instead, no stamp).
+   */
+  reverifiedNoCodeChange?: string;
 }
 
 /**
@@ -288,6 +309,9 @@ export function renderVerifiedAgainst(record: VerifiedAgainstRecord): string {
   lines.push(`${LABEL_SOURCE_HASH} ${record.sourceHash ?? 'none recorded'}`);
   lines.push(`${LABEL_VERSION} ${record.boardsmithVersion}`);
   lines.push(`${LABEL_SKILLS_HASH} ${record.skillsTreeHash}`);
+  if (record.reverifiedNoCodeChange) {
+    lines.push(`${LABEL_REVERIFIED} ${record.reverifiedNoCodeChange}`);
+  }
   lines.push('');
   lines.push(LABEL_CITED);
   lines.push('');
@@ -354,7 +378,19 @@ ${VERIFIED_AGAINST_BEGIN}${renderVerifiedAgainst(record)}${VERIFIED_AGAINST_END}
  */
 export async function chunkCheckCommand(
   slug: string,
-  options: { project?: string; json?: boolean } = {},
+  options: {
+    project?: string;
+    json?: boolean;
+    /**
+     * 175-CONTEXT.md decision 11's stamp value — the drift comparison evidence justifying a
+     * "re-verified, no code change" claim (e.g. `<hash>..<head> — 0 manifest files changed`).
+     * When supplied, writes the `Re-verified (no code change):` label; omitted otherwise. The
+     * `--reverified-no-code-change <range>` CLI flag itself is registered by plan 175-04 in
+     * `cli.ts`, to keep that file in one plan's `files_modified` — this option is exposed here
+     * only, ready for that registration to pass through.
+     */
+    reverifiedNoCodeChange?: string;
+  } = {},
 ): Promise<void> {
   const projectDir = resolve(options.project ?? process.cwd());
   const chunkPath = join(projectDir, 'chunks', slug, 'CHUNK.md');
@@ -416,6 +452,9 @@ export async function chunkCheckCommand(
     skillsTreeHash: await hashSkillsTree(projectDir),
     citedSlices,
     unresolved,
+    ...(options.reverifiedNoCodeChange
+      ? { reverifiedNoCodeChange: options.reverifiedNoCodeChange }
+      : {}),
   };
 
   const newBody = renderVerifiedAgainst(record);
@@ -538,6 +577,12 @@ export interface ParsedVerifiedAgainst {
   citedSlices: string[];
   unresolved: string[];
   /**
+   * 175-CONTEXT.md decision 11's re-verification stamp, round-tripped. `undefined` when the label
+   * is ABSENT — an eight-label block predates this change and is not malformed (an old block
+   * parsing as valid, not as damaged, is the whole point of appending rather than restructuring).
+   */
+  reverifiedNoCodeChange?: string;
+  /**
    * true only when a "## Verified Against" HEADING exists but its body could not be parsed (a
    * fence missing, a required label removed). Distinct from the ordinary "no heading at all"
    * unknown case — that one means "verified before this phase existed," not "corrupted." Both
@@ -581,7 +626,11 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
   if (body === VERIFIED_AGAINST_EMPTY) return unparsed(false); // freshly scaffolded, never run
 
   const readLabel = (label: string): string | undefined => {
-    const match = new RegExp(`^${label}\\s*(.*)$`, 'm').exec(body);
+    // Escape regex metacharacters (T-175-XX): `LABEL_REVERIFIED` is
+    // 'Re-verified (no code change):' — the parentheses are literal text in the label, not a
+    // regex capture group, and an unescaped label would silently fail to match.
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = new RegExp(`^${escaped}\\s*(.*)$`, 'm').exec(body);
     return match ? match[1].trim() : undefined;
   };
 
@@ -590,6 +639,8 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
   const sourceHashRaw = readLabel(LABEL_SOURCE_HASH);
   const versionRaw = readLabel(LABEL_VERSION);
   const skillsHashRaw = readLabel(LABEL_SKILLS_HASH);
+  // Absence is valid — an eight-label block predates decision 11's append and is not malformed.
+  const reverifiedNoCodeChangeRaw = readLabel(LABEL_REVERIFIED);
 
   if (
     (scopeRaw !== SCOPE_FULL && scopeRaw !== SCOPE_CODE_ONLY) ||
@@ -640,6 +691,9 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
     skillsTreeHash: skillsHashRaw,
     citedSlices,
     unresolved,
+    ...(reverifiedNoCodeChangeRaw !== undefined
+      ? { reverifiedNoCodeChange: reverifiedNoCodeChangeRaw }
+      : {}),
     blockMalformed: false,
   };
 }
