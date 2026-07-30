@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 175-04-PLAN.md — computeRepairGate (pure, total, driftState 'unknown' checked before stale/status, never collapsed into clean/drifted), verifyImpactStatusCommand (the impact map, composing verify-classify/drift-check/chunk-provenance/rules-staleness-marker/contradictions, uncapped staleFraction, line-level attributions carried verbatim for Phase 176), and verifyImpactApplyCommand (the gated staleness write — blocked entirely while any contradiction is pending, UNADJUDICATED does not block, per-chunk write-then-record). All four verify-impact-* commands registered on the CLI plus chunk-check --reverified-no-code-change. This is plan 4 of 8 in Phase 175; VERIFY-05/VERIFY-06 are now mechanically complete pending the skill-text wiring and Phase 176's actual repair/status-flip."
-last_updated: "2026-07-30T14:45:00Z"
+stopped_at: "Completed 175-05-PLAN.md — deleted verify-game.md Step 3's now-false 'flips no staleness marker anywhere and opens no repair loop (that is Phase 175's job)' boundary claim IN PLACE (not appended around), added Step 4: Adjudication Gate and Impact Map (VERIFY-04/05/06) dispatching to the new verify/adjudication-gate.md reference file (models build/ask.md's Gate-Before-Write, no bypass vocabulary anywhere), renumbered Close to Step 5, and rewrote verify.test.ts's drift pins for the six-step shape — the negative pin proven to fail on temporary reintroduction of the deleted sentence. This is plan 5 of 8 in Phase 175; VERIFY-04/05/06 are now mechanically complete AND wired into the skill text a live session actually follows; Phase 176 owns performing the actual repair."
+last_updated: "2026-07-30T15:40:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
@@ -25,8 +25,34 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 175 (Impact Map & Repair Gating) — plan 175-04 of 8 executed.
-Next: Phase 175 plan 175-05, per `ROADMAP.md`.
+Phase: 175 (Impact Map & Repair Gating) — plan 175-05 of 8 executed.
+Next: Phase 175 plan 175-06, per `ROADMAP.md`.
+
+`175-05-PLAN.md` (2026-07-30) closed the skill-text half of VERIFY-04/05/06: created
+`src/cli/slash-command/bs/verify/adjudication-gate.md`, modelling `build/ask.md`'s
+"Gate-Before-Write" no-bypass discipline — present every pending contradiction at once (one
+question per FINDING, never per affected chunk, decision 14), both readings verbatim, every
+affected chunk slug uncapped (decision 15); no durable write until an explicit answer; two
+terminal answers only (`resolved` appends a `RULINGS.md` entry, `UNADJUDICATED` never silently
+cleans, decision 8); cites `state-machine.md`'s Write Order/Authority/Redteam Escalation/Rules
+Staleness Marker sections rather than restating them. Deleted `verify-game.md` Step 3's now-false
+final sentence ("flips no staleness marker anywhere and opens no repair loop (that is Phase 175's
+job)") IN PLACE — the identical fix-class 174-05 applied to this same file for Phase 173's boundary
+statements — and inserted `## Step 4: Adjudication Gate and Impact Map (VERIFY-04, VERIFY-05,
+VERIFY-06)` dispatching to the new file, renumbering the existing Close step to Step 5 and updating
+its one cross-reference. Also fixed all three collateral stale claims the plan named: the
+step-count pin (5→6), the per-heading requirement-ID regex, and Step 0's "restate its four items" —
+fixed by DROPPING the count (not incrementing to five) with a new pin rejecting ANY hardcoded count
+re-appearing. Added the new file to `install-claude-command.ts`'s `SHARED_LEAF_PROBES` and verified
+with a real local install into a scratch directory that it physically ships. Rewrote
+`verify.test.ts`'s drift pins accordingly, and — per the plan's explicit requirement — PROVED the
+negative pin actually fails: temporarily reintroduced the deleted sentence, ran the suite, observed
+the `not.toContain('Phase 175')` assertion fail, then reverted. `npm test`: 3817/3817 green
+(baseline 3811 + 6 new tests). VERIFY-04/05/06 are now mechanically complete AND wired into the
+skill text a live session actually follows — Phase 176 owns performing the actual repair. See
+`.planning/phases/175-impact-map-repair-gating/175-05-SUMMARY.md`.
+
+---
 
 `175-04-PLAN.md` (2026-07-30) built `computeRepairGate`: pure, total, checking `driftState ===
 'unknown'` FIRST — before even the `stale` flag — so a caller can never be told "nothing to gate"

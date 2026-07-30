@@ -199,7 +199,7 @@ Plans:
 - [x] 175-02-PLAN.md — host-module extensions: `impact`/`adjudication` ledger kinds in the one atomic write path + `Re-verified (no code change):` in `VERIFIED_AGAINST_LABELS` (VERIFY-05, VERIFY-06, wave 1)
 - [x] 175-03-PLAN.md — VERIFY-04 core: contradiction collection (one per FINDING), both-readings formatting, `RULINGS.md` `### Ruling N` append reusing `parseRulings`, `UNADJUDICATED` (VERIFY-04, wave 2)
 - [x] 175-04-PLAN.md — VERIFY-06 core: `computeRepairGate` (drift-check as sole authority, `unknown` never collapsed, waiver never renewed), impact-map `--json` for Phase 176, the gate-guarded `verify-impact-apply`, CLI registration (VERIFY-05, VERIFY-06, wave 3)
-- [ ] 175-05-PLAN.md — skill text: `verify/adjudication-gate.md` + `verify-game.md`'s Step 3 boundary statement deleted IN PLACE, new Step 4, Close→Step 5, rewritten drift pins (VERIFY-04, VERIFY-05, VERIFY-06, wave 4)
+- [x] 175-05-PLAN.md — skill text: `verify/adjudication-gate.md` + `verify-game.md`'s Step 3 boundary statement deleted IN PLACE, new Step 4, Close→Step 5, rewritten drift pins (VERIFY-04, VERIFY-05, VERIFY-06, wave 4)
 - [ ] 175-06-PLAN.md — `/bs-check-status` item 9: uncapped rules-stale fraction + repair-gate dispositions, closing 174's deferred item (VERIFY-05, VERIFY-06, wave 4)
 - [ ] 175-07-PLAN.md — live proof: VERIFY-04's gate against the REAL archived `contradictory` verdict, both terminal answers on real files, human adjudicability checkpoint (VERIFY-04, wave 5)
 - [ ] 175-08-PLAN.md — live proof: VERIFY-05's cross-file write on both games + the VERIFY-06 payoff MEASURED on the real 6/16 and 6/11 stale sets, decision 13's path, closeout (VERIFY-05, VERIFY-06, wave 6)
@@ -256,7 +256,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
 | 173. Verify Pipeline Core | 8/8 | Complete   | 2026-07-29 |
 | 174. Verify Classifier | 8/8 | Reopened — goal NOT MET (decision 19 applied, §8) | - |
-| 175. Impact Map & Repair Gating | 4/8 | In Progress|  |
+| 175. Impact Map & Repair Gating | 5/8 | In Progress|  |
 | 176. Stale-Chunk Repair | 0/TBD | Not started | - |
 | 177. Derived-Line Re-Derivation | 0/TBD | Not started | - |
 | 178. Worked-Example Tests | 0/TBD | Not started | - |
