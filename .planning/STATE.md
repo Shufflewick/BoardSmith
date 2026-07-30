@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 175-03-PLAN.md — VERIFY-04's core: collectContradictions/formatBothReadings (one Contradiction per finding, both readings verbatim, uncapped affected-chunk slugs), verifyImpactGateCommand (read-only, exit 0 always), and nextRulingNumber/renderRuling/appendRuling/verifyImpactAdjudicateCommand — the first machine write into RULINGS.md, append-only, no bypass, RULINGS.md written before the ledger record. This is plan 3 of 8 in Phase 175; VERIFY-04 requirement is now mechanically implemented pending the skill-text wiring in later plans."
-last_updated: "2026-07-30T14:26:00Z"
+stopped_at: "Completed 175-04-PLAN.md — computeRepairGate (pure, total, driftState 'unknown' checked before stale/status, never collapsed into clean/drifted), verifyImpactStatusCommand (the impact map, composing verify-classify/drift-check/chunk-provenance/rules-staleness-marker/contradictions, uncapped staleFraction, line-level attributions carried verbatim for Phase 176), and verifyImpactApplyCommand (the gated staleness write — blocked entirely while any contradiction is pending, UNADJUDICATED does not block, per-chunk write-then-record). All four verify-impact-* commands registered on the CLI plus chunk-check --reverified-no-code-change. This is plan 4 of 8 in Phase 175; VERIFY-05/VERIFY-06 are now mechanically complete pending the skill-text wiring and Phase 176's actual repair/status-flip."
+last_updated: "2026-07-30T14:45:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
@@ -25,8 +25,32 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 175 (Impact Map & Repair Gating) — plan 175-03 of 8 executed.
-Next: Phase 175 plan 175-04, per `ROADMAP.md`.
+Phase: 175 (Impact Map & Repair Gating) — plan 175-04 of 8 executed.
+Next: Phase 175 plan 175-05, per `ROADMAP.md`.
+
+`175-04-PLAN.md` (2026-07-30) built `computeRepairGate`: pure, total, checking `driftState ===
+'unknown'` FIRST — before even the `stale` flag — so a caller can never be told "nothing to gate"
+or "gate closes/reopens" about code movement `drift-check` couldn't resolve (never collapsed into
+`clean`). Maps `clean` → keep `Status:` verbatim (including a `verified (user-waived)` waiver) +
+re-verification stamp; `drifted` → `built` + playtest gate re-opens, NOT preserving a prior waiver
+(decision 13 — a waiver is a one-time decision, never a standing exemption). `verifyImpactStatusCommand`
+composes `verifyClassifyStatusCommand`/`driftCheckCommand`/`chunkProvenanceStatusCommand`/
+`parseRulesStaleness`/`collectContradictions` into one `ImpactMapEntry` per chunk — never
+re-deriving any of their facts — with an uncapped `staleFraction`/`staleSlugs` (decision 15) and
+`attributions` carried verbatim from `ChunkVerdict` (decision 16, Phase 176's `--json` input
+contract). `verifyImpactApplyCommand` is blocked ENTIRELY (zero writes, byte-identical project)
+while any contradiction's adjudication is `'pending'`; a recorded `UNADJUDICATED` does NOT block
+and still marks the chunk stale; each chunk's marker write lands before its `ImpactRecord` is
+appended, so a crash never leaves a chunk falsely recorded, and a stale chunk with no
+`chunks/<slug>/` directory is skipped, never written. All four `verify-impact-*` CLI commands are
+now registered (matching the `verify-classify-*` shape, no bypass option anywhere) plus
+`chunk-check --reverified-no-code-change`. 23 new tests, including an exhaustive
+`computeRepairGate` table and a real git-repo + verify-run/verify-classify project fixture.
+`npm test`: 3811/3811 green (baseline 3788). VERIFY-05/VERIFY-06 are now mechanically complete;
+Phase 176 owns performing the actual repair and the `Status:`/marker flip `computeRepairGate`
+describes. See `.planning/phases/175-impact-map-repair-gating/175-04-SUMMARY.md`.
+
+---
 
 `175-03-PLAN.md` (2026-07-30) built VERIFY-04's mechanical core: `collectContradictions` returns
 one `Contradiction` per contradictory FINDING, never per affected chunk (decision 14 — a single
