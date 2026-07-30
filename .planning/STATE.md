@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 176-05-PLAN.md — CHECK-01's live proof. Full 62-ruling corpus across seven and one-two-punch re-validated against the committed 175-FIXTURES/174-07-contradictory fresh staged transcription: 60 rulings dispatched via real claude -p subagents (2 correctly skipped as superseded, seven's Ruling 3 the direction-reversed case), every dispatched verdict still-needed (verdictCounts fully reconciled, zero discrepancy against research's 36+26 count). SC-3 (seven's Ruling 1 — the sole-scoring-authority absence-of-source trap) proven MET: expected verdict + required reasoning shape declared and committed (5db4b17f) strictly before the real dispatch, which then independently returned still-needed with reasoning satisfying both required elements. Real grep confirms no absence-phrase list exists in verify-ruling-recheck.ts. Both reference-game originals confirmed byte-identical before/after (whole-tree sha256 diff empty). One code-observed quirk reported not fixed: resolveFreshTranscription's recursive readdir picks up one-two-punch's superseded/ subfolder into resolved slicePaths. Dispatch mechanism (claude -p OS subprocess, not native Task/Agent tool) stated honestly per 173-PROOF.md's precedent — the native-dispatch gap remains open for CHECK-01. CHECK-01 marked complete in REQUIREMENTS.md. npm test 3886/3886 green throughout, zero regressions (no src/ file modified). CHECK-02's live proof (audit-lens re-run) still owed by 176-06. See .planning/phases/176-stale-chunk-repair/176-05-SUMMARY.md."
-last_updated: "2026-07-30T19:45:00Z"
+stopped_at: "Completed 176-06-PLAN.md — CHECK-02's live proof and phase 176 closeout. Fixed ADDED ITEM 1 (resolveFreshTranscription's superseded/ subfolder exclusion, promoted from 176-05's reported finding, regression-tested against the real committed fixture). Closed ADDED ITEM 2 (CHECK-01's verdict-distribution gap) with 2 hand-built CONSTRUCTED lexicon pairs (resolved-by-source, contradicted), both real claude -p dispatches matching EXPECTED.md 2/2 — still-needed remains the only label proven on real data (60/60), CHECK-01 stays Complete on the same disposition basis Phase 174 used for VERIFY-03. Found and fixed TWO live bugs discovered while running this plan's own real lens-dispatch tooling for the first time: ImpactMapEntry dropped ChunkVerdict's own pairIds field (made verify-repair --json throw on every real stale chunk); verify-repair --json's stdout was contaminated by nested commands' human reports regardless of the composing caller's own --json flag (fixed via a quiet option cascaded across 4 command modules, mirroring ingest-archive.ts's precedent). A third bug found the same way: appendAuditRoundHeading appended past a real CHUNK.md's trailing sections instead of within Findings Ledger — fixed to insert before the next top-level heading, demonstrated corrected on the real seven/best-seven-selection and one-two-punch/block CHUNK.md files via a real diff. Real lens run: 2 of 12 stale chunks audited (best-seven-selection, block — both already at 3 build-era audit rounds AND both ui:touches|major), 6 real fresh-context claude -p dispatches (fidelity/visibility/undo), 15 real findings recorded (0 fixed, decision 16), decision 17's fresh-episode-budget rule proven live in BOTH reference games (absolute round 4 on first verify dispatch, never triaged). Paired pre/post-repair gate readings: 0 of 2 audited chunks changed disposition (both reopen-playtest/drifted throughout, since decision 16 forbids code changes) — restates 175-PROOF.md section 5's own 1-of-12 baseline rather than manufacturing a payoff. Phase 176 CLOSED: CHECK-01 and CHECK-02 both marked Complete in REQUIREMENTS.md with section citations, 176-VALIDATION.md signed off (nyquist_compliant true), ROADMAP.md Result paragraph recorded. Both ~/BoardSmithGames originals confirmed byte-identical across the entire phase. npm test 3893/3893 green throughout, zero regressions. See .planning/phases/176-stale-chunk-repair/176-06-SUMMARY.md."
+last_updated: "2026-07-30T21:30:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 47
-  completed_plans: 46
-  percent: 65
+  completed_plans: 47
+  percent: 70
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 176 — stale-chunk-repair (in progress, 3/6 plans)
+**Current focus:** Phase 177 — derived-line-re-derivation (not yet planned)
 
 ## Current Position
 
-Phase: 176 (Stale-Chunk Repair) — IN PROGRESS, 4/6 plans executed.
-Next: 176-05-PLAN.md — CHECK-01's live proof (all ~62 rulings across both reference games
-re-validated, `seven`'s Ruling 1 proven live against the absence-of-source trap).
+Phase: 176 (Stale-Chunk Repair) — COMPLETE, 6/6 plans executed. CHECK-01 and CHECK-02 both closed
+in `REQUIREMENTS.md` with `176-PROOF.md` section-and-number citations.
+Next: Phase 177 (Derived-Line Re-Derivation) — CHECK-04, not yet planned.
 
 `176-04-PLAN.md` (2026-07-30) swept `verify-game.md` for stale cross-file claims beyond the two
 named in advance, added CHECK-01/CHECK-02's routing, and pinned the result with drift guards.
