@@ -60,6 +60,10 @@ on **either schema**:
 - `Visual (p.N):` — the post-Phase-170 form.
 - `Derived (p.N) — diagram description:` — a pre-Phase-170 form.
 - `Derived (p.N) — art:` — the other pre-Phase-170 form.
+- `Derived (p.N) — diagram description (Plan phase):` — the same pre-Phase-170 form carrying a
+  parenthetical qualifier naming which diagram it describes. The qualifier's presence is what
+  makes the line presentation, not the exact wording after it — a real line reads:
+  `Derived (p.1) — diagram description (Plan phase): Two boxer cards are shown at top...`
 
 **Why both schemas are listed, not just the current one:** the two sides of a real pair are
 usually written under different contracts. The live side predates the Phase 170 `Derived`/`Visual`

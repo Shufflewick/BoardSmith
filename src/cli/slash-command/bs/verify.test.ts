@@ -512,9 +512,14 @@ describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12
     // that literal prefix appears verbatim in the contract's prose. The source string itself
     // carries doubled backslashes (a regex-source string embedded in a TS string literal), so
     // every backslash is stripped outright before re-inserting the one non-literal token (`\d+`,
-    // which collapses to `N` after backslash-stripping becomes `d+`).
+    // which collapses to `N` after backslash-stripping becomes `d+`). 177-CONTEXT.md decision 13
+    // widened two markers with an optional `(?: \([^)]+\))?` parenthetical-qualifier group — that
+    // group is erased BEFORE the backslash-strip so the widened marker still normalizes to the
+    // same literal prefix the prose has always contained (the qualifier's presence is the rule;
+    // its exact wording is never quoted verbatim in the constant itself).
     const literalPrefixes = markers.map((source) =>
       source
+        .replace(/\(\?:[\s\S]*?\)\?/, '')
         .replace(/\\/g, '')
         .replace(/^\^/, '')
         .replace(/d\+/g, 'N'),
@@ -523,6 +528,16 @@ describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12
     for (const literal of literalPrefixes) {
       expect(doc).toContain(literal);
     }
+  });
+
+  it('the qualified-parenthetical form named in the prose is itself matched by isPresentationLine (decision 13)', async () => {
+    const { isPresentationLine } = await import('../../commands/verify-classify.js');
+    const doc = read('verify/classification-subagent.md');
+    expect(doc).toContain('Plan phase');
+    const line =
+      'Derived (p.1) — diagram description (Plan phase): Two boxer cards are shown at top...';
+    expect(doc).toContain(line);
+    expect(isPresentationLine(line)).toBe(true);
   });
 });
 
