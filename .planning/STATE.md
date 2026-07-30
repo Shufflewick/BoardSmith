@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 175-02-PLAN.md — impact/adjudication ledger kinds widened into verify-run.ts's single atomic fence pair, plus the 'Re-verified (no code change):' stamp appended to chunk-provenance.ts's VERIFIED_AGAINST_LABELS. This is plan 2 of 8 in Phase 175; VERIFY-05/VERIFY-06 stay open in REQUIREMENTS.md pending the remaining wiring plans."
-last_updated: "2026-07-30T14:11:58Z"
+stopped_at: "Completed 175-03-PLAN.md — VERIFY-04's core: collectContradictions/formatBothReadings (one Contradiction per finding, both readings verbatim, uncapped affected-chunk slugs), verifyImpactGateCommand (read-only, exit 0 always), and nextRulingNumber/renderRuling/appendRuling/verifyImpactAdjudicateCommand — the first machine write into RULINGS.md, append-only, no bypass, RULINGS.md written before the ledger record. This is plan 3 of 8 in Phase 175; VERIFY-04 requirement is now mechanically implemented pending the skill-text wiring in later plans."
+last_updated: "2026-07-30T14:26:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
   completed_phases: 5
   total_plans: 39
-  completed_plans: 38
+  completed_plans: 39
   percent: 50
 ---
 
@@ -25,8 +25,38 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 175 (Impact Map & Repair Gating) — plan 175-02 of 8 executed.
-Next: Phase 175 plan 175-03, per `ROADMAP.md`.
+Phase: 175 (Impact Map & Repair Gating) — plan 175-03 of 8 executed.
+Next: Phase 175 plan 175-04, per `ROADMAP.md`.
+
+`175-03-PLAN.md` (2026-07-30) built VERIFY-04's mechanical core: `collectContradictions` returns
+one `Contradiction` per contradictory FINDING, never per affected chunk (decision 14 — a single
+finding can touch 6+ chunks), joining each to its recorded `AdjudicationRecord` by `pairId` and
+deriving `affectedSlugs` from `ChunkVerdict.pairIds` membership; a missing verbatim reading renders
+as an explicit `(no verbatim reading recorded)` string, never dropped or synthesized.
+`formatBothReadings` lists every affected chunk UNCAPPED (decision 15). `verifyImpactGateCommand`
+is a read-only report composing `verifyClassifyStatusCommand` + the shared ledger-read authority —
+never sets `process.exitCode`, proven read-only by a whole-project sha256-map equality test. On the
+write side: `nextRulingNumber`/`renderRuling`/`appendRuling` are the FIRST machine write ever made
+into `RULINGS.md`, numbering derived exclusively from the existing `parseRulings`
+(`build-manifest.ts`) — no second `### Ruling (\d+)` regex exists anywhere (grep-asserted) — and
+proven append-only via a byte-for-byte `startsWith` assertion against a real 26-entry corpus; no
+supersession syntax is invented (decision 7). `verifyImpactAdjudicateCommand` requires non-empty
+`decision`/`citation`/`rationale` for `outcome: 'resolved'` (a resolution is the human's words,
+never the tool's) and writes NO RULINGS.md entry for `outcome: 'UNADJUDICATED'`, leaving the pair
+pending for a later run (decision 8) — `RULINGS.md` is written before the ledger record so a crash
+between them never orphans a resolution with no ruling behind it, and a second `resolved` call for
+an already-resolved pair reuses the same ruling number (idempotent per pair). No bypass exists
+anywhere in the module: no `force`/`skip`/`yes`/`assumeResolved`/`autoAdjudicate` option, no
+`process.env` read (grep-asserted, decision 9). 19 new tests (7 Task 1, 12 Task 2) read the REAL
+174-07 contradictory `ClassificationRecord` from the committed fixture `RUN.md` rather than a
+synthetic one. `npm test`: 3788/3788 green (baseline 3769); `trace-check.test.ts` (35/35)
+re-confirmed its existing `RULINGS.md` reader still parses the appended corpus. Neither command is
+wired into `cli.ts`'s `program.command(...)` surface yet — that registration is later-plan scope.
+VERIFY-04 is now mechanically implemented; the skill-text adjudication-gate wiring
+(`verify/adjudication-gate.md`, `verify-game.md`'s Step 3 rewrite) is plan 175-05. See
+`.planning/phases/175-impact-map-repair-gating/175-03-SUMMARY.md`.
+
+---
 
 `175-01-PLAN.md` (2026-07-30) built VERIFY-05's rules-staleness marker as a NEW, ORTHOGONAL,
 machine-owned fenced field in CHUNK.md — never a new Status enum value (175-CONTEXT.md decision
