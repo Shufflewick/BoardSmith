@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-02-PLAN.md — built CHECK-04's mechanical core in a new src/cli/commands/verify-derive-recheck.ts. DERIVE_VERDICTS (agrees/disagrees/underivable/not-rule-bearing) is frozen and validated at exactly one choke point, createDeriveVerdictRecord, which additionally requires disagrees to carry both originalReading and rederivedReading non-empty and verbatim (decision 8's stricter bar). quoteLinesOnly — the phase's one genuinely new engineering piece — selects only directly-quoted rulebook content and citation headers, excluding Derived/Visual lines entirely (per the plan) plus Named-but-undefined lines (a Rule 2 deviation beyond the plan's literal text, since 177-RESEARCH.md's own Question 1 answer names it as inferential ingest output that must also be excluded from a 'quote lines only' payload). buildBlindDerivePayload is the single BS-DERIVE-V1 dispatch-prompt construction site; a corpus-wide counting test proves zero 'Derived (p.' and zero 'Visual (p.' occurrences across all 22 real Derived lines in both reference games' committed 174-FIXTURES live corpus (10 seven + 12 one-two-punch, matching 177-CONTEXT.md's measured reality exactly). enumerateDerivedLines mirrors verify-ruling-recheck.ts's enumerate-and-report-never-silently-drop posture. readLiveSlices reads the live rulebook/*.md tree directly (never the staged .verify/ tree), pinned by a comment-stripped source assertion and an import-line-only check that resolveFreshTranscription is never imported. Both tasks committed atomically (944f133b enum/choke-point, 1e3e749d payload filter/enumeration). npm test: 3918/3918 green (baseline 3896 + 22 new tests), zero regressions. npx tsc --noEmit clean except the pre-existing permitted docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN in REQUIREMENTS.md — this is mechanics only (plan 2 of 7); CLI registration/ledger (177-03), judgment contracts (177-04), skill-text wiring (177-05), and the live proof (177-06/07) remain. See .planning/phases/177-derived-line-re-derivation/177-02-SUMMARY.md."
-last_updated: "2026-07-30T21:33:00Z"
-last_activity: 2026-07-30 -- Phase 177 plan 02 executed
+stopped_at: "Completed 177-03-PLAN.md — gave CHECK-04 its CLI surface in src/cli/commands/verify-derive-recheck.ts. recordDeriveVerdicts/readDeriveVerdicts write and round-trip a PROJECT-LEVEL ledger at rulebook/.derive-recheck/DERIVE-VERDICTS.md — no .verify/<runId>/ segment, no runId parameter anywhere in either signature (decision 14), matching CHECK-03/CHECK-05's read-only run-less shape — through atomicWriteFile only (source-guard test proves zero direct fs.writeFile/writeFileSync calls); a before/after whole-project byte-hash test (T-171-19 class) proves recording touches only rulebook/.derive-recheck/, a live slice and an archive-shaped decoy file both confirmed byte-identical. verifyDeriveRecheckCommand enumerates every live-tree Derived line, joins each candidate to whatever the ledger already holds, and reports one finding per candidate (pending when unrecorded, never a manufactured default); verdictCounts always includes all four DERIVE_VERDICTS with zeros written explicitly; a disagrees finding always carries both originalReading/rederivedReading verbatim (decision 8); never sets process.exitCode anywhere (findings exit 0, decision 15, pinned by source inspection); --json emits exactly one console.log call that parses as JSON. boardsmith verify-derive-recheck registered in cli.ts with exactly --project and --json (confirmed via a real --help invocation), no --run-id, no bypass option. Both tasks committed atomically (3c43bb36 ledger, b4318f46 report command + CLI registration). npm test: 3931/3931 green (baseline 3918 + 13 new tests), zero regressions. npx tsc --noEmit clean except the pre-existing permitted docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN in REQUIREMENTS.md — this is plan 3 of 7; the two judgment-subagent contracts (177-04), verify-game.md skill-text wiring (177-05), and the live claude -p dispatch proof (177-06/07) remain. See .planning/phases/177-derived-line-re-derivation/177-03-SUMMARY.md."
+last_updated: "2026-07-30T21:43:15Z"
+last_activity: 2026-07-30 -- Phase 177 plan 03 executed
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 54
-  completed_plans: 49
+  completed_plans: 50
   percent: 70
 ---
 
@@ -25,7 +25,37 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 2/7 plans complete.
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 3/7 plans complete.
+
+`177-03-PLAN.md` (2026-07-30) gave CHECK-04 its CLI surface in the existing
+`src/cli/commands/verify-derive-recheck.ts`: `recordDeriveVerdicts(projectDir, records)` /
+`readDeriveVerdicts(projectDir)` write and round-trip a PROJECT-LEVEL ledger at
+`rulebook/.derive-recheck/DERIVE-VERDICTS.md` — no `.verify/<runId>/` segment, no `runId`
+parameter anywhere in either signature (177-CONTEXT.md decision 14), matching CHECK-03/CHECK-05's
+(`trace-check.ts`/`drift-check.ts`) read-only, run-less shape exactly — through `atomicWriteFile`
+only (a source-guard test proves zero direct `fs.writeFile`/`writeFileSync` calls anywhere in the
+module). A before/after whole-project byte-hash test (the T-171-19 class, mirroring
+`chunk-provenance.ts:706-714`) proves recording touches only `rulebook/.derive-recheck/`: a real
+live slice and a decoy file at an archive-shaped path (`rulebook/source/rules.pdf`) both confirmed
+byte-identical before and after. `verifyDeriveRecheckCommand({ project, json })` enumerates every
+live-tree `Derived` line, joins each surviving candidate to whatever the ledger already holds, and
+reports one `DeriveRecheckFinding` per candidate — `pending` when unrecorded, never a manufactured
+default; `verdictCounts` always includes all four `DERIVE_VERDICTS` with zeros written explicitly;
+a `disagrees` finding always carries both `originalReading`/`rederivedReading` verbatim (decision
+8, guaranteed transitively by 177-02's `createDeriveVerdictRecord` validation); never sets
+`process.exitCode` anywhere (findings exit 0, decision 15, pinned by a source-inspection test);
+`--json` emits exactly one `console.log` call whose payload parses as JSON, confirmed by a purity
+test. `boardsmith verify-derive-recheck` registered in `cli.ts` alongside `verify-ruling-recheck`/
+`verify-repair`, with exactly `--project <dir>` and `--json` — confirmed via a real `--help`
+invocation showing no `--run-id` and no bypass option. Both tasks committed atomically
+(`3c43bb36` ledger, `b4318f46` report command + CLI registration), reconstructed as two
+task-scoped commits from a single authored pass (Task 2's report command reads through Task 1's
+`readDeriveVerdicts`). `npm test`: 3931/3931 green (baseline 3918 + 13 new tests, zero
+regressions); `npx tsc --noEmit` clean except the pre-existing permitted
+`docs/seed-to-state.test.ts` rootDir error. **CHECK-04 stays OPEN in `REQUIREMENTS.md`** — this
+plan is 3 of 7; the two judgment-subagent contracts (177-04), `verify-game.md` skill-text wiring
+(177-05), and the live `claude -p` dispatch proof (177-06/07) remain. See
+`.planning/phases/177-derived-line-re-derivation/177-03-SUMMARY.md`.
 
 `177-02-PLAN.md` (2026-07-30) built CHECK-04's mechanical core in a new
 `src/cli/commands/verify-derive-recheck.ts`: `DERIVE_VERDICTS` — the frozen four-verdict enum
