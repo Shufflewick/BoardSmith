@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 176-04-PLAN.md — verify-game.md full stale-claim sweep + repair/ruling-recheck routing, no-fork drift guards proven to fail when violated. Sweep found a THIRD stale claim beyond the two named in advance (Step 0's 'clean close (Step 5)' cross-reference, stale the moment Close renumbered to Step 7) plus a second stale dimension inside the named disposition-enumeration claim (three of REPAIR_GATE_DISPOSITIONS's four values, not-applicable omitted, confirmed real via printImpactHumanReport). All rewritten in place; dropped the hardcoded disposition list in favor of citing the source array. Added Step 5 (Ruling Re-Check, CHECK-01) and Step 6 (Repair Dispatch, CHECK-02), both routes reachable and pinned. verify.test.ts gained a no-fork guard sourcing lens/repair-bound marker phrases from build/audit.md and build/repair.md at test time, absence pins, routing pins, step-contiguity and no-hardcoded-count guards, a decision-11 Interpretation guard — both negative-pin classes empirically proven to fail on re-introduction then reverted. verify/adjudication-gate.md's identical sibling defect (out-of-scope file) logged to deferred-items.md, not fixed. npm test 3886/3886 green (baseline 3876 + 10 new tests), zero regressions. CHECK-01/CHECK-02 still NOT marked complete in REQUIREMENTS.md — 176-05/06's live proof still owed. See .planning/phases/176-stale-chunk-repair/176-04-SUMMARY.md."
-last_updated: "2026-07-30T18:30:00Z"
+stopped_at: "Completed 176-05-PLAN.md — CHECK-01's live proof. Full 62-ruling corpus across seven and one-two-punch re-validated against the committed 175-FIXTURES/174-07-contradictory fresh staged transcription: 60 rulings dispatched via real claude -p subagents (2 correctly skipped as superseded, seven's Ruling 3 the direction-reversed case), every dispatched verdict still-needed (verdictCounts fully reconciled, zero discrepancy against research's 36+26 count). SC-3 (seven's Ruling 1 — the sole-scoring-authority absence-of-source trap) proven MET: expected verdict + required reasoning shape declared and committed (5db4b17f) strictly before the real dispatch, which then independently returned still-needed with reasoning satisfying both required elements. Real grep confirms no absence-phrase list exists in verify-ruling-recheck.ts. Both reference-game originals confirmed byte-identical before/after (whole-tree sha256 diff empty). One code-observed quirk reported not fixed: resolveFreshTranscription's recursive readdir picks up one-two-punch's superseded/ subfolder into resolved slicePaths. Dispatch mechanism (claude -p OS subprocess, not native Task/Agent tool) stated honestly per 173-PROOF.md's precedent — the native-dispatch gap remains open for CHECK-01. CHECK-01 marked complete in REQUIREMENTS.md. npm test 3886/3886 green throughout, zero regressions (no src/ file modified). CHECK-02's live proof (audit-lens re-run) still owed by 176-06. See .planning/phases/176-stale-chunk-repair/176-05-SUMMARY.md."
+last_updated: "2026-07-30T19:45:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 47
-  completed_plans: 45
-  percent: 62
+  completed_plans: 46
+  percent: 65
 ---
 
 # Project State

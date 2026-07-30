@@ -199,7 +199,7 @@ the tag.
 
 ### Verification Checks (CHECK)
 
-- [ ] **CHECK-01**: Ruling re-validation — every `RULINGS.md` entry is re-checked against the fresh
+- [x] **CHECK-01**: Ruling re-validation — every `RULINGS.md` entry is re-checked against the fresh
       transcription and reported as still-needed, resolved-by-source, or contradicted, respecting
       supersession chains.
 - [ ] **CHECK-02**: The three audit lenses (fidelity, visibility, undo) run per stale chunk against
@@ -265,7 +265,7 @@ the tag.
 | VERIFY-04 | Phase 175 | Complete — `175-PROOF.md` §§1–3d |
 | VERIFY-05 | Phase 175 | Complete — `175-PROOF.md` §4 (real cross-file write, both games) |
 | VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
-| CHECK-01 | Phase 176 | Pending |
+| CHECK-01 | Phase 176 | Complete |
 | CHECK-02 | Phase 176 | Pending |
 | CHECK-04 | Phase 177 | Pending |
 | CHECK-06 | Phase 178 | Pending |

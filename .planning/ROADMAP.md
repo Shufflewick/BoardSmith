@@ -240,7 +240,7 @@ Plans:
 - [x] 176-02-PLAN.md — CHECK-02 mechanics: stale-chunk → fresh staged slice resolution, verify-episode round bookkeeping (decision 17), POST-repair `computeRepairGate` re-derivation (CHECK-02, wave 1)
 - [x] 176-03-PLAN.md — skill text: `verify/ruling-recheck.md` judgment contract + `verify/repair-dispatch.md` delegating to `build/audit.md`/`build/repair.md` by reference, CLI registration, installer probes (CHECK-01, CHECK-02, wave 2)
 - [x] 176-04-PLAN.md — `verify-game.md` full stale-claim sweep + repair routing, and the no-fork drift guards proven to fail when violated (CHECK-01, CHECK-02, wave 3)
-- [ ] 176-05-PLAN.md — live proof: all ~62 rulings re-validated with measured per-verdict counts, SC-3's Ruling 1 verdict AND reasoning (CHECK-01, wave 4)
+- [x] 176-05-PLAN.md — live proof: all ~62 rulings re-validated with measured per-verdict counts, SC-3's Ruling 1 verdict AND reasoning (CHECK-01, wave 4)
 - [ ] 176-06-PLAN.md — live proof: real lens run on a STATED subset of the 12 stale chunks, paired pre/post-repair gate readings, phase closeout (CHECK-02, wave 5)
 
 ### Phase 177: Derived-Line Re-Derivation
@@ -286,7 +286,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 173. Verify Pipeline Core | 8/8 | Complete   | 2026-07-29 |
 | 174. Verify Classifier | 8/8 | Reopened — goal NOT MET (decision 19 applied, §8) | - |
 | 175. Impact Map & Repair Gating | 8/8 | Complete   | 2026-07-30 |
-| 176. Stale-Chunk Repair | 4/6 | In Progress|  |
+| 176. Stale-Chunk Repair | 5/6 | In Progress|  |
 | 177. Derived-Line Re-Derivation | 0/TBD | Not started | - |
 | 178. Worked-Example Tests | 0/TBD | Not started | - |
 | 179. Source-Free Verification Mode | 0/TBD | Not started | - |
