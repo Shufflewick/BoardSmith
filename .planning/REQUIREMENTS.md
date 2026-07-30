@@ -108,28 +108,49 @@ the tag.
       in this run — stated honestly rather than implied, and pinned structurally by
       `deriveStale`'s one-argument arity). Staleness-map/presentation-filter/pairing/ledger mechanics
       are unit-pinned in `src/cli/commands/verify-classify.test.ts`.)*
-- [ ] **VERIFY-04**: A `contradictory` classification always stops and asks the human, with both
+- [x] **VERIFY-04**: A `contradictory` classification always stops and asks the human, with both
       readings quoted side by side; the resolution is recorded in `RULINGS.md`.
-- [ ] **VERIFY-05**: Chunks affected by a changed slice flip to a rules-staleness marker visible in
+      *(`175-PROOF.md` §§1–3d — the real archived 174-07 `contradictory` verdict measurably blocks a
+      real `verify-impact-apply` pass (whole-copy sha256 diff: 0 files changed while pending), both
+      terminal answers proven on real `cp -R` copies (`UNADJUDICATED` writes nothing to `RULINGS.md`;
+      `resolved` appends a real, `trace-check`-parseable `### Ruling 27`), no representable bypass
+      measured across all four commands' `--help` output, and — genuinely, not self-certified — the
+      designer's own APPROVED verdict on the gate's adjudicability, recorded verbatim in §3d.)*
+- [x] **VERIFY-05**: Chunks affected by a changed slice flip to a rules-staleness marker visible in
       both CHUNK.md and SKETCH.md, following the existing authority and write-order rules.
-      *(Mechanically implemented and unit-proven across plans 175-01 (marker + writer + registration),
-      175-02 (ledger kinds), 175-04 (impact map + gate-guarded apply), 175-05 (skill-text wiring) and
-      175-06 (`/bs-check-status` item 9) — 3825/3825 green. Left OPEN because the REAL cross-file write
-      against a live project has not happened yet: plan 175-08 owns it and still carries VERIFY-05 in
-      its frontmatter. Briefly marked complete by 175-06 with no evidence pointer and reverted the same
-      day — plans 175-01 through 175-05 each deliberately left it open for this reason, and 175-04's
-      executor caught and reverted the identical premature mark. The requirement says chunks "flip to a
-      marker visible in both CHUNK.md and SKETCH.md"; unit fixtures are not a live project.)*
-- [ ] **VERIFY-06**: Only chunks whose code changed during repair re-open the human playtest gate;
+      *(Mechanically proven across plans 175-01 (marker + writer + registration), 175-02 (ledger
+      kinds), 175-04 (impact map + gate-guarded apply), 175-05 (skill-text wiring), and 175-06
+      (`/bs-check-status` item 9) — AND now proven with a REAL cross-file write against both live
+      reference games: `175-PROOF.md` §4. `verify-impact-apply` marked the real, measured stale set on
+      each game (`seven` 6/16, `one-two-punch` 6/11 — exactly matching `174-PROOF.md` §8's expected
+      sets, zero symmetric difference), CHUNK.md-first/SKETCH.md-second write order confirmed,
+      `Marker:` confirmed last in all 12 real written fenced bodies with zero CHUNK/SKETCH mismatches,
+      the `Status:` line confirmed untouched (0 occurrences of `rules-stale` on any `Status:` line,
+      both games), and cold-resume parseability confirmed on both written copies
+      (`chunk-provenance-status`/`drift-check --json` parse every chunk, 17/17 and 12/12, zero parse
+      failures). **A real live bug in the SKETCH.md insertion path was found producing this section's
+      own first real write and fixed under deviation Rule 1** (§4 — the pointer line fused onto the
+      next real bullet with no newline between them when no blank line separated them; fixed by never
+      slicing past the Status line's own trailing newline; new regression test added;
+      3826/3826 green). Both `~/BoardSmithGames` originals confirmed byte-identical throughout
+      (`175-PROOF.md` §9).)*
+- [x] **VERIFY-06**: Only chunks whose code changed during repair re-open the human playtest gate;
       chunks that pass the audit lenses unchanged close without re-playtesting.
-      *(Mechanically implemented and unit-proven — `computeRepairGate`'s four dispositions, the
-      `Re-verified (no code change):` stamp, and the waived-reopen path all covered in 175-04. Left OPEN
-      for the same reason as VERIFY-05, plus one specific to this requirement: its real-data payoff is
-      NOT yet measured, and may not be demonstrable on these fixtures at all. Both reference games are
-      pre-provenance with no `## Verified Commit Hash`, so `drift-check` is expected to return `unknown`
-      for most chunks — which is neither "code changed" nor "code unchanged", and must never be rendered
-      as `clean`. Plan 175-08 measures this and is required to report "payoff not demonstrated" if that
-      is what the data shows.)*
+      *(The mechanism — `computeRepairGate`'s four dispositions, the `Re-verified (no code
+      change):` stamp, and the waived-reopen path — is unit-proven (175-04) AND now measured on both
+      real reference games' real stale sets: `175-PROOF.md` §5. **Honest verdict: the practical payoff
+      is NOT demonstrated on this data** — 1 of 12 (8.3%) rules-stale chunks across both games closes
+      without re-playtesting (`one-two-punch`'s `final-acceptance`, real `drift-check: clean`); 11 of 12
+      (91.7%) re-open the gate, because most stale chunks' code genuinely DID move (real
+      `drift-check: drifted`) for reasons unrelated to the specific rules finding — both reference
+      games have had substantial ordinary development land since their chunks were last verified. This
+      differs from the anticipated `unknown-drift`-dominant failure mode: `dispositionCounts.
+      unknown-drift` is 0 in both games' real gate output — the data landed in the `drifted`-dominant
+      case instead, a different but equally real reason the payoff is not demonstrated (`175-PROOF.md`
+      §5's interpretation subsection). Decision 13's `verified (user-waived)`+stale+code-changed path
+      is proven **LIVE** (not constructed) on 8 real chunks across both games (`175-PROOF.md` §6);
+      decision 11's `Re-verified (no code change):` stamp is proven on the one real chunk that took the
+      clean path.)*
 - [x] **VERIFY-07**: The orchestrator never reads a full slice — re-transcription and classification
       both run in subagents, preserving the context-economics rule.
       *(Both halves now proven live. Re-transcription: `173-PROOF.md` section 3 (`seven`) and section
@@ -241,9 +262,9 @@ the tag.
 | VERIFY-07 | Phase 173 (closed 174-07) | Complete — re-transcription absence proven (173-06/173-07); classification-in-subagent absence proven live (`174-PROOF.md` §3), one honest exception beyond the stated scope reported (free-prose `evidence` schema-mentions) |
 | VERIFY-08 | Phase 173 | Complete (173-07 proof; re-confirmed 173-08 against a corrected crash-safety guarantee + closed range-level resume determinism — see `173-PROOF.md` §5) |
 | VERIFY-03 | Phase 174 | Complete — the CLI surface (174-04), the classification subagent contract (174-05), and every real-data bar (SC-1 through SC-5) proven live (`174-PROOF.md` §2, §4, §5): SC-2 90.9% cosmetic PASS, SC-3 real mutation → `contradictory` PASS, determinism identical, 7/7 lexicon regression |
-| VERIFY-04 | Phase 175 | Pending |
-| VERIFY-05 | Phase 175 | Partial — mechanically unit-proven (175-01/02/04/05/06); live cross-file write awaits 175-08 |
-| VERIFY-06 | Phase 175 | Partial — dispositions unit-proven (175-04); real-data payoff awaits 175-08 and may report not-demonstrated |
+| VERIFY-04 | Phase 175 | Complete — `175-PROOF.md` §§1–3d |
+| VERIFY-05 | Phase 175 | Complete — `175-PROOF.md` §4 (real cross-file write, both games) |
+| VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
 | CHECK-01 | Phase 176 | Pending |
 | CHECK-02 | Phase 176 | Pending |
 | CHECK-04 | Phase 177 | Pending |

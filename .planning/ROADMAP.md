@@ -29,7 +29,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 172: Source-Free Conformance Checks** - Traceability sweep + code drift, proven immediately against the two reference games with zero source dependency (completed 2026-07-28)
 - [x] **Phase 173: Verify Pipeline Core** - `/bs-verify-game` skill entry, non-destructive re-transcription staging, subagent-only context economics, crash resumability (completed 2026-07-28)
 - [x] **Phase 174: Verify Classifier** - Two-dimension classification (provenance + rule delta), tuned and validated against real pass-1-vs-pass-2 output (completed 2026-07-31, 8 plans. Reopened mid-phase when the goal measured NOT MET; gap-closure plan 174-08 added decision 19's per-citation attribution ladder, roughly halving both games' stale fractions on real data — `one-two-punch` 100%→54.5% (11/11→6/11), `seven` 87.5%→37.5% (14/16→6/16), untuned. **Goal MET under the ROADMAP's literal bar** ("does not flag EVERY chunk as stale"); the stricter "small, explainable subset" bar that 174-08 measured against was added mid-phase by the orchestrator, not in the original spec, and the user ruled the ROADMAP wording governs — see decision 19's RESOLVED note and `174-PROOF.md` §7/§8. Residual stale chunks genuinely cite the changed rule. Carried to 175/176: anchor density in short, heavily cross-referenced rulebooks keeps the staleness set broader than ideal.)
-- [ ] **Phase 175: Impact Map & Repair Gating** - Contradictory human gate, cross-file staleness flip, scoped re-playtest (code-changed chunks only)
+- [x] **Phase 175: Impact Map & Repair Gating** - Contradictory human gate, cross-file staleness flip, scoped re-playtest (code-changed chunks only) (completed 2026-07-30, 8 plans, all 3 requirements CLOSED. VERIFY-04/05 proven live on real reference-game data; VERIFY-06's mechanism is correct but its real-data payoff is honestly NOT demonstrated — 1 of 12 real rules-stale chunks across both games closes without re-playtesting, not because drift-check returned `unknown` as anticipated, but because most stale chunks' code genuinely drifted for reasons unrelated to the rules finding. See `175-PROOF.md` §§4-9.)
 - [ ] **Phase 176: Stale-Chunk Repair** - Ruling re-validation against fresh transcription + the three audit lenses re-run per stale chunk
 - [ ] **Phase 177: Derived-Line Re-Derivation** - Independent re-derivation of rule-bearing `Derived` lines, disagreements reported
 - [ ] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay
@@ -194,6 +194,27 @@ rung are in `174-PROOF.md` §8.
   3. Only chunks whose code actually changed during repair re-open the human playtest gate; chunks that pass the audit lenses unchanged close without re-playtesting.
 **Plans**: 8 plans in 6 waves
 
+**Result: all three requirements CLOSED (`REQUIREMENTS.md`), with one honest NOT-DEMONSTRATED
+verdict inside a closed requirement, not smoothed into a pass.** VERIFY-04's gate blocks a real
+`verify-impact-apply` pass on the real archived `contradictory` verdict (0 files written while
+pending, measured by whole-copy sha256 diff) and a genuine human confirmed the gate's
+adjudicability at a real checkpoint (`175-PROOF.md` §3d). VERIFY-05's cross-file write landed on
+BOTH real reference games, marking exactly the stale sets `174-PROOF.md` §8 predicted (`seven`
+6/16, `one-two-punch` 6/11, zero symmetric difference) — and a real live bug (a SKETCH.md
+pointer-line fusion when no blank line separated it from the next bullet) was found and fixed under
+deviation Rule 1 producing this section's own first real write (`175-PROOF.md` §4). VERIFY-06's
+mechanism is proven correct per-chunk, but its measured real-data payoff is **NOT demonstrated**:
+across both games' 12 real rules-stale chunks, only 1 (8.3%) closes without re-playtesting — 11 of
+12 re-open the gate because their code genuinely drifted for reasons unrelated to the rules finding,
+not because `drift-check` returned `unknown` (the anticipated failure mode never materialized;
+`unknown-drift` is 0 in both games' dispositions). Decision 13's `verified (user-waived)` +
+stale + code-changed path is proven **LIVE** on 8 real chunks (not constructed). Both
+`~/BoardSmithGames` originals confirmed byte-identical throughout (`175-PROOF.md` §9). Carried
+forward, honestly, not resolved: the `lineFindings[]` multi-delta persistence gap (to Phase 176),
+the standing no-native-Task-dispatch caveat, and whether a shorter-lived, less-drifted real game
+would show VERIFY-06's payoff more favourably (neither reference game can settle that — see
+`175-PROOF.md` §7).
+
 Plans:
 - [x] 175-01-PLAN.md — the rules-staleness marker: constants, renderer, strict parser, CHUNK-then-SKETCH writer + its registration in state-machine.md/both templates/pins, incl. the Status-enum orthogonality negative (VERIFY-05, wave 1)
 - [x] 175-02-PLAN.md — host-module extensions: `impact`/`adjudication` ledger kinds in the one atomic write path + `Re-verified (no code change):` in `VERIFIED_AGAINST_LABELS` (VERIFY-05, VERIFY-06, wave 1)
@@ -202,7 +223,7 @@ Plans:
 - [x] 175-05-PLAN.md — skill text: `verify/adjudication-gate.md` + `verify-game.md`'s Step 3 boundary statement deleted IN PLACE, new Step 4, Close→Step 5, rewritten drift pins (VERIFY-04, VERIFY-05, VERIFY-06, wave 4)
 - [x] 175-06-PLAN.md — `/bs-check-status` item 9: uncapped rules-stale fraction + repair-gate dispositions, closing 174's deferred item (VERIFY-05, VERIFY-06, wave 4)
 - [x] 175-07-PLAN.md — live proof: VERIFY-04's gate against the REAL archived `contradictory` verdict, both terminal answers on real files, human adjudicability checkpoint (VERIFY-04, wave 5)
-- [ ] 175-08-PLAN.md — live proof: VERIFY-05's cross-file write on both games + the VERIFY-06 payoff MEASURED on the real 6/16 and 6/11 stale sets, decision 13's path, closeout (VERIFY-05, VERIFY-06, wave 6)
+- [x] 175-08-PLAN.md — live proof: VERIFY-05's cross-file write on both games + the VERIFY-06 payoff MEASURED on the real 6/16 and 6/11 stale sets, decision 13's path, closeout (VERIFY-05, VERIFY-06, wave 6)
 
 ### Phase 176: Stale-Chunk Repair
 **Goal**: Every stale chunk gets re-checked against the composite source of truth (fresh transcription + RULINGS.md) through the same audit lenses the build pipeline already trusts.
