@@ -679,3 +679,192 @@ summary: {"pairs":1,"paired":1,"presentationOnly":0,"unpaired":0,"classified":1,
 `pendingPairs: []` for both — the real classification pass is complete.
 
 **GATE: PASSED (Task 1 — real classification pass, both games, raw prompts and returns captured)**
+
+### SC-1 measurement — provenance and rule delta are independent dimensions
+
+| pairId | Game | kind | live files | staged files | provenance | ruleDelta | stale |
+|---|---|---|---|---|---|---|---|
+| `pages-1-2` | `seven` | paired | 3 | 6 | `unknown` | `sharper` | `true` |
+| `pages-1-2` | `one-two-punch` | paired | 2 | 6 | `unknown` | `cosmetic` | `false` |
+
+Both dimensions are present for every real pair, and both games happen to land `unknown`
+provenance — expected and correct per decision 2b: neither reference game has ever recorded a
+`Source hash:` line before this phase's own `ingest-archive` adoption, so this is a genuine
+first-ever verify pass, and `unknown` is the honest verdict, not `source-unchanged`. Recorded as
+measured, not reinterpreted.
+
+**Cross-tab, provenance × ruleDelta** (both real records):
+
+| | `cosmetic` | `sharper` | `contradictory` | `unclassified` |
+|---|---|---|---|---|
+| `unknown` | 1 | 1 | 0 | 0 |
+| `source-changed` | 0 | 0 | 0 | 0 |
+| `source-unchanged` | 0 | 0 | 0 | 0 |
+
+Only the `unknown` row is populated — both real pairs are pre-provenance, so `source-changed`/
+`source-unchanged` cells are empty by construction of this data, not by design choice. The two
+populated cells are the load-bearing corroboration SC-4's unit tests already prove structurally:
+**`unknown` + `cosmetic` (one-two-punch) is NOT stale**, and **`unknown` + `sharper` (seven) IS
+stale** — the same `unknown` provenance value produces opposite staleness outcomes depending
+entirely on `ruleDelta`, proving in real data (not just a unit test) that provenance is never
+consulted by `deriveStale()`. No cell of this cross-tab was used to derive either record's `stale`
+value — both `stale` fields came straight from the CLI's enumerated `ruleDelta` map.
+
+### SC-2 measurement — the pre-declared bar, measured
+
+**Group-level verdicts** (reported per decision 18, because it is what downstream chunk-staleness
+attribution structurally keys off — NOT the bar itself, per decision 14b):
+
+| Game | Group verdict | Rationale |
+|---|---|---|
+| `seven` | `sharper` | MAX-severity rollup over 6 line-level findings: 5 `cosmetic` + 1 `sharper` (the undefined-vs-`+1` bonus-card-value delta) |
+| `one-two-punch` | `cosmetic` | MAX-severity rollup over 5 rule-bearing line-level findings (a 6th finding was a dual-schema-excluded diagram/`Visual` pair the subagent recorded to show it was recognized and dropped, not compared — correctly excluded from the rollup) |
+
+Two groups total: 1 `sharper`, 1 `cosmetic`, 0 `contradictory`. This is decision 14b's own
+worked example of why the bar cannot be group-scored: 1 of 2 groups is `sharper`, a 50% group-level
+"cosmetic rate" that would FAIL a naive 90% group bar even though the underlying content is
+overwhelmingly cosmetic at the line level (see below) — exactly the "one group flipping moves the
+number 50 points" arithmetic-theatre problem decision 14b names.
+
+**Line-level measurement (THE BAR, per decision 14b)** — pooled across both games' real
+`lineFindings[]` returns, presentation-excluded findings removed per decision 17 (never entering
+numerator or denominator):
+
+| Game | Rule-bearing line-level findings | `cosmetic` | `sharper` | `contradictory` | Excluded (presentation) |
+|---|---|---|---|---|---|
+| `seven` | 6 | 5 | 1 | 0 | 0 |
+| `one-two-punch` | 5 (of 6 returned) | 5 | 0 | 0 | 1 (the diagram/`Visual (p.1)` pair, correctly dropped by the dual-schema filter, retained in the return only to show recognition) |
+| **Pooled** | **11** | **10** | **1** | **0** | **1** |
+
+```
+cosmeticPct = 10 / 11 = 90.90909...% ≈ 90.9%
+```
+
+**Measured against the pre-declared bar:**
+
+- Bar: ≥90% `cosmetic` → measured **90.9%** → **PASS** (by a margin of 0.9 points over 11 real
+  line-level comparisons — reported exactly, not rounded up to look more comfortable than it is).
+- Bar: zero `contradictory` → measured **0** → **PASS**.
+
+**Overall verdict: PASS.** This is a narrow pass on a genuinely small real-data sample (11
+line-level comparisons across two 2-page rulebooks) — a single additional `sharper` finding on
+either game would drop the pooled percentage to 90.0% (10/11 unchanged... actually to 9/10 = 90%
+if the extra sharper replaced a cosmetic, or to 10/12 = 83.3% if it were a wholly new finding),
+still at or above the bar in the first case and below it in the second. The bar is not
+comfortably cleared; it is cleared. No exclusion-filter diagnosis was needed since the bar passed
+(decision 17's diagnostic step is a FAIL-path requirement).
+
+---
+
+## 3. VERIFY-07 — the orchestrator never opened a slice
+
+Grepped independently across three artifacts per dispatch, mirroring `173-PROOF.md` §3's method
+exactly. Patterns: `Derived (p.`, `Visual (p.`, and a bare `^p\.[0-9]+,` citation-header shape.
+
+### Artifact 1 — the raw dispatch prompts
+
+```
+$ grep -c 'Derived (p\.' dispatch-prompt-seven-pages-1-2.txt dispatch-prompt-otp-pages-1-2.txt
+dispatch-prompt-seven-pages-1-2.txt:0
+dispatch-prompt-otp-pages-1-2.txt:0
+$ grep -c 'Visual (p\.' dispatch-prompt-seven-pages-1-2.txt dispatch-prompt-otp-pages-1-2.txt
+dispatch-prompt-seven-pages-1-2.txt:0
+dispatch-prompt-otp-pages-1-2.txt:0
+$ grep -cE '^p\.[0-9]+,' dispatch-prompt-seven-pages-1-2.txt dispatch-prompt-otp-pages-1-2.txt
+dispatch-prompt-seven-pages-1-2.txt:0
+dispatch-prompt-otp-pages-1-2.txt:0
+```
+**Zero matches, both prompts, all three patterns.** The prompts carry only the `BS-CLASSIFY-V1`
+pointer block, the pair id, and file paths — never slice content, exactly as
+`classification-dispatch.md`'s "Do not compose, restate, or summarize the classification contract
+in the dispatch prompt" instructs.
+
+### Artifact 2 — the raw subagent returns
+
+```
+$ grep -c 'Derived (p\.' subagent-seven-pages-1-2-return.txt subagent-otp-pages-1-2-return.txt
+subagent-seven-pages-1-2-return.txt:9
+subagent-otp-pages-1-2-return.txt:8
+$ grep -c 'Visual (p\.' subagent-seven-pages-1-2-return.txt subagent-otp-pages-1-2-return.txt
+subagent-seven-pages-1-2-return.txt:0
+subagent-otp-pages-1-2-return.txt:6
+```
+
+**Non-zero, and expected to be** — this is the documented `quotedPass1`/`quotedPass2` exception:
+the subagent's structured return is the ONE place a slice is legitimately read, and
+`sharper`/`contradictory` verdicts REQUIRE both readings quoted verbatim (decision 9). Per-field
+breakdown, checked line-by-line (`grep -n`):
+
+- **`seven`'s return**: all 9 `Derived (p.` matches fall inside `quotedPass1`/`quotedPass2` fields
+  (the top-level pair quote plus 5 `lineFindings[].quotedPass1`/`quotedPass2` entries) — exactly
+  the exception, zero matches outside a quote field.
+- **`one-two-punch`'s return**: of the 14 total matches (8 `Derived (p.` + 6 `Visual (p.`), 12 fall
+  inside `quotedPass1`/`quotedPass2`/`lineFindings[].note` quote fields — the same exception. **2
+  matches are inside the free-prose `evidence` field**, at the top level (`evidence: "Presentation
+  notes were excluded on BOTH schemas... writes every diagram/art observation as 'Derived (p.N) —
+  diagram description:'..."`) and inside one `lineFindings[].note` — but in both cases the subagent
+  is describing the SCHEMA PREFIX GENERICALLY (`'Derived (p.N)'`/`'Visual (p.N)'` as a pattern
+  name), not quoting an actual rule-bearing line's content. This is a real, honest finding beyond
+  the plan's stated exception (which named only `quotedPass1`/`quotedPass2`): the subagent's
+  free-prose `evidence` field is not schema-content-quote-free by construction, only rule-line-quote
+  -free by the contract's own instruction ("`evidence` is the only free-prose field... put your
+  reasoning there"). Reported plainly rather than silently folded into the exception it does not
+  literally match.
+
+### Artifact 3 — the orchestrator's own transcript
+
+```
+$ grep -c 'Derived (p\.' 174-06-orchestrator-transcript.log
+1
+$ grep -c 'Visual (p\.' 174-06-orchestrator-transcript.log
+0
+$ grep -cE '^p\.[0-9]+,' 174-06-orchestrator-transcript.log
+0
+```
+
+**One match**, located at the `verify-classify-record --quoted-pass2` argument for `seven`'s pair
+— `"Derived (p.1): Each bonus point card is worth +1 point, as printed on its face."` — copied
+VERBATIM from the subagent's own `return.quotedPass2` field during the Recording step. This is
+`classification-dispatch.md`'s explicit instruction ("record from those returned fields, it does
+not open a slice to check them") — the orchestrator never opened `01-distribution-of-cards.md` or
+any live/staged slice directly to produce this string; it forwarded a string the subagent already
+returned. Zero other matches anywhere in the transcript, including every narration line, every
+`verify-classify-pairs`/`-status` JSON output (which carries only paths, counts, and ids — never
+slice bodies), and every dispatch/record command shown. The orchestrator's own reasoning never
+independently quotes or paraphrases a rule line at any point in this pass.
+
+**Grep commands used** (re-runnable against the artifacts named above):
+```
+grep -c 'Derived (p\.' <file>
+grep -c 'Visual (p\.' <file>
+grep -cE '^p\.[0-9]+,' <file>
+grep -n 'Derived (p\.\|Visual (p\.' <file>   # to locate which field/line each match sits in
+```
+
+**Summary: the orchestrator never independently read or composed rule content.** Every
+slice-body-shaped line found anywhere in this pass's artifacts is accounted for as either (a) the
+subagent's own legitimate read, surfaced through the contract's `quotedPass1`/`quotedPass2`/
+`lineFindings` return fields, or (b) that same content forwarded verbatim into a `--quoted-pass1`/
+`--quoted-pass2` recording argument — never a fresh, independent orchestrator read. The one
+genuine gap versus a strict reading of the exception (the 2 `evidence`-field schema-prefix
+mentions in `one-two-punch`'s return) is reported above, not smoothed over — it does not indicate
+the orchestrator read a slice, but it does mean "evidence never contains a slice-body-shaped
+line" is not literally true of this real dispatch, only "evidence never contains a *quoted rule
+line*" is.
+
+### what this pass did NOT prove
+
+1. **True internal Task/Agent-tool dispatch** — same documented constraint as every prior plan in
+   this milestone; a real `claude -p` OS-process subprocess stood in as the closest faithful
+   equivalent. Not separately confirmed under native Task-tool access.
+2. **A second real pair in either game** — both reference rulebooks pair into exactly one
+   rule-bearing group each (decision 4's second amendment), so this pass exercised exactly one
+   real `BS-CLASSIFY-V1` dispatch per game, never a multi-pair resume/skip-already-classified path
+   in the SAME run. `verify-classify-status`'s `pendingPairs` narrowing was exercised only in the
+   trivial one-pair-to-zero-pair direction.
+3. **A `contradictory` verdict from a real dispatch.** Neither real pair happened to contain a
+   genuine contradiction — the zero-`contradictory` half of the bar is measured as a true zero on
+   real data, but this pass did not exercise what a real `contradictory` dispatch return or its
+   recording looks like (the lexicon regression pairs in section 4 cover that path syntheticaly).
+4. **The `evidence` field's freedom from ALL slice-body-shaped text**, only from quoted RULE
+   lines outside `quotedPass1`/`quotedPass2` — see the Artifact 2 finding above.
