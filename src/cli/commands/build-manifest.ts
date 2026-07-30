@@ -287,6 +287,15 @@ export interface ParsedRuling {
   supersededBy?: number;
   /** Supersede-verb sentences whose target number or direction could not be resolved. */
   unparsedSupersession: string[];
+  /**
+   * This ruling's full entry body — everything after its `### Ruling N` heading line up to (but
+   * not including) the next `### Ruling` heading, or end-of-file for the last entry. Populated
+   * from the SAME `body` local the supersession scan already computes (176-CONTEXT.md decision
+   * 18) — no second slice of `rulingsText`, no second `### Ruling (\d+)` regex. Added so a
+   * judgment subagent (CHECK-01) can read a ruling's Decision/Citation/Rationale text without
+   * this function being forked or re-parsed a second time.
+   */
+  body: string;
 }
 
 /**
@@ -337,7 +346,7 @@ export function parseRulings(rulingsText: string): ParsedRuling[] {
 
   const byNumber = new Map<number, ParsedRuling>();
   for (const h of headings) {
-    byNumber.set(h.number, { number: h.number, unparsedSupersession: [] });
+    byNumber.set(h.number, { number: h.number, unparsedSupersession: [], body: '' });
   }
 
   for (let i = 0; i < headings.length; i++) {
@@ -345,6 +354,7 @@ export function parseRulings(rulingsText: string): ParsedRuling[] {
     const bodyEnd = i + 1 < headings.length ? headings[i + 1].index : rulingsText.length;
     const body = rulingsText.slice(h.bodyStart, bodyEnd);
     const entry = byNumber.get(h.number)!;
+    entry.body = body;
 
     for (const sentence of sentences(body)) {
       if (!SUPERSEDE_VERB.test(sentence)) continue;
