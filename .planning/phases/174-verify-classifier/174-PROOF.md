@@ -990,3 +990,267 @@ classification pass, the determinism double-run, and the lexicon regression comb
 nothing outside `$SCRATCH` copies and the in-repo `174-FIXTURES`/`174-PROOF.md` artifacts.
 
 **GATE: PASSED (Task 3 — determinism identical both games, lexicon 7/7, originals untouched)**
+
+---
+
+## 5. SC-3 — a genuine rules change, caught by the pipeline
+
+### The mutation: a real edit to the archived source PDF, not a hand-edited slice
+
+`one-two-punch`'s rulebook is `rules.pdf` — a 2-page, image/vector-graphic PDF (InDesign export,
+no text layer; `pdftotext` returns empty). "Editing the archived source" therefore means editing
+the rendered page, not a text string in a source file. `SCRATCH="${TMPDIR:-/tmp}/174-07-proof"`.
+
+Page 1's `2) FIGHT` rule read (baseline, page rendered at 300dpi via `pdftoppm`, verbatim from
+the image):
+
+> "The player with the **lower** timing on their card must resolve their action first. If the
+> timing is the same on both cards, they are resolved at the same time."
+
+The mutation reverses the precedence — a genuine, unambiguous, quotable rules change, matching
+`174-CONTEXT.md` decision 15's "reversing precedence" example exactly:
+
+> "The player with the **higher** timing on their card must resolve their action first. If the
+> timing is the same on both cards, they are resolved at the same time."
+
+Mechanism (all tools already present on this machine — `pdftoppm`/`pdfinfo` (poppler), `gs`
+(ghostscript), `magick` (imagemagick) — no package install of any kind):
+
+1. `pdftoppm -r 300 -png` rasterized both pages of the ORIGINAL `rules.pdf` to PNG (2550×3300px,
+   letter @300dpi).
+2. A small Ghostscript-rendered patch (`Times-Roman`, real font rendering — ImageMagick's own
+   `-annotate` has no Freetype delegate built into this machine's install) was composited onto
+   page 1 at the exact pixel location of the "2) FIGHT" resolution-order paragraph, replacing
+   "lower" with "higher" and leaving every other pixel on the page untouched (verified visually,
+   both before/after full-page renders inspected).
+3. The mutated page-1 PNG + the UNMODIFIED page-2 PNG were reassembled into a new 2-page PDF
+   (`magick`, explicit `-units PixelsPerInch -density 300` to preserve the original 612×792pt
+   letter page size — confirmed via `pdfinfo`).
+
+**Hashes, before and after** (`shasum -a 256`):
+
+| | sha256 |
+|---|---|
+| Original `rules.pdf` (matches `174-FIXTURES/MANIFEST.md` and plan 174-01/174-06's own adoption) | `e28d18756e976a437b81e10e6944f90842e7aa1d26b8102221a54769b4358eea` |
+| Mutated `rules.pdf` | `8a01d38c0073b9ba90d07e4dc20817d1ad6c590d3c0c747ec31655e88c35bb9c` |
+
+### Provenance baseline — establishing a REAL "prior verify pass recorded this hash"
+
+`174-CONTEXT.md` decision 2's `source-changed` state requires some chunk's `## Verified Against`
+to carry a `Source hash:` value that PREDATES the mutation. Neither reference game has ever had
+`chunk-check` run on it (both are pre-provenance, per `174-06-PROOF.md` §2's real cross-tab — every
+real pair in this milestone has so far measured `unknown`). This plan therefore ran the REAL,
+existing `boardsmith chunk-check <slug>` command (Phase 171's own tool — not hand-authored) against
+the chunk that cites the affected content, `second-action-resolution` (confirmed via its own prose
+citing `rulebook/01-setup-and-round-structure.md`, "2) Fight" (p.1) verbatim), **before** the
+mutation:
+
+```
+$ (cd "$SCRATCH/one-two-punch" && boardsmith ingest-archive rules.pdf --project . --json)
+{"archivedPath":"rulebook/source/rules.pdf","sourceHash":"e28d1875...358eea","indexPath":"rulebook/INDEX.md","wroteIndex":false}
+$ (cd "$SCRATCH/one-two-punch" && boardsmith chunk-check second-action-resolution --project . --json)
+{"slug":"second-action-resolution","scope":"full","changed":true,
+ "citedSlices":["rulebook/01-setup-and-round-structure.md","rulebook/02-action-cards-and-resolution.md"],
+ "unresolved":[]}
+```
+
+(Exit 1 — by design: `chunk-check` exits non-zero whenever it had to write/repair the block, per
+its own description.) The written `## Verified Against` block records `Rulebook source hash:
+e28d18756e976a437b81e10e6944f90842e7aa1d26b8102221a54769b4358eea` — the PRE-mutation hash,
+verified directly against the chunk file (`grep -n "Rulebook source hash" chunks/second-action-
+resolution/CHUNK.md`).
+
+**Disclosed departure, reported plainly rather than hidden:** the archived file at
+`rulebook/source/rules.pdf` was then overwritten directly with the mutated bytes, and
+`rulebook/INDEX.md`'s `Source hash:` line was updated by a direct text edit from the old hash to
+the new one. This is NOT the real `boardsmith ingest-archive` command — that command explicitly
+refuses to overwrite an existing archive that differs from the new source ("Never clobber. Ingest
+does not overwrite a designer's archived source" — `ingest-archive.ts`), matching
+`verify/source-resolution.md` Case 4's own instruction ("Never overwrite the archived file on this
+signal"). No command in the current codebase re-syncs `INDEX.md`'s recorded hash after a Case-4
+mismatch is detected — that re-adoption path is not built in this phase's scope. The manual
+`INDEX.md` edit stands in for it, simulating "the tool has already recognized and adopted the new
+edition," and is disclosed here as exactly that: a test-fixture step with no equivalent real
+command yet, not a hidden hack. Everything downstream of this edit — the re-transcription dispatch,
+the classification dispatch, and every derived verdict — is real.
+
+### Real re-transcription dispatch against the mutated source
+
+```
+$ (cd "$SCRATCH/one-two-punch" && boardsmith verify-run-init --project . --ranges '["1-2"]' --json)
+{"runId":"2026-07-30T01-31-49Z","stagingDir":"rulebook/.verify/2026-07-30T01-31-49Z/slices",
+ "ledgerPath":"rulebook/.verify/2026-07-30T01-31-49Z/RUN.md","created":true,"ranges":["1-2"]}
+```
+
+Dispatch prompt (the `BS-DISPATCH-V2` pointer block, byte-identical to every prior plan's shape):
+
+```
+BS-DISPATCH-V2
+
+Read `.claude/skills/bs-shared/ingest/transcription-subagent.md` in full and follow it exactly.
+
+Your page range: 1-2
+Rulebook path:   rulebook/source/rules.pdf
+Write slices to: rulebook/.verify/2026-07-30T01-31-49Z/slices
+```
+
+```
+$ (cd "$SCRATCH/one-two-punch" && claude -p "<above>" --allowedTools Read,Write,Bash)
+```
+
+Exit 0. The subagent read the (now-mutated) PDF fresh, with **no prior context of the baseline
+transcription or this plan's mutation** (a real, separate OS-process dispatch), and returned 7
+structured slices. It independently caught the internal contradiction the mutation created against
+the page's own worked example, and surfaced it unprompted in its own summary:
+
+> "'Higher timing' is inverted from its plain reading. The rule says the higher timing resolves
+> first, but the source's own worked example resolves Jab (1) before Retreat (2). Lower numeral =
+> acts first. I flagged this as `Derived` in two slices rather than 'correcting' the quote."
+
+The staged file's quoted rule text (`01-round-structure.md`, verified directly on disk, never
+trusted from the subagent's own return alone):
+
+```
+$ grep -n "resolve their action first" rulebook/.verify/2026-07-30T01-31-49Z/slices/01-round-structure.md
+17:The player with the higher timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.
+```
+
+Matches the mutated page image verbatim. All 7 staged files recorded and the range completed
+through the real ledger (`verify-run-record` × 7 + `--complete-range 1-2`); `verify-run-status`
+confirms `rangesPending: []`.
+
+**One real collision handled correctly, reported honestly rather than smoothed over:** a first
+dispatch attempt (this session's own tool-call timeout, unrelated to the subagent) left 3 partial,
+incomplete slice files in the staging directory before being cut off. The SECOND real dispatch (the
+one whose return is quoted above) detected them independently, read all three plus the source PDF,
+found verbatim transcription errors in the partial set (compared against a fresh read of the same
+pages), and moved them to a `slices/superseded/` subdirectory — non-destructively, outside the
+`slices/*.md` glob `verify-run-record` reads — rather than silently overwriting or silently
+using them. This is the transcription contract's own non-destructive-staging discipline
+(`VERIFY-02`) firing correctly under a real, unplanned partial-run condition, not a scripted test
+of it.
+
+### Real classification dispatch — pairing, provenance, verdict
+
+```
+$ (cd "$SCRATCH/one-two-punch" && boardsmith verify-classify-pairs --project . --run-id 2026-07-30T01-31-49Z --json)
+{
+  "pairs": [{"pairId":"pages-1-2","kind":"paired",
+    "liveSlices":["rulebook/01-setup-and-round-structure.md","rulebook/02-action-cards-and-resolution.md"],
+    "stagedSlices":["01-overview-and-contents.md","01-starting-a-new-game.md","01-round-structure.md",
+                    "02-action-cards.md","02-punch-examples.md","02-end-of-game.md","02-tips.md"],
+    "liveRuleBearingLines":74,"stagedRuleBearingLines":121}],
+  "provenance": {"pages-1-2": {
+    "provenance":"source-changed",
+    "currentHash":"8a01d38c0073b9ba90d07e4dc20817d1ad6c590d3c0c747ec31655e88c35bb9c",
+    "recordedHashes":["e28d18756e976a437b81e10e6944f90842e7aa1d26b8102221a54769b4358eea"],
+    "reason":"at least one citing chunk's recorded Source hash differs from the current archived source — any disagreement is a change the designer must see"
+  }},
+  "summary": {"paired":1,"presentationOnly":0,"unpaired":0,"ruleBearingPairs":1}
+}
+```
+
+**Provenance is `source-changed`, mechanically — the exact predicted verdict, derived purely from
+the real hash comparison (decision 2), with no subagent involvement whatsoever.**
+
+Classification dispatch (`BS-CLASSIFY-V1`, same pointer-block shape as every prior real dispatch in
+this milestone, `--allowedTools Read` only):
+
+```
+$ (cd "$SCRATCH/one-two-punch" && claude -p "<BS-CLASSIFY-V1 prompt, pair pages-1-2, live+staged paths>" --allowedTools Read)
+```
+
+Exit 0. Raw structured return (verbatim, condensed to the load-bearing fields — full text preserved
+in `$SCRATCH/subagent-otp-sc3-classify-return.txt`):
+
+```
+{
+  pairId: "pages-1-2",
+  label: "contradictory",
+  quotedPass1: "The player with the lower timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.",
+  quotedPass2: "The player with the higher timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.",
+  lineFindings: [
+    { label: "contradictory", note: "p.1, 2) FIGHT — resolution-order rule. lower-first vs higher-first is reversed precedence over the same comparison; read literally the two produce opposite resolution order in every untied exchange." },
+    // + 6 further line findings, all "cosmetic" (credit-name spelling, "next to"/"in front of" your boxer, punctuation, "one player"/"your player") — none consequential.
+  ]
+}
+```
+
+The subagent's own reasoning for choosing `contradictory` over `sharper`: "neither reading
+constrains something the other left open — both assert a specific, opposite direction for the same
+comparison" (matching decision 10's consequence test exactly: this is not compatible-but-narrower,
+it is two mutually exclusive readings of the same sentence).
+
+Recorded via the real ledger command, from the subagent's own returned fields only:
+
+```
+$ (cd "$SCRATCH/one-two-punch" && boardsmith verify-classify-record --project . --run-id 2026-07-30T01-31-49Z \
+    --pair-id pages-1-2 --label contradictory \
+    --evidence "<verbatim from return.evidence>" \
+    --quoted-pass1 "The player with the lower timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time." \
+    --quoted-pass2 "The player with the higher timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time." --json)
+{"ruleDelta":"contradictory","stale":true,"provenance":"source-changed", ...}
+$ (cd "$SCRATCH/one-two-punch" && boardsmith verify-classify-status --project . --run-id 2026-07-30T01-31-49Z --json)
+"summary": {"pairs":1,"paired":1,"classified":1,"cosmetic":0,"sharper":0,"contradictory":1,"unclassified":0,"stale":1,"cosmeticPct":0}
+```
+
+**GATE: PASSED (SC-3 — real archived-source mutation, real re-transcription dispatch, real
+classification dispatch, verdict `contradictory`, `stale: true`).**
+
+### SC-3 / SC-4 assertions, stated separately and explicitly
+
+- **SC-3:** the pair covering the mutated page classifies **`contradictory`** and is **`stale: true`**.
+  Both readings are quoted verbatim in `evidence`/`quotedPass1`/`quotedPass2` above — a direct,
+  irreconcilable reversal of "lower timing resolves first" vs "higher timing resolves first," caught
+  through the REAL pipeline (real archived-source mutation → real re-transcription dispatch → real
+  classification dispatch → real ledger record), never a hand-edited staged slice. No hand-edited
+  staged slice appears anywhere in this section — every staged file under
+  `rulebook/.verify/2026-07-30T01-31-49Z/slices/` was produced by the real `claude -p` transcription
+  dispatch quoted above, confirmed on disk.
+- **SC-4 on real data:** the mutation moved the source bytes (H1 → H2, both hashes recorded above),
+  and the affected pair's provenance reads **`source-changed`** (the mechanical hash-compare
+  ladder's own output — not the subagent's opinion; the subagent has no provenance field to supply).
+  **No naturally-occurring `source-changed` + `cosmetic` + not-stale pair occurred in this run** — the
+  one real pair in this run is the SAME pair that was mutated, so it is necessarily the one carrying
+  both the new provenance state and the non-cosmetic delta together; a genuinely different pair
+  (same run, same source, unaffected by the mutation) would be needed to show `source-changed` co-
+  occurring with `cosmetic`, and this real game has exactly one page-overlap group (decision 4's
+  second amendment — the same "1 pair per 2-page rulebook" ceiling section 2 already measured), so
+  there is no second real pair available to carry it. This is reported plainly rather than implied:
+  **the independence of provenance from staleness is instead corroborated on real data by the
+  CROSS-GAME comparison already recorded in §2** ("SC-1 measurement" — `one-two-punch`'s ORIGINAL,
+  unmutated pair was real `unknown` + `cosmetic` + not-stale, and this section's pair is real
+  `source-changed` + `contradictory` + stale — two different provenance values, on two different
+  runs of the SAME pair, landing on two different staleness outcomes purely as a function of
+  `ruleDelta`), plus the structural unit tests that pin `deriveStale`'s single-parameter arity
+  (`src/cli/commands/verify-classify.ts`, `STALE_BY_RULE_DELTA`/`deriveStale` — a function that
+  cannot even be called with a provenance argument) and the `provenance-3` test asserting
+  `source-unchanged` can never be returned with zero recorded hashes. The literal
+  `source-changed`+`cosmetic`+not-stale triple is proven structurally (by construction of
+  `deriveStale`'s one-argument signature) rather than exhibited as a naturally-occurring real
+  4-tuple in this specific run — stated honestly rather than implied.
+
+### Originals re-verification (post-run, this section's own pass)
+
+```
+$ git -C ~/BoardSmithGames/one-two-punch rev-parse HEAD
+7e69471bd8980a854f3e351f2f486e1fb6f712b9   (unchanged)
+$ git -C ~/BoardSmithGames/seven rev-parse HEAD
+a03f38d4792af9dfc7c798be69686fc3230f54dd   (unchanged)
+$ git -C ~/BoardSmithGames/seven status --porcelain
+(still empty)
+```
+
+Whole-tree sha256 manifest diff, before vs. after this plan's ENTIRE run (both games, captured
+fresh at this plan's own start):
+
+```
+$ diff "$SCRATCH/otp.before" "$SCRATCH/otp.after"
+(empty, exit 0)
+$ diff "$SCRATCH/seven.before" "$SCRATCH/seven.after"
+(empty, exit 0)
+```
+
+Both originals byte-identical before and after — the mutation, the provenance-baseline `chunk-
+check`, the re-transcription dispatch, and the classification dispatch all touched only
+`$SCRATCH` copies.
