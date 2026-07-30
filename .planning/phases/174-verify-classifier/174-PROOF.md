@@ -1410,6 +1410,173 @@ rulebooks.
 
 ---
 
+## 7. Citation-resolution rate on real chunks (decision 19, measured before trusting the narrowing)
+
+Before Task 2 wires the ladder into `computeChunkVerdicts`, this section measures how often the
+three pure functions (`parseClaimCitationAnchors`, `matchedLiveLine`, `citedPageForLine`,
+`resolveCitationAttribution`) actually resolve to a claim-level anchor on the REAL reference-game
+chunks and rulebooks — read-only, no writes, confirmed by a whole-tree hash diff before/after.
+
+**Read-only proof.** Before running the measurement script:
+
+```
+$ cd ~/BoardSmithGames && find seven one-two-punch -type f -not -path '*/.git/*' -print0 \
+    | xargs -0 shasum -a 256 | sort > before.hash
+$ wc -l before.hash
+8053 before.hash
+$ (cd seven && git rev-parse HEAD && git status --porcelain)
+a03f38d4792af9dfc7c798be69686fc3230f54dd
+(empty — porcelain clean)
+```
+
+After running the script (below):
+
+```
+$ find seven one-two-punch -type f -not -path '*/.git/*' -print0 | xargs -0 shasum -a 256 | sort > after.hash
+$ diff before.hash after.hash && echo IDENTICAL
+IDENTICAL
+$ (cd seven && git rev-parse HEAD && git status --porcelain)
+a03f38d4792af9dfc7c798be69686fc3230f54dd
+(empty — porcelain clean)
+```
+
+`seven` remains pinned at `a03f38d4792af9dfc7c798be69686fc3230f54dd`, porcelain clean. Both trees
+byte-identical before and after — the measurement script only opens files for reading.
+
+**The script**, run via `npx tsx` against the real `~/BoardSmithGames/{seven,one-two-punch}` trees,
+using the real `quotedPass1` this phase's own real classification dispatches returned (`seven` →
+`sharper`, `one-two-punch` → `contradictory`, both transcribed verbatim in §2/§5 above):
+
+```ts
+import { promises as fs } from 'node:fs';
+import { join } from 'node:path';
+import {
+  parseClaimCitationAnchors,
+  resolveCitationAttribution,
+  matchedLiveLine,
+  citedPageForLine,
+} from '/Users/jtsmith/BoardSmith/src/cli/commands/verify-classify.ts';
+import { resolveCitedSlices } from '/Users/jtsmith/BoardSmith/src/cli/commands/chunk-provenance.ts';
+
+const GAMES: Record<string, { root: string; quote: string; quoteSlice: string }> = {
+  seven: {
+    root: '/Users/jtsmith/BoardSmithGames/seven',
+    quote:
+      'Named-but-undefined (p.1): bonus point cards (depicted as a black "+1" card; the text does not define its scoring effect beyond Game End\'s instruction to add bonus point cards to your score)',
+    quoteSlice: '01-definitions-and-components.md',
+  },
+  'one-two-punch': {
+    root: '/Users/jtsmith/BoardSmithGames/one-two-punch',
+    quote:
+      'The player with the lower timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.',
+    quoteSlice: '01-setup-and-round-structure.md',
+  },
+};
+
+async function main() {
+  for (const [game, { root, quote }] of Object.entries(GAMES)) {
+    const rulebookDir = join(root, 'rulebook');
+    const sliceFilenames = (await fs.readdir(rulebookDir, { withFileTypes: true }))
+      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .map((e) => e.name);
+    const chunksDir = join(root, 'chunks');
+    const slugs = (await fs.readdir(chunksDir, { withFileTypes: true }))
+      .filter((e) => e.isDirectory()).map((e) => e.name).sort();
+
+    const liveTextCache = new Map<string, string>();
+    async function liveText(name: string): Promise<string> {
+      if (!liveTextCache.has(name)) liveTextCache.set(name, await fs.readFile(join(rulebookDir, name), 'utf-8'));
+      return liveTextCache.get(name)!;
+    }
+
+    for (const slug of slugs) {
+      let chunkText: string;
+      try { chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8'); } catch { continue; }
+      const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
+      if (resolved.length === 0) continue;
+      const anchors = parseClaimCitationAnchors(chunkText, sliceFilenames);
+      for (const citedSlice of resolved) {
+        const bareName = citedSlice.slice('rulebook/'.length);
+        const text = await liveText(bareName);
+        const line = matchedLiveLine(text, quote);
+        if (line === undefined) continue; // this cited slice isn't the one the delta line is in
+        const page = citedPageForLine(text, line);
+        const attribution = resolveCitationAttribution({
+          liveSlice: citedSlice, liveSliceText: text, deltaLine: line, deltaLinePage: page, anchors,
+        });
+        console.log(`${game} | ${slug} | ${citedSlice} | rung=${attribution.rung} attributed=${attribution.attributed}`);
+      }
+    }
+  }
+}
+main();
+```
+
+**Raw output (verbatim):**
+
+```
+=== seven ===
+best-seven-selection | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=true
+bonus-point-cards | rulebook/01-definitions-and-components.md | rung=slice-fallback attributed=true
+discard | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=false
+game-end-trigger | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=true
+match-best-of-7 | rulebook/01-definitions-and-components.md | rung=cited-page attributed=true
+scoring-declaration | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=false
+scoring-engine-and-parity | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=false
+scoring-one-color | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=false
+scoring-run-of-7 | rulebook/01-definitions-and-components.md | rung=slice-fallback attributed=true
+scoring-run-of-7-one-color | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=false
+scoring-set-5-plus-set-2 | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=false
+scoring-set-of-7 | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=false
+simultaneous-round-loop | rulebook/01-definitions-and-components.md | rung=quoted-fragment attributed=false
+table-and-draw | rulebook/01-definitions-and-components.md | rung=slice-fallback attributed=true
+
+=== one-two-punch ===
+block | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=true
+discard-phase-and-reclaim | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=false
+final-acceptance | rulebook/01-setup-and-round-structure.md | rung=slice-fallback attributed=true
+game-end | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=false
+jab | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=true
+movement-advance-retreat | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=true
+plan-and-reveal | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=false
+punch | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=false
+rest | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=true
+second-action-resolution | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=true
+setup-opening-discards | rulebook/01-setup-and-round-structure.md | rung=quoted-fragment attributed=false
+```
+
+**Per-game rung-distribution table**, counted over every (chunk, cited-live-slice) pair where the
+delta's quote actually lands in that slice's text (the decision-18-relevant scope — the same scope
+`computeChunkVerdicts`'s case (a) narrows within):
+
+| Game | evaluated pairs | `quoted-fragment` attributed | `quoted-fragment` not attributed | `cited-page` attributed | `cited-page` not attributed | `slice-fallback` (always attributed) |
+|---|---|---|---|---|---|---|
+| `seven` | 14 | 2 | 8 | 1 | 0 | 3 |
+| `one-two-punch` | 11 | 5 | 5 | 0 | 0 | 1 |
+
+As a percentage of evaluated pairs: `seven` — 14.3% quoted-fragment-attributed, 57.1%
+quoted-fragment-NOT-attributed, 7.1% cited-page-attributed, 21.4% slice-fallback. `one-two-punch` —
+45.5% quoted-fragment-attributed, 45.5% quoted-fragment-NOT-attributed, 9.1% slice-fallback.
+
+**The fallback share is not small** (21.4% on `seven`, 9.1% on `one-two-punch`) — a real and honest
+limitation, reported here as instructed, not tuned away. It means roughly a fifth of `seven`'s
+evaluated attributions and a tenth of `one-two-punch`'s rest entirely on decision 18's conservative
+slice-level answer because no claim-level anchor (quoted fragment or page) could be resolved for
+that chunk's citation of that slice — the narrowing is carried by comparatively FEWER chunks than
+the total citing set, which is exactly the phase-goal risk this measurement exists to surface before
+Task 3 reads a re-measured phase-goal number against it. This is a limitation of these two short,
+citation-sparse rulebooks' real transcribed content, not a defect discovered in the ladder itself —
+Task 2's `decision-19-guard-1` test pins the fallback rung's own no-false-clean behavior directly.
+
+**No bar is declared or evaluated here, and none is tuned.** This measurement exists only so Task 3's
+phase-goal re-measurement is read against a known anchor-availability baseline instead of taken on
+faith. The dominant real observation is that `quoted-fragment` is the load-bearing rung on both
+games (10/14 seven, 10/11 one-two-punch evaluations resolve to it, attributed either way) — matching
+`<measured_reality>`'s own finding that quoted fragments, not slice tokens or bare pages, are the
+anchor real `## Interpretation` claims actually carry.
+
+---
+
 ## What is still unproven
 
 Carried forward from earlier plans, plus this plan's own gaps — nothing below is silently resolved:
