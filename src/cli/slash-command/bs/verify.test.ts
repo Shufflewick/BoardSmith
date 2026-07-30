@@ -743,6 +743,30 @@ describe('verify-game.md — CHECK-04 routing and Reference Files (177-05)', () 
   });
 });
 
+describe('verify-game.md — Context-Economics carve-out for CHECK-04 (177-05)', () => {
+  it('still contains the original orchestrator-transcript observable sentence verbatim', () => {
+    const skill = read('verify-game.md');
+    expect(skill).toContain(
+      'The observable a reviewer can check: this skill\'s own transcript\n' +
+        'should never contain a quoted-rule line, a `Derived (p.` line, or a `Visual (p.` line',
+    );
+  });
+
+  it('names the carve-out and names both observables checked separately', () => {
+    const skill = flat(read('verify-game.md'));
+    expect(skill).toContain('Context-Economics carve-out for CHECK-04');
+    expect(skill).toMatch(/ZERO `Derived \(p\.` and ZERO `Visual \(p\.`/);
+    expect(skill).toMatch(/EXPECTED to contain a\s*`Derived \(p\.` line/);
+    expect(skill).toMatch(/TWO separate observables/);
+  });
+
+  it('cites the quotedPass1/quotedPass2 precedent and 174-PROOF.md by name', () => {
+    const skill = flat(read('verify-game.md'));
+    expect(skill).toMatch(/quotedPass1.{0,10}quotedPass2/);
+    expect(skill).toContain('174-PROOF.md');
+  });
+});
+
 describe('CHECK-02 no-fork guard — lens/repair prose sourced from build/*.md at test time (176-04)', () => {
   /** Every `bs/verify/*.md` file, absolute paths. */
   function verifyFiles(): string[] {

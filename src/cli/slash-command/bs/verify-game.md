@@ -46,6 +46,27 @@ that reads a slice file back. The observable a reviewer can check: this skill's 
 should never contain a quoted-rule line, a `Derived (p.` line, or a `Visual (p.` line — those
 strings exist only inside a written slice, staged or live, and this orchestrator never opens one.
 
+**Context-Economics carve-out for CHECK-04's dispatch prompts (Step 7):** the sentence above
+describes the ORCHESTRATOR's own transcript, and that stays true unchanged — this orchestrator
+still shows zero quoted-rule lines, zero `Derived (p.` lines, and zero `Visual (p.` lines in its
+own transcript. The exception belongs to the SUBAGENT dispatch prompts and returns, not to the
+orchestrator: `verify/derive-recheck.md`'s blind-derivation prompt legitimately carries quote
+lines — that is its entire payload — and `verify/derive-compare.md`'s comparison prompt and return
+legitimately carry a `Derived (p.` line, because decision 8 requires citing both derivations
+verbatim on a `disagrees` finding. Those payloads are constructed by `buildBlindDerivePayload`
+(`verify-derive-recheck.ts`) and passed through the dispatch, never composed by this orchestrator
+reading a slice itself — which is what keeps the orchestrator's own rule true even while the
+subagents' payloads legitimately carry exactly the strings the rule forbids from this transcript.
+This is the identical exception `174-PROOF.md` §3 already documented for
+`quotedPass1`/`quotedPass2` in the classification contract: the subagent's structured return is
+the one legitimate place a quoted line lives, never the orchestrator dispatching it.
+
+A reviewer checks TWO separate observables here, never one blanket grep across both: the
+blind-derivation prompt (`BS-DERIVE-V1`) must contain ZERO `Derived (p.` and ZERO `Visual (p.`
+lines — no exception applies to it, which is stronger than this rule's own transcript check —
+while the comparison prompt and return (`BS-DERIVE-COMPARE-V1`) are EXPECTED to contain a
+`Derived (p.` line, accounted for by this carve-out.
+
 ## Step 0: State Detection and Lock (VERIFY-01)
 
 On entry, before any other work, run the consistency check described in
