@@ -270,6 +270,24 @@ Plans:
   3. The check runs with no source rulebook present and correctly ignores `Visual` lines as out of scope.
 **Plans**: 7 plans
 
+**Result:** NOT MET — SC-1 fails on real dispatch data. All 22 real `Derived` lines were enumerated
+(16 real dispatch candidates + 6 mechanically presentation-excluded); 29 real `claude -p` dispatches
+(16 blind + 13 comparison) measured a distribution of `agrees` 4, `disagrees` 9, `underivable` 1,
+`not-rule-bearing` 2 (of 16), against a committed-before-measurement prediction of 5/1/3/7 for the
+same 16-line subset — 5 hits, 11 misses. The blind-independence STRUCTURAL guarantee (decision 5: the
+re-deriving subagent never sees the target line's own text) is proven — real grep on all 16 dispatched
+prompts found zero `Derived (p.`/`Visual (p.` leaks. But the dispatch payload's `Target line`
+identifier carries no information the subagent can use to distinguish WHICH candidate fact is under
+test when a slice has more than one `Derived` line — true of every multi-candidate slice in this
+corpus — so the blind stage repeatedly re-derives the single most obviously derivable fact in a shared
+slice regardless of the nominal target. This dominates the measured 56% `disagrees` rate with
+targeting-collapse artifacts, not genuine original-vs-rederivation content mismatches (one genuine
+on-topic disagreement was found: `one-two-punch:52`, 8 vs. 6 Action Cards). SC-2 (citing both
+derivations) and SC-3 (source-free, ignores `Visual` — proven on constructed input only, zero real
+`Visual` lines in either reference game, same disposition Phase 176 used) are MET. Both
+`~/BoardSmithGames/{seven,one-two-punch}` originals confirmed byte-identical (whole-tree sha256,
+empty diff) before and after all 29 dispatches. Full detail: `177-PROOF.md` §§1-4.
+
 Plans:
 - [x] 177-01-PLAN.md — Widen `PRESENTATION_EXCLUSION_MARKERS` (decision 13), pinned by the 4 real slipping lines + a negative over-exclusion test; keep the cross-file lexicon pin honest; note 174's results stand
 - [x] 177-02-PLAN.md — CHECK-04's mechanical core: frozen four-verdict enum, single record choke point, and the quote-lines-only blind payload filter proven leak-free on all 22 real lines
@@ -277,7 +295,7 @@ Plans:
 - [x] 177-04-PLAN.md — The two judgment contracts (`BS-DERIVE-V1` blind, `BS-DERIVE-COMPARE-V1` comparison), installer leaf probes, and drift pins
 - [x] 177-05-PLAN.md — `verify-game.md`: the CHECK-04 step, the Context-Economics carve-out, renumbered Close, and a full stale-claim sweep recording TRUE findings too
 - [x] 177-06-PLAN.md — Commit the 22-line distribution prediction BEFORE dispatching; stage the proof run on `cp -R` copies with sha256 baselines and a named dispatch mechanism
-- [ ] 177-07-PLAN.md — The live proof: grep a real blind dispatch prompt for zero `Derived (p.`, run the full 22-line corpus, compare against the prediction, disclose limitations
+- [x] 177-07-PLAN.md — The live proof: grep a real blind dispatch prompt for zero `Derived (p.`, run the full 22-line corpus, compare against the prediction, disclose limitations. **Goal NOT MET** — SC-1 fails; CHECK-04 left OPEN (PARTIAL) in `REQUIREMENTS.md`.
 
 ### Phase 178: Worked-Example Tests
 **Goal**: Worked examples in the rulebook stop being a one-time seed for hand-written tests and become an accumulating, automatically-derived executable test suite in both build and verify.

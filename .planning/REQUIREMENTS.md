@@ -213,7 +213,26 @@ the tag.
       traces to a live claim, and every ruling has a test; gaps are reported as findings. Runs with
       no source present.
 - [ ] **CHECK-04**: Derived-line re-derivation — every rule-bearing `Derived` line is re-derived
-      independently of pass 1 and disagreements reported. Runs with no source present.
+      independently of pass 1 and disagreements reported. Runs with no source present. **PARTIAL —
+      left OPEN, not closed.** SC-2 and SC-3 are MET on real evidence (`177-PROOF.md` §4): the
+      citing-both-derivations mechanism works unconditionally (`createDeriveVerdictRecord`, 9/9 real
+      `disagrees` records this run carry both fields), and the check is source-free by construction
+      with the same constructed-input-only disposition Phase 176 used for its Visual-lines gap (zero
+      real `Visual (p.` lines in either reference game). **SC-1 is NOT MET** (`177-PROOF.md` §4):
+      the blind-independence STRUCTURAL guarantee (the re-deriving subagent never sees the target
+      line's own text) is proven by real grep on all 16 dispatched prompts, zero leaks
+      (`177-PROOF.md` §2) — but `buildBlindDerivePayload`'s `Target line` identifier carries no
+      information the blind subagent can use to distinguish WHICH candidate fact is under test when
+      a slice has more than one `Derived` line, which is true of every multi-candidate slice in the
+      real 16-line corpus. Measured on real dispatch data (`177-PROOF.md` §3): the blind stage
+      repeatedly re-derives the single most obviously derivable fact in a shared slice regardless of
+      the nominal target, producing a 56% (9/16) `disagrees` rate dominated by targeting-collapse
+      artifacts rather than genuine original-vs-rederivation content mismatches. Verdicts exercised
+      on REAL data: all four (`agrees` 4, `disagrees` 9, `underivable` 1, `not-rule-bearing` 2 of 16
+      real dispatched candidates, `177-PROOF.md` §3) — unlike CHECK-01/CHECK-02, this check's full
+      four-verdict set was exercised live, not only structurally. What remains open: a redesign of
+      the dispatch payload's target-identification mechanism (out of scope for this proof-only plan)
+      before CHECK-04 can be closed.
 - [x] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
       commit hash, and any chunk whose code moved since the human last approved it is reported.
 - [ ] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
@@ -272,7 +291,7 @@ the tag.
 | VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
 | CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
 | CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
-| CHECK-04 | Phase 177 | Pending |
+| CHECK-04 | Phase 177 | PARTIAL — left OPEN. SC-2/SC-3 MET on real evidence; SC-1 NOT MET — real dispatch data (`177-PROOF.md` §§2-4) shows the blind-independence structural guarantee (never sees the original) holds, but the dispatch payload's target-line identification cannot distinguish which candidate fact is under test in a multi-candidate slice, dominating the measured 56% `disagrees` rate with targeting-collapse artifacts. All four verdicts exercised on REAL data (`agrees` 4, `disagrees` 9, `underivable` 1, `not-rule-bearing` 2 of 16 real candidates). |
 | CHECK-06 | Phase 178 | Pending |
 | TEST-01 | Phase 178 | Pending |
 | VERIFY-09 | Phase 179 | Pending |

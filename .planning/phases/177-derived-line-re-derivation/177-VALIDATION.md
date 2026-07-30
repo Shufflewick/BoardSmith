@@ -1,10 +1,19 @@
 ---
 phase: 177
 slug: derived-line-re-derivation
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: closed-partial
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-30
+closed: 2026-07-30
+closure_note: >
+  All 7 plans executed and committed. Full live-dispatch proof run (177-PROOF.md §§1-4): SC-2/SC-3
+  MET on real evidence; SC-1 NOT MET — real dispatch data disproves per-line targeting independence
+  (buildBlindDerivePayload's Target-line identifier is not locatable inside the quote-only payload
+  the subagent receives, so the blind stage collapses onto one shared derivation per slice instead of
+  a derivation specific to each candidate line). CHECK-04 left OPEN/PARTIAL in REQUIREMENTS.md, not
+  closed. This is a status="closed" validation record for the PLAN WORK (all tasks committed,
+  nyquist-compliant sampling followed throughout), not a claim that CHECK-04 itself is complete.
 ---
 
 # Phase 177 — Validation Strategy
@@ -55,7 +64,7 @@ created: 2026-07-30
 | decision 15 | Findings exit 0; non-zero reserved for tool failure | unit | `... -t "exit"` | ❌ W0 | ⬜ pending |
 | Cross-cutting | **Context-Economics carve-out**: `verify-game.md`'s hard rule gains an explicit exception for the DERIVE dispatch prompt (which legitimately carries quote lines), mirroring 174's `quotedPass1`/`quotedPass2` precedent | skill-text pin | `npx vitest run src/cli/slash-command/bs/verify.test.ts` | ✅ extend | ⬜ pending |
 | Cross-cutting | 176-04's step-contiguity, no-hardcoded-count, and no-fork drift guards stay true | drift guards | same file | ✅ extend | ⬜ pending |
-| CHECK-04 | Real full-corpus run: 22 `Derived` lines, ~44 dispatches, measured distribution | integration (real dispatch) | recorded in `177-PROOF.md` | ❌ proof-only | ⬜ pending |
+| CHECK-04 | Real full-corpus run: 22 `Derived` lines (16 real dispatch candidates + 6 mechanically excluded), 29 real dispatches, measured distribution | integration (real dispatch) | recorded in `177-PROOF.md` §§2-4 | ✅ proof-only, real | ✅ green (mechanically: distribution measured; SC-1 itself NOT MET, see 177-PROOF.md §4 and REQUIREMENTS.md's CHECK-04 row) |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -91,15 +100,22 @@ created: 2026-07-30
 
 ## Validation Sign-Off
 
-- [ ] All tasks have automated verify or a declared Wave 0 dependency
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 10s for unit work
-- [ ] `177-PROOF.md` records the predicted-before-measured distribution, the real counts, and the
-      grepped independence observable
-- [ ] Findings reported, NOT fixed on reference-game slice content
-- [ ] Dispatch mechanism stated honestly (`claude -p` subprocess vs native Task-tool)
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have automated verify or a declared Wave 0 dependency — plans 01-05 have unit
+      tests (`npm test`: 3954/3954 green); 06-07 are proof-only tasks with `177-PROOF.md`/
+      `177-PREDICTION.md` as their declared verify artifact, per plan.
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 10s for unit work
+- [x] `177-PROOF.md` records the predicted-before-measured distribution (§3, citing prediction commit
+      `913bfe7d`), the real counts (§3), and the grepped independence observable (§2)
+- [x] Findings reported, NOT fixed on reference-game slice content (`177-PROOF.md` §3's closing note;
+      both originals byte-identical, §4)
+- [x] Dispatch mechanism stated honestly (`claude -p` subprocess, not native Task-tool — `177-PROOF.md`
+      §2, §4)
+- [x] `nyquist_compliant: true` set in frontmatter — true for how THIS plan's own work was sampled
+      (real dispatch, real grep, real diff, no assertions substituted); it is NOT a claim that
+      CHECK-04's own SC-1 is met — that disposition is recorded separately in `REQUIREMENTS.md`.
 
-**Approval:** pending
+**Approval:** plan-work approved (all 7 plans executed, committed, `npm test` green) — CHECK-04 itself
+left OPEN/PARTIAL per `177-PROOF.md` §4 and `REQUIREMENTS.md`, not closed. See `closure_note` above.
