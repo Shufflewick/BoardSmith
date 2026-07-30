@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 176-03-PLAN.md — CHECK-01/CHECK-02 skill text, CLI registration, installer probes: verify/ruling-recheck.md (staged-only, absence-aware judgment contract, four verdicts, seven's Ruling 1 worked example) and verify/repair-dispatch.md (delegates build/audit.md's three lenses and build/repair.md's bounded loop BY REFERENCE only, per-verify-episode round budget, post-repair gate re-derivation/VERIFY-06 seam) both created; verify-ruling-recheck and verify-repair registered in cli.ts with --project/--run-id/--json, no bypass option; SHARED_LEAF_PROBES gained both files, a real scratch-dir install proves both ship under bs-shared/verify/. Added verifyRepairStatusCommand to verify-repair.ts (a Rule-2 deviation — 176-02 left no orchestrating command to register). npm test 3876/3876 green (baseline 3875 + 1 new test), zero regressions. CHECK-01/CHECK-02 still NOT marked complete in REQUIREMENTS.md — ROADMAP.md's plan breakdown assigns their live-proof/routing closure to 176-04/05/06. See .planning/phases/176-stale-chunk-repair/176-03-SUMMARY.md."
-last_updated: "2026-07-30T17:10:00Z"
+stopped_at: "Completed 176-04-PLAN.md — verify-game.md full stale-claim sweep + repair/ruling-recheck routing, no-fork drift guards proven to fail when violated. Sweep found a THIRD stale claim beyond the two named in advance (Step 0's 'clean close (Step 5)' cross-reference, stale the moment Close renumbered to Step 7) plus a second stale dimension inside the named disposition-enumeration claim (three of REPAIR_GATE_DISPOSITIONS's four values, not-applicable omitted, confirmed real via printImpactHumanReport). All rewritten in place; dropped the hardcoded disposition list in favor of citing the source array. Added Step 5 (Ruling Re-Check, CHECK-01) and Step 6 (Repair Dispatch, CHECK-02), both routes reachable and pinned. verify.test.ts gained a no-fork guard sourcing lens/repair-bound marker phrases from build/audit.md and build/repair.md at test time, absence pins, routing pins, step-contiguity and no-hardcoded-count guards, a decision-11 Interpretation guard — both negative-pin classes empirically proven to fail on re-introduction then reverted. verify/adjudication-gate.md's identical sibling defect (out-of-scope file) logged to deferred-items.md, not fixed. npm test 3886/3886 green (baseline 3876 + 10 new tests), zero regressions. CHECK-01/CHECK-02 still NOT marked complete in REQUIREMENTS.md — 176-05/06's live proof still owed. See .planning/phases/176-stale-chunk-repair/176-04-SUMMARY.md."
+last_updated: "2026-07-30T18:30:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 47
-  completed_plans: 44
-  percent: 61
+  completed_plans: 45
+  percent: 62
 ---
 
 # Project State
@@ -25,9 +25,43 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 176 (Stale-Chunk Repair) — IN PROGRESS, 3/6 plans executed.
-Next: 176-04-PLAN.md — `verify-game.md` full stale-claim sweep + repair routing, and the no-fork
-drift guards proven to fail when violated (CHECK-01, CHECK-02, wave 3).
+Phase: 176 (Stale-Chunk Repair) — IN PROGRESS, 4/6 plans executed.
+Next: 176-05-PLAN.md — CHECK-01's live proof (all ~62 rulings across both reference games
+re-validated, `seven`'s Ruling 1 proven live against the absence-of-source trap).
+
+`176-04-PLAN.md` (2026-07-30) swept `verify-game.md` for stale cross-file claims beyond the two
+named in advance, added CHECK-01/CHECK-02's routing, and pinned the result with drift guards.
+Full inventory (recorded in `176-04-SUMMARY.md`): fixed the two named boundary statements (line
+15's "never edits a chunk's design" → narrowed to "does not scaffold a new chunk the BUILD
+pipeline's way", since repair MAY change an existing chunk's code per decision 12; the "Performing
+the repair itself is Phase 176's job" forward reference → repointed at the concrete new Step 6);
+found a SECOND stale dimension inside the disposition-enumeration claim (it named only 3 of
+`REPAIR_GATE_DISPOSITIONS`'s 4 values, `not-applicable` omitted — confirmed real, not a deliberate
+exclusion, via `printImpactHumanReport`'s actual iteration over all four) and fixed it by citing
+the source array instead of restating a list; found a THIRD stale claim never named in advance
+(Step 0's "clean close (Step 5)" cross-reference, stale the instant Close renumbered to Step 7)
+purely from reading the whole file. Verified lines 20-21's "no flag or path ... writes staged
+output into a live location" sentence remains byte-identical. Added Step 5 (Ruling Re-Check,
+CHECK-01, dispatching `verify/ruling-recheck.md`) and Step 6 (Repair Dispatch, CHECK-02,
+dispatching `verify/repair-dispatch.md`); renumbered Close to Step 7; added both files to
+Reference Files. Extended `verify.test.ts` with a no-fork guard reading its lens/repair-bound
+marker phrases live from `build/audit.md`/`build/repair.md` (companion presence assertions against
+those same files), a positive delegation-path pin, absence pins for both retired sentences, routing
+pins for the new steps, a step-numbering contiguity check, and guards against any hardcoded
+step/reference-file/disposition count reappearing; updated three PRE-EXISTING pinned tests
+(six-step count → eight, "Step 5 naming Close" → Step 7, the rebuild-claim phrase) to match.
+**Both negative-pin classes were empirically proven to fail**: a lens marker phrase was temporarily
+pasted into `repair-dispatch.md` (observed the no-fork assertion fail with the real diff logged,
+then reverted from backup); "It never edits a chunk's design" was temporarily reinserted into
+`verify-game.md` (observed both the narrowed-claim pin and the absence pin fail, then reverted from
+backup) — `git diff --stat` confirmed zero remaining change on both files after revert.
+`verify/adjudication-gate.md`'s identical sibling defect (a three-of-four disposition enumeration
+and a now-self-referential "Phase 176's job" label) was found but is OUTSIDE this plan's
+`files_modified` scope — logged to
+`.planning/phases/176-stale-chunk-repair/deferred-items.md` with a concrete fix recommendation,
+not touched here. `npm test`: 3886/3886 green (baseline 3876 + 10 new assertions), zero
+regressions. CHECK-01/CHECK-02 still NOT marked complete in `REQUIREMENTS.md` — their live-proof
+closure is 176-05/06's job. See `.planning/phases/176-stale-chunk-repair/176-04-SUMMARY.md`.
 
 `176-03-PLAN.md` (2026-07-30) wrote CHECK-01's and CHECK-02's skill text and made both reachable
 from the real CLI surface. `verify/ruling-recheck.md`: a versioned-handshake
