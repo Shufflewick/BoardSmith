@@ -1,9 +1,9 @@
 ---
 phase: 176
 slug: stale-chunk-repair
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-30
 ---
 
@@ -40,20 +40,20 @@ created: 2026-07-30
 
 | Req | Behavior | Test Type | Automated Command | File Exists | Status |
 |---|---|---|---|---|---|
-| CHECK-01 | `parseRulings` extension exposes ruling body text **additively**, no existing caller broken, no second `Ruling (\d+)` regex | unit | `npx vitest run src/cli/commands/build-manifest.test.ts` | ✅ extend | ⬜ pending |
-| CHECK-01 | Verdict enum frozen-array + derived-type + pinning test: `still-needed \| resolved-by-source \| contradicted \| undetermined` | unit | `npx vitest run src/cli/commands/verify-ruling-recheck.test.ts` | ❌ W0 | ⬜ pending |
-| CHECK-01 | Supersession: only explicit verbs parsed, BOTH directions handled, unparseable chains reported not assumed | unit | `... -t "supersession"` | ❌ W0 | ⬜ pending |
-| CHECK-01 | `undetermined` is reachable and never collapsed into another verdict | unit | `... -t "undetermined"` | ❌ W0 | ⬜ pending |
-| CHECK-01 · SC-3 | `seven`'s Ruling 1 (source-absence) verdicts **`still-needed`** with recorded reasoning, against a real fresh transcription | integration (real dispatch) | recorded in `176-PROOF.md` | ❌ proof-only | ⬜ pending |
-| CHECK-02 | Stale-chunk → staged-slice-path resolution correct under real m:n pairing (`seven` 3 live → 6 staged) | unit | `npx vitest run src/cli/commands/verify-repair.test.ts` | ❌ W0 | ⬜ pending |
-| CHECK-02 | Lens templates read VERBATIM from `build/audit.md` — **no forked copy exists anywhere** | unit (drift guard, mirroring 174/175's lexicon pins) | `npx vitest run src/cli/slash-command/bs/verify.test.ts` | ✅ extend | ⬜ pending |
-| CHECK-02 | `build/repair.md`'s loop is cited, never forked | unit (drift guard) | same file | ✅ extend | ⬜ pending |
-| CHECK-02 | **Post-repair `computeRepairGate` RE-INVOCATION** reflects code changed during repair — never the pre-repair snapshot (Pitfall 1) | unit | `npx vitest run src/cli/commands/verify-impact.test.ts` | ✅ extend | ⬜ pending |
-| decision 17 | A verify episode opens a fresh 3-round budget; rounds append alongside build rounds **without renumbering**, and the episode boundary is legible in CHUNK.md | unit | `... -t "episode"` | ❌ W0 | ⬜ pending |
-| decision 10 | Missing fresh transcription reports **scope-limited**, never silently falls back to live slices | unit | `... -t "scope-limited"` | ❌ W0 | ⬜ pending |
-| decision 11 | `## Interpretation` never reachable by a lens dispatch | source assertion + drift guard | `verify.test.ts` | ✅ extend | ⬜ pending |
-| CHECK-02 | Real lens dispatch against a real stale chunk + real staged fixture surfaces real findings | integration (real dispatch) | recorded in `176-PROOF.md` | ❌ proof-only | ⬜ pending |
-| Cross-cutting | No self-contradicting boundary statement left in `verify-game.md` (lines 15 and 109 become false) | drift pin, old text asserted ABSENT | `verify.test.ts` | ✅ extend | ⬜ pending |
+| CHECK-01 | `parseRulings` extension exposes ruling body text **additively**, no existing caller broken, no second `Ruling (\d+)` regex | unit | `npx vitest run src/cli/commands/build-manifest.test.ts` | ✅ extend | ✅ green |
+| CHECK-01 | Verdict enum frozen-array + derived-type + pinning test: `still-needed \| resolved-by-source \| contradicted \| undetermined` | unit | `npx vitest run src/cli/commands/verify-ruling-recheck.test.ts` | ✅ done | ✅ green |
+| CHECK-01 | Supersession: only explicit verbs parsed, BOTH directions handled, unparseable chains reported not assumed | unit | `... -t "supersession"` | ✅ done | ✅ green |
+| CHECK-01 | `undetermined` is reachable and never collapsed into another verdict | unit | `... -t "undetermined"` | ✅ done | ✅ green |
+| CHECK-01 · SC-3 | `seven`'s Ruling 1 (source-absence) verdicts **`still-needed`** with recorded reasoning, against a real fresh transcription | integration (real dispatch) | recorded in `176-PROOF.md` | ✅ done | ✅ green — `176-PROOF.md` §3, bar MET |
+| CHECK-02 | Stale-chunk → staged-slice-path resolution correct under real m:n pairing (`seven` 3 live → 6 staged) | unit | `npx vitest run src/cli/commands/verify-repair.test.ts` | ✅ done | ✅ green (25 tests, incl. 176-06's `pairIds`/append-placement regressions) |
+| CHECK-02 | Lens templates read VERBATIM from `build/audit.md` — **no forked copy exists anywhere** | unit (drift guard, mirroring 174/175's lexicon pins) | `npx vitest run src/cli/slash-command/bs/verify.test.ts` | ✅ extend | ✅ green |
+| CHECK-02 | `build/repair.md`'s loop is cited, never forked | unit (drift guard) | same file | ✅ extend | ✅ green |
+| CHECK-02 | **Post-repair `computeRepairGate` RE-INVOCATION** reflects code changed during repair — never the pre-repair snapshot (Pitfall 1) | unit | `npx vitest run src/cli/commands/verify-impact.test.ts` | ✅ extend | ✅ green — mechanics-level flip proven on a real 2-commit git fixture; live real-game flip NOT observed (176-PROOF.md §5, honestly reported) |
+| decision 17 | A verify episode opens a fresh 3-round budget; rounds append alongside build rounds **without renumbering**, and the episode boundary is legible in CHUNK.md | unit | `... -t "episode"` | ✅ done | ✅ green — AND proven live on real `best-seven-selection`/`block` CHUNK.md (176-PROOF.md §4) |
+| decision 10 | Missing fresh transcription reports **scope-limited**, never silently falls back to live slices | unit | `... -t "scope-limited"` | ✅ done | ✅ green |
+| decision 11 | `## Interpretation` never reachable by a lens dispatch | source assertion + drift guard | `verify.test.ts` | ✅ extend | ✅ green |
+| CHECK-02 | Real lens dispatch against a real stale chunk + real staged fixture surfaces real findings | integration (real dispatch) | recorded in `176-PROOF.md` | ✅ done | ✅ green — `176-PROOF.md` §4, 2 of 12 chunks, 15 real findings, 4th lens NOT dispatched (stated limitation) |
+| Cross-cutting | No self-contradicting boundary statement left in `verify-game.md` (lines 15 and 109 become false) | drift pin, old text asserted ABSENT | `verify.test.ts` | ✅ extend | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -88,13 +88,26 @@ created: 2026-07-30
 
 ## Validation Sign-Off
 
-- [ ] All tasks have automated verify or a declared Wave 0 dependency
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 10s for unit work
-- [ ] `176-PROOF.md` records SC-3's reasoning, full ruling counts, and explicit lens coverage
-- [ ] Findings reported, NOT fixed on reference-game content (decision 16)
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have automated verify or a declared Wave 0 dependency
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 10s for unit work
+- [x] `176-PROOF.md` records SC-3's reasoning, full ruling counts, and explicit lens coverage —
+      §2-§3 (ruling counts + SC-3), §3b (constructed-lexicon verdict-distribution closure), §4
+      (explicit AUDITED/NOT-AUDITED coverage table, 2 of 12)
+- [x] Findings reported, NOT fixed on reference-game content (decision 16) — 15 real lens findings
+      recorded in §4, zero reference-game fixes; two REAL bugs found were fixed in BoardSmith's own
+      `src/cli/commands/` (not reference-game content — decision 16 does not apply to BoardSmith's
+      own shipped tooling)
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Honest caveats carried forward (not hidden by this sign-off):** the 4th design-review lens was
+NOT dispatched for either audited chunk (needs a live dev-server/browser harness); 10 of 12 stale
+chunks were NOT audited (decision 15's stated cost-containment subset); `resolved-by-source`/
+`contradicted` verdicts are proven only on constructed lexicon input, never real data; native
+Task/Agent-tool dispatch remains unproven throughout this phase. See `176-PROOF.md`'s own
+"What is still unproven" section for the complete, phase-wide list.
+
+**Approval:** approved — phase closed with `176-PROOF.md`'s live evidence, honest caveats carried
+forward rather than hidden (see above).

@@ -202,8 +202,13 @@ the tag.
 - [x] **CHECK-01**: Ruling re-validation — every `RULINGS.md` entry is re-checked against the fresh
       transcription and reported as still-needed, resolved-by-source, or contradicted, respecting
       supersession chains.
-- [ ] **CHECK-02**: The three audit lenses (fidelity, visibility, undo) run per stale chunk against
-      raw slices plus `RULINGS.md`, feeding the existing bounded repair loop.
+- [x] **CHECK-02**: The three audit lenses (fidelity, visibility, undo) run per stale chunk against
+      raw slices plus `RULINGS.md`, feeding the existing bounded repair loop. Mechanism (never
+      capped in code — `selectStaleChunks` processes every `stale === true` entry) proven live on a
+      2-of-12 real dispatch sample (`176-PROOF.md` §4), decision 15's explicit cost-containment
+      allowance. 15 real findings recorded, zero fixed (decision 16). The 4th (design-review) lens
+      was NOT dispatched in this proof pass (needs a live dev-server/browser harness) — noted, not
+      hidden.
 - [x] **CHECK-03**: Traceability sweep — every Interpretation claim has a citing test, every test
       traces to a live claim, and every ruling has a test; gaps are reported as findings. Runs with
       no source present.
@@ -266,7 +271,7 @@ the tag.
 | VERIFY-05 | Phase 175 | Complete — `175-PROOF.md` §4 (real cross-file write, both games) |
 | VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
 | CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
-| CHECK-02 | Phase 176 | Pending |
+| CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
 | CHECK-04 | Phase 177 | Pending |
 | CHECK-06 | Phase 178 | Pending |
 | TEST-01 | Phase 178 | Pending |

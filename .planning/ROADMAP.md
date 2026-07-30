@@ -235,13 +235,30 @@ Plans:
   3. Run against seven's Ruling 1 — the designer-statement scoring table with no source card — this produces a defensible still-needed/resolved/contradicted verdict, proving the highest-consequence ruling re-validation target in either reference game.
 **Plans**: 6 plans
 
+**Result:** CHECK-01 and CHECK-02 both closed live. Ruling re-validation: 62 rulings across both
+reference games (`seven` 36, `one-two-punch` 26), 60 dispatched + 2 correctly skipped as
+superseded (both directions proven), verdictCounts `{still-needed: 60, resolved-by-source: 0,
+contradicted: 0, undetermined: 0}` on real data plus 2/2 constructed lexicon cases exercising the
+other two labels (176-05, 176-06 §3b). SC-3 (`seven` Ruling 1) verdict `still-needed` MET with its
+bar committed before dispatch. Audit-lens coverage: 2 of 12 real stale chunks audited (~17%,
+decision 15's stated-subset allowance), 15 real findings recorded across 6 fresh-context lens
+dispatches (0 fixed, per decision 16), decision 17's fresh-episode-budget rule demonstrated in
+BOTH reference games on chunks already at 3 build-era rounds (absolute round 4 on first verify
+dispatch, never routed to triage). Paired pre/post-repair gate readings: 2 of 2 audited chunks show
+NO disposition change (both `reopen-playtest`, pre-existing drift unrelated to this pass),
+consistent with `175-PROOF.md` §5's own 1-of-12 baseline — restated, not overturned. Two live bugs
+found and fixed while producing this proof: `ImpactMapEntry` dropped its `pairIds` field (made
+`verify-repair` throw on every real stale chunk) and `appendAuditRoundHeading` landed a new round
+heading after the wrong CHUNK.md section (never caught by synthetic-only test fixtures). `npm
+test`: 3893/3893 green throughout this phase's final plan, zero regressions.
+
 Plans:
 - [x] 176-01-PLAN.md — CHECK-01 mechanics: `parseRulings` body-text extension, `RULING_VERDICTS` enum, supersession skip/report, scope-limited, atomic verdict recording (CHECK-01, wave 1)
 - [x] 176-02-PLAN.md — CHECK-02 mechanics: stale-chunk → fresh staged slice resolution, verify-episode round bookkeeping (decision 17), POST-repair `computeRepairGate` re-derivation (CHECK-02, wave 1)
 - [x] 176-03-PLAN.md — skill text: `verify/ruling-recheck.md` judgment contract + `verify/repair-dispatch.md` delegating to `build/audit.md`/`build/repair.md` by reference, CLI registration, installer probes (CHECK-01, CHECK-02, wave 2)
 - [x] 176-04-PLAN.md — `verify-game.md` full stale-claim sweep + repair routing, and the no-fork drift guards proven to fail when violated (CHECK-01, CHECK-02, wave 3)
 - [x] 176-05-PLAN.md — live proof: all ~62 rulings re-validated with measured per-verdict counts, SC-3's Ruling 1 verdict AND reasoning (CHECK-01, wave 4)
-- [ ] 176-06-PLAN.md — live proof: real lens run on a STATED subset of the 12 stale chunks, paired pre/post-repair gate readings, phase closeout (CHECK-02, wave 5)
+- [x] 176-06-PLAN.md — live proof: real lens run on a STATED subset of the 12 stale chunks, paired pre/post-repair gate readings, phase closeout (CHECK-02, wave 5)
 
 ### Phase 177: Derived-Line Re-Derivation
 **Goal**: Rule-bearing inferences get an independent second opinion, separate from the presentation notes the Phase 170 split now keeps out of the way.
