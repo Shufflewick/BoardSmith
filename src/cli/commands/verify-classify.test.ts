@@ -13,7 +13,6 @@ import {
   ruleBearingLines,
   deriveStale,
   livePageSpan,
-  parseRangeId,
   pairSlices,
   resolveProvenance,
   type RuleDelta,
@@ -217,36 +216,98 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
     expect(livePageSpan(action)).toEqual({ first: 2, last: 2 });
   });
 
-  it('pairing-3: the real seven fixture (3 live rule slices, 6 staged units sharing rangeId "1-2") groups into ONE paired group — an m:n asymmetry, not a finding', async () => {
-    const liveNames = [
-      '01-definitions-and-components.md',
-      '01-overview-setup-and-play.md',
-      '02-solo-variant.md',
-    ];
+  it('pairing-3 (corrective, symmetric span derivation): each seven staged unit\'s OWN content yields its own span — most single-page, one genuinely cross-page, never the ledger rangeId', async () => {
     const stagedNames = await listFixtureFiles('seven/staged');
     expect(stagedNames.length).toBe(6);
 
-    const liveSlices = await Promise.all(
-      liveNames.map(async (name) => ({
-        path: `rulebook/${name}`,
-        text: await readFixture(`seven/live/${name}`),
-      })),
-    );
-    const stagedUnits = await Promise.all(
-      stagedNames.map(async (name) => ({
-        unit: name.replace(/\.md$/, ''),
-        slicePath: name,
-        rangeId: '1-2',
-        text: await readFixture(`seven/staged/${name}`),
-      })),
-    );
+    // Measured directly against the real archived files (174-CONTEXT.md decision 4's second
+    // amendment): five staged units carry only a p.1 citation, one only p.2, and
+    // 01-about-and-setup.md's own "Derived (p.1): ... the Solo Variant (p.2)." line makes it
+    // genuinely span both pages — a real content fact, not a rangeId artifact.
+    const expectedSpans: Record<string, { first: number; last: number }> = {
+      '01-about-and-setup.md': { first: 1, last: 2 },
+      '01-definitions.md': { first: 1, last: 1 },
+      '01-distribution-of-cards.md': { first: 1, last: 1 },
+      '01-game-end-and-match.md': { first: 1, last: 1 },
+      '01-round.md': { first: 1, last: 1 },
+      '02-solo-variant.md': { first: 2, last: 2 },
+    };
+    for (const name of stagedNames) {
+      const text = await readFixture(`seven/staged/${name}`);
+      expect(livePageSpan(text)).toEqual(expectedSpans[name]);
+    }
+  });
 
+  it('pairing-3b (corrective, real fixture, both games): pairSlices() over the real seven and one-two-punch fixtures produces exactly ONE paired group per game — genuine cross-page staged content bridges the p.1/p.2 split, not a collapsed rangeId artifact', async () => {
+    async function pairGame(
+      game: string,
+      liveNames: string[],
+    ): Promise<{ liveCount: number; stagedNames: string[] }> {
+      const stagedNames = await listFixtureFiles(`${game}/staged`);
+      const liveSlices = await Promise.all(
+        liveNames.map(async (name) => ({
+          path: `rulebook/${name}`,
+          text: await readFixture(`${game}/live/${name}`),
+        })),
+      );
+      // Deliberately WRONG/absent rangeId values on every staged unit: if pairing were still
+      // keyed off rangeId, this would scramble or collapse the result differently. The point of
+      // this fix is that pairSlices() no longer reads rangeId for spans at all, so the grouping
+      // below must be identical regardless of what rangeId says.
+      const stagedUnits = await Promise.all(
+        stagedNames.map(async (name, i) => ({
+          unit: name.replace(/\.md$/, ''),
+          slicePath: name,
+          rangeId: i % 2 === 0 ? undefined : '999-999',
+          text: await readFixture(`${game}/staged/${name}`),
+        })),
+      );
+      const pairs = pairSlices({ liveSlices, stagedUnits });
+      const paired = pairs.filter((p) => p.kind === 'paired');
+      expect(paired).toHaveLength(1);
+      expect(paired[0].liveSlices).toHaveLength(liveNames.length);
+      expect(paired[0].stagedUnits).toHaveLength(stagedNames.length);
+      return { liveCount: liveNames.length, stagedNames };
+    }
+
+    // seven: 3 live rule slices, 6 staged units — one bridging staged file (01-about-and-setup.md,
+    // p.1-2) unions the p.1 live/staged cluster with the p.2 live/staged cluster into one group.
+    const seven = await pairGame('seven', [
+      '01-definitions-and-components.md',
+      '01-overview-setup-and-play.md',
+      '02-solo-variant.md',
+    ]);
+    expect(seven.stagedNames.length).toBe(6);
+
+    // one-two-punch: 2 live rule slices, 6 staged units — TWO bridging staged files
+    // (01-round-structure.md and 02-punch-examples-discard.md both explicitly say "continues on
+    // p.2" / "begun on p.1" in their own prose) union the split into one group here too.
+    const otp = await pairGame('one-two-punch', [
+      '01-setup-and-round-structure.md',
+      '02-action-cards-and-resolution.md',
+    ]);
+    expect(otp.stagedNames.length).toBe(6);
+  });
+
+  it('pairing-3c (corrective): the mechanism itself CAN produce finer per-page groups — it is the real fixtures\' genuine cross-page prose, not a pairSlices() limitation, that collapses seven/one-two-punch to one group', () => {
+    // No bridging unit here (unlike the real fixtures): every span is confined to a single page,
+    // so the same union-find algorithm correctly reports TWO groups, proving the collapse above is
+    // a fact about the real archived content, not something pairSlices() cannot avoid.
+    const liveSlices = [
+      { path: 'rulebook/a.md', text: 'p.1, A:\n"one"\n' },
+      { path: 'rulebook/b.md', text: 'p.2, B:\n"two"\n' },
+    ];
+    const stagedUnits = [
+      { unit: 'u1', slicePath: 'u1.md', text: 'p.1, A:\n"one restated"\n' },
+      { unit: 'u2', slicePath: 'u2.md', text: 'p.2, B:\n"two restated"\n' },
+    ];
     const pairs = pairSlices({ liveSlices, stagedUnits });
     const paired = pairs.filter((p) => p.kind === 'paired');
-    expect(paired).toHaveLength(1);
-    expect(paired[0].liveSlices).toHaveLength(3);
-    expect(paired[0].stagedUnits).toHaveLength(6);
-    expect(paired[0].kind).toBe('paired');
+    expect(paired).toHaveLength(2);
+    expect(paired.map((p) => p.span).sort((a, b) => a.first - b.first)).toEqual([
+      { first: 1, last: 1 },
+      { first: 2, last: 2 },
+    ]);
   });
 
   it('pairing-4: a live slice whose span overlaps nothing staged, and a staged range overlapping nothing live, are both reported as unpaired-slice — never dropped', () => {
@@ -318,20 +379,16 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
     });
   });
 
-  it('pairing-7: a staged unit with no rangeId is reported as its own unpaired-slice group, never dropped', () => {
+  it('pairing-7: a staged unit with no derivable p.N page span (rangeId is irrelevant post-fix) is reported as its own unpaired-slice group, never dropped', () => {
     const liveSlices = [{ path: 'rulebook/a.md', text: 'p.1, A:\n"one"\n' }];
     const stagedUnits = [
       { unit: 'u1', slicePath: 'u1.md', rangeId: '1-1', text: 'p.1, A:\n"one restated"\n' },
-      { unit: 'orphan', slicePath: 'orphan.md', text: 'Some content with no rangeId.\n' },
+      { unit: 'orphan', slicePath: 'orphan.md', rangeId: '1-1', text: 'Some content with no p.N citation at all.\n' },
     ];
     const pairs = pairSlices({ liveSlices, stagedUnits });
     const orphanGroup = pairs.find((p) => p.stagedUnits.includes('orphan'));
     expect(orphanGroup).toMatchObject({ kind: 'unpaired-slice', missingSide: 'live-missing' });
     expect(orphanGroup!.stagedUnits).toEqual(['orphan']);
-  });
-
-  it('parseRangeId rejects a malformed rangeId with an actionable error naming the value', () => {
-    expect(() => parseRangeId('not-a-range')).toThrow(/Invalid rangeId "not-a-range"/);
   });
 
   it('PAIR_KINDS is the frozen three-member enum', () => {

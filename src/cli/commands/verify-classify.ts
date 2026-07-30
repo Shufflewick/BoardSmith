@@ -165,39 +165,34 @@ function spansOverlap(a: PageSpan, b: PageSpan): boolean {
 }
 
 /**
- * A live slice's page span, derived from its OWN content's `p.N,` citation-header lines (the
- * `^p\.(\d+),` shape measured on real live slices, e.g. `p.1, Distribution of Cards:`) — never
- * from `INDEX.md`. `one-two-punch`'s real `INDEX.md` has no `## Slices` table at all (174-
- * RESEARCH.md Pattern 2), so an INDEX-keyed implementation is blind on it; this function is not.
+ * A slice's page span, derived from its OWN content's `p.N` page citations — every occurrence of
+ * the `p.N` shape anywhere in the text (a bare citation header like `p.1, Distribution of Cards:`,
+ * a `Derived (p.N):`/`Named-but-undefined (p.N):`/`Visual (p.N):` line, or an inline aside like
+ * `(p.2)` inside a sentence) — never from `INDEX.md` and never from the ledger's `rangeId`.
+ * `one-two-punch`'s real `INDEX.md` has no `## Slices` table at all (174-RESEARCH.md Pattern 2),
+ * so an INDEX-keyed implementation is blind on it; this function is not.
  *
- * Returns `undefined` when the slice carries no `p.N,` citation at all (e.g. a non-rule visual
+ * This is the ONE content-derived span mechanism `pairSlices()` below applies to BOTH the live
+ * side and the staged side (174-CONTEXT.md decision 4's second amendment) — the ledger `rangeId`
+ * records which dispatch produced a staged unit, not which page(s) its content actually cites, so
+ * it is retained on the record for traceability but is never the pairing key. Verified directly
+ * against the real archived `seven` staged fixtures: `01-about-and-setup.md` carries only bare
+ * `p.1,` headers, but its `Derived (p.1): ... the Solo Variant (p.2).` line's inline `(p.2)` aside
+ * is what makes this function correctly report its span as `{first: 1, last: 2}` — a citation
+ * that a header-only scan would miss entirely.
+ *
+ * Returns `undefined` when the slice carries no `p.N` citation at all (e.g. a non-rule visual
  * survey file) — the caller reports that rather than guessing a span.
  */
 export function livePageSpan(sliceText: string): PageSpan | undefined {
   const pages: number[] = [];
-  for (const rawLine of sliceText.split('\n')) {
-    const match = /^p\.(\d+),/.exec(rawLine.trim());
-    if (match) pages.push(Number(match[1]));
+  const citationRe = /p\.(\d+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = citationRe.exec(sliceText)) !== null) {
+    pages.push(Number(match[1]));
   }
   if (pages.length === 0) return undefined;
   return { first: Math.min(...pages), last: Math.max(...pages) };
-}
-
-/**
- * Parses a ledger `rangeId`'s `"N-M"` shape (the same shape `verify-run.ts`'s `RANGE_ID_RE`
- * accepts for a page range, e.g. `"1-2"`) into a `PageSpan`. Throws an actionable error naming
- * the value on anything else — never a guessed or silently-dropped span.
- */
-export function parseRangeId(rangeId: string): PageSpan {
-  const match = /^(\d+)-(\d+)$/.exec(rangeId.trim());
-  if (!match) {
-    throw new Error(
-      `Invalid rangeId "${rangeId}".\n` +
-        `Expected the shape "N-M" (e.g. "1-2"), the same page-range shape ` +
-        `\`boardsmith verify-run-record --range\` accepts.`,
-    );
-  }
-  return { first: Number(match[1]), last: Number(match[2]) };
 }
 
 /** The three shapes a page-overlap GROUP can be (174-CONTEXT.md decision 4, amended). */
@@ -239,12 +234,17 @@ function derivePairId(span: PageSpan | undefined, fallback: string): string {
  * Pairs live↔staged slices by PAGE-SPAN OVERLAP (decision 4, amended) — a pure function, no I/O,
  * following `resolveLedgerState`'s style (single input, single output, no ambient state).
  *
- * Algorithm: each live slice's span comes from its own content (`livePageSpan`); each staged
- * unit's span comes from the ledger's `rangeId` (`parseRangeId`) — **never `INDEX.md`**, which
- * `one-two-punch` does not carry a Slices table for at all. Spans are joined into connected
- * groups via union-find over pairwise overlap (live-staged, live-live, and staged-staged), so an
- * m:n group — one live slice bridging several staged units, or several live slices sharing one
- * staged range — is a single group rather than an approximated 1:1 lookup.
+ * Algorithm: BOTH sides' spans come from the SAME content-derived mechanism, `livePageSpan`
+ * applied to that slice's own text (174-CONTEXT.md decision 4's second amendment) — **never
+ * `INDEX.md`** (which `one-two-punch` does not carry a Slices table for at all) and **never the
+ * ledger's `rangeId`** (which records which dispatch produced a staged unit, an engineering
+ * artifact of transcription-pipeline granularity, not a content fact — both reference rulebooks
+ * are 2-page books dispatched as a single range, so every staged unit shares the same `rangeId`
+ * and a `rangeId`-keyed pairing collapses an entire game into one group). `rangeId` is retained on
+ * each staged unit's input record for traceability, but it is never consulted here. Spans are
+ * joined into connected groups via union-find over pairwise overlap (live-staged, live-live, and
+ * staged-staged), so an m:n group — one live slice bridging several staged units, or several live
+ * slices sharing one staged span — is a single group rather than an approximated 1:1 lookup.
  *
  * A group with files on only one side is `unpaired-slice`, naming which side is missing — never
  * silently dropped (decision 4's whole reason for existing: silent under-recording is the defect
@@ -253,10 +253,10 @@ function derivePairId(span: PageSpan | undefined, fallback: string): string {
  * denominator (decision 17). Everything else is `paired`, including a group whose two sides carry
  * different file counts — that asymmetry is NORMAL, not a finding.
  *
- * A staged unit with no `rangeId` is reported, not dropped: it gets a singleton group of its own,
- * `kind: 'unpaired-slice'`, `missingSide: 'live-missing'`.
+ * A staged unit with no derivable `p.N` span at all is reported, not dropped: it gets a singleton
+ * group of its own, `kind: 'unpaired-slice'`, `missingSide: 'live-missing'`.
  *
- * A live slice with no page span at all (`livePageSpan` returned `undefined` — no `p.N,`
+ * A live slice with no page span at all (`livePageSpan` returned `undefined` — no `p.N`
  * citation anywhere in it, e.g. a non-rule visual-survey file) likewise gets a singleton group of
  * its own rather than being silently excluded from the result, `missingSide: 'staged-missing'`.
  */
@@ -267,7 +267,7 @@ export function pairSlices(input: PairSlicesInput): SlicePair[] {
 
   const spans: (PageSpan | undefined)[] = [
     ...input.liveSlices.map((s) => livePageSpan(s.text)),
-    ...input.stagedUnits.map((u) => (u.rangeId !== undefined ? parseRangeId(u.rangeId) : undefined)),
+    ...input.stagedUnits.map((u) => livePageSpan(u.text)),
   ];
 
   const parent = Array.from({ length: total }, (_, i) => i);

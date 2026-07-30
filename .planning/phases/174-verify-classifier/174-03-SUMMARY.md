@@ -109,6 +109,74 @@ None. Every function is fully implemented and exercised against either real arch
 hand-built regression fixtures for edge cases (unpaired slices, presentation-only groups, malformed
 rangeIds) that real archived data does not happen to exhibit.
 
+## Corrective follow-up (2026-07-29)
+
+Plan 174-03's pairing implementation keyed the staged side's page span off the ledger `rangeId`
+(174-CONTEXT.md decision 4's first amendment). Executing it against the real archived fixtures
+exposed why that is wrong, documented above as this Summary's Deviations item 2: `rangeId` records
+which DISPATCH produced a staged unit — an engineering artifact of transcription-pipeline
+granularity, not a content fact. Both reference rulebooks are 2-page books, and Phase 173's
+pipeline dispatched each as a single range, so every staged unit in both `seven` and
+`one-two-punch` carried the identical `rangeId`, making every staged span identical, overlapping
+every live span, and collapsing each game into ONE pair group regardless of what the staged
+content actually said. That destroys the pairing granularity decision 4 exists to provide and made
+decision 14b's line-level bar unmeasurable at the group level.
+
+**Fix:** `livePageSpan()` — the single function `pairSlices()` now calls for BOTH the live side and
+the staged side — no longer only scans anchored `^p.N,` citation headers; it scans every `p.N`
+occurrence anywhere in a slice's own text (a bare citation header, a `Derived (p.N):` /
+`Named-but-undefined (p.N):` / `Visual (p.N):` line, or an inline cross-reference like `(p.2)`
+inside a sentence). This is what makes the mechanism truly symmetric: the staged side derives its
+span from its own content exactly as the live side already did, and `rangeId` is retained on the
+staged-unit input record for traceability but is no longer read anywhere in `pairSlices()`.
+`parseRangeId()` had no caller left once the pairing path stopped using it, so it and its dedicated
+test were removed as dead code rather than left in place (project rule: no backward-compatibility
+shims).
+
+**Prove Before Fix — actual measured group counts, both games, before and after:**
+
+| Game | Before (rangeId-keyed) | After (content-keyed) |
+|---|---|---|
+| `seven` (3 live, 6 staged) | 1 paired group (all 9 files) | 1 paired group (all 9 files) |
+| `one-two-punch` (2 live, 6 staged) | 1 paired group (all 8 files, not previously tested) | 1 paired group (all 8 files) |
+
+**The group count did NOT change on these two real fixtures — reported plainly, not smoothed
+over.** Measuring the individual staged spans after the fix shows the mechanism IS now genuinely
+content-derived (five of `seven`'s six staged units resolve to a single page, one to the other; in
+`one-two-punch`, four of six resolve to a single page) — but in BOTH games, at least one staged
+unit's own prose genuinely bridges both pages: `seven`'s `01-about-and-setup.md` contains
+`Derived (p.1): ... the Solo Variant (p.2).`, a real forward-reference inside its own transcribed
+content; `one-two-punch`'s `01-round-structure.md` and `02-punch-examples-discard.md` are each
+explicit in their own headings/notes ("continues on p.2" / "begun on p.1") about spanning the
+page break. Because a page-overlap union-find merges any two spans that share a page, these
+genuinely cross-page staged units bridge the p.1 cluster and the p.2 cluster back into one
+connected component in both games — a real property of the transcribed content, not a defect in
+`pairSlices()`.
+
+The diagnosis (rangeId coupling pairing granularity to dispatch granularity, an unrelated
+engineering decision) was correct and the fix was necessary for correctness and traceability
+regardless: had either reference game been dispatched as two ranges instead of one, the pre-fix
+code would have produced a **wrong** group split keyed to dispatch boundaries rather than content;
+that risk is now gone. But on THESE two specific fixtures, fixing it does not itself yield finer
+groups, because the real transcribed content — not the dispatch/ledger — is what bridges the pages.
+A new test, `pairing-3c`, proves the mechanism itself is capable of splitting into two groups on
+non-bridging content (hand-built, two single-page spans on each side), isolating that the
+one-group-per-game outcome on the real fixtures is a fact about this specific transcribed content,
+not a `pairSlices()` limitation. `pairing-3` and `pairing-3b` replace the superseded rangeId-keyed
+version, asserting the real measured per-unit spans and the real measured group count directly,
+including with deliberately wrong/absent `rangeId` values on every staged unit to prove the
+grouping is now unaffected by whatever `rangeId` says.
+
+**Files modified:** `src/cli/commands/verify-classify.ts` (`livePageSpan()` broadened; `pairSlices()`
+now calls it for both sides; `parseRangeId()` removed), `src/cli/commands/verify-classify.test.ts`
+(`pairing-3` rewritten, `pairing-3b`/`pairing-3c` added, `parseRangeId` test removed, `pairing-7`
+retitled to reflect that `rangeId` is now irrelevant to its outcome).
+
+**Verification:** `npx vitest run src/cli/commands/verify-classify.test.ts` — 24/24 passed.
+`npm test` — 3648/3648 passed (full suite; 3647 baseline − 1 removed `parseRangeId` test + 2 new
+pairing tests = 3648, no regression). `npx tsc --noEmit -p .` — clean (only the pre-existing,
+unrelated `docs/seed-to-state.test.ts` rootDir diagnostic).
+
 ## Self-Check: PASSED
 
 - FOUND: `src/cli/commands/verify-classify.ts`
