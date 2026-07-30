@@ -465,10 +465,24 @@ decision 4 the reasoning (not just the label) must be recorded.
 
 **If empty:** not applicable — see table above.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three were resolved before task planning. The original text is retained as the reasoning trail
+> that produced each resolution; the `RESOLVED` line under each is authoritative.
 
 1. **Does the Repair Loop Bound reset per verify-episode, or is it a per-chunk lifetime cap shared
    with the original build?**
+
+   **RESOLVED — per-verify-episode.** Surfaced to the user at the post-research gate exactly as this
+   question recommended, and decided by them; recorded as `176-CONTEXT.md` decision 17. The bound is a
+   LOOP GUARD (stop audit→repair spinning inside one session), not a lifetime quota — a chunk audited
+   3 times during its build and now re-checked against a CHANGED rulebook is a new question. Under the
+   lifetime reading, 4 of 12 stale chunks would get zero lens dispatches and that fraction would grow
+   as chunks mature, making CHECK-02 permanently unavailable to the best-audited chunks. Two
+   constraints attach: round entries stay append-only across the chunk's whole life (never renumbered
+   over build rounds), and the episode boundary must be legible in CHUNK.md. This question's
+   contingency advice still applies in spirit — `176-06` requires at least one already-at-3-rounds
+   chunk in the lens subset, so the collision case is demonstrated rather than avoided.
    - What we know: 4 of 12 real stale chunks across both games already carry exactly 3 recorded
      `### Audit Round` entries from their original build (`best-seven-selection`, `table-and-draw`,
      `block`, `jab` — confirmed by direct grep of both games' real CHUNK.md files this pass).
@@ -495,6 +509,14 @@ decision 4 the reasoning (not just the label) must be recorded.
      its governing classification record by `pairId`, or whether the lens's own read of the staged
      slice is sufficient (likely sufficient, per the templates' actual parameter list).
 
+   **RESOLVED — no join needed for the lens.** Confirmed at plan time: the three lens templates take
+   only `{gameName}`, `{slug}`, `{slicePaths}`, `{codeFilePaths}`, `{visibilityDeclarationText}`, and
+   the staged slice already contains the new text, so pointing the lens at the staged slice is
+   sufficient. Decision 6's verbatim reuse therefore holds with no template change. The related
+   `lineFindings[]` multi-delta persistence gap carried in from Phase 175 is NOT dismissed by this —
+   it is wired into `176-02`'s input contract and required in `176-06`'s "What is still unproven"
+   section rather than dropped.
+
 3. **Does the round-3 user-triage step (already defined in `build/repair.md`) need any wording
    adjustment for a verify-context user prompt** (e.g. referencing "this chunk was already verified"
    rather than assuming a mid-build chunk)?
@@ -507,6 +529,13 @@ decision 4 the reasoning (not just the label) must be recorded.
    - Recommendation: Lean toward citing unchanged per decision 8's spirit; add framing only in the
      surrounding orchestration file if the triage prompt is confirmed to read confusingly in a
      verify context during actual proof dispatch.
+
+   **RESOLVED — cited unchanged.** Per decision 8, `build/repair.md`'s triage is cited, not forked or
+   reworded; any verify-context framing lives in the surrounding orchestration file, never in the
+   triage prompt itself. This keeps the drift guard in `176-04` meaningful: a reworded triage prompt
+   would be indistinguishable from a fork. If real proof dispatch shows the triage reads confusingly
+   in a verify context, that is a finding to REPORT in `176-PROOF.md`, not a licence to edit the
+   shared file mid-phase.
 
 ## Environment Availability
 
