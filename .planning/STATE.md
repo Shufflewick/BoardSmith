@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 176-02-PLAN.md — CHECK-02's mechanics: verify-repair.ts's selectStaleChunks (decision 5, stale===true only) and resolveStagedSlicePaths (a stale chunk's pairIds resolved to RUN.md's own ClassificationRecord.stagedSlices, proven against the real committed 175 fixture's genuine 3-live-to-6-staged m:n fan-out on seven, scope-limited on an unmatched pairId, never a live rulebook/ fallback); parseAuditRounds/planVerifyEpisodeRound/resolveVerifyEpisodeNumber/appendAuditRoundHeading/writeAppendedAuditRound giving each verify pass its own fresh 3-round budget (decision 17), append-only and legible in CHUNK.md, proven against all three real Audit Round 3 heading precedents (table-and-draw/block/jab) and writing exclusively through atomicWriteFile; recomputeRepairGatePostRepair re-deriving computeRepairGate from POST-repair drift state via drift-check.ts, with a source-regex proof its parameter type carries no driftState/gate field (Pitfall 1 — the pre-repair snapshot is structurally unpassable), proven with a real two-commit git fixture's clean-to-drifted flip. npm test 3875/3875 green (baseline 3851 + 24 new tests), zero regressions. CHECK-02 intentionally NOT marked complete in REQUIREMENTS.md — ROADMAP.md's own plan breakdown assigns CHECK-02 to four plans (176-02 mechanics, 176-03 skill text, 176-04 routing/drift-guard proof, 176-06 live proof); this is 176-02 only. See .planning/phases/176-stale-chunk-repair/176-02-SUMMARY.md."
-last_updated: "2026-07-30T17:50:00Z"
+stopped_at: "Completed 176-03-PLAN.md — CHECK-01/CHECK-02 skill text, CLI registration, installer probes: verify/ruling-recheck.md (staged-only, absence-aware judgment contract, four verdicts, seven's Ruling 1 worked example) and verify/repair-dispatch.md (delegates build/audit.md's three lenses and build/repair.md's bounded loop BY REFERENCE only, per-verify-episode round budget, post-repair gate re-derivation/VERIFY-06 seam) both created; verify-ruling-recheck and verify-repair registered in cli.ts with --project/--run-id/--json, no bypass option; SHARED_LEAF_PROBES gained both files, a real scratch-dir install proves both ship under bs-shared/verify/. Added verifyRepairStatusCommand to verify-repair.ts (a Rule-2 deviation — 176-02 left no orchestrating command to register). npm test 3876/3876 green (baseline 3875 + 1 new test), zero regressions. CHECK-01/CHECK-02 still NOT marked complete in REQUIREMENTS.md — ROADMAP.md's plan breakdown assigns their live-proof/routing closure to 176-04/05/06. See .planning/phases/176-stale-chunk-repair/176-03-SUMMARY.md."
+last_updated: "2026-07-30T17:10:00Z"
 last_activity: 2026-07-30
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 47
-  completed_plans: 43
-  percent: 60
+  completed_plans: 44
+  percent: 61
 ---
 
 # Project State
@@ -21,14 +21,41 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 176 — stale-chunk-repair (in progress, 2/6 plans)
+**Current focus:** Phase 176 — stale-chunk-repair (in progress, 3/6 plans)
 
 ## Current Position
 
-Phase: 176 (Stale-Chunk Repair) — IN PROGRESS, 2/6 plans executed.
-Next: 176-03-PLAN.md — skill text: `verify/ruling-recheck.md` judgment contract +
-`verify/repair-dispatch.md` delegating to `build/audit.md`/`build/repair.md` by reference, CLI
-registration, installer probes.
+Phase: 176 (Stale-Chunk Repair) — IN PROGRESS, 3/6 plans executed.
+Next: 176-04-PLAN.md — `verify-game.md` full stale-claim sweep + repair routing, and the no-fork
+drift guards proven to fail when violated (CHECK-01, CHECK-02, wave 3).
+
+`176-03-PLAN.md` (2026-07-30) wrote CHECK-01's and CHECK-02's skill text and made both reachable
+from the real CLI surface. `verify/ruling-recheck.md`: a versioned-handshake
+(`BS-RULING-RECHECK-V1`) judgment contract mirroring `classification-subagent.md`'s shape —
+staged-only input (never live `rulebook/` slices), four verdicts
+(`still-needed`/`resolved-by-source`/`contradicted`/`undetermined`) with mandatory reasoning, and
+the absence-of-source trap worked through `seven`'s real Ruling 1 (a designer-supplied scoring
+table for a card absent from the rulebook PDF, the game's sole scoring authority for it), naming
+both plausible wrong answers and why each is catastrophic — no absence-phrase list, exactly as
+176-01's code contains no heuristic. `verify/repair-dispatch.md`: delegates `build/audit.md`'s
+three lens templates and `build/repair.md`'s bounded loop entirely BY REFERENCE
+(`${CLAUDE_SKILL_DIR}/../bs-shared/build/{audit,repair}.md`), naming all five substitution tokens
+and binding `{slicePaths}` to fresh staged paths (decision 9); states `## Interpretation` stays
+forbidden to every lens and is MORE important on a rules-stale chunk (decision 11); states the
+per-verify-episode round budget naming the four chunks already at 3 build-era rounds
+(`best-seven-selection`/`table-and-draw`/`block`/`jab`, decision 17); states the post-repair gate
+re-derivation / VERIFY-06 seam explicitly (decision 12). Grep-confirmed clean of the two lens
+marker phrases 176-04's drift guard will pin and of a verbatim copy of `build/repair.md`'s
+round-bound sentence as its own policy statement. Added `verifyRepairStatusCommand` to
+`verify-repair.ts` (a Rule-2 deviation, documented in `176-03-SUMMARY.md` — 176-02 left no
+orchestrating command to register) mirroring `verify-impact-status`'s read-only shape. Both
+commands registered in `cli.ts` with `--project`/`--run-id`/`--json`, no bypass option;
+`SHARED_LEAF_PROBES` gained both new files, a real scratch-dir install proves both ship under
+`bs-shared/verify/`. `npm test`: 3876/3876 green (baseline 3875 + 1 new test); `npx tsc --noEmit`:
+only the pre-existing permitted `docs/seed-to-state.test.ts` rootDir error. CHECK-01/CHECK-02
+still NOT marked complete in `REQUIREMENTS.md` — `ROADMAP.md`'s plan breakdown assigns their
+live-proof/routing closure to 176-04/05/06. See
+`.planning/phases/176-stale-chunk-repair/176-03-SUMMARY.md`.
 
 `176-02-PLAN.md` (2026-07-30) built CHECK-02's mechanical core in a new
 `src/cli/commands/verify-repair.ts`: `selectStaleChunks` filters `ImpactMapEntry[]` to
