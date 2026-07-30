@@ -42,6 +42,8 @@ const ALL_VERIFY_FILES = [
   'verify-game.md',
   'verify/source-resolution.md',
   'verify/staging-dispatch.md',
+  'verify/classification-dispatch.md',
+  'verify/classification-subagent.md',
 ];
 
 describe('verify-game.md — entry point shape (VERIFY-01)', () => {
@@ -71,12 +73,12 @@ describe('verify-game.md — entry point shape (VERIFY-01)', () => {
     expect(skill).toMatch(/does NOT rebuild the project/);
   });
 
-  it('has exactly four numbered steps, each tagged with a VERIFY requirement ID', () => {
+  it('has exactly five numbered steps, each tagged with a VERIFY requirement ID', () => {
     const skill = read('verify-game.md');
     const stepHeadings = skill.match(/^## Step \d+:.*$/gm) ?? [];
-    expect(stepHeadings.length).toBe(4);
+    expect(stepHeadings.length).toBe(5);
     for (const heading of stepHeadings) {
-      expect(heading).toMatch(/VERIFY-0[1278]/);
+      expect(heading).toMatch(/VERIFY-0[12378]/);
     }
   });
 
@@ -276,17 +278,7 @@ describe('VERIFY-07 structural enforcement — the dispatch is a pointer, not a 
   });
 });
 
-describe('Decision 16 — this phase classifies nothing (structural absence)', () => {
-  it('no verify file contains classification vocabulary in an instruction position', () => {
-    const FORBIDDEN_WORDS = [/\bcosmetic\b/i, /\bsharper\b/i, /\bcontradictory\b/i, /\bclassify\b/i];
-    for (const relPath of ALL_VERIFY_FILES) {
-      const text = stripComments(read(relPath));
-      for (const pattern of FORBIDDEN_WORDS) {
-        expect(text).not.toMatch(pattern);
-      }
-    }
-  });
-
+describe('Decision 16 — this phase never promotes a staged slice over a live one (structural absence)', () => {
   it('no verify file contains --apply, promote, or cutover (decision 8)', () => {
     const FORBIDDEN = ['--apply', 'promote', 'cutover'];
     for (const relPath of ALL_VERIFY_FILES) {
@@ -296,11 +288,158 @@ describe('Decision 16 — this phase classifies nothing (structural absence)', (
       }
     }
   });
+});
 
-  it('verify-game.md explicitly asserts no comparison, verdict, or cutover happens in this pass', () => {
+describe('verify-game.md — Step 3 classification routing (VERIFY-03)', () => {
+  it('has a Step naming classification, pointing at classification-dispatch.md', () => {
+    const skill = read('verify-game.md');
+    expect(skill).toMatch(/^## Step \d+: Classification/m);
+    expect(skill).toContain(
+      '${CLAUDE_SKILL_DIR}/../bs-shared/verify/classification-dispatch.md',
+    );
+  });
+
+  it('deletes the Phase 173 no-classification/no-comparison boundary statements', () => {
+    const skill = read('verify-game.md');
+    expect(skill).not.toContain('The pass ends here');
+    expect(skill).not.toContain('never compares the staged output');
+    expect(skill).not.toMatch(/no classification/);
+  });
+
+  it('states Close formats, never computes, the verdict report', () => {
     const skill = flat(read('verify-game.md'));
-    expect(skill).toMatch(/no comparison/);
-    expect(skill).toMatch(/no classification/);
-    expect(skill).toMatch(/no promotion of a staged slice over a live one/);
+    expect(skill).toMatch(/formatting\s*`verify-classify-status --json`|formatted, never computed/);
+  });
+});
+
+describe('classification-subagent.md — the one judgment contract', () => {
+  it('carries the BS-CLASSIFY-V1 token and a DISPATCH REJECTED block', () => {
+    const doc = read('verify/classification-subagent.md');
+    expect(doc).toContain('BS-CLASSIFY-V1');
+    expect(doc).toContain('DISPATCH REJECTED');
+    expect(doc).toMatch(/Read no slice|Do not read either slice|read either slice/i);
+  });
+
+  it('contains all three labels', () => {
+    const doc = read('verify/classification-subagent.md');
+    expect(doc).toMatch(/\bcosmetic\b/);
+    expect(doc).toMatch(/\bsharper\b/);
+    expect(doc).toMatch(/\bcontradictory\b/);
+  });
+
+  it('states the consequence-vs-wording decision test', () => {
+    const doc = flat(read('verify/classification-subagent.md'));
+    expect(doc).toMatch(/equivalence of CONSEQUENCE, not similarity of\s*WORDING/);
+  });
+
+  it('carries the RETURN field names', () => {
+    const doc = read('verify/classification-subagent.md');
+    for (const field of ['pairId', 'label', 'evidence', 'quotedPass1', 'quotedPass2', 'lineFindings']) {
+      expect(doc).toContain(field);
+    }
+  });
+
+  it('carries the dual-schema exclusion worked example, quoted from the real fixture', () => {
+    const doc = read('verify/classification-subagent.md');
+    expect(doc).toContain('Visual (p.N):');
+    expect(doc).toContain('Derived (p.N) — diagram description:');
+    expect(doc).toContain('Derived (p.N) — art:');
+    expect(doc).toContain(
+      'Derived (p.1) — diagram description: A layout diagram of the ring showing three dashed-outline areas in a row',
+    );
+  });
+
+  it('states the scope-limit sentence that it never computes staleness, with no other staleness vocabulary', () => {
+    const doc = read('verify/classification-subagent.md');
+    expect(doc).toContain('never computes staleness');
+    const staleOccurrences = (doc.match(/stale/gi) ?? []).length;
+    expect(staleOccurrences).toBe(1);
+  });
+});
+
+describe('classification-dispatch.md — pointer, not restatement (VERIFY-07)', () => {
+  it('points at classification-subagent.md rather than restating its contract', () => {
+    const doc = read('verify/classification-dispatch.md');
+    expect(doc).toContain(
+      '${CLAUDE_SKILL_DIR}/../bs-shared/verify/classification-subagent.md',
+    );
+  });
+
+  it('carries the BS-CLASSIFY-V1 token in the dispatch block', () => {
+    const doc = read('verify/classification-dispatch.md');
+    expect(doc).toContain('BS-CLASSIFY-V1');
+  });
+
+  it('invokes all three verify-classify-* commands', () => {
+    const doc = read('verify/classification-dispatch.md');
+    expect(doc).toContain('verify-classify-pairs');
+    expect(doc).toContain('verify-classify-status');
+    expect(doc).toContain('verify-classify-record');
+  });
+
+  it('no file under bs/verify/ other than classification-subagent.md carries its decision-procedure marker', () => {
+    // Mirrors the no-fork guard VERIFY-07's earlier test applies to the transcription contract —
+    // a fork of the classification contract's own body is exactly the copy-drift trap decision 15
+    // (of this phase) forbids.
+    const CONTRACT_BODY_MARKER = 'equivalence of CONSEQUENCE, not similarity of';
+    const verifyDir = join(__dirname, 'verify');
+    const files = readdirSync(verifyDir, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .map((e) => join(verifyDir, e.name));
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      if (file.endsWith('classification-subagent.md')) continue;
+      const text = flat(readFileSync(file, 'utf-8'));
+      expect(text).not.toContain(CONTRACT_BODY_MARKER);
+    }
+  });
+});
+
+describe('SC-4 — no skill file derives staleness in prose', () => {
+  it('no verify file states a staleness derivation rule', () => {
+    const FORBIDDEN = [/marks stale/i, /→\s*stale/i, /\bis stale\b/i, /\bnot stale\b/i];
+    for (const relPath of ALL_VERIFY_FILES) {
+      const text = stripComments(read(relPath));
+      for (const pattern of FORBIDDEN) {
+        expect(text).not.toMatch(pattern);
+      }
+    }
+  });
+});
+
+describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12b)', () => {
+  it('every marker declared in verify-classify.ts appears verbatim in classification-subagent.md', () => {
+    // Two representations exist for the same lexicon: a regex-source array in code, and its
+    // literal prefix forms quoted in skill prose. A divergence here would mean the classifier's
+    // code excludes a presentation form the prose never tells the subagent about, or vice versa.
+    const src = readFileSync(
+      join(__dirname, '../../commands/verify-classify.ts'),
+      'utf-8',
+    );
+    const decl = /(?:export\s+)?const\s+PRESENTATION_EXCLUSION_MARKERS\s*=\s*(?:Object\.freeze\(\s*)?\[/.exec(
+      src,
+    );
+    if (!decl) throw new Error('PRESENTATION_EXCLUSION_MARKERS declaration not found');
+    const open = decl.index + decl[0].length - 1;
+    const close = src.indexOf(']', open);
+    const arrayBody = src.slice(open + 1, close);
+    const markers = [...arrayBody.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(markers.length).toBeGreaterThan(0);
+
+    // Each regex-source marker names a literal prefix once its regex escaping is undone — assert
+    // that literal prefix appears verbatim in the contract's prose. The source string itself
+    // carries doubled backslashes (a regex-source string embedded in a TS string literal), so
+    // every backslash is stripped outright before re-inserting the one non-literal token (`\d+`,
+    // which collapses to `N` after backslash-stripping becomes `d+`).
+    const literalPrefixes = markers.map((source) =>
+      source
+        .replace(/\\/g, '')
+        .replace(/^\^/, '')
+        .replace(/d\+/g, 'N'),
+    );
+    const doc = read('verify/classification-subagent.md');
+    for (const literal of literalPrefixes) {
+      expect(doc).toContain(literal);
+    }
   });
 });

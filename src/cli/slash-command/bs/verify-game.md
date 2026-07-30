@@ -16,8 +16,8 @@ lock inline — see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all 
 re-transcription into a run-scoped, non-live directory, records each completed unit through the
 ledger CLI, and classifies each staged/live pair's rule delta. It never runs a build, never edits
 a chunk, and never writes a staged slice over a live one — comparison happens in Step 3, below, and
-even there the verdict is only ever recorded, never promoted. There is no flag or path anywhere in
-this skill that writes staged output into a live location.
+even there the verdict is only ever recorded, with no staged slice ever taking a live one's place.
+There is no flag or path anywhere in this skill that writes staged output into a live location.
 
 ## Invocation
 
@@ -108,7 +108,7 @@ pair classified, the pass closes:
 - Release the session lock: rewrite `Session Lock:` in `SKETCH.md` to exactly `none`, the same
   clean-close release the chunk-build lock already uses.
 
-This pass never promotes a staged slice over a live one, at this or any earlier step.
+There is no promotion of a staged slice over a live one, at this or any earlier step.
 
 ## Reference Files
 

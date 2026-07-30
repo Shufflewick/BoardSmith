@@ -91,4 +91,4 @@ When `boardsmith verify-classify-status --run-id <runId> --project <dir> --json`
 `pendingPairs` empty, this step is done and `verify-game.md` Step 3 (formerly the Close step) takes
 over. This phase records verdicts and nothing else: no marker is flipped in `CHUNK.md` or
 `SKETCH.md`, no repair loop is opened, no human adjudication gate is run (Phase 175's work), and no
-staged slice is ever promoted over a live one.
+staged slice ever takes a live one's place.

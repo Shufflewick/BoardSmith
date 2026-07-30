@@ -8,7 +8,8 @@ This contract lives in its own file for the same reason
 `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md` does: a paraphrase composed
 from memory silently drops the part that matters most. Here that part is the dual-schema
 exclusion rule below — omit it and every pre-Phase-170 diagram note on the live side gets read as
-a rule change. Do not accept a paraphrase of this file in place of the file.
+a rule change. A summary of this contract is not a substitute for reading it — read this file
+itself, in full, before classifying anything.
 
 ---
 
