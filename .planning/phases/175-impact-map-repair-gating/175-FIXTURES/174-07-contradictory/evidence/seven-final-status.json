@@ -1,0 +1,260 @@
+{
+  "runId": "2026-07-29T23-25-24Z",
+  "pendingPairs": [],
+  "classified": [
+    {
+      "kind": "classification",
+      "pairId": "pages-1-2",
+      "units": [
+        "01-about-and-setup",
+        "01-round",
+        "01-game-end-and-match",
+        "01-definitions",
+        "01-distribution-of-cards",
+        "02-solo-variant"
+      ],
+      "liveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/02-solo-variant.md"
+      ],
+      "stagedSlices": [
+        "01-about-and-setup.md",
+        "01-round.md",
+        "01-game-end-and-match.md",
+        "01-definitions.md",
+        "01-distribution-of-cards.md",
+        "02-solo-variant.md"
+      ],
+      "provenance": "unknown",
+      "ruleDelta": "sharper",
+      "stale": true,
+      "evidence": "Nearly all rule-bearing content agrees verbatim. One rule-bearing delta: pass 1 explicitly records the bonus point card's scoring effect as UNDEFINED in the text, while pass 2 asserts each bonus point card is worth +1 point. Compatible plus non-identical consequence = sharper. | Pass 1 quote: \"Named-but-undefined (p.1): bonus point cards (depicted as a black \"+1\" card; the text does not define its scoring effect beyond Game End's instruction to add bonus point cards to your score)\" | Pass 2 quote: \"Derived (p.1): Each bonus point card is worth +1 point, as printed on its face.\"",
+      "recordedAt": "2026-07-30T01:45:20.787Z",
+      "quotedPass1": "Named-but-undefined (p.1): bonus point cards (depicted as a black \"+1\" card; the text does not define its scoring effect beyond Game End's instruction to add bonus point cards to your score)",
+      "quotedPass2": "Derived (p.1): Each bonus point card is worth +1 point, as printed on its face."
+    }
+  ],
+  "warnings": [],
+  "summary": {
+    "pairs": 1,
+    "paired": 1,
+    "presentationOnly": 0,
+    "unpaired": 0,
+    "classified": 1,
+    "cosmetic": 0,
+    "sharper": 1,
+    "contradictory": 0,
+    "unclassified": 0,
+    "stale": 1,
+    "cosmeticPct": 0
+  },
+  "chunkVerdicts": [
+    {
+      "slug": "best-seven-selection",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "bonus-point-cards",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "discard",
+      "citedLiveSlices": [
+        "rulebook/00-visual-survey.md",
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/02-solo-variant.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "game-end-trigger",
+      "citedLiveSlices": [
+        "rulebook/00-visual-survey.md",
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/02-solo-variant.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "game-score-and-winner",
+      "citedLiveSlices": [
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/02-solo-variant.md"
+      ],
+      "pairIds": [],
+      "ruleDelta": "cosmetic",
+      "stale": false
+    },
+    {
+      "slug": "match-best-of-7",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/02-solo-variant.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "scoring-combo-sets-and-runs",
+      "citedLiveSlices": [
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [],
+      "ruleDelta": "cosmetic",
+      "stale": false
+    },
+    {
+      "slug": "scoring-declaration",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "scoring-engine-and-parity",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "scoring-one-color",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "scoring-run-of-7",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "scoring-run-of-7-one-color",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/02-solo-variant.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "scoring-set-5-plus-set-2",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "scoring-set-of-7",
+      "citedLiveSlices": [
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "simultaneous-round-loop",
+      "citedLiveSlices": [
+        "rulebook/00-visual-survey.md",
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    },
+    {
+      "slug": "table-and-draw",
+      "citedLiveSlices": [
+        "rulebook/00-visual-survey.md",
+        "rulebook/01-definitions-and-components.md",
+        "rulebook/01-overview-setup-and-play.md",
+        "rulebook/02-solo-variant.md",
+        "rulebook/INDEX.md"
+      ],
+      "pairIds": [
+        "pages-1-2"
+      ],
+      "ruleDelta": "sharper",
+      "stale": true
+    }
+  ]
+}

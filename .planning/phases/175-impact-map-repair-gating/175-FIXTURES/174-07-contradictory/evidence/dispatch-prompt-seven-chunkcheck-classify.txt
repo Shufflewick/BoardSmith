@@ -1,0 +1,8 @@
+BS-CLASSIFY-V1
+
+Read `.claude/skills/bs-shared/verify/classification-subagent.md` in full and follow it
+exactly.
+
+Pair id:      pages-1-2
+Live slices:  rulebook/01-definitions-and-components.md, rulebook/01-overview-setup-and-play.md, rulebook/02-solo-variant.md
+Staged slices: rulebook/.verify/2026-07-29T23-25-24Z/slices/01-about-and-setup.md, rulebook/.verify/2026-07-29T23-25-24Z/slices/01-round.md, rulebook/.verify/2026-07-29T23-25-24Z/slices/01-game-end-and-match.md, rulebook/.verify/2026-07-29T23-25-24Z/slices/01-definitions.md, rulebook/.verify/2026-07-29T23-25-24Z/slices/01-distribution-of-cards.md, rulebook/.verify/2026-07-29T23-25-24Z/slices/02-solo-variant.md

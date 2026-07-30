@@ -1,0 +1,7 @@
+BS-DISPATCH-V2
+
+Read `.claude/skills/bs-shared/ingest/transcription-subagent.md` in full and follow it exactly.
+
+Your page range: 1-2
+Rulebook path:   rulebook/source/rules.pdf
+Write slices to: rulebook/.verify/2026-07-30T01-31-49Z/slices

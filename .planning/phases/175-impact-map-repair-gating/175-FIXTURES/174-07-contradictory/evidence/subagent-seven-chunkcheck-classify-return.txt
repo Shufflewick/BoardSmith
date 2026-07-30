@@ -1,0 +1,63 @@
+Read all 9 slices in full. Comparison done line-by-line with presentation notes excluded on both schemas (`Visual (p.N):` on the staged side; no qualified `Derived — diagram description:`/`— art:` forms appear on the live side, so its unqualified `Derived (p.1):` lines were treated as rule-bearing and compared).
+
+```
+{
+  pairId: "pages-1-2",
+  label: "sharper",
+  evidence: "All directly quoted rulebook text matches between the two passes: About (1-7 players, ~7 minutes, ages 7+), Setup (Ways to Score card, face-down mess, draw 3), Round (draw 2 / discard 1, 7 discards, discards public, end at 10 cards), Game End (best hand of 7 plus bonus point cards even beyond the 7), Match End (7 games, highest cumulative total wins), Match Length (best of 3 / 7 / 10), Definitions (Hand 3->10, Set 2+ matching numbers, Run 3+ in numeric order), Distribution (1-7 in 4 colors x 4 copies + 7 bonus point cards), credits, and the full Solo Variant text. Both sides also agree on the 112 numbered cards derivation, the net +1 card/round -> 7 rounds structure, simultaneous play, and the out-of-scope Variant markers for Match Length and Solo Variant. Nearly every staged Derived line is an unpacking of text both passes quote identically (best-7 subset chosen by the player, cumulative-score match winner, 119-card total, player count 1-7 with solo on p.2, tiered solo goals, exactly 7 scoring hands) — cosmetic, since outcomes are identical in every game situation. One rule-bearing delta is not merely wording: pass 1 explicitly records the bonus point card's scoring effect as UNDEFINED in the text, while pass 2 asserts each bonus point card is worth +1 point. That changes scoring outcomes (a bonus card contributes a definite +1 rather than an unresolved value), and the two are compatible — pass 1 nowhere denies the value, it only declines to derive one from the printed '+1' face that both passes observe. Compatible plus non-identical consequence = sharper, which sets the pair's MAX-severity rollup. The one factual disagreement about artifact contents (Set example third-card colors: live 'a green 5, a red 5, and a purple 5' vs staged 'green 5, green 5, purple 5') carries no game consequence, because both passes agree color is not part of the Set condition and both depict a mixed-color example; cosmetic.",
+  quotedPass1: "Named-but-undefined (p.1): bonus point cards (depicted as a black \"+1\" card; the text does not define its scoring effect beyond Game End's instruction to add bonus point cards to your score)",
+  quotedPass2: "Derived (p.1): Each bonus point card is worth +1 point, as printed on its face.",
+  lineFindings: [
+    {
+      label: "sharper",
+      quotedPass1: "Named-but-undefined (p.1): bonus point cards (depicted as a black \"+1\" card; the text does not define its scoring effect beyond Game End's instruction to add bonus point cards to your score)",
+      quotedPass2: "Derived (p.1): Each bonus point card is worth +1 point, as printed on its face.",
+      note: "Pass 2 supplies a concrete scoring value (+1 each) for a component pass 1 recorded as having no defined scoring effect. Compatible — pass 1 observes the same printed '+1' face but declines to treat it as a rule — yet consequential for every final score that includes a bonus card. Only non-cosmetic delta in the pair; drives the rollup."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "Named-but-undefined (p.1): bonus point cards (referenced in Game End as adding to score; the +1 card appears in the Distribution of Cards diagram, but no scoring value is defined in the text)",
+      quotedPass2: "Named-but-undefined (p.1): scoring values for hands (\"scores their best hand of 7 cards\" — the per-hand point values live on the \"Ways to Score\" card, which is not reproduced in the rulebook)",
+      note: "Both passes flag missing scoring values; they attach the gap to different objects (bonus card value vs per-hand values) and pass 2 attributes the hand values to the un-reproduced Ways to Score card. No game situation resolves differently — the values are absent from the source either way."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "Derived (p.1): The Set example is illustrated by three card images side by side: a green 5, a red 5, and a purple 5.",
+      quotedPass2: "Set example (p.1): three cards showing the number 5 — green 5, green 5, purple 5.",
+      note: "Disagreement over the second example card's color (red vs green). Purely illustrative: both passes state color is not part of the Set condition and both show a mixed-color triple of 5s, so no game outcome differs. Worth noting as a transcription-fidelity discrepancy, not a rule delta."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+      quotedPass2: "Derived (p.1): Total deck size is 119 cards (112 numbered + 7 bonus point cards).",
+      note: "Identical component census; pass 2 additionally states the sum (119). Same cards in every game situation."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "\"Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score.\"",
+      quotedPass2: "Derived (p.1): Scoring uses a best 7-card subset of the 10-card final hand; the player chooses which 7 cards to score.",
+      note: "Pass 2 unpacks the shared quoted rule (\"best hand of 7\" from a 10-card hand implies a player-chosen subset). Entailed by text both passes quote verbatim; identical outcomes."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "Derived (p.2): The final challenge sentence ends \"in each game during the match in no particular order.\"",
+      quotedPass2: "And after you've conquered that, attempt to get one of each of the 7 scoring hands in each game\nduring the match.",
+      note: "Pass 1 claims the third solo goal's sentence carries a trailing \"in no particular order\"; pass 2's verbatim quote ends at \"during the match.\" Neither reading imposes an ordering requirement on the 7 scoring hands (pass 2's own tiered-goal derivation states no order), so solo success is determined identically. Wording/fidelity difference only."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "Named-but-undefined (p.2): the 7 scoring hands (referenced as a solo goal; not enumerated or defined on pages 1-2)",
+      quotedPass2: "Derived (p.2): There are exactly 7 distinct scoring hands.",
+      note: "Both agree the count is 7 and that the hands are not enumerated on pp.1-2 (pass 2 repeats the Named-but-undefined marker). Pass 2's \"exactly 7 distinct\" adds no constraint beyond the count pass 1 already carries."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "Derived (p.1): Rounds are played simultaneously by all players, not in turn order.",
+      quotedPass2: "Derived (p.1): The round has a fixed two-step sequence: draw 2, then discard 1. All players act\nsimultaneously rather than in turn order.",
+      note: "Same simultaneity rule; pass 2 folds in the draw-then-discard ordering that pass 1 records separately (\"The round structure is draw 2 / discard 1\"). Identical sequence and outcomes."
+    }
+  ]
+}
+```
+
+**Verdict: `sharper`** — driven by the single bonus-point-card valuation line; every other rule-bearing delta across the six staged and three live slices is cosmetic.

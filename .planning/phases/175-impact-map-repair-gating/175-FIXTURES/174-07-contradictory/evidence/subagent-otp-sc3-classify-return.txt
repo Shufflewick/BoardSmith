@@ -1,0 +1,63 @@
+Both slice sets read in full. Presentation notes excluded on both schemas (live: `Derived (p.N) — diagram description:` / `— art:`; staged: `Visual (p.N):`).
+
+```
+{
+  pairId: "pages-1-2",
+  label: "contradictory",
+  evidence:
+    "Rule-bearing lines were compared line by line after excluding presentation notes on both schemas — the live side's `Derived (p.1) — diagram description:` / `Derived (p.2) — art:` lines and the staged side's `Visual (p.N):` lines were dropped identically, so the setup-diagram, Plan-diagram, Fight-card, Punch-example-strip and boxer-illustration descriptions were never compared against each other despite being written under different contracts. The two passes agree verbatim on setup steps 1–5, the three-phase round structure, all six action-card entries and their timings (Jab 1, Retreat 2, Advance 3, Block 4, Punch 5, Rest 6), the four Punch resolution bullets, the Rest reclaim/Guard-recovery text, the Fight-phase continuation, the Discard phase, both Punch examples, the End of Game knockout/draw rule, and all five Tips bullets. The single non-cosmetic delta is the FIGHT-phase resolution-order rule: pass 1 quotes the source as `lower timing ... resolve their action first`, pass 2 quotes it as `higher timing ... must resolve their action first`. As rule statements these cannot both be true of the same printed sentence, and taken at face value they invert resolution order in every non-tied exchange (e.g. Jab vs Retreat, Jab vs Punch, anything vs Rest) — reversed precedence over the same comparison, which the contract's second `contradictory` worked example matches exactly. Pass 2 does append a Derived reconciliation (`\"Higher timing\" resolves first, and the worked example fixes the direction unambiguously against the plain reading of the word — Jab (timing 1) resolves before Retreat (timing 2). The lower printed number acts first`) and both sides carry the identical Jab-before-Retreat worked example, so the two passes' *derived* order ladders coincide. That reconciliation is why the delta is not silently order-inverting downstream, but it does not make the pair cosmetic: one of the two verbatim quotes of the printed rule is a misreading, the rule-bearing line itself is inverted, and which word the source actually prints determines whether the derived ladder rests on the rule text or only on the example. Flagging as contradictory rather than sharper because neither reading constrains something the other left open — both assert a specific, opposite direction for the same comparison. Remaining line-level deltas are cosmetic: a credited name spelling, `next to your boxer` vs `in front of your boxer` in Plan, a truncated `to determine the order`, and `one player` vs `your player` in the simultaneous-Punch bullet (whose body, `the player punching from their corner must finish exhausting their Guard card (if able) before either player may resolve their Punch`, fixes the same outcome under either phrasing). One live rule-bearing line has no comparable staged counterpart — `Derived (p.2): Publisher logo reads \"ALRIGHT GAMES\"; a \"not for children under 3\" icon appears beside the copyright notice.` versus the staged side's `no under-14` reading of the same icon — but the staged reading sits on an excluded `Visual (p.2):` line, so there is nothing rule-bearing to compare it against and it carries no game consequence either way.",
+  quotedPass1:
+    "The player with the lower timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.",
+  quotedPass2:
+    "The player with the higher timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.",
+  lineFindings: [
+    {
+      label: "contradictory",
+      quotedPass1:
+        "The player with the lower timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.",
+      quotedPass2:
+        "The player with the higher timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.",
+      note:
+        "p.1, 2) FIGHT — resolution-order rule. lower-first vs higher-first is reversed precedence over the same comparison; read literally the two produce opposite resolution order in every untied exchange. Both sides carry the identical Jab-before-Retreat worked example, and pass 2 adds a Derived note asserting \"higher timing\" means higher priority so the lower printed numeral still acts first — so the derived ladders agree (Jab → Retreat → Advance → Block → Punch → Rest on both sides). The conflict is in the quoted rule text itself: exactly one of these is what the sheet prints, and repair needs to establish which."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "\"GAME ART Kalli Williams\"",
+      quotedPass2: "GAME ART Katt Williams",
+      note: "p.1 title-block credit. Non-rule metadata; no game situation resolves differently. Recorded as cosmetic per the consequence test, though the two passes read the printed surname differently."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "Choose any two action cards from your hand and place them in any order face-down next to your boxer.",
+      quotedPass2: "Choose any two action cards from your hand and place them in any order face-down in front of your boxer.",
+      note: "p.1, 1) PLAN. \"next to\" vs \"in front of\" your boxer; both sides then give the identical ordering rule (card closest to the boxer is the first action), so placement geometry has no further consequence."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "compare their timings to determine the order they are resolved",
+      quotedPass2: "compare their timings to determine the order",
+      note: "p.1, 2) FIGHT opening sentence. Pass 2 is shorter; \"the order\" and \"the order they are resolved\" denote the same thing in context."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "If both you and your opponent play a Punch for the same action while one player is in the center ring:",
+      quotedPass2: "If both you and your opponent play a Punch for the same action while your player is in the center ring:",
+      note: "p.2, PUNCH resolution bullet 4. Both boxers can never share the center ring, so the trigger set is the same set of positions either way, and the bullet body (\"the player punching from their corner must finish exhausting their Guard card (if able) before either player may resolve their Punch\") assigns the cost identically regardless of which player the clause names."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "Blue must first exhaust a Guard before both players Punch one another.",
+      quotedPass2: "Blue must first exhaust a Guard before players Punch one another.",
+      note: "p.2, PUNCH worked example. Dropped \"both\"; identical outcome."
+    },
+    {
+      label: "cosmetic",
+      quotedPass1: "pits two players against one another in the ring! Predict your opponent's moves to land the perfect punch!",
+      quotedPass2: "pits two players against one another in the ring. Predict your opponent's moves to land the perfect punch!",
+      note: "p.1 Introduction. Terminal punctuation only."
+    }
+  ]
+}
+```
+
+Overall verdict is `contradictory` by MAX-severity rollup: one contradictory line finding (the FIGHT resolution-order rule) among six cosmetic ones.

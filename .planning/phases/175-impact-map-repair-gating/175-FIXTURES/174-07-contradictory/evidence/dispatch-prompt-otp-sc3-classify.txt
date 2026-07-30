@@ -1,0 +1,8 @@
+BS-CLASSIFY-V1
+
+Read `.claude/skills/bs-shared/verify/classification-subagent.md` in full and follow it
+exactly.
+
+Pair id:      pages-1-2
+Live slices:  rulebook/01-setup-and-round-structure.md, rulebook/02-action-cards-and-resolution.md
+Staged slices: rulebook/.verify/2026-07-30T01-31-49Z/slices/01-overview-and-contents.md, rulebook/.verify/2026-07-30T01-31-49Z/slices/01-starting-a-new-game.md, rulebook/.verify/2026-07-30T01-31-49Z/slices/01-round-structure.md, rulebook/.verify/2026-07-30T01-31-49Z/slices/02-action-cards.md, rulebook/.verify/2026-07-30T01-31-49Z/slices/02-punch-examples.md, rulebook/.verify/2026-07-30T01-31-49Z/slices/02-end-of-game.md, rulebook/.verify/2026-07-30T01-31-49Z/slices/02-tips.md

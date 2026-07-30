@@ -1,0 +1,45 @@
+Pages 1-2 transcribed. Seven slices written.
+
+## ⚠️ First: a collision you need to know about
+
+The output directory **already contained slices for my exact page range**, written ~2 minutes before my dispatch (`01-overview-and-setup.md`, `01-starting-a-new-round.md`, `02-action-cards.md`). That prior run was **incomplete** — it stopped after Action Cards and never covered End of Game, Tips, or the colophon.
+
+I did not silently overwrite. I read all three, transcribed independently against the PDF, and kept mine because the prior set has **verbatim errors under citation prefixes** — the one thing a citation prefix promises:
+
+| Prior text | Actual source |
+|---|---|
+| "…one another in the ring**!**" | "…one another in the ring**.**" |
+| "place them in any order face-down **next to** your boxer" | "**in front of** your boxer" |
+| "determine the order **of play**" | "determine the order" |
+| "pushed back into their corner" | "pushed back into their **own** corner" |
+| "while **one player** is in the center ring" | "while **your player** is in the center ring" *(source's own odd wording — preserved)* |
+| "exhaust a **Guard card** before **both players** Punch" | "exhaust a **Guard** before **players** Punch" |
+
+The two non-overwritten stale files are moved to `slices/superseded/` — non-destructive, and out of a `slices/*.md` glob. Delete them once you've confirmed.
+
+## Returns
+
+**7 sections.** Full structured returns are in the slices; condensed here:
+
+| slicePath | Covers |
+|---|---|
+| `01-overview-and-contents.md` | Cover, credits, flavor, intro, contents, win condition |
+| `01-starting-a-new-game.md` | Setup steps 1-5, ring zones, asymmetric start |
+| `01-round-structure.md` | Plan / Fight / Discard (spans p.1→p.2 seam) |
+| `02-action-cards.md` | All six actions, timings 1-6 |
+| `02-punch-examples.md` | Two Guard-state worked examples |
+| `02-end-of-game.md` | Knockout, draw, colophon |
+| `02-tips.md` | Five tips — four carry rules found nowhere else |
+
+**Two findings worth surfacing to the designer:**
+
+1. **"Higher timing" is inverted from its plain reading.** The rule says the higher timing resolves first, but the source's own worked example resolves Jab (1) before Retreat (2). Lower numeral = acts first. I flagged this as `Derived` in two slices rather than "correcting" the quote.
+2. **Tips is load-bearing, not advice.** Bullets 2-5 are the only statements of: an unpayable Punch is legal-but-inert, costs are evaluated at resolution time (not plan time), timing doesn't constrain placement, and Block is slot-scoped. A downstream chunk that treats Tips as flavor will lose four rules.
+
+**openGaps[] — one:**
+`Named-but-undefined (p.1): per-player Action Card composition` — 16 total, "take all cards of your color," but per-card counts are never stated. Only Rest is pinned (2 each, via the Tips bullet). Card counts for Jab/Retreat/Advance/Block/Punch are unrecoverable from pages 1-2 and may not exist anywhere in the rulebook.
+
+**edition:** not returned — the dispatch did not state I own the opening pages, and the contract gates that field on being told. For what it's worth, the colophon reads © 2020 Alright Games with no edition or printing stated.
+
+**nextStep:**
+> `BEFORE ANY STEP 3 ACTION: re-read Step 3 of ${CLAUDE_SKILL_DIR}/SKILL.md as an actual file read. Do not proceed from memory. Step 3 delegates the archive and rulebook/INDEX.md to a synthesis subagent; writing INDEX.md directly is the known failure.`
