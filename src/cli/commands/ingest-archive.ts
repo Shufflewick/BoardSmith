@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import chalk from 'chalk';
+import { DERIVED_LINE_RE } from './derived-line-pattern.js';
 
 /**
  * `boardsmith ingest-archive <rulebook>` — the deterministic half of ingest Step 3.
@@ -342,6 +343,20 @@ export const PRESENTATION_LEXICON = Object.freeze([
  *
  * Lines that need human judgment are left alone and reported, not guessed at.
  */
+/**
+ * The relabeller's citation-body group, derived from the shared `DERIVED_LINE_RE`
+ * (`derived-line-pattern.ts`, also consumed by `verify-derive-recheck.ts`) rather than a second
+ * hand-spelled literal (177-08, closing WR-01) — two modules disagreeing on what a `Derived` line
+ * IS is the drift class this milestone keeps closing. `DERIVED_LINE_RE.source` is
+ * `^Derived \(p\.[^)]*\)`; stripping the leading `^Derived ` leaves exactly the citation-body
+ * pattern (`\(p\.[^)]*\)`), which is captured here so a multi-page citation
+ * (`Derived (p.1, continues on p.2):`) is recognized identically by both modules.
+ */
+const DERIVED_CITATION_BODY_SOURCE = DERIVED_LINE_RE.source.replace(/^\^Derived /, '');
+const RELABEL_DERIVED_LINE_RE = new RegExp(
+  `^(\\s*)Derived (${DERIVED_CITATION_BODY_SOURCE}):(.*)$`,
+);
+
 export async function ingestRelabelCommand(
   options: { project?: string; json?: boolean; dryRun?: boolean; quiet?: boolean } = {},
 ): Promise<{ relabelled: number; changes: Array<{ file: string; line: number; matched: string }> }> {
@@ -367,7 +382,7 @@ export async function ingestRelabelCommand(
     let touched = false;
 
     for (let i = 0; i < lines.length; i++) {
-      const m = /^(\s*)Derived (\(p\.[^)]*\)):(.*)$/.exec(lines[i]);
+      const m = RELABEL_DERIVED_LINE_RE.exec(lines[i]);
       if (!m) continue;
       const hit = lexicon.exec(m[3]);
       if (!hit) continue;

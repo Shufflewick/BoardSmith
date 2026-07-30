@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { isPresentationLine } from './verify-classify.js';
 import { atomicWriteFile } from './verify-run.js';
+import { DERIVED_LINE_RE } from './derived-line-pattern.js';
 
 /**
  * `verify-derive-recheck.ts` — CHECK-04's mechanical core (177-CONTEXT.md decision 2/5): the
@@ -23,6 +24,18 @@ import { atomicWriteFile } from './verify-run.js';
  * re-derivation that has seen the original is not a second opinion — it is a confirmation, and it
  * would report high agreement whether or not the original derivation was sound. Independence must
  * be structural: the original line is not in the dispatch payload at all.
+ *
+ * INDEPENDENCE IS DECORATION-INDEPENDENT AND BACKSTOPPED (177-08, closing GAP 2/CR-01): the
+ * `^`-anchored trimmed-line matching this module originally used only stripped a `Derived`/
+ * `Visual`/`Named-but-undefined` line when it was line-initial after trimming — an ordinary
+ * blockquote (`> Derived (p.1): ...`) or list decoration (`- Derived (p.1): ...`) defeated it,
+ * leaking the line into the blind payload AND silently dropping it from enumeration. `annotationBody`
+ * is now the single decoration-normalization site both `quoteLinesOnly` and `enumerateDerivedLines`
+ * route through before every prefix test, so the two can never diverge on what counts as decoration.
+ * That alone is still a (wider) deny-list, so `buildBlindDerivePayload` additionally backstops at
+ * the construction site: it throws on any assembled string matching an annotation family,
+ * independent of which prefix regex missed it. A decoration form nobody anticipated fails loudly
+ * instead of leaking — that is what makes the guarantee structural rather than incidental.
  *
  * This module reads the LIVE `rulebook/*.md` tree directly, never a staged `.verify/<runId>/`
  * tree (177-CONTEXT.md decision 12; 177-RESEARCH.md Pitfall 3) — `resolveFreshTranscription`
@@ -224,8 +237,35 @@ export async function readLiveSlices(
 // quoteLinesOnly — the genuinely new payload filter (177-RESEARCH.md Question 1)
 // -------------------------------------------------------------------------------------------
 
-const DERIVED_LINE_RE = /^Derived \(p\.\d+\)/i;
-const VISUAL_LINE_RE = /^Visual \(p\.\d+\)/i;
+/**
+ * Leading blockquote markers, list bullets, and ordered-list markers, repeatable (a line can be
+ * both quoted AND bulleted, e.g. `> - Derived (p.1): ...`) — stripped before every prefix test.
+ * This is the ONE decoration-normalization site (`annotationBody`, immediately below); no caller
+ * re-derives its own trim/strip logic.
+ */
+const LINE_DECORATION_RE = /^(?:[>\-*+]\s*|\d+\.\s+)*/;
+
+/**
+ * Trims `line` and strips any leading markdown decoration (blockquote markers, list bullets,
+ * ordered-list markers), returning the annotation-testable body. `quoteLinesOnly` and
+ * `enumerateDerivedLines` both route through this single function before testing any of the three
+ * prefix regexes below, so the two can never diverge on what counts as decoration (177-08,
+ * closing CR-01). Not applied to anything else — a directly-quoted sentence's own leading `"` is
+ * never decoration and must never be stripped.
+ */
+export function annotationBody(line: string): string {
+  return line.trim().replace(LINE_DECORATION_RE, '');
+}
+
+/**
+ * Citation body widened to `\(p\.[^)]*\)` (WR-01) — matches `ingest-archive.ts`'s relabeller
+ * exactly, so a multi-page citation (`Derived (p.1, continues on p.2):`) is recognized identically
+ * by both modules. Defined in `derived-line-pattern.ts` (a dependency-free leaf module) and
+ * re-exported here so this module's own consumers, and any existing importer of `DERIVED_LINE_RE`
+ * from this file, keep working unchanged.
+ */
+export { DERIVED_LINE_RE };
+const VISUAL_LINE_RE = /^Visual \(p\.[^)]*\)/i;
 /**
  * A `Named-but-undefined` line is an ingest-time INFERENCE about undefined terminology, not
  * directly-quoted rulebook prose (177-RESEARCH.md's answer to Question 1 names it alongside
@@ -234,7 +274,10 @@ const VISUAL_LINE_RE = /^Visual \(p\.\d+\)/i;
  * leaving an inferential line in a payload whose entire purpose is "quote lines only" would
  * silently reintroduce the same anchoring risk decision 5 exists to prevent, one line at a time.
  */
-const NAMED_BUT_UNDEFINED_LINE_RE = /^Named-but-undefined \(p\.\d+\)/i;
+const NAMED_BUT_UNDEFINED_LINE_RE = /^Named-but-undefined \(p\.[^)]*\)/i;
+
+/** All three annotation families, for the payload-level construction-site backstop below. */
+const ANY_ANNOTATION_LINE_RE = /Derived \(p\.|Visual \(p\.|Named-but-undefined \(p\./i;
 
 /**
  * Selects ONLY directly-quoted rulebook content and its citation headers from `sliceText` — the
@@ -257,14 +300,15 @@ export function quoteLinesOnly(sliceText: string): string[] {
   return sliceText
     .split('\n')
     .map((line) => line.trim())
-    .filter(
-      (line) =>
-        line.length > 0 &&
-        !line.startsWith('#') &&
-        !DERIVED_LINE_RE.test(line) &&
-        !VISUAL_LINE_RE.test(line) &&
-        !NAMED_BUT_UNDEFINED_LINE_RE.test(line),
-    );
+    .filter((line) => {
+      if (line.length === 0 || line.startsWith('#')) return false;
+      const body = annotationBody(line);
+      return (
+        !DERIVED_LINE_RE.test(body) &&
+        !VISUAL_LINE_RE.test(body) &&
+        !NAMED_BUT_UNDEFINED_LINE_RE.test(body)
+      );
+    });
 }
 
 // -------------------------------------------------------------------------------------------
@@ -308,13 +352,14 @@ export function enumerateDerivedLines(
     const rawLines = slice.text.split('\n');
     rawLines.forEach((rawLine, index) => {
       const line = rawLine.trim();
-      if (!DERIVED_LINE_RE.test(line)) return;
+      const body = annotationBody(line);
+      if (!DERIVED_LINE_RE.test(body)) return;
       const entry: DerivedLineEntry = {
         slicePath: slice.path,
         lineNumber: index + 1,
         text: line,
       };
-      if (isPresentationLine(line)) {
+      if (isPresentationLine(body)) {
         excluded.push(entry);
       } else {
         candidates.push(entry);
@@ -345,13 +390,20 @@ export const BLIND_DERIVE_TOKEN = 'BS-DERIVE-V1';
  * sound. This function is where that independence guarantee is either upheld or broken; it is
  * upheld here by construction, not by instruction, because `entry.text` is structurally absent
  * from the assembled string.
+ *
+ * CONSTRUCTION-SITE BACKSTOP (177-08, closing CR-01): after assembly, the payload is tested
+ * against `ANY_ANNOTATION_LINE_RE` and THROWS — never silently emits — if it still matches. This
+ * check is independent of `DERIVED_LINE_RE`/`VISUAL_LINE_RE`/`NAMED_BUT_UNDEFINED_LINE_RE`/
+ * `annotationBody`: it does not care WHY a line leaked, only THAT one did. The prefix regexes can
+ * still miss a decoration form nobody anticipated; this backstop is the reason a miss fails loudly
+ * at the one construction site rather than leaking into a dispatched prompt.
  */
 export function buildBlindDerivePayload(
   slice: { path: string; text: string },
   entry: DerivedLineEntry,
 ): string {
   const quotes = quoteLinesOnly(slice.text);
-  return [
+  const payload = [
     BLIND_DERIVE_TOKEN,
     `Slice: ${slice.path}`,
     `Target line: ${entry.slicePath}:${entry.lineNumber}`,
@@ -359,6 +411,18 @@ export function buildBlindDerivePayload(
     'line from this slice, or any other slice, is included below or anywhere in this prompt:',
     ...quotes,
   ].join('\n');
+
+  if (ANY_ANNOTATION_LINE_RE.test(payload)) {
+    throw new Error(
+      `buildBlindDerivePayload assembled a payload for ${entry.slicePath}:${entry.lineNumber} ` +
+        `that still matches an annotation family (Derived (p./Visual (p./Named-but-undefined (p.).\n` +
+        `The payload construction site, not the prompt text, is where independence is upheld — ` +
+        `quoteLinesOnly()/annotationBody() missed a decoration form. Fix the strip filter; never ` +
+        `relax this check to let the payload through.`,
+    );
+  }
+
+  return payload;
 }
 
 // -------------------------------------------------------------------------------------------
