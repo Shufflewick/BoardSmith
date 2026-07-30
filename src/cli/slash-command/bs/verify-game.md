@@ -15,7 +15,7 @@ lock inline — see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all 
 **This skill does NOT rebuild the project.** It reads the archived rulebook, stages a fresh
 re-transcription into a run-scoped, non-live directory, records each completed unit through the
 ledger CLI, and classifies each staged/live pair's rule delta. It never runs a build, never edits
-a chunk, and never writes a staged slice over a live one — comparison happens in Step 4, below, and
+a chunk, and never writes a staged slice over a live one — comparison happens in Step 3, below, and
 even there the verdict is only ever recorded, never promoted. There is no flag or path anywhere in
 this skill that writes staged output into a live location.
 
@@ -61,7 +61,7 @@ vice versa.
 A lock naming the run being resumed (the same `run-id`) is refreshed and continued — the normal
 resume path. Any other live, non-stale lock warns the user instead of silently proceeding. A lock
 older than 24 hours is reported as stale and the user confirms clearing it before this session
-takes it. A clean close (Step 5) releases the line to exactly `none`.
+takes it. A clean close (Step 4) releases the line to exactly `none`.
 
 ## Step 1: Source Resolution (VERIFY-01)
 
@@ -82,7 +82,7 @@ unit is dispatched to the shared transcription-subagent contract with its output
 the staging path, and each completed unit is recorded via `verify-run-record` — never by trusting
 what files exist on disk.
 
-## Step 4: Classification (VERIFY-03, VERIFY-07)
+## Step 3: Classification (VERIFY-03, VERIFY-07)
 
 Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/classification-dispatch.md` for the full pair
 enumeration, ledger-driven resume, per-pair subagent dispatch, and verdict recording sequence. In
@@ -93,7 +93,7 @@ legitimately read), and each returned verdict is recorded via `verify-classify-r
 the orchestrator opening a slice itself. This step records verdicts only: it flips no staleness
 marker anywhere and opens no repair loop (that is Phase 175's job).
 
-## Step 5: Close (VERIFY-02)
+## Step 4: Close (VERIFY-02)
 
 When `verify-run-status` reports every unit recorded and `verify-classify-status` reports every
 pair classified, the pass closes:
