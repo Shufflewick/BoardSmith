@@ -1,8 +1,18 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { promises as fs, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { DERIVE_VERDICTS, createDeriveVerdictRecord } from './verify-derive-recheck.js';
+import {
+  DERIVE_VERDICTS,
+  BLIND_DERIVE_TOKEN,
+  createDeriveVerdictRecord,
+  readLiveSlices,
+  quoteLinesOnly,
+  enumerateDerivedLines,
+  buildBlindDerivePayload,
+  type DerivedLineEntry,
+} from './verify-derive-recheck.js';
 
 /**
  * `verify-derive-recheck.ts` is CHECK-04's mechanical core (177-CONTEXT.md decision 2/5). Every
@@ -12,6 +22,36 @@ import { DERIVE_VERDICTS, createDeriveVerdictRecord } from './verify-derive-rech
  */
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const FIXTURES_ROOT = join(
+  __dirname,
+  '../../../.planning/phases/174-verify-classifier/174-FIXTURES',
+);
+
+async function readFixture(relPath: string): Promise<string> {
+  return fs.readFile(join(FIXTURES_ROOT, relPath), 'utf-8');
+}
+
+/** The real rule-bearing live slice files for each pinned reference game (174-FIXTURES). */
+const GAME_FILES: Record<string, string[]> = {
+  seven: ['01-definitions-and-components.md', '01-overview-setup-and-play.md', '02-solo-variant.md'],
+  'one-two-punch': ['01-setup-and-round-structure.md', '02-action-cards-and-resolution.md'],
+};
+
+async function loadGameSlices(game: string): Promise<{ path: string; text: string }[]> {
+  return Promise.all(
+    GAME_FILES[game].map(async (name) => ({
+      path: `rulebook/${name}`,
+      text: await readFixture(`${game}/live/${name}`),
+    })),
+  );
+}
+
+/** Strips `/* *\/` block comments and `//` line comments so a source assertion never
+ * false-positives on this module's own doc comments (176-01's established technique). */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
 
 // ===========================================================================================
 // Task 1 — DERIVE_VERDICTS and the single record-construction choke point
@@ -126,5 +166,171 @@ describe('createDeriveVerdictRecord', () => {
       expect(src).not.toContain(marker);
     }
     expect(src).not.toMatch(/RULE_BEARING(?:NESS)?_(?:KEYWORDS|PHRASES|MARKERS)/);
+  });
+});
+
+// ===========================================================================================
+// Task 2 — quoteLinesOnly, buildBlindDerivePayload, and live-slice enumeration
+// ===========================================================================================
+
+describe('readLiveSlices', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-'));
+    await fs.mkdir(join(dir, 'rulebook'));
+    await fs.writeFile(join(dir, 'rulebook', 'INDEX.md'), '# index');
+    await fs.writeFile(join(dir, 'rulebook', '00-visual-survey.md'), '# visual survey');
+    await fs.writeFile(join(dir, 'rulebook', '01-setup.md'), 'p.1, Setup:\n"Deal 7 cards."');
+    await fs.writeFile(join(dir, 'rulebook', '02-play.md'), 'p.2, Play:\n"Draw a card."');
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('excludes INDEX.md and 00-visual-survey.md, reading the two real rule slices', async () => {
+    const slices = await readLiveSlices(dir);
+    const paths = slices.map((s) => s.path).sort();
+    expect(paths).toEqual(['rulebook/01-setup.md', 'rulebook/02-play.md']);
+  });
+
+  it('throws a single actionable line when the project has no rulebook/ directory', async () => {
+    const empty = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-empty-'));
+    try {
+      await expect(readLiveSlices(empty)).rejects.toThrow(/No rulebook\/ directory/);
+    } finally {
+      await fs.rm(empty, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('quoteLinesOnly', () => {
+  it('retains bare citation headers and quoted rulebook prose beneath them', () => {
+    const quotes = quoteLinesOnly('p.1, Distribution of Cards:\n"There are 112 cards total."');
+    expect(quotes).toEqual(['p.1, Distribution of Cards:', '"There are 112 cards total."']);
+  });
+
+  it('strips Visual (p. lines entirely (visual)', () => {
+    const synthetic = [
+      'p.3, Example:',
+      '"Real quoted rulebook sentence."',
+      'Visual (p.3): A diagram showing card layout.',
+      'Derived (p.3): An inference line.',
+    ].join('\n');
+    const quotes = quoteLinesOnly(synthetic);
+    expect(quotes).toContain('p.3, Example:');
+    expect(quotes).toContain('"Real quoted rulebook sentence."');
+    expect(quotes.some((l) => l.startsWith('Visual (p.'))).toBe(false);
+    expect(quotes.some((l) => l.startsWith('Derived (p.'))).toBe(false);
+  });
+
+  it('over every committed live slice in both games, zero lines start with Derived (p. or Visual (p.', async () => {
+    for (const game of Object.keys(GAME_FILES)) {
+      const slices = await loadGameSlices(game);
+      for (const slice of slices) {
+        const quotes = quoteLinesOnly(slice.text);
+        expect(quotes.filter((l) => l.startsWith('Derived (p.'))).toHaveLength(0);
+        expect(quotes.filter((l) => l.startsWith('Visual (p.'))).toHaveLength(0);
+      }
+    }
+  });
+
+  it('never returns empty on a real slice — not so aggressive it strips everything', async () => {
+    for (const game of Object.keys(GAME_FILES)) {
+      const slices = await loadGameSlices(game);
+      for (const slice of slices) {
+        expect(quoteLinesOnly(slice.text).length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('enumerateDerivedLines', () => {
+  it('yields exactly 10 total Derived lines for seven and 12 for one-two-punch (22 total)', async () => {
+    const sevenSlices = await loadGameSlices('seven');
+    const otpSlices = await loadGameSlices('one-two-punch');
+
+    const sevenResult = enumerateDerivedLines(sevenSlices);
+    const otpResult = enumerateDerivedLines(otpSlices);
+
+    const sevenTotal = sevenResult.candidates.length + sevenResult.excluded.length;
+    const otpTotal = otpResult.candidates.length + otpResult.excluded.length;
+
+    expect(sevenTotal).toBe(10);
+    expect(otpTotal).toBe(12);
+    expect(sevenTotal + otpTotal).toBe(22);
+  });
+
+  it('never treats a Visual (p. line as a Derived line (visual)', () => {
+    const slices = [{ path: 'rulebook/synthetic.md', text: 'Visual (p.5): some art description.' }];
+    const result = enumerateDerivedLines(slices);
+    expect(result.candidates).toHaveLength(0);
+    expect(result.excluded).toHaveLength(0);
+  });
+
+  it('records 1-based line numbers and verbatim text for a real candidate', async () => {
+    const slices = await loadGameSlices('seven');
+    const result = enumerateDerivedLines(slices);
+    const entry = [...result.candidates, ...result.excluded][0];
+    expect(entry.lineNumber).toBeGreaterThan(0);
+    expect(entry.text.startsWith('Derived (p.')).toBe(true);
+  });
+});
+
+describe('buildBlindDerivePayload', () => {
+  it('carries the BS-DERIVE-V1 handshake token', () => {
+    const slice = { path: 'rulebook/01-x.md', text: 'p.1, X:\n"quoted."' };
+    const entry: DerivedLineEntry = { slicePath: slice.path, lineNumber: 3, text: 'Derived (p.1): x' };
+    const payload = buildBlindDerivePayload(slice, entry);
+    expect(payload).toContain(BLIND_DERIVE_TOKEN);
+  });
+
+  it('for every one of the 22 real Derived lines, contains zero Derived (p. and zero Visual (p. occurrences (blind)', async () => {
+    let checked = 0;
+    for (const game of Object.keys(GAME_FILES)) {
+      const slices = await loadGameSlices(game);
+      const sliceByPath = new Map(slices.map((s) => [s.path, s] as const));
+      const { candidates, excluded } = enumerateDerivedLines(slices);
+      for (const entry of [...candidates, ...excluded]) {
+        const slice = sliceByPath.get(entry.slicePath);
+        expect(slice).toBeDefined();
+        const payload = buildBlindDerivePayload(slice!, entry);
+        const derivedCount = (payload.match(/Derived \(p\./g) ?? []).length;
+        const visualCount = (payload.match(/Visual \(p\./g) ?? []).length;
+        expect(derivedCount).toBe(0);
+        expect(visualCount).toBe(0);
+        expect(payload).not.toContain(entry.text);
+        checked++;
+      }
+    }
+    expect(checked).toBe(22);
+  });
+
+  it('never leaks the entry own originalLine text into the payload', () => {
+    const slice = {
+      path: 'rulebook/01-x.md',
+      text: 'p.1, X:\n"A 112-card deck."\n\nDerived (p.1): 112 cards total.',
+    };
+    const entry: DerivedLineEntry = {
+      slicePath: slice.path,
+      lineNumber: 4,
+      text: 'Derived (p.1): 112 cards total.',
+    };
+    const payload = buildBlindDerivePayload(slice, entry);
+    expect(payload).not.toContain(entry.text);
+  });
+});
+
+describe('module source guarantees', () => {
+  it('never constructs a .verify/ staging path in code, and does not import resolveFreshTranscription (live)', () => {
+    const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
+    const codeOnly = stripComments(src);
+    expect(codeOnly).not.toContain('.verify');
+    const importLines = src
+      .split('\n')
+      .filter((l) => l.trim().startsWith('import'))
+      .join('\n');
+    expect(importLines).not.toContain('resolveFreshTranscription');
   });
 });
