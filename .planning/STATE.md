@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-04-PLAN.md — wrote CHECK-04's two judgment-subagent contracts. src/cli/slash-command/bs/verify/derive-recheck.md (BS-DERIVE-V1, blind derivation): dispatch-token validation block copying ruling-recheck.md's shape; states in one place that the subagent is NEVER given the Derived line under test, any other Derived line, or any Visual line — structural, not instructional, because buildBlindDerivePayload (177-02) is incapable of emitting the target line's own text; teaches not-rule-bearing and underivable via two real worked examples quoted byte-identical from 174-FIXTURES/seven/live/ (02-solo-variant.md's unqualified page-layout line; 01-definitions-and-components.md's deck-math line whose only support is itself a stripped Derived diagram-description line), no keyword/trigger-phrase list for either; RETURNs { rederivedValue, sourceQuotes } with explicitly no verdict field. src/cli/slash-command/bs/verify/derive-compare.md (BS-DERIVE-COMPARE-V1, comparison, distinct token — file contains zero occurrences of BS-DERIVE-V1): takes exactly two inputs (the original line verbatim, the blind subagent's already-recorded rederivedValue/sourceQuotes); states all four DERIVE_VERDICTS verdicts matching the code enum exactly; states the never-collapse rule for underivable/not-rule-bearing (never folded into agrees/disagrees) citing the milestone's existing first-class-blindness precedent; RETURN requires originalReading/rederivedReading byte-for-byte verbatim for a disagrees verdict (mirrors classification-subagent.md's quotedPass1/quotedPass2); carries the Context-Economics carve-out sentence citing 174-PROOF.md §3's precedent. SHARED_LEAF_PROBES gained both files; a real installer run into a temp dir confirms both land under .claude/skills/bs-shared/verify/, and deleting one proves a non-force reinstall detects the partial tree and repopulates exactly the missing leaf. verify.test.ts gained a dedicated describe block: token/DISPATCH-REJECTED pins, distinct-token assertion, never-given-list pin, RETURN-object-shape pin scoped to the fenced code block only (so derive-recheck.md's own explanatory 'NO verdict field' prose doesn't self-invalidate the guard), a cross-file DERIVE_VERDICTS lexicon pin read from verify-derive-recheck.ts at test time, fixture-verbatim worked-example pins asserted against the real fixture files, never-collapse-rule pin, and both scope-limit pins. npm test: 3946/3946 green (baseline 3931 + 15 new tests), zero regressions. npx tsc --noEmit clean except the pre-existing permitted docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN in REQUIREMENTS.md — this is plan 4 of 7; verify-game.md's skill-text wiring that actually dispatches these two contracts (177-05), the 22-line distribution prediction committed before measuring (177-06), and the live claude -p dispatch proof against both reference games (177-07) remain. See .planning/phases/177-derived-line-re-derivation/177-04-SUMMARY.md."
-last_updated: "2026-07-30T22:33:00Z"
-last_activity: 2026-07-30 -- Phase 177 plan 04 executed
+stopped_at: "Completed 177-05-PLAN.md — wired CHECK-04 into /bs-verify-game as Step 7 (Derived-Line Re-Check), renumbering Close to Step 8. Step 7 routes into both 177-04 judgment contracts: dispatches BS-DERIVE-V1 (verify/derive-recheck.md) with a blind quote-lines-only payload built by buildBlindDerivePayload (verify-derive-recheck.ts), then a SEPARATE BS-DERIVE-COMPARE-V1 dispatch (verify/derive-compare.md) carrying the original line and the blind reading, returning one of the four DERIVE_VERDICTS; both recorded through recordDeriveVerdicts's atomic write, reported by formatting `boardsmith verify-derive-recheck --json` (formatted, never computed); findings exit 0 and never gate Close (decision 15). Added an explicit, pinned Context-Economics carve-out directly below the original hard-rule sentence (preserved byte-identical): the orchestrator's own transcript still shows zero quote/Derived/Visual lines (unchanged); the exception belongs to CHECK-04's subagent dispatch prompts/returns, citing 174-PROOF.md §3's quotedPass1/quotedPass2 precedent by name, and naming two SEPARATELY-checked observables (blind prompt: ZERO Derived/Visual, no exception; comparison prompt/return: EXPECTED to carry a Derived line). Full-file swept verify-game.md end to end (177-SWEEP.md, 12 claims: 6 STILL TRUE re-verified, 5 REVISED, 1 CARVE-OUT ADDED, 0 UNRESOLVED) — found Step 0's 'clean close (Step N)' cross-reference had drifted a SECOND time (176-04 fixed it once already, Step 5→7; now 7→8), and confirmed Close's condition is deliberately unchanged since CHECK-04 is report-only (decision 15). verify.test.ts: moved the naming-Close pin to Step 8, bumped the pre-existing structural step-count test 8→9 steps / CHECK-0[1-2]→CHECK-0[1-4] (a deliberate pin per its own comment), added a CHECK-04 routing describe block and a Context-Economics carve-out describe block. npm test: 3954/3954 green (baseline 3951 + 3 net new), zero regressions. CHECK-04 stays OPEN in REQUIREMENTS.md — this is plan 5 of 7; the 22-line distribution prediction committed before measuring (177-06) and the live claude -p dispatch proof against both reference games (177-07) remain. See .planning/phases/177-derived-line-re-derivation/177-05-SUMMARY.md."
+last_updated: "2026-07-30T23:20:00Z"
+last_activity: 2026-07-30 -- Phase 177 plan 05 executed
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 54
-  completed_plans: 51
+  completed_plans: 52
   percent: 70
 ---
 
@@ -25,7 +25,62 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 4/7 plans complete.
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING, 5/7 plans complete.
+
+`177-05-PLAN.md` (2026-07-30) wired CHECK-04 into `/bs-verify-game` as Step 7 (Derived-Line
+Re-Check), renumbering Close from Step 7 to Step 8 with a full numeric renumber (every
+cross-reference updated in lockstep: Step 0's "clean close (Step N, below)" pointer, the intro's
+dispatch-target list, Reference Files). Step 7 states in Step 5's compressed "In short:" style:
+the check is independent of staleness/repair and does not consume Step 4's staleness verdicts;
+every `Derived` line surviving `isPresentationLine` exclusion is enumerated PROJECT-WIDE, never
+scoped to stale chunks; each survivor is dispatched BLIND carrying `BS-DERIVE-V1` and that slice's
+quote lines only, the payload built by `buildBlindDerivePayload` (`verify-derive-recheck.ts`),
+never composed by the orchestrator; a SEPARATE dispatch carries `BS-DERIVE-COMPARE-V1`, the
+original line, and the blind reading, returning one of the four `DERIVE_VERDICTS`; both are
+recorded through `recordDeriveVerdicts`'s one atomic write, then reported by formatting
+`boardsmith verify-derive-recheck --json`'s output — formatted, never computed, the same
+discipline Close already holds; findings citing both derivations verbatim exit 0 and never gate
+Close (decision 15). Added an explicit, pinned Context-Economics carve-out directly below the
+original hard-rule sentence — preserved byte-identical, confirmed via `git diff` — distinguishing
+the orchestrator's own transcript (still zero quote-rule/`Derived (p.`/`Visual (p.` lines,
+unchanged) from CHECK-04's subagent dispatch prompts/returns (where `BS-DERIVE-V1`'s blind prompt
+legitimately carries quote lines and `BS-DERIVE-COMPARE-V1`'s prompt/return legitimately carries a
+`Derived (p.` line, decision 8), citing `174-PROOF.md` §3's `quotedPass1`/`quotedPass2` precedent
+by name and naming the two SEPARATELY-checked observables explicitly (blind prompt: ZERO
+`Derived (p.`/`Visual (p.`, no exception, stronger than the base rule; comparison prompt/return:
+EXPECTED to carry a `Derived (p.` line). Full-file swept `verify-game.md` end to end and wrote
+`177-SWEEP.md`: 12 claims (6 named in advance by `177-PATTERNS.md`/`177-RESEARCH.md`, 6 found by a
+first-principles pass), disposed 6 `STILL TRUE (re-verified)`, 5 `REVISED`, 1 `CARVE-OUT ADDED`, 0
+`UNRESOLVED`. The most consequential finding: Step 0's "clean close (Step N, below)"
+cross-reference had drifted a SECOND time — the identical defect class 176-04 already found once
+in this exact sentence (Step 5→7), now recurring a second time (Step 7→8) across a second phase
+that inserted a step before Close — strong empirical evidence the full-file sweep discipline is
+load-bearing, not a one-off caution. Also confirms Close's condition
+(`verify-run-status`+`verify-classify-status` both complete) is deliberately UNCHANGED — CHECK-04
+is report-only per decision 15, and adding its completion as a third gate was explicitly declined
+and recorded as the sweep's most consequential negative result. Pastes a real grep for spelled-out
+(`four` through `ten`) and digit step/reference-file counts across `verify-game.md` — all empty,
+extending coverage beyond the existing `verify.test.ts` guard's `five`-through-`nine` regex.
+`verify.test.ts`: moved the "naming Close" pin to Step 8, bumped the pre-existing structural
+step-count test from 8 to 9 steps and `CHECK-0[1-2]` to `CHECK-0[1-4]` (a deliberate structural pin
+per its own comment, not a stale free-floating count), added a CHECK-04 routing describe block
+(step heading, both handshake tokens, the `verify-derive-recheck` report command name, the
+project-wide/never-gates-Close prose, Reference Files bullets) and a Context-Economics carve-out
+describe block (verbatim original sentence, both separately-named observables, the
+`quotedPass1`/`quotedPass2`/`174-PROOF.md` citation). One deviation worth flagging: the plan's own
+`<action>` text attributed the blind-dispatch payload to "the `boardsmith verify-derive-recheck`"
+CLI command; cross-checked against 177-03's real CLI surface (that command is a READ-ONLY REPORT,
+`verifyDeriveRecheckCommand`, never a payload builder) and against `derive-recheck.md`'s own
+accurate self-description, and corrected the attribution to `buildBlindDerivePayload`
+(`verify-derive-recheck.ts`) before it ever landed in the file — avoiding introducing a fresh stale
+claim in the very plan whose Task 3 exists to sweep for exactly that defect class. `npm test`:
+3954/3954 green (baseline 3951 + 3 net new assertions across both tasks, zero regressions).
+**CHECK-04 stays OPEN in `REQUIREMENTS.md`** — this plan is 5 of 7; the 22-line distribution
+prediction committed before measuring (177-06) and the live `claude -p` dispatch proof against
+both reference games (177-07) remain. See
+`.planning/phases/177-derived-line-re-derivation/177-05-SUMMARY.md`.
+
+---
 
 `177-04-PLAN.md` (2026-07-30) wrote CHECK-04's two judgment-subagent contracts:
 `src/cli/slash-command/bs/verify/derive-recheck.md` (`BS-DERIVE-V1`, blind derivation) and
