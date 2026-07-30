@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: Completed 174-03-PLAN.md — verify-classifier core (enumerated codes, presentation filter, m:n pairing, staleness, provenance)
-last_updated: "2026-07-30T00:02:08.000Z"
-last_activity: 2026-07-29
+stopped_at: "Completed 174-04-PLAN.md — verify-classify-pairs/-record/-status CLI surface + per-chunk verdict roll-up (decision 18)"
+last_updated: "2026-07-30T00:32:23.467Z"
+last_activity: 2026-07-30
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 37
-  completed_plans: 31
+  completed_plans: 32
   percent: 30
 ---
 
@@ -25,8 +25,33 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 174 (verify-classifier) — IN PROGRESS (3/7 plans)
-Next: Phase 174 plan 04 (VERIFY-03 CLI surface — verify-classify-status/-record ledger commands, wiring pairSlices/resolveProvenance/deriveStale into ClassificationRecord)
+Phase: 174 (verify-classifier) — IN PROGRESS (4/7 plans)
+Next: Phase 174 plan 05 (classification subagent contract + classification-dispatch.md skill delegate + verify-game.md Step 4 rewrite — VERIFY-03/VERIFY-07)
+
+`174-04-PLAN.md` shipped the three run-scoped commands that make classification recordable and
+resumable — `verify-classify-pairs`/`-record`/`-status` — registered in the real `cli.ts` beside
+`verify-run-status`. `verifyClassifyPairsCommand` reads the ledger's recorded staged units (never a
+directory scan) and the live `rulebook/*.md` tree (excluding `INDEX.md` and the presentation-by-
+design `00-visual-survey.md`, matching `ingest-archive.ts`'s existing exclusion), pairs them via
+`pairSlices()`, and resolves provenance per group as a sibling map. `verifyClassifyRecordCommand`
+appends exactly one classification line through the same atomic ledger path 173-08 hardened; `stale`
+and `provenance` are derived, never CLI options; an out-of-enum/missing `--label` normalizes to
+`unclassified` with a warning (decision 8); `sharper`/`contradictory` require both
+`--quoted-pass1`/`--quoted-pass2` non-empty (decision 9), demoting to `unclassified` otherwise.
+
+**Applied CONTEXT.md decision 18** (added after this plan was authored, superseding its own
+original Task 3 text): chunk staleness is derived from a classification record's `quotedPass1`
+matched against the specific live slice(s) a chunk cites, never from the pair/group verdict
+wholesale — because real reference games measurably pair into exactly ONE group each
+(174-03-SUMMARY.md's corrective follow-up), so a group-verdict-keyed chunk roll-up would mark
+every chunk stale from one `sharper` line anywhere in the rulebook, precisely the failure this
+phase exists to prevent. `ClassificationRecord` (174-02) was widened with optional
+`quotedPass1`/`quotedPass2` fields to make this retention load-bearing. A dedicated regression test
+proves two chunks citing the SAME pair group land on DIFFERENT verdicts when the delta's quote
+intersects only one chunk's cited content. 30 new tests, `npm test` 3676/3676 green (baseline 3648),
+typecheck clean. VERIFY-01/VERIFY-03/VERIFY-07 remain open — plans 174-05/06/07 build the
+skill-text/subagent-dispatch integration that makes these commands reachable from
+`/bs-verify-game`. See `.planning/phases/174-verify-classifier/174-04-SUMMARY.md`.
 
 `174-03-PLAN.md` built the mechanical classifier core as pure functions in
 `src/cli/commands/verify-classify.ts`, colocated with `verify-classify.test.ts`. Three frozen
@@ -663,6 +688,9 @@ Recent decisions affecting current work:
 - [Phase 174]: ClassificationRecord slot fields are plural (units[]/liveSlices[]/stagedSlices[]) mirroring SlicePair.stagedUnits[] with no collapsing step
 - [Phase 174]: ruleBearingLines() excludes bare "p.N, <label>:" citation headers in addition to blank/heading/presentation lines — derived from measuring that real one-two-punch live slices' total content-line count equals exactly (citation headers + quoted lines + Derived lines)
 - [Phase 174]: pairing-3's test proves the real seven fixture's actual outcome (one paired group, 3 live + 6 staged, since the archived ledger tags every staged unit with the same rangeId "1-2") rather than 174-03-PLAN.md's illustrative "1 live, 3 staged" example, which does not occur under a rangeId-keyed join over the real ledger data
+- [Phase 174-04]: Applied CONTEXT.md decision 18 (added after the plan was authored) in place of the plan's original Task 3 text — chunk staleness is derived from a classification record's quotedPass1 matched against the specific live slice(s) a chunk cites, never from the pair/group verdict wholesale, because real reference games pair into exactly one group each and a group-verdict-keyed roll-up would mark every chunk stale from one sharper line anywhere in the rulebook
+- [Phase 174-04]: ClassificationRecord widened with optional quotedPass1/quotedPass2 fields (beyond 174-02's original schema) so decision 18's line-level attribution has a quote to match against, retained on the persisted ledger record itself
+- [Phase 174-04]: VERIFY-01/VERIFY-03/VERIFY-07 NOT marked complete despite appearing in this plan's frontmatter requirements — plans 174-05/06/07 build the skill-text/subagent-dispatch integration that makes these CLI commands reachable from /bs-verify-game; marking now would repeat the premature-completion pattern Phase 173 already caught twice
 
 ### Pending Todos
 

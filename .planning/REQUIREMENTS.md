@@ -199,11 +199,11 @@ the tag.
 | PROV-03 | Phase 171 | Complete |
 | CHECK-03 | Phase 172 | Complete |
 | CHECK-05 | Phase 172 | Complete |
-| VERIFY-01 | Phase 173 | Partial — install+run proven (173-06/173-07); per-chunk verdict awaits Phase 174 classification |
+| VERIFY-01 | Phase 173 | Partial — install+run proven (173-06/173-07); per-chunk verdict now COMPUTED (174-04's `chunkVerdicts[]`), but not yet reachable from a live `/bs-verify-game` run — awaits 174-05/06/07's skill-text/subagent-dispatch integration |
 | VERIFY-02 | Phase 173 | Complete (173-06/173-07 proof) |
-| VERIFY-07 | Phase 173 | Partial — re-transcription absence proven (173-06/173-07); classification-in-subagent awaits Phase 174 |
+| VERIFY-07 | Phase 173 | Partial — re-transcription absence proven (173-06/173-07); classification-in-subagent contract/dispatch is 174-05's scope, not yet built |
 | VERIFY-08 | Phase 173 | Complete (173-07 proof; re-confirmed 173-08 against a corrected crash-safety guarantee + closed range-level resume determinism — see `173-PROOF.md` §5) |
-| VERIFY-03 | Phase 174 | Pending |
+| VERIFY-03 | Phase 174 | Partial — the CLI surface (`verify-classify-pairs`/`-record`/`-status`, provenance + rule-delta + staleness derivation) is built and tested (174-04); the classification subagent contract that supplies the judgment label is 174-05's scope |
 | VERIFY-04 | Phase 175 | Pending |
 | VERIFY-05 | Phase 175 | Pending |
 | VERIFY-06 | Phase 175 | Pending |
