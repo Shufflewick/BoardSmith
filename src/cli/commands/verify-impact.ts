@@ -424,12 +424,20 @@ export async function writeRulesStalenessMarker(
       );
     }
     const statusLineEnd = entryRange.start + statusMatch.index + statusMatch[0].length;
-    const hasNewline = sketchText[statusLineEnd] === '\n';
+    // Insert immediately after the Status line's own text, WITHOUT consuming its trailing
+    // newline (the `sketchText.slice(statusLineEnd)` below starts at that newline character,
+    // not past it). A prior version sliced past the newline and re-added exactly one '\n' before
+    // `pointerLine` but none after it — correct only when a BLANK line already separated the
+    // Status line from whatever followed (the consumed newline was invisibly replaced by the
+    // blank line's own newline). When the very next SKETCH.md line was another bullet (no blank
+    // separator — the real, more common shape, e.g. one-two-punch's "- Test script (outcome-based):
+    // ..." immediately after Status), that produced a single fused line with `pointerLine` and the
+    // next bullet's text run together with no newline between them — a real, live-discovered
+    // corruption of SKETCH.md's structure caught while producing this plan's own proof on real
+    // reference-game data (175-08-PLAN.md's §4). Never slicing past the original newline removes
+    // the need to re-synthesize it and cannot lose or fuse an adjacent line either way.
     updatedSketch =
-      sketchText.slice(0, statusLineEnd) +
-      (hasNewline ? '\n' : '\n') +
-      pointerLine +
-      sketchText.slice(hasNewline ? statusLineEnd + 1 : statusLineEnd);
+      sketchText.slice(0, statusLineEnd) + '\n' + pointerLine + sketchText.slice(statusLineEnd);
     sketchWritten = true;
   }
 

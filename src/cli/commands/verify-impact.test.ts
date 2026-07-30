@@ -413,6 +413,29 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
     expect(nextLine.startsWith('- Rules Staleness (derived from')).toBe(true);
   });
 
+  it('write-order — the pointer line is on ITS OWN line: the very next bullet is neither swallowed nor fused onto it (175-08 live regression — a real SKETCH.md entry with a bullet immediately after Status, no blank-line separator)', async () => {
+    // fixtureSketchText() already places "- Test script (outcome-based): n/a" directly after the
+    // Status line with no blank line between them — matching one-two-punch's real "block"/
+    // "movement-advance-retreat" entry shape exactly (175-08-PLAN.md §4). A prior version of
+    // writeRulesStalenessMarker fused this line onto the end of the pointer line with no newline
+    // between them; only checking `startsWith` (the test above) did not catch it because the fused
+    // string still legitimately started with the expected prefix.
+    await writeRulesStalenessMarker(dir, fixtureRecord());
+    const sketchText = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    const lines = sketchText.split('\n');
+    const pointerLineIdx = lines.findIndex((l) =>
+      l.startsWith(`- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md):`),
+    );
+    expect(pointerLineIdx).toBeGreaterThan(-1);
+    // The pointer line's OWN text ends exactly at the marker value — it must not contain any
+    // other bullet's text fused onto its end.
+    expect(lines[pointerLineIdx]).toBe(
+      `- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md): ${RULES_STALE_MARKER}`,
+    );
+    // The very next line is the untouched original bullet, on its own line, byte-for-byte intact.
+    expect(lines[pointerLineIdx + 1]).toBe('- Test script (outcome-based): n/a');
+  });
+
   it('write-order — CHUNK.md is written BEFORE SKETCH.md; a failed SKETCH.md write still leaves CHUNK.md written', async () => {
     const { atomicWriteFile } = await import('./verify-run.js');
     const mocked = vi.mocked(atomicWriteFile);
