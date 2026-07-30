@@ -1,6 +1,22 @@
-import { atomicWriteFile, type ClassificationRecord } from './verify-run.js';
+import { promises as fs } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
+import chalk from 'chalk';
+import {
+  atomicWriteFile,
+  ledgerFilePath,
+  parseLedgerBody,
+  readLedgerOrThrow,
+  resolveLedgerState,
+  stagingSlicesDir,
+  type ClassificationRecord,
+} from './verify-run.js';
 import { driftCheckCommand } from './drift-check.js';
-import { computeRepairGate, type ImpactMapEntry, type RepairGate } from './verify-impact.js';
+import {
+  computeRepairGate,
+  verifyImpactStatusCommand,
+  type ImpactMapEntry,
+  type RepairGate,
+} from './verify-impact.js';
 
 /**
  * `verify-repair.ts` — CHECK-02's mechanical core (176-CONTEXT.md decisions 5, 8, 9, 12, 17, 19).
@@ -283,4 +299,112 @@ export async function recomputeRepairGatePostRepair(input: {
   const driftState = chunkDrift?.state ?? 'unknown';
 
   return computeRepairGate({ status, stale, driftState });
+}
+
+// -------------------------------------------------------------------------------------------
+// Task 4 (176-03) — verifyRepairStatusCommand: the CLI-facing read-only entry point
+// -------------------------------------------------------------------------------------------
+
+export interface RepairStatusRow {
+  slug: string;
+  scopeLimited: boolean;
+  /** Populated only when `scopeLimited` is false — this chunk's fresh staged slice paths. */
+  slicePaths?: string[];
+  /** Populated only when `scopeLimited` is true — names the unresolved input. */
+  scopeLimitedReason?: string;
+  /** This chunk's next verify-episode round plan (a fresh round to dispatch, or triage). */
+  roundPlan: VerifyEpisodeRoundPlan;
+}
+
+export interface VerifyRepairStatusResult {
+  runId?: string;
+  /** Every entry from Phase 175's impact map with `stale === true` (decision 5). */
+  rows: RepairStatusRow[];
+  warnings: string[];
+}
+
+/**
+ * `boardsmith verify-repair` — CHECK-02's read-only status report: for every chunk Phase 175's
+ * impact map marks `stale === true`, resolves its fresh staged slice paths
+ * (`resolveStagedSlicePaths`, decision 9 — scope-limited, never a live fallback, decision 10) and
+ * plans its next verify-episode audit round (`resolveVerifyEpisodeNumber` +
+ * `planVerifyEpisodeRound`, decision 17). This command computes and reports only — it never
+ * dispatches a lens, never writes a `### Audit Round` heading, and never re-derives a repair
+ * gate; those actions are `verify/repair-dispatch.md`'s orchestration, driven by an agent reading
+ * each row this command reports (the same "CLI computes, subagent judges" split CHECK-01 already
+ * holds). Findings exit 0 — only a tool failure (unknown run, no chunks/ tree) is non-zero.
+ */
+export async function verifyRepairStatusCommand(
+  options: { project?: string; runId?: string; json?: boolean } = {},
+): Promise<VerifyRepairStatusResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  const impactStatus = await verifyImpactStatusCommand({
+    project: projectDir,
+    runId: options.runId,
+    json: false,
+  });
+  const runId = impactStatus.runId;
+  const staleEntries = selectStaleChunks(impactStatus.entries);
+
+  const warnings = [...impactStatus.warnings];
+  const rows: RepairStatusRow[] = [];
+
+  if (staleEntries.length > 0 && runId !== undefined) {
+    const ledgerFile = ledgerFilePath(projectDir, runId);
+    const relLedgerPath = relative(projectDir, ledgerFile);
+    const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+    const { classifications } = resolveLedgerState(lines);
+    const stagedDir = stagingSlicesDir(projectDir, runId);
+
+    for (const entry of staleEntries) {
+      const resolution = resolveStagedSlicePaths(entry, classifications, stagedDir);
+
+      let chunkMd = '';
+      try {
+        chunkMd = await fs.readFile(join(projectDir, 'chunks', entry.slug, 'CHUNK.md'), 'utf-8');
+      } catch {
+        warnings.push(
+          `[repair-status] chunk "${entry.slug}" is marked stale but has no readable ` +
+            `chunks/${entry.slug}/CHUNK.md — its round plan could not be computed.`,
+        );
+        continue;
+      }
+
+      const episode = resolveVerifyEpisodeNumber(chunkMd);
+      const roundPlan = planVerifyEpisodeRound(chunkMd, episode);
+
+      rows.push({
+        slug: entry.slug,
+        scopeLimited: resolution.scopeLimited,
+        ...(resolution.scopeLimited
+          ? { scopeLimitedReason: resolution.reason }
+          : { slicePaths: resolution.paths }),
+        roundPlan,
+      });
+    }
+  }
+
+  const result: VerifyRepairStatusResult = { runId, rows, warnings };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  console.log(chalk.green(`✓ Repair status — ${rows.length} stale chunk(s)`));
+  for (const row of rows) {
+    if (row.scopeLimited) {
+      console.log(chalk.yellow(`  ${row.slug}: scope-limited — ${row.scopeLimitedReason}`));
+    } else if (row.roundPlan.disposition === 'triage') {
+      console.log(`  ${row.slug}: round budget exhausted — ${row.roundPlan.reason}`);
+    } else {
+      console.log(`  ${row.slug}: next round ${row.roundPlan.heading}`);
+    }
+  }
+  for (const warning of warnings) {
+    console.log(chalk.yellow(`⚠ ${warning}`));
+  }
+  return result;
 }

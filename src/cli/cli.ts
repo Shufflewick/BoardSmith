@@ -36,6 +36,8 @@ import {
   verifyImpactApplyCommand,
   verifyImpactStatusCommand,
 } from './commands/verify-impact.js';
+import { verifyRulingRecheckCommand } from './commands/verify-ruling-recheck.js';
+import { verifyRepairStatusCommand } from './commands/verify-repair.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -382,6 +384,33 @@ program
   .option('--run-id <id>', 'Report on a specific run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyImpactStatusCommand);
+
+// CHECK-01 / CHECK-02 (176-CONTEXT.md): re-checking every RULINGS.md entry against the fresh
+// staged transcription, and reporting each rules-stale chunk's next repair step. Neither command
+// registers a bypass option of any kind — the same no-bypass discipline verify-impact-* holds.
+program
+  .command('verify-ruling-recheck')
+  .description(
+    "Re-check every RULINGS.md entry against the fresh staged transcription, reporting one of " +
+      'four verdicts (still-needed / resolved-by-source / contradicted / undetermined) per ' +
+      'non-superseded ruling (read-only, machine-readable)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyRulingRecheckCommand);
+
+program
+  .command('verify-repair')
+  .description(
+    "Report each rules-stale chunk's fresh staged slice paths and its next verify-episode audit " +
+      'round plan (read-only, machine-readable) — dispatching the audit lenses and the repair ' +
+      'loop itself is verify/repair-dispatch.md\'s job, never this command\'s',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyRepairStatusCommand);
 
 // Claude Code integration
 const claudeCmd = program

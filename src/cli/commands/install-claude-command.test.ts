@@ -130,6 +130,14 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
       expect(existsSync(join(skillsRoot, 'state-machine.md'))).toBe(false);
     });
 
+    it('176-03: verify/ruling-recheck.md and verify/repair-dispatch.md physically ship under bs-shared/verify/', () => {
+      // A real install into a scratch dir (175-05's own proof style for adjudication-gate.md) —
+      // a probe list entry that never actually lands on disk is indistinguishable from a contract
+      // that does not exist at runtime.
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'ruling-recheck.md'))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'repair-dispatch.md'))).toBe(true);
+    });
+
     it('verify/ shared dir contains every file present in src/cli/slash-command/bs/verify/', () => {
       const sourceVerifyDir = join(REPO_ROOT, 'src', 'cli', 'slash-command', 'bs', 'verify');
       const sourceFiles = walk(sourceVerifyDir)

@@ -73,6 +73,8 @@ const SHARED_LEAF_PROBES = [
   join(SHARED_ROOT, 'verify', 'source-resolution.md'),
   join(SHARED_ROOT, 'verify', 'classification-subagent.md'),
   join(SHARED_ROOT, 'verify', 'adjudication-gate.md'),
+  join(SHARED_ROOT, 'verify', 'ruling-recheck.md'),
+  join(SHARED_ROOT, 'verify', 'repair-dispatch.md'),
 ];
 
 /** Filter applied to every recursive tree copy: never ship test files. */
