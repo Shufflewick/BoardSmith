@@ -28,7 +28,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 171: Provenance Recording** - `## Verified Against` block at close, code-conformance-only scope recording, `/bs-check-status` drift reporting (completed 2026-07-28)
 - [x] **Phase 172: Source-Free Conformance Checks** - Traceability sweep + code drift, proven immediately against the two reference games with zero source dependency (completed 2026-07-28)
 - [x] **Phase 173: Verify Pipeline Core** - `/bs-verify-game` skill entry, non-destructive re-transcription staging, subagent-only context economics, crash resumability (completed 2026-07-28)
-- [x] **Phase 174: Verify Classifier** - Two-dimension classification (provenance + rule delta), tuned and validated against real pass-1-vs-pass-2 output (completed 2026-07-30)
+- [ ] **Phase 174: Verify Classifier** - Two-dimension classification (provenance + rule delta), tuned and validated against real pass-1-vs-pass-2 output (REOPENED 2026-07-30: all 5 success criteria pass on real data, but the phase GOAL is measurably not met — one real finding marks 11/11 of `one-two-punch`'s and 14/16 of `seven`'s citing chunks stale. Root cause is live-slice attribution granularity, not classifier accuracy. Gap-closure plan adds per-citation attribution.)
 - [ ] **Phase 175: Impact Map & Repair Gating** - Contradictory human gate, cross-file staleness flip, scoped re-playtest (code-changed chunks only)
 - [ ] **Phase 176: Stale-Chunk Repair** - Ruling re-validation against fresh transcription + the three audit lenses re-run per stale chunk
 - [ ] **Phase 177: Derived-Line Re-Derivation** - Independent re-derivation of rule-bearing `Derived` lines, disagreements reported

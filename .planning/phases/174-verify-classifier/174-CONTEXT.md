@@ -317,6 +317,44 @@ contract. Skill text's only jobs are to invoke commands, dispatch the subagent, 
     Rejected: dropping the group verdict — the designer needs the page-region view, and Phase 175's
     impact map consumes it.
 
+19. **Attribution narrows to the CITATION a chunk names, not merely the live SLICE the quote sits in.**
+    Decided 2026-07-30 at the reopened phase gate, after plan 174-07's added measurement showed the
+    phase goal is NOT MET on real data.
+
+    The measurement: one real finding marks 11/11 (100%) of `one-two-punch`'s citing chunks and 14/16
+    (87.5%) of `seven`'s stale. "Flags every chunk as stale" is verbatim the failure the phase goal
+    names, so the goal is unmet even though SC-1 through SC-5 all pass on real data.
+
+    The diagnosis, which this decision accepts rather than re-litigates: decision 18 was right and is
+    provably working — it narrowed from "the whole page-overlap group" to "the specific live slice the
+    quote sits in," and that produced a real, non-vacuous carve-out (`game-score-and-winner` stays
+    clean on `seven`, where a decision-11-only rollup would have marked all 16). The residual failure
+    is one level finer: chunks CITE WHOLE SLICES, and both reference games concentrate the rulebook
+    into 2-3 live slices that most chunks cross-cite for general context (definitions, components,
+    round structure). So "the specific slice" is still most of the rulebook, and a single delta in it
+    reaches nearly every chunk.
+
+    Therefore attribution must narrow one level further: match the delta to the specific citation the
+    chunk actually names — its own `## Interpretation` claim citations and page references — rather
+    than to any chunk that cites the containing slice. A chunk goes stale when a delta lands on
+    content IT specifically cites, not on content that merely shares a slice with its citations.
+
+    Two guardrails carried forward, because this is the third narrowing in a row and each previous one
+    traded one failure for its mirror image:
+    - **Do not re-create the false-clean.** The 174-04 corrective established the rule: where
+      attribution cannot be resolved, broaden conservatively AND report it (`unattributable-quote`),
+      never silently drop the delta. A finer attribution key has MORE ways to fail to resolve, so this
+      matters more here, not less.
+    - **The goal is a small, EXPLAINABLE stale set, not a small number.** Do not tune thresholds to
+      push the percentage down. Every non-stale chunk must be non-stale for a citation-level reason
+      that can be named, exactly as `game-score-and-winner`'s exemption can be.
+
+    Rejected: revising the phase goal to match the architecture — the goal is the milestone's actual
+    requirement, and a verify pass that marks everything stale is one a designer learns to ignore,
+    which is the lexicon-waiving failure this milestone keeps citing.
+    Rejected: deferring to Phase 175/176 — they own the CONSEQUENCE of a staleness verdict, and
+    designing repair scoping against a known-over-broad input bakes the defect into two more phases.
+
 17. **The SC-2 bar is measured on RULE-BEARING content only** — a corollary of 12b, stated explicitly
     because it is the difference between a meaningful bar and a meaningless one. Presentation notes
     excluded per 12b never contribute to a delta, so they can neither inflate nor deflate the
