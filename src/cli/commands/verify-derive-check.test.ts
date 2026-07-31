@@ -4,6 +4,7 @@ import { promises as fs, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { renderIndex } from './ingest-archive.js';
 import {
   DERIVE_CHECK_VERDICTS,
   DERIVE_CHECK_LEDGER_BEGIN,
@@ -15,6 +16,7 @@ import {
   readDeriveCheckVerdicts,
   reconcileSlice,
   parseSubagentJsonInput,
+  verifyDeriveRecordCommand,
   type DeriveCheckRecord,
   type EnumeratorReturn,
   type ReconcilerReturn,
@@ -923,5 +925,323 @@ describe('parseSubagentJsonInput', () => {
     expect(message).toContain('--enumerator-a');
     expect(message).toContain('/tmp/a.json');
     expect(message).not.toContain('SyntaxError');
+  });
+});
+
+// ===========================================================================================
+// Task 3 (177.1-03) — verifyDeriveRecordCommand: retargeted onto reconcileSlice
+// ===========================================================================================
+
+describe('verifyDeriveRecordCommand', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-record-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  /**
+   * Builds a project with quote-verified provenance (mirrors `verify-enumerate.test.ts`'s own
+   * `QuoteVerifiedProvenance` fixture setup) plus a rulebook slice file at `slicePath`, so a
+   * `contradicted`/`uncorroborated` proposal is not downgraded to `quote-unverified` — needed to
+   * exercise the "contradicted classification never sets process.exitCode" behavior bullet.
+   */
+  async function setupProvenanceProject(slicePath: string, sliceText: string): Promise<string> {
+    const project = join(dir, 'project');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash,
+        transcribed: '2026-07-28',
+      }),
+    );
+    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(dirname(join(project, slicePath)), { recursive: true });
+    await fs.writeFile(join(project, slicePath), sliceText);
+    return project;
+  }
+
+  async function writeJson(name: string, value: unknown): Promise<string> {
+    const filePath = join(dir, name);
+    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
+    return filePath;
+  }
+
+  it('reads --enumerator-a/--enumerator-b/--reconciler, runs reconcileSlice, and records ALL of the slice\'s classifications in one call', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await setupProvenanceProject(
+      slicePath,
+      'Cards come in 4 colors.\n\nDerived (p.1): There are 4 colors.\n',
+    );
+    const enumeratorA: EnumeratorReturn = {
+      facts: [
+        {
+          statement: 'Cards come in 4 colors.',
+          sourceSentence: 'Cards come in 4 colors.',
+          numericValue: { magnitude: 4, unit: 'colors', approximate: false },
+        },
+      ],
+    };
+    const enumeratorB: EnumeratorReturn = { facts: enumeratorA.facts };
+    const reconciler: ReconcilerReturn = {
+      both: [
+        { statement: 'Cards come in 4 colors.', quotedFromA: 'Cards come in 4 colors.', quotedFromB: 'Cards come in 4 colors.' },
+      ],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        {
+          lineNumber: 3,
+          derivedLineText: 'Derived (p.1): There are 4 colors.',
+          proposedClassification: 'corroborated',
+          citedBothStatements: ['Cards come in 4 colors.'],
+        },
+      ],
+    };
+    const enumeratorAPath = await writeJson('a.json', enumeratorA);
+    const enumeratorBPath = await writeJson('b.json', enumeratorB);
+    const reconcilerPath = await writeJson('reconcile.json', reconciler);
+
+    const result = await verifyDeriveRecordCommand({
+      project,
+      slicePath,
+      enumeratorA: enumeratorAPath,
+      enumeratorB: enumeratorBPath,
+      reconciler: reconcilerPath,
+    });
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].verdict).toBe('corroborated');
+    expect(result.records[0].lineNumber).toBe(3);
+
+    const recorded = await readDeriveCheckVerdicts(project);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].verdict).toBe('corroborated');
+  });
+
+  it('recording slice B after slice A leaves both slices\' records readable (upsert-append, exercised through the real command)', async () => {
+    const sliceAPath = 'rulebook/01-a.md';
+    const sliceBPath = 'rulebook/02-b.md';
+    const project = await setupProvenanceProject(
+      sliceAPath,
+      'Cards come in 4 colors.\n\nDerived (p.1): There are 4 colors.\n',
+    );
+    await fs.mkdir(dirname(join(project, sliceBPath)), { recursive: true });
+    await fs.writeFile(
+      join(project, sliceBPath),
+      'There are 5 shapes.\n\nDerived (p.2): There are 5 shapes.\n',
+    );
+
+    const factsFor = (statement: string, magnitude: number, unit: string): EnumeratorReturn => ({
+      facts: [{ statement, sourceSentence: statement, numericValue: { magnitude, unit, approximate: false } }],
+    });
+    const reconcilerFor = (statement: string, lineNumber: number, derivedLineText: string): ReconcilerReturn => ({
+      both: [{ statement, quotedFromA: statement, quotedFromB: statement }],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        { lineNumber, derivedLineText, proposedClassification: 'corroborated', citedBothStatements: [statement] },
+      ],
+    });
+
+    await verifyDeriveRecordCommand({
+      project,
+      slicePath: sliceAPath,
+      enumeratorA: await writeJson('a1.json', factsFor('Cards come in 4 colors.', 4, 'colors')),
+      enumeratorB: await writeJson('b1.json', factsFor('Cards come in 4 colors.', 4, 'colors')),
+      reconciler: await writeJson(
+        'r1.json',
+        reconcilerFor('Cards come in 4 colors.', 3, 'Derived (p.1): There are 4 colors.'),
+      ),
+    });
+    await verifyDeriveRecordCommand({
+      project,
+      slicePath: sliceBPath,
+      enumeratorA: await writeJson('a2.json', factsFor('There are 5 shapes.', 5, 'shapes')),
+      enumeratorB: await writeJson('b2.json', factsFor('There are 5 shapes.', 5, 'shapes')),
+      reconciler: await writeJson(
+        'r2.json',
+        reconcilerFor('There are 5 shapes.', 3, 'Derived (p.2): There are 5 shapes.'),
+      ),
+    });
+
+    const recorded = await readDeriveCheckVerdicts(project);
+    expect(recorded).toHaveLength(2);
+    expect(recorded.some((r) => r.slicePath === sliceAPath)).toBe(true);
+    expect(recorded.some((r) => r.slicePath === sliceBPath)).toBe(true);
+  });
+
+  it('a malformed JSON input file rejects with a message naming the flag and the path, no stack trace or .ts: line reference', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await setupProvenanceProject(slicePath, 'x\n');
+    await fs.writeFile(join(dir, 'bad.json'), '{not valid json');
+
+    let message = '';
+    try {
+      await verifyDeriveRecordCommand({
+        project,
+        slicePath,
+        enumeratorA: join(dir, 'bad.json'),
+        enumeratorB: join(dir, 'bad.json'),
+        reconciler: join(dir, 'bad.json'),
+      });
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain('--enumerator-a');
+    expect(message).toContain('bad.json');
+    expect(message).not.toContain('SyntaxError');
+    expect(message).not.toMatch(/\.ts:\d+/);
+  });
+
+  it('a missing required flag throws a clear message naming the flag', async () => {
+    await expect(
+      verifyDeriveRecordCommand({
+        project: dir,
+        enumeratorA: 'a.json',
+        enumeratorB: 'b.json',
+        reconciler: 'r.json',
+      }),
+    ).rejects.toThrow(/--slice-path/);
+
+    await expect(
+      verifyDeriveRecordCommand({
+        project: dir,
+        slicePath: 'rulebook/01-x.md',
+        enumeratorB: 'b.json',
+        reconciler: 'r.json',
+      }),
+    ).rejects.toThrow(/--enumerator-a/);
+  });
+
+  it('--json emits the recorded records, ledgerPath, and rejected — and nothing else on stdout', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await setupProvenanceProject(
+      slicePath,
+      'Cards come in 4 colors.\n\nDerived (p.1): There are 4 colors.\n',
+    );
+    const facts: EnumeratorReturn = {
+      facts: [
+        { statement: 'Cards come in 4 colors.', sourceSentence: 'Cards come in 4 colors.', numericValue: { magnitude: 4, unit: 'colors', approximate: false } },
+      ],
+    };
+    const reconciler: ReconcilerReturn = {
+      both: [{ statement: 'Cards come in 4 colors.', quotedFromA: 'Cards come in 4 colors.', quotedFromB: 'Cards come in 4 colors.' }],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        { lineNumber: 3, derivedLineText: 'Derived (p.1): There are 4 colors.', proposedClassification: 'corroborated', citedBothStatements: ['Cards come in 4 colors.'] },
+      ],
+    };
+
+    const logs: string[] = [];
+    const original = console.log;
+    console.log = (msg?: unknown) => logs.push(String(msg));
+    try {
+      await verifyDeriveRecordCommand({
+        project,
+        slicePath,
+        enumeratorA: await writeJson('a.json', facts),
+        enumeratorB: await writeJson('b.json', facts),
+        reconciler: await writeJson('r.json', reconciler),
+        json: true,
+      });
+    } finally {
+      console.log = original;
+    }
+    expect(logs).toHaveLength(1);
+    const parsed = JSON.parse(logs[0]);
+    expect(Object.keys(parsed).sort()).toEqual(['ledgerPath', 'records', 'rejected']);
+    expect(parsed.records).toHaveLength(1);
+    expect(parsed.rejected).toEqual([]);
+  });
+
+  it('grounding rejections (a fabricating reconciler) are reported in --json output, never silently dropped', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await setupProvenanceProject(slicePath, 'x\n');
+    const facts: EnumeratorReturn = {
+      facts: [{ statement: 'Cards come in 4 colors.', sourceSentence: 'Cards come in 4 colors.', numericValue: { magnitude: 4, unit: 'colors', approximate: false } }],
+    };
+    const reconciler: ReconcilerReturn = {
+      both: [
+        {
+          statement: 'Cards come in 4 colors.',
+          quotedFromA: 'This text was fabricated and never stated by A.',
+          quotedFromB: 'Cards come in 4 colors.',
+        },
+      ],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [],
+    };
+
+    const result = await verifyDeriveRecordCommand({
+      project,
+      slicePath,
+      enumeratorA: await writeJson('a.json', facts),
+      enumeratorB: await writeJson('b.json', facts),
+      reconciler: await writeJson('r.json', reconciler),
+    });
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].reason).toContain('quotedFromA');
+  });
+
+  it('process.exitCode stays unset on a successful record, including when the slice produces a contradicted classification', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await setupProvenanceProject(
+      slicePath,
+      'Cards come in 4 colors.\n\nDerived (p.1): There are 5 colors.\n',
+    );
+    const facts: EnumeratorReturn = {
+      facts: [{ statement: 'Cards come in 4 colors.', sourceSentence: 'Cards come in 4 colors.', numericValue: { magnitude: 4, unit: 'colors', approximate: false } }],
+    };
+    const reconciler: ReconcilerReturn = {
+      both: [{ statement: 'Cards come in 4 colors.', quotedFromA: 'Cards come in 4 colors.', quotedFromB: 'Cards come in 4 colors.' }],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        {
+          lineNumber: 3,
+          derivedLineText: 'Derived (p.1): There are 5 colors.',
+          proposedClassification: 'contradicted',
+          citedBothStatements: ['Cards come in 4 colors.'],
+        },
+      ],
+    };
+
+    const before = process.exitCode;
+    const result = await verifyDeriveRecordCommand({
+      project,
+      slicePath,
+      enumeratorA: await writeJson('a.json', facts),
+      enumeratorB: await writeJson('b.json', facts),
+      reconciler: await writeJson('r.json', reconciler),
+    });
+
+    expect(result.records[0].verdict).toBe('contradicted');
+    expect(process.exitCode).toBe(before);
+  });
+
+  it('registers no --force, --skip, --overwrite, or --run-id option string (source-level pin, comment-stripped)', () => {
+    const src = readFileSync(join(__dirname, 'verify-derive-check.ts'), 'utf-8');
+    const stripped = src
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//'))
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(stripped).not.toMatch(/--force|--skip|--overwrite|--run-id/);
   });
 });
