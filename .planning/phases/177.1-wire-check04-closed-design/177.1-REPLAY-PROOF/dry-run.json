@@ -1,0 +1,80 @@
+{
+  "projectDir": "/private/tmp/claude-501/-Users-jtsmith-BoardSmith/ec67162e-8441-486e-81a5-9664c77fbf70/scratchpad/177.1-06/seven",
+  "models": {
+    "enumeratorA": "claude-opus-5",
+    "enumeratorB": "claude-haiku-4-5-20251001",
+    "reconciler": "claude-sonnet-5"
+  },
+  "slices": [
+    {
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "candidates": 1,
+      "derivedLines": [
+        {
+          "lineNumber": 21,
+          "text": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards."
+        }
+      ],
+      "enumeratorPayload": "BS-ENUMERATE-V1\nSlice: rulebook/01-definitions-and-components.md\n\np.1, Definitions:\n\"Hand: The cards each player holds. Each starts with 3 and ends the game with 10.\"\n\"Set: 2+ cards with matching numbers.\"\n\"example: 5, 5, 5\"\np.1, Definitions:\n\"Run: 3+ cards in numeric order.\"\n\"example: 5, 6, 7\"\np.1, Distribution of Cards:\n\"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card. In addition, there are 7 bonus point cards.\"\np.1, Designer:\n\"JT Smith\"\np.1, Play Testers:\n\"Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof\""
+    },
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "candidates": 2,
+      "derivedLines": [
+        {
+          "lineNumber": 36,
+          "text": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end."
+        },
+        {
+          "lineNumber": 38,
+          "text": "Derived (p.1): Rounds are played simultaneously by all players, not in turn order."
+        }
+      ],
+      "enumeratorPayload": "BS-ENUMERATE-V1\nSlice: rulebook/01-overview-setup-and-play.md\n\np.1, About:\n\"Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up.\"\np.1, Setup:\n\"Give each player a \"Ways to Score\" card.\"\n\"Create a mess of face-down cards in the middle of the table and mixes them around.\"\n\"Each player should then draw 3 cards from the mess to form their hand.\"\np.1, Round (Simultaneous):\n\"Each player draws 2 cards into their hand.\"\n\"Each player discards 1 card from their hand face-up off to the side of the table in their own discard pile.\"\n\"If you ever lose track of which round you are on, count your discards, you will have 7 discards when the game is over.\"\n\"Discards are considered public information.\"\n\"If everyone has 10 cards, end the game; otherwise begin the next round.\"\np.1, Game End:\n\"After all players have 10 cards, the game ends.\"\n\"Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score.\"\np.1, Match End: Best of 7 Games:\n\"A match consists of 7 games.\"\n\"Play 7 games and keep track of each player's score total.\"\n\"Whichever player has the highest total score at the end of the match wins!\"\np.1, Match Length:\n\"A full match of Seven is naturally played in a best of 7 series. That said, if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games.\"\n> Variant (p.1): Match Length — alternate match lengths (best of 3 games, best of 10 games) instead of the default best of 7. Out of scope by default."
+    }
+  ],
+  "findings": [
+    {
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "lineNumber": 21,
+      "derivedLineText": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+      "verdict": "pending",
+      "reason": "",
+      "citedFactIds": [],
+      "status": "pending"
+    },
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "lineNumber": 36,
+      "derivedLineText": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end.",
+      "verdict": "pending",
+      "reason": "",
+      "citedFactIds": [],
+      "status": "pending"
+    },
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "lineNumber": 38,
+      "derivedLineText": "Derived (p.1): Rounds are played simultaneously by all players, not in turn order.",
+      "verdict": "pending",
+      "reason": "",
+      "citedFactIds": [],
+      "status": "pending"
+    }
+  ],
+  "verdictCounts": {
+    "corroborated": 0,
+    "corroborated-by-composition": 0,
+    "uncorroborated": 0,
+    "contradicted": 0,
+    "quote-unverified": 0,
+    "absence-corroborated": 0,
+    "absence-contradicted": 0,
+    "absence-unverifiable": 0
+  },
+  "pendingCount": 3,
+  "staleRecords": [],
+  "orphanedRecords": [],
+  "groundingRejections": [],
+  "missedFactCount": 0
+}

@@ -1,0 +1,96 @@
+{
+  "both": [
+    {
+      "statement": "The hand is the cards each player holds.",
+      "quotedFromA": "Hand: The cards each player holds.",
+      "quotedFromB": "Hand: The cards each player holds."
+    },
+    {
+      "statement": "Each player starts the game with 3 cards.",
+      "quotedFromA": "Each starts with 3 and ends the game with 10.",
+      "quotedFromB": "Each starts with 3 and ends the game with 10."
+    },
+    {
+      "statement": "Each player ends the game with 10 cards.",
+      "quotedFromA": "Each starts with 3 and ends the game with 10.",
+      "quotedFromB": "Each starts with 3 and ends the game with 10."
+    },
+    {
+      "statement": "A Set is 2 or more cards with matching numbers.",
+      "quotedFromA": "Set: 2+ cards with matching numbers.",
+      "quotedFromB": "Set: 2+ cards with matching numbers."
+    },
+    {
+      "statement": "A Run is 3 or more cards in numeric order.",
+      "quotedFromA": "Run: 3+ cards in numeric order.",
+      "quotedFromB": "Run: 3+ cards in numeric order."
+    },
+    {
+      "statement": "Card numbers range from 1 to 7.",
+      "quotedFromA": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "quotedFromB": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card."
+    },
+    {
+      "statement": "Cards come in 4 colors.",
+      "quotedFromA": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "quotedFromB": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card."
+    },
+    {
+      "statement": "There are 4 copies of each card.",
+      "quotedFromA": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "quotedFromB": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card."
+    },
+    {
+      "statement": "There are 7 bonus point cards.",
+      "quotedFromA": "In addition, there are 7 bonus point cards.",
+      "quotedFromB": "In addition, there are 7 bonus point cards."
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "Three 5s is given as an example of a Set.",
+      "sourceSentence": "example: 5, 5, 5"
+    },
+    {
+      "statement": "The cards 5, 6, 7 are given as an example of a Run.",
+      "sourceSentence": "example: 5, 6, 7"
+    },
+    {
+      "statement": "The game's designer is JT Smith.",
+      "sourceSentence": "JT Smith"
+    },
+    {
+      "statement": "The game credits 20 named play testers: Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof.",
+      "sourceSentence": "Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof"
+    }
+  ],
+  "bOnly": [],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 21,
+      "derivedLineText": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+      "proposedClassification": "corroborated-by-composition",
+      "citedBothStatements": [
+        "Card numbers range from 1 to 7.",
+        "Cards come in 4 colors.",
+        "There are 4 copies of each card.",
+        "There are 7 bonus point cards."
+      ],
+      "arithmeticNote": "112 = 7 (numbers, range 1-7) x 4 (colors) x 4 (copies of each card); the additional 7 bonus point cards is a separate, non-multiplied addend stated directly as its own fact.",
+      "arithmeticSpec": {
+        "kind": "single",
+        "operation": "multiply",
+        "operandStatements": [
+          "There are 7 bonus point cards.",
+          "Cards come in 4 colors.",
+          "There are 4 copies of each card."
+        ],
+        "claimedResult": {
+          "magnitude": 112,
+          "unit": "numbered cards",
+          "approximate": false
+        }
+      }
+    }
+  ]
+}
