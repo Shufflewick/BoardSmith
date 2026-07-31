@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 55350,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "b5d85711-cdac-4f72-82b0-2817c7c8e155",
+    "total_cost_usd": 0.2171637,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 17820,
+      "cache_read_input_tokens": 29259,
+      "output_tokens": 6764,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 17820,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 6764,
+          "cache_read_input_tokens": 29259,
+          "cache_creation_input_tokens": 17820,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 17820
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 6764,
+        "cacheReadInputTokens": 29259,
+        "cacheCreationInputTokens": 17820,
+        "webSearchRequests": 0,
+        "costUSD": 0.2171637,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"both\": [\n    {\n      \"statement\": \"The addition dice-roll symbol requires 3 dice.\",\n      \"quotedFromA\": \"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\",\n      \"quotedFromB\": \"This dice roll symbol requires 3 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the addition symbol, the first and second die values must sum to equal the third die's value.\",\n      \"quotedFromA\": \"For the addition symbol, the values of the first and second dice must sum to the value of the third die.\",\n      \"quotedFromB\": \"The sum of the first and second die values must equal the third die's value.\"\n    },\n    {\n      \"statement\": \"The three-sixes symbol requires 3 dice.\",\n      \"quotedFromA\": \"The symbol showing three six-pip faces requires three dice.\",\n      \"quotedFromB\": \"This dice roll symbol requires 3 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the three-sixes symbol, all three dice must show a six.\",\n      \"quotedFromA\": \"For the three-sixes symbol, every one of the required dice must show a six.\",\n      \"quotedFromB\": \"All three dice must show the value 6.\"\n    },\n    {\n      \"statement\": \"The doubles symbol requires 2 dice.\",\n      \"quotedFromA\": \"The symbol showing one unknown die equal to another unknown die requires two dice.\",\n      \"quotedFromB\": \"This dice roll symbol requires 2 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the doubles symbol, both dice must show the same value.\",\n      \"quotedFromA\": \"For the equality symbol, the two dice must show the same value (doubles).\",\n      \"quotedFromB\": \"Both dice must show the same value.\"\n    },\n    {\n      \"statement\": \"The slash symbol requires 1 die.\",\n      \"quotedFromA\": \"The symbol showing a two-pip face and a three-pip face separated by a slash requires one die.\",\n      \"quotedFromB\": \"This dice roll symbol requires 1 die to be rolled.\"\n    },\n    {\n      \"statement\": \"For the slash symbol, the single die may show either a 2 or a 3.\",\n      \"quotedFromA\": \"For the slash symbol, the single die may show either of the two listed values, a 2 or a 3.\",\n      \"quotedFromB\": \"The die must show either a 2 or a 3.\"\n    },\n    {\n      \"statement\": \"The greater-than symbol requires 2 dice.\",\n      \"quotedFromA\": \"The symbol showing an unknown die, a greater-than sign, and a three-pip face requires two dice.\",\n      \"quotedFromB\": \"This dice roll symbol requires 2 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the greater-than symbol, one die must show the value 3.\",\n      \"quotedFromA\": \"For the greater-than symbol, one die must show exactly a 3 and the other must show a value higher than 3.\",\n      \"quotedFromB\": \"One die must show the value 3.\"\n    },\n    {\n      \"statement\": \"For the greater-than symbol, the other die must show a value greater than 3.\",\n      \"quotedFromA\": \"For the greater-than symbol, one die must show exactly a 3 and the other must show a value higher than 3.\",\n      \"quotedFromB\": \"Another die must show a value greater than 3.\"\n    },\n    {\n      \"statement\": \"The 4-and-5 symbol requires 2 dice.\",\n      \"quotedFromA\": \"The symbol showing a four-pip face and a five-pip face requires two dice.\",\n      \"quotedFromB\": \"This dice roll symbol requires 2 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the 4-and-5 symbol, one die must show the value 4.\",\n      \"quotedFromA\": \"For the 4-plus-5 symbol, one die must show a 4 and the other must show a 5.\",\n      \"quotedFromB\": \"One die must show the value 4.\"\n    },\n    {\n      \"statement\": \"For the 4-and-5 symbol, the other die must show the value 5.\",\n      \"quotedFromA\": \"For the 4-plus-5 symbol, one die must show a 4 and the other must show a 5.\",\n      \"quotedFromB\": \"One die must show the value 5.\"\n    }\n  ],\n  \"aOnly\": [\n    {\n      \"statement\": \"An example satisfying the addition symbol is 2 plus 4 equaling 6.\",\n      \"sourceSentence\": \"(i.e. 2+4=6)\"\n    },\n    {\n      \"statement\": \"Dice roll symbols appear on page 1 in panel -13- under the heading DICE ROLL SYMBOLOGY / EXAMPLES.\",\n      \"sourceSentence\": \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"\n    }\n  ],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 25,\n      \"derivedLineText\": \"Roll conditions on machine part cards are expressed with a compact symbol language: \\\"?\\\" means any value, an explicit pip face means an exact value, \\\"/\\\" means either-or, \\\"+\\\" and \\\"=\\\" express arithmetic/equality relations across dice, and \\\">\\\" expresses a comparison.\",\n      \"proposedClassification\": \"uncorroborated\",\n      \"citedBothStatements\": []\n    }\n  ]\n}\n```",
+    "ttft_ms": 44707,
+    "ttft_stream_ms": 1525,
+    "time_to_request_ms": 439,
+    "type": "result",
+    "duration_ms": 56208,
+    "uuid": "1f696f4b-cfa4-4c73-85c5-b48735c3a309"
+  },
+  "reconcile": "{\n  \"both\": [\n    {\n      \"statement\": \"The addition dice-roll symbol requires 3 dice.\",\n      \"quotedFromA\": \"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\",\n      \"quotedFromB\": \"This dice roll symbol requires 3 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the addition symbol, the first and second die values must sum to equal the third die's value.\",\n      \"quotedFromA\": \"For the addition symbol, the values of the first and second dice must sum to the value of the third die.\",\n      \"quotedFromB\": \"The sum of the first and second die values must equal the third die's value.\"\n    },\n    {\n      \"statement\": \"The three-sixes symbol requires 3 dice.\",\n      \"quotedFromA\": \"The symbol showing three six-pip faces requires three dice.\",\n      \"quotedFromB\": \"This dice roll symbol requires 3 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the three-sixes symbol, all three dice must show a six.\",\n      \"quotedFromA\": \"For the three-sixes symbol, every one of the required dice must show a six.\",\n      \"quotedFromB\": \"All three dice must show the value 6.\"\n    },\n    {\n      \"statement\": \"The doubles symbol requires 2 dice.\",\n      \"quotedFromA\": \"The symbol showing one unknown die equal to another unknown die requires two dice.\",\n      \"quotedFromB\": \"This dice roll symbol requires 2 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the doubles symbol, both dice must show the same value.\",\n      \"quotedFromA\": \"For the equality symbol, the two dice must show the same value (doubles).\",\n      \"quotedFromB\": \"Both dice must show the same value.\"\n    },\n    {\n      \"statement\": \"The slash symbol requires 1 die.\",\n      \"quotedFromA\": \"The symbol showing a two-pip face and a three-pip face separated by a slash requires one die.\",\n      \"quotedFromB\": \"This dice roll symbol requires 1 die to be rolled.\"\n    },\n    {\n      \"statement\": \"For the slash symbol, the single die may show either a 2 or a 3.\",\n      \"quotedFromA\": \"For the slash symbol, the single die may show either of the two listed values, a 2 or a 3.\",\n      \"quotedFromB\": \"The die must show either a 2 or a 3.\"\n    },\n    {\n      \"statement\": \"The greater-than symbol requires 2 dice.\",\n      \"quotedFromA\": \"The symbol showing an unknown die, a greater-than sign, and a three-pip face requires two dice.\",\n      \"quotedFromB\": \"This dice roll symbol requires 2 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the greater-than symbol, one die must show the value 3.\",\n      \"quotedFromA\": \"For the greater-than symbol, one die must show exactly a 3 and the other must show a value higher than 3.\",\n      \"quotedFromB\": \"One die must show the value 3.\"\n    },\n    {\n      \"statement\": \"For the greater-than symbol, the other die must show a value greater than 3.\",\n      \"quotedFromA\": \"For the greater-than symbol, one die must show exactly a 3 and the other must show a value higher than 3.\",\n      \"quotedFromB\": \"Another die must show a value greater than 3.\"\n    },\n    {\n      \"statement\": \"The 4-and-5 symbol requires 2 dice.\",\n      \"quotedFromA\": \"The symbol showing a four-pip face and a five-pip face requires two dice.\",\n      \"quotedFromB\": \"This dice roll symbol requires 2 dice to be rolled.\"\n    },\n    {\n      \"statement\": \"For the 4-and-5 symbol, one die must show the value 4.\",\n      \"quotedFromA\": \"For the 4-plus-5 symbol, one die must show a 4 and the other must show a 5.\",\n      \"quotedFromB\": \"One die must show the value 4.\"\n    },\n    {\n      \"statement\": \"For the 4-and-5 symbol, the other die must show the value 5.\",\n      \"quotedFromA\": \"For the 4-plus-5 symbol, one die must show a 4 and the other must show a 5.\",\n      \"quotedFromB\": \"One die must show the value 5.\"\n    }\n  ],\n  \"aOnly\": [\n    {\n      \"statement\": \"An example satisfying the addition symbol is 2 plus 4 equaling 6.\",\n      \"sourceSentence\": \"(i.e. 2+4=6)\"\n    },\n    {\n      \"statement\": \"Dice roll symbols appear on page 1 in panel -13- under the heading DICE ROLL SYMBOLOGY / EXAMPLES.\",\n      \"sourceSentence\": \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"\n    }\n  ],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 25,\n      \"derivedLineText\": \"Roll conditions on machine part cards are expressed with a compact symbol language: \\\"?\\\" means any value, an explicit pip face means an exact value, \\\"/\\\" means either-or, \\\"+\\\" and \\\"=\\\" express arithmetic/equality relations across dice, and \\\">\\\" expresses a comparison.\",\n      \"proposedClassification\": \"uncorroborated\",\n      \"citedBothStatements\": []\n    }\n  ]\n}"
+}

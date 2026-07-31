@@ -351,6 +351,49 @@ the tag.
       `177-CONSOLIDATED-PROOF.md`, `177-20-MEASUREMENT/`. **CHECK-04 remains open** — two specific,
       actionable code fixes are named for whoever closes it next (disambiguate `findMatch`;
       widen `ANNOTATION_VOCABULARY_RE`'s tolerated leading-decoration set to include `(`).
+
+      **AMENDMENT 3 (2026-07-31, plan 177-21) — the definitive consolidated measurement, both
+      177-20 defects confirmed FIXED and re-verified live; STILL OPEN on a new, structural finding.**
+      Both fixes 177-20 named landed (`564f1a42`): `findMatch` now selects deterministically
+      (strongest match rank, ties broken on content-derived id, order-independent) instead of
+      `Array.find`'s first-match-wins; `ANNOTATION_VOCABULARY_RE` now consumes all non-alphanumeric
+      leading decoration instead of a hand-enumerated character class. This run (`564f1a42`, all
+      three reference games, run twice, pre-registered `2aad3d1c` before any dispatch) confirms both
+      live: `seven` L21 — the exact line that flipped in 177-20 — is stable
+      `corroborated-by-composition` in both runs of this measurement; `CARDS.md` L140's
+      parenthesized `(Derived: ...)` form (the latent gap 177-20 could only test in isolation) is
+      confirmed absent from the real dispatched payload, by grep, before any dispatch. `CARDS.md`'s
+      whole-file block (177-20's line-270 mid-sentence citation) is also gone — **for the first time
+      in this measurement chain, all real `Derived` lines across all three reference games were
+      attempted, both runs, no blocks.** (Also disclosed: this run's own corpus-extraction harness
+      had a bug that mis-flagged `CARDS.md` line 8 — the file's own legend explaining the annotation
+      convention, using the literal placeholder `p.N` — as a real `Derived` line; fixed before
+      analysis, confirmed absent from every real dispatch. The corrected true count is **32** real
+      `Derived` lines, not 33.) **But determinism still failed** — 31/32 lines identical across runs,
+      one flip (`doom-machine/CARDS.md` L143, `corroborated` → `uncorroborated`), traced this time
+      to real ACROSS-RUN VARIANCE IN WHAT THE ENUMERATORS THEMSELVES ENUMERATED (haiku decomposed
+      `CARDS.md`'s dense card-track data differently between run 1 and run 2, so the reconciler had
+      no synthesizable pair to cite in run 2) — not a `validateGrounding`/`findMatch`-class code
+      defect; both runs' mechanical checks behaved correctly given their legitimately different
+      inputs. Per this run's own pre-registered rule (`177-21-MEASUREMENT/PRE-REGISTRATION.md`
+      prediction 1: "a flip on ANY of the lines... means the fix did not fully close the defect, or
+      a new determinism gap exists... CHECK-04 must NOT close"), this blocks closure exactly as
+      pre-named. **Every other criterion PASSED on this run's real evidence:** zero `contradicted`
+      (0/32, both runs); grounding rejections (14 run 1, 0 run 2, all on `CARDS.md`, all genuine
+      Rule-2 quoting violations — the reconciler quoting a short glyph fragment instead of the
+      fact's actual statement/sourceSentence — mechanically caught, spot-checked, zero fabrications
+      passed through); independence confirmed by `grep` against all 32 real dispatched payloads
+      BEFORE any dispatch (not by post-hoc assertion); every non-corroborated line named to a
+      category (cross-slice reference x3, 2 genuine dual-enumeration misses, 1 harness
+      arithmetic-spec gap, 1 structurally-unanswerable absence claim, plus the one determinism flip).
+      Full detail, both runs' raw dispatch data (90 real `claude -p` calls): `177-FINAL-PROOF.md`,
+      `177-21-MEASUREMENT/`. **CHECK-04 remains open.** Unlike the prior two amendments, no specific
+      unfixed code defect is named as the blocker this time — what remains open is whether this
+      design's determinism criterion, as currently defined (byte-identical classification across two
+      full runs of unchanged input), is achievable at all against a large, information-dense slice
+      dispatched to two independently-sampled, non-deterministic models, without either an
+      enumeration-granularity mechanism this run did not test or a redefinition of the criterion
+      itself — neither attempted here, per this run's own scope (measurement, not remediation).
 - [x] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
       commit hash, and any chunk whose code moved since the human last approved it is reported.
 - [ ] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
@@ -409,7 +452,7 @@ the tag.
 | VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
 | CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
 | CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
-| CHECK-04 | Phase 177 | STILL OPEN after re-scoping to dual enumeration + reconciliation and a consolidated, twice-run, all-three-games measurement of current code (177-20, `177-CONSOLIDATED-PROOF.md`). Original per-line blind re-derivation design (177-01..13) PARTIAL — left OPEN after a 6-plan gap-closure sequence; goal measured in its own unit: 6/16 (37.5%) real candidates got a genuine second opinion (`177-GOAL-MEASUREMENT.md`, citing `177-PROOF-2.md`); retired per `177-EXPERIMENTS/README.md` (asks an unanswerable targeting question). Replacement design (177-14..20): 28/33 real Derived lines across `seven`/`one-two-punch`/`doom-machine` got a genuine dual-enumeration attempt on current code (`b1a9bc35`), run twice; determinism failed on 1/28 (a real, newly-found `validateGrounding` defect), blocking closure per this run's own pre-committed criteria despite zero contradicted/zero fabrications/confirmed independence on the rest. Two named, unfixed code defects carried forward. |
+| CHECK-04 | Phase 177 | STILL OPEN after the definitive consolidated measurement (177-21, `177-FINAL-PROOF.md`). Original per-line blind re-derivation design (177-01..13) PARTIAL — left OPEN after a 6-plan gap-closure sequence; goal measured in its own unit: 6/16 (37.5%) real candidates got a genuine second opinion (`177-GOAL-MEASUREMENT.md`, citing `177-PROOF-2.md`); retired per `177-EXPERIMENTS/README.md` (asks an unanswerable targeting question). Replacement design (177-14..21), dual enumeration + reconciliation: 177-20 found 28/33 dispatchable lines with determinism failing on 1/28, traced to a real `validateGrounding`/`findMatch` defect; that defect (and a related `ANNOTATION_VOCABULARY_RE` gap) is now CONFIRMED FIXED (`564f1a42`) and re-verified live in 177-21 — `seven` L21 stable in both runs, `CARDS.md` no longer blocked at all. 177-21 measured ALL 32 real Derived lines (corrected count; a harness artifact inflated the prior 33), both runs, 100% attempted for the first time — but determinism STILL failed, on a different line (`CARDS.md` L143), traced this time to real cross-run enumerator-output variance (haiku decomposing a dense slice differently between runs) rather than a code defect. Zero contradicted, zero fabrications, confirmed independence, full explainability all PASS on both runs. CHECK-04 stays open per the run's own pre-registered rule; no specific unfixed code defect is named this time — the open question is whether byte-identical determinism is achievable at all against non-deterministic enumerator models on a large slice. |
 | CHECK-06 | Phase 178 | Pending |
 | TEST-01 | Phase 178 | Pending |
 | VERIFY-09 | Phase 179 | Pending |

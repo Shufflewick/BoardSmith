@@ -1,0 +1,7 @@
+BS-ENUMERATE-V1
+Slice: rulebook/02-taking-damage-and-winning.md
+
+p.2 (panel -10-), TAKING DAMAGE:
+"Any time a machine part card deals you damage, it will always damage your shields first (if you have any remaining). As damage is taken, reduce the value of shield dice first until they are completely expended (and removed to your spent dice pile). Any remaining damage that hasn't been absorbed by your shield dice will carry over and deal direct damage to your HP."
+p.2 (panel -10-), WINNING THE GAME:
+"You win the game when the Doom Core has been destroyed. You don't have to clear all of the machine part cards to win. However, if your HP is reduced to zero, the machine destroys you first, and you lose."

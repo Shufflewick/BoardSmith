@@ -1,0 +1,76 @@
+{
+  "facts": [
+    {
+      "statement": "The sum-equals symbol requires 3 dice.",
+      "sourceSentence": "3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)",
+      "numericValue": { "magnitude": 3, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the sum-equals symbol, the first die plus the second die must equal the value shown on the third die.",
+      "sourceSentence": "1st die + 2nd die must = the value of the third die."
+    },
+    {
+      "statement": "The all-sixes symbol requires 3 dice.",
+      "sourceSentence": "3 dice required. They must all be sixes.",
+      "numericValue": { "magnitude": 3, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the all-sixes symbol, all three dice must show six pips.",
+      "sourceSentence": "They must all be sixes.",
+      "numericValue": { "magnitude": 6, "unit": "pips", "approximate": false }
+    },
+    {
+      "statement": "The doubles symbol requires 2 dice.",
+      "sourceSentence": "2 dice required. They must be doubles.",
+      "numericValue": { "magnitude": 2, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the doubles symbol, both dice must show the same value.",
+      "sourceSentence": "They must be doubles."
+    },
+    {
+      "statement": "The either-or symbol requires 1 die.",
+      "sourceSentence": "1 die required. It can be either a 2 or a 3 value.",
+      "numericValue": { "magnitude": 1, "unit": "die", "approximate": false }
+    },
+    {
+      "statement": "For the either-or symbol, the die must show a value of 2.",
+      "sourceSentence": "It can be either a 2 or a 3 value.",
+      "numericValue": { "magnitude": 2, "unit": "pips", "approximate": false }
+    },
+    {
+      "statement": "For the either-or symbol, the die must show a value of 3.",
+      "sourceSentence": "It can be either a 2 or a 3 value.",
+      "numericValue": { "magnitude": 3, "unit": "pips", "approximate": false }
+    },
+    {
+      "statement": "The greater-than symbol requires 2 dice.",
+      "sourceSentence": "2 dice required. One must be a 3, another greater than 3.",
+      "numericValue": { "magnitude": 2, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the greater-than symbol, one die must show a value of 3.",
+      "sourceSentence": "One must be a 3, another greater than 3.",
+      "numericValue": { "magnitude": 3, "unit": "pips", "approximate": false }
+    },
+    {
+      "statement": "For the greater-than symbol, one die must show a value greater than 3.",
+      "sourceSentence": "One must be a 3, another greater than 3."
+    },
+    {
+      "statement": "The specific-pair symbol requires 2 dice.",
+      "sourceSentence": "2 dice required. They must be a 4 and a 5.",
+      "numericValue": { "magnitude": 2, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the specific-pair symbol, one die must show a value of 4.",
+      "sourceSentence": "They must be a 4 and a 5.",
+      "numericValue": { "magnitude": 4, "unit": "pips", "approximate": false }
+    },
+    {
+      "statement": "For the specific-pair symbol, one die must show a value of 5.",
+      "sourceSentence": "They must be a 4 and a 5.",
+      "numericValue": { "magnitude": 5, "unit": "pips", "approximate": false }
+    }
+  ]
+}

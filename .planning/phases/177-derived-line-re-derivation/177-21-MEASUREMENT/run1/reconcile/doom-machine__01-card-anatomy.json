@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 59203,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "ced2bcb0-6e8a-4276-8c6b-f3524de80c7a",
+    "total_cost_usd": 0.2316267,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 17723,
+      "cache_read_input_tokens": 29259,
+      "output_tokens": 7767,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 17723,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 7767,
+          "cache_read_input_tokens": 29259,
+          "cache_creation_input_tokens": 17723,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 17723
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 7767,
+        "cacheReadInputTokens": 29259,
+        "cacheCreationInputTokens": 17723,
+        "webSearchRequests": 0,
+        "costUSD": 0.2316267,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"both\": [\n    {\n      \"statement\": \"The card has a name\",\n      \"quotedFromA\": \"1  Card name\",\n      \"quotedFromB\": \"1  Card name\"\n    },\n    {\n      \"statement\": \"The card shows roll conditions needed to damage the machine part\",\n      \"quotedFromA\": \"2  Roll conditions needed to damage machine part\",\n      \"quotedFromB\": \"2  Roll conditions needed to damage machine part\"\n    },\n    {\n      \"statement\": \"The card has a machine part cycle track\",\n      \"quotedFromA\": \"3  Machine part cycle track\",\n      \"quotedFromB\": \"3  Machine part cycle track\"\n    },\n    {\n      \"statement\": \"The card has cycle icon effects\",\n      \"quotedFromA\": \"4  Cycle icon effects\",\n      \"quotedFromB\": \"4  Cycle icon effects\"\n    },\n    {\n      \"statement\": \"The diagram card is portrait-oriented\",\n      \"quotedFromA\": \"a single portrait teal machine part card with four numbered callouts pointing to it.\",\n      \"quotedFromB\": \"a single portrait teal machine part card with four numbered callouts pointing to it\"\n    },\n    {\n      \"statement\": \"The diagram card is teal\",\n      \"quotedFromA\": \"a single portrait teal machine part card with four numbered callouts pointing to it.\",\n      \"quotedFromB\": \"a single portrait teal machine part card with four numbered callouts pointing to it\"\n    },\n    {\n      \"statement\": \"The diagram card is a machine part card\",\n      \"quotedFromA\": \"a single portrait teal machine part card with four numbered callouts pointing to it.\",\n      \"quotedFromB\": \"a single portrait teal machine part card with four numbered callouts pointing to it\"\n    },\n    {\n      \"statement\": \"The diagram shows four numbered callouts\",\n      \"quotedFromA\": \"a single portrait teal machine part card with four numbered callouts pointing to it.\",\n      \"quotedFromB\": \"a single portrait teal machine part card with four numbered callouts pointing to it\"\n    },\n    {\n      \"statement\": \"Callout 1 points to the title bar at the top of the card\",\n      \"quotedFromA\": \"(1) points at the title bar across the top of the card (the sample card's name reads as \\\"RECYCLING UNIT\\\").\",\n      \"quotedFromB\": \"(1) points at the title bar across the top of the card\"\n    },\n    {\n      \"statement\": \"The sample card name shown is RECYCLING UNIT\",\n      \"quotedFromA\": \"(the sample card's name reads as \\\"RECYCLING UNIT\\\")\",\n      \"quotedFromB\": \"the sample card's name reads as \\\"RECYCLING UNIT\\\"\"\n    },\n    {\n      \"statement\": \"Callout 2 points to yellow roll-condition tiles on the middle-right of the card\",\n      \"quotedFromA\": \"(2) points at the yellow roll-condition tiles on the middle-right of the card face.\",\n      \"quotedFromB\": \"(2) points at the yellow roll-condition tiles on the middle-right of the card face\"\n    },\n    {\n      \"statement\": \"Callout 3 points to a vertical column of track squares on the left side of the card, which holds the yellow HP die\",\n      \"quotedFromA\": \"(3) points at the vertical column of track squares running down the left side of the card, which holds the yellow HP die.\",\n      \"quotedFromB\": \"(3) points at the vertical column of track squares running down the left side of the card, which holds the yellow HP die\"\n    },\n    {\n      \"statement\": \"Cycle track holds a yellow HP die\",\n      \"quotedFromA\": \"which holds the yellow HP die.\",\n      \"quotedFromB\": \"which holds the yellow HP die\"\n    },\n    {\n      \"statement\": \"Callout 4 points to small colored icon badges in the track and lower card area\",\n      \"quotedFromA\": \"(4) points at the small colored icon badges embedded in the track / lower card area that fire when the die lands on them.\",\n      \"quotedFromB\": \"(4) points at the small colored icon badges embedded in the track / lower card area that fire when the die lands on them\"\n    },\n    {\n      \"statement\": \"Cycle icon badges fire when the die lands on them\",\n      \"quotedFromA\": \"that fire when the die lands on them.\",\n      \"quotedFromB\": \"small colored icon badges embedded in the track / lower card area that fire when the die lands on them\"\n    },\n    {\n      \"statement\": \"Numbered markers 1-4 run down the left edge of the card\",\n      \"quotedFromA\": \"Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right.\",\n      \"quotedFromB\": \"Numbered markers 1-4 run down the left edge of the card\"\n    },\n    {\n      \"statement\": \"Numbered legend entries appear on the right of the card\",\n      \"quotedFromA\": \"Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right.\",\n      \"quotedFromB\": \"Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right\"\n    }\n  ],\n  \"aOnly\": [],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 11,\n      \"derivedLineText\": \"Derived (p.1): A machine part card carries four rule-bearing regions — name, roll conditions (damage requirements), a cycle track the part's yellow HP die moves down, and cycle icon effects triggered when the die lands on an icon.\",\n      \"proposedClassification\": \"corroborated\",\n      \"citedBothStatements\": [\n        \"The card has a name\",\n        \"The card shows roll conditions needed to damage the machine part\",\n        \"The card has a machine part cycle track\",\n        \"Cycle track holds a yellow HP die\",\n        \"The card has cycle icon effects\",\n        \"Cycle icon badges fire when the die lands on them\"\n      ]\n    }\n  ]\n}\n```",
+    "ttft_ms": 49493,
+    "ttft_stream_ms": 3104,
+    "time_to_request_ms": 1061,
+    "type": "result",
+    "duration_ms": 61080,
+    "uuid": "96584011-cf0a-4347-b5c5-b2936fd01aa8"
+  },
+  "reconcile": "{\n  \"both\": [\n    {\n      \"statement\": \"The card has a name\",\n      \"quotedFromA\": \"1  Card name\",\n      \"quotedFromB\": \"1  Card name\"\n    },\n    {\n      \"statement\": \"The card shows roll conditions needed to damage the machine part\",\n      \"quotedFromA\": \"2  Roll conditions needed to damage machine part\",\n      \"quotedFromB\": \"2  Roll conditions needed to damage machine part\"\n    },\n    {\n      \"statement\": \"The card has a machine part cycle track\",\n      \"quotedFromA\": \"3  Machine part cycle track\",\n      \"quotedFromB\": \"3  Machine part cycle track\"\n    },\n    {\n      \"statement\": \"The card has cycle icon effects\",\n      \"quotedFromA\": \"4  Cycle icon effects\",\n      \"quotedFromB\": \"4  Cycle icon effects\"\n    },\n    {\n      \"statement\": \"The diagram card is portrait-oriented\",\n      \"quotedFromA\": \"a single portrait teal machine part card with four numbered callouts pointing to it.\",\n      \"quotedFromB\": \"a single portrait teal machine part card with four numbered callouts pointing to it\"\n    },\n    {\n      \"statement\": \"The diagram card is teal\",\n      \"quotedFromA\": \"a single portrait teal machine part card with four numbered callouts pointing to it.\",\n      \"quotedFromB\": \"a single portrait teal machine part card with four numbered callouts pointing to it\"\n    },\n    {\n      \"statement\": \"The diagram card is a machine part card\",\n      \"quotedFromA\": \"a single portrait teal machine part card with four numbered callouts pointing to it.\",\n      \"quotedFromB\": \"a single portrait teal machine part card with four numbered callouts pointing to it\"\n    },\n    {\n      \"statement\": \"The diagram shows four numbered callouts\",\n      \"quotedFromA\": \"a single portrait teal machine part card with four numbered callouts pointing to it.\",\n      \"quotedFromB\": \"a single portrait teal machine part card with four numbered callouts pointing to it\"\n    },\n    {\n      \"statement\": \"Callout 1 points to the title bar at the top of the card\",\n      \"quotedFromA\": \"(1) points at the title bar across the top of the card (the sample card's name reads as \\\"RECYCLING UNIT\\\").\",\n      \"quotedFromB\": \"(1) points at the title bar across the top of the card\"\n    },\n    {\n      \"statement\": \"The sample card name shown is RECYCLING UNIT\",\n      \"quotedFromA\": \"(the sample card's name reads as \\\"RECYCLING UNIT\\\")\",\n      \"quotedFromB\": \"the sample card's name reads as \\\"RECYCLING UNIT\\\"\"\n    },\n    {\n      \"statement\": \"Callout 2 points to yellow roll-condition tiles on the middle-right of the card\",\n      \"quotedFromA\": \"(2) points at the yellow roll-condition tiles on the middle-right of the card face.\",\n      \"quotedFromB\": \"(2) points at the yellow roll-condition tiles on the middle-right of the card face\"\n    },\n    {\n      \"statement\": \"Callout 3 points to a vertical column of track squares on the left side of the card, which holds the yellow HP die\",\n      \"quotedFromA\": \"(3) points at the vertical column of track squares running down the left side of the card, which holds the yellow HP die.\",\n      \"quotedFromB\": \"(3) points at the vertical column of track squares running down the left side of the card, which holds the yellow HP die\"\n    },\n    {\n      \"statement\": \"Cycle track holds a yellow HP die\",\n      \"quotedFromA\": \"which holds the yellow HP die.\",\n      \"quotedFromB\": \"which holds the yellow HP die\"\n    },\n    {\n      \"statement\": \"Callout 4 points to small colored icon badges in the track and lower card area\",\n      \"quotedFromA\": \"(4) points at the small colored icon badges embedded in the track / lower card area that fire when the die lands on them.\",\n      \"quotedFromB\": \"(4) points at the small colored icon badges embedded in the track / lower card area that fire when the die lands on them\"\n    },\n    {\n      \"statement\": \"Cycle icon badges fire when the die lands on them\",\n      \"quotedFromA\": \"that fire when the die lands on them.\",\n      \"quotedFromB\": \"small colored icon badges embedded in the track / lower card area that fire when the die lands on them\"\n    },\n    {\n      \"statement\": \"Numbered markers 1-4 run down the left edge of the card\",\n      \"quotedFromA\": \"Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right.\",\n      \"quotedFromB\": \"Numbered markers 1-4 run down the left edge of the card\"\n    },\n    {\n      \"statement\": \"Numbered legend entries appear on the right of the card\",\n      \"quotedFromA\": \"Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right.\",\n      \"quotedFromB\": \"Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right\"\n    }\n  ],\n  \"aOnly\": [],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 11,\n      \"derivedLineText\": \"Derived (p.1): A machine part card carries four rule-bearing regions — name, roll conditions (damage requirements), a cycle track the part's yellow HP die moves down, and cycle icon effects triggered when the die lands on an icon.\",\n      \"proposedClassification\": \"corroborated\",\n      \"citedBothStatements\": [\n        \"The card has a name\",\n        \"The card shows roll conditions needed to damage the machine part\",\n        \"The card has a machine part cycle track\",\n        \"Cycle track holds a yellow HP die\",\n        \"The card has cycle icon effects\",\n        \"Cycle icon badges fire when the die lands on them\"\n      ]\n    }\n  ]\n}"
+}

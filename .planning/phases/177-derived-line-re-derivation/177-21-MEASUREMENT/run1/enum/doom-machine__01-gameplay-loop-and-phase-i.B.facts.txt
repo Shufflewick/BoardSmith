@@ -1,0 +1,63 @@
+{
+  "facts": [
+    {
+      "statement": "At the start of each turn, the player rolls all available dice.",
+      "sourceSentence": "At the start of your turn, roll all of your available dice"
+    },
+    {
+      "statement": "The player starts with 5 black dice.",
+      "sourceSentence": "you start with 5 black dice",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "black dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The player may gain up to 5 additional yellow dice from destroying machine parts.",
+      "sourceSentence": "may gain up to 5 additional yellow dice from destroyed machine part cards",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "yellow dice",
+        "approximate": true
+      }
+    },
+    {
+      "statement": "Players can allocate dice to activate available utilities.",
+      "sourceSentence": "ACTIVATE ANY AVAILABLE UTILITIES"
+    },
+    {
+      "statement": "Players can allocate dice to play to shields.",
+      "sourceSentence": "PLAY DICE TO YOUR SHIELDS"
+    },
+    {
+      "statement": "Players can allocate dice to deal damage to machine parts.",
+      "sourceSentence": "DEAL DAMAGE TO MACHINE PARTS"
+    },
+    {
+      "statement": "After the player allocates and resolves all dice, the machine cycles its remaining parts.",
+      "sourceSentence": "Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts"
+    },
+    {
+      "statement": "The machine resolves the effects of its parts.",
+      "sourceSentence": "resolve their effects"
+    },
+    {
+      "statement": "The machine grows by 1 additional card.",
+      "sourceSentence": "grow by 1 additional card",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "additional card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The game ends when the player reveals and destroys the Doom Core.",
+      "sourceSentence": "This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine"
+    },
+    {
+      "statement": "The game ends when the machine destroys the player.",
+      "sourceSentence": "This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine"
+    }
+  ]
+}

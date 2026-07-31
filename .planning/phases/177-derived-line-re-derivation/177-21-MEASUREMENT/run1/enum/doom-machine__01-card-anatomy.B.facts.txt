@@ -1,0 +1,82 @@
+{
+  "facts": [
+    {
+      "statement": "The card has a name",
+      "sourceSentence": "1  Card name"
+    },
+    {
+      "statement": "The card has roll conditions needed to damage the machine part",
+      "sourceSentence": "2  Roll conditions needed to damage machine part"
+    },
+    {
+      "statement": "The card has a machine part cycle track",
+      "sourceSentence": "3  Machine part cycle track"
+    },
+    {
+      "statement": "The card has cycle icon effects",
+      "sourceSentence": "4  Cycle icon effects"
+    },
+    {
+      "statement": "The card is portrait-oriented",
+      "sourceSentence": "a single portrait teal machine part card with four numbered callouts pointing to it"
+    },
+    {
+      "statement": "The card is teal",
+      "sourceSentence": "a single portrait teal machine part card with four numbered callouts pointing to it"
+    },
+    {
+      "statement": "The card is a machine part card",
+      "sourceSentence": "a single portrait teal machine part card with four numbered callouts pointing to it"
+    },
+    {
+      "statement": "The card displays four numbered callouts",
+      "sourceSentence": "a single portrait teal machine part card with four numbered callouts pointing to it",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "callouts",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Callout 1 points to the title bar at the top of the card",
+      "sourceSentence": "(1) points at the title bar across the top of the card"
+    },
+    {
+      "statement": "The sample card name shown is RECYCLING UNIT",
+      "sourceSentence": "the sample card's name reads as \"RECYCLING UNIT\""
+    },
+    {
+      "statement": "Callout 2 points to yellow roll-condition tiles on the middle-right of the card",
+      "sourceSentence": "(2) points at the yellow roll-condition tiles on the middle-right of the card face"
+    },
+    {
+      "statement": "Callout 3 points to a vertical column of track squares on the left side of the card",
+      "sourceSentence": "(3) points at the vertical column of track squares running down the left side of the card, which holds the yellow HP die"
+    },
+    {
+      "statement": "The cycle track holds a yellow HP die",
+      "sourceSentence": "which holds the yellow HP die"
+    },
+    {
+      "statement": "Callout 4 points to small colored icon badges in the track and lower card area",
+      "sourceSentence": "(4) points at the small colored icon badges embedded in the track / lower card area that fire when the die lands on them"
+    },
+    {
+      "statement": "The cycle icon badges fire when the die lands on them",
+      "sourceSentence": "small colored icon badges embedded in the track / lower card area that fire when the die lands on them"
+    },
+    {
+      "statement": "Numbered markers 1-4 run down the left edge of the card",
+      "sourceSentence": "Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "markers",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Numbered legend entries appear on the right of the card",
+      "sourceSentence": "Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right"
+    }
+  ]
+}

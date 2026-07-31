@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 83993,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "1d6d9165-5b9a-43de-a57e-539116887bd1",
+    "total_cost_usd": 0.0673755,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9176,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 9369,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9176,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 9369,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9176,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9176
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 9369,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9176,
+        "webSearchRequests": 0,
+        "costUSD": 0.0673755,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"HARD MODE is an optional rule variation that makes the game tougher and longer.\",\n      \"sourceSentence\": \"For a tougher challenge and longer game, try playing HARD MODE using the follow rule variations:\"\n    },\n    {\n      \"statement\": \"In a normal game setup, 6 cards are removed at random.\",\n      \"sourceSentence\": \"Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\",\n      \"numericValue\": {\n        \"magnitude\": 6,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"In HARD MODE setup, all 16 cards are used without removing any.\",\n      \"sourceSentence\": \"Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\",\n      \"numericValue\": {\n        \"magnitude\": 16,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The HP tracking card can be flipped to show a B side.\",\n      \"sourceSentence\": \"Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\"\n    },\n    {\n      \"statement\": \"The B side of the HP tracking card has one fewer shield slot than the normal side.\",\n      \"sourceSentence\": \"Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"shield slot reduction\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The B side of the HP tracking card has one fewer re-roll slot than the normal side.\",\n      \"sourceSentence\": \"Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"re-roll slot reduction\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The B side of the HP tracking card has one fewer roll modifier slot than the normal side.\",\n      \"sourceSentence\": \"Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"roll modifier slot reduction\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"In a normal game, a maximum of 4 dice can be placed this way per turn.\",\n      \"sourceSentence\": \"In a normal game, no more than 4 dice can be placed this way per turn.\",\n      \"numericValue\": {\n        \"magnitude\": 4,\n        \"unit\": \"dice per turn\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"In HARD MODE, a maximum of 3 dice can be placed this way per turn.\",\n      \"sourceSentence\": \"In Hard Mode, no more than 3 dice can be placed this way per turn.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"dice per turn\",\n        \"approximate\": false\n      }\n    }\n  ]\n}\n```",
+    "ttft_ms": 79406,
+    "ttft_stream_ms": 1826,
+    "time_to_request_ms": 765,
+    "type": "result",
+    "duration_ms": 85178,
+    "uuid": "0dc33b23-d3c7-4169-af9c-ae9bd341e64c"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"HARD MODE is an optional rule variation that makes the game tougher and longer.\",\n      \"sourceSentence\": \"For a tougher challenge and longer game, try playing HARD MODE using the follow rule variations:\"\n    },\n    {\n      \"statement\": \"In a normal game setup, 6 cards are removed at random.\",\n      \"sourceSentence\": \"Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\",\n      \"numericValue\": {\n        \"magnitude\": 6,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"In HARD MODE setup, all 16 cards are used without removing any.\",\n      \"sourceSentence\": \"Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\",\n      \"numericValue\": {\n        \"magnitude\": 16,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The HP tracking card can be flipped to show a B side.\",\n      \"sourceSentence\": \"Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\"\n    },\n    {\n      \"statement\": \"The B side of the HP tracking card has one fewer shield slot than the normal side.\",\n      \"sourceSentence\": \"Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"shield slot reduction\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The B side of the HP tracking card has one fewer re-roll slot than the normal side.\",\n      \"sourceSentence\": \"Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"re-roll slot reduction\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The B side of the HP tracking card has one fewer roll modifier slot than the normal side.\",\n      \"sourceSentence\": \"Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"roll modifier slot reduction\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"In a normal game, a maximum of 4 dice can be placed this way per turn.\",\n      \"sourceSentence\": \"In a normal game, no more than 4 dice can be placed this way per turn.\",\n      \"numericValue\": {\n        \"magnitude\": 4,\n        \"unit\": \"dice per turn\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"In HARD MODE, a maximum of 3 dice can be placed this way per turn.\",\n      \"sourceSentence\": \"In Hard Mode, no more than 3 dice can be placed this way per turn.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"dice per turn\",\n        \"approximate\": false\n      }\n    }\n  ]\n}"
+}

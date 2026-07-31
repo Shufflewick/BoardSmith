@@ -1,0 +1,43 @@
+{
+  "facts": [
+    {
+      "statement": "Players start with 3 cards in their hand",
+      "sourceSentence": "Each starts with 3 and ends the game with 10.",
+      "numericValue": { "magnitude": 3, "unit": "cards", "approximate": false }
+    },
+    {
+      "statement": "Players end the game with 10 cards in their hand",
+      "sourceSentence": "Each starts with 3 and ends the game with 10.",
+      "numericValue": { "magnitude": 10, "unit": "cards", "approximate": false }
+    },
+    {
+      "statement": "A Set consists of 2 or more cards with matching numbers",
+      "sourceSentence": "Set: 2+ cards with matching numbers.",
+      "numericValue": { "magnitude": 2, "unit": "cards", "approximate": true }
+    },
+    {
+      "statement": "A Run consists of 3 or more cards in numeric order",
+      "sourceSentence": "Run: 3+ cards in numeric order.",
+      "numericValue": { "magnitude": 3, "unit": "cards", "approximate": true }
+    },
+    {
+      "statement": "Cards have numbers ranging from 1 to 7",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card."
+    },
+    {
+      "statement": "There are 4 colors",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "numericValue": { "magnitude": 4, "unit": "colors", "approximate": false }
+    },
+    {
+      "statement": "There are 4 copies of each card",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "numericValue": { "magnitude": 4, "unit": "copies", "approximate": false }
+    },
+    {
+      "statement": "There are 7 bonus point cards",
+      "sourceSentence": "In addition, there are 7 bonus point cards.",
+      "numericValue": { "magnitude": 7, "unit": "bonus point cards", "approximate": false }
+    }
+  ]
+}

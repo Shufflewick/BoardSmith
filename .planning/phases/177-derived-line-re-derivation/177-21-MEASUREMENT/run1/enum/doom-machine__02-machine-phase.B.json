@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 115451,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "4f6e4bfa-9efe-4972-808d-b8570210dbda",
+    "total_cost_usd": 0.0826185,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9450,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 12308,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9450,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 12308,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9450,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9450
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 12308,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9450,
+        "webSearchRequests": 0,
+        "costUSD": 0.0826185,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"In the machine phase, players process machine part cards sequentially from left to right.\",\n      \"sourceSentence\": \"At the start of the machine phase, go from left to right down the row of machine parts in play, cycling each card's track and resolving its abilities as follows:\"\n    },\n    {\n      \"statement\": \"A machine part card's yellow die moves 1 space down its cycle track.\",\n      \"sourceSentence\": \"Move a machine part card's yellow die 1 space down its cycle track.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"space\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"If the yellow die lands on an icon, that icon's ability is triggered immediately.\",\n      \"sourceSentence\": \"If that dice lands on an icon, immediately trigger that icon's corresponding ability.\"\n    },\n    {\n      \"statement\": \"Dead spaces on cycle tracks are represented as darkened squares.\",\n      \"sourceSentence\": \"If moving the die places it on a dead space (darkened square), then move that die back to the starting position on the track.\"\n    },\n    {\n      \"statement\": \"If a die lands on a dead space, it is moved back to the starting position of the track.\",\n      \"sourceSentence\": \"If moving the die places it on a dead space (darkened square), then move that die back to the starting position on the track.\"\n    },\n    {\n      \"statement\": \"After processing one machine part card, the cycling process repeats for the next card to the right.\",\n      \"sourceSentence\": \"Proceed to the next machine part card in the line (moving right) and repeat the card cycling process until all part cards have increased their cycle track by 1 and resolved any abilities/effects that are triggered.\"\n    },\n    {\n      \"statement\": \"Each machine part card's cycle track is increased by 1 space during the machine phase.\",\n      \"sourceSentence\": \"Proceed to the next machine part card in the line (moving right) and repeat the card cycling process until all part cards have increased their cycle track by 1 and resolved any abilities/effects that are triggered.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"space\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"After cycling all machine part cards, the entire row slides 1 space to the right.\",\n      \"sourceSentence\": \"Now, carefully slide the entire machine part card row one space to the right.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"space\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"A new machine part card is drawn and placed in the available space.\",\n      \"sourceSentence\": \"Draw a new machine part card and slot it into the available space.\"\n    },\n    {\n      \"statement\": \"New machine part cards receive a yellow HP die placed on their first cycle tracking space.\",\n      \"sourceSentence\": \"Add a yellow HP die to the first cycle tracking space on the new card, setting the die face to the correct starting HP value for that card.\"\n    },\n    {\n      \"statement\": \"The yellow HP die on a new card is set to that card's starting HP value.\",\n      \"sourceSentence\": \"Add a yellow HP die to the first cycle tracking space on the new card, setting the die face to the correct starting HP value for that card.\"\n    },\n    {\n      \"statement\": \"A maximum of 10 machine parts can be in play at any given time.\",\n      \"sourceSentence\": \"Note: there can never be more than 10 machine parts in play at any given time.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"machine parts\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"When 10 machine part cards are active, no new card is drawn.\",\n      \"sourceSentence\": \"If 10 cards are active on the line, then skip drawing a new card and proceed with play.\"\n    },\n    {\n      \"statement\": \"The machine phase ends after all machine part cards are cycled and a new card is added.\",\n      \"sourceSentence\": \"When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I.\"\n    },\n    {\n      \"statement\": \"At the end of the machine phase, players gather all spent dice.\",\n      \"sourceSentence\": \"When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I.\"\n    },\n    {\n      \"statement\": \"Players may obtain new dice by defeating machine parts.\",\n      \"sourceSentence\": \"When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I.\"\n    },\n    {\n      \"statement\": \"After the machine phase completes, play returns to Phase I.\",\n      \"sourceSentence\": \"When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I.\"\n    },\n    {\n      \"statement\": \"Shields can prevent damage dealt to the player.\",\n      \"sourceSentence\": \"If they don't have enough shields to prevent some or all of that damage.\"\n    },\n    {\n      \"statement\": \"Damage that is not prevented by shields reduces the player's HP.\",\n      \"sourceSentence\": \"Unblocked damage carries over and reduces HP directly.\"\n    }\n  ]\n}\n```",
+    "ttft_ms": 106745,
+    "ttft_stream_ms": 1814,
+    "time_to_request_ms": 700,
+    "type": "result",
+    "duration_ms": 116581,
+    "uuid": "fed0606c-8629-4f91-8420-049b17dd26b2"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"In the machine phase, players process machine part cards sequentially from left to right.\",\n      \"sourceSentence\": \"At the start of the machine phase, go from left to right down the row of machine parts in play, cycling each card's track and resolving its abilities as follows:\"\n    },\n    {\n      \"statement\": \"A machine part card's yellow die moves 1 space down its cycle track.\",\n      \"sourceSentence\": \"Move a machine part card's yellow die 1 space down its cycle track.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"space\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"If the yellow die lands on an icon, that icon's ability is triggered immediately.\",\n      \"sourceSentence\": \"If that dice lands on an icon, immediately trigger that icon's corresponding ability.\"\n    },\n    {\n      \"statement\": \"Dead spaces on cycle tracks are represented as darkened squares.\",\n      \"sourceSentence\": \"If moving the die places it on a dead space (darkened square), then move that die back to the starting position on the track.\"\n    },\n    {\n      \"statement\": \"If a die lands on a dead space, it is moved back to the starting position of the track.\",\n      \"sourceSentence\": \"If moving the die places it on a dead space (darkened square), then move that die back to the starting position on the track.\"\n    },\n    {\n      \"statement\": \"After processing one machine part card, the cycling process repeats for the next card to the right.\",\n      \"sourceSentence\": \"Proceed to the next machine part card in the line (moving right) and repeat the card cycling process until all part cards have increased their cycle track by 1 and resolved any abilities/effects that are triggered.\"\n    },\n    {\n      \"statement\": \"Each machine part card's cycle track is increased by 1 space during the machine phase.\",\n      \"sourceSentence\": \"Proceed to the next machine part card in the line (moving right) and repeat the card cycling process until all part cards have increased their cycle track by 1 and resolved any abilities/effects that are triggered.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"space\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"After cycling all machine part cards, the entire row slides 1 space to the right.\",\n      \"sourceSentence\": \"Now, carefully slide the entire machine part card row one space to the right.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"space\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"A new machine part card is drawn and placed in the available space.\",\n      \"sourceSentence\": \"Draw a new machine part card and slot it into the available space.\"\n    },\n    {\n      \"statement\": \"New machine part cards receive a yellow HP die placed on their first cycle tracking space.\",\n      \"sourceSentence\": \"Add a yellow HP die to the first cycle tracking space on the new card, setting the die face to the correct starting HP value for that card.\"\n    },\n    {\n      \"statement\": \"The yellow HP die on a new card is set to that card's starting HP value.\",\n      \"sourceSentence\": \"Add a yellow HP die to the first cycle tracking space on the new card, setting the die face to the correct starting HP value for that card.\"\n    },\n    {\n      \"statement\": \"A maximum of 10 machine parts can be in play at any given time.\",\n      \"sourceSentence\": \"Note: there can never be more than 10 machine parts in play at any given time.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"machine parts\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"When 10 machine part cards are active, no new card is drawn.\",\n      \"sourceSentence\": \"If 10 cards are active on the line, then skip drawing a new card and proceed with play.\"\n    },\n    {\n      \"statement\": \"The machine phase ends after all machine part cards are cycled and a new card is added.\",\n      \"sourceSentence\": \"When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I.\"\n    },\n    {\n      \"statement\": \"At the end of the machine phase, players gather all spent dice.\",\n      \"sourceSentence\": \"When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I.\"\n    },\n    {\n      \"statement\": \"Players may obtain new dice by defeating machine parts.\",\n      \"sourceSentence\": \"When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I.\"\n    },\n    {\n      \"statement\": \"After the machine phase completes, play returns to Phase I.\",\n      \"sourceSentence\": \"When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I.\"\n    },\n    {\n      \"statement\": \"Shields can prevent damage dealt to the player.\",\n      \"sourceSentence\": \"If they don't have enough shields to prevent some or all of that damage.\"\n    },\n    {\n      \"statement\": \"Damage that is not prevented by shields reduces the player's HP.\",\n      \"sourceSentence\": \"Unblocked damage carries over and reduces HP directly.\"\n    }\n  ]\n}"
+}

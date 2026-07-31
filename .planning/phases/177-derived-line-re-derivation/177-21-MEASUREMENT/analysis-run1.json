@@ -1,0 +1,771 @@
+[
+  {
+    "slug": "seven__01-definitions-and-components",
+    "game": "seven",
+    "slicePath": "rulebook/01-definitions-and-components.md",
+    "derivedLineCount": 1,
+    "enumACount": 13,
+    "enumBCount": 8,
+    "groundedBothCount": 8,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [
+      {
+        "slug": "seven__01-definitions-and-components",
+        "lineNumber": 21,
+        "outcome": {
+          "ok": true,
+          "composed": {
+            "id": "ccb54c72d6b176e1",
+            "statement": "7 highest card number multiply 4 colors multiply 4 colors = 112 numbered cards",
+            "value": {
+              "magnitude": 112,
+              "unit": "numbered cards",
+              "approximate": false
+            },
+            "operation": "multiply",
+            "operandIds": [
+              "3745fcfc1d7b7e4a",
+              "a6cb336953c5b5fd",
+              "a6cb336953c5b5fd"
+            ],
+            "claimText": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+            "unitVariance": [
+              "\"highest card number\" / \"numbers\""
+            ]
+          }
+        }
+      }
+    ],
+    "classifications": [
+      {
+        "slicePath": "rulebook/01-definitions-and-components.md",
+        "lineNumber": 21,
+        "derivedLineText": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+        "classification": "corroborated-by-composition",
+        "citedFactIds": [
+          "3745fcfc1d7b7e4a",
+          "a6cb336953c5b5fd",
+          "a6cb336953c5b5fd"
+        ],
+        "reason": "Verified in code: 7 highest card number multiply 4 colors multiply 4 colors = 112 numbered cards (checked against this Derived line's own stated claim, never freely generated)."
+      }
+    ],
+    "missedCount": 6,
+    "aOnlyCount": 5,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "seven__01-overview-setup-and-play",
+    "game": "seven",
+    "slicePath": "rulebook/01-overview-setup-and-play.md",
+    "derivedLineCount": 2,
+    "enumACount": 22,
+    "enumBCount": 24,
+    "groundedBothCount": 23,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [
+      {
+        "slug": "seven__01-overview-setup-and-play",
+        "lineNumber": 36,
+        "outcome": {
+          "ok": true,
+          "composed": {
+            "id": "580cab72645565db",
+            "statement": "2 subtract 1 = 1; then 10 subtract 3 = 7; then 7 divide 1 = 7 (final: 7 rounds)",
+            "value": {
+              "magnitude": 7,
+              "unit": "rounds",
+              "approximate": false
+            },
+            "operation": "divide",
+            "operandIds": [
+              "347847ea00c53930",
+              "4b496486174c865f",
+              "b2c136a7dcd1109e",
+              "a24dbe7d8883ed8d"
+            ],
+            "claimText": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end.",
+            "chainSteps": [
+              "2 subtract 1 = 1",
+              "10 subtract 3 = 7",
+              "7 divide 1 = 7"
+            ]
+          }
+        }
+      }
+    ],
+    "classifications": [
+      {
+        "slicePath": "rulebook/01-overview-setup-and-play.md",
+        "lineNumber": 36,
+        "derivedLineText": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end.",
+        "classification": "corroborated-by-composition",
+        "citedFactIds": [
+          "347847ea00c53930",
+          "4b496486174c865f",
+          "b2c136a7dcd1109e",
+          "a24dbe7d8883ed8d"
+        ],
+        "reason": "Verified in code: 2 subtract 1 = 1; then 10 subtract 3 = 7; then 7 divide 1 = 7 (final: 7 rounds) (checked against this Derived line's own stated claim, never freely generated)."
+      },
+      {
+        "slicePath": "rulebook/01-overview-setup-and-play.md",
+        "lineNumber": 38,
+        "derivedLineText": "Derived (p.1): Rounds are played simultaneously by all players, not in turn order.",
+        "classification": "uncorroborated",
+        "citedFactIds": [],
+        "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+      }
+    ],
+    "missedCount": 19,
+    "aOnlyCount": 2,
+    "bOnlyCount": 2
+  },
+  {
+    "slug": "one-two-punch__01-setup-and-round-structure",
+    "game": "one-two-punch",
+    "slicePath": "rulebook/01-setup-and-round-structure.md",
+    "derivedLineCount": 4,
+    "enumACount": 43,
+    "enumBCount": 34,
+    "groundedBothCount": 28,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/01-setup-and-round-structure.md",
+        "lineNumber": 32,
+        "derivedLineText": "Derived (p.1): The box contains 2 Boxer Cards, 16 Action Cards, 6 Guard Cards, and 1 Rules Sheet.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "36242e50db7afa4e",
+          "4a0245dc6cd65b54",
+          "9445aa0e112368ab",
+          "131f5b094f51b1e8"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/01-setup-and-round-structure.md",
+        "lineNumber": 61,
+        "derivedLineText": "Derived (p.1): A round always proceeds through exactly three phases, in this order: Plan, Fight, Discard.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "2c119cbc2cb00be0"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/01-setup-and-round-structure.md",
+        "lineNumber": 68,
+        "derivedLineText": "Derived (p.1): Each player commits exactly two action cards per round, placed face-down in a chosen order (first action, second action), before the Fight phase begins.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "308fd81927ea86e2",
+          "1d22288acec11c8a"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/01-setup-and-round-structure.md",
+        "lineNumber": 81,
+        "derivedLineText": "Derived (p.1): Each action card carries a numeric timing value; when both players' first (or second) action cards are revealed, the card with the lower timing value resolves first, and cards with equal timing resolve simultaneously.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "0c23f5fc943a999a",
+          "89b33e0650169049",
+          "3df2f2fd490345b7"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      }
+    ],
+    "missedCount": 18,
+    "aOnlyCount": 14,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "one-two-punch__02-action-cards-and-resolution",
+    "game": "one-two-punch",
+    "slicePath": "rulebook/02-action-cards-and-resolution.md",
+    "derivedLineCount": 7,
+    "enumACount": 48,
+    "enumBCount": 46,
+    "groundedBothCount": 41,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/02-action-cards-and-resolution.md",
+        "lineNumber": 16,
+        "derivedLineText": "Derived (p.2): A Jab can only flip a ready Guard card to exhausted; it never removes/breaks a Guard card outright.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "477a662a3cd7b2c5",
+          "c1f0960a83973a39"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/02-action-cards-and-resolution.md",
+        "lineNumber": 68,
+        "derivedLineText": "Derived (p.2): A \"broken\" Guard card is permanently removed from the game (returned to the box), distinct from \"exhausted\" (flipped face, remains in play and can be flipped back to ready by Rest). Punch can only break an already-exhausted Guard card; against an opponent with no exhausted Guards, Punch instead exhausts one of their ready Guards (same effect as a Jab in that case).",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "1c77bbef94abb549",
+          "859bba12ac72d686",
+          "af41a6277eb02fa8"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/02-action-cards-and-resolution.md",
+        "lineNumber": 82,
+        "derivedLineText": "Derived (p.2): Resolving a round's Fight phase is two sequential sub-steps — resolve both players' first action cards completely (in timing order), then reveal and resolve both players' second action cards (in timing order) — with cards from the first sub-step staying in place, unresolved into the discard pile, until the Discard phase.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "9d4ad2d3535f67fb",
+          "9a44bb0c8a111ee1",
+          "f192dbbb4ca706a9"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/02-action-cards-and-resolution.md",
+        "lineNumber": 106,
+        "derivedLineText": "Derived (p.2): Win condition: reduce an opponent to 0 Guard cards (all 3 broken) to knock them out and win immediately. If both players' third Guard card is broken by the same action's resolution, the game ends in a draw instead of a win.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "ccddc6deb86e8538",
+          "ac446d288f3e5cd6"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/02-action-cards-and-resolution.md",
+        "lineNumber": 117,
+        "derivedLineText": "Derived (p.2): Each player's card set includes exactly 2 Rest cards (implied by the first Tip's warning against holding both at once).",
+        "classification": "uncorroborated",
+        "citedFactIds": [],
+        "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+      },
+      {
+        "slicePath": "rulebook/02-action-cards-and-resolution.md",
+        "lineNumber": 128,
+        "derivedLineText": "Derived (p.2): No edition or printing number is stated anywhere on this page; the only dating information is the 2020 copyright year in the colophon.",
+        "classification": "absence-corroborated",
+        "citedFactIds": [],
+        "reason": "None of the named target term(s) (edition, printing) appear anywhere in this passage's quote lines — mechanically confirms the claimed absence."
+      },
+      {
+        "slicePath": "rulebook/02-action-cards-and-resolution.md",
+        "lineNumber": 132,
+        "derivedLineText": "Derived (p.2): This section marks no rules as variants, optional modules, or advanced/expert rules.",
+        "classification": "absence-unverifiable",
+        "citedFactIds": [],
+        "reason": "Reconciler flagged this Derived line as an absence claim but named no explicit, literal, searchable target — dual enumeration structurally cannot corroborate a negative (no enumerator ever lists a fact that is not there), and this module refuses to guess a keyword to scan for on its own (177-01 precedent: recognizing an absence claim and naming a safe target for it is a judgment call, not a keyword list baked into this module). Reported honestly in its own bucket rather than downgraded to uncorroborated."
+      }
+    ],
+    "missedCount": 31,
+    "aOnlyCount": 8,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__01-card-anatomy",
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-card-anatomy.md",
+    "derivedLineCount": 1,
+    "enumACount": 13,
+    "enumBCount": 17,
+    "groundedBothCount": 17,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/01-card-anatomy.md",
+        "lineNumber": 11,
+        "derivedLineText": "Derived (p.1): A machine part card carries four rule-bearing regions — name, roll conditions (damage requirements), a cycle track the part's yellow HP die moves down, and cycle icon effects triggered when the die lands on an icon.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "7079d0c553ad1d7d",
+          "7a64e983e8595bd4",
+          "abe96aeccfa3a5d5",
+          "946445823b2039bc",
+          "33abd698ad5b9af5",
+          "b6f2ab13b77c29d7"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      }
+    ],
+    "missedCount": 11,
+    "aOnlyCount": 0,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__01-destroying-a-machine-part",
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-destroying-a-machine-part.md",
+    "derivedLineCount": 1,
+    "enumACount": 11,
+    "enumBCount": 12,
+    "groundedBothCount": 12,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/01-destroying-a-machine-part.md",
+        "lineNumber": 16,
+        "derivedLineText": "Derived (p.1): Destroying a part converts its yellow HP die into a player die, so the player's pool grows as parts are destroyed, capped at 10 dice (5 black + 5 yellow).",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "40c3248b0dc9bca2",
+          "fbf8a5b6b5f8e23f",
+          "3fb2d071431e5132",
+          "45209efc6cf6ea41"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      }
+    ],
+    "missedCount": 8,
+    "aOnlyCount": 0,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__01-dice-roll-symbology",
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-dice-roll-symbology.md",
+    "derivedLineCount": 1,
+    "enumACount": 14,
+    "enumBCount": 15,
+    "groundedBothCount": 12,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/01-dice-roll-symbology.md",
+        "lineNumber": 25,
+        "derivedLineText": "Derived (p.1): Roll conditions on machine part cards are expressed with a compact symbol language: \"?\" means any value, an explicit pip face means an exact value, \"/\" means either-or, \"+\" and \"=\" express arithmetic/equality relations across dice, and \">\" expresses a comparison.",
+        "classification": "uncorroborated",
+        "citedFactIds": [],
+        "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+      }
+    ],
+    "missedCount": 12,
+    "aOnlyCount": 2,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__01-gameplay-loop-and-phase-i",
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-gameplay-loop-and-phase-i.md",
+    "derivedLineCount": 2,
+    "enumACount": 18,
+    "enumBCount": 11,
+    "groundedBothCount": 12,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [
+      {
+        "slug": "doom-machine__01-gameplay-loop-and-phase-i",
+        "lineNumber": 15,
+        "outcome": null
+      }
+    ],
+    "classifications": [
+      {
+        "slicePath": "rulebook/01-gameplay-loop-and-phase-i.md",
+        "lineNumber": 13,
+        "derivedLineText": "Derived (p.1): The game is a repeating two-phase loop (Phase I player dice allocation, Phase II machine phase) that ends only in a win (Doom Core destroyed) or a loss (player destroyed).",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "8d2498e9d2b91a7b",
+          "8ec67627a260fbe0",
+          "e23edd97fce5e6a9",
+          "7d6b12bd93a23403"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/01-gameplay-loop-and-phase-i.md",
+        "lineNumber": 15,
+        "derivedLineText": "Derived (p.1): The player's dice pool ranges from 5 dice (5 black) up to 10 dice (5 black + 5 yellow), and all available dice are re-rolled at the start of each turn.",
+        "classification": "uncorroborated",
+        "citedFactIds": [],
+        "reason": "Reconciler claimed \"corroborated-by-composition\" citing a composed-fact id that either does not exist or was verified against different Derived-line text — downgraded rather than trusted."
+      }
+    ],
+    "missedCount": 8,
+    "aOnlyCount": 6,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__01-objective-and-setup",
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-objective-and-setup.md",
+    "derivedLineCount": 3,
+    "enumACount": 23,
+    "enumBCount": 20,
+    "groundedBothCount": 14,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [
+      {
+        "slug": "doom-machine__01-objective-and-setup",
+        "lineNumber": 34,
+        "outcome": {
+          "ok": true,
+          "composed": {
+            "id": "3c41332b61e30645",
+            "statement": "9 machine part cards subtract 3 machine part cards = 6 dice",
+            "value": {
+              "magnitude": 6,
+              "unit": "dice",
+              "approximate": false
+            },
+            "operation": "subtract",
+            "operandIds": [
+              "a99ca6526632df57",
+              "c404700de56527ab"
+            ],
+            "claimText": "Derived (p.1, p.2): The machine deck for a normal game is 9 face-up-drawable machine part cards stacked on top of the face-down Doom Core, so the Doom Core is the final card of the deck. Of those 9, the top 3 are immediately revealed in step 5, leaving 6 face down above the Doom Core."
+          }
+        }
+      }
+    ],
+    "classifications": [
+      {
+        "slicePath": "rulebook/01-objective-and-setup.md",
+        "lineNumber": 34,
+        "derivedLineText": "Derived (p.1, p.2): The machine deck for a normal game is 9 face-up-drawable machine part cards stacked on top of the face-down Doom Core, so the Doom Core is the final card of the deck. Of those 9, the top 3 are immediately revealed in step 5, leaving 6 face down above the Doom Core.",
+        "classification": "corroborated-by-composition",
+        "citedFactIds": [
+          "a99ca6526632df57",
+          "c404700de56527ab"
+        ],
+        "reason": "Verified in code: 9 machine part cards subtract 3 machine part cards = 6 dice (checked against this Derived line's own stated claim, never freely generated)."
+      },
+      {
+        "slicePath": "rulebook/01-objective-and-setup.md",
+        "lineNumber": 36,
+        "derivedLineText": "Derived (p.1): The Doom Machine tracking card has two tracks — Sentience (yellow) and Power (black) — each starting at zero.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "eb1655099e1a0c9a"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/01-objective-and-setup.md",
+        "lineNumber": 38,
+        "derivedLineText": "Derived (p.1): Player HP starts at 10.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "50c820a4c51e2f7a"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      }
+    ],
+    "missedCount": 10,
+    "aOnlyCount": 9,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__02-card-effect-icons",
+    "game": "doom-machine",
+    "slicePath": "rulebook/02-card-effect-icons.md",
+    "derivedLineCount": 1,
+    "enumACount": 11,
+    "enumBCount": 24,
+    "groundedBothCount": 8,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/02-card-effect-icons.md",
+        "lineNumber": 25,
+        "derivedLineText": "Derived (p.2): These icons appear on machine part cycle tracks; a part's die landing on an icon during the machine phase triggers the corresponding effect (see Phase II, p.2 panel -8-).",
+        "classification": "uncorroborated",
+        "citedFactIds": [],
+        "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+      }
+    ],
+    "missedCount": 8,
+    "aOnlyCount": 0,
+    "bOnlyCount": 13
+  },
+  {
+    "slug": "doom-machine__02-hard-mode",
+    "game": "doom-machine",
+    "slicePath": "rulebook/02-hard-mode.md",
+    "derivedLineCount": 1,
+    "enumACount": 10,
+    "enumBCount": 9,
+    "groundedBothCount": 9,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/02-hard-mode.md",
+        "lineNumber": 19,
+        "derivedLineText": "Hard Mode changes exactly three things: the full card pool is used instead of a reduced one, the Player HP card's B side offers one fewer shield slot / re-roll slot / +-modifier slot, and the per-turn shield dice limit drops from 4 to 3.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "869449a4f30c2380",
+          "88966c62b4c5c57d",
+          "88966c62b4c5c57d",
+          "88966c62b4c5c57d",
+          "31256fab23c41cb6",
+          "cc6a402699078f3a"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      }
+    ],
+    "missedCount": 1,
+    "aOnlyCount": 1,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__02-machine-phase",
+    "game": "doom-machine",
+    "slicePath": "rulebook/02-machine-phase.md",
+    "derivedLineCount": 1,
+    "enumACount": 27,
+    "enumBCount": 19,
+    "groundedBothCount": 19,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/02-machine-phase.md",
+        "lineNumber": 26,
+        "derivedLineText": "Derived (p.1, p.2): Each machine phase, every part in play advances one step on its own cycle track (wrapping back to the start if it would land on a dead space), and then one new part card joins the line from the left, up to a maximum of 10 parts.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "933f1ca9495b79fa",
+          "e616d87f51f7af0e",
+          "357de9c37a77e6f4",
+          "357de9c37a77e6f4",
+          "74c7a2a6a89fdb13",
+          "761d1be9758be225",
+          "f6b3cefa322313eb",
+          "d49e3f7d82a8988d"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      }
+    ],
+    "missedCount": 10,
+    "aOnlyCount": 9,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__02-player-actions",
+    "game": "doom-machine",
+    "slicePath": "rulebook/02-player-actions.md",
+    "derivedLineCount": 1,
+    "enumACount": 24,
+    "enumBCount": 24,
+    "groundedBothCount": 26,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/02-player-actions.md",
+        "lineNumber": 23,
+        "derivedLineText": "Derived (p.2): Utility slots (+/- modifier slots and re-roll slots) live on the Player HP tracking card, since Hard Mode removes a shield slot, a re-roll slot, and a roll modifier slot by flipping that card (see p.1, panel -11-).",
+        "classification": "uncorroborated",
+        "citedFactIds": [],
+        "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+      }
+    ],
+    "missedCount": 26,
+    "aOnlyCount": 1,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__02-taking-damage-and-winning",
+    "game": "doom-machine",
+    "slicePath": "rulebook/02-taking-damage-and-winning.md",
+    "derivedLineCount": 2,
+    "enumACount": 7,
+    "enumBCount": 6,
+    "groundedBothCount": 7,
+    "rejectedCount": 0,
+    "rejected": [],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/02-taking-damage-and-winning.md",
+        "lineNumber": 9,
+        "derivedLineText": "Derived (p.2): Shield strength is consumed by reducing the face values of the dice sitting in shield slots; once a shield die's value is exhausted it goes to the spent dice pile.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "cb111396c64c32ea",
+          "b8ace074c72f5e64"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/02-taking-damage-and-winning.md",
+        "lineNumber": 11,
+        "derivedLineText": "Derived (p.2): The only win condition is destroying the Doom Core; the only loss condition is Player HP reaching zero.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "b2106597f9edc659",
+          "efcae283cca8d773",
+          "154c5c9e26407c2d"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      }
+    ],
+    "missedCount": 2,
+    "aOnlyCount": 0,
+    "bOnlyCount": 0
+  },
+  {
+    "slug": "doom-machine__CARDS",
+    "game": "doom-machine",
+    "slicePath": "rulebook/CARDS.md",
+    "derivedLineCount": 4,
+    "enumACount": 127,
+    "enumBCount": 125,
+    "groundedBothCount": 86,
+    "rejectedCount": 14,
+    "rejected": [
+      {
+        "statement": "Thought Siphon damage effect: DEAL 3 DMG.",
+        "reason": "quotedFromA (\"\"DEAL 3 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Impact Nexus destroy effect: -1 POWER.",
+        "reason": "quotedFromA (\"\"-1 POWER\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Cerebral Amplifier damage strip large text: DEAL 3 DMG.",
+        "reason": "quotedFromA (\"\"DEAL 3 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Hard Cycle Storage damage effect: DEAL 4 DMG.",
+        "reason": "quotedFromA (\"\"DEAL 4 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Design Flaw damage effect: DEAL 3 DMG.",
+        "reason": "quotedFromA (\"\"DEAL 3 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Extinction Collider power effect: +1 POWER.",
+        "reason": "quotedFromA (\"\"+1 POWER\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Pulse Pools damage effect: DEAL 3 DMG.",
+        "reason": "quotedFromA (\"\"DEAL 3 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Logic Mainframe destroy effect: +2 POWER.",
+        "reason": "quotedFromA (\"\"+2 POWER\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Stasis Generator lock effect: LOCK 1 DIE.",
+        "reason": "quotedFromA (\"\"LOCK 1 DIE\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Recycling Vats damage effect: DEAL 4 DMG.",
+        "reason": "quotedFromA (\"\"DEAL 4 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Populace Grinder repair effect: REPAIR 2.",
+        "reason": "quotedFromA (\"\"REPAIR 2\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Soul Harvester damage effect: DEAL 5 DMG.",
+        "reason": "quotedFromA (\"\"DEAL 5 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Soul Harvester lock effect: LOCK 1 DIE.",
+        "reason": "quotedFromA (\"\"LOCK 1 DIE\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+      },
+      {
+        "statement": "Icon spaces and blank spaces are connected to neighbours by yellow connector bars.",
+        "reason": "quotedFromB (\"**Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar.\n**Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected.\") does not match any fact in enumerator B's list — the reconciler attributed text to B that B never stated."
+      }
+    ],
+    "composeAttempts": [],
+    "classifications": [
+      {
+        "slicePath": "rulebook/CARDS.md",
+        "lineNumber": 24,
+        "derivedLineText": "Derived (p.1, p.3): Position 1 is always the yellow HP die slot (the die is printed there showing the card's starting HP as pips).",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "07cb7a3f4b4bfa14",
+          "85f8f4ca9ce39d7a",
+          "b171c3b462d5fc20",
+          "69e62d16f8e93d02",
+          "45afc274b32db927",
+          "5482241c31a33aa9",
+          "24ada26e75653d3d",
+          "03952faf08bdb7b7",
+          "5547502d66ac6282",
+          "3380c96088753ace",
+          "aaa71ed6f892464c",
+          "e8cab0f771695578",
+          "db4a87702482c692",
+          "1913dc0ffa0f43b2",
+          "4981da2b66f5f965",
+          "5beafab2d1661ec9",
+          "f353bc1db05888cd"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/CARDS.md",
+        "lineNumber": 73,
+        "derivedLineText": "Derived (p.1, p.3): However, the tracks are not inert — their consequences are printed on the MACHINE PART cards",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "58701d9c3fe763c1",
+          "f9f656d31017493d",
+          "3a7dcd41a6cf1f52",
+          "f915f5d6f57b6405",
+          "c16556c6254c85c2",
+          "e448c81c78dbd3ab"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/CARDS.md",
+        "lineNumber": 143,
+        "derivedLineText": "Derived (p.1): Effectively a 2-space loop — die goes slot → Damage → dead → back to slot.",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "45afc274b32db927",
+          "c76e2584f144da3f"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      },
+      {
+        "slicePath": "rulebook/CARDS.md",
+        "lineNumber": 274,
+        "derivedLineText": "Derived (p.3): By symmetry with the documented `[?] > [3]` example (\"2 dice required. One must be...",
+        "classification": "corroborated",
+        "citedFactIds": [
+          "d57f79d53a587ccf",
+          "aeab94be0b63c19f"
+        ],
+        "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+      }
+    ],
+    "missedCount": 60,
+    "aOnlyCount": 16,
+    "bOnlyCount": 2
+  }
+]

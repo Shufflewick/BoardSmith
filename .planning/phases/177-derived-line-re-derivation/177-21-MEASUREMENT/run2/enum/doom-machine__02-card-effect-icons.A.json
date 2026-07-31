@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 8850,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "94280c94-75eb-4901-8ce1-8edc13ed8f0c",
+    "total_cost_usd": 0.0356635,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 32407,
+      "output_tokens": 778,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 778,
+          "cache_read_input_tokens": 32407,
+          "cache_creation_input_tokens": 0,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-5": {
+        "inputTokens": 2,
+        "outputTokens": 778,
+        "cacheReadInputTokens": 32407,
+        "cacheCreationInputTokens": 0,
+        "webSearchRequests": 0,
+        "costUSD": 0.0356635,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-opus-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"facts\":[{\"statement\":\"The Damage effect applies to a player's shields before HP; damage that exceeds the shields carries over to HP.\",\"sourceSentence\":\"\\\"Damage - Hits player's shields first, if blocked, then HP if any carries over.\\\"\"},{\"statement\":\"The Power / Sentience effect moves the matching token up or down along the Doom Machine track.\",\"sourceSentence\":\"\\\"Power / Sentience - Move the corresponding token up or down the Doom Machine track.\\\"\"},{\"statement\":\"The Power + Sentience effect changes both Power and Sentience together, either increasing or decreasing them.\",\"sourceSentence\":\"\\\"Power + Sentience - Increase or decrease both Power and Sentience.\\\"\"},{\"statement\":\"When the Broken Shield effect is activated, the player may place only one shield die on their next turn.\",\"sourceSentence\":\"\\\"Broken Shield - When activated, only 1 shield dice can be placed next turn.\\\"\",\"numericValue\":{\"magnitude\":1,\"unit\":\"shield dice\",\"approximate\":false}},{\"statement\":\"The Destroy Effect triggers immediately at the moment a part card is destroyed.\",\"sourceSentence\":\"\\\"Destroy Effect - Immediately triggers when a part card is destroyed.\\\"\"},{\"statement\":\"The Repair effect restores HP to a part card, and cannot raise it above the card's maximum starting health.\",\"sourceSentence\":\"\\\"Repair - Restores part card's HP (only up to its maximum starting health).\\\"\"},{\"statement\":\"The Gear effect instantly triggers one extra track cycle for any cards immediately adjacent to the Gear.\",\"sourceSentence\":\"\\\"Gear - Instantly triggers an additional track cycle for any cards immediately adjacent to it.\\\"\"},{\"statement\":\"The Lock effect makes the player choose one of their own dice and set it aside.\",\"sourceSentence\":\"\\\"Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn.\\\"\",\"numericValue\":{\"magnitude\":1,\"unit\":\"die\",\"approximate\":false}},{\"statement\":\"A die set aside by the Lock effect is neither rolled nor placed on the player's next turn.\",\"sourceSentence\":\"\\\"Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn.\\\"\"}]}",
+    "ttft_ms": 9269,
+    "ttft_stream_ms": 1922,
+    "time_to_request_ms": 438,
+    "type": "result",
+    "duration_ms": 9727,
+    "uuid": "f75ab5a5-7548-4d1a-9e7a-6d8c87aa4860"
+  },
+  "facts": "{\"facts\":[{\"statement\":\"The Damage effect applies to a player's shields before HP; damage that exceeds the shields carries over to HP.\",\"sourceSentence\":\"\\\"Damage - Hits player's shields first, if blocked, then HP if any carries over.\\\"\"},{\"statement\":\"The Power / Sentience effect moves the matching token up or down along the Doom Machine track.\",\"sourceSentence\":\"\\\"Power / Sentience - Move the corresponding token up or down the Doom Machine track.\\\"\"},{\"statement\":\"The Power + Sentience effect changes both Power and Sentience together, either increasing or decreasing them.\",\"sourceSentence\":\"\\\"Power + Sentience - Increase or decrease both Power and Sentience.\\\"\"},{\"statement\":\"When the Broken Shield effect is activated, the player may place only one shield die on their next turn.\",\"sourceSentence\":\"\\\"Broken Shield - When activated, only 1 shield dice can be placed next turn.\\\"\",\"numericValue\":{\"magnitude\":1,\"unit\":\"shield dice\",\"approximate\":false}},{\"statement\":\"The Destroy Effect triggers immediately at the moment a part card is destroyed.\",\"sourceSentence\":\"\\\"Destroy Effect - Immediately triggers when a part card is destroyed.\\\"\"},{\"statement\":\"The Repair effect restores HP to a part card, and cannot raise it above the card's maximum starting health.\",\"sourceSentence\":\"\\\"Repair - Restores part card's HP (only up to its maximum starting health).\\\"\"},{\"statement\":\"The Gear effect instantly triggers one extra track cycle for any cards immediately adjacent to the Gear.\",\"sourceSentence\":\"\\\"Gear - Instantly triggers an additional track cycle for any cards immediately adjacent to it.\\\"\"},{\"statement\":\"The Lock effect makes the player choose one of their own dice and set it aside.\",\"sourceSentence\":\"\\\"Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn.\\\"\",\"numericValue\":{\"magnitude\":1,\"unit\":\"die\",\"approximate\":false}},{\"statement\":\"A die set aside by the Lock effect is neither rolled nor placed on the player's next turn.\",\"sourceSentence\":\"\\\"Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn.\\\"\"}]}"
+}

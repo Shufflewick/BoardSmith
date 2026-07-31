@@ -1,0 +1,356 @@
+BS-ENUMERATE-V1
+Slice: rulebook/CARDS.md
+
+> Source: `/Users/jtsmith/BoardSmithGames/doom-machine/cards.pdf` (4 letter pages, 3x3 grid per page).
+> **p.1 and p.3 = card FACES** (18 faces total). **p.2 and p.4 = card BACKS** — confirmed: every slot is the
+> "DOOM MACHINE / BY NATHAN MEUNIER" back art, EXCEPT p.2 row 1 col 3, which is the **Player HP card's B side**
+> (the duplex-mirror of the Player HP A side at p.1 row 1 col 1). p.4 is nine identical backs, no exceptions.
+> Text below is one of three kinds of line: QUOTE (transcribed verbatim from the printed card),
+- 15 machine part cards (non-Core)
+- 1 Doom Core card ("THE DOOM CORE")
+- 1 Doom Machine tracking card
+- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)
+- **18 distinct faces total.**
+three squares running DOWN the left edge, then two more running RIGHT along the bottom.
+Positions 2–5 hold icons, blanks, or dead spaces. Order of travel = 1 → 2 → 3 → 4 → 5.
+Three kinds of space appear:
+- **Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar.
+- **Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected.
+- **Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow.
+Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1.
+---
+- **Type:** Player HP tracking card (A side / normal mode)
+- **Starting HP:** n/a (this is the tracker; rules set the cube to 10)
+- QUOTE — cards.pdf p.1, row 1 col 1: "PLAYER HP"
+- QUOTE — cards.pdf p.1, row 1 col 1: "A SIDE"
+- QUOTE — cards.pdf p.1, row 1 col 1: "SHIELD"
+- QUOTE — cards.pdf p.1, row 1 col 1: "1X ROUND"
+- QUOTE — cards.pdf p.1, row 1 col 1: "UTILITY"
+- **PLAYER HP track:** heart badge at top, then a serpentine numbered track: 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0.
+(11 spaces, 10 down to 0.)
+- **SHIELD section: 4 slots.** Four shield-with-"+" badges in a 2x2 arrangement.
+- **UTILITY section (labelled "1X ROUND"): 6 slots total —**
+- **3 x "+/-" roll-modifier slots**
+- **3 x re-roll slots** (two-white-dice glyph)
+- Printed layout: row 1 = [+/-] [+/-]; row 2 = [+/-] [dice]; row 3 = [dice] [dice].
+- No roll conditions, no cycle track, no destroy effect.
+- **Type:** Doom Machine tracking card
+- **Starting HP:** n/a
+- **COMPLETE VERBATIM TRANSCRIPTION — every word printed on this card:**
+- QUOTE — cards.pdf p.1, row 1 col 2: "THE"
+- QUOTE — cards.pdf p.1, row 1 col 2: "DOOM"
+- QUOTE — cards.pdf p.1, row 1 col 2: "MACHINE"
+- QUOTE — cards.pdf p.1, row 1 col 2: "SENTIENCE"
+- QUOTE — cards.pdf p.1, row 1 col 2: "POWER"
+- QUOTE (Sentience track numerals, top to bottom): "10" "9" "7" "8" "6" "5" "3" "4" "2" "1" "0"
+- QUOTE (Power track numerals, top to bottom): "10" "9" "7" "8" "6" "5" "3" "4" "2" "1" "0"
+- **That is the entire printed content of the card. There is no other text of any kind.**
+- Art: an eye badge (Sentience, yellow) above the left track, a battery badge (Power, black) above the right track,
+the "THE DOOM MACHINE" logo plate between them. Two parallel serpentine 0–10 tracks.
+- **>>> THE POWER/SENTIENCE ANSWER: NO. This card does NOT define what the Power and Sentience tracks do. <<<**
+It defines only their RANGE (0 through 10). No threshold, no trigger, no win/loss condition, no per-turn effect
+is printed anywhere on it. The designer's hypothesis is not borne out.
+cards, not on the tracker. Every card that reads the tracks is listed here:
+- EXTINCTION COLLIDER (p.3 r1c1): "DEAL DMG = POWER"
+- SYNAPTIC DISRUPTOR (p.3 r3c2): "DEAL DMG = SENTIENCE"
+- THE DOOM CORE (p.3 r1c3): "DEAL DMG = SENTIENCE + POWER"
+- CEREBRAL AMPLIFIER (p.1 r3c1): "IF SENTIENCE IS > 5 DEAL 3 MORE DMG"
+- STASIS GENERATOR (p.3 r2c2): "IF SENTIENCE IS > 6 REMOVE THAT DIE FROM PLAY"
+So Power and Sentience are damage/severity multipliers consumed by specific cards. There is still NO printed
+rule for what happens at the top of a track (10), and no track-based loss condition anywhere in the PDFs.
+- **Type:** machine part
+- **Starting HP: 3** (yellow die shows 3 pips)
+- **Roll condition (1 tile):** `[1] + [1] + [1]` — three black die faces each showing one pip, joined by "+".
+Meaning (per 01-dice-roll-symbology.md, cf. the "all sixes" example): **3 dice required; they must all be 1s.**
+- **Cycle track (5 spaces, top → bottom → right):**
+1. HP die slot (die set to 3)
+2. Power+Sentience icon
+3. Blank space (no icon)
+4. Power+Sentience icon
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.1, row 1 col 3 (Power+Sentience strip): "+1 POWER AND +1 SENTIENCE"
+- **Destroy effect (yellow X banner):**
+- QUOTE — cards.pdf p.1, row 1 col 3: "DEAL 1 DMG TO ALL PARTS IN PLAY"
+- (This is the card used as the destroy-effect example in the rulebook, p.1 panel -7-.)
+- **Type:** machine part
+- **Starting HP: 6**
+- **Roll condition (1 tile):** `[2] / [3]` — a two-pip face, a slash, a three-pip face.
+Meaning: **1 die required; it can be either a 2 or a 3.**
+- **Cycle track (5 spaces):**
+1. HP die slot (6)
+2. Damage
+3. Damage
+4. Damage
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.1, row 2 col 1 (Damage strip): "DEAL DMG = HP OF LEFT ADJACENT PART"
+- **Destroy effect:**
+- QUOTE — cards.pdf p.1, row 2 col 1: "DEAL 2 DMG TO LEFT ADJACENT PART"
+- **Type:** machine part
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[6] + [6]` — two six-pip faces joined by "+".
+Meaning: **2 dice required; they must both be 6s.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Damage
+3. Damage
+4. Broken Shield
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.1, row 2 col 2 (Damage strip): "DEAL 3 DMG"
+- QUOTE — cards.pdf p.1, row 2 col 2 (Broken Shield strip): "ONLY 1 SHIELD DIE CAN BE PLAYED NEXT TURN"
+- **Destroy effect:** none printed.
+- **Type:** machine part
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[?] = [?]` — two "?" faces joined by "=".
+Meaning: **2 dice required; they must be doubles.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Damage
+3. Dead space (hatched)
+4. Dead space (hatched)
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.1, row 2 col 3 (Damage strip): "DEAL 1 DMG FOR EVERY PART CARD IN PLAY"
+- **Destroy effect:**
+- QUOTE — cards.pdf p.1, row 2 col 3: "-1 POWER"
+- **Type:** machine part
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[?] = [?]`
+Meaning: **2 dice required; they must be doubles.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Damage
+3. Damage
+4. Dead space (hatched)
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.1, row 3 col 1 (Damage strip, large text): "DEAL 3 DMG"
+- QUOTE — cards.pdf p.1, row 3 col 1 (same strip, small text beneath): "IF SENTIENCE IS > 5 DEAL 3 MORE DMG"
+- **Destroy effect:** none printed.
+- **Type:** machine part
+- **Starting HP: 5**
+- **Roll condition (1 tile):** `[?] > [3]` — a "?" face, a greater-than sign, a three-pip face.
+Meaning (per the symbology's own worked example): **2 dice required; one must be a 3, another greater than 3.**
+- **Cycle track (5 spaces):**
+1. HP die slot (5)
+2. Gear
+3. Damage
+4. Gear
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.1, row 3 col 2 (Damage strip): "DEAL 4 DMG"
+- QUOTE — cards.pdf p.1, row 3 col 2 (Gear strip): "+1 CYCLE FOR ANY ADJACENT PARTS"
+- **Destroy effect:** none printed.
+- **Type:** machine part
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[3] + [4]` — a three-pip face and a four-pip face joined by "+".
+Meaning: **2 dice required; they must be a 3 and a 4.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Damage
+3. Damage
+4. Blank space (no icon)
+5. Damage
+- **NOTE — no dead space on this card.** All five spaces are live (all connectors are yellow). See
+"Open issue: dead-space wraparound" below.
+- **Effects:**
+- QUOTE — cards.pdf p.1, row 3 col 3 (Damage strip): "DEAL 3 DMG"
+- **Destroy effect:**
+- QUOTE — cards.pdf p.1, row 3 col 3: "-2 SENTIENCE AND -2 POWER"
+---
+- **Type:** machine part
+- **Starting HP: 6**
+- **Roll condition (1 tile):** `[4] / [5]` — a four-pip face, a slash, a five-pip face.
+Meaning: **1 die required; it can be either a 4 or a 5.**
+- **Cycle track (5 spaces):**
+1. HP die slot (6)
+2. Damage
+3. Power
+4. Damage
+5. Power
+- **NOTE — no dead space on this card.** All five spaces are live.
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.3, row 1 col 1 (Damage strip): "DEAL DMG = POWER"
+- QUOTE — cards.pdf p.3, row 1 col 1 (Power strip): "+1 POWER"
+- **Destroy effect:** none printed.
+- **Type:** machine part
+- **Starting HP: 3**
+- **Roll condition (1 tile):** `[1] + [6]` — a one-pip face and a six-pip face joined by "+".
+Meaning: **2 dice required; they must be a 1 and a 6.**
+- **Cycle track (5 spaces):**
+1. HP die slot (3)
+2. Power
+3. Power
+4. Damage
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.3, row 1 col 2 (Damage strip): "DEAL 3 DMG"
+- QUOTE — cards.pdf p.3, row 1 col 2 (Power strip): "+1 POWER"
+- **Destroy effect:** none printed.
+- **Type:** Doom Core (the final/objective card)
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[6] + [6] + [6]` — three six-pip faces joined by "+".
+Meaning: **3 dice required; they must all be sixes.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Damage
+3. Power+Sentience
+4. Power+Sentience
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.3, row 1 col 3 (Damage strip): "DEAL DMG = SENTIENCE + POWER"
+- QUOTE — cards.pdf p.3, row 1 col 3 (Power+Sentience strip): "+1 SENTIENCE AND +1 POWER"
+- **Destroy effect:** none printed (destroying it wins the game per the rulebook objective).
+- **Type:** machine part
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[?] = [?]`
+Meaning: **2 dice required; they must be doubles.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Sentience
+3. Sentience
+4. Dead space (hatched)
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.3, row 2 col 1 (Sentience strip): "+1 SENTIENCE"
+- **Destroy effect:**
+- QUOTE — cards.pdf p.3, row 2 col 1: "+2 POWER"
+- **Type:** machine part
+- **Starting HP: 6**
+- **Roll condition (1 tile):** `[?] < [3]` — a "?" face, a **less-than** sign, a three-pip face.
+- **NOTE:** the "<" operator is NOT listed in the rulebook's DICE ROLL SYMBOLOGY panel (which documents only
+`+ = / >`).
+a 3, another greater than 3"): **2 dice required; one must be a 3, another less than 3.** Flagged for the
+designer to confirm — the glyph itself is unambiguously a "<", but its meaning is undocumented.
+- **Cycle track (5 spaces):**
+1. HP die slot (6)
+2. Lock
+3. Blank space (no icon)
+4. Lock
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.3, row 2 col 2 (Lock strip, large text): "LOCK 1 DIE"
+- QUOTE — cards.pdf p.3, row 2 col 2 (same strip, small text beneath): "IF SENTIENCE IS > 6 REMOVE THAT DIE FROM PLAY"
+- **Destroy effect:** none printed.
+- **Type:** machine part
+- **Starting HP: 6**
+- **Roll condition (1 tile):** `[1] / [6]` — a one-pip face, a slash, a six-pip face.
+Meaning: **1 die required; it can be either a 1 or a 6.**
+- **Cycle track (5 spaces):**
+1. HP die slot (6)
+2. Damage
+3. Damage
+4. Repair
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.3, row 2 col 3 (Damage strip): "DEAL 4 DMG"
+- QUOTE — cards.pdf p.3, row 2 col 3 (Repair strip): "REPAIR 2 TO ANY ADJACENT PARTS"
+- **Destroy effect:** none printed.
+- Note: the Repair icon here is a yellow HEART containing a triangle glyph (not the wrench described in
+`02-card-effect-icons.md`'s art notes). It sits beside the "REPAIR 2..." text, so its identity is certain.
+- **Type:** machine part
+- **Starting HP: 3**
+- **Roll condition (1 tile):** `[3] + [3]` — two three-pip faces joined by "+".
+Meaning: **2 dice required; they must both be 3s.**
+- **Cycle track (5 spaces):**
+1. HP die slot (3)
+2. Damage
+3. Repair
+4. Dead space (hatched)
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.3, row 3 col 1 (Damage strip): "DEAL 4 DMG"
+- QUOTE — cards.pdf p.3, row 3 col 1 (Repair strip): "REPAIR 2"
+- **Destroy effect:** none printed.
+- **Type:** machine part
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[4] + [5]` — a four-pip face and a five-pip face joined by "+".
+Meaning: **2 dice required; they must be a 4 and a 5.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Sentience
+3. Damage
+4. Dead space (hatched)
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.3, row 3 col 2 (Damage strip): "DEAL DMG = SENTIENCE"
+- QUOTE — cards.pdf p.3, row 3 col 2 (Sentience strip): "+1 SENTIENCE"
+- **Destroy effect:** none printed.
+- **Type:** machine part
+- **Starting HP: 3**
+- **Roll condition (1 tile):** `[?] + [?] = [?]` — three "?" faces with "+" and "=".
+Meaning: **3 dice required; 1st die + 2nd die must equal the value of the third die.**
+- **Cycle track (5 spaces):**
+1. HP die slot (3)
+2. Damage
+3. Lock
+4. Damage
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.3, row 3 col 3 (Damage strip): "DEAL 5 DMG"
+- QUOTE — cards.pdf p.3, row 3 col 3 (Lock strip): "LOCK 1 DIE"
+- **Destroy effect:** none printed.
+- **Correction to `00-visual-survey.md`:** that file records Soul Harvester's two strips as "DEAL 5 DMG" and
+"TAKE 1 DMG". The actual card reads **"DEAL 5 DMG"** and **"LOCK 1 DIE"**. There is no "TAKE 1 DMG" text on
+any card in cards.pdf.
+---
+- **Type:** Player HP tracking card, B side (reverse of p.1 r1c1)
+- QUOTE — cards.pdf p.2, row 1 col 3: "PLAYER HP"
+- QUOTE — cards.pdf p.2, row 1 col 3: "B SIDE"
+- QUOTE — cards.pdf p.2, row 1 col 3: "SHIELD"
+- QUOTE — cards.pdf p.2, row 1 col 3: "1X ROUND"
+- QUOTE — cards.pdf p.2, row 1 col 3: "UTILITY"
+- **PLAYER HP track:** identical to the A side — 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0.
+- **SHIELD section: 3 slots** (two side by side, one below).
+- **UTILITY section: 4 slots — 2 x "+/-" roll-modifier slots, 2 x re-roll slots.**
+- Confirms `02-hard-mode.md`: exactly one fewer shield slot (4→3), one fewer roll-modifier slot (3→2),
+and one fewer re-roll slot (3→2).
+---
+| Card | Page/Pos | Type | HP | Roll condition | Destroy effect |
+|---|---|---|---|---|---|
+| INFERNAL POWER COMPLEX | p.1 r1c3 | part | 3 | 1+1+1 (all three 1s) | DEAL 1 DMG TO ALL PARTS IN PLAY |
+| MISERY EXTRACTOR | p.1 r2c1 | part | 6 | 2 / 3 (one die, a 2 or 3) | DEAL 2 DMG TO LEFT ADJACENT PART |
+| THOUGHT SIPHON | p.1 r2c2 | part | 4 | 6+6 (two 6s) | — |
+| IMPACT NEXUS | p.1 r2c3 | part | 4 | ?=? (doubles) | -1 POWER |
+| CEREBRAL AMPLIFIER | p.1 r3c1 | part | 4 | ?=? (doubles) | — |
+| HARD CYCLE STORAGE | p.1 r3c2 | part | 5 | ? > 3 (a 3 + one higher) | — |
+| DESIGN FLAW | p.1 r3c3 | part | 4 | 3+4 | -2 SENTIENCE AND -2 POWER |
+| EXTINCTION COLLIDER | p.3 r1c1 | part | 6 | 4 / 5 (one die, a 4 or 5) | — |
+| PULSE POOLS | p.3 r1c2 | part | 3 | 1+6 | — |
+| THE DOOM CORE | p.3 r1c3 | Doom Core | 4 | 6+6+6 (all three 6s) | — |
+| LOGIC MAINFRAME | p.3 r2c1 | part | 4 | ?=? (doubles) | +2 POWER |
+| STASIS GENERATOR | p.3 r2c2 | part | 6 | ? < 3 (a 3 + one lower) — see note | — |
+| RECYCLING VATS | p.3 r2c3 | part | 6 | 1 / 6 (one die, a 1 or 6) | — |
+| POPULACE GRINDER | p.3 r3c1 | part | 3 | 3+3 (two 3s) | — |
+| SYNAPTIC DISRUPTOR | p.3 r3c2 | part | 4 | 4+5 | — |
+| SOUL HARVESTER | p.3 r3c3 | part | 3 | ?+?=? (two summing to a third) | — |
+| PLAYER HP (A SIDE) | p.1 r1c1 | HP tracker | — | — | — |
+| PLAYER HP (B SIDE) | p.2 r1c3 | HP tracker | — | — | — |
+| THE DOOM MACHINE | p.1 r1c2 | DM tracker | — | — | — |
+Every card carries exactly ONE roll-condition tile. No card in cards.pdf has multiple roll-condition tiles.
+---
+1. **Power / Sentience track effect — NOT on the tracker card.** The Doom Machine tracking card is silent
+(see p.1 r1c2 above for its complete verbatim contents). The tracks' only printed consequences live on five
+machine part cards (Extinction Collider, Synaptic Disruptor, The Doom Core, Cerebral Amplifier, Stasis
+Generator). Nothing in either PDF says what happens when a track reaches 10, or whether the tracks can
+cause a loss. This remains an unanswered rules question.
+2. **"<" operator is undocumented.** STASIS GENERATOR uses `[?] < [3]`. The rulebook's DICE ROLL SYMBOLOGY panel
+documents `+`, `=`, `/`, and `>` only. Meaning inferred by symmetry; needs a designer ruling.
+3. **Dead-space wraparound gap.** DESIGN FLAW (p.1 r3c3) and EXTINCTION COLLIDER (p.3 r1c1) have **no dead space**
+— all 5 cycle-track spaces are live. The rulebook only defines the die returning to the start when it would
+land on a dead space, so it does not say what happens when the die is on space 5 of these two cards and must
+cycle again. Presumably it wraps to space 1, but that is not printed.
+4. **Card count vs. Hard Mode.** There are exactly **15 non-Core machine part cards + 1 Doom Core = 16 cards**.
+Hard Mode's "instead of removing 6 cards at random, use all 16" is therefore consistent, PROVIDED the count of
+16 includes the Doom Core. Normal setup: 15 parts − 6 removed = 9 parts, stacked on the Doom Core → a 10-card
+machine deck, matching `01-objective-and-setup.md` step 3 ("Place the 9 remaining cards face down on top of
+the Doom Core"). **No contradiction.**
+5. **Repair icon art.** `02-card-effect-icons.md` describes Repair as "a wrench/tool glyph in a purple-pink ring".
+On the actual cards (Recycling Vats, Populace Grinder) the Repair icon is a **yellow heart containing a
+triangle**. Worth correcting in the icon slice.
+6. **Soul Harvester strip text.** `00-visual-survey.md` records "TAKE 1 DMG"; the card actually reads
+"LOCK 1 DIE". Correct the survey.
+**None.** Every card name, HP die pip count, roll-condition glyph, cycle-track space, effect strip, and destroy
+banner in cards.pdf was resolved at 300 DPI. No value was guessed.

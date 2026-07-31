@@ -1,0 +1,91 @@
+{
+  "facts": [
+    {
+      "statement": "The first phase of each turn is called PHASE I: DICE ROLL / RESOLUTION.",
+      "sourceSentence": "PHASE I: DICE ROLL / RESOLUTION"
+    },
+    {
+      "statement": "On each turn, you roll all available dice.",
+      "sourceSentence": "On each turn, you will roll your available dice"
+    },
+    {
+      "statement": "Dice can be allocated to modify roll results.",
+      "sourceSentence": "allocate them in various ways to modify your rolls"
+    },
+    {
+      "statement": "Dice can be allocated to defend against incoming damage.",
+      "sourceSentence": "defend against incoming damage"
+    },
+    {
+      "statement": "Dice can be allocated to deal damage to machine parts.",
+      "sourceSentence": "deal damage to parts of the Doom Machine"
+    },
+    {
+      "statement": "The second phase of each turn is called PHASE II: THE MACHINE PHASE.",
+      "sourceSentence": "PHASE II: THE MACHINE PHASE"
+    },
+    {
+      "statement": "After the player's dice are allocated and resolved, the machine phase begins.",
+      "sourceSentence": "Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card."
+    },
+    {
+      "statement": "The machine cycles its remaining parts.",
+      "sourceSentence": "the machine will cycle its remaining parts"
+    },
+    {
+      "statement": "The machine resolves the effects of its parts.",
+      "sourceSentence": "resolve their effects"
+    },
+    {
+      "statement": "The machine grows by 1 additional card.",
+      "sourceSentence": "grow by 1 additional card",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "additional card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "One game-ending condition is when the Doom Core is revealed and destroyed.",
+      "sourceSentence": "This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine."
+    },
+    {
+      "statement": "One game-ending condition is when the player is destroyed by the machine.",
+      "sourceSentence": "This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine."
+    },
+    {
+      "statement": "The player starts with 5 black dice.",
+      "sourceSentence": "you start with 5 black dice",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "black dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The player may gain up to 5 additional yellow dice from destroyed machine part cards.",
+      "sourceSentence": "may gain up to 5 additional yellow dice from destroyed machine part cards",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "additional yellow dice",
+        "approximate": true
+      }
+    },
+    {
+      "statement": "Dice allocation depends on roll results.",
+      "sourceSentence": "Allocate them in any of the following available ways, based on your rolls"
+    },
+    {
+      "statement": "One available allocation option is to activate available utilities.",
+      "sourceSentence": "ACTIVATE ANY AVAILABLE UTILITIES"
+    },
+    {
+      "statement": "One available allocation option is to play dice to shields.",
+      "sourceSentence": "PLAY DICE TO YOUR SHIELDS"
+    },
+    {
+      "statement": "One available allocation option is to deal damage to machine parts.",
+      "sourceSentence": "DEAL DAMAGE TO MACHINE PARTS"
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "facts": [
+    {
+      "statement": "Seven is a rummy-style card game",
+      "sourceSentence": "Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up."
+    },
+    {
+      "statement": "The game supports 1 to 7 players",
+      "sourceSentence": "Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up."
+    },
+    {
+      "statement": "A game plays in approximately 7 minutes",
+      "sourceSentence": "Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "minutes",
+        "approximate": true
+      }
+    },
+    {
+      "statement": "The game is recommended for ages 7 and up",
+      "sourceSentence": "Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "years",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each player receives a Ways to Score card during setup",
+      "sourceSentence": "Give each player a \"Ways to Score\" card."
+    },
+    {
+      "statement": "Face-down cards are placed in the middle of the table and mixed around during setup",
+      "sourceSentence": "Create a mess of face-down cards in the middle of the table and mixes them around."
+    },
+    {
+      "statement": "Each player draws 3 cards from the central deck during setup to form their hand",
+      "sourceSentence": "Each player should then draw 3 cards from the mess to form their hand.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each player draws 2 cards from the central deck during each round",
+      "sourceSentence": "Each player draws 2 cards into their hand.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each player discards 1 card per round",
+      "sourceSentence": "Each player discards 1 card from their hand face-up off to the side of the table in their own discard pile.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Discarded cards are placed face-up off to the side of the table",
+      "sourceSentence": "Each player discards 1 card from their hand face-up off to the side of the table in their own discard pile."
+    },
+    {
+      "statement": "Each player has their own discard pile",
+      "sourceSentence": "Each player discards 1 card from their hand face-up off to the side of the table in their own discard pile."
+    },
+    {
+      "statement": "Players can count their discards to track which round they are on",
+      "sourceSentence": "If you ever lose track of which round you are on, count your discards, you will have 7 discards when the game is over."
+    },
+    {
+      "statement": "Players will have 7 discards when the game ends",
+      "sourceSentence": "If you ever lose track of which round you are on, count your discards, you will have 7 discards when the game is over.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "discards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Discards are considered public information",
+      "sourceSentence": "Discards are considered public information."
+    },
+    {
+      "statement": "The game ends when all players have 10 cards",
+      "sourceSentence": "If everyone has 10 cards, end the game; otherwise begin the next round.",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "If not all players have 10 cards, the next round begins",
+      "sourceSentence": "If everyone has 10 cards, end the game; otherwise begin the next round."
+    },
+    {
+      "statement": "Players score their best hand of 7 cards",
+      "sourceSentence": "Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Bonus point cards beyond the hand of 7 are added to a player's score",
+      "sourceSentence": "Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score."
+    },
+    {
+      "statement": "A match consists of 7 games",
+      "sourceSentence": "A match consists of 7 games.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "games",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each player's score total is tracked across all games in a match",
+      "sourceSentence": "Play 7 games and keep track of each player's score total."
+    },
+    {
+      "statement": "The player with the highest total score at the end of the match wins",
+      "sourceSentence": "Whichever player has the highest total score at the end of the match wins!"
+    },
+    {
+      "statement": "A match is naturally played as a best of 7 series",
+      "sourceSentence": "A full match of Seven is naturally played in a best of 7 series.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "games",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A match can be played as a best of 3 games variant",
+      "sourceSentence": "That said, if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "games",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A match can be played as a best of 10 games variant",
+      "sourceSentence": "That said, if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games.",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "games",
+        "approximate": false
+      }
+    }
+  ]
+}

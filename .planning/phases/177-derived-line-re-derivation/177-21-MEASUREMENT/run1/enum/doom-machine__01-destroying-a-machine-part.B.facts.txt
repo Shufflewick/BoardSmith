@@ -1,0 +1,77 @@
+{
+  "facts": [
+    {
+      "statement": "Destroying a machine part requires reducing its HP die to zero.",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).",
+      "numericValue": {
+        "magnitude": 0,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "When a machine part is destroyed, the card is removed from play.",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn)."
+    },
+    {
+      "statement": "The die of a destroyed machine part is added to the player's permanent dice pool.",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn)."
+    },
+    {
+      "statement": "Dice in the permanent pool are set aside until the start of the next turn.",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn)."
+    },
+    {
+      "statement": "A player's permanent dice pool cannot exceed 10 dice total.",
+      "sourceSentence": "Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A player's permanent dice pool cannot exceed 5 black dice.",
+      "sourceSentence": "Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "black dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A player's permanent dice pool cannot exceed 5 yellow dice.",
+      "sourceSentence": "Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "yellow dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Remaining machine part cards in play shift to close gaps left by destroyed parts.",
+      "sourceSentence": "Then, shift any remaining machine part cards in play to close the gap."
+    },
+    {
+      "statement": "Some machine part cards have a yellow X icon with an effect.",
+      "sourceSentence": "Some machine part cards have a yellow X icon and effect on them."
+    },
+    {
+      "statement": "Yellow X effects on machine parts are triggered immediately when that part is destroyed.",
+      "sourceSentence": "These effects are triggered and resolved immediately when that part is destroyed."
+    },
+    {
+      "statement": "Yellow X effects on machine parts are resolved immediately when that part is destroyed.",
+      "sourceSentence": "These effects are triggered and resolved immediately when that part is destroyed."
+    },
+    {
+      "statement": "An example machine part destroy effect deals 1 damage to all parts in play.",
+      "sourceSentence": "DEAL 1 DMG TO ALL PARTS IN PLAY",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "damage",
+        "approximate": false
+      }
+    }
+  ]
+}

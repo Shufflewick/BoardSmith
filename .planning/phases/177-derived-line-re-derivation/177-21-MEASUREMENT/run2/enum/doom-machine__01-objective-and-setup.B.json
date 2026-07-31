@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 84999,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "318b0f11-3509-484e-b227-975842b424bc",
+    "total_cost_usd": 0.05519190000000001,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 31269,
+      "output_tokens": 10411,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 10411,
+          "cache_read_input_tokens": 31269,
+          "cache_creation_input_tokens": 0,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 10411,
+        "cacheReadInputTokens": 31269,
+        "cacheCreationInputTokens": 0,
+        "webSearchRequests": 0,
+        "costUSD": 0.05519190000000001,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"The player's goal is to uncover and destroy The Doom Core before succumbing to total extinction.\",\n      \"sourceSentence\": \"Uncover and destroy The Doom Core before you succumb to total extinction.\"\n    },\n    {\n      \"statement\": \"The Doom Machine tracking card is placed to the left.\",\n      \"sourceSentence\": \"Set the Doom Machine tracking card to your left.\"\n    },\n    {\n      \"statement\": \"Tracking cubes are placed on the zero spaces of two tracks: the Sentience track (yellow) and the Power track (black).\",\n      \"sourceSentence\": \"Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks.\"\n    },\n    {\n      \"statement\": \"The Doom Core is a machine part card.\",\n      \"sourceSentence\": \"Find the \\\"Doom Core\\\" machine part card, and place it face down to the right of the Doom Machine tracking card.\"\n    },\n    {\n      \"statement\": \"The Doom Core card is placed face down to the right of the Doom Machine tracking card.\",\n      \"sourceSentence\": \"Find the \\\"Doom Core\\\" machine part card, and place it face down to the right of the Doom Machine tracking card.\"\n    },\n    {\n      \"statement\": \"The remaining machine part cards are shuffled.\",\n      \"sourceSentence\": \"Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run).\"\n    },\n    {\n      \"statement\": \"Six machine part cards are removed at random.\",\n      \"sourceSentence\": \"Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run).\",\n      \"numericValue\": {\n        \"magnitude\": 6,\n        \"unit\": \"machine part cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The removed machine part cards are set back in the tin and will not be used for this game session.\",\n      \"sourceSentence\": \"set them back in the tin, as they won't be used for this run\"\n    },\n    {\n      \"statement\": \"Nine machine part cards are placed face down on top of the Doom Core to create the machine deck.\",\n      \"sourceSentence\": \"Place the 9 remaining cards face down on top of the Doom Core to create the machine deck.\",\n      \"numericValue\": {\n        \"magnitude\": 9,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The Player HP tracking card is placed below the machine deck.\",\n      \"sourceSentence\": \"Place the Player HP (health points) tracking card below the machine deck.\"\n    },\n    {\n      \"statement\": \"The white tracking cube is set on the 10 space of the Player HP track.\",\n      \"sourceSentence\": \"Set the white tracking cube on the 10 space of the Player HP track.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"space\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Three cards are drawn from the top of the machine deck and placed face up in a line to the immediate right of the deck.\",\n      \"sourceSentence\": \"Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The drawn cards represent the starting machine parts the player will face.\",\n      \"sourceSentence\": \"These are the starting machine parts you will face.\"\n    },\n    {\n      \"statement\": \"One yellow die is taken for each revealed machine part card and placed on the yellow dice slot on the cycle track on that card.\",\n      \"sourceSentence\": \"Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points).\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"yellow die\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The yellow die face is set to match the indicated machine part's HP.\",\n      \"sourceSentence\": \"Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points).\"\n    },\n    {\n      \"statement\": \"The remaining unused yellow dice are set aside.\",\n      \"sourceSentence\": \"Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you.\"\n    },\n    {\n      \"statement\": \"Five black starting dice are placed in front of the player.\",\n      \"sourceSentence\": \"Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you.\",\n      \"numericValue\": {\n        \"magnitude\": 5,\n        \"unit\": \"black starting dice\",\n        \"approximate\": false\n      }\n    }\n  ]\n}\n```",
+    "ttft_ms": 76817,
+    "ttft_stream_ms": 1359,
+    "time_to_request_ms": 430,
+    "type": "result",
+    "duration_ms": 85900,
+    "uuid": "f3ded7c0-d125-4e22-a5f8-72acd03c7fef"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"The player's goal is to uncover and destroy The Doom Core before succumbing to total extinction.\",\n      \"sourceSentence\": \"Uncover and destroy The Doom Core before you succumb to total extinction.\"\n    },\n    {\n      \"statement\": \"The Doom Machine tracking card is placed to the left.\",\n      \"sourceSentence\": \"Set the Doom Machine tracking card to your left.\"\n    },\n    {\n      \"statement\": \"Tracking cubes are placed on the zero spaces of two tracks: the Sentience track (yellow) and the Power track (black).\",\n      \"sourceSentence\": \"Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks.\"\n    },\n    {\n      \"statement\": \"The Doom Core is a machine part card.\",\n      \"sourceSentence\": \"Find the \\\"Doom Core\\\" machine part card, and place it face down to the right of the Doom Machine tracking card.\"\n    },\n    {\n      \"statement\": \"The Doom Core card is placed face down to the right of the Doom Machine tracking card.\",\n      \"sourceSentence\": \"Find the \\\"Doom Core\\\" machine part card, and place it face down to the right of the Doom Machine tracking card.\"\n    },\n    {\n      \"statement\": \"The remaining machine part cards are shuffled.\",\n      \"sourceSentence\": \"Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run).\"\n    },\n    {\n      \"statement\": \"Six machine part cards are removed at random.\",\n      \"sourceSentence\": \"Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run).\",\n      \"numericValue\": {\n        \"magnitude\": 6,\n        \"unit\": \"machine part cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The removed machine part cards are set back in the tin and will not be used for this game session.\",\n      \"sourceSentence\": \"set them back in the tin, as they won't be used for this run\"\n    },\n    {\n      \"statement\": \"Nine machine part cards are placed face down on top of the Doom Core to create the machine deck.\",\n      \"sourceSentence\": \"Place the 9 remaining cards face down on top of the Doom Core to create the machine deck.\",\n      \"numericValue\": {\n        \"magnitude\": 9,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The Player HP tracking card is placed below the machine deck.\",\n      \"sourceSentence\": \"Place the Player HP (health points) tracking card below the machine deck.\"\n    },\n    {\n      \"statement\": \"The white tracking cube is set on the 10 space of the Player HP track.\",\n      \"sourceSentence\": \"Set the white tracking cube on the 10 space of the Player HP track.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"space\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Three cards are drawn from the top of the machine deck and placed face up in a line to the immediate right of the deck.\",\n      \"sourceSentence\": \"Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The drawn cards represent the starting machine parts the player will face.\",\n      \"sourceSentence\": \"These are the starting machine parts you will face.\"\n    },\n    {\n      \"statement\": \"One yellow die is taken for each revealed machine part card and placed on the yellow dice slot on the cycle track on that card.\",\n      \"sourceSentence\": \"Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points).\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"yellow die\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The yellow die face is set to match the indicated machine part's HP.\",\n      \"sourceSentence\": \"Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points).\"\n    },\n    {\n      \"statement\": \"The remaining unused yellow dice are set aside.\",\n      \"sourceSentence\": \"Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you.\"\n    },\n    {\n      \"statement\": \"Five black starting dice are placed in front of the player.\",\n      \"sourceSentence\": \"Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you.\",\n      \"numericValue\": {\n        \"magnitude\": 5,\n        \"unit\": \"black starting dice\",\n        \"approximate\": false\n      }\n    }\n  ]\n}"
+}

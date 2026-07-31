@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 91588,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "6dd6a66d-74cf-4123-b717-680e5b429a79",
+    "total_cost_usd": 0.0520746,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 30896,
+      "output_tokens": 9795,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 9795,
+          "cache_read_input_tokens": 30896,
+          "cache_creation_input_tokens": 0,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 9795,
+        "cacheReadInputTokens": 30896,
+        "cacheCreationInputTokens": 0,
+        "webSearchRequests": 0,
+        "costUSD": 0.0520746,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"Reducing a machine part's HP die to zero destroys the part card\",\n      \"sourceSentence\": \"If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).\"\n    },\n    {\n      \"statement\": \"Destroyed machine part cards are removed from play\",\n      \"sourceSentence\": \"If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).\"\n    },\n    {\n      \"statement\": \"The destroyed machine part's die is added to the player's permanent dice pool\",\n      \"sourceSentence\": \"If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).\"\n    },\n    {\n      \"statement\": \"Spent dice in the permanent pool are set aside until the start of the next turn\",\n      \"sourceSentence\": \"If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).\"\n    },\n    {\n      \"statement\": \"The permanent dice pool has a maximum of 10 dice total, with a maximum of 5 black dice and 5 yellow dice\",\n      \"sourceSentence\": \"Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"dice\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"After a machine part is destroyed, any remaining machine part cards in play are shifted to close the gap\",\n      \"sourceSentence\": \"Then, shift any remaining machine part cards in play to close the gap.\"\n    },\n    {\n      \"statement\": \"Some machine part cards have a yellow X icon with an associated effect\",\n      \"sourceSentence\": \"Some machine part cards have a yellow X icon and effect on them.\"\n    },\n    {\n      \"statement\": \"Destroy effects are triggered and resolved immediately when the machine part is destroyed\",\n      \"sourceSentence\": \"These effects are triggered and resolved immediately when that part is destroyed.\"\n    },\n    {\n      \"statement\": \"An example destroy effect reads: DEAL 1 DMG TO ALL PARTS IN PLAY\",\n      \"sourceSentence\": \"DEAL 1 DMG TO ALL PARTS IN PLAY\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"DMG\",\n        \"approximate\": false\n      }\n    }\n  ]\n}\n```",
+    "ttft_ms": 87295,
+    "ttft_stream_ms": 1556,
+    "time_to_request_ms": 431,
+    "type": "result",
+    "duration_ms": 92464,
+    "uuid": "0eb057f6-0388-4719-a693-966328031c5b"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"Reducing a machine part's HP die to zero destroys the part card\",\n      \"sourceSentence\": \"If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).\"\n    },\n    {\n      \"statement\": \"Destroyed machine part cards are removed from play\",\n      \"sourceSentence\": \"If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).\"\n    },\n    {\n      \"statement\": \"The destroyed machine part's die is added to the player's permanent dice pool\",\n      \"sourceSentence\": \"If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).\"\n    },\n    {\n      \"statement\": \"Spent dice in the permanent pool are set aside until the start of the next turn\",\n      \"sourceSentence\": \"If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).\"\n    },\n    {\n      \"statement\": \"The permanent dice pool has a maximum of 10 dice total, with a maximum of 5 black dice and 5 yellow dice\",\n      \"sourceSentence\": \"Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"dice\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"After a machine part is destroyed, any remaining machine part cards in play are shifted to close the gap\",\n      \"sourceSentence\": \"Then, shift any remaining machine part cards in play to close the gap.\"\n    },\n    {\n      \"statement\": \"Some machine part cards have a yellow X icon with an associated effect\",\n      \"sourceSentence\": \"Some machine part cards have a yellow X icon and effect on them.\"\n    },\n    {\n      \"statement\": \"Destroy effects are triggered and resolved immediately when the machine part is destroyed\",\n      \"sourceSentence\": \"These effects are triggered and resolved immediately when that part is destroyed.\"\n    },\n    {\n      \"statement\": \"An example destroy effect reads: DEAL 1 DMG TO ALL PARTS IN PLAY\",\n      \"sourceSentence\": \"DEAL 1 DMG TO ALL PARTS IN PLAY\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"DMG\",\n        \"approximate\": false\n      }\n    }\n  ]\n}"
+}

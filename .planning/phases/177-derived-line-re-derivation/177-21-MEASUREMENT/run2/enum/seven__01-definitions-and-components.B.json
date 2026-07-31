@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 64326,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "8a3b8423-6203-4ccd-8ad5-2a81a243470a",
+    "total_cost_usd": 0.0545635,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9070,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 6849,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9070,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 6849,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9070,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9070
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 6849,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9070,
+        "webSearchRequests": 0,
+        "costUSD": 0.0545635,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"Players start with 3 cards in their hand\",\n      \"sourceSentence\": \"Each starts with 3 and ends the game with 10.\",\n      \"numericValue\": { \"magnitude\": 3, \"unit\": \"cards\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Players end the game with 10 cards in their hand\",\n      \"sourceSentence\": \"Each starts with 3 and ends the game with 10.\",\n      \"numericValue\": { \"magnitude\": 10, \"unit\": \"cards\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"A Set consists of 2 or more cards with matching numbers\",\n      \"sourceSentence\": \"Set: 2+ cards with matching numbers.\",\n      \"numericValue\": { \"magnitude\": 2, \"unit\": \"cards\", \"approximate\": true }\n    },\n    {\n      \"statement\": \"A Run consists of 3 or more cards in numeric order\",\n      \"sourceSentence\": \"Run: 3+ cards in numeric order.\",\n      \"numericValue\": { \"magnitude\": 3, \"unit\": \"cards\", \"approximate\": true }\n    },\n    {\n      \"statement\": \"Cards have numbers ranging from 1 to 7\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"There are 4 colors\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"numericValue\": { \"magnitude\": 4, \"unit\": \"colors\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There are 4 copies of each card\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"numericValue\": { \"magnitude\": 4, \"unit\": \"copies\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There are 7 bonus point cards\",\n      \"sourceSentence\": \"In addition, there are 7 bonus point cards.\",\n      \"numericValue\": { \"magnitude\": 7, \"unit\": \"bonus point cards\", \"approximate\": false }\n    }\n  ]\n}\n```",
+    "ttft_ms": 60900,
+    "ttft_stream_ms": 1895,
+    "time_to_request_ms": 453,
+    "type": "result",
+    "duration_ms": 65204,
+    "uuid": "a3ee9d6e-27a2-4137-b017-bfca4408c277"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"Players start with 3 cards in their hand\",\n      \"sourceSentence\": \"Each starts with 3 and ends the game with 10.\",\n      \"numericValue\": { \"magnitude\": 3, \"unit\": \"cards\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Players end the game with 10 cards in their hand\",\n      \"sourceSentence\": \"Each starts with 3 and ends the game with 10.\",\n      \"numericValue\": { \"magnitude\": 10, \"unit\": \"cards\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"A Set consists of 2 or more cards with matching numbers\",\n      \"sourceSentence\": \"Set: 2+ cards with matching numbers.\",\n      \"numericValue\": { \"magnitude\": 2, \"unit\": \"cards\", \"approximate\": true }\n    },\n    {\n      \"statement\": \"A Run consists of 3 or more cards in numeric order\",\n      \"sourceSentence\": \"Run: 3+ cards in numeric order.\",\n      \"numericValue\": { \"magnitude\": 3, \"unit\": \"cards\", \"approximate\": true }\n    },\n    {\n      \"statement\": \"Cards have numbers ranging from 1 to 7\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"There are 4 colors\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"numericValue\": { \"magnitude\": 4, \"unit\": \"colors\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There are 4 copies of each card\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"numericValue\": { \"magnitude\": 4, \"unit\": \"copies\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There are 7 bonus point cards\",\n      \"sourceSentence\": \"In addition, there are 7 bonus point cards.\",\n      \"numericValue\": { \"magnitude\": 7, \"unit\": \"bonus point cards\", \"approximate\": false }\n    }\n  ]\n}"
+}

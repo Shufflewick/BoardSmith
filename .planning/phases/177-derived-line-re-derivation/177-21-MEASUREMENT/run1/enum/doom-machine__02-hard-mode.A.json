@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 15145,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "104fbee1-cb66-4fd7-8b1e-74f6ddde89ff",
+    "total_cost_usd": 0.1850605,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 14045,
+      "cache_read_input_tokens": 18151,
+      "output_tokens": 1421,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 14045,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1421,
+          "cache_read_input_tokens": 18151,
+          "cache_creation_input_tokens": 14045,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 14045
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-5": {
+        "inputTokens": 2,
+        "outputTokens": 1421,
+        "cacheReadInputTokens": 18151,
+        "cacheCreationInputTokens": 14045,
+        "webSearchRequests": 0,
+        "costUSD": 0.1850605,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-opus-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"facts\":[{\"statement\":\"Hard Mode is an optional way to play that makes the game tougher and longer, achieved through a set of rule variations.\",\"sourceSentence\":\"For a tougher challenge and longer game, try playing HARD MODE using the follow rule variations:\"},{\"statement\":\"Hard Mode setup follows the normal setup procedure except for the change to card removal.\",\"sourceSentence\":\"1) Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\"},{\"statement\":\"In the normal game, 6 cards are removed at random during setup.\",\"sourceSentence\":\"1) Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\",\"numericValue\":{\"magnitude\":6,\"unit\":\"cards removed at random\",\"approximate\":false}},{\"statement\":\"In Hard Mode, all 16 of those cards are used instead of removing any.\",\"sourceSentence\":\"1) Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\",\"numericValue\":{\"magnitude\":16,\"unit\":\"cards used\",\"approximate\":false}},{\"statement\":\"In Hard Mode, the player HP tracking card is flipped to its B side.\",\"sourceSentence\":\"2) Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\"},{\"statement\":\"The B side of the player HP tracking card provides one fewer shield slot than the normal side.\",\"sourceSentence\":\"2) Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"fewer shield slot\",\"approximate\":false}},{\"statement\":\"The B side of the player HP tracking card provides one fewer re-roll slot than the normal side.\",\"sourceSentence\":\"2) Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"fewer re-roll slot\",\"approximate\":false}},{\"statement\":\"The B side of the player HP tracking card provides one fewer roll modifier slot than the normal side.\",\"sourceSentence\":\"2) Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"fewer roll modifier slot\",\"approximate\":false}},{\"statement\":\"In a normal game, a player may place at most 4 dice to their shields in a single turn.\",\"sourceSentence\":\"In a normal game, no more than 4 dice can be placed this way per turn.\",\"numericValue\":{\"magnitude\":4,\"unit\":\"dice per turn\",\"approximate\":false}},{\"statement\":\"In Hard Mode, a player may place at most 3 dice to their shields in a single turn.\",\"sourceSentence\":\"In Hard Mode, no more than 3 dice can be placed this way per turn.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice per turn\",\"approximate\":false}}]}",
+    "ttft_ms": 6979,
+    "ttft_stream_ms": 2289,
+    "time_to_request_ms": 684,
+    "type": "result",
+    "duration_ms": 16493,
+    "uuid": "722cab48-0a06-45d4-8011-e9d640519fa6"
+  },
+  "facts": "{\"facts\":[{\"statement\":\"Hard Mode is an optional way to play that makes the game tougher and longer, achieved through a set of rule variations.\",\"sourceSentence\":\"For a tougher challenge and longer game, try playing HARD MODE using the follow rule variations:\"},{\"statement\":\"Hard Mode setup follows the normal setup procedure except for the change to card removal.\",\"sourceSentence\":\"1) Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\"},{\"statement\":\"In the normal game, 6 cards are removed at random during setup.\",\"sourceSentence\":\"1) Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\",\"numericValue\":{\"magnitude\":6,\"unit\":\"cards removed at random\",\"approximate\":false}},{\"statement\":\"In Hard Mode, all 16 of those cards are used instead of removing any.\",\"sourceSentence\":\"1) Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.\",\"numericValue\":{\"magnitude\":16,\"unit\":\"cards used\",\"approximate\":false}},{\"statement\":\"In Hard Mode, the player HP tracking card is flipped to its B side.\",\"sourceSentence\":\"2) Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\"},{\"statement\":\"The B side of the player HP tracking card provides one fewer shield slot than the normal side.\",\"sourceSentence\":\"2) Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"fewer shield slot\",\"approximate\":false}},{\"statement\":\"The B side of the player HP tracking card provides one fewer re-roll slot than the normal side.\",\"sourceSentence\":\"2) Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"fewer re-roll slot\",\"approximate\":false}},{\"statement\":\"The B side of the player HP tracking card provides one fewer roll modifier slot than the normal side.\",\"sourceSentence\":\"2) Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"fewer roll modifier slot\",\"approximate\":false}},{\"statement\":\"In a normal game, a player may place at most 4 dice to their shields in a single turn.\",\"sourceSentence\":\"In a normal game, no more than 4 dice can be placed this way per turn.\",\"numericValue\":{\"magnitude\":4,\"unit\":\"dice per turn\",\"approximate\":false}},{\"statement\":\"In Hard Mode, a player may place at most 3 dice to their shields in a single turn.\",\"sourceSentence\":\"In Hard Mode, no more than 3 dice can be placed this way per turn.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice per turn\",\"approximate\":false}}]}"
+}

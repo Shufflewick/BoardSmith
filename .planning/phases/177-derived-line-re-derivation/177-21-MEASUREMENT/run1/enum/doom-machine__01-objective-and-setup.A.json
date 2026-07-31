@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 18675,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "65af33c4-a326-4ce2-a929-8b8e9dbe4494",
+    "total_cost_usd": 0.2022755,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 14794,
+      "cache_read_input_tokens": 18151,
+      "output_tokens": 1810,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 14794,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1810,
+          "cache_read_input_tokens": 18151,
+          "cache_creation_input_tokens": 14794,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 14794
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-5": {
+        "inputTokens": 2,
+        "outputTokens": 1810,
+        "cacheReadInputTokens": 18151,
+        "cacheCreationInputTokens": 14794,
+        "webSearchRequests": 0,
+        "costUSD": 0.2022755,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-opus-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"facts\":[{\"statement\":\"The game's objective is to find and destroy The Doom Core before the player is wiped out entirely.\",\"sourceSentence\":\"Uncover and destroy The Doom Core before you succumb to total extinction.\"},{\"statement\":\"A how-to-play video is available at the listed URL for players who prefer not to read the rules.\",\"sourceSentence\":\"\\\"Hate Reading? Watch the How to Play Video:\\\" \\\"https://nathanmeunier.com/doom\\\"\"},{\"statement\":\"During setup, the Doom Machine tracking card is placed to the player's left.\",\"sourceSentence\":\"1) Set the Doom Machine tracking card to your left.\"},{\"statement\":\"The Doom Machine tracking card has two tracks: Sentience (yellow) and Power (black), and each begins with its corresponding tracking cube on the zero space.\",\"sourceSentence\":\"Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks.\",\"numericValue\":{\"magnitude\":0,\"unit\":\"starting track space\",\"approximate\":false}},{\"statement\":\"The \\\"Doom Core\\\" machine part card is set aside during setup and placed face down to the right of the Doom Machine tracking card.\",\"sourceSentence\":\"2) Find the \\\"Doom Core\\\" machine part card, and place it face down to the right of the Doom Machine tracking card.\"},{\"statement\":\"After removing the Doom Core, the remaining machine part cards are shuffled and 6 are removed at random and returned to the tin, unused for the current game.\",\"sourceSentence\":\"3) Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run).\",\"numericValue\":{\"magnitude\":6,\"unit\":\"machine part cards removed\",\"approximate\":false}},{\"statement\":\"The machine deck is formed by placing the 9 remaining machine part cards face down on top of the Doom Core card.\",\"sourceSentence\":\"Place the 9 remaining cards face down on top of the Doom Core to create the machine deck.\",\"numericValue\":{\"magnitude\":9,\"unit\":\"machine part cards\",\"approximate\":false}},{\"statement\":\"The Player HP (health points) tracking card is placed below the machine deck.\",\"sourceSentence\":\"4) Place the Player HP (health points) tracking card below the machine deck.\"},{\"statement\":\"The player's HP starts at 10, marked by placing the white tracking cube on the 10 space of the Player HP track.\",\"sourceSentence\":\"Set the white tracking cube on the 10 space of the Player HP track.\",\"numericValue\":{\"magnitude\":10,\"unit\":\"HP\",\"approximate\":false}},{\"statement\":\"Setup reveals the top 3 cards of the machine deck face up in a line immediately to the right of the deck.\",\"sourceSentence\":\"5) Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"machine part cards\",\"approximate\":false}},{\"statement\":\"Those three face-up cards are the starting machine parts the player will face.\",\"sourceSentence\":\"These are the starting machine parts you will face.\"},{\"statement\":\"Each revealed machine part card receives one yellow die, placed on the yellow dice slot of that card's cycle track.\",\"sourceSentence\":\"6) Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card,\",\"numericValue\":{\"magnitude\":1,\"unit\":\"yellow die per revealed machine part card\",\"approximate\":false}},{\"statement\":\"Each machine part's die is set to the face matching that machine part's indicated HP.\",\"sourceSentence\":\"setting the die face to match the indicated machine part's HP (health points).\"},{\"statement\":\"Yellow dice not placed on machine part cards are set aside as a reserve pool.\",\"sourceSentence\":\"7) Set the remaining unused yellow dice aside for now,\"},{\"statement\":\"The player begins with 5 black starting dice placed in front of them.\",\"sourceSentence\":\"then place your 5 black starting dice in front of you.\",\"numericValue\":{\"magnitude\":5,\"unit\":\"black starting dice\",\"approximate\":false}},{\"statement\":\"Setup is finished once the player's starting dice are placed.\",\"sourceSentence\":\"Setup is complete!\"},{\"statement\":\"In the setup layout diagram, component A is the Doom Machine Tracker together with its cubes.\",\"sourceSentence\":\"A) Doom Machine Tracker + Cubes\"},{\"statement\":\"In the setup layout diagram, component B is the Machine Deck.\",\"sourceSentence\":\"B) Machine Deck\"},{\"statement\":\"In the setup layout diagram, component C is the Player HP Tracker together with its cube.\",\"sourceSentence\":\"C) Player HP Tracker + Cube\"},{\"statement\":\"In the setup layout diagram, component D is the starting machine part cards.\",\"sourceSentence\":\"D) Starting Machine Part Cards\"},{\"statement\":\"In the setup layout diagram, component E is the machine part die.\",\"sourceSentence\":\"E) Machine Part Die\"},{\"statement\":\"In the setup layout diagram, component F is the extra machine dice pool.\",\"sourceSentence\":\"F) Extra Machine Dice Pool\"},{\"statement\":\"In the setup layout diagram, component G is the starting player dice.\",\"sourceSentence\":\"G) Starting Player Dice\"}]}",
+    "ttft_ms": 19342,
+    "ttft_stream_ms": 2758,
+    "time_to_request_ms": 683,
+    "type": "result",
+    "duration_ms": 19984,
+    "uuid": "081933b6-7a8e-498b-89c9-b3a69fa08729"
+  },
+  "facts": "{\"facts\":[{\"statement\":\"The game's objective is to find and destroy The Doom Core before the player is wiped out entirely.\",\"sourceSentence\":\"Uncover and destroy The Doom Core before you succumb to total extinction.\"},{\"statement\":\"A how-to-play video is available at the listed URL for players who prefer not to read the rules.\",\"sourceSentence\":\"\\\"Hate Reading? Watch the How to Play Video:\\\" \\\"https://nathanmeunier.com/doom\\\"\"},{\"statement\":\"During setup, the Doom Machine tracking card is placed to the player's left.\",\"sourceSentence\":\"1) Set the Doom Machine tracking card to your left.\"},{\"statement\":\"The Doom Machine tracking card has two tracks: Sentience (yellow) and Power (black), and each begins with its corresponding tracking cube on the zero space.\",\"sourceSentence\":\"Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks.\",\"numericValue\":{\"magnitude\":0,\"unit\":\"starting track space\",\"approximate\":false}},{\"statement\":\"The \\\"Doom Core\\\" machine part card is set aside during setup and placed face down to the right of the Doom Machine tracking card.\",\"sourceSentence\":\"2) Find the \\\"Doom Core\\\" machine part card, and place it face down to the right of the Doom Machine tracking card.\"},{\"statement\":\"After removing the Doom Core, the remaining machine part cards are shuffled and 6 are removed at random and returned to the tin, unused for the current game.\",\"sourceSentence\":\"3) Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run).\",\"numericValue\":{\"magnitude\":6,\"unit\":\"machine part cards removed\",\"approximate\":false}},{\"statement\":\"The machine deck is formed by placing the 9 remaining machine part cards face down on top of the Doom Core card.\",\"sourceSentence\":\"Place the 9 remaining cards face down on top of the Doom Core to create the machine deck.\",\"numericValue\":{\"magnitude\":9,\"unit\":\"machine part cards\",\"approximate\":false}},{\"statement\":\"The Player HP (health points) tracking card is placed below the machine deck.\",\"sourceSentence\":\"4) Place the Player HP (health points) tracking card below the machine deck.\"},{\"statement\":\"The player's HP starts at 10, marked by placing the white tracking cube on the 10 space of the Player HP track.\",\"sourceSentence\":\"Set the white tracking cube on the 10 space of the Player HP track.\",\"numericValue\":{\"magnitude\":10,\"unit\":\"HP\",\"approximate\":false}},{\"statement\":\"Setup reveals the top 3 cards of the machine deck face up in a line immediately to the right of the deck.\",\"sourceSentence\":\"5) Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"machine part cards\",\"approximate\":false}},{\"statement\":\"Those three face-up cards are the starting machine parts the player will face.\",\"sourceSentence\":\"These are the starting machine parts you will face.\"},{\"statement\":\"Each revealed machine part card receives one yellow die, placed on the yellow dice slot of that card's cycle track.\",\"sourceSentence\":\"6) Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card,\",\"numericValue\":{\"magnitude\":1,\"unit\":\"yellow die per revealed machine part card\",\"approximate\":false}},{\"statement\":\"Each machine part's die is set to the face matching that machine part's indicated HP.\",\"sourceSentence\":\"setting the die face to match the indicated machine part's HP (health points).\"},{\"statement\":\"Yellow dice not placed on machine part cards are set aside as a reserve pool.\",\"sourceSentence\":\"7) Set the remaining unused yellow dice aside for now,\"},{\"statement\":\"The player begins with 5 black starting dice placed in front of them.\",\"sourceSentence\":\"then place your 5 black starting dice in front of you.\",\"numericValue\":{\"magnitude\":5,\"unit\":\"black starting dice\",\"approximate\":false}},{\"statement\":\"Setup is finished once the player's starting dice are placed.\",\"sourceSentence\":\"Setup is complete!\"},{\"statement\":\"In the setup layout diagram, component A is the Doom Machine Tracker together with its cubes.\",\"sourceSentence\":\"A) Doom Machine Tracker + Cubes\"},{\"statement\":\"In the setup layout diagram, component B is the Machine Deck.\",\"sourceSentence\":\"B) Machine Deck\"},{\"statement\":\"In the setup layout diagram, component C is the Player HP Tracker together with its cube.\",\"sourceSentence\":\"C) Player HP Tracker + Cube\"},{\"statement\":\"In the setup layout diagram, component D is the starting machine part cards.\",\"sourceSentence\":\"D) Starting Machine Part Cards\"},{\"statement\":\"In the setup layout diagram, component E is the machine part die.\",\"sourceSentence\":\"E) Machine Part Die\"},{\"statement\":\"In the setup layout diagram, component F is the extra machine dice pool.\",\"sourceSentence\":\"F) Extra Machine Dice Pool\"},{\"statement\":\"In the setup layout diagram, component G is the starting player dice.\",\"sourceSentence\":\"G) Starting Player Dice\"}]}"
+}

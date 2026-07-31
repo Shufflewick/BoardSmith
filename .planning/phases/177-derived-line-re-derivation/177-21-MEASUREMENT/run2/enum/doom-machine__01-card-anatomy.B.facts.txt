@@ -1,0 +1,56 @@
+{
+  "facts": [
+    {
+      "statement": "Cards have a component labeled 'Card name'",
+      "sourceSentence": "1  Card name"
+    },
+    {
+      "statement": "Cards have a component labeled 'Roll conditions needed to damage machine part'",
+      "sourceSentence": "2  Roll conditions needed to damage machine part"
+    },
+    {
+      "statement": "Cards have a component labeled 'Machine part cycle track'",
+      "sourceSentence": "3  Machine part cycle track"
+    },
+    {
+      "statement": "Cards have a component labeled 'Cycle icon effects'",
+      "sourceSentence": "4  Cycle icon effects"
+    },
+    {
+      "statement": "Machine part cards are portrait-oriented and teal-colored",
+      "sourceSentence": "a single portrait teal machine part card with four numbered callouts pointing to it."
+    },
+    {
+      "statement": "The card name is located on the title bar at the top of the card",
+      "sourceSentence": "(1) points at the title bar across the top of the card"
+    },
+    {
+      "statement": "An example machine part card is named 'RECYCLING UNIT'",
+      "sourceSentence": "the sample card's name reads as \"RECYCLING UNIT\""
+    },
+    {
+      "statement": "Roll conditions are displayed as yellow roll-condition tiles positioned on the middle-right of the card face",
+      "sourceSentence": "(2) points at the yellow roll-condition tiles on the middle-right of the card face."
+    },
+    {
+      "statement": "The cycle track is a vertical column of track squares positioned on the left side of the card",
+      "sourceSentence": "(3) points at the vertical column of track squares running down the left side of the card, which holds the yellow HP die."
+    },
+    {
+      "statement": "A yellow HP die is placed in the cycle track",
+      "sourceSentence": "which holds the yellow HP die"
+    },
+    {
+      "statement": "Cycle icon effects are represented by small colored icon badges",
+      "sourceSentence": "(4) points at the small colored icon badges embedded in the track / lower card area that fire when the die lands on them."
+    },
+    {
+      "statement": "Icon badges activate when the die lands on them",
+      "sourceSentence": "that fire when the die lands on them"
+    },
+    {
+      "statement": "The card has numbered markers arranged down the left edge and matching numbered legend entries arranged on the right",
+      "sourceSentence": "Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right."
+    }
+  ]
+}

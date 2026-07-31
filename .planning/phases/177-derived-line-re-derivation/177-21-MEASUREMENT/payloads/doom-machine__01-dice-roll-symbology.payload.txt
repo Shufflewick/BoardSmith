@@ -1,0 +1,16 @@
+BS-ENUMERATE-V1
+Slice: rulebook/01-dice-roll-symbology.md
+
+p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:
+Symbol shown: [ ? ] + [ ? ] = [ ? ]
+"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)"
+Symbol shown: [ 6 ] + [ 6 ] = [ 6 ]  (three six-pip die faces)
+"3 dice required. They must all be sixes."
+Symbol shown: [ ? ] = [ ? ]
+"2 dice required. They must be doubles."
+Symbol shown: [ 2 ] / [ 3 ]  (a two-pip face and a three-pip face separated by a slash)
+"1 die required. It can be either a 2 or a 3 value."
+Symbol shown: [ ? ] > [ 3 ]  (a "?" die, a greater-than sign, and a three-pip die face)
+"2 dice required. One must be a 3, another greater than 3."
+Symbol shown: [ 4 ] + [ 5 ]  (a four-pip face and a five-pip face)
+"2 dice required. They must be a 4 and a 5."

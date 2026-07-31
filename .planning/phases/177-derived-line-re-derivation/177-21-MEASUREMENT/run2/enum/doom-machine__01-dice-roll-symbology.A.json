@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 15600,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "65af3902-84e7-464e-9321-c378f679b228",
+    "total_cost_usd": 0.1755105,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 13890,
+      "cache_read_input_tokens": 18151,
+      "output_tokens": 1101,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 13890,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1101,
+          "cache_read_input_tokens": 18151,
+          "cache_creation_input_tokens": 13890,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 13890
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-5": {
+        "inputTokens": 2,
+        "outputTokens": 1101,
+        "cacheReadInputTokens": 18151,
+        "cacheCreationInputTokens": 13890,
+        "webSearchRequests": 0,
+        "costUSD": 0.1755105,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-opus-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"facts\":[{\"statement\":\"The symbol showing two unknown dice added together equaling a third unknown die requires three dice.\",\"sourceSentence\":\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the addition symbol, the values of the first and second dice must sum to the value of the third die.\",\"sourceSentence\":\"1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\"},{\"statement\":\"An example satisfying the addition symbol is 2 plus 4 equaling 6.\",\"sourceSentence\":\"(i.e. 2+4=6)\"},{\"statement\":\"The symbol showing three six-pip faces requires three dice.\",\"sourceSentence\":\"3 dice required. They must all be sixes.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the three-sixes symbol, every one of the required dice must show a six.\",\"sourceSentence\":\"They must all be sixes.\",\"numericValue\":{\"magnitude\":6,\"unit\":\"die value\",\"approximate\":false}},{\"statement\":\"The symbol showing one unknown die equal to another unknown die requires two dice.\",\"sourceSentence\":\"2 dice required. They must be doubles.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the equality symbol, the two dice must show the same value (doubles).\",\"sourceSentence\":\"They must be doubles.\"},{\"statement\":\"The symbol showing a two-pip face and a three-pip face separated by a slash requires one die.\",\"sourceSentence\":\"1 die required. It can be either a 2 or a 3 value.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"die\",\"approximate\":false}},{\"statement\":\"For the slash symbol, the single die may show either of the two listed values, a 2 or a 3.\",\"sourceSentence\":\"It can be either a 2 or a 3 value.\"},{\"statement\":\"The symbol showing an unknown die, a greater-than sign, and a three-pip face requires two dice.\",\"sourceSentence\":\"2 dice required. One must be a 3, another greater than 3.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the greater-than symbol, one die must show exactly a 3 and the other must show a value higher than 3.\",\"sourceSentence\":\"One must be a 3, another greater than 3.\"},{\"statement\":\"The symbol showing a four-pip face and a five-pip face requires two dice.\",\"sourceSentence\":\"2 dice required. They must be a 4 and a 5.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the 4-plus-5 symbol, one die must show a 4 and the other must show a 5.\",\"sourceSentence\":\"They must be a 4 and a 5.\"},{\"statement\":\"Dice roll symbols appear on page 1 in panel -13- under the heading DICE ROLL SYMBOLOGY / EXAMPLES.\",\"sourceSentence\":\"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"}]}",
+    "ttft_ms": 16011,
+    "ttft_stream_ms": 6123,
+    "time_to_request_ms": 436,
+    "type": "result",
+    "duration_ms": 16473,
+    "uuid": "29b6dc2d-8f91-4aec-8af3-853b5518e5de"
+  },
+  "facts": "{\"facts\":[{\"statement\":\"The symbol showing two unknown dice added together equaling a third unknown die requires three dice.\",\"sourceSentence\":\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the addition symbol, the values of the first and second dice must sum to the value of the third die.\",\"sourceSentence\":\"1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\"},{\"statement\":\"An example satisfying the addition symbol is 2 plus 4 equaling 6.\",\"sourceSentence\":\"(i.e. 2+4=6)\"},{\"statement\":\"The symbol showing three six-pip faces requires three dice.\",\"sourceSentence\":\"3 dice required. They must all be sixes.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the three-sixes symbol, every one of the required dice must show a six.\",\"sourceSentence\":\"They must all be sixes.\",\"numericValue\":{\"magnitude\":6,\"unit\":\"die value\",\"approximate\":false}},{\"statement\":\"The symbol showing one unknown die equal to another unknown die requires two dice.\",\"sourceSentence\":\"2 dice required. They must be doubles.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the equality symbol, the two dice must show the same value (doubles).\",\"sourceSentence\":\"They must be doubles.\"},{\"statement\":\"The symbol showing a two-pip face and a three-pip face separated by a slash requires one die.\",\"sourceSentence\":\"1 die required. It can be either a 2 or a 3 value.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"die\",\"approximate\":false}},{\"statement\":\"For the slash symbol, the single die may show either of the two listed values, a 2 or a 3.\",\"sourceSentence\":\"It can be either a 2 or a 3 value.\"},{\"statement\":\"The symbol showing an unknown die, a greater-than sign, and a three-pip face requires two dice.\",\"sourceSentence\":\"2 dice required. One must be a 3, another greater than 3.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the greater-than symbol, one die must show exactly a 3 and the other must show a value higher than 3.\",\"sourceSentence\":\"One must be a 3, another greater than 3.\"},{\"statement\":\"The symbol showing a four-pip face and a five-pip face requires two dice.\",\"sourceSentence\":\"2 dice required. They must be a 4 and a 5.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the 4-plus-5 symbol, one die must show a 4 and the other must show a 5.\",\"sourceSentence\":\"They must be a 4 and a 5.\"},{\"statement\":\"Dice roll symbols appear on page 1 in panel -13- under the heading DICE ROLL SYMBOLOGY / EXAMPLES.\",\"sourceSentence\":\"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"}]}"
+}

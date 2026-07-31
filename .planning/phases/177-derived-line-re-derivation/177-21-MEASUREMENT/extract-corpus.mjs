@@ -1,0 +1,105 @@
+// Extracts, for each real reference-game slice, the buildEnumeratorPayload output (or the throw
+// it produces) plus the mechanical list of "Derived" annotation lines (both the (p.N)-citation
+// form and the bare-"Derived:" form), for reconciler input. Real, unmodified verify-enumerate.ts
+// function — no reimplementation.
+import { buildEnumeratorPayload } from '/Users/jtsmith/BoardSmith/src/cli/commands/verify-enumerate.ts';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { join, basename } from 'node:path';
+
+const GAMES = {
+  seven: '/Users/jtsmith/BoardSmithGames/seven/rulebook',
+  'one-two-punch': '/Users/jtsmith/BoardSmithGames/one-two-punch/rulebook',
+  'doom-machine': '/Users/jtsmith/BoardSmithGames/doom-machine/rulebook',
+};
+
+const EXCLUDE = new Set(['INDEX.md', 'OPEN-QUESTIONS.md']);
+
+// Any line whose trimmed body contains "Derived" annotation vocabulary, either the (p.N) form
+// or the bare colon form, at line start (with tolerated decoration) OR mid-line (the residual
+// case that causes buildEnumeratorPayload's construction-site backstop to throw).
+const DERIVED_LINE_START_RE = /^[\s>\-*(]*Derived\s*(\(p\.[^)]*\))?\s*:/i;
+// Requires an actual digit after "p." — CARDS.md line 8 is the file's OWN LEGEND explaining the
+// annotation convention using the literal placeholder text "Derived (p.N):" (letter N, not a page
+// number), wrapped in backticks as a description of the syntax, not a use of it. The un-anchored
+// prior version ([^)]* instead of \d) matched that placeholder as if it were a real citation — a
+// bug in this harness script, found when CARDS.md became dispatchable for the first time in this
+// measurement chain (blocked by a throw in every prior run, so this bug was never exercised).
+// Fixed here before analysis; verify-enumerate.ts's real quoteLinesOnly/buildEnumeratorPayload
+// already excluded this legend line from every real dispatch, unaffected by this fix.
+const DERIVED_ANYWHERE_RE = /Derived\s*\(p\.\d/i;
+
+const OUT_DIR = '/private/tmp/claude-501/-Users-jtsmith-BoardSmith/39655717-66f7-4931-ad0d-d86278ea06be/scratchpad/177-21/payloads';
+mkdirSync(OUT_DIR, { recursive: true });
+
+const manifest = { slices: [] };
+
+for (const [game, rulebookDir] of Object.entries(GAMES)) {
+  const files = readdirSync(rulebookDir).filter(
+    (f) => f.endsWith('.md') && !EXCLUDE.has(f) && f !== '00-visual-survey.md',
+  );
+  for (const file of files.sort()) {
+    const fullPath = join(rulebookDir, file);
+    const text = readFileSync(fullPath, 'utf8');
+    const rawLines = text.split('\n');
+
+    const derivedLines = [];
+    rawLines.forEach((raw, idx) => {
+      const trimmed = raw.trim();
+      const isStart = DERIVED_LINE_START_RE.test(trimmed);
+      const isMidline = !isStart && DERIVED_ANYWHERE_RE.test(raw);
+      if (isStart || isMidline) {
+        derivedLines.push({ lineNumber: idx + 1, text: trimmed, form: isStart ? 'line-start' : 'mid-line-residual' });
+      }
+    });
+
+    if (derivedLines.length === 0) continue; // no Derived lines in this slice; skip entirely
+
+    let payloadResult;
+    try {
+      const payload = buildEnumeratorPayload({ path: `rulebook/${file}`, text });
+      payloadResult = { ok: true, payload };
+    } catch (e) {
+      payloadResult = { ok: false, error: e.message };
+    }
+
+    const slug = `${game}__${file.replace(/\.md$/, '')}`;
+    const record = {
+      game,
+      slicePath: `rulebook/${file}`,
+      fullPath,
+      derivedLines,
+      payloadOk: payloadResult.ok,
+      payloadLength: payloadResult.ok ? payloadResult.payload.length : null,
+      throwMessage: payloadResult.ok ? null : payloadResult.error,
+    };
+    manifest.slices.push(record);
+
+    writeFileSync(join(OUT_DIR, `${slug}.derived-lines.json`), JSON.stringify(derivedLines, null, 2));
+    if (payloadResult.ok) {
+      writeFileSync(join(OUT_DIR, `${slug}.payload.txt`), payloadResult.payload);
+    } else {
+      writeFileSync(join(OUT_DIR, `${slug}.throw.txt`), payloadResult.error);
+    }
+  }
+}
+
+writeFileSync(
+  '/private/tmp/claude-501/-Users-jtsmith-BoardSmith/39655717-66f7-4931-ad0d-d86278ea06be/scratchpad/177-21/manifest.json',
+  JSON.stringify(manifest, null, 2),
+);
+
+let totalLines = 0;
+let dispatchable = 0;
+let blocked = 0;
+for (const s of manifest.slices) {
+  totalLines += s.derivedLines.length;
+  if (s.payloadOk) dispatchable += s.derivedLines.length;
+  else blocked += s.derivedLines.length;
+}
+console.log(`Slices with Derived lines: ${manifest.slices.length}`);
+console.log(`Total Derived lines: ${totalLines}`);
+console.log(`Dispatchable (payload built OK): ${dispatchable}`);
+console.log(`Blocked (construction-site throw): ${blocked}`);
+for (const s of manifest.slices) {
+  console.log(`  ${s.game}/${s.slicePath}: ${s.derivedLines.length} lines, payloadOk=${s.payloadOk}`);
+}

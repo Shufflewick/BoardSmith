@@ -1,0 +1,12 @@
+[
+  {
+    "lineNumber": 9,
+    "text": "Derived (p.2): Shield strength is consumed by reducing the face values of the dice sitting in shield slots; once a shield die's value is exhausted it goes to the spent dice pile.",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 11,
+    "text": "Derived (p.2): The only win condition is destroying the Doom Core; the only loss condition is Player HP reaching zero.",
+    "form": "line-start"
+  }
+]

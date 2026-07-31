@@ -1,0 +1,113 @@
+{
+  "facts": [
+    {
+      "statement": "During the machine phase, you process machine parts from left to right.",
+      "sourceSentence": "At the start of the machine phase, go from left to right down the row of machine parts in play, cycling each card's track and resolving its abilities as follows:"
+    },
+    {
+      "statement": "For each machine part, you cycle the card's track.",
+      "sourceSentence": "At the start of the machine phase, go from left to right down the row of machine parts in play, cycling each card's track and resolving its abilities as follows:"
+    },
+    {
+      "statement": "For each machine part, you resolve its abilities.",
+      "sourceSentence": "At the start of the machine phase, go from left to right down the row of machine parts in play, cycling each card's track and resolving its abilities as follows:"
+    },
+    {
+      "statement": "A machine part card's yellow die moves 1 space down its cycle track.",
+      "sourceSentence": "Move a machine part card's yellow die 1 space down its cycle track.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "space",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "When a die lands on an icon, you immediately trigger that icon's ability.",
+      "sourceSentence": "If that dice lands on an icon, immediately trigger that icon's corresponding ability."
+    },
+    {
+      "statement": "The Soul Harvester's damage icon ability deals 5 damage to the player.",
+      "sourceSentence": "The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player.",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Damage that is not prevented by shields reduces the player's HP directly.",
+      "sourceSentence": "If they don't have enough shields to prevent some or all of that damage. Unblocked damage carries over and reduces HP directly."
+    },
+    {
+      "statement": "If a die lands on a dead space, it moves back to the starting position on the track.",
+      "sourceSentence": "Note: If moving the die places it on a dead space (darkened square), then move that die back to the starting position on the track."
+    },
+    {
+      "statement": "You proceed to the next machine part card in the line, moving right.",
+      "sourceSentence": "Proceed to the next machine part card in the line (moving right) and repeat the card cycling process until all part cards have increased their cycle track by 1 and resolved any abilities/effects that are triggered."
+    },
+    {
+      "statement": "You repeat the card cycling process for each machine part card.",
+      "sourceSentence": "Proceed to the next machine part card in the line (moving right) and repeat the card cycling process until all part cards have increased their cycle track by 1 and resolved any abilities/effects that are triggered."
+    },
+    {
+      "statement": "Each machine part card's cycle track advances by 1 position.",
+      "sourceSentence": "Proceed to the next machine part card in the line (moving right) and repeat the card cycling process until all part cards have increased their cycle track by 1 and resolved any abilities/effects that are triggered.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "position",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "All triggered abilities and effects are resolved during the cycling process.",
+      "sourceSentence": "Proceed to the next machine part card in the line (moving right) and repeat the card cycling process until all part cards have increased their cycle track by 1 and resolved any abilities/effects that are triggered."
+    },
+    {
+      "statement": "The entire machine part card row slides 1 space to the right.",
+      "sourceSentence": "Now, carefully slide the entire machine part card row one space to the right.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "space",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A new machine part card is drawn and placed in the available space.",
+      "sourceSentence": "Draw a new machine part card and slot it into the available space."
+    },
+    {
+      "statement": "A yellow HP die is added to the first cycle tracking space of new machine part cards.",
+      "sourceSentence": "Add a yellow HP die to the first cycle tracking space on the new card, setting the die face to the correct starting HP value for that card."
+    },
+    {
+      "statement": "The HP die on a new card is set to the correct starting HP value for that card.",
+      "sourceSentence": "Add a yellow HP die to the first cycle tracking space on the new card, setting the die face to the correct starting HP value for that card."
+    },
+    {
+      "statement": "There can never be more than 10 machine parts in play at any given time.",
+      "sourceSentence": "Note: there can never be more than 10 machine parts in play at any given time.",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "machine parts",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "If 10 machine part cards are active on the line, skip drawing a new card.",
+      "sourceSentence": "If 10 cards are active on the line, then skip drawing a new card and proceed with play."
+    },
+    {
+      "statement": "After all machine part cards have cycled and a new card is added, gather all spent dice.",
+      "sourceSentence": "When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I."
+    },
+    {
+      "statement": "Gather any new dice obtained by defeating machine parts.",
+      "sourceSentence": "When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I."
+    },
+    {
+      "statement": "After gathering dice, return to Phase I.",
+      "sourceSentence": "When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I."
+    }
+  ]
+}

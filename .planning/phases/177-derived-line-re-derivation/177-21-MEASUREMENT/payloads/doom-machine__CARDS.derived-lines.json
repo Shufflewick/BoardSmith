@@ -1,0 +1,22 @@
+[
+  {
+    "lineNumber": 24,
+    "text": "Derived (p.1, p.3): Position 1 is always the **yellow HP die slot** (the die is printed there showing the card's starting HP as pips).",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 73,
+    "text": "- Derived (p.1, p.3): However, the tracks are **not** inert — their consequences are printed on the MACHINE PART",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 143,
+    "text": "- Derived (p.1): Effectively a 2-space loop — die goes slot → Damage → dead → back to slot.",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 274,
+    "text": "- Derived (p.3): By symmetry with the documented `[?] > [3]` example (\"2 dice required. One must be",
+    "form": "line-start"
+  }
+]
