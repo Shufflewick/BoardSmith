@@ -1604,3 +1604,36 @@ describe('classifyDerivedLines — absence claims', () => {
     expect(result.classifications[0].reason).toMatch(/literally contain "edition"/);
   });
 });
+
+// ===========================================================================================
+// WR-02 (177.1 code review) — the verify-enumerate.ts <-> verify-derive-check.ts import cycle
+// is safe only because neither module currently evaluates the cross-imported binding at
+// top-level module-init time. Nothing else enforces that invariant, so pin it with a live,
+// fresh-module-graph import: if either file ever gains a top-level use of the other's export
+// (reintroducing a TDZ/`undefined`-at-init hazard), this test fails loudly instead of silently.
+// ===========================================================================================
+describe('WR-02: verify-enumerate.ts <-> verify-derive-check.ts import cycle stays safe', () => {
+  it('every cross-cycle export is defined and callable after a fresh module-graph import', async () => {
+    const enumerateModule = await import('./verify-enumerate.js');
+    const deriveCheckModule = await import('./verify-derive-check.js');
+
+    // verify-enumerate.ts imports quoteLinesOnly from verify-derive-check.ts.
+    expect(typeof deriveCheckModule.quoteLinesOnly).toBe('function');
+    // verify-derive-check.ts imports several functions from verify-enumerate.ts.
+    expect(typeof enumerateModule.createEnumeratedFact).toBe('function');
+    expect(typeof enumerateModule.validateGrounding).toBe('function');
+    expect(typeof enumerateModule.composeArithmeticClaim).toBe('function');
+    expect(typeof enumerateModule.composeArithmeticChain).toBe('function');
+    expect(typeof enumerateModule.classifyDerivedLines).toBe('function');
+    expect(typeof enumerateModule.buildEnumeratorPayload).toBe('function');
+    expect(typeof enumerateModule.QuoteVerifiedProvenance).toBe('function');
+
+    // Both sides are actually CALLABLE (not just defined) right after import — proves neither
+    // was `undefined` at the moment the other module's top-level code ran.
+    expect(deriveCheckModule.quoteLinesOnly('Hello world, a directly-quoted sentence.')).toEqual([
+      'Hello world, a directly-quoted sentence.',
+    ]);
+    const fact = enumerateModule.createEnumeratedFact({ statement: 'x', sourceSentence: 'y' });
+    expect(fact.id).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
