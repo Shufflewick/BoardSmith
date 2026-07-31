@@ -32,6 +32,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 175: Impact Map & Repair Gating** - Contradictory human gate, cross-file staleness flip, scoped re-playtest (code-changed chunks only) (completed 2026-07-30, 8 plans, all 3 requirements CLOSED. VERIFY-04/05 proven live on real reference-game data; VERIFY-06's mechanism is correct but its real-data payoff is honestly NOT demonstrated — 1 of 12 real rules-stale chunks across both games closes without re-playtesting, not because drift-check returned `unknown` as anticipated, but because most stale chunks' code genuinely drifted for reasons unrelated to the rules finding. See `175-PROOF.md` §§4-9.)
 - [x] **Phase 176: Stale-Chunk Repair** - Ruling re-validation against fresh transcription + the three audit lenses re-run per stale chunk (completed 2026-07-30)
 - [x] **Phase 177: Derived-Line Re-Derivation** - Rule-bearing `Derived` lines get an independent second opinion via dual enumeration + reconciliation; CHECK-04 CLOSED 2026-07-31 after the miscalibrated determinism gate was retired (see Result below)
+- [ ] **Phase 177.1: Wire CHECK-04's Closed Design Into The Pipeline** - `/bs-verify-game` Step 7 still dispatches the RETIRED blind-derivation design; the dual-enumeration design CHECK-04 was closed on has zero CLI wiring
 - [ ] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay
 - [ ] **Phase 179: Source-Free Verification Mode** - `/bs-verify-game` degrades honestly when source is unavailable, naming which defect classes went unchecked
 
@@ -340,9 +341,53 @@ Design change — `177-EXPERIMENTS/` retired per-line blind re-derivation (struc
 - [x] 177-21 — Definitive measurement: both 177-20 defects confirmed fixed live; 31/32 stable, one flip on enumerator variance
 - [x] 177-22 — Density hypothesis tested directly and REFUTED (4/32 flips); determinism criterion identified as miscalibrated → retired, CHECK-04 CLOSED
 
+### Phase 177.1: Wire CHECK-04's Closed Design Into The Pipeline
+**Goal**: A designer running `/bs-verify-game` actually reaches the derived-line check CHECK-04 was closed on, instead of the design Phase 177 retired.
+**Depends on**: Phase 177 (the closed design and its contracts)
+**Requirements**: CHECK-04 (delivery gap in an already-closed requirement — the closure evidence stands; the wiring does not)
+
+**Why this phase exists** (found during Phase 178 research, verified directly 2026-07-31):
+CHECK-04 closed on the **dual-enumeration + reconciliation** design. That design is 1,438 lines of
+tested TypeScript in `src/cli/commands/verify-enumerate.ts` — `buildEnumeratorPayload`,
+`createEnumeratedFact`, `validateGrounding`, `composeArithmeticChain`, `QuoteVerifiedProvenance`,
+`classifyDerivedLines` — and its two judgment contracts (`verify/enumerate-facts.md`
+`BS-ENUMERATE-V1`, `verify/reconcile-facts.md` `BS-RECONCILE-V1`) are written, installed, and
+token-pinned. **But it has no CLI command and no ledger.** `grep '.command(' src/cli/cli.ts`
+has no entry for it; it is imported nowhere outside its own test. The four definitive
+measurements ran through a standalone harness in `.planning/177-22-MEASUREMENT/`
+(`driver.mjs`, `dispatch-enum.mjs`, `dispatch-reconcile.mjs`), never through the product.
+
+Meanwhile `verify-game.md` Step 7 still dispatches `verify/derive-recheck.md` +
+`verify/derive-compare.md` and formats `boardsmith verify-derive-recheck --json` — the **retired**
+per-line blind design, the one measured at 6/16 and refuted as structurally unanswerable.
+
+The closure evidence is sound; this is a delivery gap, not a measurement gap. But CHECK-04's own
+closure note promises "a tool that flags rule-bearing inferences worth a human's attention," and
+today no designer can reach that tool.
+
+**Success Criteria** (what must be TRUE):
+  1. A CLI surface exposes the dual-enumeration check end-to-end, following the read-command /
+     single-atomic-write-surface pairing already established (`verify-derive-recheck` +
+     `verify-derive-record`), including that pairing's fence-injection rejection, read-path
+     revalidation, and upsert-append semantics.
+  2. `/bs-verify-game` Step 7 dispatches `enumerate-facts.md` / `reconcile-facts.md` and formats
+     the new command's `--json` — **formatted, never computed** by the skill, the discipline every
+     other step in that file already holds.
+  3. The retired blind-derivation design is REMOVED, not deprecated — `derive-recheck.md`,
+     `derive-compare.md`, and the `verify-derive-recheck`/`verify-derive-record` commands and
+     their blind-payload machinery — per the project's No Backward Compatibility rule. Any part
+     genuinely still needed by the new path is moved, not left behind as a second path.
+  4. Proven by a real end-to-end `/bs-verify-game`-path run on at least one reference game,
+     reproducing a classification the `.planning/` harness already produced for the same input —
+     the product path and the measurement harness must agree.
+  5. Advisory, exit 0, never gates the Close — CHECK-04's decision 15 is preserved through the
+     rewiring, not silently changed by it.
+
+**Plans**: TBD
+
 ### Phase 178: Worked-Example Tests
 **Goal**: Worked examples in the rulebook stop being a one-time seed for hand-written tests and become an accumulating, automatically-derived executable test suite in both build and verify.
-**Depends on**: Phase 170 (the split determines which lines are examples vs. presentation)
+**Depends on**: Phase 177.1 (the CLI/ledger pairing Phase 178 mirrors must reflect the design actually in the pipeline). **NOTE — the previously recorded dependency was FALSE**: this phase did NOT depend on "Phase 170 (the split determines which lines are examples vs. presentation)". Phase 170's annotation family is exactly `{Derived, Visual, Named-but-undefined}`; nothing in it identifies a worked example. Phase 178 must CREATE the identification mechanism, not consume one. See `178-CONTEXT.md` `<measured_reality>` #1.
 **Requirements**: CHECK-06, TEST-01
 **Success Criteria** (what must be TRUE):
   1. `build/test.md` generates an executable test for every worked example in a newly-built chunk's cited slices.
