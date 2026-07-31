@@ -96,7 +96,8 @@ Return exactly one object:
   verdict: 'agrees' | 'disagrees' | 'underivable' | 'not-rule-bearing',
   reasoning: string,
   originalReading: string,
-  rederivedReading: string
+  rederivedReading: string,
+  factAlignment: 'same-fact' | 'different-fact'
 }
 ```
 
@@ -110,6 +111,21 @@ Return exactly one object:
   recording CLI (`createDeriveVerdictRecord`, `verify-derive-recheck.ts`) rejects a `disagrees`
   record missing either field, because a designer adjudicating a disagreement needs to see exactly
   what each side said, not a summary of the difference.
+- **`factAlignment` is REQUIRED for `agrees` and `disagrees`** (the recording CLI rejects either
+  verdict without it). It answers exactly one question, separate from `verdict` itself: did the
+  blind re-derivation actually address the SAME fact the original line asserts? `same-fact` when it
+  did — the two readings are about the same underlying claim, whether or not they agree.
+  `different-fact` when the blind stage's reading is about something else entirely — a targeting
+  outcome about THIS CHECK's own dispatch mechanism, not a defect in the original transcription, so
+  there is no reason to avoid returning it. Two worked examples, both drawn from measured real
+  runs: `one-two-punch:52` (the original states a flat 8 Action Cards per player; the blind
+  re-derivation tracked the discard-adjusted round-1 hand of 6 — both readings are about the SAME
+  Action-Card-count fact, so `factAlignment: 'same-fact'` even though the verdict is `disagrees`)
+  versus `seven:8` (the original describes the Set example's card-image illustration; a blind
+  re-derivation that instead produced deck-composition arithmetic addressed a DIFFERENT fact
+  entirely, so `factAlignment: 'different-fact'` regardless of whether that arithmetic is itself
+  correct). Judge this from what each reading is actually ABOUT, not from a keyword or trigger-word
+  list — the same absence-phrase-list discipline this contract already holds for the four verdicts.
 
 ---
 

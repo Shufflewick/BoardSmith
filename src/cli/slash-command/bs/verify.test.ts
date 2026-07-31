@@ -664,6 +664,48 @@ describe('derive-recheck.md / derive-compare.md — the two CHECK-04 judgment co
     expect(returnSection).toMatch(/byte-for-byte verbatim for a\s*\n?\s*`disagrees` verdict/);
   });
 
+  it('derive-recheck.md carries no resolvable Target line: pointer (177-11, closing CR-07)', () => {
+    const doc = read('verify/derive-recheck.md');
+    expect(doc).not.toContain('Target line:');
+    expect(doc).toContain('Target: {handle}');
+    expect(doc).toMatch(/no slice path and no line number/i);
+  });
+
+  it('derive-recheck.md describes the Focus passage / Context split and instructs deriving from the focus passage', () => {
+    const doc = flat(read('verify/derive-recheck.md'));
+    expect(doc).toMatch(/Focus passage/);
+    expect(doc).toMatch(/derive your answer from those lines/i);
+    expect(doc).toMatch(/Context.{0,60}terminology/);
+  });
+
+  it('derive-compare.md RETURN section requires factAlignment, defined by its question (no keyword/trigger-phrase list) — 177-11', () => {
+    const doc = read('verify/derive-compare.md');
+    const idx = doc.indexOf('## RETURN a structured object only');
+    expect(idx).toBeGreaterThan(-1);
+    const returnSection = doc.slice(idx, doc.indexOf('## Scope limit'));
+    const factAlignmentMentions = (returnSection.match(/factAlignment/g) ?? []).length;
+    expect(factAlignmentMentions).toBeGreaterThanOrEqual(2);
+    expect(returnSection).toContain("'same-fact' | 'different-fact'");
+    expect(returnSection).toMatch(/REQUIRED for `agrees` and `disagrees`/);
+    // Worked examples drawn from measured real data, not a fixed keyword/trigger-phrase list.
+    expect(returnSection).toContain('one-two-punch:52');
+    expect(returnSection).toContain('seven:8');
+    expect(returnSection).not.toMatch(/keywords?:\s*["'`]/i);
+    expect(returnSection).not.toMatch(/trigger[- ]phrases?:/i);
+  });
+
+  it('derive-compare.md states different-fact is reportable about the CHECK\'s own targeting, not a transcription defect', () => {
+    const doc = flat(read('verify/derive-compare.md'));
+    expect(doc).toMatch(
+      /a targeting outcome about THIS CHECK's own dispatch mechanism, not a defect in the original transcription/,
+    );
+  });
+
+  it('verify-game.md Step 7 names the --fact-alignment recording flag (177-11)', () => {
+    const skill = read('verify-game.md');
+    expect(skill).toContain('--fact-alignment');
+  });
+
   it('derive-compare.md carries the Context-Economics carve-out sentence citing the quotedPass1/quotedPass2 precedent', () => {
     const doc = flat(read('verify/derive-compare.md'));
     expect(doc).toContain('Context-Economics carve-out');
@@ -955,5 +997,79 @@ describe('drift guard — every named boardsmith verify-* command actually exist
     const wouldFail = [...mentioned].some((name) => !withoutDeriveRecord.has(name));
     expect(wouldFail).toBe(true);
     expect(mentioned.has('verify-derive-record')).toBe(true);
+  });
+});
+
+describe('drift guard — every field named in derive-compare.md\'s RETURN block corresponds to an accepted verify-derive-record CLI option (177-11, closing the contract-drift path one level deeper than command-existence)', () => {
+  // Converts a RETURN-object field name (camelCase) to its expected CLI flag (kebab-case,
+  // `--`-prefixed) — the same convention every option on `verify-derive-record` already follows
+  // (`originalReading` -> `--original-reading`, `factAlignment` -> `--fact-alignment`).
+  function toCliFlag(fieldName: string): string {
+    return '--' + fieldName.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+  }
+
+  /** Field names declared inside derive-compare.md's fenced RETURN object literal. */
+  function returnFieldNames(doc: string): string[] {
+    const idx = doc.indexOf('## RETURN a structured object only');
+    const returnSection = doc.slice(idx, doc.indexOf('## Scope limit'));
+    const objectBlock = returnSection.slice(
+      returnSection.indexOf('```'),
+      returnSection.indexOf('```', returnSection.indexOf('```') + 3) + 3,
+    );
+    return [...objectBlock.matchAll(/^\s*([a-zA-Z][a-zA-Z0-9]*):/gm)].map((m) => m[1]);
+  }
+
+  /** The verify-derive-record command's own registered CLI option flags, read live from cli.ts. */
+  function verifyDeriveRecordCliFlags(cliSource: string): Set<string> {
+    const block = cliSource.slice(
+      cliSource.indexOf("'verify-derive-record'"),
+      cliSource.indexOf('.action(verifyDeriveRecordCommand)'),
+    );
+    const flags = new Set<string>();
+    for (const m of block.matchAll(/[.'"](--[a-z][a-z-]*)[\s<'"]/g)) {
+      flags.add(m[1]);
+    }
+    return flags;
+  }
+
+  it('every field derive-compare.md\'s RETURN object declares (verdict/reasoning/originalReading/rederivedReading/factAlignment) has a matching --option on verify-derive-record', () => {
+    const fields = returnFieldNames(read('verify/derive-compare.md'));
+    expect(fields.length).toBeGreaterThan(0);
+    const cliSource = readFileSync(join(__dirname, '..', '..', 'cli.ts'), 'utf-8');
+    const flags = verifyDeriveRecordCliFlags(cliSource);
+    expect(flags.size).toBeGreaterThan(0);
+
+    const missing = fields
+      .map((f) => ({ field: f, flag: toCliFlag(f) }))
+      .filter(({ flag }) => !flags.has(flag));
+    expect(missing).toEqual([]);
+  });
+
+  it('the guard is a real regression detector: with --fact-alignment removed from the parsed cli.ts source, the same field list fails the guard (observed, then the real file is left untouched — no live edit is made)', () => {
+    const cliSource = readFileSync(join(__dirname, '..', '..', 'cli.ts'), 'utf-8');
+    // Simulate removal by deleting only the matched option-declaration line, in memory — the real
+    // file on disk is never touched by this test.
+    const withoutFactAlignment = cliSource.replace(
+      /\.option\(\s*\n\s*'--fact-alignment[\s\S]*?\n\s*\)\n/,
+      '\n',
+    );
+    expect(withoutFactAlignment).not.toBe(cliSource);
+    expect(withoutFactAlignment).not.toContain('--fact-alignment');
+
+    const fields = returnFieldNames(read('verify/derive-compare.md'));
+    const flagsWithout = verifyDeriveRecordCliFlags(withoutFactAlignment);
+    const flagsWith = verifyDeriveRecordCliFlags(cliSource);
+
+    const missingWithout = fields
+      .map((f) => ({ field: f, flag: toCliFlag(f) }))
+      .filter(({ flag }) => !flagsWithout.has(flag));
+    const missingWith = fields
+      .map((f) => ({ field: f, flag: toCliFlag(f) }))
+      .filter(({ flag }) => !flagsWith.has(flag));
+
+    // OBSERVED: with --fact-alignment removed, the guard fails (factAlignment is unmatched).
+    expect(missingWithout).toEqual([{ field: 'factAlignment', flag: '--fact-alignment' }]);
+    // OBSERVED: with the real, unmodified cli.ts, the guard passes.
+    expect(missingWith).toEqual([]);
   });
 });

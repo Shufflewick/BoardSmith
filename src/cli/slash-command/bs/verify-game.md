@@ -177,7 +177,10 @@ slice's quote lines only — never the original `Derived` line itself; the paylo
 the target line's own text, not composed by this orchestrator reading a slice. A SEPARATE dispatch
 then carries `${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md`'s `BS-DERIVE-COMPARE-V1`
 handshake, the original line, and the blind subagent's already-recorded reading, and returns one of
-the four `DERIVE_VERDICTS`. Both readings are recorded through exactly ONE `boardsmith verify-derive-record` invocation per
+the four `DERIVE_VERDICTS` plus, for `agrees`/`disagrees`, a `factAlignment` (`same-fact` /
+`different-fact` — a FIELD, never a fifth verdict) separating a genuine content disagreement from a
+targeting artifact. Both readings, plus `factAlignment` when applicable via `--fact-alignment`, are
+recorded through exactly ONE `boardsmith verify-derive-record` invocation per
 `Derived` line — the CLI write surface's atomic upsert-append, never a whole-ledger rewrite, so
 calling it for a later line never destroys a verdict already recorded for an earlier one — then
 reported by formatting `boardsmith verify-derive-recheck --json`'s output —

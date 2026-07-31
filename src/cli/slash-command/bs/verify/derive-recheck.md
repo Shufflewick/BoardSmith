@@ -43,18 +43,33 @@ line into a prompt that is supposed to never contain it.
 
 ## Your inputs
 
-The dispatching prompt gives you exactly ONE thing: this slice's quote lines — every directly-
-quoted rulebook sentence and its citation header, with every `Derived (p.` line, every
-`Visual (p.` line, and every `Named-but-undefined (p.` line already stripped out by
+The dispatching prompt gives you `Target: {handle}` — an opaque short digest, not a file path and
+not a line number — plus this slice's quote lines, split into two labelled sections: a **Focus
+passage** (the citation passage the target line's fact is drawn from) and **Context** (the rest of
+this slice's quoted content, for terminology only). Every `Derived (p.` line, every `Visual (p.`
+line, and every `Named-but-undefined (p.` line is already stripped out of BOTH sections by
 `buildBlindDerivePayload` (`verify-derive-recheck.ts`) before this prompt was ever assembled — the
 orchestrator itself never opens the slice; it dispatches the payload that function already built.
+
+**No slice path and no line number are given to you at all, because none exists in this prompt.**
+The handle is not a pointer you can resolve — it is not a path, and there is nothing to look up. Do
+not attempt to find "line {N}" in any file; that instruction would refer to a coordinate this
+prompt structurally does not contain.
+
+When a **Focus passage** section is present, derive your answer from those lines — that passage is
+what the fact under test is drawn from. The **Context** lines exist only to resolve terminology,
+never as the material your derivation should turn on. When no Focus passage could be located (the
+prompt says so explicitly, labelled DEGRADED), every quote line you were given is background only;
+derive from the full set as best you can, and lean toward `underivable` if nothing in it actually
+supports a specific value.
 
 State this plainly, because it is the crux of the whole contract: **you are NEVER given**
 
 - the `Derived` line you are re-deriving,
 - any OTHER `Derived` line from this slice or any other slice,
-- any `Visual` line at all, or
-- any `Named-but-undefined` line at all.
+- any `Visual` line at all,
+- any `Named-but-undefined` line at all, or
+- the slice's file path or the target line's line number.
 
 You must not ask for or assume access to the live `rulebook/` files. If you believe you can infer
 what the original derivation said from context, you cannot — the original was never included in
@@ -64,8 +79,8 @@ verification, it is confirmation — and a subagent shown the original would agr
 every time regardless of whether the original derivation was actually sound. That is the failure
 mode this contract exists to prevent, and it is prevented structurally: the quote-line payload you
 receive is built by a function (`buildBlindDerivePayload`, `verify-derive-recheck.ts`) that never
-reads the target line's own text, not by an instruction telling you to look away from something
-that was sent anyway.
+reads the target line's own text and never emits a resolvable coordinate, not by an instruction
+telling you to look away from something that was sent anyway.
 
 ---
 
