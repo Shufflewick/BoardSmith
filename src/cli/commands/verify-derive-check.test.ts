@@ -19,6 +19,9 @@ import {
   parseSubagentJsonInput,
   verifyDeriveRecordCommand,
   verifyDeriveCheckCommand,
+  annotationBody,
+  quoteLinesOnly,
+  enumerateDerivedLines,
   type DeriveCheckRecord,
   type EnumeratorReturn,
   type ReconcilerReturn,
@@ -27,8 +30,9 @@ import {
 /**
  * `verify-derive-check.ts` is CHECK-04's mechanical core, MOVED and retargeted onto the closed
  * dual-enumeration verdict set (177.1-02). Every fixture here is a real filesystem temp dir
- * (`fs.mkdtemp`, no mocks) — mirroring the retired blind-derivation module's test suite's own discipline so the
- * moved invariants are visibly the same proofs, just against eight verdicts instead of four.
+ * (`fs.mkdtemp`, no mocks) — mirroring the retired blind-derivation module's test suite's own
+ * discipline so the moved invariants are visibly the same proofs, just against eight verdicts
+ * instead of four.
  */
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -57,6 +61,93 @@ describe('DERIVE_CHECK_VERDICTS', () => {
     for (const retired of ['agrees', 'disagrees', 'underivable', 'not-rule-bearing']) {
       expect(DERIVE_CHECK_VERDICTS).not.toContain(retired);
     }
+  });
+});
+
+// ===========================================================================================
+// annotationBody / quoteLinesOnly / enumerateDerivedLines — MOVED wholesale from the retired
+// blind-derivation module (177.1-CONTEXT.md decision 6). Direct unit coverage ported here
+// (177.1-07 port-coverage audit) so the decoration-tolerance guarantee stays pinned by name, not
+// only exercised indirectly through buildEnumeratorPayload/verifyDeriveCheckCommand.
+// ===========================================================================================
+
+describe('annotationBody', () => {
+  it('strips a leading blockquote marker', () => {
+    expect(annotationBody('> Derived (p.1): x')).toBe('Derived (p.1): x');
+  });
+
+  it('strips a leading list bullet', () => {
+    expect(annotationBody('- Derived (p.1): x')).toBe('Derived (p.1): x');
+  });
+
+  it('strips repeated decoration (blockquote + list)', () => {
+    expect(annotationBody('> - Derived (p.1): x')).toBe('Derived (p.1): x');
+  });
+
+  it('strips a leading ordered-list marker', () => {
+    expect(annotationBody('1. Derived (p.1): x')).toBe('Derived (p.1): x');
+  });
+
+  it('leaves a quoted sentence unchanged — quote lines are not decoration-stripped into something else', () => {
+    expect(annotationBody('"A quoted sentence."')).toBe('"A quoted sentence."');
+  });
+});
+
+describe('quoteLinesOnly', () => {
+  it('retains bare citation headers and quoted rulebook prose beneath them', () => {
+    const quotes = quoteLinesOnly('p.1, Distribution of Cards:\n"There are 112 cards total."');
+    expect(quotes).toEqual(['p.1, Distribution of Cards:', '"There are 112 cards total."']);
+  });
+
+  it('strips Visual (p. and Derived (p. lines entirely', () => {
+    const synthetic = [
+      'p.3, Example:',
+      '"Real quoted rulebook sentence."',
+      'Visual (p.3): A diagram showing card layout.',
+      'Derived (p.3): An inference line.',
+    ].join('\n');
+    const quotes = quoteLinesOnly(synthetic);
+    expect(quotes).toContain('p.3, Example:');
+    expect(quotes).toContain('"Real quoted rulebook sentence."');
+    expect(quotes.some((l) => l.startsWith('Visual (p.'))).toBe(false);
+    expect(quotes.some((l) => l.startsWith('Derived (p.'))).toBe(false);
+  });
+});
+
+describe('enumerateDerivedLines — decoration tolerance (CR-01, silent-drop regression)', () => {
+  it('never treats a Visual (p. line as a Derived line', () => {
+    const slices = [{ path: 'rulebook/synthetic.md', text: 'Visual (p.5): some art description.' }];
+    const result = enumerateDerivedLines(slices);
+    expect(result.candidates).toHaveLength(0);
+    expect(result.excluded).toHaveLength(0);
+  });
+
+  it('a slice with three Derived lines — bare, blockquote-decorated, list-decorated — enumerates all three as candidates, not one', () => {
+    const slice = {
+      path: 'rulebook/01-z.md',
+      text: [
+        'p.1, X:',
+        '"A quoted sentence."',
+        '',
+        'Derived (p.1): bare line, rule-bearing.',
+        '> Derived (p.1): blockquote-decorated, rule-bearing.',
+        '- Derived (p.1): list-decorated, rule-bearing.',
+      ].join('\n'),
+    };
+    const { candidates, excluded } = enumerateDerivedLines([slice]);
+    expect(candidates.length + excluded.length).toBe(3);
+    expect(candidates).toHaveLength(3);
+  });
+
+  it('a `Derived (p.1, continues on p.2):` multi-page citation line is a candidate', () => {
+    const decoratedLine = 'Derived (p.1, continues on p.2): a multi-page citation body.';
+    const slice = {
+      path: 'rulebook/01-w.md',
+      text: `p.1, X:\n"A real quoted sentence."\n\n${decoratedLine}`,
+    };
+    const { candidates } = enumerateDerivedLines([slice]);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].text).toBe(decoratedLine);
   });
 });
 
