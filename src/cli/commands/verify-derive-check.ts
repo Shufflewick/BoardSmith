@@ -1,7 +1,28 @@
 import { promises as fs } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { atomicWriteFile } from './verify-run.js';
-import type { DerivedLineClassification } from './verify-enumerate.js';
+import {
+  createEnumeratedFact,
+  validateGrounding,
+  composeArithmeticClaim,
+  composeArithmeticChain,
+  classifyDerivedLines,
+  type DerivedLineClassification,
+  type NumericValue,
+  type EnumeratedFact,
+  type ArithmeticOp,
+  type ArithmeticChainStep,
+  type ReconcilerBothClaim,
+  type ReconcilerDerivedLineClaim,
+  type GroundedBothFact,
+  type GroundingResult,
+  type ComposedFact,
+  type ComposeOutcome,
+  type ComposeChainOutcome,
+  type DerivedLineClassificationResult,
+  type MissedFact,
+  type QuoteVerifiedProvenance,
+} from './verify-enumerate.js';
 
 /**
  * `verify-derive-check.ts` — CHECK-04's mechanical core, RETARGETED onto the closed
@@ -367,10 +388,301 @@ export async function readDeriveCheckVerdicts(projectDir: string): Promise<Deriv
 }
 
 // -------------------------------------------------------------------------------------------
-// Not yet defined in this module (177.1-03's job)
+// reconcileSlice() — the compute pipeline (177.1-03)
 // -------------------------------------------------------------------------------------------
 
-// The write-surface command (`verify-derive-record`), `reconcileSlice()`, and the CLI retarget
-// that dispatches enumerator/reconciler subagents and calls `recordDeriveCheckVerdicts` are
-// 177.1-03's job — this plan delivers only the data layer (verdict set, single construction
-// site, and the ledger) those later pieces will build on.
+/**
+ * One enumerator's already-parsed structured return — the `verify/enumerate-facts.md` RETURN
+ * shape, exactly. Never a raw dispatch envelope: a Task-tool dispatch returns already-structured
+ * output, so there is no `raw`/fenced-text layer to unwrap here (unlike the `.planning/`
+ * measurement harness's `analyze.mjs`, which parsed manual `--output-format json` captures).
+ */
+export interface EnumeratorFactInput {
+  statement: string;
+  sourceSentence: string;
+  numericValue?: NumericValue;
+}
+
+export interface EnumeratorReturn {
+  facts: EnumeratorFactInput[];
+}
+
+/** One leaf/step-result reference inside an `arithmeticSpec` chain step (reconcile-facts.md). */
+export type ArithmeticSpecOperandRef =
+  | { kind: 'fact'; statement: string }
+  | { kind: 'stepResult'; index: number };
+
+export interface ArithmeticSpecStep {
+  operation: ArithmeticOp;
+  operandRefs: ArithmeticSpecOperandRef[];
+}
+
+export interface ArithmeticSpecSingle {
+  kind: 'single';
+  operation: ArithmeticOp;
+  operandStatements: string[];
+  claimedResult: NumericValue;
+}
+
+export interface ArithmeticSpecChain {
+  kind: 'chain';
+  steps: ArithmeticSpecStep[];
+  claimedResult: NumericValue;
+}
+
+/**
+ * The machine-readable pointer `reconcile-facts.md` (177.1-03 Task 1) instructs the reconciler to
+ * populate for every `corroborated-by-composition` proposal, additive to the free-prose
+ * `arithmeticNote`. Code — never the reconciler — performs the arithmetic and rejects a wrong
+ * `claimedResult`; this type only carries WHICH facts and WHICH operation the reconciler is
+ * pointing at.
+ */
+export type ArithmeticSpec = ArithmeticSpecSingle | ArithmeticSpecChain;
+
+export interface ReconcilerDerivedLineProposal {
+  lineNumber: number;
+  derivedLineText: string;
+  proposedClassification:
+    | 'corroborated'
+    | 'corroborated-by-composition'
+    | 'uncorroborated'
+    | 'contradicted'
+    | 'absence';
+  citedBothStatements: string[];
+  arithmeticNote?: string;
+  arithmeticSpec?: ArithmeticSpec;
+  absenceTargets?: string[];
+}
+
+/** The `verify/reconcile-facts.md` RETURN shape, exactly — one reconciler dispatch, one slice. */
+export interface ReconcilerReturn {
+  both: ReconcilerBothClaim[];
+  aOnly: { statement: string; sourceSentence: string }[];
+  bOnly: { statement: string; sourceSentence: string }[];
+  derivedLineProposals: ReconcilerDerivedLineProposal[];
+}
+
+export interface ReconcileSliceComposeAttempt {
+  lineNumber: number;
+  outcome: ComposeOutcome | ComposeChainOutcome;
+}
+
+export interface ReconcileSliceResult {
+  listA: EnumeratedFact[];
+  listB: EnumeratedFact[];
+  grounding: GroundingResult;
+  composed: ComposedFact[];
+  composeAttempts: ReconcileSliceComposeAttempt[];
+  classifications: DerivedLineClassificationResult[];
+  missed: MissedFact[];
+  aOnly: { statement: string; sourceSentence: string }[];
+  bOnly: { statement: string; sourceSentence: string }[];
+}
+
+/**
+ * Resolves ONE `arithmeticSpec` against this proposal's grounding-validated "both" facts, and
+ * performs the actual composition check through the real, unmodified `composeArithmeticClaim`/
+ * `composeArithmeticChain` (`verify-enumerate.ts`) — this function's ONLY job is turning the
+ * reconciler's verbatim-statement pointers into the `GroundedBothFact[]`/`ArithmeticChainStep[]`
+ * shapes those functions require; it never itself computes or judges an arithmetic result.
+ *
+ * A `chain` spec with more than `MAX_ARITHMETIC_CHAIN_DEPTH` steps is NOT checked here — that
+ * bound is `composeArithmeticChain`'s own refusal, reached unmodified, never re-implemented as a
+ * second check in this module.
+ */
+function resolveArithmeticSpec(
+  spec: ArithmeticSpec,
+  derivedLineText: string,
+  groundedByStatement: Map<string, GroundedBothFact>,
+): ComposeOutcome | ComposeChainOutcome {
+  if (spec.kind === 'single') {
+    const operands: (GroundedBothFact | undefined)[] = spec.operandStatements.map((s) =>
+      groundedByStatement.get(s),
+    );
+    const missingIndex = operands.findIndex((o) => !o);
+    if (missingIndex !== -1) {
+      return {
+        ok: false,
+        reason:
+          `arithmeticSpec.operandStatements[${missingIndex}] ` +
+          `("${spec.operandStatements[missingIndex]}") does not match any grounding-validated ` +
+          `"both" statement for this proposal — code cannot resolve it to an operand.`,
+      };
+    }
+    return composeArithmeticClaim({
+      derivedLineText,
+      operation: spec.operation,
+      operands: operands as GroundedBothFact[],
+      claimedResult: spec.claimedResult,
+    });
+  }
+
+  // 'chain': flatten every 'fact' operand ref, across every step, into ONE ordered operand array
+  // (deduplicated by statement, first-occurrence order), then resolve each step's operandRefs
+  // against that array's indices — 'stepResult' refs pass through untouched, exactly as
+  // `composeArithmeticChain` expects.
+  const operandIndexByStatement = new Map<string, number>();
+  const operands: GroundedBothFact[] = [];
+  for (const step of spec.steps) {
+    for (const ref of step.operandRefs) {
+      if (ref.kind !== 'fact') continue;
+      if (operandIndexByStatement.has(ref.statement)) continue;
+      const fact = groundedByStatement.get(ref.statement);
+      if (!fact) {
+        return {
+          ok: false,
+          reason:
+            `arithmeticSpec chain step references statement "${ref.statement}", which does not ` +
+            `match any grounding-validated "both" statement for this proposal — code cannot ` +
+            `resolve it to an operand.`,
+        };
+      }
+      operandIndexByStatement.set(ref.statement, operands.length);
+      operands.push(fact);
+    }
+  }
+
+  const steps: ArithmeticChainStep[] = spec.steps.map((step) => ({
+    operation: step.operation,
+    operandRefs: step.operandRefs.map((ref) =>
+      ref.kind === 'fact'
+        ? { kind: 'fact' as const, index: operandIndexByStatement.get(ref.statement)! }
+        : { kind: 'stepResult' as const, index: ref.index },
+    ),
+  }));
+
+  return composeArithmeticChain({
+    derivedLineText,
+    steps,
+    operands,
+    claimedResult: spec.claimedResult,
+  });
+}
+
+/**
+ * The CLI's compute pipeline for ONE slice: ingests the two enumerator returns and the reconciler
+ * return, and runs `validateGrounding` -> arithmetic composition -> `classifyDerivedLines` — the
+ * exact order `.planning/phases/177-derived-line-re-derivation/177-22-MEASUREMENT/analyze.mjs`
+ * (the reference implementation CHECK-04's closure was measured against) runs the same real,
+ * unmodified `verify-enumerate.ts` functions in. This function calls NO subagent and reads NO
+ * file — every argument is an already-parsed object; dispatching and file I/O are the CALLER's
+ * job (the skill orchestrator dispatches, `verifyDeriveRecordCommand` — Task 3 — reads files).
+ *
+ * The ONE deliberate deviation from `analyze.mjs`: arithmetic operand resolution goes through
+ * `arithmeticSpec` (177.1-03 Task 1's machine-readable pointer), not `analyze.mjs`'s hand-curated
+ * `ARITHMETIC_LINES` table — the product has no hand list a live reconciler dispatch could ever
+ * populate. See `resolveArithmeticSpec` above.
+ */
+export function reconcileSlice(input: {
+  projectDir: string;
+  slicePath: string;
+  sliceText: string;
+  enumeratorA: EnumeratorReturn;
+  enumeratorB: EnumeratorReturn;
+  reconciler: ReconcilerReturn;
+  provenance: QuoteVerifiedProvenance | null;
+}): ReconcileSliceResult {
+  const { slicePath, sliceText, enumeratorA, enumeratorB, reconciler, provenance } = input;
+
+  const listA = enumeratorA.facts.map((f) => createEnumeratedFact({ ...f, slicePath }));
+  const listB = enumeratorB.facts.map((f) => createEnumeratedFact({ ...f, slicePath }));
+
+  const claimedBoth: ReconcilerBothClaim[] = reconciler.both.map((b) => ({
+    statement: b.statement,
+    quotedFromA: b.quotedFromA,
+    quotedFromB: b.quotedFromB,
+  }));
+
+  const grounding = validateGrounding(listA, listB, claimedBoth);
+  const groundedByStatement = new Map(grounding.grounded.map((g) => [g.statement, g] as const));
+
+  const composed: ComposedFact[] = [];
+  const composeAttempts: ReconcileSliceComposeAttempt[] = [];
+
+  for (const prop of reconciler.derivedLineProposals) {
+    if (prop.proposedClassification !== 'corroborated-by-composition') continue;
+    if (!prop.arithmeticSpec) {
+      composeAttempts.push({
+        lineNumber: prop.lineNumber,
+        outcome: {
+          ok: false,
+          reason:
+            'No arithmeticSpec was supplied for a corroborated-by-composition proposal — code ' +
+            'has nothing to check, so the proposal falls through to uncorroborated.',
+        },
+      });
+      continue;
+    }
+    const outcome = resolveArithmeticSpec(
+      prop.arithmeticSpec,
+      prop.derivedLineText,
+      groundedByStatement,
+    );
+    composeAttempts.push({ lineNumber: prop.lineNumber, outcome });
+    if (outcome.ok) composed.push(outcome.composed);
+  }
+
+  const claims: ReconcilerDerivedLineClaim[] = reconciler.derivedLineProposals.map((prop) => {
+    const citedFactIds = prop.citedBothStatements
+      .map((s) => groundedByStatement.get(s)?.id)
+      .filter((id): id is string => Boolean(id));
+    let composedFactId: string | undefined;
+    if (prop.proposedClassification === 'corroborated-by-composition') {
+      composedFactId = composed.find((c) => c.claimText === prop.derivedLineText)?.id;
+    }
+    return {
+      slicePath,
+      lineNumber: prop.lineNumber,
+      derivedLineText: prop.derivedLineText,
+      proposedClassification: prop.proposedClassification,
+      citedFactIds,
+      composedFactId,
+      absenceTargets: prop.absenceTargets,
+    };
+  });
+
+  const { classifications, missed } = classifyDerivedLines({
+    claims,
+    groundedBoth: grounding.grounded,
+    composed,
+    provenance,
+    passages: { [slicePath]: sliceText },
+  });
+
+  return {
+    listA,
+    listB,
+    grounding,
+    composed,
+    composeAttempts,
+    classifications,
+    missed,
+    aOnly: reconciler.aOnly,
+    bOnly: reconciler.bOnly,
+  };
+}
+
+/**
+ * Parses one subagent-return JSON input file's already-read text, throwing ONE actionable
+ * message naming the flag and the file path on failure — never a raw `SyntaxError`. Shared by
+ * `verifyDeriveRecordCommand` (Task 3) for all three of its `--enumerator-a`/`--enumerator-b`/
+ * `--reconciler` file inputs, so the three call sites cannot drift on error shape.
+ */
+export function parseSubagentJsonInput(text: string, flagLabel: string, filePath: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      `Failed to parse ${flagLabel} JSON at ${filePath}: the file does not contain valid JSON.\n` +
+        `Re-dispatch the subagent and write its structured return to this file, unmodified.`,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------------------------
+// Not yet defined in this module (177.1-03 Task 3's job)
+// -------------------------------------------------------------------------------------------
+
+// The write-surface command (`verify-derive-record`) that dispatches enumerator/reconciler
+// subagents (via the SKILL, never this CLI) and calls `recordDeriveCheckVerdicts` is Task 3's
+// job — this section delivers `reconcileSlice()`, the pure compute pipeline it will call.
