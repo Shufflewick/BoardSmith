@@ -74,10 +74,9 @@ byte-identical.
 - **Zero false disagreements** on the exact 10 lines that broke the existing design. Every outcome
   was a clean corroboration, an honest non-answer, or a defect catch — an improvement in *kind*,
   not just hit rate.
-- **Caught a real transcription bug** neither design was told to look for: `seven:11` claims the
-  final challenge sentence ends "in no particular order." It does not — that phrase belongs to the
-  *previous* sentence. Both enumerators independently reconstructed the sentences correctly, so the
-  reconciled output actively **contradicts** the `Derived` line.
+- **Flagged a real defect at `seven:11`, but misdiagnosed it — see the CORRECTION below.** The
+  reconciled output actively contradicted that `Derived` line, which is a true signal that
+  something was wrong there. The design's conclusion about *what* was wrong was inverted.
 - **Found two facts the transcription missed entirely** (Guard cards have ready/exhausted states;
   a boxer occupies own-corner or center-ring) — real state-machine facts, invisible to a design
   that only re-checks targets the transcriber already picked.
@@ -94,6 +93,35 @@ conclusion appears in neither list and buckets as "uncorroborated," indistinguis
 actually-wrong inference. Different noise from the old design's false disagreements, but still
 noise. Likely fix: instruct the reconciler to attempt cross-fact arithmetic rather than only
 literal-meaning matching; it already holds both operands.
+
+### CORRECTION (2026-07-30, after re-transcription) — the `seven:11` finding was misdiagnosed, and the reason is a worse limitation than the arithmetic one
+
+Track B reported that `seven/02-solo-variant.md:11` was a transcription error: the `Derived` line
+claimed the final challenge sentence ends "in no particular order," and both enumerators
+reconstructed the sentences without that phrase, so the reconciled output contradicted it.
+
+**Re-transcribing from the source PDF proved the `Derived` line was CORRECT.** Page 2 reads:
+"And after you've conquered that, attempt to get one of each of the 7 scoring hands in each game
+during the match **in no particular order**." The defect was in the **quote line** above it, which
+truncated the sentence and dropped the phrase. The `Derived` line existed to compensate for the
+broken quote. Track B located the defect correctly and blamed the wrong party.
+
+**The limitation this exposes:** the design feeds enumerators the transcription's own quote lines
+and treats them as ground truth. **A defect upstream of both enumerators is invisible to
+agreement** — they will faithfully agree on what a broken quote says, corroborate each other, and
+the reconciler will confidently report a *correct* inference as contradicted. That is worse than
+the arithmetic weakness: arithmetic under-corroboration produces an honest shrug, but this produces
+a confident false accusation aimed at the one line that was right.
+
+Neither experiment could have caught this. Both consumed existing quote lines; neither compared
+them against the source. The stress test measured whether enumerators would agree on something
+false *given a passage* — it never tested whether the passage itself could be wrong.
+
+**Required guard for any implementation:** an uncorroborated-or-contradicted `Derived` line must
+not be reported as a suspect inference until its supporting quote lines have been checked against
+the archived source. Verifying inferences against unverified quotes cannot distinguish "the
+inference is wrong" from "the quote is wrong." The existing provenance machinery (source archive +
+hashes, `chunk-provenance.ts`) is the natural place to anchor that check.
 
 ### The caveat that matters most
 

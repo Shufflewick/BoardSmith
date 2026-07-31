@@ -285,9 +285,21 @@ the tag.
       corroborated / uncorroborated / missed-by-transcription. No targeting is required, so the
       failure mode above cannot arise. Measured on real data (Track B, 15 dispatches): zero false
       disagreements on the exact 10 lines that broke the old design, image lines self-sorted 7/8
-      with no filter, one **genuine transcription bug caught** (`seven:11`'s misattributed sentence
-      fragment) and two real facts found that the transcription omitted entirely — a capability the
-      per-line design structurally lacks.
+      with no filter, a real defect flagged at `seven:11`, and two real facts found that the
+      transcription omitted entirely — a capability the per-line design structurally lacks.
+      **CORRECTION (same day, after re-transcribing from the source PDF): the `seven:11` finding was
+      MISDIAGNOSED, and the misdiagnosis is itself the more serious limitation.** The `Derived` line
+      was correct — page 2 does end "...in each game during the match in no particular order." The
+      defective line was the **quote** above it, which truncated the sentence; the `Derived` line
+      existed to compensate. **The design feeds enumerators the transcription's own quote lines and
+      treats them as ground truth, so a defect UPSTREAM of both enumerators is invisible to
+      agreement** — they faithfully agree on what a broken quote says and the reconciler confidently
+      reports a correct inference as contradicted. Worse than the arithmetic weakness: that one
+      yields an honest shrug, this one yields a confident false accusation against the one line that
+      was right. **Required guard:** no `Derived` line may be reported as a suspect inference until
+      its supporting quote lines are checked against the archived source — verifying inferences
+      against unverified quotes cannot separate "the inference is wrong" from "the quote is wrong."
+      Anchor on the existing provenance machinery (source archive + hashes, `chunk-provenance.ts`).
       **Known open weakness of the new approach:** multi-hop arithmetic syntheses
       (`seven:21`, `seven:36`, `one-two-punch:52`) are systematically under-corroborated — every
       sub-fact is found by both enumerators but neither performs the final arithmetic, so the
