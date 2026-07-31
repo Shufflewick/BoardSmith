@@ -470,6 +470,59 @@ the tag.
       **What this requirement now promises:** a tool that flags rule-bearing inferences worth a
       human's attention and never sends that human after a line that was already correct. It does
       not promise a reproducible score, and must not be used as a build gate.
+
+      **PHASE 177.1 DELIVERY NOTE (2026-07-31) — reachability, not a reopening.** The closure above
+      is NOT reopened and its evidence is unchanged; the four definitive measurement runs
+      (`177-15`/`177-20`/`177-21`/`177-22`) still stand as this requirement's acceptance evidence.
+      **What changed is REACHABILITY: at the time of closure, the dual-enumeration design that
+      CHECK-04 was actually closed on had zero product wiring** — `verify-enumerate.ts` had no CLI
+      command, no `verify-game.md` dispatch, and no designer-reachable path; the four measurement
+      runs ran through a standalone harness (`177-22-MEASUREMENT/driver.mjs`), not the product.
+      Phase 177.1 closed that gap:
+      - A CLI surface now exists — `boardsmith verify-derive-check` (read/report) and
+        `boardsmith verify-derive-record` (the sole write surface) — registered in `src/cli/cli.ts`,
+        retargeting the ledger/write-surface/validation plumbing MOVED wholesale from the retired
+        design (atomic upsert-append, fence-injection rejection, read-path revalidation, evidence
+        requirement all carried forward unchanged).
+      - `/bs-verify-game` Step 7 now dispatches `verify/enumerate-facts.md` (`BS-ENUMERATE-V1`) to
+        two independent cross-family enumerators and `verify/reconcile-facts.md`
+        (`BS-RECONCILE-V1`) to a reconciler, using the exact pinned model ids
+        (`DERIVE_CHECK_MODELS`: `claude-opus-5`, `claude-haiku-4-5-20251001`, `claude-sonnet-5`) the
+        measurement harness used — the design that was actually measured is now the one a designer's
+        session reaches.
+      - The retired per-line blind-derivation design — `buildBlindDerivePayload`, `focusQuoteWindow`,
+        `blindDeriveHandle`, `factAlignment`, the four-verdict enum, `verify/derive-recheck.md`,
+        `verify/derive-compare.md`, and the `verify-derive-recheck` command — is REMOVED, not
+        deprecated, per this project's No Backward Compatibility rule. Exactly ONE live
+        derived-line-check path remains.
+      - The product path was proven against the harness on BOTH recorded input and a live run:
+        `177.1-PRE-REGISTRATION.md` committed the split mechanical/model-dependent bar BEFORE any
+        comparison ran; `177.1-REPLAY-PROOF/` replayed 177-22 run1's recorded `seven` returns through
+        the real product CLI (zero divergences across all seven mechanical categories, `arithmeticSpec`
+        supplied by hand per a disclosed input-shape adaptation); `177.1-LIVE-PROOF/PROOF.md`
+        dispatched REAL, live model calls (not simulated, not replayed) through the INSTALLED skill
+        prose and proved the live Sonnet-5 reconciler independently produces a well-formed
+        `arithmeticSpec` — for both a `single` and a `chain` claim — that code accepts as correct; all
+        three live classifications (L21, L36, L38) landed IN-SET against the pre-registered permitted
+        label sets, zero out-of-set results.
+      - **WR-07 (`quoteLinesOnly`'s deny-list → allow-list inversion) STAYS OPEN**, dated 2026-07-30,
+        routed to Phase 178 — this phase's `quoteLinesOnly` port carried the deny-list posture forward
+        unchanged (177.1-02); the inversion itself was explicitly out of this phase's scope and is not
+        silently resolved by the reachability work above.
+      - Findings surfaced while moving the design (recorded, not silently absorbed): behavior that
+        only made sense for the retired four-verdict set was found and removed during the ledger move
+        (177.1-02); the `arithmeticSpec` gap between the measurement harness's own hand-curated
+        fixtures and the product's real dispatch contract was found and closed by wiring
+        `arithmeticSpec` into `reconcile-facts.md` and `verify-enumerate.ts` (177.1-03) — this is the
+        exact gap this delivery note's live-proof paragraph above closes; `repairUnescapedQuotes` (a
+        measurement-harness JSON-repair utility) was found to have no product-side analogue and was
+        deliberately NOT ported, since the CLI's own JSON.parse path either accepts or rejects a
+        subagent's return outright rather than attempting a repair (177.1-03); a
+        `PRESENTATION_EXCLUSION_MARKERS` divergence WAS found and deliberately left in place —
+        `verify-classify.ts`'s presentation-schema-variant array is not element-wise derivable from
+        the consolidated `ANNOTATION_CITATION_SOURCES` family list (different citation-body pattern,
+        qualifier-group tolerance the family sources never carry), so it was left unconsolidated
+        with an explanatory comment rather than silently widened or narrowed (177.1-01).
 - [x] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
       commit hash, and any chunk whose code moved since the human last approved it is reported.
 - [ ] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
@@ -528,7 +581,7 @@ the tag.
 | VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
 | CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
 | CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
-| CHECK-04 | Phase 177 | **Complete** — closed 2026-07-31 on the reframed criterion, see the CHECK-04 entry's closure note. Dual enumeration + reconciliation replaced the retired per-line blind re-derivation design. Measured across THREE reference games (`seven`, `one-two-punch`, `doom-machine`), ~250 line-classifications over four definitive runs (`177-15`, `177-20`, `177-21`, `177-22`): **zero wrongly-`contradicted` lines, zero fabrications passed grounding, zero annotation leaks into any dispatched payload, every result explainable** — the four criteria that protect a user, clean in every run. The fifth criterion (byte-identical classifications across two runs) was RETIRED as miscalibrated: the design's premise is two INDEPENDENT enumerations, independence implies variance, and `claude -p` exposes no temperature/seed control (61 flags, none for sampling). Residual confirmation variance ~12.5% (4/32, `177-22`), entirely in the safe direction — a line may read `corroborated` on one run and `uncorroborated` on another, never falsely `contradicted`. Treat a non-corroboration as "worth a human glance", never as a verdict. |
+| CHECK-04 | Phase 177 (delivery: Phase 177.1) | **Complete** — closed 2026-07-31 on the reframed criterion, see the CHECK-04 entry's closure note AND its Phase 177.1 delivery note directly below it. Dual enumeration + reconciliation replaced the retired per-line blind re-derivation design. Measured across THREE reference games (`seven`, `one-two-punch`, `doom-machine`), ~250 line-classifications over four definitive runs (`177-15`, `177-20`, `177-21`, `177-22`): **zero wrongly-`contradicted` lines, zero fabrications passed grounding, zero annotation leaks into any dispatched payload, every result explainable** — the four criteria that protect a user, clean in every run. The fifth criterion (byte-identical classifications across two runs) was RETIRED as miscalibrated: the design's premise is two INDEPENDENT enumerations, independence implies variance, and `claude -p` exposes no temperature/seed control (61 flags, none for sampling). Residual confirmation variance ~12.5% (4/32, `177-22`), entirely in the safe direction — a line may read `corroborated` on one run and `uncorroborated` on another, never falsely `contradicted`. Treat a non-corroboration as "worth a human glance", never as a verdict. **Phase 177.1 closed a reachability gap, not this closure**: the measured design now has a CLI surface (`verify-derive-check`/`verify-derive-record`) and `/bs-verify-game` Step 7 dispatches it directly. Proven against the harness on recorded input (`177.1-REPLAY-PROOF/`, zero mechanical divergence) and a real live run (`177.1-LIVE-PROOF/PROOF.md`) — the live Sonnet-5 reconciler produced a well-formed `arithmeticSpec` for both a `single` and a `chain` claim, code accepted both as correct, and all three live classifications landed within their pre-registered permitted sets. WR-07 stays open, routed to Phase 178. |
 | CHECK-06 | Phase 178 | Pending |
 | TEST-01 | Phase 178 | Pending |
 | VERIFY-09 | Phase 179 | Pending |
