@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-09-PLAN.md — the second of six gap-closure plans (177-08..13), closing GAP 3's ledger-integrity findings from 177-REVIEW.md ahead of 177-10's write surface: CR-04 (ledger fence injection), CR-02 (readDeriveVerdicts bypassing the single validation choke point), CR-06 (recordDeriveVerdicts replacing the whole ledger on every call), WR-05 (evidence-free agrees/disagrees), and WR-04 (the blind underivable/not-rule-bearing pass-through had no code cross-check). createDeriveVerdictRecord now throws on 7 conditions (up from 4): the three new blocks reject any reasoning/originalReading/rederivedReading carrying the ledger's own begin/end fence marker (JSON.stringify does not escape '<', so unrejected model-controlled reasoning could corrupt the ledger permanently), require at least one non-empty sourceQuotes entry for agrees/disagrees (underivable/not-rule-bearing may still cite none), and reject a rederivedValue (now a required input, persisted on DeriveVerdictRecord for ledger auditability) of underivable/not-rule-bearing paired with a differing verdict. readDeriveVerdicts no longer does JSON.parse(l) as DeriveVerdictRecord with zero validation — every parsed line now re-enters createDeriveVerdictRecord, so a malformed-JSON line throws one actionable message naming the ledger path and 1-based record index (never a raw SyntaxError) and an out-of-enum verdict throws instead of reaching the report (zero 'as DeriveVerdictRecord' casts remain, grep-gated). recordDeriveVerdicts renamed to replaceDeriveVerdicts (kept exported as the explicit full-rewrite path) and a new recordDeriveVerdict(projectDir, record) singular callable added: reads the ledger, upserts by slicePath:lineNumber (existing order preserved, updated record appended last), writes the merged set through replaceDeriveVerdicts — still exactly one durable write path in the module (zero writeFile( call sites outside atomicWriteFile). All three negative pins (CR-04's fence rejection, CR-02's revalidation, CR-06's upsert) were empirically proven to fail when reverted, using a scratch-directory backup rather than git stash: deleting the CR-04 fence block failed 3 tests; reverting readDeriveVerdicts to the pre-fix cast failed 4 tests and independently reproduced the reviewer's exact 'verdictCounts: { TOTALLY-BOGUS: NaN }' output; making recordDeriveVerdict call replaceDeriveVerdicts([record]) directly (the pre-fix destructive shape) failed 1 test ('expected length 2 but got 1'); all three reverts confirmed git diff --stat clean before restoring. All three tasks were authored in a single pass then reconstructed into 3 task-scoped commits from git blob content (each intermediate state independently tsc-clean and vitest-green: 55/55 after Task 1, 61/61 after Task 2, 64/64 after Task 3). npx vitest run src/cli/commands/verify-derive-recheck.test.ts: 64/64 green (up from 44). Full npm test (mandatory per the orchestrator's explicit instruction, not a subdirectory subset): 3987/3987 green across 241 files (baseline 3967 + 20 net new, zero regressions) — this baseline-tracking discipline exists because 177-08's own subdirectory-only test run had shipped a real regression the orchestrator later caught and fixed (commit 9ebc38bb). npx tsc --noEmit clean except the pre-existing unrelated docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 2 of 6 gap-closure plans; 177-10 through 177-13 remain. See .planning/phases/177-derived-line-re-derivation/177-09-SUMMARY.md."
-last_updated: "2026-07-30T23:59:00Z"
-last_activity: 2026-07-30 -- Phase 177 gap-closure plan 09 executed (CR-02/CR-04/CR-06/WR-04/WR-05 closed; CHECK-04 stays OPEN/PARTIAL)
+stopped_at: "Completed 177-10-PLAN.md — the third of six gap-closure plans (177-08..13), closing GAP 3's headline blocker from 177-REVIEW.md: CR-05 (CHECK-04 had no way to record a verdict end-to-end — cli.ts registered only the read-only report) and CR-03 (verdicts joined by line number only, so an edited line could silently inherit a stale verdict), plus WR-02, WR-03, WR-06, WR-08, and WR-10. Task 1: verifyDeriveRecheckCommand's join now requires record.originalLine === entry.text at the same slicePath:lineNumber location — a mismatch reports pending and is named in a new staleRecords array, never inherits a verdict for text that changed (CR-03). orphanedRecords surfaces every ledger record matching no current candidate location (WR-03). Extracted formatReading() so a disagrees finding's missing reading never interpolates the literal 'undefined' (WR-06) — discovered while testing that 177-09's CR-02 fix had already made the WR-06 scenario unreachable end-to-end, proved directly rather than assumed. Deleted the redundant fs.access pre-check; readLiveSlices is now the sole 'no rulebook/' throw site, distinguishing ENOENT from a real unreadable-directory condition via a real EACCES fixture (WR-02/WR-10). Task 2: added verifyDeriveRecordCommand / boardsmith verify-derive-record — CHECK-04's ONLY write surface, registered in cli.ts immediately after verify-derive-recheck with no --run-id (decision 14) and no --force/--skip/--overwrite/env-var bypass of any kind, delegating all verdict validation to createDeriveVerdictRecord and persisting through 177-09's upsert-append recordDeriveVerdict. Proved end-to-end with a REAL BUILT CLI (node dist/cli.js, not the test harness): two successive verify-derive-record calls for different lines both survived and were reported by verify-derive-recheck --json. Task 3: verify-game.md Step 7's recording sentence now names boardsmith verify-derive-record (one call per line, atomic upsert-append), replacing the recordDeriveVerdicts prose that named no callable CLI entry point. derive-recheck.md's 'Your inputs' now attributes the stripping to buildBlindDerivePayload, never the orchestrator, and adds Named-but-undefined to the never-given list (WR-08). Added a drift guard to verify.test.ts reading cli.ts's real registered commands and cross-checking every verify-* command named in verify-game.md/bs/verify/*.md against that live set — the guard that makes CR-05's own failure mode (skill text naming a non-existent entry point) hard to reintroduce silently. Swept both modified files for other stale claims beyond the two named in advance; none found. **Both negative pins were empirically proven to fail when reverted**, using a scratch-directory backup rather than git stash: reverting the CR-03 join predicate to location-only failed the new pinned test with the real observed 'expected agrees to be pending' output; deleting the verify-derive-record registration from cli.ts failed the drift guard with the real observed 'Array [ \"verify-game.md: verify-derive-record\" ]' output; both reverts confirmed git diff --stat clean before restoring. npx vitest run src/cli/commands/verify-derive-recheck.test.ts: 77/77 green (up from 64). npx vitest run src/cli/slash-command/bs/verify.test.ts: 93/93 green. Full npm test (mandatory, not a subdirectory subset): 4003/4003 green across 241 files (baseline 3987 + 16 net new, zero regressions). npx tsc --noEmit clean except the pre-existing unrelated docs/seed-to-state.test.ts rootDir error. A real built-CLI --help invocation confirmed no --run-id and no bypass flag on verify-derive-record. One documented acceptance-criteria grep deviation (not a code defect): the literal 'createDeriveVerdictRecord|recordDeriveVerdict outside verify-derive-recheck.{ts,test.ts}' grep returns zero because cli.ts registers the verifyDeriveRecordCommand wrapper (matching every sibling write command's convention), not the lower-level functions by name — the underlying CR-05 condition is genuinely closed, proved by the real end-to-end CLI invocation instead. CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 3 of 6 gap-closure plans; 177-11 (CR-07, the blind-derivation payload still hands the subagent a resolvable slicePath:lineNumber pointer) through 177-13 (re-measure the phase goal, dispose of CHECK-04) remain. See .planning/phases/177-derived-line-re-derivation/177-10-SUMMARY.md."
+last_updated: "2026-07-31T00:35:00Z"
+last_activity: 2026-07-30 -- Phase 177 gap-closure plan 10 executed (CR-05/CR-03/WR-02/WR-03/WR-06/WR-08/WR-10 closed; CHECK-04 stays OPEN/PARTIAL)
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 60
-  completed_plans: 56
-  percent: 93
+  completed_plans: 57
+  percent: 95
 ---
 
 # Project State
@@ -25,8 +25,60 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 9/13 plans complete (7 original +
-2 of 6 gap-closure plans).
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 10/13 plans complete (7 original +
+3 of 6 gap-closure plans).
+
+`177-10-PLAN.md` (2026-07-30) is the third of six gap-closure plans (177-08..13), closing GAP 3's
+headline blocker from `177-REVIEW.md`: CR-05 (CHECK-04 had no way to record a verdict end-to-end —
+`cli.ts` registered only the read-only report) and CR-03 (verdicts joined by line number only, so
+an edited line could silently inherit a stale verdict), plus WR-02, WR-03, WR-06, WR-08, and
+WR-10. Task 1: `verifyDeriveRecheckCommand`'s join now requires `record.originalLine ===
+entry.text` at the same `slicePath:lineNumber` location — a mismatch reports `pending` and is
+named in a new `staleRecords` array, never inherits a verdict for text that changed (CR-03).
+`orphanedRecords` surfaces every ledger record matching no current candidate location (WR-03).
+Extracted `formatReading()` so a `disagrees` finding's missing reading never interpolates the
+literal `undefined` (WR-06) — discovered while testing that 177-09's CR-02 fix had already made
+the WR-06 scenario unreachable end-to-end, proved directly rather than assumed. Deleted the
+redundant `fs.access` pre-check; `readLiveSlices` is now the sole "no rulebook/" throw site,
+distinguishing `ENOENT` from a real unreadable-directory condition via a real EACCES fixture
+(WR-02/WR-10). Task 2: added `verifyDeriveRecordCommand` / `boardsmith verify-derive-record` —
+CHECK-04's ONLY write surface, registered in `cli.ts` immediately after `verify-derive-recheck`
+with no `--run-id` (decision 14) and no `--force`/`--skip`/`--overwrite`/env-var bypass of any
+kind, delegating all verdict validation to `createDeriveVerdictRecord` and persisting through
+177-09's upsert-append `recordDeriveVerdict`. Proved end-to-end with a REAL BUILT CLI (`node
+dist/cli.js`, not the test harness): two successive `verify-derive-record` calls for different
+lines both survived and were reported by `verify-derive-recheck --json`. Task 3: `verify-game.md`
+Step 7's recording sentence now names `boardsmith verify-derive-record` (one call per line, atomic
+upsert-append), replacing the `recordDeriveVerdicts` prose that named no callable CLI entry point.
+`derive-recheck.md`'s "Your inputs" now attributes the stripping to `buildBlindDerivePayload`,
+never the orchestrator, and adds `Named-but-undefined` to the never-given list (WR-08). Added a
+drift guard to `verify.test.ts` reading `cli.ts`'s real registered commands and cross-checking
+every `verify-*` command named in `verify-game.md`/`bs/verify/*.md` against that live set — the
+guard that makes CR-05's own failure mode (skill text naming a non-existent entry point) hard to
+reintroduce silently. Swept both modified files for other stale claims beyond the two named in
+advance; none found. **Both negative pins were empirically proven to fail when reverted**, using a
+scratch-directory backup rather than `git stash`: reverting the CR-03 join predicate to
+location-only failed the new pinned test with the real observed `expected 'agrees' to be
+'pending'` output; deleting the `verify-derive-record` registration from `cli.ts` failed the drift
+guard with the real observed `Array [ "verify-game.md: verify-derive-record" ]` output; both
+reverts confirmed `git diff --stat` clean before restoring. `npx vitest run
+src/cli/commands/verify-derive-recheck.test.ts`: 77/77 green (up from 64). `npx vitest run
+src/cli/slash-command/bs/verify.test.ts`: 93/93 green. **Full `npm test`** (mandatory, not a
+subdirectory subset): 4003/4003 green across 241 files (baseline 3987 + 16 net new, zero
+regressions). `npx tsc --noEmit` clean except the pre-existing unrelated
+`docs/seed-to-state.test.ts` rootDir error. A real built-CLI `--help` invocation confirmed no
+`--run-id` and no bypass flag on `verify-derive-record`. One documented acceptance-criteria grep
+deviation (not a code defect): the literal `createDeriveVerdictRecord|recordDeriveVerdict outside
+verify-derive-recheck.{ts,test.ts}` grep returns zero because `cli.ts` registers the
+`verifyDeriveRecordCommand` wrapper (matching every sibling write command's convention), not the
+lower-level functions by name — the underlying CR-05 condition is genuinely closed, proved by the
+real end-to-end CLI invocation instead. **CHECK-04 stays OPEN/PARTIAL in `REQUIREMENTS.md`** —
+this is 3 of 6 gap-closure plans; `177-11` (CR-07, the blind-derivation payload still hands the
+subagent a resolvable `slicePath:lineNumber` pointer) through `177-13` (re-measure the phase goal,
+dispose of CHECK-04) remain. See
+`.planning/phases/177-derived-line-re-derivation/177-10-SUMMARY.md`.
+
+---
 
 `177-09-PLAN.md` (2026-07-30) is the second of six gap-closure plans (177-08..13), closing GAP 3's
 ledger-integrity findings from `177-REVIEW.md` — deliberately sequenced BEFORE `177-10` exposes a
