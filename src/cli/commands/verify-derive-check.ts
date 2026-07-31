@@ -160,12 +160,16 @@ export function annotationBody(line: string): string {
 /**
  * Built via the shared `annotationLineStartRe` factory (`derived-line-pattern.ts`) rather than a
  * hand-spelled literal — equivalent to the former `/^Visual \(p\.[^)]*\)/i`.
+ *
+ * Exported (178-01 Task 3): plan 178-02's example-extraction payload needs `Visual (p.N):` lines
+ * — `seven`'s Run-example contradiction (text "5, 6, 7" vs. card art 1, 2, 3) is recorded ONLY in
+ * a `Visual (p.1):` line, not a `Derived` line, so extraction cannot rely on `Derived` alone.
  */
-const VISUAL_LINE_RE = annotationLineStartRe('Visual');
+export const VISUAL_LINE_RE = annotationLineStartRe('Visual');
 /**
  * A `Named-but-undefined` line is an ingest-time INFERENCE about undefined terminology, not
  * directly-quoted rulebook prose — excluded from every "quote lines only" payload alongside
- * `Derived`/`Visual`.
+ * `Derived`/`Visual`/`Example`.
  *
  * Built via the shared `annotationLineStartRe` factory rather than a hand-spelled literal —
  * equivalent to the former `/^Named-but-undefined \(p\.[^)]*\)/i`.
@@ -173,15 +177,33 @@ const VISUAL_LINE_RE = annotationLineStartRe('Visual');
 const NAMED_BUT_UNDEFINED_LINE_RE = annotationLineStartRe('Named-but-undefined');
 
 /**
+ * A `Example (p.N):` line marks a worked-example annotation (178-01, closing WR-07 by Option B —
+ * see `178-WR07-DECISION.md`) — added to `quoteLinesOnly`'s deny-list alongside the other three
+ * family forms rather than treated as directly-quoted content. CHECK-06 (plan 178-02+) needs the
+ * lines this excludes, so it builds its OWN separate extraction payload rather than reusing
+ * `quoteLinesOnly` — this module's "quote lines only" payload stays CHECK-04's, unchanged in
+ * composition on every reference game (178-01-MEASUREMENT/RESULTS.md: zero `Example (p.` lines
+ * exist today, so this exclusion is measured zero-behavior-change).
+ *
+ * Built via the shared `annotationLineStartRe` factory rather than a hand-spelled literal —
+ * equivalent to `/^Example \(p\.[^)]*\)/i`. Exported: `verify-derive-check.test.ts` and plan
+ * 178-02's extraction module both need it.
+ */
+export const EXAMPLE_LINE_RE = annotationLineStartRe('Example');
+
+/**
  * True when `line` (already `.trim()`ed) belongs in a "quote lines only" payload: not blank, not
- * a markdown heading, and not one of the three annotation-family lines (via `annotationBody`, the
+ * a markdown heading, and not one of the four annotation-family lines (via `annotationBody`, the
  * single decoration-normalization site).
  */
 function isQuoteLine(line: string): boolean {
   if (line.length === 0 || line.startsWith('#')) return false;
   const body = annotationBody(line);
   return (
-    !DERIVED_LINE_RE.test(body) && !VISUAL_LINE_RE.test(body) && !NAMED_BUT_UNDEFINED_LINE_RE.test(body)
+    !DERIVED_LINE_RE.test(body) &&
+    !VISUAL_LINE_RE.test(body) &&
+    !NAMED_BUT_UNDEFINED_LINE_RE.test(body) &&
+    !EXAMPLE_LINE_RE.test(body)
   );
 }
 
@@ -191,8 +213,10 @@ function isQuoteLine(line: string): boolean {
  * `Derived` lines because they are rule-bearing for classification purposes. Every enumerator
  * payload `buildEnumeratorPayload` (`verify-enumerate.ts`) builds is assembled from exactly this
  * filter's output — reused rather than re-derived, so the two modules can never diverge on what
- * counts as a quote line (this is WR-07's deny-list; the allow-list inversion is Phase 178's, per
- * 177.1-CONTEXT.md decision 9 — NOT inverted here).
+ * counts as a quote line. This IS WR-07's deny-list; WR-07 was RESOLVED by 178-01 Task 2 as
+ * Option B — keep the deny-list (do NOT invert to an allow-list), and add `Example` to it
+ * (`EXAMPLE_LINE_RE`, above) rather than treat `Example (p.N):` as quotable content. See
+ * `.planning/phases/178-worked-example-tests/178-WR07-DECISION.md` for the full evidence.
  *
  * Drops blank lines and markdown headings (`#`). Bare `p.N, <label>:` citation headers are
  * RETAINED (they carry no rule content of their own, but an enumerator needs them to know which

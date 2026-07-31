@@ -146,6 +146,27 @@ Worked examples, sample positions/states, and rule-bearing diagrams: copy their 
 downstream test scenarios have — a dropped example gets silently replaced by an invented one
 later.
 
+### EXAMPLE markers — `Example (p.14):`
+
+A worked example, sample position, or sample resolution — a designer walking through what happens
+in a specific concrete case — is written under `Example (p.N):` **in addition to, never instead
+of,** the verbatim quoted text (or `Derived`/`Visual` line) it illustrates. Same page-citation
+shape as `Derived (p.14):` and `Visual (p.14):`, including a multi-page citation body
+(`Example (p.14, continues on p.15):`) when the example spans a page break.
+
+`Example (p.N):` marks WHICH lines are the worked example, on top of whatever else those lines
+already are — it never replaces the QUOTE line, `Derived (p.N):`, or `Visual (p.N):` prefix a line
+would otherwise need. A worked example expressed as directly-quoted prose keeps its quote-line
+form (and citation header) AND additionally gets an `Example (p.N):` line naming it as the worked
+example; a worked example expressed as an inferred, rule-bearing condensation keeps its
+`Derived (p.N):` form and additionally gets the `Example (p.N):` marker.
+
+If a printed worked example CONTRADICTS its own accompanying art, diagram, or another passage in
+the source, **do not resolve the contradiction and do not pick a side.** Transcribe both exactly
+as printed — the worked example under `Example (p.N):`, and the contradicting art/diagram
+description under `Visual (p.N):` — and let downstream steps surface the discrepancy to the
+designer. Inventing a resolution here would silently encode a source error as fact.
+
 ---
 
 ## 2. RETURN a structured summary only — never the transcribed text itself

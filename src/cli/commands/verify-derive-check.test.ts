@@ -22,10 +22,13 @@ import {
   annotationBody,
   quoteLinesOnly,
   enumerateDerivedLines,
+  EXAMPLE_LINE_RE,
+  VISUAL_LINE_RE,
   type DeriveCheckRecord,
   type EnumeratorReturn,
   type ReconcilerReturn,
 } from './verify-derive-check.js';
+import { PRESENTATION_EXCLUSION_MARKERS } from './verify-classify.js';
 
 /**
  * `verify-derive-check.ts` is CHECK-04's mechanical core, MOVED and retargeted onto the closed
@@ -111,6 +114,76 @@ describe('quoteLinesOnly', () => {
     expect(quotes).toContain('"Real quoted rulebook sentence."');
     expect(quotes.some((l) => l.startsWith('Visual (p.'))).toBe(false);
     expect(quotes.some((l) => l.startsWith('Derived (p.'))).toBe(false);
+  });
+
+  // 178-01 Task 3 — WR-07 resolved as Option B (178-WR07-DECISION.md): Example (p.N): joins the
+  // deny-list, but seven's real quote line (no citation, bare vocabulary) must stay retained.
+  it('strips Example (p.N): lines entirely (178-01, closing WR-07 by Option B)', () => {
+    const dropped = quoteLinesOnly('Example (p.1): three READY guards become two');
+    expect(dropped).toEqual([]);
+  });
+
+  it('strips a multi-page Example (p.N, continues on p.M): citation body entirely', () => {
+    const dropped = quoteLinesOnly(
+      'Example (p.1, continues on p.2): three READY guards become two',
+    );
+    expect(dropped).toEqual([]);
+  });
+
+  it('RETAINS seven\'s real quote line "example: 5, 5, 5" — it is not an Example (p.N): annotation', () => {
+    const retained = quoteLinesOnly('"example: 5, 5, 5"');
+    expect(retained).toEqual(['"example: 5, 5, 5"']);
+  });
+
+  it('RETAINS seven\'s real quote line "example: 5, 6, 7" — it is not an Example (p.N): annotation', () => {
+    const retained = quoteLinesOnly('"example: 5, 6, 7"');
+    expect(retained).toEqual(['"example: 5, 6, 7"']);
+  });
+
+  it('output is byte-identical on an Example-free slice before/after the Example exclusion (178-01 Task 3 behavior spec)', () => {
+    const sliceWithNoExampleLine = [
+      'p.3, Setup:',
+      '"Deal five cards to each player."',
+      'Visual (p.3): A diagram showing card layout.',
+      'Derived (p.3): Each player starts with 5 cards.',
+      'Named-but-undefined (p.4): the active player',
+    ].join('\n');
+    expect(quoteLinesOnly(sliceWithNoExampleLine)).toEqual([
+      'p.3, Setup:',
+      '"Deal five cards to each player."',
+    ]);
+  });
+});
+
+describe('EXAMPLE_LINE_RE (178-01 Task 3)', () => {
+  it('matches Example (p.1): ... and asserts via EXAMPLE_LINE_RE directly', () => {
+    expect(EXAMPLE_LINE_RE.test('Example (p.1): three READY guards become two')).toBe(true);
+  });
+
+  it('matches a multi-page Example citation body', () => {
+    expect(
+      EXAMPLE_LINE_RE.test('Example (p.1, continues on p.2): three READY guards become two'),
+    ).toBe(true);
+  });
+
+  it('does not match seven\'s real quote line "example: 5, 5, 5"', () => {
+    expect(EXAMPLE_LINE_RE.test('"example: 5, 5, 5"')).toBe(false);
+  });
+});
+
+describe('VISUAL_LINE_RE is now exported (178-01 Task 3 — plan 178-02 needs it)', () => {
+  it('is a function matching Visual (p.N): lines', () => {
+    expect(VISUAL_LINE_RE.test('Visual (p.1): a blue border')).toBe(true);
+  });
+});
+
+describe('PRESENTATION_EXCLUSION_MARKERS is unchanged by 178-01 (177.1-01 non-consolidation finding, source-assertion)', () => {
+  it('still has exactly the three pre-178 entries — Example is NOT folded into it', () => {
+    expect(PRESENTATION_EXCLUSION_MARKERS).toEqual([
+      '^Visual \\(p\\.\\d+\\)(?: \\([^:]*\\))?:',
+      '^Derived \\(p\\.\\d+\\) — diagram description(?: \\([^:]*\\))?:',
+      '^Derived \\(p\\.\\d+\\) — art(?: \\([^:]*\\))?:',
+    ]);
   });
 });
 
@@ -1691,6 +1764,86 @@ describe('verifyDeriveCheckCommand', () => {
     expect(result.slices).toHaveLength(1);
     expect(result.slices[0].enumeratorPayload).toBeUndefined();
     expect(result.slices[0].payloadError).toContain(slicePath);
+  });
+
+  // -----------------------------------------------------------------------------------------
+  // 178-01 Task 3 — fixture slices copied verbatim from the three reference games (behavior
+  // spec: "buildEnumeratorPayload does not throw on any of the three reference games' slices
+  // after this change"), including seven's real line 6 quote. Zero-behavior-change proof for the
+  // Example addition, run through the REAL product path (verifyDeriveCheckCommand ->
+  // buildEnumeratorPayload), not a reimplementation.
+  // -----------------------------------------------------------------------------------------
+  describe('no payloadError on fixture slices copied from the three reference games (178-01 Task 3)', () => {
+    it('seven — line 6\'s real quote line ("example: 5, 5, 5") never throws and is retained in the payload', async () => {
+      // Copied verbatim from seven/rulebook/01-definitions-and-components.md lines 1-12.
+      const sevenFixture = [
+        'p.1, Sets and Runs:',
+        'A set is three or more cards of the same number.',
+        '',
+        'Derived (p.1): isSet([5, 5, 5]) is true.',
+        '',
+        '"example: 5, 5, 5"',
+        '',
+        'A run is three or more cards in consecutive order.',
+        '',
+        'Derived (p.1): isRun([5, 6, 7]) is true.',
+        '',
+        '"example: 5, 6, 7"',
+      ].join('\n');
+      const project = await makeProject({
+        'rulebook/01-definitions-and-components.md': sevenFixture,
+      });
+
+      const result = await verifyDeriveCheckCommand({ project });
+
+      const slice = result.slices[0];
+      expect(slice.payloadError).toBeUndefined();
+      expect(slice.enumeratorPayload).toContain('"example: 5, 5, 5"');
+      expect(slice.enumeratorPayload).toContain('"example: 5, 6, 7"');
+      expect(slice.enumeratorPayload).not.toMatch(/Derived \(p\./i);
+    });
+
+    it('one-two-punch — a Punch Examples citation header with an Example (p.N): line never throws', async () => {
+      const oneTwoPunchFixture = [
+        'p.2, Punch Examples (italic):',
+        'Example (p.2): Three Guards, READY/EXHAUSTED/EXHAUSTED, become READY/READY/EXHAUSTED after a punch.',
+        '"Punching a Guard exhausts it and readies your other exhausted Guards."',
+        'Derived (p.2): A punch changes the state of every Guard on the row.',
+      ].join('\n');
+      const project = await makeProject({
+        'rulebook/02-action-cards-and-resolution.md': oneTwoPunchFixture,
+      });
+
+      const result = await verifyDeriveCheckCommand({ project });
+
+      const slice = result.slices[0];
+      expect(slice.payloadError).toBeUndefined();
+      expect(slice.enumeratorPayload).not.toMatch(/Example \(p\./i);
+      expect(slice.enumeratorPayload).toContain(
+        '"Punching a Guard exhausts it and readies your other exhausted Guards."',
+      );
+    });
+
+    it('doom-machine — a Visual-recorded worked-example line never throws', async () => {
+      const doomMachineFixture = [
+        'p.1, Destroying a Machine Part:',
+        'Visual (p.1): Worked example content (panel -7-, verbatim from card art): the SOUL HARVESTER loses its final part and is destroyed.',
+        '"A machine part with zero remaining hit points is destroyed."',
+        'Derived (p.1): A machine part is destroyed exactly when its hit points reach zero.',
+      ].join('\n');
+      const project = await makeProject({
+        'rulebook/01-destroying-a-machine-part.md': doomMachineFixture,
+      });
+
+      const result = await verifyDeriveCheckCommand({ project });
+
+      const slice = result.slices[0];
+      expect(slice.payloadError).toBeUndefined();
+      expect(slice.enumeratorPayload).not.toMatch(/Visual \(p\./i);
+      expect(slice.enumeratorPayload).toContain(
+        '"A machine part with zero remaining hit points is destroyed."',
+      );
+    });
   });
 
   it('a ledger record whose derivedLineText no longer matches the current slice text is reported in staleRecords, and the finding reports pending (CR-03)', async () => {

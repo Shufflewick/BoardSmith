@@ -8,6 +8,7 @@ import {
   ANNOTATION_FAMILIES,
   ANNOTATION_VOCABULARY_RE,
   DERIVED_LINE_RE,
+  VOCABULARY_KEYED_FAMILIES,
   annotationLineStartRe,
 } from './derived-line-pattern.js';
 
@@ -15,9 +16,20 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC_ROOT = join(HERE, '..', '..');
 
 describe('ANNOTATION_FAMILIES', () => {
-  it('equals exactly the three closed families, in order, frozen', () => {
-    expect(ANNOTATION_FAMILIES).toEqual(['Derived', 'Visual', 'Named-but-undefined']);
+  it('equals exactly the four citation-keyed families, in order, frozen (178-01 Task 3 adds Example)', () => {
+    expect(ANNOTATION_FAMILIES).toEqual(['Derived', 'Visual', 'Named-but-undefined', 'Example']);
     expect(Object.isFrozen(ANNOTATION_FAMILIES)).toBe(true);
+  });
+});
+
+describe('VOCABULARY_KEYED_FAMILIES (178-01 Task 3 — deliberately excludes Example)', () => {
+  it('equals exactly the three original families, in order, frozen', () => {
+    expect(VOCABULARY_KEYED_FAMILIES).toEqual(['Derived', 'Visual', 'Named-but-undefined']);
+    expect(Object.isFrozen(VOCABULARY_KEYED_FAMILIES)).toBe(true);
+  });
+
+  it('does NOT contain Example', () => {
+    expect(VOCABULARY_KEYED_FAMILIES).not.toContain('Example');
   });
 });
 
@@ -29,10 +41,12 @@ describe('DERIVED_LINE_RE (pre-existing export, unchanged)', () => {
 });
 
 describe('ANNOTATION_CITATION_RE', () => {
-  // Byte-equality with the two literals it replaces IS the zero-behavior-change proof.
-  it('is byte-equal (.source and .flags) to the literal it replaces', () => {
+  // Byte-equality with the literal it replaces IS the zero-behavior-change proof for the three
+  // pre-existing families; the fourth alternative (Example) is 178-01 Task 3's intended widening,
+  // measured safe (178-01-MEASUREMENT/RESULTS.md: zero Example (p. lines in any reference game).
+  it('is byte-equal (.source and .flags) to the four-name literal (178-01 Task 3 pin update)', () => {
     expect(ANNOTATION_CITATION_RE.source).toBe(
-      'Derived \\(p\\.|Visual \\(p\\.|Named-but-undefined \\(p\\.',
+      'Derived \\(p\\.|Visual \\(p\\.|Named-but-undefined \\(p\\.|Example \\(p\\.',
     );
     expect(ANNOTATION_CITATION_RE.flags).toBe('i');
   });
@@ -41,19 +55,27 @@ describe('ANNOTATION_CITATION_RE', () => {
     expect(ANNOTATION_CITATION_RE.test('Derived (p.1): the board has 8 spaces')).toBe(true);
     expect(ANNOTATION_CITATION_RE.test('Visual (p.2): a blue border')).toBe(true);
     expect(ANNOTATION_CITATION_RE.test('Named-but-undefined (p.3): "the active player"')).toBe(true);
+    expect(ANNOTATION_CITATION_RE.test('Example (p.1): three READY guards become two')).toBe(true);
   });
 
-  it('matches a multi-page citation body', () => {
+  it('matches a multi-page citation body, including for Example', () => {
     expect(ANNOTATION_CITATION_RE.test('Derived (p.1, continues on p.2): the turn order')).toBe(true);
+    expect(
+      ANNOTATION_CITATION_RE.test('Example (p.1, continues on p.2): three READY guards become two'),
+    ).toBe(true);
   });
 
   it('does not match a plain quoted rulebook sentence with no annotation marker', () => {
     expect(ANNOTATION_CITATION_RE.test('p.1, Setup: Deal five cards to each player.')).toBe(false);
   });
+
+  it('does not match seven\'s real quote line — no (p. citation, so citation-keyed check is blind to it (expected)', () => {
+    expect(ANNOTATION_CITATION_RE.test('"example: 5, 5, 5"')).toBe(false);
+  });
 });
 
-describe('ANNOTATION_VOCABULARY_RE', () => {
-  it('is byte-equal (.source and .flags) to the literal it replaces', () => {
+describe('ANNOTATION_VOCABULARY_RE (178-01 Task 3 — MUST stay byte-equal, Example excluded)', () => {
+  it('is byte-equal (.source and .flags) to the literal it replaces — UNCHANGED by 178-01', () => {
     expect(ANNOTATION_VOCABULARY_RE.source).toBe(
       '^[^A-Za-z0-9]*(?:Derived|Visual|Named-but-undefined)\\b',
     );
@@ -73,6 +95,20 @@ describe('ANNOTATION_VOCABULARY_RE', () => {
     expect(ANNOTATION_VOCABULARY_RE.test('The score is derived from the remaining cards.')).toBe(
       false,
     );
+  });
+
+  it('does not match a bare "Example:" line — Example is deliberately excluded from the vocabulary-keyed family list', () => {
+    expect(ANNOTATION_VOCABULARY_RE.test('Example: three READY guards become two')).toBe(false);
+  });
+
+  // The measured hazard this split exists to avoid (178-01-MEASUREMENT/RESULTS.md): seven's real
+  // quote lines must never be swept up by a vocabulary-keyed Example match.
+  it('does not match seven\'s real quote line "example: 5, 5, 5"', () => {
+    expect(ANNOTATION_VOCABULARY_RE.test('"example: 5, 5, 5"')).toBe(false);
+  });
+
+  it('does not match seven\'s real quote line "example: 5, 6, 7"', () => {
+    expect(ANNOTATION_VOCABULARY_RE.test('"example: 5, 6, 7"')).toBe(false);
   });
 });
 
@@ -94,15 +130,33 @@ describe('annotationLineStartRe', () => {
     expect(re.source).toBe('^Derived \\(p\\.[^)]*\\)');
     expect(re.flags).toBe('i');
   });
+
+  it('returns /^Example \\(p\\.[^)]*\\)/i for the new Example family (178-01 Task 3)', () => {
+    const re = annotationLineStartRe('Example');
+    expect(re.source).toBe('^Example \\(p\\.[^)]*\\)');
+    expect(re.flags).toBe('i');
+  });
+
+  it('matches Example (p.1): ... and a multi-page Example citation', () => {
+    const re = annotationLineStartRe('Example');
+    expect(re.test('Example (p.1): three READY guards become two')).toBe(true);
+    expect(re.test('Example (p.1, continues on p.2): three READY guards become two')).toBe(true);
+  });
+
+  it('does not match seven\'s real quote line "example: 5, 5, 5"', () => {
+    const re = annotationLineStartRe('Example');
+    expect(re.test('"example: 5, 5, 5"')).toBe(false);
+  });
 });
 
 describe('ANNOTATION_CITATION_SOURCES', () => {
-  it('is frozen and has one entry per family, in bare citation-body shape', () => {
+  it('is frozen and has one entry per family (now four, 178-01 Task 3 adds Example), in bare citation-body shape', () => {
     expect(Object.isFrozen(ANNOTATION_CITATION_SOURCES)).toBe(true);
     expect(ANNOTATION_CITATION_SOURCES).toEqual([
       '^Derived \\(p\\.\\d+\\):',
       '^Visual \\(p\\.\\d+\\):',
       '^Named-but-undefined \\(p\\.\\d+\\):',
+      '^Example \\(p\\.\\d+\\):',
     ]);
   });
 });

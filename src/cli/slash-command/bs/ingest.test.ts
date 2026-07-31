@@ -349,6 +349,44 @@ describe('v4.9 INGEST-03 — openGaps[] return-field transport', () => {
   });
 });
 
+describe('178-01 (CHECK-06/TEST-01) — Example (p.N): worked-example marker (PROC-01 prose pin)', () => {
+  it('the subagent contract defines the Example (p. prefix', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toMatch(/Example \(p\./);
+  });
+
+  it('the marker is a sibling of Named-but-undefined and Visual, anchored at the worked-examples section', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    const idx = contract.indexOf('### Worked examples are transcription-critical');
+    expect(idx).toBeGreaterThan(-1);
+    const afterSection = contract.slice(idx);
+    expect(afterSection).toMatch(/### EXAMPLE markers/);
+  });
+
+  it("marks the example IN ADDITION TO, never instead of, the quote/Derived/Visual line it illustrates", () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(flat(contract)).toContain('in addition to, never instead of,** the verbatim quoted text');
+  });
+
+  it('tolerates a multi-page citation body, same shape as Derived (p.N, continues on p.M):', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('Example (p.14, continues on p.15):');
+  });
+
+  it('instructs never resolving a contradiction between a printed example and its accompanying art — transcribe both', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    const flatContract = flat(contract);
+    expect(flatContract).toContain('do not resolve the contradiction and do not pick a side');
+    expect(flatContract).toContain('Visual (p.N):');
+  });
+
+  it('the contract still defines Named-but-undefined and Visual after the Example section is added', () => {
+    const contract = read('ingest/transcription-subagent.md');
+    expect(contract).toContain('Named-but-undefined');
+    expect(contract).toContain('Visual (p.');
+  });
+});
+
 // NOTE (Plan 173-03): these assertions prove the instruction EXISTS in skill text; they do not
 // prove a live subagent RECEIVES or FOLLOWS it. The behavioural evidence for VERIFY-07 -- that
 // the orchestrator never holds transcribed text -- is the transcript-absence proof in plan
