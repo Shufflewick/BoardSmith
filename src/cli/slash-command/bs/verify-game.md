@@ -9,7 +9,7 @@ Cite `state-machine.md` rather than restating its rules — if you are extending
 to the relevant section instead of copying rule text. This file is a lean router: it detects
 state, resolves the source, dispatches to `verify/source-resolution.md`,
 `verify/staging-dispatch.md`, `verify/classification-dispatch.md`, `verify/ruling-recheck.md`,
-`verify/repair-dispatch.md`, `verify/derive-recheck.md`, and `verify/derive-compare.md` for their
+`verify/repair-dispatch.md`, `verify/enumerate-facts.md`, and `verify/reconcile-facts.md` for their
 heavyweight prose, and closes the run. It does not explain
 the status enum, the consistency check, or the session lock inline — see
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
@@ -50,11 +50,13 @@ strings exist only inside a written slice, staged or live, and this orchestrator
 describes the ORCHESTRATOR's own transcript, and that stays true unchanged — this orchestrator
 still shows zero quoted-rule lines, zero `Derived (p.` lines, and zero `Visual (p.` lines in its
 own transcript. The exception belongs to the SUBAGENT dispatch prompts and returns, not to the
-orchestrator: `verify/derive-recheck.md`'s blind-derivation prompt legitimately carries quote
-lines — that is its entire payload — and `verify/derive-compare.md`'s comparison prompt and return
-legitimately carry a `Derived (p.` line, because decision 8 requires citing both derivations
-verbatim on a `disagrees` finding. Those payloads are constructed by `buildBlindDerivePayload`
-(`verify-derive-recheck.ts`) and passed through the dispatch, never composed by this orchestrator
+orchestrator: `verify/enumerate-facts.md`'s enumerator prompt legitimately carries quote lines —
+that is its entire payload — because it is the `slices[].enumeratorPayload` bytes
+`boardsmith verify-derive-check --json` already built, dispatched unchanged. And
+`verify/reconcile-facts.md`'s reconciler prompt and return legitimately carry `Derived` line text
+and fact statements, because classifying a `Derived` line requires citing it. Those payloads are
+constructed by `buildEnumeratorPayload` (`verify-enumerate.ts`) and `verify-derive-check`'s own
+`slices[].derivedLines` field, passed through the dispatch, never composed by this orchestrator
 reading a slice itself — which is what keeps the orchestrator's own rule true even while the
 subagents' payloads legitimately carry exactly the strings the rule forbids from this transcript.
 This is the identical exception `174-PROOF.md` §3 already documented for
@@ -62,10 +64,10 @@ This is the identical exception `174-PROOF.md` §3 already documented for
 the one legitimate place a quoted line lives, never the orchestrator dispatching it.
 
 A reviewer checks TWO separate observables here, never one blanket grep across both: the
-blind-derivation prompt (`BS-DERIVE-V1`) must contain ZERO `Derived (p.` and ZERO `Visual (p.`
-lines — no exception applies to it, which is stronger than this rule's own transcript check —
-while the comparison prompt and return (`BS-DERIVE-COMPARE-V1`) are EXPECTED to contain a
-`Derived (p.` line, accounted for by this carve-out.
+enumerator prompt (`BS-ENUMERATE-V1`) must contain ZERO `Derived (p.`, ZERO `Visual (p.`, and ZERO
+`Named-but-undefined (p.` lines — no exception applies to it, which is stronger than this rule's
+own transcript check — while the reconciler prompt and return (`BS-RECONCILE-V1`) are EXPECTED to
+contain `Derived` line text, accounted for by this carve-out.
 
 ## Step 0: State Detection and Lock (VERIFY-01)
 
@@ -168,25 +170,32 @@ gate, and a chunk that passes the lenses unchanged closes without re-playtesting
 ## Step 7: Derived-Line Re-Check (CHECK-04)
 
 In short: this check is independent of staleness and repair — it does not consume Step 4's
-staleness verdicts and does not scope to the chunks Step 6 touched. Every `Derived` line surviving
-`isPresentationLine` exclusion is enumerated PROJECT-WIDE, all of them, never scoped to stale
-chunks. Each survivor is dispatched BLIND, carrying
-`${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-recheck.md`'s `BS-DERIVE-V1` handshake and that
-slice's quote lines only — never the original `Derived` line itself; the payload is built by
-`buildBlindDerivePayload` (`verify-derive-recheck.ts`), which is structurally incapable of emitting
-the target line's own text, not composed by this orchestrator reading a slice. A SEPARATE dispatch
-then carries `${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md`'s `BS-DERIVE-COMPARE-V1`
-handshake, the original line, and the blind subagent's already-recorded reading, and returns one of
-the four `DERIVE_VERDICTS` plus, for `agrees`/`disagrees`, a `factAlignment` (`same-fact` /
-`different-fact` — a FIELD, never a fifth verdict) separating a genuine content disagreement from a
-targeting artifact. Both readings, plus `factAlignment` when applicable via `--fact-alignment`, are
-recorded through exactly ONE `boardsmith verify-derive-record` invocation per
-`Derived` line — the CLI write surface's atomic upsert-append, never a whole-ledger rewrite, so
-calling it for a later line never destroys a verdict already recorded for an earlier one — then
-reported by formatting `boardsmith verify-derive-recheck --json`'s output —
+staleness verdicts and does not scope to the chunks Step 6 touched. Run
+`boardsmith verify-derive-check --json`. Every `Derived` line surviving `isPresentationLine`
+exclusion is enumerated PROJECT-WIDE, all of them, never scoped to stale chunks — independent of
+Step 4's staleness verdicts and not scoped to the chunks Step 6 touched.
+
+For each slice the command reports as pending, dispatch the SAME `slices[].enumeratorPayload`
+bytes TWICE, unchanged, to two independent cross-family subagents carrying
+`${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md`'s `BS-ENUMERATE-V1` handshake —
+enumerator A on `claude-opus-5`, enumerator B on `claude-haiku-4-5-20251001`. The model ids come
+from the command's own `models` field, so this prose and the code cannot drift. Cross-family
+independence is load-bearing: two same-family enumerators would confirm each other's decomposition
+rather than independently reproduce the facts.
+
+Dispatch a THIRD subagent on `claude-sonnet-5` carrying
+`${CLAUDE_SKILL_DIR}/../bs-shared/verify/reconcile-facts.md`'s `BS-RECONCILE-V1` handshake, the two
+enumerator returns, and `slices[].derivedLines`.
+
+Record all three returns through exactly ONE `boardsmith verify-derive-record` invocation per
+SLICE — the CLI write surface's atomic upsert-append, never a whole-ledger rewrite, so recording a
+later slice never destroys a verdict already recorded for an earlier one. Grounding validation,
+arithmetic composition, and classification all happen INSIDE that command, never in this skill.
+
+Report by formatting `boardsmith verify-derive-check --json`'s output —
 **formatted, never computed** by this skill, the same discipline Step 8's Close already holds.
-Findings citing BOTH derivations verbatim are reported and exit 0 — a `disagrees` verdict is
-advisory, never a Close gate.
+Findings are reported and exit 0 — a non-corroboration is worth a human glance, NEVER a verdict,
+and this check must not be used as a build gate.
 
 ## Step 8: Close (VERIFY-02)
 
@@ -223,12 +232,11 @@ This skill delegates its heavyweight, step-scoped prose to:
   four-verdict set, the absence-of-source trap, and the `BS-RULING-RECHECK-V1` dispatch handshake
 - `${CLAUDE_SKILL_DIR}/../bs-shared/verify/repair-dispatch.md` — CHECK-02's route into
   `build/audit.md`'s three lenses and `build/repair.md`'s bounded loop, reused by reference
-- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-recheck.md` — CHECK-04's blind-derivation
-  contract: the `BS-DERIVE-V1` dispatch handshake, the never-given list, and the
-  `not-rule-bearing`/`underivable` non-value outcomes
-- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md` — CHECK-04's comparison contract:
-  the `BS-DERIVE-COMPARE-V1` dispatch handshake, the four-verdict set, and the never-collapse rule
-  for `underivable`/`not-rule-bearing`
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md` — CHECK-04's enumeration contract:
+  the `BS-ENUMERATE-V1` dispatch handshake, the never-sees list, and the no-arithmetic rule
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/reconcile-facts.md` — CHECK-04's reconciliation
+  contract: the `BS-RECONCILE-V1` dispatch handshake, the verbatim-quote grounding rule, the
+  `arithmeticSpec` pointer, and the `absence` proposal
 
 And to the shared reference files that ship with every `bs-` skill:
 
