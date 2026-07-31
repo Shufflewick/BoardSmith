@@ -703,11 +703,6 @@ describe('derive-recheck.md / derive-compare.md — the two CHECK-04 judgment co
     );
   });
 
-  it('verify-game.md Step 7 names the --fact-alignment recording flag (177-11)', () => {
-    const skill = read('verify-game.md');
-    expect(skill).toContain('--fact-alignment');
-  });
-
   it('derive-compare.md carries the Context-Economics carve-out sentence citing the quotedPass1/quotedPass2 precedent', () => {
     const doc = flat(read('verify/derive-compare.md'));
     expect(doc).toContain('Context-Economics carve-out');
@@ -897,6 +892,59 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     expect(reconcile).toContain('## Scope limit');
   });
 
+  it('verify-game.md Step 7 names both contracts by path (177.1-05)', () => {
+    const skill = read('verify-game.md');
+    const step7 = skill.slice(
+      skill.indexOf('## Step 7: Derived-Line Re-Check'),
+      skill.indexOf('## Step 8: Close'),
+    );
+    expect(step7).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md');
+    expect(step7).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/reconcile-facts.md');
+  });
+
+  it('verify-game.md Step 7 names verify-derive-check --json (177.1-05)', () => {
+    const skill = read('verify-game.md');
+    const step7 = skill.slice(
+      skill.indexOf('## Step 7: Derived-Line Re-Check'),
+      skill.indexOf('## Step 8: Close'),
+    );
+    expect(step7).toContain('boardsmith verify-derive-check --json');
+  });
+
+  it('verify-game.md Step 7 names all three pinned model ids (177.1-05)', () => {
+    const skill = read('verify-game.md');
+    const step7 = skill.slice(
+      skill.indexOf('## Step 7: Derived-Line Re-Check'),
+      skill.indexOf('## Step 8: Close'),
+    );
+    expect(step7).toContain('claude-opus-5');
+    expect(step7).toContain('claude-haiku-4-5-20251001');
+    expect(step7).toContain('claude-sonnet-5');
+  });
+
+  it('verify-game.md carve-out names BS-ENUMERATE-V1 and BS-RECONCILE-V1 and states TWO separate observables (177.1-05)', () => {
+    const skill = read('verify-game.md');
+    const carveOutIdx = skill.indexOf('Context-Economics carve-out for CHECK-04');
+    expect(carveOutIdx).toBeGreaterThan(-1);
+    const carveOut = skill.slice(carveOutIdx, skill.indexOf('## Step 0:'));
+    expect(carveOut).toContain('BS-ENUMERATE-V1');
+    expect(carveOut).toContain('BS-RECONCILE-V1');
+    expect(carveOut).toContain('TWO separate observables');
+  });
+
+  it('ABSENCE gate: verify-game.md contains none of the retired CHECK-04 identifiers, after stripping comments (177.1-05)', () => {
+    const skill = stripComments(read('verify-game.md'));
+    for (const retired of [
+      'BS-DERIVE-V1',
+      'BS-DERIVE-COMPARE-V1',
+      'buildBlindDerivePayload',
+      'factAlignment',
+      'verify-derive-recheck',
+    ]) {
+      expect(skill).not.toContain(retired);
+    }
+  });
+
   describe('installer leaf probes — real install proves both contracts ship (177-15)', () => {
     let tempDir: string;
     let origCwd: string;
@@ -930,21 +978,31 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
   });
 });
 
-describe('verify-game.md — CHECK-04 routing and Reference Files (177-05)', () => {
-  it('has a Step naming Derived-Line Re-Check, pointing at derive-recheck.md and derive-compare.md', () => {
+describe('verify-game.md — CHECK-04 routing and Reference Files (177.1-05)', () => {
+  it('has a Step naming Derived-Line Re-Check, pointing at enumerate-facts.md and reconcile-facts.md', () => {
     const skill = read('verify-game.md');
     expect(skill).toMatch(/^## Step \d+: Derived-Line Re-Check \(CHECK-04\)/m);
-    expect(skill).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-recheck.md');
-    expect(skill).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md');
+    expect(skill).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md');
+    expect(skill).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/reconcile-facts.md');
   });
 
-  it('names both handshake tokens, the report command, and the recording command (CR-05: recordDeriveVerdicts named no callable entry point)', () => {
+  it('Step 7 names both dispatch tokens, the report command, and the recording command', () => {
     const skill = read('verify-game.md');
-    expect(skill).toContain('BS-DERIVE-V1');
-    expect(skill).toContain('BS-DERIVE-COMPARE-V1');
-    expect(skill).toContain('verify-derive-recheck');
+    expect(skill).toContain('BS-ENUMERATE-V1');
+    expect(skill).toContain('BS-RECONCILE-V1');
+    expect(skill).toContain('boardsmith verify-derive-check --json');
     expect(skill).toContain('boardsmith verify-derive-record');
-    expect(skill).not.toContain('recordDeriveVerdicts');
+  });
+
+  it('Step 7 names all three pinned model ids (CONTEXT decision 4)', () => {
+    const skill = read('verify-game.md');
+    const step7 = skill.slice(
+      skill.indexOf('## Step 7: Derived-Line Re-Check'),
+      skill.indexOf('## Step 8: Close'),
+    );
+    expect(step7).toContain('claude-opus-5');
+    expect(step7).toContain('claude-haiku-4-5-20251001');
+    expect(step7).toContain('claude-sonnet-5');
   });
 
   it('states the check is project-wide and independent of staleness/repair scoping', () => {
@@ -953,20 +1011,22 @@ describe('verify-game.md — CHECK-04 routing and Reference Files (177-05)', () 
     expect(skill).toMatch(/enumerated PROJECT-WIDE, all of them, never scoped to stale\s*chunks/);
   });
 
-  it('states findings never gate Close', () => {
+  it('states findings never gate the build', () => {
     const skill = flat(read('verify-game.md'));
-    expect(skill).toMatch(/reported and exit 0.*never a Close gate/);
+    expect(skill).toMatch(/NEVER a verdict, and this check must not be used as a build gate/);
   });
 
   it('lists both new routes in Reference Files, in the existing one-line bullet style', () => {
     const skill = read('verify-game.md');
     const refSection = skill.slice(skill.indexOf('## Reference Files'));
-    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-recheck.md');
-    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md');
+    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md');
+    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/reconcile-facts.md');
+    expect(refSection).not.toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-recheck.md');
+    expect(refSection).not.toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md');
   });
 });
 
-describe('verify-game.md — Context-Economics carve-out for CHECK-04 (177-05)', () => {
+describe('verify-game.md — Context-Economics carve-out for CHECK-04 (177.1-05)', () => {
   it('still contains the original orchestrator-transcript observable sentence verbatim', () => {
     const skill = read('verify-game.md');
     expect(skill).toContain(
@@ -975,11 +1035,15 @@ describe('verify-game.md — Context-Economics carve-out for CHECK-04 (177-05)',
     );
   });
 
-  it('names the carve-out and names both observables checked separately', () => {
+  it('names the carve-out and names both observables checked separately, re-aimed at the new tokens', () => {
     const skill = flat(read('verify-game.md'));
     expect(skill).toContain('Context-Economics carve-out for CHECK-04');
-    expect(skill).toMatch(/ZERO `Derived \(p\.` and ZERO `Visual \(p\.`/);
-    expect(skill).toMatch(/EXPECTED to contain a\s*`Derived \(p\.` line/);
+    expect(skill).toMatch(
+      /enumerator prompt \(`BS-ENUMERATE-V1`\) must contain ZERO `Derived \(p\.`, ZERO `Visual \(p\.`, and ZERO\s*`Named-but-undefined \(p\.` lines/,
+    );
+    expect(skill).toMatch(
+      /reconciler prompt and return \(`BS-RECONCILE-V1`\) are EXPECTED to\s*contain `Derived` line text/,
+    );
     expect(skill).toMatch(/TWO separate observables/);
   });
 
@@ -987,6 +1051,11 @@ describe('verify-game.md — Context-Economics carve-out for CHECK-04 (177-05)',
     const skill = flat(read('verify-game.md'));
     expect(skill).toMatch(/quotedPass1.{0,10}quotedPass2/);
     expect(skill).toContain('174-PROOF.md');
+  });
+
+  it('never collapses the two-observable check into one blanket grep, per CONTEXT decision 7', () => {
+    const skill = flat(read('verify-game.md'));
+    expect(skill).toMatch(/never one blanket grep across both/);
   });
 });
 
