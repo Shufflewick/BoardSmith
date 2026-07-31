@@ -1,0 +1,42 @@
+{
+  "games": {
+    "seven": {
+      "citationKeyedExampleCount": 0,
+      "vocabularyKeyedNewMatchCount": 2,
+      "vocabularyOnlyLines": [
+        {
+          "slice": "rulebook/01-definitions-and-components.md",
+          "lineNumber": 6,
+          "text": "\"example: 5, 5, 5\""
+        },
+        {
+          "slice": "rulebook/01-definitions-and-components.md",
+          "lineNumber": 12,
+          "text": "\"example: 5, 6, 7\""
+        }
+      ],
+      "throws": {
+        "today": [],
+        "fourName": []
+      }
+    },
+    "one-two-punch": {
+      "citationKeyedExampleCount": 0,
+      "vocabularyKeyedNewMatchCount": 0,
+      "vocabularyOnlyLines": [],
+      "throws": {
+        "today": [],
+        "fourName": []
+      }
+    },
+    "doom-machine": {
+      "citationKeyedExampleCount": 0,
+      "vocabularyKeyedNewMatchCount": 0,
+      "vocabularyOnlyLines": [],
+      "throws": {
+        "today": [],
+        "fourName": []
+      }
+    }
+  }
+}
