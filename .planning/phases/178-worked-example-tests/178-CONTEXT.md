@@ -269,3 +269,65 @@ These were checked against real files, not assumed. Two of them contradict the R
 </deferred>
 </content>
 </invoke>
+
+---
+
+<addendum date="2026-07-31" reason="Phase 177.1 landed after this context was gathered">
+## ADDENDUM — what Phase 177.1 changed underneath this context
+
+This CONTEXT and `178-RESEARCH.md` were both written BEFORE Phase 177.1 executed. The decisions
+below all still stand; several of their *cited anchors* are now stale, and one decision got
+dramatically cheaper. Read this before planning.
+
+**1. `verify-derive-recheck.ts` NO LONGER EXISTS.** It was deleted in 177.1-07 along with
+`verify/derive-recheck.md` and `verify/derive-compare.md`. Every reference to it in this file
+(lines ~34, ~90, ~211) and throughout `178-RESEARCH.md` is stale.
+
+**Decision 9's "mirror CHECK-04's module/CLI pairing" now points at the LIVE pairing:**
+`verify-derive-check` (read/report, `--json`, exit 0) + `verify-derive-record` (sole atomic write
+surface), both registered in `src/cli/cli.ts` (~lines 430 and 442), implemented in
+`src/cli/commands/verify-derive-check.ts`. That module carries the ledger's four guarantees —
+atomic upsert-append (CR-06), fence-injection rejection (CR-04), read-path revalidation through a
+single choke point (CR-02), evidence requirement (WR-05) — all verified intact by 177.1's code
+review. **This is a better model to copy than the retired one this context originally named.**
+
+**2. Decision 2 got MUCH cheaper — the "five sites in lockstep" problem is GONE.** 177.1-01
+consolidated every hardcoded `{Derived, Visual, Named-but-undefined}` regex into a single exported
+definition in `src/cli/commands/derived-line-pattern.ts` (`ANNOTATION_FAMILIES`,
+`ANNOTATION_CITATION_RE`, `ANNOTATION_VOCABULARY_RE`, `annotationLineStartRe`,
+`ANNOTATION_CITATION_SOURCES`), consumed by `verify-enumerate.ts`, `verify-derive-check.ts`, and
+`ingest-archive.ts`. A grep gate test fails if a sixth hand-spelled copy appears.
+
+**Adding an `Example (p.N):` kind is now a ONE-DEFINITION change**, not a five-file lockstep
+edit. This was the explicit payoff 177.1's decision 8 was taken for.
+
+**Carried caveat (177.1-01's recorded finding):** `PRESENTATION_EXCLUSION_MARKERS` in
+`verify-classify.ts` is deliberately NOT part of that consolidation and is NOT element-wise
+derivable from the family list — it is shaped around pre-170 presentation schema variants
+(`— diagram description` / `— art` qualifiers, a `(?: \([^:]*\))?` qualifier-group tolerance, no
+`Named-but-undefined` entry). Do not "finish the consolidation" by folding it in; that would
+silently change exclusion behavior. Its definition site carries a comment naming the exact
+difference.
+
+**3. Decision 11's anchor moved.** `verify-game.md` Step 7 is now the dual-enumeration CHECK-04
+step (rewritten in 177.1-05, with a two-observable Context-Economics carve-out re-aimed at
+`BS-ENUMERATE-V1` / `BS-RECONCILE-V1`). CHECK-06 still becomes a NEW Step 8, with Close renumbering
+to Step 9 — unchanged in substance; just note Step 7's content is no longer what this context
+described.
+
+**4. WR-07 (decision 9 here / D-09 there) is still OPEN and is now explicitly routed to THIS
+phase.** It survived 177.1's deletion wave deliberately and is re-asserted open in
+`REQUIREMENTS.md`. Decision 2 above is where it lands: when adding the `Example` kind, decide
+explicitly whether to invert `quoteLinesOnly`'s deny-list to an allow-list or widen the deny-list
+once more. Make the choice on evidence, and make it explicitly rather than by default.
+
+**5. A hazard class worth inheriting.** 177.1's code review found three criticals sharing one
+root: **lookups keyed by model-supplied free text** (`statement`, `sourceSentence`,
+`derivedLineText`) instead of stable caller-assigned identity — two model outputs phrasing
+themselves identically collapsed onto one entry. Fixed fail-closed. Phase 178 dispatches models
+that return `WorkedExample` specs (decision 5) and then translates them (decision 6). **Key those
+by caller-assigned id from the start, never by returned text, and fail closed on collision.**
+Do not re-introduce the pattern that was just removed.
+
+**6. Suite baseline entering Phase 178:** 4125 tests / 244 files, 0 failing.
+</addendum>
