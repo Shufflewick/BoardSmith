@@ -309,6 +309,116 @@ function groundedNumeric(statement: string, magnitude: number, unit: string, app
   };
 }
 
+/**
+ * Like `groundedNumeric`, but lets A and B carry DIFFERENT unit wording for the same magnitude —
+ * which is what two independently-dispatched enumerators actually produce, since they never
+ * coordinate on vocabulary. `groundedNumeric` reuses one fact for both sides, so every unit string
+ * matches by construction; that is exactly why the original 42 tests could not catch the
+ * exact-string-equality brittleness that refused every real composition in the 177-15 measurement.
+ */
+function groundedNumericDivergentUnits(
+  statement: string,
+  magnitude: number,
+  unitA: string,
+  unitB: string,
+): GroundedBothFact {
+  const mk = (unit: string) =>
+    createEnumeratedFact({
+      statement,
+      sourceSentence: statement,
+      numericValue: { magnitude, unit, approximate: false },
+    });
+  return {
+    id: createHash('sha256').update(`test:divergent:${statement}`).digest('hex').slice(0, 16),
+    statement,
+    quotedFromA: statement,
+    quotedFromB: statement,
+    matchedFactA: mk(unitA),
+    matchedFactB: mk(unitB),
+  };
+}
+
+describe('composeArithmeticClaim — divergent unit wording between independent enumerators', () => {
+  it('composes across the REAL unit-label pairs observed in the 177-15 measurement', () => {
+    // Both pairs are verbatim from the live run: run 1 produced "highest card number"/"card
+    // numbers", run 2 produced "4 copies of each card"/"4 copies". Magnitudes agreed exactly in
+    // every case; only the wording differed, and exact string equality refused all of it.
+    const derivedLineText =
+      'The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 "+1" bonus point cards.';
+    const outcome = composeArithmeticClaim({
+      derivedLineText,
+      operation: 'multiply',
+      operands: [
+        groundedNumericDivergentUnits('7 numbers per color.', 7, 'highest card number', 'card numbers'),
+        groundedNumericDivergentUnits('4 colors.', 4, 'colors', 'card colors'),
+        groundedNumericDivergentUnits('4 copies of each card.', 4, '4 copies of each card', '4 copies'),
+      ],
+      claimedResult: { magnitude: 112, unit: 'cards', approximate: false },
+    });
+    expect(outcome.ok).toBe(true);
+  });
+
+  it('records the surviving wording gap on the result rather than absorbing it silently', () => {
+    const outcome = composeArithmeticClaim({
+      derivedLineText: 'The full deck is 7 x 4 = 28 cards.',
+      operation: 'multiply',
+      operands: [
+        groundedNumericDivergentUnits('7 numbers.', 7, 'highest card number', 'card numbers'),
+        groundedNumericDivergentUnits('4 colors.', 4, 'colors', 'colors'),
+      ],
+      claimedResult: { magnitude: 28, unit: 'cards', approximate: false },
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.composed.unitVariance).toBeDefined();
+    expect(outcome.composed.unitVariance?.join(' ')).toContain('highest card number');
+  });
+
+  it('STILL REFUSES genuinely unlike quantities — the check was loosened, not removed', () => {
+    // The reason the unit check cannot simply be deleted: an unconstrained composer accepted
+    // "7 players x 10 end-hand cards = 70 cards distributed" in the ARITHMETIC-RECONCILER
+    // experiment, a quantity the rules never treat as meaningful. Same magnitude, unlike kinds.
+    const outcome = composeArithmeticClaim({
+      derivedLineText: 'A full match is 7 games x 7 minutes = 49 minutes.',
+      operation: 'multiply',
+      operands: [
+        groundedNumericDivergentUnits('7 games per match.', 7, 'games', 'games'),
+        groundedNumericDivergentUnits('7 minutes per game.', 7, 'minutes', 'players'),
+      ],
+      claimedResult: { magnitude: 49, unit: 'minutes', approximate: false },
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.reason).toContain('different kinds of quantity');
+  });
+
+  it('still refuses on magnitude disagreement, which was never the brittle part', () => {
+    const f = (magnitude: number, unit: string) =>
+      createEnumeratedFact({
+        statement: 'copies',
+        sourceSentence: 'copies',
+        numericValue: { magnitude, unit, approximate: false },
+      });
+    const operand: GroundedBothFact = {
+      id: createHash('sha256').update('test:magdiff').digest('hex').slice(0, 16),
+      statement: '4 copies.',
+      quotedFromA: '4 copies.',
+      quotedFromB: '4 copies.',
+      matchedFactA: f(4, 'copies'),
+      matchedFactB: f(5, 'copies'),
+    };
+    const outcome = composeArithmeticClaim({
+      derivedLineText: '7 x 4 = 28 cards.',
+      operation: 'multiply',
+      operands: [groundedNumeric('7 numbers.', 7, 'numbers'), operand],
+      claimedResult: { magnitude: 28, unit: 'cards', approximate: false },
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.reason).toContain('disagree on numeric value');
+  });
+});
+
 describe('composeArithmeticClaim', () => {
   it('verifies the real seven fixture arithmetic (7 numbers x 4 colors x 4 copies = 112)', () => {
     const derivedLineText =

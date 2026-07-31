@@ -359,6 +359,13 @@ export interface ComposedFact {
   operandIds: string[];
   /** The `Derived` line's verbatim text this composition was checked against — never generated from. */
   claimText: string;
+  /**
+   * Present when the two enumerators labelled an operand's unit differently but compatibly (e.g.
+   * `"4 copies of each card"` / `"4 copies"`). The composition was accepted on magnitude agreement
+   * plus token compatibility; this records the wording gap so a reader can weigh it rather than
+   * having it silently absorbed. Absent when every operand's units matched after normalization.
+   */
+  unitVariance?: string[];
 }
 
 export type ComposeOutcome = { ok: true; composed: ComposedFact } | { ok: false; reason: string };
@@ -419,14 +426,15 @@ export function composeArithmeticClaim(input: {
   }
 
   const operandValues: NumericValue[] = [];
+  const unitVariances: string[] = [];
   for (const op of operands) {
     const valueA = op.matchedFactA.numericValue;
     const valueB = op.matchedFactB.numericValue;
     if (valueA && valueB) {
+      // Magnitude and approximate must agree EXACTLY — both are semantically load-bearing, and a
+      // disagreement on either means the two enumerators are not describing the same quantity.
       const disagree =
-        valueA.magnitude !== valueB.magnitude ||
-        valueA.unit !== valueB.unit ||
-        valueA.approximate !== valueB.approximate;
+        valueA.magnitude !== valueB.magnitude || valueA.approximate !== valueB.approximate;
       if (disagree) {
         return {
           ok: false,
@@ -435,6 +443,33 @@ export function composeArithmeticClaim(input: {
             `(A: ${valueA.magnitude} ${valueA.unit}, B: ${valueB.magnitude} ${valueB.unit}) — ` +
             `refusing to compose from an inconsistent operand.`,
         };
+      }
+      // Unit wording is NOT compared by string equality. The two enumerators are dispatched
+      // independently and never coordinate on vocabulary, so they routinely label the same
+      // magnitude differently — real observed pairs from the 177-15 measurement:
+      // "highest card number"/"card numbers" and "4 copies of each card"/"4 copies". An exact
+      // string check refused every real composition on this corpus (0/2 verified) while every
+      // magnitude matched exactly. That was brittleness, not a correctness signal.
+      //
+      // Units still cannot be ignored outright, or "7 players" would compose with "10 minutes".
+      // The rule is token compatibility: one label's tokens must be a subset of the other's, so
+      // a narrower phrasing may stand in for a broader one but genuinely different kinds refuse.
+      //
+      // HONESTY: this is a heuristic, not a guarantee. It admits "cards" against "bonus cards"
+      // when magnitudes coincide. Two things bound that risk — magnitude equality is already
+      // required, and this function only ever CHECKS a composition the Derived line itself
+      // states, never generates one. A surviving variance is reported on the result rather than
+      // silently accepted, so a reader can weigh it.
+      if (!unitsCompatible(valueA.unit, valueB.unit)) {
+        return {
+          ok: false,
+          reason:
+            `Operand "${op.statement}"'s two matched facts describe different kinds of quantity ` +
+            `(A: "${valueA.unit}", B: "${valueB.unit}") — refusing to compose across unlike units.`,
+        };
+      }
+      if (normalizeUnitTokens(valueA.unit).join(' ') !== normalizeUnitTokens(valueB.unit).join(' ')) {
+        unitVariances.push(`"${valueA.unit}" / "${valueB.unit}"`);
       }
     }
     const value = valueA ?? valueB;
@@ -492,9 +527,42 @@ export function composeArithmeticClaim(input: {
     operation,
     operandIds: operands.map((o) => o.id),
     claimText: derivedLineText,
+    ...(unitVariances.length > 0 ? { unitVariance: unitVariances } : {}),
   };
 
   return { ok: true, composed };
+}
+
+/**
+ * Lowercase alphanumeric tokens of a unit label, with a trailing `s` stripped so trivial plurals
+ * collapse (`copies`/`copy` do not, and are not expected to — the subset rule below tolerates that
+ * by matching on the tokens that DO agree).
+ */
+function normalizeUnitTokens(unit: string): string[] {
+  return unit
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 0)
+    .map((t) => (t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t))
+    .sort();
+}
+
+/**
+ * True when two unit labels plausibly name the same kind of quantity: identical token sets, or one
+ * a subset of the other (a narrower phrasing standing in for a broader one). Unrelated kinds —
+ * `cards` vs `minutes` — share no tokens and are refused.
+ *
+ * Deliberately a heuristic; see the caller's comment for what it does and does not guarantee.
+ */
+function unitsCompatible(unitA: string, unitB: string): boolean {
+  const a = new Set(normalizeUnitTokens(unitA));
+  const b = new Set(normalizeUnitTokens(unitB));
+  if (a.size === 0 || b.size === 0) return true;
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  for (const token of small) {
+    if (!large.has(token)) return false;
+  }
+  return true;
 }
 
 // -------------------------------------------------------------------------------------------
