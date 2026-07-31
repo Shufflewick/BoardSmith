@@ -121,6 +121,16 @@ any, cover its claim, and one of:
   is independently a "found by both" fact. **Flag this line for CODE to verify the arithmetic —
   never compute or confirm the arithmetic yourself.** Name which "found by both" facts you believe
   are the operands; `composeArithmeticClaim` performs and checks the actual composition.
+
+  Some `Derived` lines state a genuine COMPOUND relationship — more than one arithmetic step,
+  where a later step's operand is an earlier step's own result (e.g. `seven` L36: "draw 2 /
+  discard 1 nets +1 card per round; starting at 3 and ending at 10 means 7 rounds" is really three
+  steps — a net-per-round subtraction, a span subtraction, then a division of the two). You do not
+  need to decompose the steps yourself or decide their order — that is `composeArithmeticChain`'s
+  job (`verify-enumerate.ts`), bounded at a small, explicitly-stated depth. Naming ALL the "found
+  by both" facts you believe are ingredients anywhere in the compound relationship, via
+  `arithmeticNote`, is enough; still propose `corroborated-by-composition` and still never compute
+  or confirm any part of the arithmetic yourself.
 - **`uncorroborated`** — no "found by both" fact covers this claim, and nothing found by both
   contradicts it either. This is the honest default when the passage plausibly supports the line
   but neither enumerator happened to state it as its own fact (this is common and expected for
@@ -128,11 +138,29 @@ any, cover its claim, and one of:
 - **`contradicted`** — one or more "found by both" facts state something that cannot both be true
   alongside the `Derived` line's claim (not merely "different wording" — an actual conflict of
   substance, e.g., a different number, a reversed order, an opposite outcome).
+- **`absence`** — the `Derived` line asserts that something is NOT present ("No edition or printing
+  number is stated anywhere on this page", "This section marks no rules as variants..."). Dual
+  enumeration structurally cannot corroborate this the normal way: neither enumerator will ever
+  list a fact that is not there. Propose `absence` and, ONLY when the claim maps cleanly onto one
+  or a small number of specific literal words or short phrases that would definitely appear in the
+  passage if the claimed-absent thing were actually present, name them verbatim in
+  `absenceTargets` (e.g. `["edition", "printing"]` for the edition/printing-number example above —
+  code will mechanically check whether either literal term appears anywhere in this passage's own
+  quote lines).
+
+  **Leave `absenceTargets` empty when no safe literal target exists.** A claim spanning several
+  loosely related concepts — "no rules marked as variants, optional modules, or advanced/expert
+  rules" — has no single word or short phrase that reliably stands in for all three; guessing one
+  (e.g. searching for "variant") risks a false negative (a variant rule described in different
+  words) or an unrelated match, producing false confidence rather than a real check. When you are
+  not confident a literal target is safe, leave `absenceTargets` empty — code reports the claim
+  honestly as `absence-unverifiable` rather than trusting a shaky keyword guess. Naming a target
+  you are not genuinely confident in is worse than naming none.
 
 **You decide the semantic label** (`corroborated`/`uncorroborated`/`contradicted`/
-`corroborated-by-composition`); the citation you attach to it is what code re-checks. Do not treat
-your own label as self-certifying — cite specific fact ids/statements for every proposal, because
-`classifyDerivedLines` (`verify-enumerate.ts`) validates every citation against the
+`corroborated-by-composition`/`absence`); the citation you attach to it is what code re-checks. Do
+not treat your own label as self-certifying — cite specific fact ids/statements for every proposal,
+because `classifyDerivedLines` (`verify-enumerate.ts`) validates every citation against the
 grounding-validated evidence and downgrades any citation to a nonexistent or ungrounded fact,
 regardless of what label you proposed.
 
@@ -164,9 +192,10 @@ Return exactly one object:
     {
       lineNumber: number,
       derivedLineText: string,
-      proposedClassification: 'corroborated' | 'corroborated-by-composition' | 'uncorroborated' | 'contradicted',
+      proposedClassification: 'corroborated' | 'corroborated-by-composition' | 'uncorroborated' | 'contradicted' | 'absence',
       citedBothStatements: string[],
-      arithmeticNote?: string
+      arithmeticNote?: string,
+      absenceTargets?: string[]
     }
   ]
 }
@@ -178,11 +207,16 @@ Return exactly one object:
   existing transcription never wrote down as a `Derived` line" — the design's measured advantage,
   the `missed`-fact signal) — quote the enumerator's own `sourceSentence`, do not paraphrase.
 - `derivedLineProposals.citedBothStatements` names which `both`-bucket entries (by their
-  `statement` text) support the proposal — leave it empty only for `uncorroborated` when nothing
-  applies.
+  `statement` text) support the proposal — leave it empty only for `uncorroborated`/`absence` when
+  nothing applies.
 - `arithmeticNote` is free prose naming which operands you believe compose the claim, for
-  `corroborated-by-composition` only — it is a POINTER for code to check, never a computed result
-  you are asserting yourself. Leave it unset for every other classification.
+  `corroborated-by-composition` only (including the compound/multi-step case — see above) — it is
+  a POINTER for code to check, never a computed result you are asserting yourself. Leave it unset
+  for every other classification.
+- `absenceTargets` is for `'absence'` only — literal, verbatim search term(s), never a paraphrase,
+  never invented by you beyond what the passage's own claim already names. Leave it unset (or an
+  empty array) when no safe literal target exists, per the guidance above — never populate it with
+  a low-confidence guess.
 - **Never return either enumerator's full list back.** Cite only the specific statements each
   bucket/proposal actually turns on.
 
