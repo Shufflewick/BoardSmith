@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177.1-05-PLAN.md — verify-game.md Step 7 rewritten onto the dual-enumeration design. Next: 177.1-06 (split-bar proof against the recorded 177-22 slice)."
-last_updated: "2026-07-31T22:00:00.000Z"
-last_activity: 2026-07-31
+stopped_at: "Completed 177.1-06-PLAN.md — pre-registered the split mechanical/model-dependent bar, committed alone, then replayed 177-22 run1's seven corpus through the product CLI with zero divergences on all 7 mechanical categories. Next: 177.1-07 (delete the retired design)."
+last_updated: "2026-07-31T22:15:00.000Z"
+last_activity: 2026-07-28
 progress:
   total_phases: 11
   completed_phases: 7
@@ -21,13 +21,40 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plans 01-05 of 8
+**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plans 01-06 of 8
 complete (annotation-family regex consolidation; ledger moved onto the dual-enumeration verdict
 set; reconcileSlice() + verify-derive-record retarget + arithmeticSpec; verifyDeriveCheckCommand +
 both commands registered in cli.ts; verify-game.md Step 7 rewritten onto the dual-enumeration
-design); plans 06-08 remain (split-bar proof, retired-design deletion, live end-to-end run).
+design; zero-dispatch pre-registration + product-path replay proof against 177-22 run1); plans
+07-08 remain (retired-design deletion, live end-to-end run).
 
 ## Current Position
+
+`177.1-06-PLAN.md` (2026-07-31) pre-registered CONTEXT decision 11's split mechanical/model-dependent
+bar from a ZERO-DISPATCH dry run (`boardsmith verify-derive-check --json`, no ledger present) plus
+direct in-process `reconcileSlice` calls, and committed `177.1-PRE-REGISTRATION.md` ALONE
+(`be9ce540`, exactly one file changed) before any comparison ran. Predicted, and later confirmed
+exactly: enumerator payload sha256s for both `seven` slices matching `177-22-MEASUREMENT`'s
+recorded payloads; candidate-line selection; grounded/rejected counts 9/0 and 19/0; composed-fact
+ids `ccb54c72d6b176e1`/`580cab72645565db`; classifications `[21: corroborated-by-composition]` and
+`[36: corroborated-by-composition, 38: corroborated]`; exit code 0 throughout. Also mechanically
+derived (script-computed from the union of `177-20`/`177-21`/`177-22`'s six analysis JSONs, never
+hand-picked) the permitted-label-set bar plan 08's live run must check membership against, and
+named the measured ~16.7% cross-run variance that makes an exact-label bar unsatisfiable by
+construction. Task 2 (`22169f5d`) independently transformed 177-22 run1's raw recorded returns
+into the product's input shape (0 unescaped-quote repairs needed), cross-checked byte-identical to
+177.1-03's own hand-amended `arithmeticSpec` fixtures, then replayed both `seven` slices through
+`boardsmith verify-derive-record` and `boardsmith verify-derive-check --json` against a `cp -R`
+staged copy — **zero divergences across all 7 mechanical categories**, documented item-by-item in
+`177.1-REPLAY-PROOF/diff-report.md`. Re-observed (not new) 177.1-03's already-disclosed
+`validateGrounding` tie-break behavior and the `arithmeticSpec` live-dispatch scope boundary (no
+live model call has ever populated that field — plan 08 owes that proof, not this plan). Original
+`~/BoardSmithGames/seven` proven untouched (263/263 sha256 OK, re-verified after the replay). Full
+`npm test`: **4230 tests / 245 files, 4228 passing, 2 failing** — unchanged from the wave baseline,
+same two `derive-compare.md` RETURN-field drift guards plan 07 will delete. See
+`.planning/phases/177.1-wire-check04-closed-design/177.1-06-SUMMARY.md`.
+
+---
 
 `177.1-05-PLAN.md` (2026-07-31) rewrote `verify-game.md`'s Step 7, router paragraph,
 Context-Economics carve-out, and Reference Files onto the dual-enumeration design: Step 7 now runs
