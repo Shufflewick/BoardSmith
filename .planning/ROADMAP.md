@@ -32,7 +32,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 175: Impact Map & Repair Gating** - Contradictory human gate, cross-file staleness flip, scoped re-playtest (code-changed chunks only) (completed 2026-07-30, 8 plans, all 3 requirements CLOSED. VERIFY-04/05 proven live on real reference-game data; VERIFY-06's mechanism is correct but its real-data payoff is honestly NOT demonstrated — 1 of 12 real rules-stale chunks across both games closes without re-playtesting, not because drift-check returned `unknown` as anticipated, but because most stale chunks' code genuinely drifted for reasons unrelated to the rules finding. See `175-PROOF.md` §§4-9.)
 - [x] **Phase 176: Stale-Chunk Repair** - Ruling re-validation against fresh transcription + the three audit lenses re-run per stale chunk (completed 2026-07-30)
 - [x] **Phase 177: Derived-Line Re-Derivation** - Rule-bearing `Derived` lines get an independent second opinion via dual enumeration + reconciliation; CHECK-04 CLOSED 2026-07-31 after the miscalibrated determinism gate was retired (see Result below)
-- [ ] **Phase 177.1: Wire CHECK-04's Closed Design Into The Pipeline** - `/bs-verify-game` Step 7 still dispatches the RETIRED blind-derivation design; the dual-enumeration design CHECK-04 was closed on has zero CLI wiring
+- [x] **Phase 177.1: Wire CHECK-04's Closed Design Into The Pipeline** - `/bs-verify-game` Step 7 now dispatches the dual-enumeration design CHECK-04 was actually closed on; proven against recorded input AND a real live dispatch (completed 2026-07-31, 8 plans, all 5 success criteria MET — see Result below)
 - [ ] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay
 - [ ] **Phase 179: Source-Free Verification Mode** - `/bs-verify-game` degrades honestly when source is unavailable, naming which defect classes went unchecked
 
@@ -396,7 +396,26 @@ today no designer can reach that tool.
 - [x] 177.1-05-PLAN.md — Rewrite verify-game.md Step 7, its Context-Economics carve-out, and Reference Files onto the dual-enumeration design
 - [x] 177.1-06-PLAN.md — Pre-register the split bar from a zero-dispatch dry run, then replay 177-22 run1 through the product CLI
 - [x] 177.1-07-PLAN.md — DELETE the retired blind per-line design, its tests, contracts, installer entries, and pins
-- [ ] 177.1-08-PLAN.md — Live end-to-end Step 7 run on `seven` under the split bar, plus CHECK-04's closing delivery note
+- [x] 177.1-08-PLAN.md — Live end-to-end Step 7 run on `seven` under the split bar, plus CHECK-04's closing delivery note
+
+**Result:** All 5 success criteria MET. A CLI surface (`verify-derive-check`/`verify-derive-record`)
+exposes the dual-enumeration check end-to-end, retargeted onto it from the retired ledger's
+atomic-upsert-append/fence-rejection/read-path-revalidation machinery (SC-1). `/bs-verify-game`
+Step 7 dispatches `enumerate-facts.md`/`reconcile-facts.md` and formats the new command's
+`--json`, formatted never computed (SC-2). The retired blind-derivation design is fully REMOVED —
+`derive-recheck.md`, `derive-compare.md`, `verify-derive-recheck`, and all blind-payload machinery
+gone, exactly one live derived-line-check path remains (SC-3). Proven by a REAL end-to-end
+`/bs-verify-game`-path run on `seven`: `177.1-06` replayed 177-22 run1's recorded data through the
+product CLI (zero mechanical divergence across 7 categories); `177.1-08` dispatched real live
+`claude -p` calls to the exact pinned models — all 3 live classifications landed within their
+pre-registered permitted sets, and the live Sonnet-5 reconciler independently produced a
+well-formed `arithmeticSpec` for both a `single` and a `chain` claim, accepted as correct by code
+(SC-4). Advisory, exit 0, never gates Close — proven live, including with a deliberately
+constructed `contradicted` record present (SC-5). CHECK-04's closure evidence is unchanged; this
+phase closed a reachability gap, recorded in a Phase 177.1 delivery note appended to CHECK-04's
+`REQUIREMENTS.md` entry. WR-07 (`quoteLinesOnly` deny-list → allow-list inversion) stays OPEN,
+dated 2026-07-30, routed to Phase 178. See `177.1-LIVE-PROOF/PROOF.md` and
+`177.1-08-SUMMARY.md`.
 
 ### Phase 178: Worked-Example Tests
 **Goal**: Worked examples in the rulebook stop being a one-time seed for hand-written tests and become an accumulating, automatically-derived executable test suite in both build and verify.

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177.1-07-PLAN.md — deleted the retired blind per-line derive-recheck design (module, contracts, installer entries, drift-guard pins); suite ends green 244 files/4119 tests/0 failing. Next: 177.1-08 (live end-to-end run on seven)."
-last_updated: "2026-07-31T22:30:00.000Z"
+stopped_at: "Completed 177.1-08-PLAN.md — Phase 177.1 COMPLETE (8/8). CHECK-04's design is now designer-reachable, proven live. Next: Phase 178."
+last_updated: "2026-07-31T23:15:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 11
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 73
-  completed_plans: 78
-  percent: 64
+  completed_plans: 80
+  percent: 73
 ---
 
 # Project State
@@ -21,14 +21,50 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plans 01-07 of 8
-complete (annotation-family regex consolidation; ledger moved onto the dual-enumeration verdict
-set; reconcileSlice() + verify-derive-record retarget + arithmeticSpec; verifyDeriveCheckCommand +
-both commands registered in cli.ts; verify-game.md Step 7 rewritten onto the dual-enumeration
-design; zero-dispatch pre-registration + product-path replay proof against 177-22 run1; retired
-blind per-line design deleted, suite green); plan 08 remains (live end-to-end run on `seven`).
+**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline — **COMPLETE (8/8
+plans)**. All 8 plans done (annotation-family regex consolidation; ledger moved onto the
+dual-enumeration verdict set; reconcileSlice() + verify-derive-record retarget + arithmeticSpec;
+verifyDeriveCheckCommand + both commands registered in cli.ts; verify-game.md Step 7 rewritten onto
+the dual-enumeration design; zero-dispatch pre-registration + product-path replay proof against
+177-22 run1; retired blind per-line design deleted; live end-to-end dispatch proof on `seven` +
+CHECK-04 delivery note). Next: Phase 178 (CHECK-06 worked-example replay, TEST-01, WR-07's deferred
+`quoteLinesOnly` allow-list inversion).
 
 ## Current Position
+
+`177.1-08-PLAN.md` (2026-07-31) — the final plan of Phase 177.1 — ran the INSTALLED
+`/bs-verify-game` Step 7 sequence for real against a `cp -R` staged `seven`: 6 genuine `claude -p`
+dispatches to the exact pinned models (`claude-opus-5`/`claude-haiku-4-5-20251001` enumerators,
+`claude-sonnet-5` reconciler, per `DERIVE_CHECK_MODELS`), all exiting 0 with empty stderr. All 7
+mechanical categories from `177.1-06`'s pre-registration MATCH; all 3 live classifications (L21,
+L36, L38) land IN-SET against the pre-registered permitted label sets, zero out-of-set results.
+**Headline proof: the live Sonnet-5 reconciler independently produced a well-formed
+`arithmeticSpec` for both a `single` (7×4×4=112) and a `chain` (2−1=1; 10−3=7; 7÷1=7) claim, and
+code accepted both `claimedResult`s as correct** — the one proof no prior wave could supply. The
+disclosed `validateGrounding` tie-break hazard did NOT reproduce on this run's specific live
+wording (reported as a live-only finding, not tuned). Original `~/BoardSmithGames/seven` confirmed
+byte-identical after the full run (263/263 sha256 OK); `177.1-PRE-REGISTRATION.md` confirmed still
+unmodified since its `be9ce540` commit. Independence grep: zero annotation-family matches in the
+actual dispatched `enumeratorPayload` bytes, both slices (the reconciler prompt/return legitimately
+carries `Derived` text, recorded separately as expected). Deviation disclosed: dispatched via
+`claude -p --model <pinned-id>` rather than the Task tool, since this executor's own tool surface
+exposed no Task/subagent dispatch — a genuinely independent, real, out-of-process live call to the
+exact pinned model, not a simulation. Task 2 appended CHECK-04's Phase 177.1 delivery note to
+`REQUIREMENTS.md` (reachability recorded, closure NOT reopened, WR-07 re-asserted open/dated
+2026-07-30/routed to Phase 178), citing every artifact by path and recording every finding plans
+02-07 surfaced. Constructed the deliberate `contradicted`-ledger-state acceptance test by hand
+(live run produced none) — confirmed `verify-derive-check` still exits 0. **Full `npm test`: 244
+files / 4119 tests / 0 failing**, unchanged from the wave's entering baseline (this plan touched
+zero `src/` files). `npm run audit:dead-code` sub-counts unchanged from 177.1-07's exit state (5
+files / 1 unresolved import / 2 unlisted deps / 6 circular deps). See
+`.planning/phases/177.1-wire-check04-closed-design/177.1-08-SUMMARY.md`.
+
+**Phase 177.1 is COMPLETE (8/8 plans).** CHECK-04's closure evidence stands unchanged; what this
+phase delivered is reachability — a designer running `/bs-verify-game` now reaches the exact
+dual-enumeration + reconciliation design CHECK-04 was actually closed on, proven against both
+recorded input and a real live dispatch.
+
+---
 
 `177.1-07-PLAN.md` (2026-07-31) deleted the retired blind per-line derive-recheck design: the
 module (`verify-derive-recheck.ts`, 1293 lines), its test file (100 tests), both retired skill
