@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-11-PLAN.md — the fourth of six gap-closure plans (177-08..13), closing CR-07 from 177-REVIEW.md and the phase's own self-reported goal failure from 177-PROOF.md §3 (the targeting-collapse where every multi-candidate slice in the real corpus re-derived the same dominant fact regardless of nominal target). blindDeriveHandle(entry) replaces the resolvable Slice:/Target line: pointer with an opaque sha256-truncated digest — the ONLY target identifier a blind prompt now carries. focusQuoteWindow(sliceText, lineNumber) narrows the payload to the target's own citation passage, treating markdown headings as passage boundaries too (the plan-checker's required fix, proven against the real fixture 174-FIXTURES/seven/live/01-definitions-and-components.md:33). derivePayloadSet computes, mechanically, which candidates in a slice share an identical non-empty focus passage (targetingAmbiguous/sharedFocusWith) — the irreducible residual reported per-finding, never hidden. factAlignment ('same-fact' | 'different-fact') is a required FIELD on agrees/disagrees records, never a fifth DERIVE_VERDICTS member (decision 6 held, still exactly four). VerifyDeriveRecheckResult gains offTargetDisagreements/genuineDisagreements/targetingAmbiguousCount, additive to the unchanged four-key verdictCounts shape. Both subagent contracts updated by reference plus a new drift guard one level deeper than 177-10's command-existence guard. Three negative pins empirically proven to fail when reverted: removing the upward-walk markdown-heading check failed the fixture-keyed regression test with the real observed wrong-passage output; reintroducing the Slice:/Target line: pointer failed 2 tests asserting its absence; deleting the factAlignment validation block failed 3 throw tests; all three reverts confirmed git diff --stat clean before restoring. npx vitest run src/cli/commands/verify-derive-recheck.test.ts: 100/100 green (up from 77). npx vitest run src/cli/slash-command/bs/verify.test.ts: 100/100 green (up from 93). Full npm test (mandatory, not a subdirectory subset): 4033/4033 green across 241 files (baseline 4003 + 30 net new, zero regressions). npx tsc --noEmit clean except the pre-existing unrelated docs/seed-to-state.test.ts rootDir error. Task 1 and Task 2 committed together (both touch the exact same interleaved files); Task 3 committed separately. CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 4 of 6 gap-closure plans; 177-12 (re-run the live proof against a pre-registered prediction) through 177-13 (re-measure the phase goal, dispose of CHECK-04) remain. See .planning/phases/177-derived-line-re-derivation/177-11-SUMMARY.md."
-last_updated: "2026-07-31T01:10:00Z"
-last_activity: 2026-07-30 -- Phase 177 gap-closure plan 11 executed (CR-07 closed; targeting-collapse fix + factAlignment instrument added; CHECK-04 stays OPEN/PARTIAL)
+stopped_at: "Completed 177-12-PLAN.md — the fifth of six gap-closure plans (177-08..13): re-ran the full live CHECK-04 corpus against 177-11's targeting fix with 28 real claude -p dispatches (16 blind + 12 compare) through the real boardsmith verify-derive-record CLI, and measured that the fix DID NOT close the targeting-collapse artifact problem 177-PROOF.md self-reported. 177-TARGETING-PREDICTION.md (commit f0b6a038) was committed alone, before any dispatch, naming a concrete FAILURE outcome (offTargetDisagreements remaining >50% of disagrees) as concretely as the success outcome — that rule fired exactly as predicted: offTargetDisagreements is 8/8 (100%) of this run's disagrees verdicts, exceeding 177-PROOF.md's own pre-fix ratio of 8/9 (89%); genuineDisagreements is 0/16. targetingAmbiguousCount (4/16, all in seven) was the one fully mechanical metric and was predicted exactly by a zero-dispatch dry-run. New finding this proof surfaces and hands to 177-13: a correctly and UNIQUELY narrowed focus passage does not reliably cause the blind subagent to derive the fact that passage supports — 6 of 8 off-target disagreements occurred on lines with a unique focus window, meaning focusQuoteWindow's payload-construction fix is necessary but not sufficient; the remaining gap is in the blind subagent's own derivation judgment, not in anything verify-derive-recheck.ts computes. Both reference-game originals confirmed byte-identical (whole-tree sha256) before and after, both still at their pinned commits. A real authoring defect in the already-committed, immutable 177-TARGETING-PREDICTION.md was found during predicted-vs-measured reconciliation (one-two-punch:95 named in two contradictory buckets; seven:11/seven:42 never individually predicted) and disclosed rather than silently resolved. No source code changed — full npm test 4033/4033 green (unchanged baseline). CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 5 of 6 gap-closure plans; 177-13 (re-measure the phase goal, dispose of CHECK-04) remains. See .planning/phases/177-derived-line-re-derivation/177-12-SUMMARY.md."
+last_updated: "2026-07-31T03:15:00Z"
+last_activity: 2026-07-30 -- Phase 177 gap-closure plan 12 executed (live re-proof of the targeting fix run on real dispatch data; measured FAILURE reported honestly per pre-registered interpretation rule; CHECK-04 stays OPEN/PARTIAL)
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 60
-  completed_plans: 58
-  percent: 97
+  completed_plans: 59
+  percent: 98
 ---
 
 # Project State
@@ -25,8 +25,46 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 11/13 plans complete (7 original +
-4 of 6 gap-closure plans).
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 12/13 plans complete (7 original +
+5 of 6 gap-closure plans).
+
+`177-12-PLAN.md` (2026-07-30) is the fifth of six gap-closure plans (177-08..13): pre-registration
+and the live re-proof. Task 1 committed `177-TARGETING-PREDICTION.md` (`f0b6a038`) ALONE, before
+any dispatch — `git show --stat` for that commit lists only the one file — naming a concrete
+FAILURE outcome (interpretation rule b: `offTargetDisagreements` remaining more than half of
+`disagrees`, mirroring `177-PROOF.md`'s own 8-of-9 ratio, means the fix did not work) as
+concretely as the success outcome, and predicting `targetingAmbiguousCount` exactly (4/16) via a
+zero-dispatch mechanical dry-run of `derivePayloadSet` against both reference games' real live
+slices. Task 2 ran 28 real `claude -p` dispatches (16 blind + 12 compare, `claude -p
+"<prompt>" --allowedTools Read` OS subprocesses, never native Task/Agent dispatch) against fresh
+`cp -R` copies, with every one of the 16 verdicts recorded by spawning the real, registered
+`node dist/cli.js verify-derive-record ...` — never by importing `createDeriveVerdictRecord`/
+`recordDeriveVerdict` into the driver's own process (closing exactly the CR-05 gap the prior
+run's library-import approach left open). `verify-derive-recheck --json` for both scratch copies
+reports zero `pending`. Independence greps (all 16 blind prompts, plus the new per-candidate own
+slice-path/own-line-number check) found zero real coordinate leaks. **Task 3 closed the proof with
+the measured result reported exactly as the pre-registered interpretation rule committed to
+reporting it: THE TARGETING FIX DID NOT WORK.** `offTargetDisagreements` is 8 of 8 `disagrees`
+verdicts this run (100%) — worse than `177-PROOF.md`'s own pre-fix ratio (8 of 9, 89%) —
+`genuineDisagreements` is 0/16, and the raw `disagrees` rate barely moved (50%, 8/16, vs. 56%,
+9/16). `177-PROOF-2.md` names the new finding this run surfaces: a correctly and UNIQUELY narrowed
+focus passage (`targetingAmbiguous: false`) does not reliably steer the blind subagent's own
+derivation to the fact that passage supports — 6 of the 8 off-target disagreements occurred on
+lines with a unique (non-ambiguous) focus window, so `focusQuoteWindow`'s payload-construction fix
+is necessary but not sufficient; the remaining defect is in subagent judgment, not payload
+construction. A real authoring defect discovered in the already-committed, immutable
+`177-TARGETING-PREDICTION.md` (one-two-punch:95 named in two contradictory buckets;
+`seven:11`/`seven:42` never individually predicted) is disclosed explicitly rather than corrected
+in place or silently resolved. Both `~/BoardSmithGames` originals confirmed byte-identical
+(whole-tree sha256, empty diff) before and after all 28 dispatches and 16 CLI writes; both still
+at their pinned commits. No source code was modified by this plan — `npm test`: 4033/4033 green,
+identical to the pre-plan baseline. No stray processes left running. **CHECK-04 stays OPEN/PARTIAL
+in `REQUIREMENTS.md`** — this is 5 of 6 gap-closure plans; `177-13` (re-measure the phase goal,
+dispose of CHECK-04, inheriting this plan's measured negative result and its new finding about
+subagent judgment vs. payload construction) remains. See
+`.planning/phases/177-derived-line-re-derivation/177-12-SUMMARY.md`.
+
+---
 
 `177-11-PLAN.md` (2026-07-30) is the fourth of six gap-closure plans (177-08..13), closing CR-07
 from `177-REVIEW.md` and the phase's own self-reported goal failure from `177-PROOF.md` §3 — the
