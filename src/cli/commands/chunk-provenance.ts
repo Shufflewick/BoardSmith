@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
 import chalk from 'chalk';
-import { normalizeEdition } from './ingest-archive.js';
+import { normalizeEdition, parseAdditionalSources } from './ingest-archive.js';
 import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
@@ -66,6 +66,18 @@ export interface VerificationScope {
   sourcePath?: string;
   /** `INDEX.md`'s `Source hash:` value — the edition anchor a verification is checked against. */
   sourceHash?: string;
+  /**
+   * 177-19: `INDEX.md`'s `## Additional Sources` table (`ingest-archive.ts`'s fix for a project
+   * with more than one source document), EACH ENTRY INDEPENDENTLY VERIFIED the same way the
+   * primary source is — the archived file at `path` must exist and its SHA-256 must match the
+   * recorded `sourceHash`. An entry whose archived file is missing or whose hash no longer
+   * matches is OMITTED here entirely (never included with a `verified: false` flag a careless
+   * caller could ignore) — this array only ever contains sources this function itself confirmed,
+   * mirroring the primary `SCOPE_FULL` contract's own all-or-nothing verification. Always present
+   * (possibly `[]`); absent only when `scope` itself could not read `rulebook/INDEX.md` at all
+   * (the `no-rulebook-project`/`index-missing` reasons).
+   */
+  additionalSources?: Array<{ sourcePath: string; sourceHash: string }>;
 }
 
 function sha256(buf: Buffer): string {
@@ -108,12 +120,19 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
     return { scope: SCOPE_CODE_ONLY, reason: 'index-missing' };
   }
 
+  // 177-19: verified independently of the primary Source:/Source hash: outcome below — a
+  // project's ADDITIONAL sources (`## Additional Sources`, `ingest-archive.ts`) are their own
+  // provenance records, each checked the identical way (archived file exists AND its SHA-256
+  // matches). An entry that fails either check is silently dropped, never included with a
+  // caller-ignorable flag — see `VerificationScope.additionalSources`'s own comment.
+  const additionalSources = await verifyAdditionalSources(dir, index);
+
   const editionMatch = /^Edition:\s*(.*)$/m.exec(index);
   const edition = editionMatch ? normalizeEdition(editionMatch[1]) : undefined;
 
   const hashMatch = /^Source hash:\s*(.*)$/m.exec(index);
   if (!hashMatch) {
-    return { scope: SCOPE_CODE_ONLY, reason: 'pre-provenance-project', edition };
+    return { scope: SCOPE_CODE_ONLY, reason: 'pre-provenance-project', edition, additionalSources };
   }
   const sourceHash = hashMatch[1].trim();
 
@@ -130,7 +149,14 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
     }
   }
   if (!archivedBuf) {
-    return { scope: SCOPE_CODE_ONLY, reason: 'source-missing', edition, sourcePath, sourceHash };
+    return {
+      scope: SCOPE_CODE_ONLY,
+      reason: 'source-missing',
+      edition,
+      sourcePath,
+      sourceHash,
+      additionalSources,
+    };
   }
 
   if (sha256(archivedBuf) !== sourceHash) {
@@ -140,10 +166,37 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
       edition,
       sourcePath,
       sourceHash,
+      additionalSources,
     };
   }
 
-  return { scope: SCOPE_FULL, edition, sourcePath, sourceHash };
+  return { scope: SCOPE_FULL, edition, sourcePath, sourceHash, additionalSources };
+}
+
+/**
+ * Verifies every `## Additional Sources` entry the same way the primary source is verified: the
+ * archived file at `path` (relative to `dir`) must exist AND its SHA-256 must match the recorded
+ * `sourceHash`. Entries that fail either check are dropped, not reported — see
+ * `VerificationScope.additionalSources`'s comment for why a caller-ignorable partial result is
+ * deliberately not offered here.
+ */
+async function verifyAdditionalSources(
+  dir: string,
+  index: string,
+): Promise<Array<{ sourcePath: string; sourceHash: string }>> {
+  const records = parseAdditionalSources(index);
+  const verified: Array<{ sourcePath: string; sourceHash: string }> = [];
+  for (const record of records) {
+    try {
+      const buf = await fs.readFile(join(dir, record.path));
+      if (sha256(buf) === record.sourceHash) {
+        verified.push({ sourcePath: record.path, sourceHash: record.sourceHash });
+      }
+    } catch {
+      // archived file missing — silently excluded, per this function's contract.
+    }
+  }
+  return verified;
 }
 
 /**

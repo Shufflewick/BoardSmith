@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { renderIndex } from './ingest-archive.js';
+import { renderIndex, ingestArchiveCommand } from './ingest-archive.js';
 import {
   ENUMERATE_TOKEN,
   buildEnumeratorPayload,
@@ -978,6 +978,29 @@ describe('QuoteVerifiedProvenance.covers() — multi-source honesty (177-19)', (
     // "faq" (3 chars) and the slice's own short stem are both below the trust threshold —
     // conservative default is uncovered, not a risky match attempt.
     expect(provenance.covers('rulebook/faq.md')).toBe(false);
+  });
+
+  it('the loop closes: once the SECOND source is genuinely archived via `boardsmith ingest-archive`, covers() resolves true without any filename heuristic at all', async () => {
+    // First build the two-source project the ordinary way (root files present, only rules.pdf
+    // archived) — same starting shape as the doom-machine measurement.
+    const { project } = await buildProjectWithSources('closes-the-loop', 'rules.pdf', [
+      'cards.pdf',
+    ]);
+    const before = await QuoteVerifiedProvenance.obtain(project);
+    expect(before!.unarchivedSources).toEqual(['cards.pdf']);
+    expect(before!.covers('rulebook/CARDS.md')).toBe(false);
+
+    // Now actually archive cards.pdf too, via the real ingest-archive command (177-19's
+    // multi-source fix) — no test-only shortcut, the same command a real ingest session runs.
+    await ingestArchiveCommand(join(project, 'cards.pdf'), { project, json: true });
+
+    const after = await QuoteVerifiedProvenance.obtain(project);
+    expect(after!.unarchivedSources).toEqual([]);
+    // Covered unconditionally now (case 1: genuinely zero unarchived sources) — not because the
+    // filename heuristic happened to match, but because both sources are independently archived
+    // and hash-verified.
+    expect(after!.covers('rulebook/CARDS.md')).toBe(true);
+    expect(after!.covers('rulebook/01-objective-and-setup.md')).toBe(true);
   });
 });
 

@@ -17,6 +17,10 @@ import {
   GAPS_EMPTY,
   GAPS_BEGIN,
   GAPS_END,
+  ADDITIONAL_SOURCES_HEADING,
+  ADDITIONAL_SOURCES_BEGIN,
+  ADDITIONAL_SOURCES_END,
+  parseAdditionalSources,
 } from './ingest-archive.js';
 import { computeVerificationScope } from './chunk-provenance.js';
 
@@ -95,6 +99,138 @@ describe('ingest-archive — archiving', () => {
     await expect(
       ingestArchiveCommand(sourcePath, { project, json: true }),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ===========================================================================================
+// ingest-archive — MULTIPLE sources (177-19: doom-machine measurement, rules.pdf + cards.pdf)
+//
+// Before this plan, a second `ingest-archive <different-file>` call silently overwrote the
+// first source's Source:/Source hash: header — the first source's provenance record was
+// discarded entirely, with no error and no trace it had happened.
+// ===========================================================================================
+
+describe('ingest-archive — multiple sources (177-19)', () => {
+  let rulesPath: string;
+  let cardsPath: string;
+  const RULES_BYTES = Buffer.from('%PDF-1.4 fake rules bytes\n');
+  const CARDS_BYTES = Buffer.from('%PDF-1.4 fake cards bytes, different content\n');
+  const RULES_HASH = createHash('sha256').update(RULES_BYTES).digest('hex');
+  const CARDS_HASH = createHash('sha256').update(CARDS_BYTES).digest('hex');
+
+  beforeEach(async () => {
+    rulesPath = join(dir, 'rules.pdf');
+    cardsPath = join(dir, 'cards.pdf');
+    await fs.writeFile(rulesPath, RULES_BYTES);
+    await fs.writeFile(cardsPath, CARDS_BYTES);
+  });
+
+  async function twoSourceProject(): Promise<string> {
+    const project = join(dir, 'doom-machine');
+    await fs.mkdir(project, { recursive: true });
+    await ingestArchiveCommand(rulesPath, { project, json: true });
+    await ingestArchiveCommand(cardsPath, { project, json: true });
+    return project;
+  }
+
+  it('a second, DIFFERENT source does NOT overwrite the primary Source:/Source hash: header', async () => {
+    const project = await twoSourceProject();
+    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    // The primary pair is still rules.pdf's, untouched.
+    expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/rules.pdf');
+    expect(/^Source hash:\s*(.*)$/m.exec(index)![1].trim()).toBe(RULES_HASH);
+  });
+
+  it('the second source is archived to disk and recorded in ## Additional Sources', async () => {
+    const project = await twoSourceProject();
+    const archivedCards = await fs.readFile(join(project, 'rulebook', 'source', 'cards.pdf'));
+    expect(archivedCards.equals(CARDS_BYTES)).toBe(true);
+
+    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    expect(index).toContain(ADDITIONAL_SOURCES_HEADING);
+    const records = parseAdditionalSources(index);
+    expect(records).toEqual([{ path: 'rulebook/source/cards.pdf', sourceHash: CARDS_HASH }]);
+  });
+
+  it('computeVerificationScope reports the additional source, independently hash-verified, without disturbing the primary scope', async () => {
+    const project = await twoSourceProject();
+    const scope = await computeVerificationScope(project);
+    expect(scope.scope).toBe('full');
+    expect(scope.sourcePath).toBe('rulebook/source/rules.pdf');
+    expect(scope.sourceHash).toBe(RULES_HASH);
+    expect(scope.additionalSources).toEqual([
+      { sourcePath: 'rulebook/source/cards.pdf', sourceHash: CARDS_HASH },
+    ]);
+  });
+
+  it('a THIRD source appends a second row, never disturbing the first additional-source entry', async () => {
+    const project = await twoSourceProject();
+    const appendixPath = join(dir, 'appendix.pdf');
+    const APPENDIX_BYTES = Buffer.from('%PDF-1.4 fake appendix bytes\n');
+    await fs.writeFile(appendixPath, APPENDIX_BYTES);
+    await ingestArchiveCommand(appendixPath, { project, json: true });
+
+    const scope = await computeVerificationScope(project);
+    expect(scope.additionalSources).toHaveLength(2);
+    expect(scope.additionalSources).toEqual(
+      expect.arrayContaining([
+        { sourcePath: 'rulebook/source/cards.pdf', sourceHash: CARDS_HASH },
+        {
+          sourcePath: 'rulebook/source/appendix.pdf',
+          sourceHash: createHash('sha256').update(APPENDIX_BYTES).digest('hex'),
+        },
+      ]),
+    );
+  });
+
+  it('re-archiving the SAME additional source (byte-identical) is idempotent — no duplicate row', async () => {
+    const project = await twoSourceProject();
+    const before = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    await ingestArchiveCommand(cardsPath, { project, json: true });
+    const after = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    expect(after).toBe(before);
+    expect(parseAdditionalSources(after)).toHaveLength(1);
+  });
+
+  it('re-archiving the additional source with CHANGED bytes updates its recorded hash in place', async () => {
+    const project = await twoSourceProject();
+    // "Never clobber" applies here too — remove the stale archived copy first, matching the
+    // documented recovery path for the primary source.
+    await fs.rm(join(project, 'rulebook', 'source', 'cards.pdf'));
+    const changedCards = Buffer.from('%PDF-1.4 fake cards bytes, CHANGED\n');
+    await fs.writeFile(cardsPath, changedCards);
+    await ingestArchiveCommand(cardsPath, { project, json: true });
+
+    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const records = parseAdditionalSources(index);
+    expect(records).toHaveLength(1);
+    expect(records[0].sourceHash).toBe(createHash('sha256').update(changedCards).digest('hex'));
+  });
+
+  it('SINGLE-SOURCE projects are byte-identical to pre-177-19 output — no ## Additional Sources section appears', async () => {
+    const project = await run();
+    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    expect(index).not.toContain(ADDITIONAL_SOURCES_HEADING);
+    expect(index).not.toContain(ADDITIONAL_SOURCES_BEGIN);
+    expect(index).not.toContain(ADDITIONAL_SOURCES_END);
+  });
+
+  it('the JSON result reports recordedAsAdditionalSource for the second call, not for the first', async () => {
+    const project = join(dir, 'doom-machine-json');
+    await fs.mkdir(project, { recursive: true });
+    const firstOut: string[] = [];
+    const origLog = console.log;
+    console.log = (s: string) => firstOut.push(s);
+    try {
+      await ingestArchiveCommand(rulesPath, { project, json: true });
+      await ingestArchiveCommand(cardsPath, { project, json: true });
+    } finally {
+      console.log = origLog;
+    }
+    const first = JSON.parse(firstOut[0]);
+    const second = JSON.parse(firstOut[1]);
+    expect(first.recordedAsAdditionalSource).toBe(false);
+    expect(second.recordedAsAdditionalSource).toBe(true);
   });
 });
 

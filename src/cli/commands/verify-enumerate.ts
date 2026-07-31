@@ -946,12 +946,15 @@ export class QuoteVerifiedProvenance {
     readonly edition: string | undefined,
     readonly archivedSourceBasename: string | undefined,
     /**
-     * Basenames of project-root files that LOOK like rulebook source documents but are NOT the
-     * one this instance's `sourceHash` was computed from. Empty for the ordinary, common case (a
-     * genuinely single-source project) — `seven` and `one-two-punch` both resolve to `[]`. Public
-     * so a caller (e.g. a future CLI report) can surface "this project has an unarchived source"
-     * explicitly, per this plan's requirement, rather than that fact being swallowed inside a
-     * silent per-slice `covers()` decision.
+     * Basenames of project-root files that LOOK like rulebook source documents but are NEITHER
+     * the primary source this instance's `sourceHash` was computed from NOR one of
+     * `computeVerificationScope`'s hash-verified `## Additional Sources` entries (177-19's
+     * `ingest-archive.ts` fix — once a second source is genuinely archived-and-verified via
+     * `boardsmith ingest-archive <second-file>`, its basename moves OUT of this array). Empty for
+     * the ordinary, common case (a genuinely single-source project) — `seven` and
+     * `one-two-punch` both resolve to `[]`. Public so a caller (e.g. a future CLI report) can
+     * surface "this project has an unarchived source" explicitly, per this plan's requirement,
+     * rather than that fact being swallowed inside a silent per-slice `covers()` decision.
      */
     readonly unarchivedSources: readonly string[],
   ) {}
@@ -960,10 +963,21 @@ export class QuoteVerifiedProvenance {
     const scope = await computeVerificationScope(projectDir);
     if (scope.scope !== SCOPE_FULL || !scope.sourceHash) return null;
 
+    // A source is "archived" for THIS guard's purposes when it is either the primary source
+    // (`scope.sourcePath`) or one of `computeVerificationScope`'s independently hash-verified
+    // `additionalSources` (177-19's `ingest-archive.ts` fix — `boardsmith ingest-archive
+    // cards.pdf` after `rules.pdf` no longer silently overwrites the primary; it augments this
+    // list instead). A root-level file whose basename matches either is genuinely archived and
+    // verified, not merely "present" — it is excluded from `unarchivedSources` on that strength.
     const archivedSourceBasename = scope.sourcePath ? basename(scope.sourcePath) : undefined;
+    const archivedBasenames = new Set(
+      [archivedSourceBasename, ...(scope.additionalSources ?? []).map((s) => basename(s.sourcePath))]
+        .filter((n): n is string => Boolean(n))
+        .map((n) => n.toLowerCase()),
+    );
     const rootCandidates = await detectRootSourceCandidates(projectDir);
     const unarchivedSources = rootCandidates.filter(
-      (name) => name.toLowerCase() !== (archivedSourceBasename ?? '').toLowerCase(),
+      (name) => !archivedBasenames.has(name.toLowerCase()),
     );
 
     return new QuoteVerifiedProvenance(

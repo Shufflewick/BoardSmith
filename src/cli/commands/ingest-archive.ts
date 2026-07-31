@@ -108,6 +108,125 @@ function isoDate(now: Date): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+/**
+ * `## Additional Sources` — 177-19's fix for a real, measured gap: a project with MORE than one
+ * source document (doom-machine: `rules.pdf` + `cards.pdf`) had no way to represent the second
+ * one at all. `boardsmith ingest-archive` archived it (never clobbers a differently-NAMED file —
+ * that path already worked), but `INDEX.md`'s header always writes into the SAME `Source:`/
+ * `Source hash:` labels regardless of what was already there, so the second call silently
+ * discarded the first source's provenance record.
+ *
+ * DELIBERATELY A SEPARATE SECTION, NEVER A SECOND `Source:`/`Source hash:` PAIR: `HEADER_LABELS`
+ * is the PRIMARY provenance contract `computeVerificationScope()` reads (its regexes match the
+ * FIRST `^Source:`/`^Source hash:` line — 177-16's own comment on that function documents this as
+ * load-bearing). Reusing those same labels for a second source would either silently become the
+ * "first match" scope reads (wrong — the primary source must stay primary) or require rewriting
+ * `computeVerificationScope`'s contract (risky — `verify-classify.ts`, `verify-enumerate.ts`, and
+ * `chunk-provenance.ts` itself all depend on its current single-primary-source shape). A distinct,
+ * ADDITIVE section leaves every existing consumer, and every existing single-source project's
+ * `INDEX.md` byte output, completely untouched — this section is present ONLY when a project
+ * genuinely has more than one source.
+ */
+export const ADDITIONAL_SOURCES_HEADING = '## Additional Sources';
+export const ADDITIONAL_SOURCES_BEGIN = '<!-- boardsmith:additional-sources:begin -->';
+export const ADDITIONAL_SOURCES_END = '<!-- boardsmith:additional-sources:end -->';
+
+export interface AdditionalSourceRecord {
+  /** Relative to the project directory, e.g. `rulebook/source/cards.pdf`. */
+  path: string;
+  sourceHash: string;
+}
+
+/**
+ * Parses the `## Additional Sources` table, if present. Pure — never touches disk. Returns `[]`
+ * (never throws) when the section is absent, matching `renderVerifiedAgainst`'s sibling
+ * `VERIFIED_AGAINST_EMPTY` precedent: an absent machine-owned section is "nothing recorded yet",
+ * not an error.
+ */
+export function parseAdditionalSources(indexText: string): AdditionalSourceRecord[] {
+  const begin = indexText.indexOf(ADDITIONAL_SOURCES_BEGIN);
+  const end = indexText.indexOf(ADDITIONAL_SOURCES_END);
+  if (begin === -1 || end === -1 || end < begin) return [];
+  const body = indexText.slice(begin + ADDITIONAL_SOURCES_BEGIN.length, end);
+  const records: AdditionalSourceRecord[] = [];
+  for (const row of body.matchAll(/^\|\s*([^|]+?)\s*\|\s*([0-9a-f]{64})\s*\|\s*$/gm)) {
+    records.push({ path: row[1].trim(), sourceHash: row[2].trim() });
+  }
+  return records;
+}
+
+/** Renders the `## Additional Sources` section body (between the fences), one row per record. */
+function renderAdditionalSourcesSection(records: AdditionalSourceRecord[]): string {
+  const rows = records.map((r) => `| ${r.path} | ${r.sourceHash} |`).join('\n');
+  return `${ADDITIONAL_SOURCES_HEADING}
+
+<!-- MACHINE-OWNED. Do not write between the fences below, and do not move or delete them.
+
+     A project's PRIMARY \`Source:\`/\`Source hash:\` pair (in the header above) is the one
+     \`computeVerificationScope()\` checks — that contract is unchanged. Additional archived source
+     documents are recorded here instead, so a second \`boardsmith ingest-archive <file>\` call
+     augments this project's provenance rather than silently discarding the first source's record.
+     Written and repaired by \`boardsmith ingest-archive\`; do not edit by hand. -->
+
+${ADDITIONAL_SOURCES_BEGIN}
+| file | sha256 |
+|------|--------|
+${rows}
+${ADDITIONAL_SOURCES_END}
+`;
+}
+
+/**
+ * Inserts or updates one record in `## Additional Sources`, creating the section if absent.
+ * Idempotent: re-recording the SAME path with the SAME hash is a byte-identical no-op (mirrors
+ * `repairExistingIndex`'s idempotence discipline for the primary header). Re-recording the same
+ * path with a DIFFERENT hash updates that one row in place. Returns whether the file changed.
+ */
+async function addAdditionalSource(
+  indexPath: string,
+  record: AdditionalSourceRecord,
+): Promise<boolean> {
+  const before = await fs.readFile(indexPath, 'utf-8');
+  const existing = parseAdditionalSources(before);
+  const already = existing.find((r) => r.path === record.path);
+  if (already && already.sourceHash === record.sourceHash) return false; // byte-identical no-op
+
+  const merged = already
+    ? existing.map((r) => (r.path === record.path ? record : r))
+    : [...existing, record];
+  merged.sort((a, b) => a.path.localeCompare(b.path));
+  const newSection = renderAdditionalSourcesSection(merged);
+
+  const begin = before.indexOf(ADDITIONAL_SOURCES_BEGIN);
+  const end = before.indexOf(ADDITIONAL_SOURCES_END);
+  let after: string;
+  if (begin !== -1 && end !== -1 && end > begin) {
+    // Section already exists — replace the whole heading+fences block. Locate the heading start
+    // by scanning backward from the fence, same anchoring style as `chunkCheckCommand`'s
+    // heading-then-fence pattern (never a bare substring search — CHUNK.template.md's own
+    // f73153a3 defect class).
+    const headingMatch = /^## Additional Sources[ \t]*$/m.exec(before);
+    const headingStart = headingMatch ? headingMatch.index : begin;
+    const sectionEnd = end + ADDITIONAL_SOURCES_END.length;
+    after = before.slice(0, headingStart) + newSection + before.slice(sectionEnd);
+  } else {
+    // Section absent — insert immediately before the first INDEX_HEADINGS entry
+    // (`## Open Rules Gaps`), so the primary header + its explanatory comment (above) stay
+    // completely untouched. Falls back to appending at end of file if that heading is somehow
+    // missing (defensive only — every INDEX.md `renderIndex` produces carries it).
+    const gapsHeadingMatch = /^## Open Rules Gaps[ \t]*$/m.exec(before);
+    if (gapsHeadingMatch) {
+      after = before.slice(0, gapsHeadingMatch.index) + newSection + '\n' + before.slice(gapsHeadingMatch.index);
+    } else {
+      const sep = before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+      after = before + sep + newSection;
+    }
+  }
+
+  await fs.writeFile(indexPath, after);
+  return true;
+}
+
 export function renderIndex(params: {
   gameName: string;
   edition: string | undefined;
@@ -553,6 +672,7 @@ export async function ingestArchiveCommand(
 
   let wroteIndex = false;
   let headerBroughtToContract = false;
+  let recordedAsAdditionalSource = false;
   if (!indexExists) {
     await fs.mkdir(dirname(indexPath), { recursive: true });
     await fs.writeFile(
@@ -568,21 +688,54 @@ export async function ingestArchiveCommand(
     wroteIndex = true;
     headerBroughtToContract = true;
   } else {
-    headerBroughtToContract = await repairExistingIndex(indexPath, {
-      edition: options.edition,
-      relArchivePath,
-      sourceHash,
-      transcribed,
-    });
+    const existingText = await fs.readFile(indexPath, 'utf-8');
+    const canonicalPrimary = readCanonicalPrimarySource(existingText);
+
+    // A DIFFERENT source is already the canonical primary — this call must NOT silently
+    // overwrite it (177-19's fix for the doom-machine measurement: a second `ingest-archive`
+    // call on a two-source-PDF project discarded the first source's provenance entirely).
+    // Record this archive as an ADDITIONAL source instead. When there is no canonical primary
+    // yet (absent, or still wrapped prose `repairExistingIndex` needs to transform), or when
+    // this call's file IS the existing primary (idempotent re-run), fall through to the
+    // existing repair path unchanged — every single-source project's behavior is untouched.
+    if (canonicalPrimary && canonicalPrimary.path !== relArchivePath) {
+      recordedAsAdditionalSource = await addAdditionalSource(indexPath, {
+        path: relArchivePath,
+        sourceHash,
+      });
+    } else {
+      headerBroughtToContract = await repairExistingIndex(indexPath, {
+        edition: options.edition,
+        relArchivePath,
+        sourceHash,
+        transcribed,
+      });
+    }
   }
 
   if (options.json) {
     console.log(
       JSON.stringify(
-        { archivedPath: relArchivePath, sourceHash, indexPath: 'rulebook/INDEX.md', wroteIndex },
+        {
+          archivedPath: relArchivePath,
+          sourceHash,
+          indexPath: 'rulebook/INDEX.md',
+          wroteIndex,
+          recordedAsAdditionalSource,
+        },
         null,
         2,
       ),
+    );
+    return;
+  }
+
+  if (recordedAsAdditionalSource) {
+    console.log(chalk.green('✓ Archived ADDITIONAL source rulebook (a different primary source is already recorded)'));
+    console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
+    console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
+    console.log(
+      `  ${chalk.gray('index:')} rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section updated (primary Source:/Source hash: untouched)`,
     );
     return;
   }
@@ -619,6 +772,39 @@ function findLabelLine(
   const match = re.exec(text);
   if (!match) return undefined;
   return { start: match.index, end: match.index + match[0].length, value: match[1].trim() };
+}
+
+/**
+ * Reads the PRIMARY `Source:`/`Source hash:` pair ONLY when it is already fully canonical — a
+ * bare path (never wrapped prose) with a `Source hash:` line present too. Returns `undefined`
+ * for every other shape (no `Source:` line at all, a `Source hash:` line missing, or the
+ * wrap-safe "prose" shape `repairExistingIndex` above is built to transform) — those are exactly
+ * the cases `repairExistingIndex`'s existing logic must keep handling unchanged, so a caller
+ * (`ingestArchiveCommand`, deciding whether the CURRENT archive call names a genuinely DIFFERENT
+ * primary source) only acts on this when the comparison is actually meaningful.
+ *
+ * Mirrors the `isBarePath` classification inside `repairExistingIndex`'s own `Source:` branch —
+ * duplicated rather than extracted, matching this file's own established precedent (the
+ * `ANY_ANNOTATION_LINE_RE`/filter duplication pattern in `verify-enumerate.ts`) for a single
+ * small predicate two call sites both need at slightly different points in the file's control
+ * flow.
+ */
+function readCanonicalPrimarySource(text: string): { path: string; hash: string } | undefined {
+  const sourceLine = findLabelLine(text, 'Source:');
+  const hashLine = findLabelLine(text, 'Source hash:');
+  if (!sourceLine || !hashLine) return undefined;
+
+  const lineEnd = text.indexOf('\n', sourceLine.end);
+  const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
+  const isBarePath =
+    !/\s/.test(sourceLine.value) &&
+    (nextLine === undefined ||
+      nextLine.trim() === '' ||
+      nextLine.startsWith('## ') ||
+      HEADER_LABELS.some((label) => nextLine.startsWith(label)));
+  if (!isBarePath) return undefined;
+
+  return { path: sourceLine.value, hash: hashLine.value };
 }
 
 /**
