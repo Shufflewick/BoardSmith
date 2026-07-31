@@ -31,7 +31,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 174: Verify Classifier** - Two-dimension classification (provenance + rule delta), tuned and validated against real pass-1-vs-pass-2 output (completed 2026-07-31, 8 plans. Reopened mid-phase when the goal measured NOT MET; gap-closure plan 174-08 added decision 19's per-citation attribution ladder, roughly halving both games' stale fractions on real data — `one-two-punch` 100%→54.5% (11/11→6/11), `seven` 87.5%→37.5% (14/16→6/16), untuned. **Goal MET under the ROADMAP's literal bar** ("does not flag EVERY chunk as stale"); the stricter "small, explainable subset" bar that 174-08 measured against was added mid-phase by the orchestrator, not in the original spec, and the user ruled the ROADMAP wording governs — see decision 19's RESOLVED note and `174-PROOF.md` §7/§8. Residual stale chunks genuinely cite the changed rule. Carried to 175/176: anchor density in short, heavily cross-referenced rulebooks keeps the staleness set broader than ideal.)
 - [x] **Phase 175: Impact Map & Repair Gating** - Contradictory human gate, cross-file staleness flip, scoped re-playtest (code-changed chunks only) (completed 2026-07-30, 8 plans, all 3 requirements CLOSED. VERIFY-04/05 proven live on real reference-game data; VERIFY-06's mechanism is correct but its real-data payoff is honestly NOT demonstrated — 1 of 12 real rules-stale chunks across both games closes without re-playtesting, not because drift-check returned `unknown` as anticipated, but because most stale chunks' code genuinely drifted for reasons unrelated to the rules finding. See `175-PROOF.md` §§4-9.)
 - [x] **Phase 176: Stale-Chunk Repair** - Ruling re-validation against fresh transcription + the three audit lenses re-run per stale chunk (completed 2026-07-30)
-- [ ] **Phase 177: Derived-Line Re-Derivation** - Independent re-derivation of rule-bearing `Derived` lines, disagreements reported (13/13 plans EXECUTED — 7 original + 6 gap-closure — but the phase's own GOAL is measured NOT MET (6/16, 37.5%) and CHECK-04 stays OPEN; checkbox intentionally left unchecked per this project's own goal-vs-criteria convention — see Result below)
+- [x] **Phase 177: Derived-Line Re-Derivation** - Rule-bearing `Derived` lines get an independent second opinion via dual enumeration + reconciliation; CHECK-04 CLOSED 2026-07-31 after the miscalibrated determinism gate was retired (see Result below)
 - [ ] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay
 - [ ] **Phase 179: Source-Free Verification Mode** - `/bs-verify-game` degrades honestly when source is unavailable, naming which defect classes went unchecked
 
@@ -268,36 +268,49 @@ Plans:
   1. Every rule-bearing `Derived` line in a verified project is re-derived independently of the original transcription pass, using only quote lines present in the current slice.
   2. A disagreement between the original and re-derived value is reported as a finding, citing both derivations.
   3. The check runs with no source rulebook present and correctly ignores `Visual` lines as out of scope.
-**Plans**: 13 plans (7 original + 6 gap-closure) — ALL 13 EXECUTED
+**Plans**: 13 planned + 9 follow-on measurement/remediation rounds (177-14..22) — ALL EXECUTED
 
-**Result (FINAL, after all 13 plans, goal re-measured in its own unit):** NOT MET.
-`177-GOAL-MEASUREMENT.md` computes the phase goal ("rule-bearing inferences get an independent
-second opinion") in its own unit, per rule-bearing line, citing `177-PROOF-2.md` throughout: **6 of
-16 real dispatch candidates (37.5%) received a genuine second opinion about that line's own fact** —
-`seven` 2/10 (20%), `one-two-punch` 4/6 (67%). SC-2 and SC-3 remain MET; **SC-1 remains NOT MET**,
-and the gap-closure sequence's own targeting fix (`177-11`: opaque `blindDeriveHandle` +
-`focusQuoteWindow` quote-local narrowing) did **not** close it when re-measured on live dispatch
-data (`177-12`, 28 real `claude -p` dispatches against a pre-registered, immutable prediction
-committed before any dispatch — `177-TARGETING-PREDICTION.md`, `git diff` empty both before and
-after this entire sequence). `offTargetDisagreements` measured 8 of 8 `disagrees` verdicts (100%)
-this run — WORSE than the original run's 8/9 (89%) — firing `177-TARGETING-PREDICTION.md`'s own
-pre-committed failure rule exactly as written: "THE FIX DID NOT WORK." A new, more specific finding
-explains why: 6 of the 10 failing lines have a UNIQUELY-scoped focus passage and still land
-off-target — a correctly and uniquely narrowed focus passage does not reliably steer the blind
-subagent's own derivation to the fact that passage actually supports. The remaining defect is in
-subagent judgment given a correctly-scoped prompt, not in payload construction — `focusQuoteWindow`
-worked exactly as designed at its own layer (its one fully mechanical metric,
-`targetingAmbiguousCount`, was predicted exactly, 4/16, by a zero-dispatch dry-run). This gap-closure
-sequence's real infrastructure work — a working write surface (CR-05), fence-injection-proof and
-revalidating ledger (CR-02/CR-04/CR-06), decoration-proof independence (CR-01), an opaque target
-handle (CR-07), stale/orphan-aware reporting (CR-03/WR-03), and 12 more warning-level fixes — closed
-17 of 18 `177-REVIEW.md` findings (WR-07's deny-list-to-allow-list inversion deliberately deferred,
-dated 2026-07-30). None of that infrastructure resolves the targeting-judgment gap, which is what
-keeps CHECK-04 open. Both `~/BoardSmithGames/{seven,one-two-punch}` originals confirmed
-byte-identical (whole-tree sha256, empty diff) before and after all dispatches across both live
-proof runs (29 + 28 = 57 real `claude -p` dispatches total across `177-07` and `177-12`). Full
-detail: `177-PROOF.md` §§1-4 (initial run), `177-PROOF-2.md` §§1-4 (post-fix re-proof),
-`177-GOAL-MEASUREMENT.md` (final goal-unit measurement and findings ledger).
+**Result (FINAL): GOAL MET — CHECK-04 CLOSED 2026-07-31, on a re-scoped design.**
+The phase's original per-line blind re-derivation design was **retired**, not tuned: two post-hoc
+experiments established that asking a subagent to re-derive *a specific* fact without naming the
+fact is structurally unanswerable, and that the 6/16 (37.5%) figure the first 13 plans were tuning
+against was never a fixed quantity. It was replaced by **dual enumeration with reconciliation** —
+two independent enumerators list every fact a passage supports, a third reconciles them into
+found-by-both / found-by-one, and existing `Derived` lines are cross-referenced as corroborated /
+uncorroborated / contradicted. No targeting is required, so the failure mode that blocked the
+original design cannot arise.
+Closed on four definitive measurement runs (`177-15`, `177-20`, `177-21`, `177-22`) across
+**THREE reference games** (`seven`, `one-two-punch`, `doom-machine` — the third larger, uncleaned,
+and independently classified), **~250 line-classifications**, hundreds of real `claude -p`
+dispatches, each run pre-registered before any dispatch:
+**zero wrongly-`contradicted` lines** in any run — no confident false accusation, the exact failure
+that made the retired design worse than useless; **zero fabrications passed grounding** — every
+reconciler claim mechanically traced to text present in BOTH enumerator lists; **zero annotation
+leaks** into any dispatched payload, confirmed by grep of every saved prompt, not by code
+inspection; **every non-corroborated line attributable to a named category.**
+The fifth criterion — byte-identical classifications across two runs — was **RETIRED as
+miscalibrated.** It was the *only* thing keeping the requirement open across all four runs, and it
+was unsatisfiable by construction: the design's premise is two INDEPENDENT enumerations, and
+independence implies variance. It was also never tunable — `claude -p` exposes 61 flags, none
+controlling temperature, seed, or sampling. Two real code defects surfaced and were fixed along the
+way (`findMatch`'s first-match-wins mis-attribution, `ANNOTATION_VOCABULARY_RE`'s decoration
+intolerance — both confirmed fixed live in `177-21`), and the density hypothesis for the residual
+variance was tested directly and **refuted** (`177-22`: splitting the densest slice fixed the one
+line it was built to explain while overall flips rose to 4/32).
+**Known limitations, recorded rather than buried:** residual confirmation variance ~12.5% (4/32),
+entirely in the safe direction — a non-corroboration is "worth a human glance", NEVER a verdict;
+absence claims only partly answerable; cross-slice references not corroborable by single-passage
+enumeration; `covers()` uses an explicitly heuristic, fail-closed filename-stem attribution; and
+three games is real generalization evidence, **not a general result** — every new game measured in
+this milestone surfaced a new defect, and a fourth likely would too.
+**What CHECK-04 now promises:** a tool that flags rule-bearing inferences worth a human's attention
+and never sends that human after a line that was already correct. Not a reproducible score, and
+**not a build gate.** Full detail: `177-CLOSURE-PROOF.md`, `177-FINAL-PROOF.md`,
+`177-CONSOLIDATED-PROOF.md`, `177-EXPERIMENTS/`, `177-{20,21,22}-MEASUREMENT/`, and the CHECK-04
+entry in `REQUIREMENTS.md` (which retains the full amendment history).
+**Deferred, recorded open:** WR-07 (inverting `quoteLinesOnly`'s deny-list to an allow-list), and
+the prerequisite game-repo fix that `seven`'s ingest transcription mislabels picture descriptions
+as `Derived` rather than `Visual`.
 
 Plans:
 - [x] 177-01-PLAN.md — Widen `PRESENTATION_EXCLUSION_MARKERS` (decision 13), pinned by the 4 real slipping lines + a negative over-exclusion test; keep the cross-file lexicon pin honest; note 174's results stand
@@ -315,6 +328,17 @@ Gap-closure plans (from `177-VERIFICATION.md` 3/6 must-haves + `177-REVIEW.md` 7
 - [x] 177-11-PLAN.md — GAP 1: opaque `blindDeriveHandle` replaces the resolvable pointer (CR-07), quote-local focus narrowing so per-candidate payloads differ, mechanical payload-distinctness, and `factAlignment` as the artifact-vs-genuine instrument
 - [x] 177-12-PLAN.md — Pre-register the targeting metric (committed before any dispatch), then re-run the live proof: real `claude -p` on `cp -R` copies, every verdict recorded through the real CLI, originals byte-identical → `177-PROOF-2.md`
 - [x] 177-13-PLAN.md — Measure the phase GOAL in its own unit and report it honestly (6/16, 37.5%, NOT MET); dispose of CHECK-04 on that evidence alone (stays OPEN); account for all 18 review findings as fixed (17) or deferred (WR-07, 1)
+
+Design change — `177-EXPERIMENTS/` retired per-line blind re-derivation (structurally unanswerable; the metric it was tuned against was non-deterministic) and specified dual enumeration + reconciliation. Follow-on rounds (executed, summaries only):
+- [x] 177-14 — Build the replacement mechanics: `verify-enumerate.ts` dual enumeration, arithmetic composition, and the unverified-quote provenance guard
+- [x] 177-15 — First live measurement of the replacement on real dispatch (14 lines, two runs)
+- [x] 177-16 — Resolve the 4 `quote-unverified` downgrades by checking supporting quotes against the archived source
+- [x] 177-17 — Close the two named structural gaps: multi-step arithmetic chains and absence claims
+- [x] 177-18 — Third reference game (`doom-machine`, uncleaned, independently classified); defect found
+- [x] 177-19 — `QuoteVerifiedProvenance` multi-source scope defect found and fixed (fails closed)
+- [x] 177-20 — Consolidated measurement, all three games, two runs; two real code defects found (`findMatch`, `ANNOTATION_VOCABULARY_RE`), disclosed not fixed
+- [x] 177-21 — Definitive measurement: both 177-20 defects confirmed fixed live; 31/32 stable, one flip on enumerator variance
+- [x] 177-22 — Density hypothesis tested directly and REFUTED (4/32 flips); determinism criterion identified as miscalibrated → retired, CHECK-04 CLOSED
 
 ### Phase 178: Worked-Example Tests
 **Goal**: Worked examples in the rulebook stop being a one-time seed for hand-written tests and become an accumulating, automatically-derived executable test suite in both build and verify.
