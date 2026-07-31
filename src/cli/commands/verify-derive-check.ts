@@ -45,7 +45,7 @@ export const DERIVE_CHECK_MODELS = Object.freeze({
 /**
  * `verify-derive-check.ts` — CHECK-04's mechanical core, RETARGETED onto the closed
  * dual-enumeration design (177.1-CONTEXT.md decision 2). This module owns the same four
- * guarantees the retired `verify-derive-recheck.ts` ledger proved across an 18-finding review
+ * guarantees the retired blind-derivation ledger proved across an 18-finding review
  * (177-09/177-10): atomic upsert-append (CR-06), fence-injection rejection at the single
  * construction site (CR-04), read-path revalidation through that same choke point (CR-02), and
  * an evidence requirement so a corroboration/contradiction citing nothing is never a valid
@@ -77,12 +77,13 @@ export const DERIVE_CHECK_MODELS = Object.freeze({
 
 // -------------------------------------------------------------------------------------------
 // readLiveSlices / annotationBody / quoteLinesOnly / enumerateDerivedLines — MOVED wholesale from
-// the retired `verify-derive-recheck.ts` (177.1-CONTEXT.md decision 6). These are the
-// design-agnostic parts the CHECK-04 closure note already named as carrying forward unchanged:
-// the live-tree read, the decoration-normalization choke point, the quote-only payload filter,
-// and candidate enumeration. The targeting-specific machinery (`focusQuoteWindow`,
-// `blindDeriveHandle`, `buildBlindDerivePayload`, `derivePayloadSet`, `factAlignment`) is NOT
-// moved — it is retired-design-specific and is deleted outright in 177.1-07.
+// the retired blind-derivation module (177.1-CONTEXT.md decision 6; the module itself, and every
+// symbol not moved here, was deleted outright in 177.1-07). These are the design-agnostic parts
+// the CHECK-04 closure note already named as carrying forward unchanged: the live-tree read, the
+// decoration-normalization choke point, the quote-only payload filter, and candidate enumeration.
+// The targeting-specific machinery (the opaque-handle/focus-window/payload-construction/
+// per-slice-payload-set functions, plus the retired per-line judgment field) is NOT moved — it
+// was specific to the retired design and no longer exists anywhere in the tree.
 // -------------------------------------------------------------------------------------------
 
 /**
@@ -234,7 +235,7 @@ export interface EnumerateDerivedLinesResult {
  * as a real citation would — it is NOT a real annotation and must never become a candidate. This
  * is the harness's own disclosed 177-21 fix (`extract-corpus.mjs`'s `DERIVED_ANYWHERE_RE`,
  * `/Derived\s*\(p\.\d/i`, requiring an actual digit), carried into the product path here rather
- * than left as a measurement-only patch: the retired `verify-derive-recheck.ts` never carried
+ * than left as a measurement-only patch: the retired blind-derivation module never carried
  * this fix, because its own real `buildEnumeratorPayload`/`quoteLinesOnly` pipeline happened never
  * to be exercised against a slice where the legend line escapes its usual backtick/quote
  * decoration. A future rulebook writing that legend WITHOUT decoration must still yield zero
@@ -292,8 +293,8 @@ export function enumerateDerivedLines(
 /**
  * The eight-member dual-enumeration verdict set, in the order `DerivedLineClassification`
  * declares it (`verify-enumerate.ts`). This is NOT a re-spelling of the retired four-member
- * `DERIVE_VERDICTS` — it is the closed design's own classification set, imported by type so this
- * array and the union it must exactly cover can never silently diverge.
+ * blind-derivation verdict enum — it is the closed design's own classification set, imported by
+ * type so this array and the union it must exactly cover can never silently diverge.
  */
 export const DERIVE_CHECK_VERDICTS = Object.freeze([
   'corroborated',
@@ -470,7 +471,7 @@ export function createDeriveCheckRecord(input: {
 // -------------------------------------------------------------------------------------------
 // deriveCheckLedgerPath / deriveCheckKey / replaceDeriveCheckVerdicts /
 // recordDeriveCheckVerdicts / readDeriveCheckVerdicts — the PROJECT-LEVEL ledger
-// (moved from verify-derive-recheck.ts, CR-02/CR-04/CR-06)
+// (moved from the retired blind-derivation module, CR-02/CR-04/CR-06)
 // -------------------------------------------------------------------------------------------
 
 /**

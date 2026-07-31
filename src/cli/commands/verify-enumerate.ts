@@ -134,16 +134,17 @@ export const ENUMERATE_TOKEN = 'BS-ENUMERATE-V1';
 
 /**
  * Builds the dual-enumerator dispatch payload for ONE slice: quote lines only, via
- * `quoteLinesOnly` (`verify-derive-recheck.ts`) — the SAME decoration-tolerant, backstop-proofed
- * filter CHECK-04's blind-derivation payload uses, reused rather than re-derived so the two
- * modules can never diverge on what counts as a quote line. Unlike the retired design, this
- * payload names NO target and hides NOTHING beyond the three annotation families — the whole
+ * `quoteLinesOnly` (`verify-derive-check.ts`) — the SAME decoration-tolerant, backstop-proofed
+ * filter this module's own line-scanning uses, reused rather than re-derived so the two functions
+ * can never diverge on what counts as a quote line. Unlike the retired blind-derivation design,
+ * this payload names NO target and hides NOTHING beyond the three annotation families — the whole
  * point of dual enumeration is that nobody aims at a withheld fact, so there is nothing else to
  * strip.
  *
- * Throws (construction-site backstop, mirroring `buildBlindDerivePayload`) if the assembled
- * payload still matches an annotation family after `quoteLinesOnly` — a decoration form neither
- * filter anticipated must fail loudly, never leak silently into a dispatch prompt.
+ * Throws (a construction-site backstop, the same shape the retired design's payload builder used)
+ * if the assembled payload still matches an annotation family after `quoteLinesOnly` — a
+ * decoration form neither filter anticipated must fail loudly, never leak silently into a
+ * dispatch prompt.
  */
 export function buildEnumeratorPayload(slice: { path: string; text: string }): string {
   const quotes = quoteLinesOnly(slice.text);

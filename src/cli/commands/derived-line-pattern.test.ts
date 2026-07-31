@@ -137,11 +137,12 @@ function stripComments(source: string): string {
  * the plan SUMMARY as an intentional non-consolidation).
  *
  * 1. The joint triple-alternation citation form (`ANY_ANNOTATION_LINE_RE`'s shape, formerly
- *    hand-spelled in both `verify-enumerate.ts` and `verify-derive-recheck.ts`).
+ *    hand-spelled in both `verify-enumerate.ts` and the retired blind-derivation module).
  * 2. The joint triple-alternation vocabulary form (`ANNOTATION_VOCABULARY_RE`'s shape, formerly
  *    hand-spelled in `verify-enumerate.ts`).
  * 3/4. The single-family anchored citation form with a `[^)]*` body (`VISUAL_LINE_RE` /
- *    `NAMED_BUT_UNDEFINED_LINE_RE`'s shape, formerly hand-spelled in `verify-derive-recheck.ts`).
+ *    `NAMED_BUT_UNDEFINED_LINE_RE`'s shape, formerly hand-spelled in the retired blind-derivation
+ *    module, now `verify-derive-check.ts`).
  *    `Derived` is deliberately excluded from this list: `DERIVED_LINE_RE` in
  *    `derived-line-pattern.ts` itself legitimately owns that exact literal, and every consumer
  *    re-exports/imports it rather than re-spelling it, so `Derived \(p\.[^)]*\)` appearing once

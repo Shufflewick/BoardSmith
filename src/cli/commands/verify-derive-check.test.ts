@@ -27,7 +27,7 @@ import {
 /**
  * `verify-derive-check.ts` is CHECK-04's mechanical core, MOVED and retargeted onto the closed
  * dual-enumeration verdict set (177.1-02). Every fixture here is a real filesystem temp dir
- * (`fs.mkdtemp`, no mocks) — mirroring `verify-derive-recheck.test.ts`'s own discipline so the
+ * (`fs.mkdtemp`, no mocks) — mirroring the retired blind-derivation module's test suite's own discipline so the
  * moved invariants are visibly the same proofs, just against eight verdicts instead of four.
  */
 

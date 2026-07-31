@@ -464,7 +464,7 @@ export const PRESENTATION_LEXICON = Object.freeze([
  */
 /**
  * The relabeller's citation-body group, derived from the shared `DERIVED_LINE_RE`
- * (`derived-line-pattern.ts`, also consumed by `verify-derive-recheck.ts`) rather than a second
+ * (`derived-line-pattern.ts`, also consumed by `verify-derive-check.ts`) rather than a second
  * hand-spelled literal (177-08, closing WR-01) — two modules disagreeing on what a `Derived` line
  * IS is the drift class this milestone keeps closing. `DERIVED_LINE_RE.source` is
  * `^Derived \(p\.[^)]*\)`; stripping the leading `^Derived ` leaves exactly the citation-body
@@ -788,7 +788,7 @@ function findLabelLine(
  * small predicate two call sites both need at slightly different points in the file's control
  * flow. (The `ANY_ANNOTATION_LINE_RE`/filter duplication this comment used to point at as
  * precedent was itself consolidated away in 177.1-01 — `verify-enumerate.ts` and
- * `verify-derive-recheck.ts` now both import `ANNOTATION_CITATION_RE` from
+ * `verify-derive-check.ts` now both import `ANNOTATION_CITATION_RE` from
  * `derived-line-pattern.ts` rather than re-spelling it.)
  */
 function readCanonicalPrimarySource(text: string): { path: string; hash: string } | undefined {

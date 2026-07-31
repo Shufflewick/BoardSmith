@@ -48,8 +48,6 @@ const ALL_VERIFY_FILES = [
   'verify/adjudication-gate.md',
   'verify/ruling-recheck.md',
   'verify/repair-dispatch.md',
-  'verify/derive-recheck.md',
-  'verify/derive-compare.md',
   'verify/enumerate-facts.md',
   'verify/reconcile-facts.md',
 ];
@@ -505,7 +503,7 @@ describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12
     // Read the constant through a real import rather than scraping the source text. A prior
     // source-scrape found the array's closing `]` with `indexOf(']')`, which silently truncated
     // to zero markers the moment a marker contained a `[^:]` character class — the pin passed
-    // vacuously instead of failing. Importing is also what the sibling DERIVE_VERDICTS pin
+    // vacuously instead of failing. Importing is also what the sibling ENUMERATE_TOKEN pin
     // below already does.
     const { PRESENTATION_EXCLUSION_MARKERS } = await import('../../commands/verify-classify.js');
     const markers = [...PRESENTATION_EXCLUSION_MARKERS];
@@ -541,214 +539,6 @@ describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12
       'Derived (p.1) — diagram description (Plan phase): Two boxer cards are shown at top...';
     expect(doc).toContain(line);
     expect(isPresentationLine(line)).toBe(true);
-  });
-});
-
-describe('derive-recheck.md / derive-compare.md — the two CHECK-04 judgment contracts (177-04)', () => {
-  it('derive-recheck.md carries the BS-DERIVE-V1 token and a DISPATCH REJECTED block', () => {
-    const doc = read('verify/derive-recheck.md');
-    expect(doc).toContain('BS-DERIVE-V1');
-    expect(doc).toContain('DISPATCH REJECTED');
-  });
-
-  it('derive-compare.md carries the BS-DERIVE-COMPARE-V1 token and a DISPATCH REJECTED block', () => {
-    const doc = read('verify/derive-compare.md');
-    expect(doc).toContain('BS-DERIVE-COMPARE-V1');
-    expect(doc).toContain('DISPATCH REJECTED');
-  });
-
-  it('the two tokens are distinct: derive-compare.md never carries BS-DERIVE-V1 as its own token', () => {
-    const doc = read('verify/derive-compare.md');
-    expect(doc).not.toContain('BS-DERIVE-V1');
-  });
-
-  it('derive-recheck.md states the never-given list in one place, including Named-but-undefined (WR-08)', () => {
-    const doc = flat(read('verify/derive-recheck.md'));
-    expect(doc).toMatch(
-      /you are NEVER given[\s\S]*?the `Derived` line you are re-deriving/,
-    );
-    expect(doc).toContain('any OTHER `Derived` line from this slice or any other slice');
-    expect(doc).toContain('any `Visual` line at all');
-    expect(doc).toContain('any `Named-but-undefined` line at all');
-  });
-
-  it('derive-recheck.md attributes the stripping to buildBlindDerivePayload, never the orchestrator (WR-08)', () => {
-    const doc = flat(read('verify/derive-recheck.md'));
-    expect(doc).toMatch(/buildBlindDerivePayload.*verify-derive-recheck\.ts/);
-    expect(doc).toMatch(/the orchestrator itself never opens the slice/);
-    expect(doc).not.toMatch(/already stripped out by the orchestrator/);
-  });
-
-  it('derive-recheck.md\'s RETURN block has no verdict field and no agrees/disagrees as something it returns', () => {
-    const doc = read('verify/derive-recheck.md');
-    const idx = doc.indexOf('## RETURN a structured object only');
-    expect(idx).toBeGreaterThan(-1);
-    const returnSection = doc.slice(idx, doc.indexOf('## Scope limit'));
-    expect(returnSection).toContain('rederivedValue');
-    expect(returnSection).toContain('sourceQuotes');
-    // The RETURN OBJECT itself — the fenced code block declaring the shape — must not declare a
-    // verdict field or an agrees/disagrees value; explanatory prose stating "there is NO verdict
-    // field" is fine and expected (asserted separately below).
-    const objectBlock = returnSection.slice(
-      returnSection.indexOf('```'),
-      returnSection.indexOf('```', returnSection.indexOf('```') + 3) + 3,
-    );
-    expect(objectBlock).not.toMatch(/\bverdict\b/);
-    expect(objectBlock).not.toMatch(/\bagrees\b|\bdisagrees\b/);
-    expect(returnSection).toMatch(/NO verdict field/);
-  });
-
-  it('derive-recheck.md\'s two worked examples are quoted verbatim from the committed seven fixtures', () => {
-    const doc = read('verify/derive-recheck.md');
-    const notRuleBearingFixture = readFileSync(
-      join(
-        __dirname,
-        '../../../../.planning/phases/174-verify-classifier/174-FIXTURES/seven/live/02-solo-variant.md',
-      ),
-      'utf-8',
-    );
-    const underivableFixture = readFileSync(
-      join(
-        __dirname,
-        '../../../../.planning/phases/174-verify-classifier/174-FIXTURES/seven/live/01-definitions-and-components.md',
-      ),
-      'utf-8',
-    );
-    const notRuleBearingLine =
-      'Derived (p.2): Page 2 is a wide landscape panel with a solid purple background, white bold sans-serif heading and white body text in a single left-hand column. The right side is empty except for the word "SEVEN" set in white bold italic sans-serif, rotated diagonally (reading upward at roughly 45 degrees). No diagrams or component images appear on this page.';
-    const underivableLine =
-      'Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 "+1" bonus point cards.';
-    expect(notRuleBearingFixture).toContain(notRuleBearingLine);
-    expect(underivableFixture).toContain(underivableLine);
-    expect(doc).toContain(notRuleBearingLine);
-    expect(doc).toContain(underivableLine);
-  });
-
-  it('derive-recheck.md contains no enumerated keyword/trigger-phrase list for not-rule-bearing or underivable', () => {
-    // Mirrors the absence-of-source-trap discipline: judge each line on what the quote lines
-    // support, not on a fixed vocabulary. A bullet list of trigger words/phrases immediately
-    // preceding either outcome's heading would be the same defect class as an absence-phrase list.
-    const doc = read('verify/derive-recheck.md');
-    expect(doc).not.toMatch(/keywords?:\s*["'`]/i);
-    expect(doc).not.toMatch(/trigger[- ]phrases?:/i);
-  });
-
-  it('derive-compare.md states the four-verdict pin, matching DERIVE_VERDICTS exactly (cross-file lexicon pin)', async () => {
-    const { DERIVE_VERDICTS } = await import('../../commands/verify-derive-recheck.js');
-    expect(DERIVE_VERDICTS.length).toBe(4);
-    const doc = read('verify/derive-compare.md');
-    for (const verdict of DERIVE_VERDICTS) {
-      expect(doc).toMatch(new RegExp(`\`${verdict}\``));
-    }
-  });
-
-  it('derive-compare.md states the never-collapse rule for underivable/not-rule-bearing', () => {
-    const doc = flat(read('verify/derive-compare.md'));
-    expect(doc).toMatch(
-      /underivable.{0,40}not-rule-bearing.{0,400}never be collapsed into.{0,20}agrees.{0,20}disagrees/,
-    );
-  });
-
-  it('derive-compare.md states it never re-derives and never opens the live slice', () => {
-    const doc = read('verify/derive-compare.md');
-    expect(doc).toContain('You re-derive nothing yourself');
-    expect(doc).toContain('never opens the live slice');
-  });
-
-  it('derive-compare.md RETURN section names all four fields and the byte-for-byte requirement for disagrees', () => {
-    const doc = read('verify/derive-compare.md');
-    const idx = doc.indexOf('## RETURN a structured object only');
-    expect(idx).toBeGreaterThan(-1);
-    const returnSection = doc.slice(idx, doc.indexOf('## Scope limit'));
-    for (const field of ['verdict', 'reasoning', 'originalReading', 'rederivedReading']) {
-      expect(returnSection).toContain(field);
-    }
-    expect(returnSection).toMatch(/byte-for-byte verbatim for a\s*\n?\s*`disagrees` verdict/);
-  });
-
-  it('derive-recheck.md carries no resolvable Target line: pointer (177-11, closing CR-07)', () => {
-    const doc = read('verify/derive-recheck.md');
-    expect(doc).not.toContain('Target line:');
-    expect(doc).toContain('Target: {handle}');
-    expect(doc).toMatch(/no slice path and no line number/i);
-  });
-
-  it('derive-recheck.md describes the Focus passage / Context split and instructs deriving from the focus passage', () => {
-    const doc = flat(read('verify/derive-recheck.md'));
-    expect(doc).toMatch(/Focus passage/);
-    expect(doc).toMatch(/derive your answer from those lines/i);
-    expect(doc).toMatch(/Context.{0,60}terminology/);
-  });
-
-  it('derive-compare.md RETURN section requires factAlignment, defined by its question (no keyword/trigger-phrase list) — 177-11', () => {
-    const doc = read('verify/derive-compare.md');
-    const idx = doc.indexOf('## RETURN a structured object only');
-    expect(idx).toBeGreaterThan(-1);
-    const returnSection = doc.slice(idx, doc.indexOf('## Scope limit'));
-    const factAlignmentMentions = (returnSection.match(/factAlignment/g) ?? []).length;
-    expect(factAlignmentMentions).toBeGreaterThanOrEqual(2);
-    expect(returnSection).toContain("'same-fact' | 'different-fact'");
-    expect(returnSection).toMatch(/REQUIRED for `agrees` and `disagrees`/);
-    // Worked examples drawn from measured real data, not a fixed keyword/trigger-phrase list.
-    expect(returnSection).toContain('one-two-punch:52');
-    expect(returnSection).toContain('seven:8');
-    expect(returnSection).not.toMatch(/keywords?:\s*["'`]/i);
-    expect(returnSection).not.toMatch(/trigger[- ]phrases?:/i);
-  });
-
-  it('derive-compare.md states different-fact is reportable about the CHECK\'s own targeting, not a transcription defect', () => {
-    const doc = flat(read('verify/derive-compare.md'));
-    expect(doc).toMatch(
-      /a targeting outcome about THIS CHECK's own dispatch mechanism, not a defect in the original transcription/,
-    );
-  });
-
-  it('derive-compare.md carries the Context-Economics carve-out sentence citing the quotedPass1/quotedPass2 precedent', () => {
-    const doc = flat(read('verify/derive-compare.md'));
-    expect(doc).toContain('Context-Economics carve-out');
-    expect(doc).toMatch(/quotedPass1.{0,10}quotedPass2/);
-    expect(doc).toContain('174-PROOF.md');
-  });
-
-  it('both contracts carry a scope-limit sentence', () => {
-    const recheck = read('verify/derive-recheck.md');
-    const compare = read('verify/derive-compare.md');
-    expect(recheck).toContain('## Scope limit');
-    expect(compare).toContain('## Scope limit');
-  });
-
-  describe('installer leaf probes — real install proves both contracts ship (177-04)', () => {
-    let tempDir: string;
-    let origCwd: string;
-    let skillsRoot: string;
-
-    beforeAll(async () => {
-      const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
-      origCwd = process.cwd();
-      tempDir = mkdtempSync(join(tmpdir(), 'bs-install-derive-'));
-      process.chdir(tempDir);
-      await installClaudeCommand({ local: true, force: true, skipLink: true });
-      skillsRoot = join(tempDir, '.claude', 'skills');
-    });
-
-    afterAll(() => {
-      process.chdir(origCwd);
-      rmSync(tempDir, { recursive: true, force: true });
-    });
-
-    it('both new contract files land under .claude/skills/bs-shared/verify/', () => {
-      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-recheck.md'))).toBe(true);
-      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-compare.md'))).toBe(true);
-    });
-
-    it('deleting one installed contract file flips the installer to report a partial (not complete) install', async () => {
-      const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
-      rmSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-recheck.md'), { force: true });
-      // A non-force install over a partial tree must NOT short-circuit as "already installed" —
-      // it must detect the missing leaf and repopulate it.
-      await installClaudeCommand({ local: true, force: false, skipLink: true });
-      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-recheck.md'))).toBe(true);
-    });
   });
 });
 
@@ -975,6 +765,15 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
       await installClaudeCommand({ local: true, force: false, skipLink: true });
       expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'enumerate-facts.md'))).toBe(true);
     });
+
+    // ABSENCE PROBE (177.1-07): a real install must never ship the two retired contracts — this
+    // is the only executed proof that removing them from the source tree (and from
+    // install-claude-command.ts's SHARED_LEAF_PROBES manifest) actually keeps them off a
+    // designer's machine, not merely off disk in this repo.
+    it('the two retired contracts (derive-recheck.md, derive-compare.md) do NOT land under .claude/skills/bs-shared/verify/', () => {
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-recheck.md'))).toBe(false);
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-compare.md'))).toBe(false);
+    });
   });
 });
 
@@ -1193,7 +992,7 @@ describe('drift guard — every named boardsmith verify-* command actually exist
   // Matches a backtick-wrapped token starting with `verify-` (optionally preceded by
   // "boardsmith "), followed by either the closing backtick directly or a space and more content
   // before the closing backtick — deliberately excluding a bare `.ts`/`.md` file-reference suffix
-  // (e.g. `verify-derive-recheck.ts`, `verify-run.ts`), which names a MODULE, not a CLI command.
+  // (e.g. `verify-derive-check.ts`, `verify-run.ts`), which names a MODULE, not a CLI command.
   const CMD_MENTION_RE = /`(?:boardsmith )?(verify-[a-z][a-z-]*)(?:\s[^`]*)?`/g;
 
   function registeredCliCommands(): Set<string> {
@@ -1241,79 +1040,5 @@ describe('drift guard — every named boardsmith verify-* command actually exist
     const wouldFail = [...mentioned].some((name) => !withoutDeriveRecord.has(name));
     expect(wouldFail).toBe(true);
     expect(mentioned.has('verify-derive-record')).toBe(true);
-  });
-});
-
-describe('drift guard — every field named in derive-compare.md\'s RETURN block corresponds to an accepted verify-derive-record CLI option (177-11, closing the contract-drift path one level deeper than command-existence)', () => {
-  // Converts a RETURN-object field name (camelCase) to its expected CLI flag (kebab-case,
-  // `--`-prefixed) — the same convention every option on `verify-derive-record` already follows
-  // (`originalReading` -> `--original-reading`, `factAlignment` -> `--fact-alignment`).
-  function toCliFlag(fieldName: string): string {
-    return '--' + fieldName.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
-  }
-
-  /** Field names declared inside derive-compare.md's fenced RETURN object literal. */
-  function returnFieldNames(doc: string): string[] {
-    const idx = doc.indexOf('## RETURN a structured object only');
-    const returnSection = doc.slice(idx, doc.indexOf('## Scope limit'));
-    const objectBlock = returnSection.slice(
-      returnSection.indexOf('```'),
-      returnSection.indexOf('```', returnSection.indexOf('```') + 3) + 3,
-    );
-    return [...objectBlock.matchAll(/^\s*([a-zA-Z][a-zA-Z0-9]*):/gm)].map((m) => m[1]);
-  }
-
-  /** The verify-derive-record command's own registered CLI option flags, read live from cli.ts. */
-  function verifyDeriveRecordCliFlags(cliSource: string): Set<string> {
-    const block = cliSource.slice(
-      cliSource.indexOf("'verify-derive-record'"),
-      cliSource.indexOf('.action(verifyDeriveRecordCommand)'),
-    );
-    const flags = new Set<string>();
-    for (const m of block.matchAll(/[.'"](--[a-z][a-z-]*)[\s<'"]/g)) {
-      flags.add(m[1]);
-    }
-    return flags;
-  }
-
-  it('every field derive-compare.md\'s RETURN object declares (verdict/reasoning/originalReading/rederivedReading/factAlignment) has a matching --option on verify-derive-record', () => {
-    const fields = returnFieldNames(read('verify/derive-compare.md'));
-    expect(fields.length).toBeGreaterThan(0);
-    const cliSource = readFileSync(join(__dirname, '..', '..', 'cli.ts'), 'utf-8');
-    const flags = verifyDeriveRecordCliFlags(cliSource);
-    expect(flags.size).toBeGreaterThan(0);
-
-    const missing = fields
-      .map((f) => ({ field: f, flag: toCliFlag(f) }))
-      .filter(({ flag }) => !flags.has(flag));
-    expect(missing).toEqual([]);
-  });
-
-  it('the guard is a real regression detector: with --fact-alignment removed from the parsed cli.ts source, the same field list fails the guard (observed, then the real file is left untouched — no live edit is made)', () => {
-    const cliSource = readFileSync(join(__dirname, '..', '..', 'cli.ts'), 'utf-8');
-    // Simulate removal by deleting only the matched option-declaration line, in memory — the real
-    // file on disk is never touched by this test.
-    const withoutFactAlignment = cliSource.replace(
-      /\.option\(\s*\n\s*'--fact-alignment[\s\S]*?\n\s*\)\n/,
-      '\n',
-    );
-    expect(withoutFactAlignment).not.toBe(cliSource);
-    expect(withoutFactAlignment).not.toContain('--fact-alignment');
-
-    const fields = returnFieldNames(read('verify/derive-compare.md'));
-    const flagsWithout = verifyDeriveRecordCliFlags(withoutFactAlignment);
-    const flagsWith = verifyDeriveRecordCliFlags(cliSource);
-
-    const missingWithout = fields
-      .map((f) => ({ field: f, flag: toCliFlag(f) }))
-      .filter(({ flag }) => !flagsWithout.has(flag));
-    const missingWith = fields
-      .map((f) => ({ field: f, flag: toCliFlag(f) }))
-      .filter(({ flag }) => !flagsWith.has(flag));
-
-    // OBSERVED: with --fact-alignment removed, the guard fails (factAlignment is unmatched).
-    expect(missingWithout).toEqual([{ field: 'factAlignment', flag: '--fact-alignment' }]);
-    // OBSERVED: with the real, unmodified cli.ts, the guard passes.
-    expect(missingWith).toEqual([]);
   });
 });
