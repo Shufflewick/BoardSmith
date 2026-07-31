@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177.1-04-PLAN.md — verifyDeriveCheckCommand + CLI registration of verify-derive-check/verify-derive-record. Next: 177.1-05 (verify-game.md Step 7 rewrite)."
-last_updated: "2026-07-31T23:00:00.000Z"
-last_activity: 2026-07-28
+stopped_at: "Completed 177.1-05-PLAN.md — verify-game.md Step 7 rewritten onto the dual-enumeration design. Next: 177.1-06 (split-bar proof against the recorded 177-22 slice)."
+last_updated: "2026-07-31T22:00:00.000Z"
+last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 7
   total_plans: 73
-  completed_plans: 75
+  completed_plans: 77
   percent: 64
 ---
 
@@ -21,44 +21,44 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plans 01-04 of 8
+**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plans 01-05 of 8
 complete (annotation-family regex consolidation; ledger moved onto the dual-enumeration verdict
 set; reconcileSlice() + verify-derive-record retarget + arithmeticSpec; verifyDeriveCheckCommand +
-both commands registered in cli.ts); plans 05-08 remain (verify-game.md rewrite, split-bar proof,
-retired-design deletion, live end-to-end run).
+both commands registered in cli.ts; verify-game.md Step 7 rewritten onto the dual-enumeration
+design); plans 06-08 remain (split-bar proof, retired-design deletion, live end-to-end run).
 
 ## Current Position
 
-`177.1-04-PLAN.md` (2026-07-31) built `verifyDeriveCheckCommand` — CHECK-04's read/report surface —
-and registered it plus a retargeted `verify-derive-record` in `cli.ts`, replacing the deregistered
-`verify-derive-recheck`. Moved the design-agnostic read machinery (`readLiveSlices`,
-`annotationBody`, `quoteLinesOnly`, `enumerateDerivedLines`) out of the retired
-`verify-derive-recheck.ts` into `verify-derive-check.ts`; `verify-enumerate.ts`'s `quoteLinesOnly`
-import is retargeted onto the new module (an intentional, proven-safe two-file import cycle).
-Added a new `DERIVED_CITATION_LEGEND_PLACEHOLDER_RE` guard carrying the 177-21 measurement
-harness's disclosed legend-placeholder fix (a `Derived (p.N):` occurrence with no digit — the
-literal annotation-convention legend text some rulebooks write) into the product's candidate
-enumeration for the first time. `verifyDeriveCheckCommand` enumerates project-wide (proven deeply
-equal against a `.verify/`+`rulebook/source/` decoy tree), joins to the ledger (CR-03 stale /
-WR-03 orphan), names `DERIVE_CHECK_MODELS` (`claude-opus-5`/`claude-haiku-4-5-20251001`/
-`claude-sonnet-5`) as string literals, and never assigns `process.exitCode` (behavioral +
-source-level pins) — advisory, exit 0 unconditionally. `boardsmith verify-derive-check --project
-<dir> [--json]` now runs end-to-end from a real shell; `verify-derive-record` accepts exactly
-`--project`/`--slice-path`/`--enumerator-a`/`--enumerator-b`/`--reconciler`/`--json`, no
-`--verdict`, no bypass flag. New `src/cli/cli.test.ts` spawns the real `bin/boardsmith.js` entry
-point to prove registration presence/absence. 21 new tests (17 `verifyDeriveCheckCommand`, 4
-`cli.test.ts`). **Finding, recorded rather than silently resolved**: retargeting `cli.ts` as this
-plan's own Task 2 instructs breaks 3 pre-existing drift-guard tests in
-`src/cli/slash-command/bs/verify.test.ts` (outside this plan's scope) that check `verify-game.md`
-and `derive-compare.md` against `cli.ts` — both fixes are explicitly OTHER plans' jobs (177.1-05's
-Step 7 rewrite; 177.1-07's deletion of the retired contract files) per this plan's own critical
-rules forbidding touching either this wave. Full `npm test`: **4224 tests / 245 files, 4221
-passing, 3 failing** (the 3 drift-guard tests above; baseline 4203/244 all-green). `npx tsc
---noEmit` unchanged (one pre-existing, unrelated `docs/seed-to-state.test.ts` rootDir error). No
-packages installed. See
-`.planning/phases/177.1-wire-check04-closed-design/177.1-04-SUMMARY.md`. **4 of 8 plans remain in
-Phase 177.1** — `177.1-05` (verify-game.md Step 7 rewrite, which also closes 2 of the 3 known-red
-drift-guard tests) is next.
+`177.1-05-PLAN.md` (2026-07-31) rewrote `verify-game.md`'s Step 7, router paragraph,
+Context-Economics carve-out, and Reference Files onto the dual-enumeration design: Step 7 now runs
+`boardsmith verify-derive-check --json`, dispatches the same `slices[].enumeratorPayload` bytes
+twice unchanged to two cross-family enumerators (`claude-opus-5`/`claude-haiku-4-5-20251001`,
+`BS-ENUMERATE-V1`), dispatches a third `claude-sonnet-5` reconciler (`BS-RECONCILE-V1`) with both
+enumerator returns plus `slices[].derivedLines`, records all three returns through exactly ONE
+`boardsmith verify-derive-record` invocation per SLICE, and reports by formatting
+`verify-derive-check --json`'s output — formatted, never computed, matching Step 8's own
+discipline. Zero retired identifiers remain (`derive-recheck.md`, `derive-compare.md`,
+`BS-DERIVE-V1`, `BS-DERIVE-COMPARE-V1`, `buildBlindDerivePayload`, `factAlignment`,
+`verify-derive-recheck` — grep-count 0). The carve-out's TWO-OBSERVABLE reviewer check (CONTEXT
+decision 7) is preserved and re-aimed: the enumerator prompt (`BS-ENUMERATE-V1`) must contain ZERO
+annotation lines across all three families; the reconciler prompt/return (`BS-RECONCILE-V1`) is
+EXPECTED to carry `Derived` line text — never one blanket grep across both. Reference Files now
+lists `enumerate-facts.md`/`reconcile-facts.md`. Added 5 new regression pins plus rewrote two
+describe blocks that pinned Step 7's/the carve-out's OLD literal wording directly, and removed the
+now-false `--fact-alignment` positive pin (superseded by a new absence gate). Left
+`derive-recheck.md`/`derive-compare.md` (the FILES), `ALL_VERIFY_FILES`, their installer leaf
+probes, and their RETURN-field content pins completely untouched — deleting them is 177.1-07's
+job. **This wave cleared exactly the one in-scope drift-guard failure** ("every verify-* command
+mentioned in verify-game.md ... is registered in cli.ts") — `boardsmith verify-derive-recheck
+--json` is gone from Step 7, replaced by the registered `verify-derive-check --json`. Full `npm
+test`: **4230 tests / 245 files, 4228 passing, 2 failing** — both are the `derive-compare.md`
+RETURN-field drift-guard tests, explicitly plan 07's job (deleting `derive-compare.md` deletes
+that guard's describe block too); baseline entering this wave was 4224/245, 4221 passing, 3
+failing. `npx tsc --noEmit` unchanged (one pre-existing, unrelated `docs/seed-to-state.test.ts`
+rootDir error). No packages installed. See
+`.planning/phases/177.1-wire-check04-closed-design/177.1-05-SUMMARY.md`. **3 of 8 plans remain in
+Phase 177.1** — `177.1-06` (pre-register the split mechanical/model-dependent bar and replay the
+recorded `177-22` slice through the product CLI + this rewritten skill prose) is next.
 
 ---
 
