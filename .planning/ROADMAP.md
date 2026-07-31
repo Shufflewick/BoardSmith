@@ -374,9 +374,14 @@ today no designer can reach that tool.
      the new command's `--json` — **formatted, never computed** by the skill, the discipline every
      other step in that file already holds.
   3. The retired blind-derivation design is REMOVED, not deprecated — `derive-recheck.md`,
-     `derive-compare.md`, and the `verify-derive-recheck`/`verify-derive-record` commands and
-     their blind-payload machinery — per the project's No Backward Compatibility rule. Any part
-     genuinely still needed by the new path is moved, not left behind as a second path.
+     `derive-compare.md`, the `verify-derive-recheck` command, and the blind-payload machinery
+     (`buildBlindDerivePayload`, `focusQuoteWindow`, `blindDeriveHandle`, `factAlignment`, the
+     four-verdict enum) — per the project's No Backward Compatibility rule. Any part genuinely
+     still needed by the new path is moved, not left behind as a second path.
+     **AMENDED after discuss (177.1-CONTEXT D-01):** this criterion originally listed
+     `verify-derive-record` for removal too. The accepted decision KEEPS it, retargeted onto the
+     dual-enumeration verdict set, because it is CHECK-04's single atomic write surface (CR-05)
+     and that identity is design-agnostic. CONTEXT governs as the later locked source.
   4. Proven by a real end-to-end `/bs-verify-game`-path run on at least one reference game,
      reproducing a classification the `.planning/` harness already produced for the same input —
      the product path and the measurement harness must agree.
