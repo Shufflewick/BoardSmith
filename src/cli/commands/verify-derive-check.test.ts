@@ -13,7 +13,11 @@ import {
   replaceDeriveCheckVerdicts,
   recordDeriveCheckVerdicts,
   readDeriveCheckVerdicts,
+  reconcileSlice,
+  parseSubagentJsonInput,
   type DeriveCheckRecord,
+  type EnumeratorReturn,
+  type ReconcilerReturn,
 } from './verify-derive-check.js';
 
 /**
@@ -614,5 +618,310 @@ describe('readDeriveCheckVerdicts — revalidation through createDeriveCheckReco
     } finally {
       await fs.rm(empty, { recursive: true, force: true });
     }
+  });
+});
+
+// ===========================================================================================
+// Task 2 (177.1-03) — reconcileSlice(): the compute pipeline
+// ===========================================================================================
+
+/**
+ * Real recorded returns from the 177-22 measurement run (`analysis-run1.json` is this run's
+ * ground truth — the closure evidence CHECK-04 was actually measured against), copied into
+ * `__fixtures__/177-22-run1-seven/` (not read from `.planning/` at test runtime, per the plan's
+ * own instruction). The two reconciler fixtures are hand-amended with an `arithmeticSpec` field
+ * that the ORIGINAL recorded run never carried — 177.1-03 Task 1 added `arithmeticSpec` to
+ * `reconcile-facts.md` after this run happened, so no live dispatch has ever populated one for
+ * this exact corpus. The `arithmeticSpec` values below were derived by hand from the SAME
+ * `analyze.mjs` `ARITHMETIC_LINES` hand list this plan's Task 1/2 replace (see that file's
+ * comment at line 106), so they encode the identical operand/operation/claimedResult facts —
+ * this is a deliberate, disclosed fixture amendment, not a fabricated scenario.
+ */
+const FIXTURES_DIR = join(__dirname, '__fixtures__', '177-22-run1-seven');
+
+function loadFixtureJson<T>(name: string): T {
+  return JSON.parse(readFileSync(join(FIXTURES_DIR, name), 'utf-8')) as T;
+}
+
+describe('reconcileSlice', () => {
+  it('reproduces analysis-run1.json exactly for seven__01-definitions-and-components (groundedBothCount 9, rejectedCount 0, line 21 corroborated-by-composition)', () => {
+    const enumeratorA = loadFixtureJson<EnumeratorReturn>(
+      'seven__01-definitions-and-components.A.json',
+    );
+    const enumeratorB = loadFixtureJson<EnumeratorReturn>(
+      'seven__01-definitions-and-components.B.json',
+    );
+    const reconciler = loadFixtureJson<ReconcilerReturn>(
+      'seven__01-definitions-and-components.reconcile.json',
+    );
+
+    const result = reconcileSlice({
+      projectDir: '/does-not-matter-for-this-pure-call',
+      slicePath: 'rulebook/01-definitions-and-components.md',
+      sliceText: '',
+      enumeratorA,
+      enumeratorB,
+      reconciler,
+      provenance: null,
+    });
+
+    expect(result.grounding.grounded.length).toBe(9);
+    expect(result.grounding.rejected.length).toBe(0);
+    expect(result.classifications).toHaveLength(1);
+    expect(result.classifications[0].lineNumber).toBe(21);
+    expect(result.classifications[0].classification).toBe('corroborated-by-composition');
+
+    // The composed fact id is a deterministic sha256 of derivedLineText + operand magnitudes +
+    // operation — matches analysis-run1.json's recorded id ("ccb54c72d6b176e1") regardless of
+    // which specific grounded fact supplied a duplicate magnitude-4 operand, because the id
+    // depends only on magnitude values, never fact identity.
+    expect(result.composed).toHaveLength(1);
+    expect(result.composed[0].id).toBe('ccb54c72d6b176e1');
+    expect(result.composed[0].value).toEqual({ magnitude: 112, unit: 'numbered cards', approximate: false });
+  });
+
+  it('reproduces analysis-run1.json exactly for seven__01-overview-setup-and-play (groundedBothCount 19, rejectedCount 0, [36 corroborated-by-composition, 38 corroborated])', () => {
+    const enumeratorA = loadFixtureJson<EnumeratorReturn>(
+      'seven__01-overview-setup-and-play.A.json',
+    );
+    const enumeratorB = loadFixtureJson<EnumeratorReturn>(
+      'seven__01-overview-setup-and-play.B.json',
+    );
+    const reconciler = loadFixtureJson<ReconcilerReturn>(
+      'seven__01-overview-setup-and-play.reconcile.json',
+    );
+
+    const result = reconcileSlice({
+      projectDir: '/does-not-matter-for-this-pure-call',
+      slicePath: 'rulebook/01-overview-setup-and-play.md',
+      sliceText: '',
+      enumeratorA,
+      enumeratorB,
+      reconciler,
+      provenance: null,
+    });
+
+    expect(result.grounding.grounded.length).toBe(19);
+    expect(result.grounding.rejected.length).toBe(0);
+    expect(result.classifications).toHaveLength(2);
+    expect(result.classifications[0]).toMatchObject({
+      lineNumber: 36,
+      classification: 'corroborated-by-composition',
+    });
+    expect(result.classifications[1]).toMatchObject({
+      lineNumber: 38,
+      classification: 'corroborated',
+    });
+
+    // The chain-composed fact id matches analysis-run1.json's recorded id ("580cab72645565db"),
+    // a deterministic sha256 of derivedLineText + the chain's own per-step statements.
+    expect(result.composed).toHaveLength(1);
+    expect(result.composed[0].id).toBe('580cab72645565db');
+    expect(result.composed[0].value).toEqual({ magnitude: 7, unit: 'rounds', approximate: false });
+  });
+
+  it('a "both" claim whose quotedFromA matches neither enumerator list is rejected, never grounded, naming quotedFromA', () => {
+    const enumeratorA: EnumeratorReturn = {
+      facts: [{ statement: 'Cards come in 4 colors.', sourceSentence: 'There are 4 colors.', numericValue: { magnitude: 4, unit: 'colors', approximate: false } }],
+    };
+    const enumeratorB: EnumeratorReturn = {
+      facts: [{ statement: 'Cards come in 4 colors.', sourceSentence: 'There are 4 colors.', numericValue: { magnitude: 4, unit: 'colors', approximate: false } }],
+    };
+    const reconciler: ReconcilerReturn = {
+      both: [
+        {
+          statement: 'Cards come in 4 colors.',
+          quotedFromA: 'This text was never stated by enumerator A at all.',
+          quotedFromB: 'There are 4 colors.',
+        },
+      ],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [],
+    };
+
+    const result = reconcileSlice({
+      projectDir: '/x',
+      slicePath: 'rulebook/x.md',
+      sliceText: '',
+      enumeratorA,
+      enumeratorB,
+      reconciler,
+      provenance: null,
+    });
+
+    expect(result.grounding.grounded).toHaveLength(0);
+    expect(result.grounding.rejected).toHaveLength(1);
+    expect(result.grounding.rejected[0].reason).toContain('quotedFromA');
+  });
+
+  it('an arithmeticSpec whose claimedResult does not equal the code-computed value falls through to uncorroborated, never corroborated-by-composition', () => {
+    const enumeratorA: EnumeratorReturn = {
+      facts: [
+        { statement: 'There are 4 colors.', sourceSentence: 'There are 4 colors.', numericValue: { magnitude: 4, unit: 'colors', approximate: false } },
+        { statement: 'There are 5 shapes.', sourceSentence: 'There are 5 shapes.', numericValue: { magnitude: 5, unit: 'shapes', approximate: false } },
+      ],
+    };
+    const enumeratorB: EnumeratorReturn = {
+      facts: [
+        { statement: 'There are 4 colors.', sourceSentence: 'There are 4 colors.', numericValue: { magnitude: 4, unit: 'colors', approximate: false } },
+        { statement: 'There are 5 shapes.', sourceSentence: 'There are 5 shapes.', numericValue: { magnitude: 5, unit: 'shapes', approximate: false } },
+      ],
+    };
+    const reconciler: ReconcilerReturn = {
+      both: [
+        { statement: 'There are 4 colors.', quotedFromA: 'There are 4 colors.', quotedFromB: 'There are 4 colors.' },
+        { statement: 'There are 5 shapes.', quotedFromA: 'There are 5 shapes.', quotedFromB: 'There are 5 shapes.' },
+      ],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        {
+          lineNumber: 1,
+          derivedLineText: 'Derived (p.1): There are 4 colors x 5 shapes = 999 tiles.',
+          proposedClassification: 'corroborated-by-composition',
+          citedBothStatements: ['There are 4 colors.', 'There are 5 shapes.'],
+          arithmeticSpec: {
+            kind: 'single',
+            operation: 'multiply',
+            operandStatements: ['There are 4 colors.', 'There are 5 shapes.'],
+            claimedResult: { magnitude: 999, unit: 'tiles', approximate: false },
+          },
+        },
+      ],
+    };
+
+    const result = reconcileSlice({
+      projectDir: '/x',
+      slicePath: 'rulebook/x.md',
+      sliceText: '',
+      enumeratorA,
+      enumeratorB,
+      reconciler,
+      provenance: null,
+    });
+
+    expect(result.composed).toHaveLength(0);
+    expect(result.composeAttempts).toHaveLength(1);
+    expect(result.composeAttempts[0].outcome.ok).toBe(false);
+    expect(result.classifications[0].classification).toBe('uncorroborated');
+  });
+
+  it('an arithmeticSpec.operandStatements entry matching no grounded "both" statement fails with a reason naming the unresolved statement, never throws', () => {
+    const enumeratorA: EnumeratorReturn = {
+      facts: [{ statement: 'There are 4 colors.', sourceSentence: 'There are 4 colors.', numericValue: { magnitude: 4, unit: 'colors', approximate: false } }],
+    };
+    const enumeratorB: EnumeratorReturn = {
+      facts: [{ statement: 'There are 4 colors.', sourceSentence: 'There are 4 colors.', numericValue: { magnitude: 4, unit: 'colors', approximate: false } }],
+    };
+    const reconciler: ReconcilerReturn = {
+      both: [{ statement: 'There are 4 colors.', quotedFromA: 'There are 4 colors.', quotedFromB: 'There are 4 colors.' }],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        {
+          lineNumber: 1,
+          derivedLineText: 'Derived (p.1): There are 4 colors x 5 shapes = 20 tiles.',
+          proposedClassification: 'corroborated-by-composition',
+          citedBothStatements: ['There are 4 colors.'],
+          arithmeticSpec: {
+            kind: 'single',
+            operation: 'multiply',
+            operandStatements: ['There are 4 colors.', 'This statement was never grounded.'],
+            claimedResult: { magnitude: 20, unit: 'tiles', approximate: false },
+          },
+        },
+      ],
+    };
+
+    const result = reconcileSlice({
+      projectDir: '/x',
+      slicePath: 'rulebook/x.md',
+      sliceText: '',
+      enumeratorA,
+      enumeratorB,
+      reconciler,
+      provenance: null,
+    });
+
+    expect(result.composeAttempts[0].outcome.ok).toBe(false);
+    expect((result.composeAttempts[0].outcome as { ok: false; reason: string }).reason).toContain(
+      'This statement was never grounded.',
+    );
+    expect(result.classifications[0].classification).toBe('uncorroborated');
+  });
+
+  it('a chain spec with more than MAX_ARITHMETIC_CHAIN_DEPTH steps is rejected by composeArithmeticChain itself, not a second re-implemented check', () => {
+    const fact = (n: number) => ({
+      statement: `Value is ${n}.`,
+      quotedFromA: `Value is ${n}.`,
+      quotedFromB: `Value is ${n}.`,
+    });
+    const enumFacts = (n: number) => ({
+      statement: `Value is ${n}.`,
+      sourceSentence: `Value is ${n}.`,
+      numericValue: { magnitude: n, unit: 'units', approximate: false },
+    });
+    const values = [1, 2, 3, 4, 5];
+    const enumeratorA: EnumeratorReturn = { facts: values.map(enumFacts) };
+    const enumeratorB: EnumeratorReturn = { facts: values.map(enumFacts) };
+    const reconciler: ReconcilerReturn = {
+      both: values.map(fact),
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        {
+          lineNumber: 1,
+          derivedLineText: 'Derived (p.1): 1 + 2 + 3 + 4 + 5 = 15 units, computed in 4 chained steps.',
+          proposedClassification: 'corroborated-by-composition',
+          citedBothStatements: values.map((n) => `Value is ${n}.`),
+          arithmeticSpec: {
+            kind: 'chain',
+            steps: [
+              { operation: 'add', operandRefs: [{ kind: 'fact', statement: 'Value is 1.' }, { kind: 'fact', statement: 'Value is 2.' }] },
+              { operation: 'add', operandRefs: [{ kind: 'stepResult', index: 0 }, { kind: 'fact', statement: 'Value is 3.' }] },
+              { operation: 'add', operandRefs: [{ kind: 'stepResult', index: 1 }, { kind: 'fact', statement: 'Value is 4.' }] },
+              { operation: 'add', operandRefs: [{ kind: 'stepResult', index: 2 }, { kind: 'fact', statement: 'Value is 5.' }] },
+            ],
+            claimedResult: { magnitude: 15, unit: 'units', approximate: false },
+          },
+        },
+      ],
+    };
+
+    const result = reconcileSlice({
+      projectDir: '/x',
+      slicePath: 'rulebook/x.md',
+      sliceText: '',
+      enumeratorA,
+      enumeratorB,
+      reconciler,
+      provenance: null,
+    });
+
+    expect(result.composeAttempts[0].outcome.ok).toBe(false);
+    expect((result.composeAttempts[0].outcome as { ok: false; reason: string }).reason).toMatch(
+      /MAX_ARITHMETIC_CHAIN_DEPTH|bounded at 3/,
+    );
+  });
+});
+
+describe('parseSubagentJsonInput', () => {
+  it('parses valid JSON text', () => {
+    expect(parseSubagentJsonInput('{"facts":[]}', '--enumerator-a', '/tmp/a.json')).toEqual({
+      facts: [],
+    });
+  });
+
+  it('throws ONE actionable message naming the flag and the file path for invalid JSON, never a raw SyntaxError', () => {
+    let message = '';
+    try {
+      parseSubagentJsonInput('{not valid json', '--enumerator-a', '/tmp/a.json');
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain('--enumerator-a');
+    expect(message).toContain('/tmp/a.json');
+    expect(message).not.toContain('SyntaxError');
   });
 });
