@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177.1-06-PLAN.md — pre-registered the split mechanical/model-dependent bar, committed alone, then replayed 177-22 run1's seven corpus through the product CLI with zero divergences on all 7 mechanical categories. Next: 177.1-07 (delete the retired design)."
-last_updated: "2026-07-31T22:15:00.000Z"
-last_activity: 2026-07-28
+stopped_at: "Completed 177.1-07-PLAN.md — deleted the retired blind per-line derive-recheck design (module, contracts, installer entries, drift-guard pins); suite ends green 244 files/4119 tests/0 failing. Next: 177.1-08 (live end-to-end run on seven)."
+last_updated: "2026-07-31T22:30:00.000Z"
+last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 7
   total_plans: 73
-  completed_plans: 77
+  completed_plans: 78
   percent: 64
 ---
 
@@ -21,14 +21,50 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plans 01-06 of 8
+**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plans 01-07 of 8
 complete (annotation-family regex consolidation; ledger moved onto the dual-enumeration verdict
 set; reconcileSlice() + verify-derive-record retarget + arithmeticSpec; verifyDeriveCheckCommand +
 both commands registered in cli.ts; verify-game.md Step 7 rewritten onto the dual-enumeration
-design; zero-dispatch pre-registration + product-path replay proof against 177-22 run1); plans
-07-08 remain (retired-design deletion, live end-to-end run).
+design; zero-dispatch pre-registration + product-path replay proof against 177-22 run1; retired
+blind per-line design deleted, suite green); plan 08 remains (live end-to-end run on `seven`).
 
 ## Current Position
+
+`177.1-07-PLAN.md` (2026-07-31) deleted the retired blind per-line derive-recheck design: the
+module (`verify-derive-recheck.ts`, 1293 lines), its test file (100 tests), both retired skill
+contracts (`verify/derive-recheck.md`, `verify/derive-compare.md`), their `install-claude-command.ts`
+manifest entries, and every drift-guard pin — clearing the 2 known-red guards this wave existed to
+close (the `derive-compare.md` RETURN-block drift tests that `readFileSync`d a file that no longer
+exists). A mandatory pre-deletion port-coverage audit (every exported symbol + describe block,
+disposed PORTED/DELETED-BY-DESIGN/UNPORTED) found zero UNPORTED rows but one real coverage gap —
+`annotationBody`/`quoteLinesOnly`/`enumerateDerivedLines` had no standalone unit describe block in
+`verify-derive-check.test.ts`, only indirect exercise through higher-level command tests — closed
+by porting 10 direct tests rather than accepting indirect coverage. Rewrote
+`derived-line-pattern.ts`'s import-cycle header and every cross-module prose reference (in
+`verify-enumerate.ts`, `ingest-archive.ts`, `verify-derive-check.ts`/`.test.ts`,
+`derived-line-pattern.test.ts`) to name surviving consumers instead of the deleted module. Replaced
+`verify.test.ts`'s `derive-recheck.md`/`derive-compare.md` pins with an installed-artifact ABSENCE
+probe (a real forced install never ships either retired contract), alongside the pre-existing
+`enumerate-facts.md`/`reconcile-facts.md` installer leaf probes (177-15). Task 1 (deletion + sweep)
+and Task 2 (pin pruning + absence probe) were committed together as one atomic commit (`ec6fc57d`)
+per the plan's own critical rule that an intermediate red state (files deleted, pins still present)
+must never land in history, plus a small follow-up commit (`873106f2`) for the port-coverage gap
+closure. **Full `npm test`: 244 files / 4119 tests / 0 failing** (down from the entering baseline
+4230/245/4228-passing/2-failing — net change reflects -100 tests from the deleted test file, -21
+from the two deleted `verify.test.ts` describe blocks, +10 newly-ported, +1 net new absence-probe
+test). `npx tsc --noEmit` clean except the pre-existing unrelated `docs/seed-to-state.test.ts`
+rootDir error (confirmed present on `HEAD~2` too). `npm run audit:dead-code` reports FEWER issues
+than the pre-plan baseline (537→529 dead-code issues, 885→862 dupe clone groups, 338→334
+above-threshold health), confirming zero newly-orphaned files/exports. Exactly ONE live
+derived-line-check path remains: `verify-derive-check`/`verify-derive-record` registered in
+`cli.ts`; `verify-derive-recheck` confirmed unreachable as a CLI command. **WR-07 (the
+`quoteLinesOnly` deny-list → allow-list inversion) confirmed still OPEN, untouched by this plan** —
+deferred to Phase 178 per CONTEXT decision 9. See
+`.planning/phases/177.1-wire-check04-closed-design/177.1-07-SUMMARY.md`. **1 of 8 plans remains in
+Phase 177.1** — `177.1-08` (the live end-to-end dispatch proof on `seven`, comparing against
+`177.1-06`'s pre-registered mechanical/model-dependent bar) is next.
+
+---
 
 `177.1-06-PLAN.md` (2026-07-31) pre-registered CONTEXT decision 11's split mechanical/model-dependent
 bar from a ZERO-DISPATCH dry run (`boardsmith verify-derive-check --json`, no ledger present) plus
