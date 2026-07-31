@@ -1,0 +1,68 @@
+[
+  {
+    "slice": "01-card-anatomy.md",
+    "derivedCount": 1,
+    "payloadChars": 889,
+    "deviation": false
+  },
+  {
+    "slice": "01-destroying-a-machine-part.md",
+    "derivedCount": 1,
+    "payloadChars": 1171,
+    "deviation": false
+  },
+  {
+    "slice": "01-dice-roll-symbology.md",
+    "derivedCount": 1,
+    "payloadChars": 1010,
+    "deviation": false
+  },
+  {
+    "slice": "01-gameplay-loop-and-phase-i.md",
+    "derivedCount": 2,
+    "payloadChars": 1006,
+    "deviation": false
+  },
+  {
+    "slice": "01-objective-and-setup.md",
+    "derivedCount": 3,
+    "payloadChars": 2871,
+    "deviation": false
+  },
+  {
+    "slice": "02-card-effect-icons.md",
+    "derivedCount": 1,
+    "payloadChars": 1500,
+    "deviation": false
+  },
+  {
+    "slice": "02-hard-mode.md",
+    "derivedCount": 1,
+    "payloadChars": 924,
+    "deviation": false
+  },
+  {
+    "slice": "02-machine-phase.md",
+    "derivedCount": 1,
+    "payloadChars": 2574,
+    "deviation": false
+  },
+  {
+    "slice": "02-player-actions.md",
+    "derivedCount": 1,
+    "payloadChars": 3615,
+    "deviation": false
+  },
+  {
+    "slice": "02-taking-damage-and-winning.md",
+    "derivedCount": 2,
+    "payloadChars": 699,
+    "deviation": false
+  },
+  {
+    "slice": "CARDS.md",
+    "derivedCount": 5,
+    "payloadChars": 18103,
+    "deviation": true
+  }
+]

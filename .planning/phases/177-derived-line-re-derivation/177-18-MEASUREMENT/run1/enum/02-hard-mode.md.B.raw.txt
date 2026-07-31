@@ -1,0 +1,89 @@
+```json
+{
+  "facts": [
+    {
+      "statement": "HARD MODE is an optional rule variation.",
+      "sourceSentence": "Variant: HARD MODE is an optional rule variation"
+    },
+    {
+      "statement": "HARD MODE is out of scope by default unless the designer opts in.",
+      "sourceSentence": "Out of scope by default unless the designer opts in."
+    },
+    {
+      "statement": "HARD MODE provides a tougher challenge.",
+      "sourceSentence": "For a tougher challenge and longer game, try playing HARD MODE"
+    },
+    {
+      "statement": "HARD MODE provides a longer game.",
+      "sourceSentence": "For a tougher challenge and longer game, try playing HARD MODE"
+    },
+    {
+      "statement": "In normal setup, 6 cards are removed at random.",
+      "sourceSentence": "Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "In HARD MODE setup, all 16 cards are used.",
+      "sourceSentence": "Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.",
+      "numericValue": {
+        "magnitude": 16,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "In HARD MODE, the player HP tracking card is flipped to the B side.",
+      "sourceSentence": "Flip the player HP tracking card to the B side"
+    },
+    {
+      "statement": "The B side of the HP card provides one fewer shield slot.",
+      "sourceSentence": "you now have one less shield slot, re-roll slot, and roll modifier slot.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "shield slot",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The B side of the HP card provides one fewer re-roll slot.",
+      "sourceSentence": "you now have one less shield slot, re-roll slot, and roll modifier slot.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "re-roll slot",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The B side of the HP card provides one fewer roll modifier slot.",
+      "sourceSentence": "you now have one less shield slot, re-roll slot, and roll modifier slot.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "roll modifier slot",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "In normal games, no more than 4 dice can be placed to shields per turn.",
+      "sourceSentence": "In a normal game, no more than 4 dice can be placed this way per turn.",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "In HARD MODE, no more than 3 dice can be placed to shields per turn.",
+      "sourceSentence": "In Hard Mode, no more than 3 dice can be placed this way per turn.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "dice",
+        "approximate": false
+      }
+    }
+  ]
+}
+```

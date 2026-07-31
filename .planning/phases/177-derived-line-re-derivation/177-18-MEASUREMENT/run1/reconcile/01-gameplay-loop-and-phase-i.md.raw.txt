@@ -1,0 +1,112 @@
+{
+  "both": [
+    {
+      "statement": "During Phase I, players allocate dice to modify their rolls, defend against incoming damage, and deal damage to machine parts.",
+      "quotedFromA": "PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine.",
+      "quotedFromB": "allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine"
+    },
+    {
+      "statement": "During Phase II, the machine cycles its remaining parts.",
+      "quotedFromA": "PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card.",
+      "quotedFromB": "the machine will cycle its remaining parts"
+    },
+    {
+      "statement": "During Phase II, the machine resolves the effects of its parts.",
+      "quotedFromA": "PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card.",
+      "quotedFromB": "resolve their effects"
+    },
+    {
+      "statement": "During Phase II, the machine grows by 1 additional card.",
+      "quotedFromA": "PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card.",
+      "quotedFromB": "grow by 1 additional card"
+    },
+    {
+      "statement": "The loop continues until either the Doom Core is revealed and destroyed or the player is destroyed by the machine.",
+      "quotedFromA": "This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine.",
+      "quotedFromB": "This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine"
+    },
+    {
+      "statement": "At the start of the player's turn, all available dice are rolled.",
+      "quotedFromA": "At the start of your turn, roll all of your available dice (you start with 5 black dice and may gain up to 5 additional yellow dice from destroyed machine part cards).",
+      "quotedFromB": "At the start of your turn, roll all of your available dice"
+    },
+    {
+      "statement": "Players start with 5 black dice.",
+      "quotedFromA": "you start with 5 black dice",
+      "quotedFromB": "you start with 5 black dice"
+    },
+    {
+      "statement": "Players may gain up to 5 additional yellow dice from destroyed machine part cards.",
+      "quotedFromA": "may gain up to 5 additional yellow dice from destroyed machine part cards",
+      "quotedFromB": "may gain up to 5 additional yellow dice from destroyed machine part cards"
+    },
+    {
+      "statement": "One allocation option is activating any available utilities.",
+      "quotedFromA": "1) ACTIVATE ANY AVAILABLE UTILITIES",
+      "quotedFromB": "1) ACTIVATE ANY AVAILABLE UTILITIES"
+    },
+    {
+      "statement": "One allocation option is playing dice to shields.",
+      "quotedFromA": "2) PLAY DICE TO YOUR SHIELDS",
+      "quotedFromB": "2) PLAY DICE TO YOUR SHIELDS"
+    },
+    {
+      "statement": "One allocation option is dealing damage to machine parts.",
+      "quotedFromA": "3) DEAL DAMAGE TO MACHINE PARTS",
+      "quotedFromB": "3) DEAL DAMAGE TO MACHINE PARTS"
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "A turn's first phase is a dice roll and resolution phase in which the player rolls their available dice.",
+      "sourceSentence": "PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine."
+    },
+    {
+      "statement": "The machine phase begins only after the player has allocated and resolved all of their dice.",
+      "sourceSentence": "PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card."
+    },
+    {
+      "statement": "Destroying the Doom Core requires first revealing it.",
+      "sourceSentence": "This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine."
+    },
+    {
+      "statement": "Which allocation options a player may use depends on the values they rolled.",
+      "sourceSentence": "Allocate them in any of the following available ways, based on your rolls:"
+    },
+    {
+      "statement": "A player may allocate dice to any of the listed available options, without restriction to a single option.",
+      "sourceSentence": "Allocate them in any of the following available ways, based on your rolls:"
+    }
+  ],
+  "bOnly": [
+    {
+      "statement": "The game alternates between Phase I (Dice Roll/Resolution) and Phase II (The Machine Phase).",
+      "sourceSentence": "PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine. PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card."
+    }
+  ],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 13,
+      "derivedLineText": "Derived (p.1): The game is a repeating two-phase loop (Phase I player dice allocation, Phase II machine phase) that ends only in a win (Doom Core destroyed) or a loss (player destroyed).",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "During Phase I, players allocate dice to modify their rolls, defend against incoming damage, and deal damage to machine parts.",
+        "During Phase II, the machine cycles its remaining parts.",
+        "During Phase II, the machine resolves the effects of its parts.",
+        "During Phase II, the machine grows by 1 additional card.",
+        "The loop continues until either the Doom Core is revealed and destroyed or the player is destroyed by the machine."
+      ]
+    },
+    {
+      "lineNumber": 15,
+      "derivedLineText": "Derived (p.1): The player's dice pool ranges from 5 dice (5 black) up to 10 dice (5 black + 5 yellow), and all available dice are re-rolled at the start of each turn.",
+      "proposedClassification": "corroborated-by-composition",
+      "citedBothStatements": [
+        "Players start with 5 black dice.",
+        "Players may gain up to 5 additional yellow dice from destroyed machine part cards.",
+        "At the start of the player's turn, all available dice are rolled."
+      ],
+      "arithmeticNote": "Operands are the 'both' facts stating 5 black dice (baseline) and up to 5 additional yellow dice (max gain); the Derived line's 5-to-10 dice range is the sum of these two quantities (5 + 0 to 5 + 5), and the re-roll-each-turn claim is separately grounded by the 'all available dice are rolled at start of turn' both-fact."
+    }
+  ]
+}

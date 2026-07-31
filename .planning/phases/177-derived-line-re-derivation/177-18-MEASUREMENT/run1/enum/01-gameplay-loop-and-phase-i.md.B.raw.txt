@@ -1,0 +1,69 @@
+```json
+{
+  "facts": [
+    {
+      "statement": "The game alternates between Phase I (Dice Roll/Resolution) and Phase II (The Machine Phase).",
+      "sourceSentence": "PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine. PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card."
+    },
+    {
+      "statement": "On each turn during Phase I, the player rolls all available dice.",
+      "sourceSentence": "At the start of your turn, roll all of your available dice"
+    },
+    {
+      "statement": "Players begin the game with 5 black dice.",
+      "sourceSentence": "you start with 5 black dice",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "black dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Players may gain up to 5 additional yellow dice by destroying machine part cards.",
+      "sourceSentence": "may gain up to 5 additional yellow dice from destroyed machine part cards",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "additional yellow dice",
+        "approximate": true
+      }
+    },
+    {
+      "statement": "During Phase I, players allocate dice to modify their rolls, defend against damage, and deal damage to machine parts.",
+      "sourceSentence": "allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine"
+    },
+    {
+      "statement": "One allocation option during Phase I is to activate available utilities.",
+      "sourceSentence": "1) ACTIVATE ANY AVAILABLE UTILITIES"
+    },
+    {
+      "statement": "One allocation option during Phase I is to play dice to shields.",
+      "sourceSentence": "2) PLAY DICE TO YOUR SHIELDS"
+    },
+    {
+      "statement": "One allocation option during Phase I is to deal damage to machine parts.",
+      "sourceSentence": "3) DEAL DAMAGE TO MACHINE PARTS"
+    },
+    {
+      "statement": "During Phase II, the machine cycles its remaining parts.",
+      "sourceSentence": "the machine will cycle its remaining parts"
+    },
+    {
+      "statement": "During Phase II, the machine resolves the effects of its parts.",
+      "sourceSentence": "resolve their effects"
+    },
+    {
+      "statement": "During Phase II, the machine grows by 1 additional card.",
+      "sourceSentence": "grow by 1 additional card",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The game loop continues until either the Doom Core is revealed and destroyed or the player is destroyed.",
+      "sourceSentence": "This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine"
+    }
+  ]
+}
+```

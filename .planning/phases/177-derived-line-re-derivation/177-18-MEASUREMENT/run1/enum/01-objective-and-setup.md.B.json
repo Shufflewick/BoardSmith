@@ -1,0 +1,134 @@
+{
+  "facts": [
+    {
+      "statement": "The objective is to uncover and destroy the Doom Core before experiencing total extinction.",
+      "sourceSentence": "Uncover and destroy The Doom Core before you succumb to total extinction."
+    },
+    {
+      "statement": "The Doom Machine tracking card is placed to the player's left.",
+      "sourceSentence": "Set the Doom Machine tracking card to your left."
+    },
+    {
+      "statement": "The Doom Machine tracking card has a Sentience track (yellow) and a Power track (black).",
+      "sourceSentence": "Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks."
+    },
+    {
+      "statement": "Tracking cubes start on the zero spaces of the Sentience and Power tracks.",
+      "sourceSentence": "Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks."
+    },
+    {
+      "statement": "The Doom Core is a machine part card.",
+      "sourceSentence": "Find the \"Doom Core\" machine part card, and place it face down to the right of the Doom Machine tracking card."
+    },
+    {
+      "statement": "The Doom Core card starts face down.",
+      "sourceSentence": "Find the \"Doom Core\" machine part card, and place it face down to the right of the Doom Machine tracking card."
+    },
+    {
+      "statement": "The Doom Core is positioned to the right of the Doom Machine tracking card.",
+      "sourceSentence": "Find the \"Doom Core\" machine part card, and place it face down to the right of the Doom Machine tracking card."
+    },
+    {
+      "statement": "Machine part cards are shuffled.",
+      "sourceSentence": "Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run)."
+    },
+    {
+      "statement": "Six machine part cards are removed at random and set aside.",
+      "sourceSentence": "Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run).",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "machine part cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Nine machine part cards remain after removal.",
+      "sourceSentence": "Place the 9 remaining cards face down on top of the Doom Core to create the machine deck.",
+      "numericValue": {
+        "magnitude": 9,
+        "unit": "machine part cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The nine remaining machine part cards form the machine deck.",
+      "sourceSentence": "Place the 9 remaining cards face down on top of the Doom Core to create the machine deck."
+    },
+    {
+      "statement": "The machine deck cards are placed face down on top of the Doom Core.",
+      "sourceSentence": "Place the 9 remaining cards face down on top of the Doom Core to create the machine deck."
+    },
+    {
+      "statement": "The Player HP tracking card is placed below the machine deck.",
+      "sourceSentence": "Place the Player HP (health points) tracking card below the machine deck."
+    },
+    {
+      "statement": "A white tracking cube starts on the 10 space of the Player HP track.",
+      "sourceSentence": "Set the white tracking cube on the 10 space of the Player HP track.",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "space",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Three cards are drawn from the top of the machine deck.",
+      "sourceSentence": "Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The drawn cards are placed face up.",
+      "sourceSentence": "Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck."
+    },
+    {
+      "statement": "The drawn cards are arranged in a line.",
+      "sourceSentence": "Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck."
+    },
+    {
+      "statement": "The drawn cards are placed to the immediate right of the deck.",
+      "sourceSentence": "Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck."
+    },
+    {
+      "statement": "The drawn cards represent the starting machine parts the player will face.",
+      "sourceSentence": "These are the starting machine parts you will face."
+    },
+    {
+      "statement": "One yellow die is taken for each revealed machine part card.",
+      "sourceSentence": "Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points).",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "yellow die per machine part card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Yellow dice are placed on the yellow dice slot on the cycle track of each machine part card.",
+      "sourceSentence": "Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points)."
+    },
+    {
+      "statement": "Each die face is set to match the corresponding machine part card's HP value.",
+      "sourceSentence": "Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points)."
+    },
+    {
+      "statement": "Unused yellow dice are set aside.",
+      "sourceSentence": "Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you."
+    },
+    {
+      "statement": "Players receive five black starting dice.",
+      "sourceSentence": "Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you.",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "black dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The black starting dice are placed in front of the player.",
+      "sourceSentence": "Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you."
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+BS-ENUMERATE-V1
+Slice: 02-player-actions.md
+
+> Section note: this section runs across printed panels -4- (PDF p.2), -5- (PDF p.1), and -6- (PDF p.2). It begins on PDF page 2.
+p.2 (panel -4-), PLAYER ACTIONS:
+"1) ACTIVATE ANY AVAILABLE UTILITIES"
+"You may place any number of unallocated dice on available utility slots. Each utility slot can only be used once per turn, and all dice you intend to place into utility slots must be placed there and immediately resolved (re-rolled or modified) before any of them can be re-allocated to either shields or part damage."
+p.2 (panel -4-), DICE MODIFIER +/- SLOT:
+"When placing a die on a dice modifier slot, immediately rotate and modify its face value by +/-1 pip. Leave it on its utility slot until all other utility dice have been resolved. Note: Sixes may NOT be changed to ones and ones may NOT be changed to sixes."
+p.2 (panel -4-), DICE RE-ROLL SLOT:
+"When placing a die on a re-roll slot, immediately re-roll it and place it back on the slot until all other utility dice are resolved. Once a die is re-rolled, it cannot be placed on a +/- slot to be further modified."
+p.1 (panel -5-), PLAYER ACTIONS (CONTINUED):
+"Once all utility dice are resolved (i.e. re-rolled or modified +/-1), remove them from your card and allocate them to either shields or damage, if possible."
+"Unallocated dice that cannot be played are considered spent at the end of your turn."
+Icon description (p.2, panel -4-): two yellow-outlined icon badges on dark teal — a "+/-" badge for the DICE MODIFIER +/- SLOT, and a badge showing two tumbling dice for the DICE RE-ROLL SLOT.
+p.1 (panel -5-), 2) PLAY DICE TO YOUR SHIELDS:
+"You may place unallocated dice (including dice that have been modified via utility slots) to the available shield slots, gaining shield strength equal to the total face value of all dice placed there."
+"In a normal game, no more than 4 dice can be placed this way per turn. In Hard Mode, no more than 3 dice can be placed this way per turn."
+"Additionally, dice used for shields do not persist from round to round. They're re-rolled at the start of your next turn."
+Icon description (p.1, panel -5-): a yellow-outlined badge with a "+" shield symbol, captioned "SHIELD DICE SLOT".
+p.2 (panel -6-), 3) DEAL DAMAGE TO MACHINE PARTS:
+"You may deal 1 damage to a given machine part by successfully fulfilling the roll conditions (on the middle right side of the card) and allocating the required dice to the part. (Only 1 point of damage is dealt each time a roll condition is met and the required dice are allocated.)"
+"Some parts can be damaged by a single dice, others require a specific combo of 2-3 dice. When a part is successfully damaged, rotate the part's yellow HP die face to reduce it by 1 pip, then place the dice you used to damage that part below the card. These dice are spent and cannot be re-used until your next turn."
+"A machine part can be damaged more than once per turn, but you must have enough dice to completely fulfill the damage condition each time."
+"When all of your dice have been allocated and resolved, and/or you have no more playable dice to play, proceed to the Machine Phase."
+Diagram description (p.2, panel -6-): a row of three yellow roll-condition tiles illustrating damage conditions — (1) a two-pip die face and a three-pip die face separated by a slash (a single-die "either/or" condition), (2) a two-die "+" combo showing two specific die faces summed, (3) a three-die condition made of three "?" dice joined by operator symbols. The full symbol vocabulary is defined in the Dice Roll Symbology section (p.1, panel -13-).

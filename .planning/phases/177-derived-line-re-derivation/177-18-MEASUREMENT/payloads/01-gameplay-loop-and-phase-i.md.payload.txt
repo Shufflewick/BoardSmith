@@ -1,0 +1,11 @@
+BS-ENUMERATE-V1
+Slice: 01-gameplay-loop-and-phase-i.md
+
+p.1 (panel -3-), GAMEPLAY LOOP:
+"PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine."
+"PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card. This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine."
+p.1 (panel -3-), PHASE I: DICE ROLL / RESOLUTION:
+"At the start of your turn, roll all of your available dice (you start with 5 black dice and may gain up to 5 additional yellow dice from destroyed machine part cards). Allocate them in any of the following available ways, based on your rolls:"
+"1) ACTIVATE ANY AVAILABLE UTILITIES"
+"2) PLAY DICE TO YOUR SHIELDS"
+"3) DEAL DAMAGE TO MACHINE PARTS"

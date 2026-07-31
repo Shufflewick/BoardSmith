@@ -1,0 +1,631 @@
+{
+  "runLabel": "run1",
+  "provenance": {
+    "sourceHash": "769195087e3745e94bdc7c67a4c1234b9dd8a859d63137cbe42bbb67bba324b0"
+  },
+  "totalBoth": 241,
+  "totalRejected": 32,
+  "perSlice": [
+    {
+      "slice": "01-card-anatomy.md",
+      "factsA": 14,
+      "factsB": 17,
+      "bothClaimed": 14,
+      "groundedBoth": 14,
+      "rejected": [],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "01-card-anatomy.md",
+          "lineNumber": 11,
+          "derivedLineText": "Derived (p.1): A machine part card carries four rule-bearing regions — name, roll conditions (damage requirements), a cycle track the part's yellow HP die moves down, and cycle icon effects triggered when the die lands on an icon.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 0
+    },
+    {
+      "slice": "01-destroying-a-machine-part.md",
+      "factsA": 13,
+      "factsB": 11,
+      "bothClaimed": 11,
+      "groundedBoth": 11,
+      "rejected": [],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "01-destroying-a-machine-part.md",
+          "lineNumber": 16,
+          "derivedLineText": "Derived (p.1): Destroying a part converts its yellow HP die into a player die, so the player's pool grows as parts are destroyed, capped at 10 dice (5 black + 5 yellow).",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 0
+    },
+    {
+      "slice": "01-dice-roll-symbology.md",
+      "factsA": 17,
+      "factsB": 12,
+      "bothClaimed": 11,
+      "groundedBoth": 11,
+      "rejected": [],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "01-dice-roll-symbology.md",
+          "lineNumber": 25,
+          "derivedLineText": "Derived (p.1): Roll conditions on machine part cards are expressed with a compact symbol language: \"?\" means any value, an explicit pip face means an exact value, \"/\" means either-or, \"+\" and \"=\" express arithmetic/equality relations across dice, and \">\" expresses a comparison.",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        }
+      ],
+      "missedCount": 11
+    },
+    {
+      "slice": "01-gameplay-loop-and-phase-i.md",
+      "factsA": 16,
+      "factsB": 12,
+      "bothClaimed": 11,
+      "groundedBoth": 11,
+      "rejected": [],
+      "composedAttempts": [
+        {
+          "lineNumber": 15,
+          "operandCount": 3,
+          "outcome": null
+        }
+      ],
+      "classifications": [
+        {
+          "slicePath": "01-gameplay-loop-and-phase-i.md",
+          "lineNumber": 13,
+          "derivedLineText": "Derived (p.1): The game is a repeating two-phase loop (Phase I player dice allocation, Phase II machine phase) that ends only in a win (Doom Core destroyed) or a loss (player destroyed).",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "01-gameplay-loop-and-phase-i.md",
+          "lineNumber": 15,
+          "derivedLineText": "Derived (p.1): The player's dice pool ranges from 5 dice (5 black) up to 10 dice (5 black + 5 yellow), and all available dice are re-rolled at the start of each turn.",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "Reconciler claimed \"corroborated-by-composition\" citing a composed-fact id that either does not exist or was verified against different Derived-line text — downgraded rather than trusted."
+        }
+      ],
+      "missedCount": 0
+    },
+    {
+      "slice": "01-objective-and-setup.md",
+      "factsA": 33,
+      "factsB": 25,
+      "bothClaimed": 19,
+      "groundedBoth": 19,
+      "rejected": [],
+      "composedAttempts": [
+        {
+          "lineNumber": 34,
+          "operandCount": 3,
+          "outcome": null
+        }
+      ],
+      "classifications": [
+        {
+          "slicePath": "01-objective-and-setup.md",
+          "lineNumber": 34,
+          "derivedLineText": "Derived (p.1, p.2): The machine deck for a normal game is 9 face-up-drawable machine part cards stacked on top of the face-down Doom Core, so the Doom Core is the final card of the deck. Of those 9, the top 3 are immediately revealed in step 5, leaving 6 face down above the Doom Core.",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "Reconciler claimed \"corroborated-by-composition\" citing a composed-fact id that either does not exist or was verified against different Derived-line text — downgraded rather than trusted."
+        },
+        {
+          "slicePath": "01-objective-and-setup.md",
+          "lineNumber": 36,
+          "derivedLineText": "Derived (p.1): The Doom Machine tracking card has two tracks — Sentience (yellow) and Power (black) — each starting at zero.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "01-objective-and-setup.md",
+          "lineNumber": 38,
+          "derivedLineText": "Derived (p.1): Player HP starts at 10.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 0
+    },
+    {
+      "slice": "02-card-effect-icons.md",
+      "factsA": 10,
+      "factsB": 23,
+      "bothClaimed": 12,
+      "groundedBoth": 12,
+      "rejected": [],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "02-card-effect-icons.md",
+          "lineNumber": 25,
+          "derivedLineText": "Derived (p.2): These icons appear on machine part cycle tracks; a part's die landing on an icon during the machine phase triggers the corresponding effect (see Phase II, p.2 panel -8-).",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        }
+      ],
+      "missedCount": 12
+    },
+    {
+      "slice": "02-hard-mode.md",
+      "factsA": 11,
+      "factsB": 12,
+      "bothClaimed": 10,
+      "groundedBoth": 10,
+      "rejected": [],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "02-hard-mode.md",
+          "lineNumber": 19,
+          "derivedLineText": "Derived (p.1, p.2): Hard Mode changes exactly three things: the full card pool is used instead of a reduced one, the Player HP card's B side offers one fewer shield slot / re-roll slot / +-modifier slot, and the per-turn shield dice limit drops from 4 to 3.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 0
+    },
+    {
+      "slice": "02-machine-phase.md",
+      "factsA": 26,
+      "factsB": 19,
+      "bothClaimed": 18,
+      "groundedBoth": 18,
+      "rejected": [],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "02-machine-phase.md",
+          "lineNumber": 26,
+          "derivedLineText": "Derived (p.1, p.2): Each machine phase, every part in play advances one step on its own cycle track (wrapping back to the start if it would land on a dead space), and then one new part card joins the line from the left, up to a maximum of 10 parts.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 0
+    },
+    {
+      "slice": "02-player-actions.md",
+      "factsA": 35,
+      "factsB": 34,
+      "bothClaimed": 30,
+      "groundedBoth": 30,
+      "rejected": [],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "02-player-actions.md",
+          "lineNumber": 23,
+          "derivedLineText": "Derived (p.2): Utility slots (+/- modifier slots and re-roll slots) live on the Player HP tracking card, since Hard Mode removes a shield slot, a re-roll slot, and a roll modifier slot by flipping that card (see p.1, panel -11-).",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        }
+      ],
+      "missedCount": 30
+    },
+    {
+      "slice": "02-taking-damage-and-winning.md",
+      "factsA": 7,
+      "factsB": 8,
+      "bothClaimed": 7,
+      "groundedBoth": 7,
+      "rejected": [],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "02-taking-damage-and-winning.md",
+          "lineNumber": 9,
+          "derivedLineText": "Derived (p.2): Shield strength is consumed by reducing the face values of the dice sitting in shield slots; once a shield die's value is exhausted it goes to the spent dice pile.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "02-taking-damage-and-winning.md",
+          "lineNumber": 11,
+          "derivedLineText": "Derived (p.2): The only win condition is destroying the Doom Core; the only loss condition is Player HP reaching zero.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 0
+    },
+    {
+      "slice": "CARDS.md",
+      "factsA": 142,
+      "factsB": 182,
+      "bothClaimed": 98,
+      "groundedBoth": 66,
+      "rejected": [
+        {
+          "claim": {
+            "statement": "Infernal Power Complex roll condition: three dice, all must show 1.",
+            "quotedFromA": "[1] + [1] + [1]",
+            "quotedFromB": "[1] + [1] + [1]"
+          },
+          "reason": "quotedFromA (\"[1] + [1] + [1]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Misery Extractor roll condition: one die, 2 or 3.",
+            "quotedFromA": "[2] / [3]",
+            "quotedFromB": "[2] / [3]"
+          },
+          "reason": "quotedFromA (\"[2] / [3]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Thought Siphon roll condition: two dice, both must be 6.",
+            "quotedFromA": "[6] + [6]",
+            "quotedFromB": "[6] + [6]"
+          },
+          "reason": "quotedFromA (\"[6] + [6]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Thought Siphon damage strip: DEAL 3 DMG.",
+            "quotedFromA": "\"DEAL 3 DMG\"",
+            "quotedFromB": "\"DEAL 3 DMG\""
+          },
+          "reason": "quotedFromA (\"\"DEAL 3 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Impact Nexus roll condition: two dice, doubles.",
+            "quotedFromA": "[?] = [?]",
+            "quotedFromB": "[?] = [?]"
+          },
+          "reason": "quotedFromA (\"[?] = [?]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Impact Nexus destroy effect: -1 POWER.",
+            "quotedFromA": "\"-1 POWER\"",
+            "quotedFromB": "\"-1 POWER\""
+          },
+          "reason": "quotedFromA (\"\"-1 POWER\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Cerebral Amplifier damage strip: DEAL 3 DMG.",
+            "quotedFromA": "\"DEAL 3 DMG\"",
+            "quotedFromB": "\"DEAL 3 DMG\""
+          },
+          "reason": "quotedFromA (\"\"DEAL 3 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Hard Cycle Storage roll condition: two dice, one a 3, another greater than 3.",
+            "quotedFromA": "[?] > [3]",
+            "quotedFromB": "[?] > [3]"
+          },
+          "reason": "quotedFromA (\"[?] > [3]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Hard Cycle Storage damage strip: DEAL 4 DMG.",
+            "quotedFromA": "\"DEAL 4 DMG\"",
+            "quotedFromB": "\"DEAL 4 DMG\""
+          },
+          "reason": "quotedFromA (\"\"DEAL 4 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Design Flaw roll condition: two dice, a 3 and a 4.",
+            "quotedFromA": "[3] + [4]",
+            "quotedFromB": "[3] + [4]"
+          },
+          "reason": "quotedFromA (\"[3] + [4]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Design Flaw damage strip: DEAL 3 DMG.",
+            "quotedFromA": "\"DEAL 3 DMG\"",
+            "quotedFromB": "\"DEAL 3 DMG\""
+          },
+          "reason": "quotedFromA (\"\"DEAL 3 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Extinction Collider roll condition: one die, 4 or 5.",
+            "quotedFromA": "[4] / [5]",
+            "quotedFromB": "[4] / [5]"
+          },
+          "reason": "quotedFromA (\"[4] / [5]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Extinction Collider Power strip: +1 POWER.",
+            "quotedFromA": "\"+1 POWER\"",
+            "quotedFromB": "\"+1 POWER\""
+          },
+          "reason": "quotedFromA (\"\"+1 POWER\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Pulse Pools roll condition: two dice, a 1 and a 6.",
+            "quotedFromA": "[1] + [6]",
+            "quotedFromB": "[1] + [6]"
+          },
+          "reason": "quotedFromA (\"[1] + [6]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Pulse Pools cycle track: HP slot(3), Power, Power, Damage, dead.",
+            "quotedFromA": "1. HP die slot (3)\n2. Power\n3. Power\n4. Damage\n5. Dead space (hatched)",
+            "quotedFromB": "2. Power\n3. Power"
+          },
+          "reason": "quotedFromB (\"2. Power\n3. Power\") does not match any fact in enumerator B's list — the reconciler attributed text to B that B never stated."
+        },
+        {
+          "claim": {
+            "statement": "Pulse Pools damage strip: DEAL 3 DMG.",
+            "quotedFromA": "\"DEAL 3 DMG\"",
+            "quotedFromB": "\"DEAL 3 DMG\""
+          },
+          "reason": "quotedFromA (\"\"DEAL 3 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Pulse Pools Power strip: +1 POWER.",
+            "quotedFromA": "\"+1 POWER\"",
+            "quotedFromB": "\"+1 POWER\""
+          },
+          "reason": "quotedFromA (\"\"+1 POWER\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "The Doom Core roll condition: three dice, all must be 6.",
+            "quotedFromA": "[6] + [6] + [6]",
+            "quotedFromB": "[6] + [6] + [6]"
+          },
+          "reason": "quotedFromA (\"[6] + [6] + [6]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Logic Mainframe roll condition: two dice, doubles.",
+            "quotedFromA": "[?] = [?]",
+            "quotedFromB": "[?] = [?]"
+          },
+          "reason": "quotedFromA (\"[?] = [?]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Logic Mainframe cycle track: HP slot(4), Sentience, Sentience, dead, dead.",
+            "quotedFromA": "1. HP die slot (4)\n2. Sentience\n3. Sentience\n4. Dead space (hatched)\n5. Dead space (hatched)",
+            "quotedFromB": "2. Sentience\n3. Sentience"
+          },
+          "reason": "quotedFromB (\"2. Sentience\n3. Sentience\") does not match any fact in enumerator B's list — the reconciler attributed text to B that B never stated."
+        },
+        {
+          "claim": {
+            "statement": "Logic Mainframe destroy effect: +2 POWER.",
+            "quotedFromA": "\"+2 POWER\"",
+            "quotedFromB": "\"+2 POWER\""
+          },
+          "reason": "quotedFromA (\"\"+2 POWER\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Stasis Generator Lock strip: LOCK 1 DIE.",
+            "quotedFromA": "\"LOCK 1 DIE\"",
+            "quotedFromB": "\"LOCK 1 DIE\""
+          },
+          "reason": "quotedFromA (\"\"LOCK 1 DIE\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Recycling Vats roll condition: one die, 1 or 6.",
+            "quotedFromA": "[1] / [6]",
+            "quotedFromB": "[1] / [6]"
+          },
+          "reason": "quotedFromA (\"[1] / [6]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Recycling Vats damage strip: DEAL 4 DMG.",
+            "quotedFromA": "\"DEAL 4 DMG\"",
+            "quotedFromB": "\"DEAL 4 DMG\""
+          },
+          "reason": "quotedFromA (\"\"DEAL 4 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Populace Grinder roll condition: two dice, both 3.",
+            "quotedFromA": "[3] + [3]",
+            "quotedFromB": "[3] + [3]"
+          },
+          "reason": "quotedFromA (\"[3] + [3]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Populace Grinder damage strip: DEAL 4 DMG.",
+            "quotedFromA": "\"DEAL 4 DMG\"",
+            "quotedFromB": "\"DEAL 4 DMG\""
+          },
+          "reason": "quotedFromA (\"\"DEAL 4 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Populace Grinder Repair strip: REPAIR 2.",
+            "quotedFromA": "\"REPAIR 2\"",
+            "quotedFromB": "\"REPAIR 2\""
+          },
+          "reason": "quotedFromA (\"\"REPAIR 2\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Synaptic Disruptor roll condition: two dice, a 4 and a 5.",
+            "quotedFromA": "[4] + [5]",
+            "quotedFromB": "[4] + [5]"
+          },
+          "reason": "quotedFromA (\"[4] + [5]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Synaptic Disruptor cycle track: HP slot(4), Sentience, Damage, dead, dead.",
+            "quotedFromA": "1. HP die slot (4)\n2. Sentience\n3. Damage\n4. Dead space (hatched)\n5. Dead space (hatched)",
+            "quotedFromB": "2. Sentience\n3. Damage"
+          },
+          "reason": "quotedFromB (\"2. Sentience\n3. Damage\") does not match any fact in enumerator B's list — the reconciler attributed text to B that B never stated."
+        },
+        {
+          "claim": {
+            "statement": "Soul Harvester roll condition: three dice, first two must sum to the third.",
+            "quotedFromA": "[?] + [?] = [?]",
+            "quotedFromB": "[?] + [?] = [?]"
+          },
+          "reason": "quotedFromA (\"[?] + [?] = [?]\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Soul Harvester damage strip: DEAL 5 DMG.",
+            "quotedFromA": "\"DEAL 5 DMG\"",
+            "quotedFromB": "\"DEAL 5 DMG\""
+          },
+          "reason": "quotedFromA (\"\"DEAL 5 DMG\"\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        },
+        {
+          "claim": {
+            "statement": "Soul Harvester Lock strip: LOCK 1 DIE (not \"TAKE 1 DMG\").",
+            "quotedFromA": "The actual card reads **\"DEAL 5 DMG\"** and **\"LOCK 1 DIE\"**.",
+            "quotedFromB": "\"LOCK 1 DIE\""
+          },
+          "reason": "quotedFromB (\"\"LOCK 1 DIE\"\") does not match any fact in enumerator B's list — the reconciler attributed text to B that B never stated."
+        }
+      ],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 19,
+          "derivedLineText": "Derived (p.1, p.3): Every machine part card carries the **same 5-position cycle track**, drawn as an inverted-L:",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 30,
+          "derivedLineText": "Derived: the yellow-vs-grey connector colour is the reliable tell for live-vs-dead; the hatch fill corroborates it.",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        },
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 70,
+          "derivedLineText": "- Derived (p.1, p.3): However, the tracks are **not** inert — their consequences are printed on the MACHINE PART",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 140,
+          "derivedLineText": "(Derived: effectively a 2-space loop — die goes slot → Damage → dead → back to slot.)",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        },
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 270,
+          "derivedLineText": "`+ = / >`). Derived (p.3), by symmetry with the documented `[?] > [3]` example (\"2 dice required. One must be",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 0
+    }
+  ]
+}

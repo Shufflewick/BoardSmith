@@ -1,0 +1,63 @@
+```json
+{
+  "facts": [
+    {
+      "statement": "Three dice are required.",
+      "sourceSentence": "3 dice required.",
+      "numericValue": {"magnitude": 3, "unit": "dice", "approximate": false}
+    },
+    {
+      "statement": "The first die plus the second die must equal the value of the third die.",
+      "sourceSentence": "1st die + 2nd die must = the value of the third die."
+    },
+    {
+      "statement": "All three dice must show the value six.",
+      "sourceSentence": "They must all be sixes.",
+      "numericValue": {"magnitude": 6, "unit": "die face value", "approximate": false}
+    },
+    {
+      "statement": "Two dice are required.",
+      "sourceSentence": "2 dice required.",
+      "numericValue": {"magnitude": 2, "unit": "dice", "approximate": false}
+    },
+    {
+      "statement": "The two dice must be doubles (show the same value).",
+      "sourceSentence": "They must be doubles."
+    },
+    {
+      "statement": "One die is required.",
+      "sourceSentence": "1 die required.",
+      "numericValue": {"magnitude": 1, "unit": "die", "approximate": false}
+    },
+    {
+      "statement": "The die may show a value of 2.",
+      "sourceSentence": "It can be either a 2 or a 3 value.",
+      "numericValue": {"magnitude": 2, "unit": "die face value", "approximate": false}
+    },
+    {
+      "statement": "The die may show a value of 3.",
+      "sourceSentence": "It can be either a 2 or a 3 value.",
+      "numericValue": {"magnitude": 3, "unit": "die face value", "approximate": false}
+    },
+    {
+      "statement": "One die must show the value 3.",
+      "sourceSentence": "One must be a 3, another greater than 3.",
+      "numericValue": {"magnitude": 3, "unit": "die face value", "approximate": false}
+    },
+    {
+      "statement": "Another die must show a value greater than 3.",
+      "sourceSentence": "One must be a 3, another greater than 3."
+    },
+    {
+      "statement": "One die must show the value 4.",
+      "sourceSentence": "They must be a 4 and a 5.",
+      "numericValue": {"magnitude": 4, "unit": "die face value", "approximate": false}
+    },
+    {
+      "statement": "One die must show the value 5.",
+      "sourceSentence": "They must be a 4 and a 5.",
+      "numericValue": {"magnitude": 5, "unit": "die face value", "approximate": false}
+    }
+  ]
+}
+```

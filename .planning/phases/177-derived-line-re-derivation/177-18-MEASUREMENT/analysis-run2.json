@@ -1,0 +1,179 @@
+{
+  "runLabel": "run2",
+  "provenance": {
+    "sourceHash": "769195087e3745e94bdc7c67a4c1234b9dd8a859d63137cbe42bbb67bba324b0"
+  },
+  "totalBoth": 145,
+  "totalRejected": 1,
+  "perSlice": [
+    {
+      "slice": "01-objective-and-setup.md",
+      "factsA": 45,
+      "factsB": 15,
+      "bothClaimed": 13,
+      "groundedBoth": 13,
+      "rejected": [],
+      "composedAttempts": [
+        {
+          "lineNumber": 34,
+          "operandCount": 2,
+          "outcome": {
+            "op": "subtract",
+            "candidate": 6,
+            "composed": {
+              "id": "3c41332b61e30645",
+              "statement": "9 remaining machine part cards subtract 3 cards drawn = 6 remaining machine part cards",
+              "value": {
+                "magnitude": 6,
+                "unit": "remaining machine part cards",
+                "approximate": false
+              },
+              "operation": "subtract",
+              "operandIds": [
+                "2ac1e8cc7da2f10d",
+                "2ac1e8cc7da2f10d"
+              ],
+              "claimText": "Derived (p.1, p.2): The machine deck for a normal game is 9 face-up-drawable machine part cards stacked on top of the face-down Doom Core, so the Doom Core is the final card of the deck. Of those 9, the top 3 are immediately revealed in step 5, leaving 6 face down above the Doom Core."
+            }
+          }
+        }
+      ],
+      "classifications": [
+        {
+          "slicePath": "01-objective-and-setup.md",
+          "lineNumber": 34,
+          "derivedLineText": "Derived (p.1, p.2): The machine deck for a normal game is 9 face-up-drawable machine part cards stacked on top of the face-down Doom Core, so the Doom Core is the final card of the deck. Of those 9, the top 3 are immediately revealed in step 5, leaving 6 face down above the Doom Core.",
+          "classification": "corroborated-by-composition",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Verified in code: 9 remaining machine part cards subtract 3 cards drawn = 6 remaining machine part cards (checked against this Derived line's own stated claim, never freely generated)."
+        },
+        {
+          "slicePath": "01-objective-and-setup.md",
+          "lineNumber": 36,
+          "derivedLineText": "Derived (p.1): The Doom Machine tracking card has two tracks — Sentience (yellow) and Power (black) — each starting at zero.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "01-objective-and-setup.md",
+          "lineNumber": 38,
+          "derivedLineText": "Derived (p.1): Player HP starts at 10.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 0
+    },
+    {
+      "slice": "02-card-effect-icons.md",
+      "factsA": 21,
+      "factsB": 22,
+      "bothClaimed": 25,
+      "groundedBoth": 25,
+      "rejected": [],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "02-card-effect-icons.md",
+          "lineNumber": 25,
+          "derivedLineText": "Derived (p.2): These icons appear on machine part cycle tracks; a part's die landing on an icon during the machine phase triggers the corresponding effect (see Phase II, p.2 panel -8-).",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        }
+      ],
+      "missedCount": 25
+    },
+    {
+      "slice": "CARDS.md",
+      "factsA": 137,
+      "factsB": 158,
+      "bothClaimed": 107,
+      "groundedBoth": 106,
+      "rejected": [
+        {
+          "claim": {
+            "statement": "Doom Machine card does not define what Power/Sentience tracks do, only their range 0-10",
+            "quotedFromA": "This card does NOT define what the Power and Sentience tracks do.** It defines only their RANGE (0 through 10).",
+            "quotedFromB": "This card does NOT define what the Power and Sentience tracks do. <<<** It defines only their RANGE (0 through 10)."
+          },
+          "reason": "quotedFromA (\"This card does NOT define what the Power and Sentience tracks do.** It defines only their RANGE (0 through 10).\") does not match any fact in enumerator A's list — the reconciler attributed text to A that A never stated."
+        }
+      ],
+      "composedAttempts": [],
+      "classifications": [
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 19,
+          "derivedLineText": "Derived (p.1, p.3): Every machine part card carries the **same 5-position cycle track**, drawn as an inverted-L:",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 30,
+          "derivedLineText": "Derived: the yellow-vs-grey connector colour is the reliable tell for live-vs-dead; the hatch fill corroborates it.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 70,
+          "derivedLineText": "- Derived (p.1, p.3): However, the tracks are **not** inert — their consequences are printed on the MACHINE PART",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 140,
+          "derivedLineText": "(Derived: effectively a 2-space loop — die goes slot → Damage → dead → back to slot.)",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "CARDS.md",
+          "lineNumber": 270,
+          "derivedLineText": "`+ = / >`). Derived (p.3), by symmetry with the documented `[?] > [3]` example (\"2 dice required. One must be",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d",
+            "2ac1e8cc7da2f10d"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 0
+    }
+  ]
+}

@@ -1,0 +1,627 @@
+{
+  "both": [
+    {
+      "statement": "There are 15 machine part cards (non-Core).",
+      "quotedFromA": "- 15 machine part cards (non-Core)",
+      "quotedFromB": "- 15 machine part cards (non-Core)"
+    },
+    {
+      "statement": "There is 1 Doom Core card (\"THE DOOM CORE\").",
+      "quotedFromA": "- 1 Doom Core card (\"THE DOOM CORE\")",
+      "quotedFromB": "- 1 Doom Core card (\"THE DOOM CORE\")"
+    },
+    {
+      "statement": "There is 1 Doom Machine tracking card.",
+      "quotedFromA": "- 1 Doom Machine tracking card",
+      "quotedFromB": "- 1 Doom Machine tracking card"
+    },
+    {
+      "statement": "There is 1 Player HP tracking card, double-sided (A side p.1, B side p.2).",
+      "quotedFromA": "- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)",
+      "quotedFromB": "- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)"
+    },
+    {
+      "statement": "There are 18 distinct card faces total.",
+      "quotedFromA": "- **18 distinct faces total.**",
+      "quotedFromB": "- **18 distinct faces total.**"
+    },
+    {
+      "statement": "Player HP A-side track runs 10,9,7,8,6,5,3,4,2,1,0.",
+      "quotedFromA": "heart badge at top, then a serpentine numbered track: 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0.",
+      "quotedFromB": "heart badge at top, then a serpentine numbered track: 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0."
+    },
+    {
+      "statement": "Player HP A-side SHIELD section has 4 slots (four shield-with-\"+\" badges, 2x2).",
+      "quotedFromA": "**SHIELD section: 4 slots.** Four shield-with-\"+\" badges in a 2x2 arrangement.",
+      "quotedFromB": "**SHIELD section: 4 slots.** Four shield-with-\"+\" badges in a 2x2 arrangement."
+    },
+    {
+      "statement": "Player HP A-side UTILITY section (labelled \"1X ROUND\") has 6 slots total.",
+      "quotedFromA": "**UTILITY section (labelled \"1X ROUND\"): 6 slots total —**",
+      "quotedFromB": "**UTILITY section (labelled \"1X ROUND\"): 6 slots total —**"
+    },
+    {
+      "statement": "3 of the utility slots are \"+/-\" roll-modifier slots.",
+      "quotedFromA": "3 x \"+/-\" roll-modifier slots",
+      "quotedFromB": "3 x \"+/-\" roll-modifier slots"
+    },
+    {
+      "statement": "3 of the utility slots are re-roll slots (two-white-dice glyph).",
+      "quotedFromA": "3 x re-roll slots** (two-white-dice glyph)",
+      "quotedFromB": "3 x re-roll slots** (two-white-dice glyph)"
+    },
+    {
+      "statement": "The Doom Machine card's printed text is only THE/DOOM/MACHINE/SENTIENCE/POWER plus track numerals.",
+      "quotedFromA": "QUOTE — cards.pdf p.1, row 1 col 2: \"THE\"",
+      "quotedFromB": "QUOTE — cards.pdf p.1, row 1 col 2: \"THE\""
+    },
+    {
+      "statement": "Doom Machine Sentience track numerals top-to-bottom: 10 9 7 8 6 5 3 4 2 1 0.",
+      "quotedFromA": "QUOTE (Sentience track numerals, top to bottom): \"10\" \"9\" \"7\" \"8\" \"6\" \"5\" \"3\" \"4\" \"2\" \"1\" \"0\"",
+      "quotedFromB": "QUOTE (Sentience track numerals, top to bottom): \"10\" \"9\" \"7\" \"8\" \"6\" \"5\" \"3\" \"4\" \"2\" \"1\" \"0\""
+    },
+    {
+      "statement": "Doom Machine Power track numerals top-to-bottom: 10 9 7 8 6 5 3 4 2 1 0.",
+      "quotedFromA": "QUOTE (Power track numerals, top to bottom): \"10\" \"9\" \"7\" \"8\" \"6\" \"5\" \"3\" \"4\" \"2\" \"1\" \"0\"",
+      "quotedFromB": "QUOTE (Power track numerals, top to bottom): \"10\" \"9\" \"7\" \"8\" \"6\" \"5\" \"3\" \"4\" \"2\" \"1\" \"0\""
+    },
+    {
+      "statement": "Infernal Power Complex starting HP is 3.",
+      "quotedFromA": "INFERNAL POWER COMPLEX | p.1 r1c3 | part | 3 |",
+      "quotedFromB": "**Starting HP: 3** (yellow die shows 3 pips)"
+    },
+    {
+      "statement": "Infernal Power Complex roll condition: three dice, all must show 1.",
+      "quotedFromA": "[1] + [1] + [1]",
+      "quotedFromB": "[1] + [1] + [1]"
+    },
+    {
+      "statement": "Infernal Power Complex cycle track: HP slot(3), Power+Sentience, blank, Power+Sentience, dead.",
+      "quotedFromA": "1. HP die slot (die set to 3)\n2. Power+Sentience icon\n3. Blank space (no icon)\n4. Power+Sentience icon\n5. Dead space (hatched)",
+      "quotedFromB": "2. Power+Sentience icon"
+    },
+    {
+      "statement": "Infernal Power Complex effect: +1 POWER AND +1 SENTIENCE.",
+      "quotedFromA": "\"+1 POWER AND +1 SENTIENCE\"",
+      "quotedFromB": "\"+1 POWER AND +1 SENTIENCE\""
+    },
+    {
+      "statement": "Infernal Power Complex destroy effect: DEAL 1 DMG TO ALL PARTS IN PLAY.",
+      "quotedFromA": "\"DEAL 1 DMG TO ALL PARTS IN PLAY\"",
+      "quotedFromB": "\"DEAL 1 DMG TO ALL PARTS IN PLAY\""
+    },
+    {
+      "statement": "Misery Extractor starting HP is 6.",
+      "quotedFromA": "MISERY EXTRACTOR | p.1 r2c1 | part | 6 |",
+      "quotedFromB": "**Starting HP: 6**"
+    },
+    {
+      "statement": "Misery Extractor roll condition: one die, 2 or 3.",
+      "quotedFromA": "[2] / [3]",
+      "quotedFromB": "[2] / [3]"
+    },
+    {
+      "statement": "Misery Extractor cycle track: HP slot(6), Damage, Damage, Damage, dead.",
+      "quotedFromA": "1. HP die slot (6)\n2. Damage\n3. Damage\n4. Damage\n5. Dead space (hatched)",
+      "quotedFromB": "5. Dead space (hatched)"
+    },
+    {
+      "statement": "Misery Extractor damage strip: DEAL DMG = HP OF LEFT ADJACENT PART.",
+      "quotedFromA": "\"DEAL DMG = HP OF LEFT ADJACENT PART\"",
+      "quotedFromB": "\"DEAL DMG = HP OF LEFT ADJACENT PART\""
+    },
+    {
+      "statement": "Misery Extractor destroy effect: DEAL 2 DMG TO LEFT ADJACENT PART.",
+      "quotedFromA": "\"DEAL 2 DMG TO LEFT ADJACENT PART\"",
+      "quotedFromB": "\"DEAL 2 DMG TO LEFT ADJACENT PART\""
+    },
+    {
+      "statement": "Thought Siphon starting HP is 4, no destroy effect.",
+      "quotedFromA": "THOUGHT SIPHON | p.1 r2c2 | part | 4 | 6+6 (two 6s) | —",
+      "quotedFromB": "**Starting HP: 4**"
+    },
+    {
+      "statement": "Thought Siphon roll condition: two dice, both must be 6.",
+      "quotedFromA": "[6] + [6]",
+      "quotedFromB": "[6] + [6]"
+    },
+    {
+      "statement": "Thought Siphon cycle track: HP slot(4), Damage, Damage, Broken Shield, dead.",
+      "quotedFromA": "1. HP die slot (4)\n2. Damage\n3. Damage\n4. Broken Shield\n5. Dead space (hatched)",
+      "quotedFromB": "4. Broken Shield"
+    },
+    {
+      "statement": "Thought Siphon damage strip: DEAL 3 DMG.",
+      "quotedFromA": "\"DEAL 3 DMG\"",
+      "quotedFromB": "\"DEAL 3 DMG\""
+    },
+    {
+      "statement": "Thought Siphon Broken Shield strip: ONLY 1 SHIELD DIE CAN BE PLAYED NEXT TURN.",
+      "quotedFromA": "\"ONLY 1 SHIELD DIE CAN BE PLAYED NEXT TURN\"",
+      "quotedFromB": "\"ONLY 1 SHIELD DIE CAN BE PLAYED NEXT TURN\""
+    },
+    {
+      "statement": "Impact Nexus starting HP is 4.",
+      "quotedFromA": "IMPACT NEXUS | p.1 r2c3 | part | 4 |",
+      "quotedFromB": "**Starting HP: 4**"
+    },
+    {
+      "statement": "Impact Nexus roll condition: two dice, doubles.",
+      "quotedFromA": "[?] = [?]",
+      "quotedFromB": "[?] = [?]"
+    },
+    {
+      "statement": "Impact Nexus cycle track: HP slot(4), Damage, dead, dead, dead.",
+      "quotedFromA": "1. HP die slot (4)\n2. Damage\n3. Dead space (hatched)\n4. Dead space (hatched)\n5. Dead space (hatched)",
+      "quotedFromB": "2. Damage"
+    },
+    {
+      "statement": "Impact Nexus damage strip: DEAL 1 DMG FOR EVERY PART CARD IN PLAY.",
+      "quotedFromA": "\"DEAL 1 DMG FOR EVERY PART CARD IN PLAY\"",
+      "quotedFromB": "\"DEAL 1 DMG FOR EVERY PART CARD IN PLAY\""
+    },
+    {
+      "statement": "Impact Nexus destroy effect: -1 POWER.",
+      "quotedFromA": "\"-1 POWER\"",
+      "quotedFromB": "\"-1 POWER\""
+    },
+    {
+      "statement": "Cerebral Amplifier starting HP is 4, no destroy effect.",
+      "quotedFromA": "CEREBRAL AMPLIFIER | p.1 r3c1 | part | 4 | ?=? (doubles) | —",
+      "quotedFromB": "**Starting HP: 4**"
+    },
+    {
+      "statement": "Cerebral Amplifier cycle track: HP slot(4), Damage, Damage, dead, dead.",
+      "quotedFromA": "1. HP die slot (4)\n2. Damage\n3. Damage\n4. Dead space (hatched)\n5. Dead space (hatched)",
+      "quotedFromB": "4. Dead space (hatched)\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "Cerebral Amplifier damage strip: DEAL 3 DMG.",
+      "quotedFromA": "\"DEAL 3 DMG\"",
+      "quotedFromB": "\"DEAL 3 DMG\""
+    },
+    {
+      "statement": "Cerebral Amplifier: IF SENTIENCE IS > 5 DEAL 3 MORE DMG.",
+      "quotedFromA": "\"IF SENTIENCE IS > 5 DEAL 3 MORE DMG\"",
+      "quotedFromB": "\"IF SENTIENCE IS > 5 DEAL 3 MORE DMG\""
+    },
+    {
+      "statement": "Hard Cycle Storage starting HP is 5, no destroy effect.",
+      "quotedFromA": "HARD CYCLE STORAGE | p.1 r3c2 | part | 5 |",
+      "quotedFromB": "**Starting HP: 5**"
+    },
+    {
+      "statement": "Hard Cycle Storage roll condition: two dice, one a 3, another greater than 3.",
+      "quotedFromA": "[?] > [3]",
+      "quotedFromB": "[?] > [3]"
+    },
+    {
+      "statement": "Hard Cycle Storage cycle track: HP slot(5), Gear, Damage, Gear, dead.",
+      "quotedFromA": "1. HP die slot (5)\n2. Gear\n3. Damage\n4. Gear\n5. Dead space (hatched)",
+      "quotedFromB": "2. Gear"
+    },
+    {
+      "statement": "Hard Cycle Storage damage strip: DEAL 4 DMG.",
+      "quotedFromA": "\"DEAL 4 DMG\"",
+      "quotedFromB": "\"DEAL 4 DMG\""
+    },
+    {
+      "statement": "Hard Cycle Storage Gear strip: +1 CYCLE FOR ANY ADJACENT PARTS.",
+      "quotedFromA": "\"+1 CYCLE FOR ANY ADJACENT PARTS\"",
+      "quotedFromB": "\"+1 CYCLE FOR ANY ADJACENT PARTS\""
+    },
+    {
+      "statement": "Design Flaw starting HP is 4.",
+      "quotedFromA": "DESIGN FLAW | p.1 r3c3 | part | 4 |",
+      "quotedFromB": "**Starting HP: 4**"
+    },
+    {
+      "statement": "Design Flaw roll condition: two dice, a 3 and a 4.",
+      "quotedFromA": "[3] + [4]",
+      "quotedFromB": "[3] + [4]"
+    },
+    {
+      "statement": "Design Flaw cycle track: HP slot(4), Damage, Damage, blank, Damage; no dead space, all five live.",
+      "quotedFromA": "**NOTE — no dead space on this card.** All five spaces are live (all connectors are yellow).",
+      "quotedFromB": "**NOTE — no dead space on this card.** All five spaces are live (all connectors are yellow)."
+    },
+    {
+      "statement": "Design Flaw damage strip: DEAL 3 DMG.",
+      "quotedFromA": "\"DEAL 3 DMG\"",
+      "quotedFromB": "\"DEAL 3 DMG\""
+    },
+    {
+      "statement": "Design Flaw destroy effect: -2 SENTIENCE AND -2 POWER.",
+      "quotedFromA": "\"-2 SENTIENCE AND -2 POWER\"",
+      "quotedFromB": "\"-2 SENTIENCE AND -2 POWER\""
+    },
+    {
+      "statement": "Extinction Collider starting HP is 6, no destroy effect.",
+      "quotedFromA": "EXTINCTION COLLIDER | p.3 r1c1 | part | 6 |",
+      "quotedFromB": "**Starting HP: 6**"
+    },
+    {
+      "statement": "Extinction Collider roll condition: one die, 4 or 5.",
+      "quotedFromA": "[4] / [5]",
+      "quotedFromB": "[4] / [5]"
+    },
+    {
+      "statement": "Extinction Collider cycle track: HP slot(6), Damage, Power, Damage, Power; no dead space, all five live.",
+      "quotedFromA": "**NOTE — no dead space on this card.** All five spaces are live.",
+      "quotedFromB": "**NOTE — no dead space on this card.** All five spaces are live."
+    },
+    {
+      "statement": "Extinction Collider damage strip: DEAL DMG = POWER.",
+      "quotedFromA": "\"DEAL DMG = POWER\"",
+      "quotedFromB": "\"DEAL DMG = POWER\""
+    },
+    {
+      "statement": "Extinction Collider Power strip: +1 POWER.",
+      "quotedFromA": "\"+1 POWER\"",
+      "quotedFromB": "\"+1 POWER\""
+    },
+    {
+      "statement": "Pulse Pools starting HP is 3, no destroy effect.",
+      "quotedFromA": "PULSE POOLS | p.3 r1c2 | part | 3 |",
+      "quotedFromB": "**Starting HP: 3**"
+    },
+    {
+      "statement": "Pulse Pools roll condition: two dice, a 1 and a 6.",
+      "quotedFromA": "[1] + [6]",
+      "quotedFromB": "[1] + [6]"
+    },
+    {
+      "statement": "Pulse Pools cycle track: HP slot(3), Power, Power, Damage, dead.",
+      "quotedFromA": "1. HP die slot (3)\n2. Power\n3. Power\n4. Damage\n5. Dead space (hatched)",
+      "quotedFromB": "2. Power\n3. Power"
+    },
+    {
+      "statement": "Pulse Pools damage strip: DEAL 3 DMG.",
+      "quotedFromA": "\"DEAL 3 DMG\"",
+      "quotedFromB": "\"DEAL 3 DMG\""
+    },
+    {
+      "statement": "Pulse Pools Power strip: +1 POWER.",
+      "quotedFromA": "\"+1 POWER\"",
+      "quotedFromB": "\"+1 POWER\""
+    },
+    {
+      "statement": "The Doom Core starting HP is 4.",
+      "quotedFromA": "THE DOOM CORE | p.3 r1c3 | Doom Core | 4 |",
+      "quotedFromB": "**Starting HP: 4**"
+    },
+    {
+      "statement": "The Doom Core roll condition: three dice, all must be 6.",
+      "quotedFromA": "[6] + [6] + [6]",
+      "quotedFromB": "[6] + [6] + [6]"
+    },
+    {
+      "statement": "The Doom Core cycle track: HP slot(4), Damage, Power+Sentience, Power+Sentience, dead.",
+      "quotedFromA": "1. HP die slot (4)\n2. Damage\n3. Power+Sentience\n4. Power+Sentience\n5. Dead space (hatched)",
+      "quotedFromB": "3. Power+Sentience\n4. Power+Sentience"
+    },
+    {
+      "statement": "The Doom Core damage strip: DEAL DMG = SENTIENCE + POWER.",
+      "quotedFromA": "\"DEAL DMG = SENTIENCE + POWER\"",
+      "quotedFromB": "\"DEAL DMG = SENTIENCE + POWER\""
+    },
+    {
+      "statement": "The Doom Core Power+Sentience strip: +1 SENTIENCE AND +1 POWER.",
+      "quotedFromA": "\"+1 SENTIENCE AND +1 POWER\"",
+      "quotedFromB": "\"+1 SENTIENCE AND +1 POWER\""
+    },
+    {
+      "statement": "The Doom Core has no printed destroy effect (destroying it wins the game).",
+      "quotedFromA": "none printed (destroying it wins the game per the rulebook objective).",
+      "quotedFromB": "none printed (destroying it wins the game per the rulebook objective)."
+    },
+    {
+      "statement": "Logic Mainframe starting HP is 4.",
+      "quotedFromA": "LOGIC MAINFRAME | p.3 r2c1 | part | 4 |",
+      "quotedFromB": "**Starting HP: 4**"
+    },
+    {
+      "statement": "Logic Mainframe roll condition: two dice, doubles.",
+      "quotedFromA": "[?] = [?]",
+      "quotedFromB": "[?] = [?]"
+    },
+    {
+      "statement": "Logic Mainframe cycle track: HP slot(4), Sentience, Sentience, dead, dead.",
+      "quotedFromA": "1. HP die slot (4)\n2. Sentience\n3. Sentience\n4. Dead space (hatched)\n5. Dead space (hatched)",
+      "quotedFromB": "2. Sentience\n3. Sentience"
+    },
+    {
+      "statement": "Logic Mainframe Sentience strip: +1 SENTIENCE.",
+      "quotedFromA": "\"+1 SENTIENCE\"",
+      "quotedFromB": "\"+1 SENTIENCE\""
+    },
+    {
+      "statement": "Logic Mainframe destroy effect: +2 POWER.",
+      "quotedFromA": "\"+2 POWER\"",
+      "quotedFromB": "\"+2 POWER\""
+    },
+    {
+      "statement": "Stasis Generator starting HP is 6, no destroy effect.",
+      "quotedFromA": "STASIS GENERATOR | p.3 r2c2 | part | 6 |",
+      "quotedFromB": "**Starting HP: 6**"
+    },
+    {
+      "statement": "Stasis Generator roll condition: two dice, one a 3, another less than 3.",
+      "quotedFromA": "a \"?\" face, a **less-than** sign, a three-pip face.",
+      "quotedFromB": "a \"?\" face, a **less-than** sign, a three-pip face."
+    },
+    {
+      "statement": "Stasis Generator cycle track: HP slot(6), Lock, blank, Lock, dead.",
+      "quotedFromA": "1. HP die slot (6)\n2. Lock\n3. Blank space (no icon)\n4. Lock\n5. Dead space (hatched)",
+      "quotedFromB": "2. Lock"
+    },
+    {
+      "statement": "Stasis Generator Lock strip: LOCK 1 DIE.",
+      "quotedFromA": "\"LOCK 1 DIE\"",
+      "quotedFromB": "\"LOCK 1 DIE\""
+    },
+    {
+      "statement": "Stasis Generator: IF SENTIENCE IS > 6 REMOVE THAT DIE FROM PLAY.",
+      "quotedFromA": "\"IF SENTIENCE IS > 6 REMOVE THAT DIE FROM PLAY\"",
+      "quotedFromB": "\"IF SENTIENCE IS > 6 REMOVE THAT DIE FROM PLAY\""
+    },
+    {
+      "statement": "Recycling Vats starting HP is 6, no destroy effect.",
+      "quotedFromA": "RECYCLING VATS | p.3 r2c3 | part | 6 |",
+      "quotedFromB": "**Starting HP: 6**"
+    },
+    {
+      "statement": "Recycling Vats roll condition: one die, 1 or 6.",
+      "quotedFromA": "[1] / [6]",
+      "quotedFromB": "[1] / [6]"
+    },
+    {
+      "statement": "Recycling Vats cycle track: HP slot(6), Damage, Damage, Repair, dead.",
+      "quotedFromA": "1. HP die slot (6)\n2. Damage\n3. Damage\n4. Repair\n5. Dead space (hatched)",
+      "quotedFromB": "4. Repair"
+    },
+    {
+      "statement": "Recycling Vats damage strip: DEAL 4 DMG.",
+      "quotedFromA": "\"DEAL 4 DMG\"",
+      "quotedFromB": "\"DEAL 4 DMG\""
+    },
+    {
+      "statement": "Recycling Vats Repair strip: REPAIR 2 TO ANY ADJACENT PARTS.",
+      "quotedFromA": "\"REPAIR 2 TO ANY ADJACENT PARTS\"",
+      "quotedFromB": "\"REPAIR 2 TO ANY ADJACENT PARTS\""
+    },
+    {
+      "statement": "Recycling Vats' Repair icon is a yellow heart with a triangle, not the wrench described in the icon slice.",
+      "quotedFromA": "the Repair icon here is a yellow HEART containing a triangle glyph (not the wrench described in",
+      "quotedFromB": "the Repair icon here is a yellow HEART containing a triangle glyph (not the wrench described in"
+    },
+    {
+      "statement": "Populace Grinder starting HP is 3, no destroy effect.",
+      "quotedFromA": "POPULACE GRINDER | p.3 r3c1 | part | 3 |",
+      "quotedFromB": "**Starting HP: 3**"
+    },
+    {
+      "statement": "Populace Grinder roll condition: two dice, both 3.",
+      "quotedFromA": "[3] + [3]",
+      "quotedFromB": "[3] + [3]"
+    },
+    {
+      "statement": "Populace Grinder cycle track: HP slot(3), Damage, Repair, dead, dead.",
+      "quotedFromA": "1. HP die slot (3)\n2. Damage\n3. Repair\n4. Dead space (hatched)\n5. Dead space (hatched)",
+      "quotedFromB": "3. Repair"
+    },
+    {
+      "statement": "Populace Grinder damage strip: DEAL 4 DMG.",
+      "quotedFromA": "\"DEAL 4 DMG\"",
+      "quotedFromB": "\"DEAL 4 DMG\""
+    },
+    {
+      "statement": "Populace Grinder Repair strip: REPAIR 2.",
+      "quotedFromA": "\"REPAIR 2\"",
+      "quotedFromB": "\"REPAIR 2\""
+    },
+    {
+      "statement": "Synaptic Disruptor starting HP is 4, no destroy effect.",
+      "quotedFromA": "SYNAPTIC DISRUPTOR | p.3 r3c2 | part | 4 |",
+      "quotedFromB": "**Starting HP: 4**"
+    },
+    {
+      "statement": "Synaptic Disruptor roll condition: two dice, a 4 and a 5.",
+      "quotedFromA": "[4] + [5]",
+      "quotedFromB": "[4] + [5]"
+    },
+    {
+      "statement": "Synaptic Disruptor cycle track: HP slot(4), Sentience, Damage, dead, dead.",
+      "quotedFromA": "1. HP die slot (4)\n2. Sentience\n3. Damage\n4. Dead space (hatched)\n5. Dead space (hatched)",
+      "quotedFromB": "2. Sentience\n3. Damage"
+    },
+    {
+      "statement": "Synaptic Disruptor damage strip: DEAL DMG = SENTIENCE.",
+      "quotedFromA": "\"DEAL DMG = SENTIENCE\"",
+      "quotedFromB": "\"DEAL DMG = SENTIENCE\""
+    },
+    {
+      "statement": "Synaptic Disruptor Sentience strip: +1 SENTIENCE.",
+      "quotedFromA": "\"+1 SENTIENCE\"",
+      "quotedFromB": "\"+1 SENTIENCE\""
+    },
+    {
+      "statement": "Soul Harvester starting HP is 3, no destroy effect.",
+      "quotedFromA": "SOUL HARVESTER | p.3 r3c3 | part | 3 |",
+      "quotedFromB": "**Starting HP: 3**"
+    },
+    {
+      "statement": "Soul Harvester roll condition: three dice, first two must sum to the third.",
+      "quotedFromA": "[?] + [?] = [?]",
+      "quotedFromB": "[?] + [?] = [?]"
+    },
+    {
+      "statement": "Soul Harvester cycle track: HP slot(3), Damage, Lock, Damage, dead.",
+      "quotedFromA": "1. HP die slot (3)\n2. Damage\n3. Lock\n4. Damage\n5. Dead space (hatched)",
+      "quotedFromB": "3. Lock"
+    },
+    {
+      "statement": "Soul Harvester damage strip: DEAL 5 DMG.",
+      "quotedFromA": "\"DEAL 5 DMG\"",
+      "quotedFromB": "\"DEAL 5 DMG\""
+    },
+    {
+      "statement": "Soul Harvester Lock strip: LOCK 1 DIE (not \"TAKE 1 DMG\").",
+      "quotedFromA": "The actual card reads **\"DEAL 5 DMG\"** and **\"LOCK 1 DIE\"**.",
+      "quotedFromB": "\"LOCK 1 DIE\""
+    },
+    {
+      "statement": "Player HP B-side track is identical to A side: 10,9,7,8,6,5,3,4,2,1,0.",
+      "quotedFromA": "identical to the A side — 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0.",
+      "quotedFromB": "identical to the A side — 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0."
+    },
+    {
+      "statement": "Player HP B-side SHIELD section has 3 slots (two side by side, one below).",
+      "quotedFromA": "**SHIELD section: 3 slots** (two side by side, one below).",
+      "quotedFromB": "**SHIELD section: 3 slots** (two side by side, one below)."
+    },
+    {
+      "statement": "Player HP B-side UTILITY section: 4 slots — 2 \"+/-\" and 2 re-roll.",
+      "quotedFromA": "**UTILITY section: 4 slots — 2 x \"+/-\" roll-modifier slots, 2 x re-roll slots.**",
+      "quotedFromB": "**UTILITY section: 4 slots — 2 x \"+/-\" roll-modifier slots, 2 x re-roll slots.**"
+    },
+    {
+      "statement": "Every card carries exactly one roll-condition tile; none has multiple.",
+      "quotedFromA": "Every card carries exactly ONE roll-condition tile. No card in cards.pdf has multiple roll-condition tiles.",
+      "quotedFromB": "Every card carries exactly ONE roll-condition tile. No card in cards.pdf has multiple roll-condition tiles."
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "The card art source is a PDF of 4 letter-sized pages laid out as a 3x3 grid of cards per page.",
+      "sourceSentence": "Source: `/Users/jtsmith/BoardSmithGames/doom-machine/cards.pdf` (4 letter pages, 3x3 grid per page)."
+    },
+    {
+      "statement": "Pages 1 and 3 hold card faces (18 total); pages 2 and 4 hold card backs, all identical except p.2 r1c3.",
+      "sourceSentence": "**p.2 and p.4 = card BACKS** — confirmed: every slot is the \"DOOM MACHINE / BY NATHAN MEUNIER\" back art, EXCEPT p.2 row 1 col 3"
+    },
+    {
+      "statement": "Page 4 is nine identical backs with no exceptions.",
+      "sourceSentence": "p.4 is nine identical backs, no exceptions."
+    },
+    {
+      "statement": "A card's cycle track is drawn as three squares descending the left edge then two more running right along the bottom.",
+      "sourceSentence": "three squares running DOWN the left edge, then two more running RIGHT along the bottom."
+    },
+    {
+      "statement": "Position 1 is always the yellow HP die slot showing the card's starting HP as pips.",
+      "sourceSentence": "Position 1 is always the **yellow HP die slot** (the die is printed there showing the card's starting HP as pips)."
+    },
+    {
+      "statement": "Three kinds of cycle-track space exist: icon, blank, and dead, distinguished by connector-bar color and hatching.",
+      "sourceSentence": "- **Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar."
+    },
+    {
+      "statement": "Blank spaces are also yellow-connected; dead spaces use dull grey/teal connectors and are darkened/hatched.",
+      "sourceSentence": "- **Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow."
+    },
+    {
+      "statement": "Landing on a dead space returns the die to position 1, per the rulebook.",
+      "sourceSentence": "Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1."
+    },
+    {
+      "statement": "The Player HP A-side card has no roll conditions, no cycle track, and no destroy effect.",
+      "sourceSentence": "No roll conditions, no cycle track, no destroy effect."
+    },
+    {
+      "statement": "The Doom Machine card's art shows an eye badge (Sentience), a battery badge (Power), a logo plate, and two parallel serpentine tracks.",
+      "sourceSentence": "an eye badge (Sentience, yellow) above the left track, a battery badge (Power, black) above the right track"
+    },
+    {
+      "statement": "The Doom Machine card defines only the 0-10 range of its tracks; no threshold, trigger, or win/loss condition is printed on it.",
+      "sourceSentence": "It defines only their RANGE (0 through 10). No threshold, no trigger, no win/loss condition, no per-turn effect\nis printed anywhere on it."
+    },
+    {
+      "statement": "Every card that reads the Power/Sentience tracks does so on machine part cards, not the tracker.",
+      "sourceSentence": "cards, not on the tracker. Every card that reads the tracks is listed here:"
+    },
+    {
+      "statement": "Power/Sentience act as damage/severity multipliers; no printed rule exists for track-top or track-based loss.",
+      "sourceSentence": "There is still NO printed\nrule for what happens at the top of a track (10), and no track-based loss condition anywhere in the PDFs."
+    },
+    {
+      "statement": "The rulebook's symbology panel documents only +, =, /, > — the \"<\" on Stasis Generator is undocumented, inferred by symmetry, flagged for designer confirmation.",
+      "sourceSentence": "2. **\"<\" operator is undocumented.** STASIS GENERATOR uses `[?] < [3]`. The rulebook's DICE ROLL SYMBOLOGY panel\ndocuments `+`, `=`, `/`, and `>` only."
+    },
+    {
+      "statement": "Design Flaw and Extinction Collider lack a dead space, so the rules don't state what happens after space 5; wraparound to 1 is presumed, not printed.",
+      "sourceSentence": "The rulebook only defines the die returning to the start when it would\nland on a dead space, so it does not say what happens when the die is on space 5 of these two cards"
+    },
+    {
+      "statement": "15 non-Core parts + 1 Doom Core = 16 cards, matching Hard Mode's \"use all 16\" instruction and normal setup's 9-card machine deck.",
+      "sourceSentence": "4. **Card count vs. Hard Mode.** There are exactly **15 non-Core machine part cards + 1 Doom Core = 16 cards**."
+    },
+    {
+      "statement": "The icon slice's Repair description (wrench in purple-pink ring) needs correcting to match the actual yellow-heart-with-triangle icon.",
+      "sourceSentence": "Worth correcting in the icon slice."
+    },
+    {
+      "statement": "Every card element was resolved at 300 DPI with nothing guessed.",
+      "sourceSentence": "**None.** Every card name, HP die pip count, roll-condition glyph, cycle-track space, effect strip, and destroy\nbanner in cards.pdf was resolved at 300 DPI. No value was guessed."
+    }
+  ],
+  "bOnly": [],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 19,
+      "derivedLineText": "Derived (p.1, p.3): Every machine part card carries the same 5-position cycle track, drawn as an inverted-L:",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "Infernal Power Complex cycle track: HP slot(3), Power+Sentience, blank, Power+Sentience, dead.",
+        "Misery Extractor cycle track: HP slot(6), Damage, Damage, Damage, dead.",
+        "Thought Siphon cycle track: HP slot(4), Damage, Damage, Broken Shield, dead.",
+        "Impact Nexus cycle track: HP slot(4), Damage, dead, dead, dead.",
+        "Cerebral Amplifier cycle track: HP slot(4), Damage, Damage, dead, dead.",
+        "Hard Cycle Storage cycle track: HP slot(5), Gear, Damage, Gear, dead.",
+        "Design Flaw cycle track: HP slot(4), Damage, Damage, blank, Damage; no dead space, all five live.",
+        "Extinction Collider cycle track: HP slot(6), Damage, Power, Damage, Power; no dead space, all five live.",
+        "Pulse Pools cycle track: HP slot(3), Power, Power, Damage, dead.",
+        "The Doom Core cycle track: HP slot(4), Damage, Power+Sentience, Power+Sentience, dead.",
+        "Logic Mainframe cycle track: HP slot(4), Sentience, Sentience, dead, dead.",
+        "Stasis Generator cycle track: HP slot(6), Lock, blank, Lock, dead.",
+        "Recycling Vats cycle track: HP slot(6), Damage, Damage, Repair, dead.",
+        "Populace Grinder cycle track: HP slot(3), Damage, Repair, dead, dead.",
+        "Synaptic Disruptor cycle track: HP slot(4), Sentience, Damage, dead, dead.",
+        "Soul Harvester cycle track: HP slot(3), Damage, Lock, Damage, dead."
+      ]
+    },
+    {
+      "lineNumber": 30,
+      "derivedLineText": "Derived: the yellow-vs-grey connector colour is the reliable tell for live-vs-dead; the hatch fill corroborates it.",
+      "proposedClassification": "uncorroborated",
+      "citedBothStatements": []
+    },
+    {
+      "lineNumber": 70,
+      "derivedLineText": "Derived (p.1, p.3): However, the tracks are not inert — their consequences are printed on the MACHINE PART",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "Cerebral Amplifier: IF SENTIENCE IS > 5 DEAL 3 MORE DMG.",
+        "Extinction Collider damage strip: DEAL DMG = POWER.",
+        "The Doom Core damage strip: DEAL DMG = SENTIENCE + POWER.",
+        "Synaptic Disruptor damage strip: DEAL DMG = SENTIENCE.",
+        "Stasis Generator: IF SENTIENCE IS > 6 REMOVE THAT DIE FROM PLAY."
+      ]
+    },
+    {
+      "lineNumber": 140,
+      "derivedLineText": "(Derived: effectively a 2-space loop — die goes slot → Damage → dead → back to slot.)",
+      "proposedClassification": "uncorroborated",
+      "citedBothStatements": []
+    },
+    {
+      "lineNumber": 270,
+      "derivedLineText": "`+ = / >`). Derived (p.3), by symmetry with the documented `[?] > [3]` example (\"2 dice required. One must be...",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "Hard Cycle Storage roll condition: two dice, one a 3, another greater than 3.",
+        "Stasis Generator roll condition: two dice, one a 3, another less than 3."
+      ]
+    }
+  ]
+}

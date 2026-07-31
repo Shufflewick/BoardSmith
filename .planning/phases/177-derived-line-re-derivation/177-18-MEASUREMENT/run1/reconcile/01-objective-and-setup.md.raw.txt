@@ -1,0 +1,186 @@
+```json
+{
+  "both": [
+    {
+      "statement": "The player's goal is to uncover and destroy the Doom Core before succumbing to total extinction.",
+      "quotedFromA": "\"Uncover and destroy The Doom Core before you succumb to total extinction.\"",
+      "quotedFromB": "Uncover and destroy The Doom Core before you succumb to total extinction."
+    },
+    {
+      "statement": "The Doom Machine tracking card is set to the player's left.",
+      "quotedFromA": "\"1) Set the Doom Machine tracking card to your left.\"",
+      "quotedFromB": "Set the Doom Machine tracking card to your left."
+    },
+    {
+      "statement": "The Doom Machine tracking card has a Sentience track (yellow) and a Power track (black).",
+      "quotedFromA": "\"Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks.\"",
+      "quotedFromB": "Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks."
+    },
+    {
+      "statement": "Tracking cubes are placed on the zero spaces of the Sentience and Power tracks.",
+      "quotedFromA": "\"Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks.\"",
+      "quotedFromB": "Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks."
+    },
+    {
+      "statement": "The Doom Core is a machine part card.",
+      "quotedFromA": "\"2) Find the \"Doom Core\" machine part card, and place it face down to the right of the Doom Machine tracking card.\"",
+      "quotedFromB": "Find the \"Doom Core\" machine part card, and place it face down to the right of the Doom Machine tracking card."
+    },
+    {
+      "statement": "The Doom Core card is placed face down.",
+      "quotedFromA": "\"2) Find the \"Doom Core\" machine part card, and place it face down to the right of the Doom Machine tracking card.\"",
+      "quotedFromB": "Find the \"Doom Core\" machine part card, and place it face down to the right of the Doom Machine tracking card."
+    },
+    {
+      "statement": "The Doom Core is positioned to the right of the Doom Machine tracking card.",
+      "quotedFromA": "\"2) Find the \"Doom Core\" machine part card, and place it face down to the right of the Doom Machine tracking card.\"",
+      "quotedFromB": "Find the \"Doom Core\" machine part card, and place it face down to the right of the Doom Machine tracking card."
+    },
+    {
+      "statement": "The remaining machine part cards (after setting aside the Doom Core) are shuffled.",
+      "quotedFromA": "\"3) Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run).\"",
+      "quotedFromB": "Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run)."
+    },
+    {
+      "statement": "Six machine part cards are removed at random and set aside, unused for this run.",
+      "quotedFromA": "\"Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run).\"",
+      "quotedFromB": "Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run)."
+    },
+    {
+      "statement": "The 9 remaining machine part cards are placed face down on top of the Doom Core to create the machine deck.",
+      "quotedFromA": "\"Place the 9 remaining cards face down on top of the Doom Core to create the machine deck.\"",
+      "quotedFromB": "Place the 9 remaining cards face down on top of the Doom Core to create the machine deck."
+    },
+    {
+      "statement": "The Doom Core sits beneath the 9 machine deck cards (i.e., at the bottom of the machine deck).",
+      "quotedFromA": "\"Place the 9 remaining cards face down on top of the Doom Core to create the machine deck.\"",
+      "quotedFromB": "Place the 9 remaining cards face down on top of the Doom Core to create the machine deck."
+    },
+    {
+      "statement": "The Player HP tracking card is placed below the machine deck.",
+      "quotedFromA": "\"4) Place the Player HP (health points) tracking card below the machine deck.\"",
+      "quotedFromB": "Place the Player HP (health points) tracking card below the machine deck."
+    },
+    {
+      "statement": "The white tracking cube is set on the 10 space of the Player HP track.",
+      "quotedFromA": "\"Set the white tracking cube on the 10 space of the Player HP track.\"",
+      "quotedFromB": "Set the white tracking cube on the 10 space of the Player HP track."
+    },
+    {
+      "statement": "The top 3 cards of the machine deck are drawn and placed face up, in a line, to the immediate right of the deck.",
+      "quotedFromA": "\"5) Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck.\"",
+      "quotedFromB": "Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck."
+    },
+    {
+      "statement": "The 3 drawn cards are the starting machine parts the player will face.",
+      "quotedFromA": "\"These are the starting machine parts you will face.\"",
+      "quotedFromB": "These are the starting machine parts you will face."
+    },
+    {
+      "statement": "One yellow die is taken for each revealed machine part card and placed on that card's cycle-track yellow dice slot.",
+      "quotedFromA": "\"6) Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card...\"",
+      "quotedFromB": "Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points)."
+    },
+    {
+      "statement": "Each placed die's face is set to match the indicated machine part card's HP.",
+      "quotedFromA": "\"...setting the die face to match the indicated machine part's HP (health points).\"",
+      "quotedFromB": "Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points)."
+    },
+    {
+      "statement": "The remaining unused yellow dice are set aside for now.",
+      "quotedFromA": "\"7) Set the remaining unused yellow dice aside for now...\"",
+      "quotedFromB": "Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you."
+    },
+    {
+      "statement": "The player places 5 black starting dice in front of themselves.",
+      "quotedFromA": "\"...then place your 5 black starting dice in front of you.\"",
+      "quotedFromB": "Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you."
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "A how-to-play video for the game is available online at nathanmeunier.com/doom.",
+      "sourceSentence": "\"Hate Reading? Watch the How to Play Video:\" \"https://nathanmeunier.com/doom\""
+    },
+    {
+      "statement": "The setup layout includes a Doom Machine Tracker accompanied by its cubes, labeled A in the diagram.",
+      "sourceSentence": "\"A) Doom Machine Tracker + Cubes\""
+    },
+    {
+      "statement": "The setup layout includes the Machine Deck, labeled B in the diagram.",
+      "sourceSentence": "\"B) Machine Deck\""
+    },
+    {
+      "statement": "The setup layout includes a Player HP Tracker accompanied by its cube, labeled C in the diagram.",
+      "sourceSentence": "\"C) Player HP Tracker + Cube\""
+    },
+    {
+      "statement": "The setup layout includes the Starting Machine Part Cards, labeled D in the diagram.",
+      "sourceSentence": "\"D) Starting Machine Part Cards\""
+    },
+    {
+      "statement": "The setup layout includes a Machine Part Die, labeled E in the diagram.",
+      "sourceSentence": "\"E) Machine Part Die\""
+    },
+    {
+      "statement": "The setup layout includes an Extra Machine Dice Pool, labeled F in the diagram.",
+      "sourceSentence": "\"F) Extra Machine Dice Pool\""
+    },
+    {
+      "statement": "The setup layout includes the Starting Player Dice, labeled G in the diagram.",
+      "sourceSentence": "\"G) Starting Player Dice\""
+    },
+    {
+      "statement": "In the setup diagram the components form a row across the top, with the Doom Machine Tracker leftmost, the Machine Deck to its right, and the starting machine part cards to the right of the deck.",
+      "sourceSentence": "A schematic row of card-shaped rectangles across the top. Leftmost is a portrait card labeled \"A\" (the Doom Machine Tracker...). To its right, a portrait card labeled \"B\" (the face-down Machine Deck). To the right of B are three blank portrait card outlines in a line..."
+    },
+    {
+      "statement": "The Doom Machine Tracker uses two cubes, one yellow and one black, matching its two tracks.",
+      "sourceSentence": "a portrait card labeled \"A\" (the Doom Machine Tracker, drawn with two small tracking cubes at its base — one yellow, one black)"
+    },
+    {
+      "statement": "The diagram shows three starting machine part cards in a line, each carrying one yellow machine part die.",
+      "sourceSentence": "three blank portrait card outlines in a line, the middle one labeled \"D\", each with a small yellow die drawn on it and a short underline beneath — these are the 3 starting machine part cards, each carrying a machine part die (\"E\")"
+    },
+    {
+      "statement": "The Player HP Tracker is positioned below and to the left of the top row of components, with the extra yellow machine dice pool to its left and the black starting player dice beneath that pool.",
+      "sourceSentence": "Below and left of the row sits a portrait card labeled \"C\" (Player HP Tracker) with a small cube; to its left is a loose cluster of yellow dice (\"F\", the extra machine dice pool)... Beneath that cluster is a small group of black dice (\"G\", the starting player dice)."
+    },
+    {
+      "statement": "The machine dice are yellow and the player dice are black.",
+      "sourceSentence": "a loose cluster of yellow dice (\"F\", the extra machine dice pool) drawn as a grid of small yellow squares. Beneath that cluster is a small group of black dice (\"G\", the starting player dice)."
+    }
+  ],
+  "bOnly": [],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 34,
+      "derivedLineText": "The machine deck for a normal game is 9 face-up-drawable machine part cards stacked on top of the face-down Doom Core, so the Doom Core is the final card of the deck. Of those 9, the top 3 are immediately revealed in step 5, leaving 6 face down above the Doom Core.",
+      "proposedClassification": "corroborated-by-composition",
+      "citedBothStatements": [
+        "The 9 remaining machine part cards are placed face down on top of the Doom Core to create the machine deck.",
+        "The Doom Core sits beneath the 9 machine deck cards (i.e., at the bottom of the machine deck).",
+        "The top 3 cards of the machine deck are drawn and placed face up, in a line, to the immediate right of the deck."
+      ],
+      "arithmeticNote": "9 machine deck cards minus the 3 drawn/revealed in step 5 leaves 6 remaining face down above the Doom Core; operands are the 'placed 9 cards on top of the Doom Core' fact and the 'top 3 cards drawn' fact, with the Doom Core's bottom position as a supporting (non-arithmetic) fact."
+    },
+    {
+      "lineNumber": 36,
+      "derivedLineText": "The Doom Machine tracking card has two tracks — Sentience (yellow) and Power (black) — each starting at zero.",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "The Doom Machine tracking card has a Sentience track (yellow) and a Power track (black).",
+        "Tracking cubes are placed on the zero spaces of the Sentience and Power tracks."
+      ]
+    },
+    {
+      "lineNumber": 38,
+      "derivedLineText": "Player HP starts at 10.",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "The white tracking cube is set on the 10 space of the Player HP track."
+      ]
+    }
+  ]
+}
+```

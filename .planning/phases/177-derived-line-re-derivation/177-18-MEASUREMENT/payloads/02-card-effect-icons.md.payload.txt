@@ -1,0 +1,21 @@
+BS-ENUMERATE-V1
+Slice: 02-card-effect-icons.md
+
+p.2 (panel -12-), CARD EFFECT ICONS:
+"Damage - Hits player's shields first, if blocked, then HP if any carries over."
+"Power / Sentience - Move the corresponding token up or down the Doom Machine track."
+"Power + Sentience - Increase or decrease both Power and Sentience."
+"Broken Shield - When activated, only 1 shield dice can be placed next turn."
+"Destroy Effect - Immediately triggers when a part card is destroyed."
+"Repair - Restores part card's HP (only up to its maximum starting health)."
+"Gear - Instantly triggers an additional track cycle for any cards immediately adjacent to it."
+"Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn."
+Icon art description (p.2, panel -12-): eight circular icon badges in a column, each ringed in a distinct color on a dark teal card back —
+- Damage: a yellow/green starburst or explosion glyph.
+- Power / Sentience: two side-by-side badges — a battery/power-cell glyph (Power, black/teal) and an eye glyph (Sentience, yellow).
+- Power + Sentience: an eye glyph badge (shown for the combined effect).
+- Broken Shield: a green cracked shield glyph.
+- Destroy Effect: a yellow circled X.
+- Repair: a yellow heart with a triangle. (Corrected from cards.pdf card faces, read at 300 DPI; the earlier "wrench in a purple-pink ring" reading was inaccurate. RULES TEXT unaffected.)
+- Gear: a cogwheel glyph in a blue ring.
+- Lock: a padlock glyph in an orange ring.

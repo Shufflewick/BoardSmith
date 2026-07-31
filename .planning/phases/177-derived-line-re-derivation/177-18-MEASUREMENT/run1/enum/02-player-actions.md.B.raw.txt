@@ -1,0 +1,157 @@
+```json
+{
+  "facts": [
+    {
+      "statement": "Players may place any number of unallocated dice on available utility slots.",
+      "sourceSentence": "You may place any number of unallocated dice on available utility slots."
+    },
+    {
+      "statement": "Each utility slot can only be used once per turn.",
+      "sourceSentence": "Each utility slot can only be used once per turn, and all dice you intend to place into utility slots must be placed there and immediately resolved (re-rolled or modified) before any of them can be re-allocated to either shields or part damage."
+    },
+    {
+      "statement": "All dice placed into utility slots must be immediately resolved (re-rolled or modified) before any can be re-allocated.",
+      "sourceSentence": "all dice you intend to place into utility slots must be placed there and immediately resolved (re-rolled or modified) before any of them can be re-allocated to either shields or part damage."
+    },
+    {
+      "statement": "When placing a die on a dice modifier slot, immediately modify its face value by +/-1 pip.",
+      "sourceSentence": "When placing a die on a dice modifier slot, immediately rotate and modify its face value by +/-1 pip."
+    },
+    {
+      "statement": "Modified dice remain on their utility slot until all other utility dice have been resolved.",
+      "sourceSentence": "Leave it on its utility slot until all other utility dice have been resolved."
+    },
+    {
+      "statement": "Sixes may not be modified to ones.",
+      "sourceSentence": "Sixes may NOT be changed to ones and ones may NOT be changed to sixes."
+    },
+    {
+      "statement": "Ones may not be modified to sixes.",
+      "sourceSentence": "Sixes may NOT be changed to ones and ones may NOT be changed to sixes."
+    },
+    {
+      "statement": "When placing a die on a re-roll slot, immediately re-roll it.",
+      "sourceSentence": "When placing a die on a re-roll slot, immediately re-roll it and place it back on the slot until all other utility dice are resolved."
+    },
+    {
+      "statement": "Re-rolled dice remain on their utility slot until all other utility dice have been resolved.",
+      "sourceSentence": "When placing a die on a re-roll slot, immediately re-roll it and place it back on the slot until all other utility dice are resolved."
+    },
+    {
+      "statement": "Once a die is re-rolled, it cannot be placed on a +/- modifier slot for further modification.",
+      "sourceSentence": "Once a die is re-rolled, it cannot be placed on a +/- slot to be further modified."
+    },
+    {
+      "statement": "After all utility dice are resolved, they can be allocated to either shields or damage.",
+      "sourceSentence": "Once all utility dice are resolved (i.e. re-rolled or modified +/-1), remove them from your card and allocate them to either shields or damage, if possible."
+    },
+    {
+      "statement": "Unallocated dice that cannot be played are considered spent at the end of the turn.",
+      "sourceSentence": "Unallocated dice that cannot be played are considered spent at the end of your turn."
+    },
+    {
+      "statement": "Players may place unallocated dice to available shield slots.",
+      "sourceSentence": "You may place unallocated dice (including dice that have been modified via utility slots) to the available shield slots, gaining shield strength equal to the total face value of all dice placed there."
+    },
+    {
+      "statement": "Shield strength equals the total face value of all dice placed on shield slots.",
+      "sourceSentence": "You may place unallocated dice (including dice that have been modified via utility slots) to the available shield slots, gaining shield strength equal to the total face value of all dice placed there."
+    },
+    {
+      "statement": "In a normal game, no more than 4 dice can be placed on shield slots per turn.",
+      "sourceSentence": "In a normal game, no more than 4 dice can be placed this way per turn.",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "In Hard Mode, no more than 3 dice can be placed on shield slots per turn.",
+      "sourceSentence": "In Hard Mode, no more than 3 dice can be placed this way per turn.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Dice used for shields do not persist from round to round.",
+      "sourceSentence": "Additionally, dice used for shields do not persist from round to round. They're re-rolled at the start of your next turn."
+    },
+    {
+      "statement": "Dice used for shields are re-rolled at the start of the next turn.",
+      "sourceSentence": "They're re-rolled at the start of your next turn."
+    },
+    {
+      "statement": "Players may deal damage to a machine part by successfully fulfilling its roll conditions and allocating the required dice.",
+      "sourceSentence": "You may deal 1 damage to a given machine part by successfully fulfilling the roll conditions (on the middle right side of the card) and allocating the required dice to the part."
+    },
+    {
+      "statement": "Only 1 point of damage is dealt each time a roll condition is met and the required dice are allocated.",
+      "sourceSentence": "(Only 1 point of damage is dealt each time a roll condition is met and the required dice are allocated.)",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Some machine parts can be damaged by a single die.",
+      "sourceSentence": "Some parts can be damaged by a single dice, others require a specific combo of 2-3 dice."
+    },
+    {
+      "statement": "Some machine parts require a specific combo of 2-3 dice to be damaged.",
+      "sourceSentence": "Some parts can be damaged by a single dice, others require a specific combo of 2-3 dice."
+    },
+    {
+      "statement": "When a part is successfully damaged, rotate the part's yellow HP die face to reduce it by 1 pip.",
+      "sourceSentence": "When a part is successfully damaged, rotate the part's yellow HP die face to reduce it by 1 pip, then place the dice you used to damage that part below the card."
+    },
+    {
+      "statement": "Dice used to damage a part are placed below the card.",
+      "sourceSentence": "then place the dice you used to damage that part below the card."
+    },
+    {
+      "statement": "Dice used for damage are spent and cannot be re-used until the next turn.",
+      "sourceSentence": "These dice are spent and cannot be re-used until your next turn."
+    },
+    {
+      "statement": "A machine part can be damaged more than once per turn.",
+      "sourceSentence": "A machine part can be damaged more than once per turn, but you must have enough dice to completely fulfill the damage condition each time."
+    },
+    {
+      "statement": "To damage a machine part multiple times in one turn, the player must have enough dice to completely fulfill the damage condition each time.",
+      "sourceSentence": "A machine part can be damaged more than once per turn, but you must have enough dice to completely fulfill the damage condition each time."
+    },
+    {
+      "statement": "When all dice have been allocated and resolved, or when there are no more playable dice, proceed to the Machine Phase.",
+      "sourceSentence": "When all of your dice have been allocated and resolved, and/or you have no more playable dice to play, proceed to the Machine Phase."
+    },
+    {
+      "statement": "The DICE MODIFIER +/- SLOT is marked with a yellow-outlined \"+/-\" badge icon on dark teal.",
+      "sourceSentence": "Icon description (p.2, panel -4-): two yellow-outlined icon badges on dark teal — a \"+/-\" badge for the DICE MODIFIER +/- SLOT, and a badge showing two tumbling dice for the DICE RE-ROLL SLOT."
+    },
+    {
+      "statement": "The DICE RE-ROLL SLOT is marked with a yellow-outlined badge showing two tumbling dice on dark teal.",
+      "sourceSentence": "Icon description (p.2, panel -4-): two yellow-outlined icon badges on dark teal — a \"+/-\" badge for the DICE MODIFIER +/- SLOT, and a badge showing two tumbling dice for the DICE RE-ROLL SLOT."
+    },
+    {
+      "statement": "The SHIELD DICE SLOT is marked with a yellow-outlined badge with a \"+\" shield symbol.",
+      "sourceSentence": "Icon description (p.1, panel -5-): a yellow-outlined badge with a \"+\" shield symbol, captioned \"SHIELD DICE SLOT\"."
+    },
+    {
+      "statement": "Some roll conditions for machine part damage are illustrated as single-die either/or conditions with specific pip values.",
+      "sourceSentence": "Diagram description (p.2, panel -6-): a row of three yellow roll-condition tiles illustrating damage conditions — (1) a two-pip die face and a three-pip die face separated by a slash (a single-die \"either/or\" condition)..."
+    },
+    {
+      "statement": "Some roll conditions for machine part damage are illustrated as two-die combinations where specific die faces are summed.",
+      "sourceSentence": "Diagram description (p.2, panel -6-): ...a row of three yellow roll-condition tiles illustrating damage conditions ... (2) a two-die \"+\" combo showing two specific die faces summed..."
+    },
+    {
+      "statement": "Some roll conditions for machine part damage are illustrated as three-die conditions using operator symbols.",
+      "sourceSentence": "Diagram description (p.2, panel -6-): ...a row of three yellow roll-condition tiles illustrating damage conditions ... (3) a three-die condition made of three \"?\" dice joined by operator symbols."
+    }
+  ]
+}
+```

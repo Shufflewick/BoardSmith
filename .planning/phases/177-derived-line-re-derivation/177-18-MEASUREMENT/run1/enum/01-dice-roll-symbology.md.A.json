@@ -1,0 +1,107 @@
+{
+  "facts": [
+    {
+      "statement": "One roll condition requires three dice, where the values of the first two dice added together must equal the value of the third die.",
+      "sourceSentence": "3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The rules give 2+4=6 as an illustrative example of satisfying the addition roll condition.",
+      "sourceSentence": "3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)"
+    },
+    {
+      "statement": "The addition roll condition is shown by a symbol pairing two unspecified die faces with a plus sign and an equals sign to a third unspecified die face.",
+      "sourceSentence": "Symbol shown: [ ? ] + [ ? ] = [ ? ]"
+    },
+    {
+      "statement": "One roll condition requires three dice that must all show sixes.",
+      "sourceSentence": "3 dice required. They must all be sixes.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The all-sixes roll condition is shown by a symbol of three six-pip die faces.",
+      "sourceSentence": "Symbol shown: [ 6 ] + [ 6 ] = [ 6 ]  (three six-pip die faces)",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "pips per die face",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "One roll condition requires two dice that must show doubles (matching values).",
+      "sourceSentence": "2 dice required. They must be doubles.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The doubles roll condition is shown by a symbol of two unspecified die faces joined by an equals sign.",
+      "sourceSentence": "Symbol shown: [ ? ] = [ ? ]"
+    },
+    {
+      "statement": "One roll condition requires a single die that must show either a 2 or a 3.",
+      "sourceSentence": "1 die required. It can be either a 2 or a 3 value.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The either-or roll condition is shown by two die faces separated by a slash.",
+      "sourceSentence": "Symbol shown: [ 2 ] / [ 3 ]  (a two-pip face and a three-pip face separated by a slash)"
+    },
+    {
+      "statement": "One roll condition requires two dice, where one die must show a 3 and the other must show a value greater than 3.",
+      "sourceSentence": "2 dice required. One must be a 3, another greater than 3.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The greater-than roll condition is shown by an unspecified die face, a greater-than sign, and a three-pip die face.",
+      "sourceSentence": "Symbol shown: [ ? ] > [ 3 ]  (a \"?\" die, a greater-than sign, and a three-pip die face)"
+    },
+    {
+      "statement": "One roll condition requires two dice showing specifically a 4 and a 5.",
+      "sourceSentence": "2 dice required. They must be a 4 and a 5.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The specific-pair roll condition is shown by a four-pip die face and a five-pip die face.",
+      "sourceSentence": "Symbol shown: [ 4 ] + [ 5 ]  (a four-pip face and a five-pip face)"
+    },
+    {
+      "statement": "A question-mark die face in a roll-condition symbol denotes a die whose specific value is not fixed by the symbol.",
+      "sourceSentence": "Symbol shown: [ ? ] > [ 3 ]  (a \"?\" die, a greater-than sign, and a three-pip die face)"
+    },
+    {
+      "statement": "Roll-condition symbols use the operator signs plus, equals, slash, and greater-than.",
+      "sourceSentence": "each example is a black-bordered yellow tile containing white/dark die-face glyphs and operator symbols (+, =, /, >)"
+    },
+    {
+      "statement": "Each roll-condition example is presented as a black-bordered yellow tile containing white/dark die-face glyphs.",
+      "sourceSentence": "each example is a black-bordered yellow tile containing white/dark die-face glyphs and operator symbols (+, =, /, >)"
+    },
+    {
+      "statement": "These example tiles use the same design as the roll-condition tiles printed on machine part cards.",
+      "sourceSentence": "matching the roll-condition tiles printed on machine part cards."
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "both": [
+    {
+      "statement": "Three dice are required for the addition roll condition (first die plus second die must equal the third die's value).",
+      "quotedFromA": "3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)",
+      "quotedFromB": "3 dice required."
+    },
+    {
+      "statement": "The first die plus the second die must equal the value of the third die.",
+      "quotedFromA": "3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)",
+      "quotedFromB": "1st die + 2nd die must = the value of the third die."
+    },
+    {
+      "statement": "Three dice are required and all three must show the value six.",
+      "quotedFromA": "3 dice required. They must all be sixes.",
+      "quotedFromB": "They must all be sixes."
+    },
+    {
+      "statement": "Two dice are required for the doubles roll condition.",
+      "quotedFromA": "2 dice required. They must be doubles.",
+      "quotedFromB": "2 dice required."
+    },
+    {
+      "statement": "The two dice must be doubles (show the same value).",
+      "quotedFromA": "2 dice required. They must be doubles.",
+      "quotedFromB": "They must be doubles."
+    },
+    {
+      "statement": "One die is required for the either-or roll condition.",
+      "quotedFromA": "1 die required. It can be either a 2 or a 3 value.",
+      "quotedFromB": "1 die required."
+    },
+    {
+      "statement": "The single die may show a value of 2 or a value of 3.",
+      "quotedFromA": "1 die required. It can be either a 2 or a 3 value.",
+      "quotedFromB": "It can be either a 2 or a 3 value."
+    },
+    {
+      "statement": "One die must show the value 3, in a two-dice roll condition.",
+      "quotedFromA": "2 dice required. One must be a 3, another greater than 3.",
+      "quotedFromB": "One must be a 3, another greater than 3."
+    },
+    {
+      "statement": "The other die in that condition must show a value greater than 3.",
+      "quotedFromA": "2 dice required. One must be a 3, another greater than 3.",
+      "quotedFromB": "One must be a 3, another greater than 3."
+    },
+    {
+      "statement": "One die must show the value 4, in the specific-pair roll condition.",
+      "quotedFromA": "2 dice required. They must be a 4 and a 5.",
+      "quotedFromB": "They must be a 4 and a 5."
+    },
+    {
+      "statement": "The other die in that condition must show the value 5.",
+      "quotedFromA": "2 dice required. They must be a 4 and a 5.",
+      "quotedFromB": "They must be a 4 and a 5."
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "The rules give 2+4=6 as an illustrative example of satisfying the addition roll condition.",
+      "sourceSentence": "3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)"
+    },
+    {
+      "statement": "The addition roll condition is shown by a symbol pairing two unspecified die faces with a plus sign and an equals sign to a third unspecified die face.",
+      "sourceSentence": "Symbol shown: [ ? ] + [ ? ] = [ ? ]"
+    },
+    {
+      "statement": "The all-sixes roll condition is shown by a symbol of three six-pip die faces.",
+      "sourceSentence": "Symbol shown: [ 6 ] + [ 6 ] = [ 6 ]  (three six-pip die faces)"
+    },
+    {
+      "statement": "The doubles roll condition is shown by a symbol of two unspecified die faces joined by an equals sign.",
+      "sourceSentence": "Symbol shown: [ ? ] = [ ? ]"
+    },
+    {
+      "statement": "The either-or roll condition is shown by two die faces separated by a slash.",
+      "sourceSentence": "Symbol shown: [ 2 ] / [ 3 ]  (a two-pip face and a three-pip face separated by a slash)"
+    },
+    {
+      "statement": "The greater-than roll condition is shown by an unspecified die face, a greater-than sign, and a three-pip die face.",
+      "sourceSentence": "Symbol shown: [ ? ] > [ 3 ]  (a \"?\" die, a greater-than sign, and a three-pip die face)"
+    },
+    {
+      "statement": "The specific-pair roll condition is shown by a four-pip die face and a five-pip die face.",
+      "sourceSentence": "Symbol shown: [ 4 ] + [ 5 ]  (a four-pip face and a five-pip face)"
+    },
+    {
+      "statement": "A question-mark die face in a roll-condition symbol denotes a die whose specific value is not fixed by the symbol.",
+      "sourceSentence": "Symbol shown: [ ? ] > [ 3 ]  (a \"?\" die, a greater-than sign, and a three-pip die face)"
+    },
+    {
+      "statement": "Roll-condition symbols use the operator signs plus, equals, slash, and greater-than.",
+      "sourceSentence": "each example is a black-bordered yellow tile containing white/dark die-face glyphs and operator symbols (+, =, /, >)"
+    },
+    {
+      "statement": "Each roll-condition example is presented as a black-bordered yellow tile containing white/dark die-face glyphs.",
+      "sourceSentence": "each example is a black-bordered yellow tile containing white/dark die-face glyphs and operator symbols (+, =, /, >)"
+    },
+    {
+      "statement": "These example tiles use the same design as the roll-condition tiles printed on machine part cards.",
+      "sourceSentence": "matching the roll-condition tiles printed on machine part cards."
+    }
+  ],
+  "bOnly": [],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 25,
+      "derivedLineText": "Roll conditions on machine part cards are expressed with a compact symbol language: \"?\" means any value, an explicit pip face means an exact value, \"/\" means either-or, \"+\" and \"=\" express arithmetic/equality relations across dice, and \">\" expresses a comparison.",
+      "proposedClassification": "uncorroborated",
+      "citedBothStatements": []
+    }
+  ]
+}

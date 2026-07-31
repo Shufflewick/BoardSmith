@@ -1,0 +1,8 @@
+{
+  "buildEnumeratorPayloadThrew": true,
+  "errorMessage": "buildEnumeratorPayload assembled a payload for CARDS.md that still matches an annotation family (Derived (p./Visual (p./Named-but-undefined (p.).\nThe payload construction site, not the prompt text, is where the quote-only guarantee is upheld — quoteLinesOnly() missed a decoration form. Fix the strip filter; never relax this check to let the payload through.",
+  "offendingResidualLines": [
+    "`+ = / >`). Derived (p.3), by symmetry with the documented `[?] > [3]` example (\"2 dice required. One must be"
+  ],
+  "workaround": "Manually stripped the offending residual line(s) from quoteLinesOnly() output before assembly (disclosed deviation, not the real shipped path)."
+}

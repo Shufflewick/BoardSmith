@@ -1,0 +1,61 @@
+{
+  "facts": [
+    {
+      "statement": "A machine part is destroyed by reducing its HP die to zero.",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn).",
+      "numericValue": { "magnitude": 0, "unit": "HP", "approximate": false }
+    },
+    {
+      "statement": "When a machine part is destroyed, its card is removed from play.",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn)."
+    },
+    {
+      "statement": "When a machine part is destroyed, that part's die is added to the destroying player's permanent dice pool.",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn)."
+    },
+    {
+      "statement": "A die newly added to the permanent pool is set aside with the player's other spent dice, and stays set aside until the start of the next turn.",
+      "sourceSentence": "(set it aside with your other spent dice until the start of the next turn)"
+    },
+    {
+      "statement": "A player's permanent dice pool can never hold more than ten dice.",
+      "sourceSentence": "Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.",
+      "numericValue": { "magnitude": 10, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "The permanent pool's maximum includes black dice, capped at five.",
+      "sourceSentence": "Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.",
+      "numericValue": { "magnitude": 5, "unit": "black dice", "approximate": false }
+    },
+    {
+      "statement": "The permanent pool's maximum includes yellow dice, capped at five.",
+      "sourceSentence": "Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.",
+      "numericValue": { "magnitude": 5, "unit": "yellow dice", "approximate": false }
+    },
+    {
+      "statement": "After a machine part card is removed, the remaining machine part cards in play are shifted to close the gap left behind.",
+      "sourceSentence": "Then, shift any remaining machine part cards in play to close the gap."
+    },
+    {
+      "statement": "Some machine part cards carry a yellow X icon together with an associated effect.",
+      "sourceSentence": "Some machine part cards have a yellow X icon and effect on them."
+    },
+    {
+      "statement": "A card's yellow-X destroy effect triggers and is resolved immediately at the moment that part is destroyed.",
+      "sourceSentence": "These effects are triggered and resolved immediately when that part is destroyed."
+    },
+    {
+      "statement": "One sample machine part card's destroy effect deals one damage to every machine part currently in play.",
+      "sourceSentence": "\"DEAL 1 DMG TO ALL PARTS IN PLAY\"",
+      "numericValue": { "magnitude": 1, "unit": "damage", "approximate": false }
+    },
+    {
+      "statement": "A destroy effect is printed on the card in a yellow banner bearing a circled-X icon, across the card's lower area.",
+      "sourceSentence": "a yellow banner with a circled-X icon reading \"DEAL 1 DMG TO ALL PARTS IN PLAY\", with an arrow pointing to a sample teal machine part card that shows the same yellow destroy-effect banner across its lower area."
+    },
+    {
+      "statement": "A machine part card's layout includes a title bar, a column of cycle-track icons down its left side, and yellow roll-condition tiles on its right side.",
+      "sourceSentence": "The sample card also shows its title bar, a cycle track column of icons down the left, and yellow roll-condition tiles on its right side."
+    }
+  ]
+}

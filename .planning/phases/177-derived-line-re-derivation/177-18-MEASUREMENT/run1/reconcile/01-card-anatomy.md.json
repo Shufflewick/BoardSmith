@@ -1,0 +1,92 @@
+{
+  "both": [
+    {
+      "statement": "Machine part cards have four numbered callout markers running down the left edge",
+      "quotedFromA": "Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right.",
+      "quotedFromB": "Numbered markers 1-4 run down the left edge of the card"
+    },
+    {
+      "statement": "Legend entries matching the numbered callouts are positioned on the right side of the card",
+      "quotedFromA": "with matching numbered legend entries on the right",
+      "quotedFromB": "with matching numbered legend entries on the right"
+    },
+    {
+      "statement": "Callout 1 identifies the card's name",
+      "quotedFromA": "\"1  Card name\"",
+      "quotedFromB": "Card name"
+    },
+    {
+      "statement": "Callout 2 identifies the roll conditions needed to damage the machine part",
+      "quotedFromA": "\"2  Roll conditions needed to damage machine part\"",
+      "quotedFromB": "Roll conditions needed to damage machine part"
+    },
+    {
+      "statement": "Callout 3 identifies the machine part's cycle track",
+      "quotedFromA": "\"3  Machine part cycle track\"",
+      "quotedFromB": "Machine part cycle track"
+    },
+    {
+      "statement": "Callout 4 identifies the cycle icon effects",
+      "quotedFromA": "\"4  Cycle icon effects\"",
+      "quotedFromB": "Cycle icon effects"
+    },
+    {
+      "statement": "Machine part cards are portrait-oriented and teal",
+      "quotedFromA": "a single portrait teal machine part card with four numbered callouts pointing to it",
+      "quotedFromB": "a single portrait teal machine part card"
+    },
+    {
+      "statement": "The card's name is printed in the title bar across the top of the card",
+      "quotedFromA": "(1) points at the title bar across the top of the card",
+      "quotedFromB": "(1) points at the title bar across the top of the card"
+    },
+    {
+      "statement": "The sample machine part card shown is named RECYCLING UNIT",
+      "quotedFromA": "the sample card's name reads as \"RECYCLING UNIT\"",
+      "quotedFromB": "the sample card's name reads as \"RECYCLING UNIT\""
+    },
+    {
+      "statement": "Roll conditions are shown as yellow tiles on the middle-right of the card face",
+      "quotedFromA": "(2) points at the yellow roll-condition tiles on the middle-right of the card face.",
+      "quotedFromB": "(2) points at the yellow roll-condition tiles on the middle-right of the card face"
+    },
+    {
+      "statement": "The cycle track is a vertical column of track squares running down the left side of the card",
+      "quotedFromA": "the vertical column of track squares running down the left side of the card",
+      "quotedFromB": "(3) points at the vertical column of track squares running down the left side of the card, which holds the yellow HP die"
+    },
+    {
+      "statement": "The cycle track holds the machine part's yellow HP die",
+      "quotedFromA": "the vertical column of track squares running down the left side of the card, which holds the yellow HP die",
+      "quotedFromB": "(3) points at the vertical column of track squares running down the left side of the card, which holds the yellow HP die"
+    },
+    {
+      "statement": "Cycle icon effects are small colored icon badges embedded in the track and lower card area",
+      "quotedFromA": "(4) points at the small colored icon badges embedded in the track / lower card area",
+      "quotedFromB": "(4) points at the small colored icon badges embedded in the track / lower card area that fire when the die lands on them"
+    },
+    {
+      "statement": "A cycle icon effect triggers when the die comes to rest on that icon",
+      "quotedFromA": "the small colored icon badges embedded in the track / lower card area that fire when the die lands on them",
+      "quotedFromB": "(4) points at the small colored icon badges embedded in the track / lower card area that fire when the die lands on them"
+    }
+  ],
+  "aOnly": [],
+  "bOnly": [],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 11,
+      "derivedLineText": "Derived (p.1): A machine part card carries four rule-bearing regions — name, roll conditions (damage requirements), a cycle track the part's yellow HP die moves down, and cycle icon effects triggered when the die lands on an icon.",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "Machine part cards have four numbered callout markers running down the left edge",
+        "Callout 1 identifies the card's name",
+        "Callout 2 identifies the roll conditions needed to damage the machine part",
+        "Callout 3 identifies the machine part's cycle track",
+        "Callout 4 identifies the cycle icon effects",
+        "The cycle track holds the machine part's yellow HP die",
+        "A cycle icon effect triggers when the die comes to rest on that icon"
+      ]
+    }
+  ]
+}

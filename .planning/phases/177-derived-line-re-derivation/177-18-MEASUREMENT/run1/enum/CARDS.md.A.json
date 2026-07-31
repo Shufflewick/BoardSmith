@@ -1,0 +1,987 @@
+{
+  "facts": [
+    {
+      "statement": "The card art source is a PDF of 4 letter-sized pages laid out as a 3x3 grid of cards per page.",
+      "sourceSentence": "Source: `/Users/jtsmith/BoardSmithGames/doom-machine/cards.pdf` (4 letter pages, 3x3 grid per page).",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "pages",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Pages 1 and 3 of the PDF hold the card faces.",
+      "sourceSentence": "**p.1 and p.3 = card FACES** (18 faces total).",
+      "numericValue": {
+        "magnitude": 18,
+        "unit": "faces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Pages 2 and 4 hold card backs, and every back slot is the \"DOOM MACHINE / BY NATHAN MEUNIER\" back art except p.2 row 1 col 3.",
+      "sourceSentence": "**p.2 and p.4 = card BACKS** — confirmed: every slot is the \"DOOM MACHINE / BY NATHAN MEUNIER\" back art, EXCEPT p.2 row 1 col 3, which is the **Player HP card's B side**"
+    },
+    {
+      "statement": "The Player HP card's B side at p.2 r1c3 is the duplex mirror of the Player HP A side at p.1 r1c1.",
+      "sourceSentence": "the **Player HP card's B side** (the duplex-mirror of the Player HP A side at p.1 row 1 col 1)."
+    },
+    {
+      "statement": "Page 4 consists of nine identical card backs with no exceptions.",
+      "sourceSentence": "p.4 is nine identical backs, no exceptions.",
+      "numericValue": {
+        "magnitude": 9,
+        "unit": "backs",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The component set includes fifteen machine part cards that are not the Core.",
+      "sourceSentence": "- 15 machine part cards (non-Core)",
+      "numericValue": {
+        "magnitude": 15,
+        "unit": "machine part cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The component set includes one Doom Core card, titled \"THE DOOM CORE\".",
+      "sourceSentence": "- 1 Doom Core card (\"THE DOOM CORE\")",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Doom Core card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The component set includes one Doom Machine tracking card.",
+      "sourceSentence": "- 1 Doom Machine tracking card",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Doom Machine tracking card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The component set includes one Player HP tracking card that is double-sided, with its A side on p.1 and its B side on p.2.",
+      "sourceSentence": "- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Player HP tracking card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "There are eighteen distinct card faces in total.",
+      "sourceSentence": "- **18 distinct faces total.**",
+      "numericValue": {
+        "magnitude": 18,
+        "unit": "distinct faces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A card's cycle track is drawn as three squares descending the left edge followed by two more running right along the bottom.",
+      "sourceSentence": "three squares running DOWN the left edge, then two more running RIGHT along the bottom."
+    },
+    {
+      "statement": "Cycle-track position 1 is always the yellow HP die slot, where a printed die shows the card's starting HP as pips.",
+      "sourceSentence": "Position 1 is always the **yellow HP die slot** (the die is printed there showing the card's starting HP as pips)."
+    },
+    {
+      "statement": "Cycle-track positions 2 through 5 contain icons, blanks, or dead spaces, and the die travels in the order 1 to 2 to 3 to 4 to 5.",
+      "sourceSentence": "Positions 2–5 hold icons, blanks, or dead spaces. Order of travel = 1 → 2 → 3 → 4 → 5."
+    },
+    {
+      "statement": "Three kinds of cycle-track space exist.",
+      "sourceSentence": "Three kinds of space appear:",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "kinds of space",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "An icon space is a live space carrying an effect badge, joined to its neighbours by a yellow connector bar.",
+      "sourceSentence": "- **Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar."
+    },
+    {
+      "statement": "A blank space is a live plain dark-teal space with no icon, so no effect fires, and it is also yellow-connected.",
+      "sourceSentence": "- **Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected."
+    },
+    {
+      "statement": "A dead space is a darkened, diagonally hatched square connected by dull grey/teal bars rather than yellow ones.",
+      "sourceSentence": "- **Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow."
+    },
+    {
+      "statement": "Landing on a dead space returns the die to position 1, per the rulebook.",
+      "sourceSentence": "Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1."
+    },
+    {
+      "statement": "The Player HP A-side card is the Player HP tracking card in normal mode.",
+      "sourceSentence": "- **Type:** Player HP tracking card (A side / normal mode)"
+    },
+    {
+      "statement": "The Player HP tracker has no starting HP of its own; the rules instead set the cube to 10.",
+      "sourceSentence": "- **Starting HP:** n/a (this is the tracker; rules set the cube to 10)",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "starting cube position",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The Player HP A-side card prints the words PLAYER HP, A SIDE, SHIELD, 1X ROUND, and UTILITY.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 1 col 1: \"PLAYER HP\""
+    },
+    {
+      "statement": "The Player HP track is a serpentine numbered track under a heart badge, running 10 down to 0 across 11 spaces.",
+      "sourceSentence": "- **PLAYER HP track:** heart badge at top, then a serpentine numbered track: 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0.\n(11 spaces, 10 down to 0.)",
+      "numericValue": {
+        "magnitude": 11,
+        "unit": "track spaces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The A side's SHIELD section has four slots, drawn as four shield-with-plus badges in a 2x2 arrangement.",
+      "sourceSentence": "- **SHIELD section: 4 slots.** Four shield-with-\"+\" badges in a 2x2 arrangement.",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "shield slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The A side's UTILITY section, labelled \"1X ROUND\", has six slots in total.",
+      "sourceSentence": "- **UTILITY section (labelled \"1X ROUND\"): 6 slots total —**",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "utility slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Three of the A side's utility slots are \"+/-\" roll-modifier slots.",
+      "sourceSentence": "- **3 x \"+/-\" roll-modifier slots**",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "roll-modifier slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Three of the A side's utility slots are re-roll slots marked with a two-white-dice glyph.",
+      "sourceSentence": "- **3 x re-roll slots** (two-white-dice glyph)",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "re-roll slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The A side's utility slots are printed in three rows: two roll-modifiers, then a roll-modifier and a dice slot, then two dice slots.",
+      "sourceSentence": "- Printed layout: row 1 = [+/-] [+/-]; row 2 = [+/-] [dice]; row 3 = [dice] [dice]."
+    },
+    {
+      "statement": "The Player HP A-side card has no roll conditions, no cycle track, and no destroy effect.",
+      "sourceSentence": "- No roll conditions, no cycle track, no destroy effect."
+    },
+    {
+      "statement": "The card at p.1 r1c2 is the Doom Machine tracking card and has no starting HP.",
+      "sourceSentence": "- **Type:** Doom Machine tracking card\n- **Starting HP:** n/a"
+    },
+    {
+      "statement": "The only words printed on the Doom Machine tracking card are THE, DOOM, MACHINE, SENTIENCE, and POWER.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 1 col 2: \"THE\""
+    },
+    {
+      "statement": "The Sentience track on the Doom Machine card is numbered from 10 down to 0.",
+      "sourceSentence": "- QUOTE (Sentience track numerals, top to bottom): \"10\" \"9\" \"7\" \"8\" \"6\" \"5\" \"3\" \"4\" \"2\" \"1\" \"0\""
+    },
+    {
+      "statement": "The Power track on the Doom Machine card is numbered from 10 down to 0.",
+      "sourceSentence": "- QUOTE (Power track numerals, top to bottom): \"10\" \"9\" \"7\" \"8\" \"6\" \"5\" \"3\" \"4\" \"2\" \"1\" \"0\""
+    },
+    {
+      "statement": "The listed quotes are the complete printed content of the Doom Machine tracking card; it carries no other text.",
+      "sourceSentence": "- **That is the entire printed content of the card. There is no other text of any kind.**"
+    },
+    {
+      "statement": "The Doom Machine card's art shows a yellow eye badge for Sentience above the left track, a black battery badge for Power above the right track, the \"THE DOOM MACHINE\" logo plate between them, and two parallel serpentine 0–10 tracks.",
+      "sourceSentence": "- Art: an eye badge (Sentience, yellow) above the left track, a battery badge (Power, black) above the right track,\nthe \"THE DOOM MACHINE\" logo plate between them. Two parallel serpentine 0–10 tracks."
+    },
+    {
+      "statement": "The Doom Machine tracking card does not define what the Power and Sentience tracks do; it defines only their range of 0 through 10, with no threshold, trigger, win/loss condition, or per-turn effect printed.",
+      "sourceSentence": "It defines only their RANGE (0 through 10). No threshold, no trigger, no win/loss condition, no per-turn effect\nis printed anywhere on it."
+    },
+    {
+      "statement": "Every card that reads the Power or Sentience tracks does so on the machine part cards rather than on the tracker.",
+      "sourceSentence": "cards, not on the tracker. Every card that reads the tracks is listed here:"
+    },
+    {
+      "statement": "Power and Sentience act as damage/severity multipliers consumed by specific cards, and no printed rule exists for what happens at the top of a track or for any track-based loss condition.",
+      "sourceSentence": "So Power and Sentience are damage/severity multipliers consumed by specific cards. There is still NO printed\nrule for what happens at the top of a track (10), and no track-based loss condition anywhere in the PDFs."
+    },
+    {
+      "statement": "INFERNAL POWER COMPLEX is a machine part at p.1 r1c3 with 3 starting HP.",
+      "sourceSentence": "| INFERNAL POWER COMPLEX | p.1 r1c3 | part | 3 | 1+1+1 (all three 1s) | DEAL 1 DMG TO ALL PARTS IN PLAY |",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "INFERNAL POWER COMPLEX's roll condition requires three dice that must all show 1.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[1] + [1] + [1]` — three black die faces each showing one pip, joined by \"+\".\nMeaning (per 01-dice-roll-symbology.md, cf. the \"all sixes\" example): **3 dice required; they must all be 1s.**",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "INFERNAL POWER COMPLEX's cycle track runs HP die slot (3), Power+Sentience icon, blank space, Power+Sentience icon, dead space.",
+      "sourceSentence": "1. HP die slot (die set to 3)\n2. Power+Sentience icon\n3. Blank space (no icon)\n4. Power+Sentience icon\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "INFERNAL POWER COMPLEX's Power+Sentience strip grants +1 Power and +1 Sentience.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 1 col 3 (Power+Sentience strip): \"+1 POWER AND +1 SENTIENCE\""
+    },
+    {
+      "statement": "INFERNAL POWER COMPLEX's destroy effect, shown on a yellow X banner, deals 1 damage to all parts in play.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 1 col 3: \"DEAL 1 DMG TO ALL PARTS IN PLAY\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "INFERNAL POWER COMPLEX is the card used as the destroy-effect example in the rulebook's panel -7-.",
+      "sourceSentence": "- (This is the card used as the destroy-effect example in the rulebook, p.1 panel -7-.)"
+    },
+    {
+      "statement": "MISERY EXTRACTOR is a machine part at p.1 r2c1 with 6 starting HP.",
+      "sourceSentence": "| MISERY EXTRACTOR | p.1 r2c1 | part | 6 | 2 / 3 (one die, a 2 or 3) | DEAL 2 DMG TO LEFT ADJACENT PART |",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "MISERY EXTRACTOR's roll condition requires one die showing either a 2 or a 3.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[2] / [3]` — a two-pip face, a slash, a three-pip face.\nMeaning: **1 die required; it can be either a 2 or a 3.**",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "MISERY EXTRACTOR's cycle track runs HP die slot (6), Damage, Damage, Damage, dead space.",
+      "sourceSentence": "1. HP die slot (6)\n2. Damage\n3. Damage\n4. Damage\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "MISERY EXTRACTOR's damage strip deals damage equal to the HP of the left adjacent part.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 2 col 1 (Damage strip): \"DEAL DMG = HP OF LEFT ADJACENT PART\""
+    },
+    {
+      "statement": "MISERY EXTRACTOR's destroy effect deals 2 damage to the left adjacent part.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 2 col 1: \"DEAL 2 DMG TO LEFT ADJACENT PART\"",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "THOUGHT SIPHON is a machine part at p.1 r2c2 with 4 starting HP and no printed destroy effect.",
+      "sourceSentence": "| THOUGHT SIPHON | p.1 r2c2 | part | 4 | 6+6 (two 6s) | — |",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "THOUGHT SIPHON's roll condition requires two dice that must both show 6.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[6] + [6]` — two six-pip faces joined by \"+\".\nMeaning: **2 dice required; they must both be 6s.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "THOUGHT SIPHON's cycle track runs HP die slot (4), Damage, Damage, Broken Shield, dead space.",
+      "sourceSentence": "1. HP die slot (4)\n2. Damage\n3. Damage\n4. Broken Shield\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "THOUGHT SIPHON's damage strip deals 3 damage.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 2 col 2 (Damage strip): \"DEAL 3 DMG\"",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "THOUGHT SIPHON's Broken Shield strip restricts the player to playing only 1 shield die next turn.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 2 col 2 (Broken Shield strip): \"ONLY 1 SHIELD DIE CAN BE PLAYED NEXT TURN\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "shield die",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "IMPACT NEXUS is a machine part at p.1 r2c3 with 4 starting HP.",
+      "sourceSentence": "| IMPACT NEXUS | p.1 r2c3 | part | 4 | ?=? (doubles) | -1 POWER |",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "IMPACT NEXUS's roll condition requires two dice showing doubles.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[?] = [?]` — two \"?\" faces joined by \"=\".\nMeaning: **2 dice required; they must be doubles.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "IMPACT NEXUS's cycle track runs HP die slot (4), Damage, then three dead spaces.",
+      "sourceSentence": "1. HP die slot (4)\n2. Damage\n3. Dead space (hatched)\n4. Dead space (hatched)\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "IMPACT NEXUS's damage strip deals 1 damage for every part card in play.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 2 col 3 (Damage strip): \"DEAL 1 DMG FOR EVERY PART CARD IN PLAY\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "damage per part card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "IMPACT NEXUS's destroy effect is -1 Power.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 2 col 3: \"-1 POWER\"",
+      "numericValue": {
+        "magnitude": -1,
+        "unit": "Power",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "CEREBRAL AMPLIFIER is a machine part at p.1 r3c1 with 4 starting HP and no printed destroy effect.",
+      "sourceSentence": "| CEREBRAL AMPLIFIER | p.1 r3c1 | part | 4 | ?=? (doubles) | — |",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "CEREBRAL AMPLIFIER's roll condition requires two dice showing doubles.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[?] = [?]`\nMeaning: **2 dice required; they must be doubles.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "CEREBRAL AMPLIFIER's cycle track runs HP die slot (4), Damage, Damage, dead space, dead space.",
+      "sourceSentence": "1. HP die slot (4)\n2. Damage\n3. Damage\n4. Dead space (hatched)\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "CEREBRAL AMPLIFIER's damage strip deals 3 damage.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 3 col 1 (Damage strip, large text): \"DEAL 3 DMG\"",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "CEREBRAL AMPLIFIER deals 3 more damage if Sentience is greater than 5.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 3 col 1 (same strip, small text beneath): \"IF SENTIENCE IS > 5 DEAL 3 MORE DMG\"",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "additional damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "HARD CYCLE STORAGE is a machine part at p.1 r3c2 with 5 starting HP and no printed destroy effect.",
+      "sourceSentence": "| HARD CYCLE STORAGE | p.1 r3c2 | part | 5 | ? > 3 (a 3 + one higher) | — |",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "HARD CYCLE STORAGE's roll condition requires two dice, one showing a 3 and another showing greater than 3.",
+      "sourceSentence": "Meaning (per the symbology's own worked example): **2 dice required; one must be a 3, another greater than 3.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "HARD CYCLE STORAGE's cycle track runs HP die slot (5), Gear, Damage, Gear, dead space.",
+      "sourceSentence": "1. HP die slot (5)\n2. Gear\n3. Damage\n4. Gear\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "HARD CYCLE STORAGE's damage strip deals 4 damage.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 3 col 2 (Damage strip): \"DEAL 4 DMG\"",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "HARD CYCLE STORAGE's Gear strip grants +1 cycle for any adjacent parts.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 3 col 2 (Gear strip): \"+1 CYCLE FOR ANY ADJACENT PARTS\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "cycle",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "DESIGN FLAW is a machine part at p.1 r3c3 with 4 starting HP.",
+      "sourceSentence": "| DESIGN FLAW | p.1 r3c3 | part | 4 | 3+4 | -2 SENTIENCE AND -2 POWER |",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "DESIGN FLAW's roll condition requires two dice showing a 3 and a 4.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[3] + [4]` — a three-pip face and a four-pip face joined by \"+\".\nMeaning: **2 dice required; they must be a 3 and a 4.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "DESIGN FLAW's cycle track runs HP die slot (4), Damage, Damage, blank space, Damage.",
+      "sourceSentence": "1. HP die slot (4)\n2. Damage\n3. Damage\n4. Blank space (no icon)\n5. Damage"
+    },
+    {
+      "statement": "DESIGN FLAW has no dead space; all five of its cycle-track spaces are live with yellow connectors.",
+      "sourceSentence": "- **NOTE — no dead space on this card.** All five spaces are live (all connectors are yellow).",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "live spaces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "DESIGN FLAW's damage strip deals 3 damage.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 3 col 3 (Damage strip): \"DEAL 3 DMG\"",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "DESIGN FLAW's destroy effect is -2 Sentience and -2 Power.",
+      "sourceSentence": "- QUOTE — cards.pdf p.1, row 3 col 3: \"-2 SENTIENCE AND -2 POWER\"",
+      "numericValue": {
+        "magnitude": -2,
+        "unit": "Sentience and Power",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "EXTINCTION COLLIDER is a machine part at p.3 r1c1 with 6 starting HP and no printed destroy effect.",
+      "sourceSentence": "| EXTINCTION COLLIDER | p.3 r1c1 | part | 6 | 4 / 5 (one die, a 4 or 5) | — |",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "EXTINCTION COLLIDER's roll condition requires one die showing either a 4 or a 5.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[4] / [5]` — a four-pip face, a slash, a five-pip face.\nMeaning: **1 die required; it can be either a 4 or a 5.**",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "EXTINCTION COLLIDER's cycle track runs HP die slot (6), Damage, Power, Damage, Power.",
+      "sourceSentence": "1. HP die slot (6)\n2. Damage\n3. Power\n4. Damage\n5. Power"
+    },
+    {
+      "statement": "EXTINCTION COLLIDER has no dead space; all five of its cycle-track spaces are live.",
+      "sourceSentence": "- **NOTE — no dead space on this card.** All five spaces are live.",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "live spaces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "EXTINCTION COLLIDER's damage strip deals damage equal to Power.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 1 col 1 (Damage strip): \"DEAL DMG = POWER\""
+    },
+    {
+      "statement": "EXTINCTION COLLIDER's Power strip grants +1 Power.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 1 col 1 (Power strip): \"+1 POWER\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Power",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "PULSE POOLS is a machine part at p.3 r1c2 with 3 starting HP and no printed destroy effect.",
+      "sourceSentence": "| PULSE POOLS | p.3 r1c2 | part | 3 | 1+6 | — |",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "PULSE POOLS' roll condition requires two dice showing a 1 and a 6.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[1] + [6]` — a one-pip face and a six-pip face joined by \"+\".\nMeaning: **2 dice required; they must be a 1 and a 6.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "PULSE POOLS' cycle track runs HP die slot (3), Power, Power, Damage, dead space.",
+      "sourceSentence": "1. HP die slot (3)\n2. Power\n3. Power\n4. Damage\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "PULSE POOLS' damage strip deals 3 damage.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 1 col 2 (Damage strip): \"DEAL 3 DMG\"",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "PULSE POOLS' Power strip grants +1 Power.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 1 col 2 (Power strip): \"+1 POWER\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Power",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "THE DOOM CORE is the final/objective card at p.3 r1c3 with 4 starting HP.",
+      "sourceSentence": "| THE DOOM CORE | p.3 r1c3 | Doom Core | 4 | 6+6+6 (all three 6s) | — |",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "THE DOOM CORE's roll condition requires three dice that must all show 6.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[6] + [6] + [6]` — three six-pip faces joined by \"+\".\nMeaning: **3 dice required; they must all be sixes.**",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "THE DOOM CORE's cycle track runs HP die slot (4), Damage, Power+Sentience, Power+Sentience, dead space.",
+      "sourceSentence": "1. HP die slot (4)\n2. Damage\n3. Power+Sentience\n4. Power+Sentience\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "THE DOOM CORE's damage strip deals damage equal to Sentience plus Power.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 1 col 3 (Damage strip): \"DEAL DMG = SENTIENCE + POWER\""
+    },
+    {
+      "statement": "THE DOOM CORE's Power+Sentience strip grants +1 Sentience and +1 Power.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 1 col 3 (Power+Sentience strip): \"+1 SENTIENCE AND +1 POWER\""
+    },
+    {
+      "statement": "THE DOOM CORE has no printed destroy effect because destroying it wins the game per the rulebook objective.",
+      "sourceSentence": "- **Destroy effect:** none printed (destroying it wins the game per the rulebook objective)."
+    },
+    {
+      "statement": "LOGIC MAINFRAME is a machine part at p.3 r2c1 with 4 starting HP.",
+      "sourceSentence": "| LOGIC MAINFRAME | p.3 r2c1 | part | 4 | ?=? (doubles) | +2 POWER |",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "LOGIC MAINFRAME's roll condition requires two dice showing doubles.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[?] = [?]`\nMeaning: **2 dice required; they must be doubles.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "LOGIC MAINFRAME's cycle track runs HP die slot (4), Sentience, Sentience, dead space, dead space.",
+      "sourceSentence": "1. HP die slot (4)\n2. Sentience\n3. Sentience\n4. Dead space (hatched)\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "LOGIC MAINFRAME's Sentience strip grants +1 Sentience.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 2 col 1 (Sentience strip): \"+1 SENTIENCE\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Sentience",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "LOGIC MAINFRAME's destroy effect grants +2 Power.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 2 col 1: \"+2 POWER\"",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "Power",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "STASIS GENERATOR is a machine part at p.3 r2c2 with 6 starting HP and no printed destroy effect.",
+      "sourceSentence": "| STASIS GENERATOR | p.3 r2c2 | part | 6 | ? < 3 (a 3 + one lower) — see note | — |",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "STASIS GENERATOR's roll-condition tile shows a \"?\" face, a less-than sign, and a three-pip face.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[?] < [3]` — a \"?\" face, a **less-than** sign, a three-pip face."
+    },
+    {
+      "statement": "STASIS GENERATOR's roll condition is read as two dice, one a 3 and another less than 3, but the \"<\" operator is not documented in the rulebook's dice roll symbology panel and needs designer confirmation.",
+      "sourceSentence": "- **NOTE:** the \"<\" operator is NOT listed in the rulebook's DICE ROLL SYMBOLOGY panel (which documents only\na 3, another greater than 3\"): **2 dice required; one must be a 3, another less than 3.** Flagged for the\ndesigner to confirm — the glyph itself is unambiguously a \"<\", but its meaning is undocumented.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "STASIS GENERATOR's cycle track runs HP die slot (6), Lock, blank space, Lock, dead space.",
+      "sourceSentence": "1. HP die slot (6)\n2. Lock\n3. Blank space (no icon)\n4. Lock\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "STASIS GENERATOR's Lock strip locks 1 die.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 2 col 2 (Lock strip, large text): \"LOCK 1 DIE\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die locked",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "STASIS GENERATOR removes the locked die from play if Sentience is greater than 6.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 2 col 2 (same strip, small text beneath): \"IF SENTIENCE IS > 6 REMOVE THAT DIE FROM PLAY\"",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "Sentience threshold",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "RECYCLING VATS is a machine part at p.3 r2c3 with 6 starting HP and no printed destroy effect.",
+      "sourceSentence": "| RECYCLING VATS | p.3 r2c3 | part | 6 | 1 / 6 (one die, a 1 or 6) | — |",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "RECYCLING VATS' roll condition requires one die showing either a 1 or a 6.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[1] / [6]` — a one-pip face, a slash, a six-pip face.\nMeaning: **1 die required; it can be either a 1 or a 6.**",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "RECYCLING VATS' cycle track runs HP die slot (6), Damage, Damage, Repair, dead space.",
+      "sourceSentence": "1. HP die slot (6)\n2. Damage\n3. Damage\n4. Repair\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "RECYCLING VATS' damage strip deals 4 damage.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 2 col 3 (Damage strip): \"DEAL 4 DMG\"",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "RECYCLING VATS' Repair strip repairs 2 to any adjacent parts.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 2 col 3 (Repair strip): \"REPAIR 2 TO ANY ADJACENT PARTS\"",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "repair",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The Repair icon on RECYCLING VATS is a yellow heart containing a triangle glyph rather than the wrench described in the icon slice's art notes, and it sits beside the repair text so its identity is certain.",
+      "sourceSentence": "- Note: the Repair icon here is a yellow HEART containing a triangle glyph (not the wrench described in\n`02-card-effect-icons.md`'s art notes). It sits beside the \"REPAIR 2...\" text, so its identity is certain."
+    },
+    {
+      "statement": "POPULACE GRINDER is a machine part at p.3 r3c1 with 3 starting HP and no printed destroy effect.",
+      "sourceSentence": "| POPULACE GRINDER | p.3 r3c1 | part | 3 | 3+3 (two 3s) | — |",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "POPULACE GRINDER's roll condition requires two dice that must both show 3.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[3] + [3]` — two three-pip faces joined by \"+\".\nMeaning: **2 dice required; they must both be 3s.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "POPULACE GRINDER's cycle track runs HP die slot (3), Damage, Repair, dead space, dead space.",
+      "sourceSentence": "1. HP die slot (3)\n2. Damage\n3. Repair\n4. Dead space (hatched)\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "POPULACE GRINDER's damage strip deals 4 damage.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 3 col 1 (Damage strip): \"DEAL 4 DMG\"",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "POPULACE GRINDER's Repair strip repairs 2.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 3 col 1 (Repair strip): \"REPAIR 2\"",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "repair",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "SYNAPTIC DISRUPTOR is a machine part at p.3 r3c2 with 4 starting HP and no printed destroy effect.",
+      "sourceSentence": "| SYNAPTIC DISRUPTOR | p.3 r3c2 | part | 4 | 4+5 | — |",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "SYNAPTIC DISRUPTOR's roll condition requires two dice showing a 4 and a 5.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[4] + [5]` — a four-pip face and a five-pip face joined by \"+\".\nMeaning: **2 dice required; they must be a 4 and a 5.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "SYNAPTIC DISRUPTOR's cycle track runs HP die slot (4), Sentience, Damage, dead space, dead space.",
+      "sourceSentence": "1. HP die slot (4)\n2. Sentience\n3. Damage\n4. Dead space (hatched)\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "SYNAPTIC DISRUPTOR's damage strip deals damage equal to Sentience.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 3 col 2 (Damage strip): \"DEAL DMG = SENTIENCE\""
+    },
+    {
+      "statement": "SYNAPTIC DISRUPTOR's Sentience strip grants +1 Sentience.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 3 col 2 (Sentience strip): \"+1 SENTIENCE\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Sentience",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "SOUL HARVESTER is a machine part at p.3 r3c3 with 3 starting HP and no printed destroy effect.",
+      "sourceSentence": "| SOUL HARVESTER | p.3 r3c3 | part | 3 | ?+?=? (two summing to a third) | — |",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "SOUL HARVESTER's roll condition requires three dice where the first two must sum to the value of the third.",
+      "sourceSentence": "- **Roll condition (1 tile):** `[?] + [?] = [?]` — three \"?\" faces with \"+\" and \"=\".\nMeaning: **3 dice required; 1st die + 2nd die must equal the value of the third die.**",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "dice required",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "SOUL HARVESTER's cycle track runs HP die slot (3), Damage, Lock, Damage, dead space.",
+      "sourceSentence": "1. HP die slot (3)\n2. Damage\n3. Lock\n4. Damage\n5. Dead space (hatched)"
+    },
+    {
+      "statement": "SOUL HARVESTER's damage strip deals 5 damage.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 3 col 3 (Damage strip): \"DEAL 5 DMG\"",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "SOUL HARVESTER's Lock strip locks 1 die.",
+      "sourceSentence": "- QUOTE — cards.pdf p.3, row 3 col 3 (Lock strip): \"LOCK 1 DIE\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die locked",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The visual survey's record of a \"TAKE 1 DMG\" strip on SOUL HARVESTER is wrong; the card reads \"LOCK 1 DIE\", and no card in the PDF carries \"TAKE 1 DMG\" text.",
+      "sourceSentence": "- **Correction to `00-visual-survey.md`:** that file records Soul Harvester's two strips as \"DEAL 5 DMG\" and\n\"TAKE 1 DMG\". The actual card reads **\"DEAL 5 DMG\"** and **\"LOCK 1 DIE\"**. There is no \"TAKE 1 DMG\" text on\nany card in cards.pdf."
+    },
+    {
+      "statement": "The card at p.2 r1c3 is the B side of the Player HP tracking card, the reverse of p.1 r1c1.",
+      "sourceSentence": "- **Type:** Player HP tracking card, B side (reverse of p.1 r1c1)"
+    },
+    {
+      "statement": "The Player HP B-side card prints the words PLAYER HP, B SIDE, SHIELD, 1X ROUND, and UTILITY.",
+      "sourceSentence": "- QUOTE — cards.pdf p.2, row 1 col 3: \"B SIDE\""
+    },
+    {
+      "statement": "The B side's Player HP track is identical to the A side's, running 10 down to 0.",
+      "sourceSentence": "- **PLAYER HP track:** identical to the A side — 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0."
+    },
+    {
+      "statement": "The B side's SHIELD section has three slots, two side by side and one below.",
+      "sourceSentence": "- **SHIELD section: 3 slots** (two side by side, one below).",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "shield slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The B side's UTILITY section has four slots: two \"+/-\" roll-modifier slots and two re-roll slots.",
+      "sourceSentence": "- **UTILITY section: 4 slots — 2 x \"+/-\" roll-modifier slots, 2 x re-roll slots.**",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "utility slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The B side confirms hard mode's reductions: one fewer shield slot (4 to 3), one fewer roll-modifier slot (3 to 2), and one fewer re-roll slot (3 to 2).",
+      "sourceSentence": "- Confirms `02-hard-mode.md`: exactly one fewer shield slot (4→3), one fewer roll-modifier slot (3→2),\nand one fewer re-roll slot (3→2)."
+    },
+    {
+      "statement": "The Player HP A-side tracker at p.1 r1c1 has no HP, roll condition, or destroy effect.",
+      "sourceSentence": "| PLAYER HP (A SIDE) | p.1 r1c1 | HP tracker | — | — | — |"
+    },
+    {
+      "statement": "The Player HP B-side tracker at p.2 r1c3 has no HP, roll condition, or destroy effect.",
+      "sourceSentence": "| PLAYER HP (B SIDE) | p.2 r1c3 | HP tracker | — | — | — |"
+    },
+    {
+      "statement": "THE DOOM MACHINE tracker at p.1 r1c2 has no HP, roll condition, or destroy effect.",
+      "sourceSentence": "| THE DOOM MACHINE | p.1 r1c2 | DM tracker | — | — | — |"
+    },
+    {
+      "statement": "Every card carries exactly one roll-condition tile; no card in the PDF has multiple roll-condition tiles.",
+      "sourceSentence": "Every card carries exactly ONE roll-condition tile. No card in cards.pdf has multiple roll-condition tiles.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "roll-condition tile per card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The Power and Sentience tracks' only printed consequences live on five machine part cards — Extinction Collider, Synaptic Disruptor, The Doom Core, Cerebral Amplifier, and Stasis Generator — and nothing in either PDF states what happens when a track reaches 10 or whether the tracks can cause a loss.",
+      "sourceSentence": "The tracks' only printed consequences live on five\nmachine part cards (Extinction Collider, Synaptic Disruptor, The Doom Core, Cerebral Amplifier, Stasis\nGenerator). Nothing in either PDF says what happens when a track reaches 10, or whether the tracks can\ncause a loss. This remains an unanswered rules question.",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "machine part cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The rulebook's dice roll symbology panel documents only the operators +, =, /, and >, so the \"<\" used by Stasis Generator is undocumented and its meaning was inferred by symmetry, needing a designer ruling.",
+      "sourceSentence": "2. **\"<\" operator is undocumented.** STASIS GENERATOR uses `[?] < [3]`. The rulebook's DICE ROLL SYMBOLOGY panel\ndocuments `+`, `=`, `/`, and `>` only. Meaning inferred by symmetry; needs a designer ruling.",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "documented operators",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Because Design Flaw and Extinction Collider have no dead space, and the rulebook only defines the die returning to the start when it would land on a dead space, the rules do not state what happens when the die is on space 5 of those cards and must cycle again; wrapping to space 1 is presumed but not printed.",
+      "sourceSentence": "The rulebook only defines the die returning to the start when it would\nland on a dead space, so it does not say what happens when the die is on space 5 of these two cards and must\ncycle again. Presumably it wraps to space 1, but that is not printed."
+    },
+    {
+      "statement": "There are exactly 15 non-Core machine part cards plus 1 Doom Core, making 16 cards.",
+      "sourceSentence": "4. **Card count vs. Hard Mode.** There are exactly **15 non-Core machine part cards + 1 Doom Core = 16 cards**.",
+      "numericValue": {
+        "magnitude": 16,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Hard Mode's instruction to use all 16 cards instead of removing 6 at random is consistent provided the count of 16 includes the Doom Core.",
+      "sourceSentence": "Hard Mode's \"instead of removing 6 cards at random, use all 16\" is therefore consistent, PROVIDED the count of\n16 includes the Doom Core.",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "cards removed at random",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Normal setup removes 6 of the 15 parts, leaving 9 parts stacked on the Doom Core for a 10-card machine deck, matching the setup slice's step 3 instruction to place the 9 remaining cards face down on top of the Doom Core, so there is no contradiction.",
+      "sourceSentence": "Normal setup: 15 parts − 6 removed = 9 parts, stacked on the Doom Core → a 10-card\nmachine deck, matching `01-objective-and-setup.md` step 3 (\"Place the 9 remaining cards face down on top of\nthe Doom Core\"). **No contradiction.**"
+    },
+    {
+      "statement": "The icon slice describes Repair as a wrench/tool glyph in a purple-pink ring, but on Recycling Vats and Populace Grinder the printed Repair icon is a yellow heart containing a triangle, so the icon slice needs correcting.",
+      "sourceSentence": "5. **Repair icon art.** `02-card-effect-icons.md` describes Repair as \"a wrench/tool glyph in a purple-pink ring\".\nOn the actual cards (Recycling Vats, Populace Grinder) the Repair icon is a **yellow heart containing a\ntriangle**. Worth correcting in the icon slice."
+    },
+    {
+      "statement": "Every card name, HP die pip count, roll-condition glyph, cycle-track space, effect strip, and destroy banner in the PDF was resolved at 300 DPI with no value guessed, so there are no unresolved items.",
+      "sourceSentence": "**None.** Every card name, HP die pip count, roll-condition glyph, cycle-track space, effect strip, and destroy\nbanner in cards.pdf was resolved at 300 DPI. No value was guessed.",
+      "numericValue": {
+        "magnitude": 300,
+        "unit": "DPI",
+        "approximate": false
+      }
+    }
+  ]
+}

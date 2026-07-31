@@ -1,0 +1,63 @@
+```json
+{
+  "facts": [
+    {
+      "statement": "A machine part card has four labeled anatomy elements, identified by callouts numbered 1 through 4.",
+      "sourceSentence": "a single portrait teal machine part card with four numbered callouts pointing to it",
+      "numericValue": { "magnitude": 4, "unit": "callouts", "approximate": false }
+    },
+    {
+      "statement": "Callout 1 identifies the card's name.",
+      "sourceSentence": "\"1  Card name\""
+    },
+    {
+      "statement": "Callout 2 identifies the roll conditions that must be met in order to damage the machine part.",
+      "sourceSentence": "\"2  Roll conditions needed to damage machine part\""
+    },
+    {
+      "statement": "Callout 3 identifies the machine part's cycle track.",
+      "sourceSentence": "\"3  Machine part cycle track\""
+    },
+    {
+      "statement": "Callout 4 identifies the cycle icon effects.",
+      "sourceSentence": "\"4  Cycle icon effects\""
+    },
+    {
+      "statement": "Machine part cards are portrait-oriented and teal.",
+      "sourceSentence": "a single portrait teal machine part card with four numbered callouts pointing to it"
+    },
+    {
+      "statement": "The card's name is printed in a title bar running across the top of the card.",
+      "sourceSentence": "(1) points at the title bar across the top of the card"
+    },
+    {
+      "statement": "The sample machine part card shown is named \"RECYCLING UNIT\".",
+      "sourceSentence": "the sample card's name reads as \"RECYCLING UNIT\""
+    },
+    {
+      "statement": "The roll conditions appear as yellow tiles positioned on the middle-right of the card face.",
+      "sourceSentence": "(2) points at the yellow roll-condition tiles on the middle-right of the card face."
+    },
+    {
+      "statement": "The cycle track is a vertical column of squares running down the left side of the card.",
+      "sourceSentence": "(3) points at the vertical column of track squares running down the left side of the card"
+    },
+    {
+      "statement": "The cycle track holds the machine part's yellow HP die.",
+      "sourceSentence": "the vertical column of track squares running down the left side of the card, which holds the yellow HP die"
+    },
+    {
+      "statement": "Cycle icon effects are shown as small colored icon badges embedded in the track and lower area of the card.",
+      "sourceSentence": "(4) points at the small colored icon badges embedded in the track / lower card area"
+    },
+    {
+      "statement": "A cycle icon effect triggers when the die comes to rest on that icon.",
+      "sourceSentence": "the small colored icon badges embedded in the track / lower card area that fire when the die lands on them"
+    },
+    {
+      "statement": "The callout markers are printed down the left edge of the card, and their matching legend entries appear on the right.",
+      "sourceSentence": "Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right."
+    }
+  ]
+}
+```
