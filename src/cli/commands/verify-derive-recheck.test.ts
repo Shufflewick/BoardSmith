@@ -836,6 +836,102 @@ describe('recordDeriveVerdicts / readDeriveVerdicts', () => {
   });
 });
 
+describe('readDeriveVerdicts — revalidation through createDeriveVerdictRecord (CR-02)', () => {
+  let dir: string;
+  let ledgerFile: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-cr02-'));
+    await fs.mkdir(join(dir, 'rulebook', '.derive-recheck'), { recursive: true });
+    ledgerFile = join(dir, 'rulebook', '.derive-recheck', 'DERIVE-VERDICTS.md');
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  async function writeRawLedger(bodyLines: string[]): Promise<void> {
+    const content =
+      `# Derive Verdicts (CHECK-04) — project-level, no run-id\n\n` +
+      `<!-- boardsmith:derive-verdicts:begin -->\n` +
+      bodyLines.join('\n') +
+      (bodyLines.length > 0 ? '\n' : '') +
+      `<!-- boardsmith:derive-verdicts:end -->\n`;
+    await fs.writeFile(ledgerFile, content);
+  }
+
+  it('rejects an out-of-enum verdict on read, never reaching a NaN/null verdict count (CR-02 executed proof)', async () => {
+    await writeRawLedger([
+      JSON.stringify({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 3,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'TOTALLY-BOGUS',
+        reasoning: 'hand-edited',
+        rederivedValue: 'x',
+        sourceQuotes: [],
+      }),
+    ]);
+    await expect(readDeriveVerdicts(dir)).rejects.toThrow(/Invalid verdict/);
+  });
+
+  it('a not-valid-JSON ledger line throws one actionable message naming the relative ledger path and record index, never a raw SyntaxError', async () => {
+    await writeRawLedger(['{ this is not valid JSON']);
+    let message = '';
+    try {
+      await readDeriveVerdicts(dir);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain('rulebook/.derive-recheck/DERIVE-VERDICTS.md');
+    expect(message).toContain('record 1');
+    expect(message).not.toContain('SyntaxError');
+  });
+
+  it('verdictCounts from verifyDeriveRecheckCommand never gains a key outside DERIVE_VERDICTS (previously reachable per CR-02)', async () => {
+    await fs.writeFile(
+      join(dir, 'rulebook', '01-x.md'),
+      'p.1, X:\n"A quoted sentence."\n\nDerived (p.1): x',
+    );
+    await writeRawLedger([
+      JSON.stringify({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 4,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'TOTALLY-BOGUS',
+        reasoning: 'hand-edited',
+        rederivedValue: 'x',
+        sourceQuotes: [],
+      }),
+    ]);
+    await expect(verifyDeriveRecheckCommand({ project: dir })).rejects.toThrow(/Invalid verdict/);
+  });
+
+  it('grep-count: no "as DeriveVerdictRecord" cast remains anywhere in the module', () => {
+    const src = readFileSync(join(__dirname, 'verify-derive-recheck.ts'), 'utf-8');
+    expect((src.match(/as DeriveVerdictRecord/g) ?? []).length).toBe(0);
+  });
+
+  it('returns an empty array (never throws) when no ledger file exists', async () => {
+    const empty = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-cr02-empty-'));
+    try {
+      await expect(readDeriveVerdicts(empty)).resolves.toEqual([]);
+    } finally {
+      await fs.rm(empty, { recursive: true, force: true });
+    }
+  });
+
+  it('a valid ledger round-trips byte-identically through write -> read -> write', async () => {
+    const records = [sampleUnderivableRecord(), sampleDisagreesRecord()];
+    await recordDeriveVerdicts(dir, records);
+    const firstRead = await readDeriveVerdicts(dir);
+    await recordDeriveVerdicts(dir, firstRead);
+    const secondRead = await readDeriveVerdicts(dir);
+    expect(secondRead).toEqual(records);
+  });
+});
+
+
 // ===========================================================================================
 // Task 2 — the report command and its CLI registration
 // ===========================================================================================

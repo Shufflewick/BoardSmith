@@ -533,6 +533,16 @@ export async function recordDeriveVerdicts(
  * `underivable`. Returns an empty array (never throws) when no ledger has been written yet — a
  * project that has never run `verify-derive-recheck`'s recording step has nothing recorded, which
  * is not a tool failure. Accepts no `runId` parameter (1-arity: `projectDir`).
+ *
+ * RE-ENTERS `createDeriveVerdictRecord` ON EVERY PARSED LINE (177-09, closing CR-02): the module
+ * header's "single choke point" claim was previously false for the read path — a hand-edited or
+ * out-of-enum ledger record reached the report unvalidated, corrupting `verdictCounts` with a
+ * `NaN`/`null` key. The ledger is a second entry path into `DeriveVerdictRecord`, not a bypass of
+ * the type: a malformed JSON line throws one actionable message naming the ledger's relative path
+ * and the 1-based record index (never a raw `SyntaxError`); a valid-JSON-but-invalid-record line
+ * throws through `createDeriveVerdictRecord`'s own checks (out-of-enum verdict, missing evidence,
+ * a forged fence, an unlawful pass-through re-adjudication) — never coerced with a default that
+ * manufactures a valid-looking record.
  */
 export async function readDeriveVerdicts(projectDir: string): Promise<DeriveVerdictRecord[]> {
   const ledgerPath = deriveVerdictsLedgerPath(projectDir);
@@ -550,12 +560,44 @@ export async function readDeriveVerdicts(projectDir: string): Promise<DeriveVerd
         `begin/end fence.`,
     );
   }
+  const relLedgerPath = relative(projectDir, ledgerPath);
   const body = text.slice(beginIdx + DERIVE_LEDGER_BEGIN.length, endIdx);
-  return body
+  const rawLines = body
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as DeriveVerdictRecord);
+    .filter((l) => l.length > 0);
+
+  return rawLines.map((line, i) => {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(line);
+    } catch {
+      throw new Error(
+        `Malformed derive-verdicts ledger at ${relLedgerPath} (record ${i + 1}): not valid JSON.\n` +
+          `Delete the file to re-run CHECK-04 from scratch.`,
+      );
+    }
+    const r = raw as Record<string, unknown>;
+    try {
+      return createDeriveVerdictRecord({
+        slicePath: String(r.slicePath ?? ''),
+        lineNumber: Number(r.lineNumber),
+        originalLine: String(r.originalLine ?? ''),
+        verdict: String(r.verdict ?? ''),
+        reasoning: String(r.reasoning ?? ''),
+        rederivedValue: r.rederivedValue !== undefined ? String(r.rederivedValue) : '',
+        originalReading: r.originalReading !== undefined ? String(r.originalReading) : undefined,
+        rederivedReading:
+          r.rederivedReading !== undefined ? String(r.rederivedReading) : undefined,
+        sourceQuotes: Array.isArray(r.sourceQuotes) ? (r.sourceQuotes as string[]) : [],
+      });
+    } catch (err) {
+      throw new Error(
+        `Malformed derive-verdicts ledger at ${relLedgerPath} (record ${i + 1}): ` +
+          `${(err as Error).message}\nDelete the file to re-run CHECK-04 from scratch.`,
+      );
+    }
+  });
 }
 
 // -------------------------------------------------------------------------------------------
