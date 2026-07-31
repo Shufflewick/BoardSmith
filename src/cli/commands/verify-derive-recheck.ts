@@ -48,8 +48,9 @@ import { DERIVED_LINE_RE } from './derived-line-pattern.js';
  * this file ever joins `projectDir` with `rulebook/source`. Source-freeness is structural, never a
  * `--source-free` mode toggle a caller could forget to pass.
  *
- * The ledger this module writes (`recordDeriveVerdicts`/`readDeriveVerdicts`) is PROJECT-LEVEL —
- * `rulebook/.derive-recheck/DERIVE-VERDICTS.md`, no `.verify/<runId>/` segment, no `runId`
+ * The ledger this module writes (`recordDeriveVerdict`/`replaceDeriveVerdicts`/
+ * `readDeriveVerdicts`) is PROJECT-LEVEL — `rulebook/.derive-recheck/DERIVE-VERDICTS.md`, no
+ * `.verify/<runId>/` segment, no `runId`
  * parameter anywhere in either function's signature (177-CONTEXT.md decision 14). CHECK-04 has
  * nothing to scope to a run: it is source-free by construction and independent of any verify run's
  * staleness verdicts, exactly like CHECK-03 (`trace-check.ts`) and CHECK-05 (`drift-check.ts`).
@@ -485,7 +486,8 @@ export function buildBlindDerivePayload(
 }
 
 // -------------------------------------------------------------------------------------------
-// recordDeriveVerdicts / readDeriveVerdicts — the PROJECT-LEVEL ledger (decision 14)
+// replaceDeriveVerdicts / recordDeriveVerdict / readDeriveVerdicts — the PROJECT-LEVEL ledger
+// (decision 14; 177-09 closing CR-02/CR-04/CR-06)
 // -------------------------------------------------------------------------------------------
 
 const DERIVE_LEDGER_BEGIN = '<!-- boardsmith:derive-verdicts:begin -->';
@@ -499,19 +501,29 @@ function deriveVerdictsLedgerPath(projectDir: string): string {
   return join(projectDir, 'rulebook', '.derive-recheck', 'DERIVE-VERDICTS.md');
 }
 
+function deriveVerdictKey(r: Pick<DeriveVerdictRecord, 'slicePath' | 'lineNumber'>): string {
+  return `${r.slicePath}:${r.lineNumber}`;
+}
+
 /**
  * Persists a batch of already-validated `DeriveVerdictRecord`s (every record MUST have already
  * passed through `createDeriveVerdictRecord` — this function accepts validated records and does
  * not re-parse verdict strings) to the project-level ledger, through `atomicWriteFile` — the ONE
- * atomic write path in the repo. Re-recording REPLACES the body atomically: `atomicWriteFile`'s
- * temp-write-then-rename means no partial file is ever observable, matching
- * `recordRulingVerdicts`'s (`verify-ruling-recheck.ts`) begin/end fenced JSON-lines shape exactly,
- * minus the run-scoping this check does not have.
+ * atomic write path in the repo. `atomicWriteFile`'s temp-write-then-rename means no partial file
+ * is ever observable.
+ *
+ * REPLACES the ENTIRE ledger body with exactly the `records` array supplied — this is a full
+ * rewrite, not the callable the workflow uses (177-09, closing CR-06). `verify-game.md` Step 7
+ * describes recording as something that happens PER `Derived` line; the obvious, documented call
+ * pattern against this function would silently destroy every previously-recorded verdict on each
+ * call. Use `recordDeriveVerdict` (singular) for that — it upserts through this function rather
+ * than replacing directly. This function remains exported for the one legitimate full-rewrite use
+ * case (e.g. re-seeding a ledger from a fresh batch) and for `recordDeriveVerdict`'s own use.
  *
  * Accepts no `runId` parameter (2-arity: `projectDir`, `records`) — the ledger path contains no
  * run-id segment.
  */
-export async function recordDeriveVerdicts(
+export async function replaceDeriveVerdicts(
   projectDir: string,
   records: DeriveVerdictRecord[],
 ): Promise<{ ledgerPath: string }> {
@@ -529,10 +541,33 @@ export async function recordDeriveVerdicts(
 }
 
 /**
- * Round-trips exactly what `recordDeriveVerdicts` wrote, including a record whose verdict is
- * `underivable`. Returns an empty array (never throws) when no ledger has been written yet — a
- * project that has never run `verify-derive-recheck`'s recording step has nothing recorded, which
- * is not a tool failure. Accepts no `runId` parameter (1-arity: `projectDir`).
+ * Records ONE verdict, upserting by `slicePath:lineNumber` (177-09, closing CR-06): reads the
+ * ledger's existing records, replaces any record already recorded for the same location (keeping
+ * every other record untouched, in existing order, with the new record appended last so the
+ * ledger diff stays reviewable), then writes the merged set through `replaceDeriveVerdicts` — so
+ * there is still exactly ONE durable write path in the module, just no longer the destructive
+ * default. This is the callable `verify-game.md` Step 7's per-line recording pattern actually
+ * needs: calling it twice for two different lines leaves BOTH readable; calling it twice for the
+ * SAME line leaves exactly one record, carrying the second call's content.
+ */
+export async function recordDeriveVerdict(
+  projectDir: string,
+  record: DeriveVerdictRecord,
+): Promise<{ ledgerPath: string }> {
+  const existing = await readDeriveVerdicts(projectDir);
+  const merged = [
+    ...existing.filter((r) => deriveVerdictKey(r) !== deriveVerdictKey(record)),
+    record,
+  ];
+  return replaceDeriveVerdicts(projectDir, merged);
+}
+
+/**
+ * Round-trips exactly what `replaceDeriveVerdicts`/`recordDeriveVerdict` wrote, including a
+ * record whose verdict is `underivable`. Returns an empty array (never throws) when no ledger has
+ * been written yet — a project that has never run `verify-derive-recheck`'s recording step has
+ * nothing recorded, which is not a tool failure. Accepts no `runId` parameter (1-arity:
+ * `projectDir`).
  *
  * RE-ENTERS `createDeriveVerdictRecord` ON EVERY PARSED LINE (177-09, closing CR-02): the module
  * header's "single choke point" claim was previously false for the read path — a hand-edited or
@@ -635,7 +670,7 @@ function emptyDeriveVerdictCounts(): Record<DeriveVerdict, number> {
 
 /**
  * `boardsmith verify-derive-recheck` — CHECK-04's report: enumerates every live-tree `Derived`
- * line, joins each surviving candidate to whatever verdict `recordDeriveVerdicts` has already
+ * line, joins each surviving candidate to whatever verdict `recordDeriveVerdict` has already
  * persisted to the project-level ledger, and reports one finding per candidate (verdict `pending`
  * when nothing has been recorded for it yet). `verdictCounts` includes all four `DERIVE_VERDICTS`
  * with zeros written explicitly — never an omitted key for a verdict that happened not to occur.
@@ -645,7 +680,7 @@ function emptyDeriveVerdictCounts(): Record<DeriveVerdict, number> {
  * guarantees neither field is empty on a `disagrees` record reaching the ledger).
  *
  * Runs project-wide with no `--run-id` and no staged run present (decision 14) — this is a
- * READ-ONLY report: it never calls `recordDeriveVerdicts` itself. Findings exit 0 (this module
+ * READ-ONLY report: it never calls `recordDeriveVerdict`/`replaceDeriveVerdicts` itself. Findings exit 0 (this module
  * never sets `process.exitCode` anywhere — a disagreement is a finding, not a gate, decision 15).
  * Only an unreadable project/rulebook throws, with a single actionable line naming `--project` —
  * no stack frame, no `.ts:` reference.

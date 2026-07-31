@@ -13,7 +13,8 @@ import {
   enumerateDerivedLines,
   buildBlindDerivePayload,
   annotationBody,
-  recordDeriveVerdicts,
+  replaceDeriveVerdicts,
+  recordDeriveVerdict,
   readDeriveVerdicts,
   verifyDeriveRecheckCommand,
   type DerivedLineEntry,
@@ -632,14 +633,14 @@ describe('module source guarantees', () => {
     }
   });
 
-  it('behavioral replacement for "atomicWriteFile is the only durable write": the post-record whole-project file inventory differs only under rulebook/.derive-recheck/, and no .tmp/partial file survives', async () => {
+  it('behavioral replacement for "atomicWriteFile is the only durable FILE write": the post-record whole-project file inventory differs only under rulebook/.derive-recheck/, and no .tmp/partial file survives', async () => {
     const dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-write-'));
     try {
       await fs.mkdir(join(dir, 'rulebook'), { recursive: true });
       await fs.writeFile(join(dir, 'rulebook', '01-x.md'), 'p.1, X:\n"112 cards total."');
 
       const before = await hashProject(dir);
-      await recordDeriveVerdicts(dir, [sampleUnderivableRecord()]);
+      await replaceDeriveVerdicts(dir, [sampleUnderivableRecord()]);
       const after = await hashProject(dir);
       expect(after).not.toBe(before);
 
@@ -679,7 +680,8 @@ describe('module source guarantees', () => {
           'Derived (p.1): Each player has 8 Action Cards.',
         ].join('\n'),
       );
-      await recordDeriveVerdicts(dir, [
+      await recordDeriveVerdict(
+        dir,
         createDeriveVerdictRecord({
           slicePath: 'rulebook/01-x.md',
           lineNumber: 4,
@@ -691,7 +693,7 @@ describe('module source guarantees', () => {
           rederivedReading: 'Each player has 7 Action Cards.',
           sourceQuotes: ['Each player has 7 Action Cards.'],
         }),
-      ]);
+      );
 
       expect(process.exitCode).toBeUndefined();
       const result = await verifyDeriveRecheckCommand({ project: dir });
@@ -753,7 +755,7 @@ function sampleDisagreesRecord(): DeriveVerdictRecord {
   });
 }
 
-describe('recordDeriveVerdicts / readDeriveVerdicts', () => {
+describe('replaceDeriveVerdicts / recordDeriveVerdict / readDeriveVerdicts', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -766,7 +768,7 @@ describe('recordDeriveVerdicts / readDeriveVerdicts', () => {
 
   it('round-trips exactly what was written, including an underivable record', async () => {
     const records = [sampleUnderivableRecord(), sampleDisagreesRecord()];
-    await recordDeriveVerdicts(dir, records);
+    await replaceDeriveVerdicts(dir, records);
 
     const read = await readDeriveVerdicts(dir);
     expect(read).toEqual(records);
@@ -778,23 +780,83 @@ describe('recordDeriveVerdicts / readDeriveVerdicts', () => {
     expect(read).toEqual([]);
   });
 
-  it('re-recording REPLACES the body atomically — no leftover from the first write', async () => {
-    await recordDeriveVerdicts(dir, [sampleUnderivableRecord()]);
-    await recordDeriveVerdicts(dir, [sampleDisagreesRecord()]);
+  it('replaceDeriveVerdicts REPLACES the body atomically — no leftover from the first write (177-09: the deliberately-destructive, non-default path)', async () => {
+    await replaceDeriveVerdicts(dir, [sampleUnderivableRecord()]);
+    await replaceDeriveVerdicts(dir, [sampleDisagreesRecord()]);
 
     const read = await readDeriveVerdicts(dir);
     expect(read).toEqual([sampleDisagreesRecord()]);
     expect(read.some((r) => r.verdict === 'underivable')).toBe(false);
   });
 
-  it('is project-level: no run-id segment in the ledger path, and neither function accepts a runId', async () => {
-    const { ledgerPath } = await recordDeriveVerdicts(dir, [sampleUnderivableRecord()]);
+  it('recordDeriveVerdict called twice for DIFFERENT locations leaves BOTH records readable — the pattern that previously destroyed one (CR-06, fails against the pre-fix API)', async () => {
+    await recordDeriveVerdict(dir, sampleUnderivableRecord());
+    await recordDeriveVerdict(dir, sampleDisagreesRecord());
+
+    const read = await readDeriveVerdicts(dir);
+    expect(read).toHaveLength(2);
+    expect(read.some((r) => r.verdict === 'underivable')).toBe(true);
+    expect(read.some((r) => r.verdict === 'disagrees')).toBe(true);
+  });
+
+  it('recordDeriveVerdict called twice for the SAME slicePath:lineNumber upserts — exactly one record survives, carrying the second call content', async () => {
+    const first = sampleUnderivableRecord();
+    const second = createDeriveVerdictRecord({
+      slicePath: first.slicePath,
+      lineNumber: first.lineNumber,
+      originalLine: first.originalLine,
+      verdict: 'not-rule-bearing',
+      reasoning: 'On reflection this is a pure layout note.',
+      rederivedValue: 'not-rule-bearing',
+    });
+
+    await recordDeriveVerdict(dir, first);
+    await recordDeriveVerdict(dir, second);
+
+    const read = await readDeriveVerdicts(dir);
+    const atLocation = read.filter(
+      (r) => r.slicePath === first.slicePath && r.lineNumber === first.lineNumber,
+    );
+    expect(atLocation).toHaveLength(1);
+    expect(atLocation[0].verdict).toBe('not-rule-bearing');
+    expect(atLocation[0].reasoning).toBe(second.reasoning);
+  });
+
+  it('recordDeriveVerdict preserves existing order and appends the new/updated record last', async () => {
+    const a = sampleUnderivableRecord();
+    const b = sampleDisagreesRecord();
+    await recordDeriveVerdict(dir, a);
+    await recordDeriveVerdict(dir, b);
+
+    const updatedA = createDeriveVerdictRecord({
+      slicePath: a.slicePath,
+      lineNumber: a.lineNumber,
+      originalLine: a.originalLine,
+      verdict: 'not-rule-bearing',
+      reasoning: 'Re-evaluated.',
+      rederivedValue: 'not-rule-bearing',
+    });
+    await recordDeriveVerdict(dir, updatedA);
+
+    const read = await readDeriveVerdicts(dir);
+    expect(read).toHaveLength(2);
+    expect(read[0].slicePath).toBe(b.slicePath);
+    expect(read[0].lineNumber).toBe(b.lineNumber);
+    expect(read[1].slicePath).toBe(updatedA.slicePath);
+    expect(read[1].lineNumber).toBe(updatedA.lineNumber);
+    expect(read[1].verdict).toBe('not-rule-bearing');
+  });
+
+  it('is project-level: no run-id segment in the ledger path, and no function accepts a runId', async () => {
+    const { ledgerPath } = await replaceDeriveVerdicts(dir, [sampleUnderivableRecord()]);
     expect(ledgerPath).not.toContain('.verify');
     expect(ledgerPath).not.toMatch(/run-?[Ii]d/);
     expect(ledgerPath).toBe('rulebook/.derive-recheck/DERIVE-VERDICTS.md');
 
-    // 2-arity (projectDir, records) / 1-arity (projectDir) — no runId parameter slot exists.
-    expect(recordDeriveVerdicts.length).toBe(2);
+    // Arity: replaceDeriveVerdicts(projectDir, records) / recordDeriveVerdict(projectDir, record)
+    // / readDeriveVerdicts(projectDir) — no runId parameter slot exists on any of the three.
+    expect(replaceDeriveVerdicts.length).toBe(2);
+    expect(recordDeriveVerdict.length).toBe(2);
     expect(readDeriveVerdicts.length).toBe(1);
   });
 
@@ -807,7 +869,7 @@ describe('recordDeriveVerdicts / readDeriveVerdicts', () => {
     const archiveHashBefore = await hashProject(join(dir, 'rulebook', 'source'));
     const sliceHashBefore = await fs.readFile(join(dir, 'rulebook', '01-x.md'), 'utf-8');
 
-    await recordDeriveVerdicts(dir, [sampleUnderivableRecord()]);
+    await recordDeriveVerdict(dir, sampleUnderivableRecord());
 
     const archiveHashAfter = await hashProject(join(dir, 'rulebook', 'source'));
     const sliceHashAfter = await fs.readFile(join(dir, 'rulebook', '01-x.md'), 'utf-8');
@@ -923,14 +985,13 @@ describe('readDeriveVerdicts — revalidation through createDeriveVerdictRecord 
 
   it('a valid ledger round-trips byte-identically through write -> read -> write', async () => {
     const records = [sampleUnderivableRecord(), sampleDisagreesRecord()];
-    await recordDeriveVerdicts(dir, records);
+    await replaceDeriveVerdicts(dir, records);
     const firstRead = await readDeriveVerdicts(dir);
-    await recordDeriveVerdicts(dir, firstRead);
+    await replaceDeriveVerdicts(dir, firstRead);
     const secondRead = await readDeriveVerdicts(dir);
     expect(secondRead).toEqual(records);
   });
 });
-
 
 // ===========================================================================================
 // Task 2 — the report command and its CLI registration
@@ -963,7 +1024,8 @@ describe('verifyDeriveRecheckCommand', () => {
   });
 
   it('runs project-wide with no --run-id and no staged run present, resolving normally with a disagreement finding present', async () => {
-    await recordDeriveVerdicts(dir, [
+    await recordDeriveVerdict(
+      dir,
       createDeriveVerdictRecord({
         slicePath: 'rulebook/01-x.md',
         lineNumber: 9,
@@ -975,14 +1037,15 @@ describe('verifyDeriveRecheckCommand', () => {
         rederivedReading: 'Each player has 7 Action Cards.',
         sourceQuotes: ['Each player has 7 Action Cards.'],
       }),
-    ]);
+    );
 
     const result = await verifyDeriveRecheckCommand({ project: dir });
     expect(result.findings.some((f) => f.verdict === 'disagrees')).toBe(true);
   });
 
   it('a disagreement finding cites both derivations verbatim, and process.exitCode stays unset (exit)', async () => {
-    await recordDeriveVerdicts(dir, [
+    await recordDeriveVerdict(
+      dir,
       createDeriveVerdictRecord({
         slicePath: 'rulebook/01-x.md',
         lineNumber: 9,
@@ -994,7 +1057,7 @@ describe('verifyDeriveRecheckCommand', () => {
         rederivedReading: 'Each player has 7 Action Cards.',
         sourceQuotes: ['Each player has 7 Action Cards.'],
       }),
-    ]);
+    );
 
     const before = process.exitCode;
     const result = await verifyDeriveRecheckCommand({ project: dir });
