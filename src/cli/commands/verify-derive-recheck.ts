@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { isPresentationLine } from './verify-classify.js';
 import { atomicWriteFile } from './verify-run.js';
-import { DERIVED_LINE_RE } from './derived-line-pattern.js';
+import { ANNOTATION_CITATION_RE, DERIVED_LINE_RE, annotationLineStartRe } from './derived-line-pattern.js';
 
 /**
  * `verify-derive-recheck.ts` — CHECK-04's mechanical core (177-CONTEXT.md decision 2/5): the
@@ -411,7 +411,11 @@ export function annotationBody(line: string): string {
  * from this file, keep working unchanged.
  */
 export { DERIVED_LINE_RE };
-const VISUAL_LINE_RE = /^Visual \(p\.[^)]*\)/i;
+/**
+ * Built via the shared `annotationLineStartRe` factory (`derived-line-pattern.ts`, 177.1-01)
+ * rather than a hand-spelled literal — equivalent to the former `/^Visual \(p\.[^)]*\)/i`.
+ */
+const VISUAL_LINE_RE = annotationLineStartRe('Visual');
 /**
  * A `Named-but-undefined` line is an ingest-time INFERENCE about undefined terminology, not
  * directly-quoted rulebook prose (177-RESEARCH.md's answer to Question 1 names it alongside
@@ -419,11 +423,11 @@ const VISUAL_LINE_RE = /^Visual \(p\.[^)]*\)/i;
  * is not required to satisfy this plan's `Derived (p.`/`Visual (p.` zero-leak assertions, but
  * leaving an inferential line in a payload whose entire purpose is "quote lines only" would
  * silently reintroduce the same anchoring risk decision 5 exists to prevent, one line at a time.
+ *
+ * Built via the shared `annotationLineStartRe` factory rather than a hand-spelled literal —
+ * equivalent to the former `/^Named-but-undefined \(p\.[^)]*\)/i`.
  */
-const NAMED_BUT_UNDEFINED_LINE_RE = /^Named-but-undefined \(p\.[^)]*\)/i;
-
-/** All three annotation families, for the payload-level construction-site backstop below. */
-const ANY_ANNOTATION_LINE_RE = /Derived \(p\.|Visual \(p\.|Named-but-undefined \(p\./i;
+const NAMED_BUT_UNDEFINED_LINE_RE = annotationLineStartRe('Named-but-undefined');
 
 /**
  * True when `line` (already `.trim()`ed) belongs in a "quote lines only" payload: not blank, not
@@ -704,7 +708,7 @@ export function buildBlindDerivePayload(
 
   const payload = lines.join('\n');
 
-  if (ANY_ANNOTATION_LINE_RE.test(payload)) {
+  if (ANNOTATION_CITATION_RE.test(payload)) {
     throw new Error(
       `buildBlindDerivePayload assembled a payload for ${entry.slicePath}:${entry.lineNumber} ` +
         `that still matches an annotation family (Derived (p./Visual (p./Named-but-undefined (p.).\n` +

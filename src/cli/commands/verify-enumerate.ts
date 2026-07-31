@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { computeVerificationScope, SCOPE_FULL } from './chunk-provenance.js';
 import { quoteLinesOnly } from './verify-derive-recheck.js';
+import { ANNOTATION_CITATION_RE, ANNOTATION_VOCABULARY_RE } from './derived-line-pattern.js';
 
 /**
  * `verify-enumerate.ts` — CHECK-04's REPLACEMENT mechanical core (177-EXPERIMENTS/README.md
@@ -106,52 +107,30 @@ import { quoteLinesOnly } from './verify-derive-recheck.js';
 export const ENUMERATE_TOKEN = 'BS-ENUMERATE-V1';
 
 /**
- * Duplicated from `verify-derive-recheck.ts`'s private `ANY_ANNOTATION_LINE_RE` rather than
- * imported — that constant is not exported (mirrors `chunk-provenance.ts`'s own precedent of
- * duplicating a private one-line regex, e.g. `CITATION_HEADER_RE`, rather than widening a
- * sibling module's export surface for a single shared pattern). Any of the three annotation
- * families anywhere in an assembled enumerator payload is a leak this backstop must catch,
- * independent of which upstream filter missed it.
+ * TWO DELIBERATELY DIFFERENT BACKSTOPS, drawn from ONE shared family list
+ * (`derived-line-pattern.ts`'s `ANNOTATION_FAMILIES`), not one check run twice.
+ *
+ * `ANNOTATION_CITATION_RE` (imported) is keyed to the `(p.N)` citation form — the same form
+ * `quoteLinesOnly`'s filter recognizes — and catches a decoration variant it might still miss
+ * (`> Derived (p.1):`, fixed by 177-08).
+ *
+ * `ANNOTATION_VOCABULARY_RE` (imported) is keyed to the annotation VOCABULARY at line start —
+ * the words themselves, with any leading decoration, requiring no citation at all. It exists
+ * because a citation-keyed check, however carefully written, is blind BY CONSTRUCTION to a
+ * marker-form variant that carries no `(p.N)`. That blindness was not hypothetical: the
+ * doom-machine measurement (plan 177-18) found `rulebook/CARDS.md` writing bare `Derived:` lines
+ * under its own locally-declared convention. They passed `quoteLinesOnly` untouched AND passed a
+ * citation-keyed backstop silently, landing the transcriber's own inference in the blind
+ * enumerator payload — precisely the "confirmation, not independence" failure the retired
+ * per-line design died of, reintroduced through a marker shape nobody had enumerated.
+ *
+ * A "backstop" built from the same vocabulary as the filter it guards is the same check run
+ * twice; it can only ever catch what the filter's author already anticipated. Two STRUCTURALLY
+ * different checks — one citation-keyed, one vocabulary-keyed — catch two different failure
+ * classes. Collapsing this back down to a single check, even a broad one, is explicitly
+ * forbidden: it silently narrows coverage back to whichever failure class the single check
+ * happens to key on.
  */
-const ANY_ANNOTATION_LINE_RE = /Derived \(p\.|Visual \(p\.|Named-but-undefined \(p\./i;
-
-/**
- * The REAL backstop — deliberately broader than every filter it guards, and deliberately NOT
- * sharing their vocabulary.
- *
- * `ANY_ANNOTATION_LINE_RE` above, and the `quoteLinesOnly` filter it was meant to guard, are BOTH
- * keyed to the `(p.N)` citation form. A "backstop" that recognizes only what its filter already
- * recognizes is the same check run twice — it can catch a decoration variant (`> Derived (p.1):`,
- * which 177-08 fixed) but is blind to a MARKER-FORM variant.
- *
- * That blindness was not hypothetical. The doom-machine measurement (plan 177-18) found
- * `rulebook/CARDS.md` writing bare `Derived:` lines under its own locally-declared convention —
- * no page citation. They passed `quoteLinesOnly` untouched AND passed the backstop silently,
- * landing the transcriber's own inference in the blind enumerator payload. That is precisely the
- * "confirmation, not independence" failure the retired per-line design died of, reintroduced
- * through a marker shape nobody had enumerated.
- *
- * So this pattern keys on the annotation VOCABULARY at line start — the words themselves, with
- * any leading decoration — and requires no citation. It is intentionally over-broad: a false
- * positive costs one loud, fixable throw, while a false negative silently corrupts a dispatch and
- * is invisible in the results. Any future marker form is caught by default rather than by
- * anticipation.
- */
-/*
- * Leading decoration is skipped by consuming ALL non-alphanumeric characters, NOT by enumerating a
- * character class. The first version of this pattern read `^[\s>\-*]*` — I picked the decoration
- * characters I could think of, and the 177-20 consolidated run found `(Derived: ...)` in
- * doom-machine's CARDS.md leaking straight past it.
- *
- * That is the same mistake this constant was introduced to fix, made inside the fix itself, and it
- * is now the fourth instance in this milestone: the retired design's "structural" independence that
- * was incidental; a backstop keyed to the same citation vocabulary as the filter it guarded; a test
- * helper that made unit strings match by construction; and this. Every one held for the shapes
- * someone had enumerated and was described as universal.
- *
- * So this deliberately enumerates nothing. Anything that is not a letter or digit is decoration.
- */
-const ANNOTATION_VOCABULARY_RE = /^[^A-Za-z0-9]*(?:Derived|Visual|Named-but-undefined)\b/im;
 
 /**
  * Builds the dual-enumerator dispatch payload for ONE slice: quote lines only, via
@@ -175,11 +154,11 @@ export function buildEnumeratorPayload(slice: { path: string; text: string }): s
   const lines = [ENUMERATE_TOKEN, `Slice: ${slice.path}`, '', ...cleaned];
   const payload = lines.join('\n');
 
-  // Two independent backstops. ANY_ANNOTATION_LINE_RE shares the filter's citation vocabulary and
+  // Two independent backstops. ANNOTATION_CITATION_RE shares the filter's citation vocabulary and
   // catches decoration variants; ANNOTATION_VOCABULARY_RE deliberately does not, and catches
   // marker-form variants. A single check keyed to the filter's own vocabulary is not a backstop —
   // that assumption is what let bare `Derived:` lines reach a live dispatch (plan 177-18).
-  if (ANY_ANNOTATION_LINE_RE.test(payload) || ANNOTATION_VOCABULARY_RE.test(payload)) {
+  if (ANNOTATION_CITATION_RE.test(payload) || ANNOTATION_VOCABULARY_RE.test(payload)) {
     throw new Error(
       `buildEnumeratorPayload assembled a payload for ${slice.path} that still names an ` +
         `annotation family (Derived / Visual / Named-but-undefined), with or without a page ` +

@@ -784,10 +784,12 @@ function findLabelLine(
  * primary source) only acts on this when the comparison is actually meaningful.
  *
  * Mirrors the `isBarePath` classification inside `repairExistingIndex`'s own `Source:` branch —
- * duplicated rather than extracted, matching this file's own established precedent (the
- * `ANY_ANNOTATION_LINE_RE`/filter duplication pattern in `verify-enumerate.ts`) for a single
+ * duplicated rather than extracted, matching this file's own established precedent for a single
  * small predicate two call sites both need at slightly different points in the file's control
- * flow.
+ * flow. (The `ANY_ANNOTATION_LINE_RE`/filter duplication this comment used to point at as
+ * precedent was itself consolidated away in 177.1-01 — `verify-enumerate.ts` and
+ * `verify-derive-recheck.ts` now both import `ANNOTATION_CITATION_RE` from
+ * `derived-line-pattern.ts` rather than re-spelling it.)
  */
 function readCanonicalPrimarySource(text: string): { path: string; hash: string } | undefined {
   const sourceLine = findLabelLine(text, 'Source:');

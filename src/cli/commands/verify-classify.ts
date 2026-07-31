@@ -90,6 +90,19 @@ export type RuleDelta = (typeof RULE_DELTA_KINDS)[number];
  * Each entry is a regex SOURCE string (not a literal regex), driving `isPresentationLine` below
  * rather than being duplicated as an inline pattern at the call site.
  *
+ * NOT DERIVED FROM `derived-line-pattern.ts`'s `ANNOTATION_CITATION_SOURCES` (177.1-01 finding,
+ * recorded in that plan's SUMMARY): the two lists are shaped for genuinely different purposes and
+ * are NOT element-wise equal. `ANNOTATION_CITATION_SOURCES` has exactly one bare entry per
+ * annotation FAMILY (`Derived`, `Visual`, `Named-but-undefined`), citation body `\d+`, no
+ * qualifier tolerance. This list instead has one entry per presentation-note SCHEMA VARIANT: two
+ * of its three entries are both `Derived`-family (the pre-170 `— diagram description` / `— art`
+ * qualifier forms), `Named-but-undefined` never appears at all (it is never a presentation note),
+ * and every entry carries the `(?: \([^:]*\))?` qualifier-group tolerance WR-09 added. Deriving
+ * this array mechanically from the family list would either drop the two `Derived` schema
+ * variants or silently invent a `Named-but-undefined` presentation marker that has never existed
+ * in real data — so this array keeps its own literal, on purpose, per 177.1-01 decision 8's
+ * explicit "do not silently widen or narrow `isPresentationLine`'s behavior" instruction.
+ *
  * SCHEMA-SYMMETRIC AND NESTING-TOLERANT (177-08, closing WR-09): the optional parenthetical
  * qualifier group is applied to all three markers identically — `^Visual \(p\.\d+\):` previously
  * lacked it, so `Visual (p.1) (Plan phase): ...` classified as rule-bearing while its `Derived`-
