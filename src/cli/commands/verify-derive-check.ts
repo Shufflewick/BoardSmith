@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
+import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
 import {
   createEnumeratedFact,
@@ -7,6 +8,7 @@ import {
   composeArithmeticClaim,
   composeArithmeticChain,
   classifyDerivedLines,
+  QuoteVerifiedProvenance,
   type DerivedLineClassification,
   type NumericValue,
   type EnumeratedFact,
@@ -16,12 +18,12 @@ import {
   type ReconcilerDerivedLineClaim,
   type GroundedBothFact,
   type GroundingResult,
+  type GroundingRejection,
   type ComposedFact,
   type ComposeOutcome,
   type ComposeChainOutcome,
   type DerivedLineClassificationResult,
   type MissedFact,
-  type QuoteVerifiedProvenance,
 } from './verify-enumerate.js';
 
 /**
@@ -680,9 +682,141 @@ export function parseSubagentJsonInput(text: string, flagLabel: string, filePath
 }
 
 // -------------------------------------------------------------------------------------------
-// Not yet defined in this module (177.1-03 Task 3's job)
+// verifyDeriveRecordCommand — the write surface, retargeted onto reconcileSlice (177.1-03 Task 3)
 // -------------------------------------------------------------------------------------------
 
-// The write-surface command (`verify-derive-record`) that dispatches enumerator/reconciler
-// subagents (via the SKILL, never this CLI) and calls `recordDeriveCheckVerdicts` is Task 3's
-// job — this section delivers `reconcileSlice()`, the pure compute pipeline it will call.
+async function readRequiredJsonFile(filePath: string, flagLabel: string): Promise<unknown> {
+  let text: string;
+  try {
+    text = await fs.readFile(filePath, 'utf-8');
+  } catch {
+    throw new Error(`verify-derive-record could not read ${flagLabel} at "${filePath}".`);
+  }
+  return parseSubagentJsonInput(text, flagLabel, filePath);
+}
+
+export interface VerifyDeriveRecordOptions {
+  project?: string;
+  slicePath?: string;
+  enumeratorA?: string;
+  enumeratorB?: string;
+  reconciler?: string;
+  json?: boolean;
+}
+
+/**
+ * The exact, documented `--json` output shape — `records`, `ledgerPath`, and `rejected`, and
+ * nothing else. `rejected` is NEVER omitted or silently dropped, even when empty: a fabricating
+ * reconciler's grounding rejections are a signal worth surfacing (177.1-CONTEXT.md decision 3),
+ * not a detail this command hides from its own output.
+ */
+export interface VerifyDeriveRecordResult {
+  records: DeriveCheckRecord[];
+  ledgerPath: string;
+  rejected: GroundingRejection[];
+}
+
+/**
+ * `boardsmith verify-derive-record` — the ONLY write surface for CHECK-04's ledger, retargeted
+ * onto the closed dual-enumeration design (177.1-CONTEXT.md decisions 1/3). Reads the THREE
+ * subagent-return JSON files the skill orchestrator dispatched (`--enumerator-a`/`--enumerator-b`/
+ * `--reconciler`), runs `reconcileSlice` — the CLI classifies; it never dispatches a model itself
+ * (no `claude -p`/`execFile`/`spawn` call appears anywhere in this module) — and records EVERY
+ * classification from that one reconciler return in ONE `recordDeriveCheckVerdicts` call.
+ *
+ * `--verdict` is DELIBERATELY NOT AN OPTION on this command (177.1-CONTEXT.md decision 1 vs
+ * decision 3, reconciled): the verdict is COMPUTED by `reconcileSlice`/`classifyDerivedLines`, not
+ * asserted by the caller. Registers no `--force`/`--skip`/`--overwrite`/`--run-id` or any other
+ * bypass of any kind, matching every sibling write command's posture.
+ *
+ * Validation is delegated entirely to `createDeriveCheckRecord` (the one choke point) and to
+ * `reconcileSlice`'s own grounding/composition checks — this function adds no second validator.
+ */
+export async function verifyDeriveRecordCommand(
+  options: VerifyDeriveRecordOptions = {},
+): Promise<VerifyDeriveRecordResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  if (!options.slicePath) {
+    throw new Error('verify-derive-record requires --slice-path <path>.');
+  }
+  if (!options.enumeratorA) {
+    throw new Error('verify-derive-record requires --enumerator-a <file>.');
+  }
+  if (!options.enumeratorB) {
+    throw new Error('verify-derive-record requires --enumerator-b <file>.');
+  }
+  if (!options.reconciler) {
+    throw new Error('verify-derive-record requires --reconciler <file>.');
+  }
+
+  const slicePath = options.slicePath;
+  const sliceFsPath = join(projectDir, slicePath);
+  let sliceText: string;
+  try {
+    sliceText = await fs.readFile(sliceFsPath, 'utf-8');
+  } catch {
+    throw new Error(
+      `verify-derive-record could not read --slice-path "${slicePath}" (looked for it at ` +
+        `${sliceFsPath}).`,
+    );
+  }
+
+  const enumeratorA = (await readRequiredJsonFile(
+    options.enumeratorA,
+    '--enumerator-a',
+  )) as EnumeratorReturn;
+  const enumeratorB = (await readRequiredJsonFile(
+    options.enumeratorB,
+    '--enumerator-b',
+  )) as EnumeratorReturn;
+  const reconciler = (await readRequiredJsonFile(
+    options.reconciler,
+    '--reconciler',
+  )) as ReconcilerReturn;
+
+  const provenance = await QuoteVerifiedProvenance.obtain(projectDir);
+
+  const { classifications, grounding } = reconcileSlice({
+    projectDir,
+    slicePath,
+    sliceText,
+    enumeratorA,
+    enumeratorB,
+    reconciler,
+    provenance,
+  });
+
+  const groundedById = new Map(grounding.grounded.map((g) => [g.id, g] as const));
+  const records = classifications.map((c) => {
+    const groundedQuotes: DeriveCheckGroundedQuote[] = c.citedFactIds
+      .map((id) => groundedById.get(id))
+      .filter((g): g is GroundedBothFact => Boolean(g))
+      .map((g) => ({ statement: g.statement, quotedFromA: g.quotedFromA, quotedFromB: g.quotedFromB }));
+    return createDeriveCheckRecord({
+      slicePath: c.slicePath,
+      lineNumber: c.lineNumber,
+      derivedLineText: c.derivedLineText,
+      verdict: c.classification,
+      reason: c.reason,
+      citedFactIds: c.citedFactIds,
+      groundedQuotes,
+    });
+  });
+
+  const { ledgerPath } = await recordDeriveCheckVerdicts(projectDir, records);
+
+  const result: VerifyDeriveRecordResult = { records, ledgerPath, rejected: grounding.rejected };
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+  console.log(
+    chalk.green(
+      `✓ Recorded ${records.length} derive-check verdict(s) for ${slicePath} ` +
+        `(${grounding.rejected.length} grounding rejection(s)).`,
+    ),
+  );
+  console.log(`  Ledger: ${ledgerPath}`);
+  return result;
+}
