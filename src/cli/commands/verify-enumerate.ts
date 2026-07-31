@@ -102,6 +102,30 @@ export const ENUMERATE_TOKEN = 'BS-ENUMERATE-V1';
 const ANY_ANNOTATION_LINE_RE = /Derived \(p\.|Visual \(p\.|Named-but-undefined \(p\./i;
 
 /**
+ * The REAL backstop — deliberately broader than every filter it guards, and deliberately NOT
+ * sharing their vocabulary.
+ *
+ * `ANY_ANNOTATION_LINE_RE` above, and the `quoteLinesOnly` filter it was meant to guard, are BOTH
+ * keyed to the `(p.N)` citation form. A "backstop" that recognizes only what its filter already
+ * recognizes is the same check run twice — it can catch a decoration variant (`> Derived (p.1):`,
+ * which 177-08 fixed) but is blind to a MARKER-FORM variant.
+ *
+ * That blindness was not hypothetical. The doom-machine measurement (plan 177-18) found
+ * `rulebook/CARDS.md` writing bare `Derived:` lines under its own locally-declared convention —
+ * no page citation. They passed `quoteLinesOnly` untouched AND passed the backstop silently,
+ * landing the transcriber's own inference in the blind enumerator payload. That is precisely the
+ * "confirmation, not independence" failure the retired per-line design died of, reintroduced
+ * through a marker shape nobody had enumerated.
+ *
+ * So this pattern keys on the annotation VOCABULARY at line start — the words themselves, with
+ * any leading decoration — and requires no citation. It is intentionally over-broad: a false
+ * positive costs one loud, fixable throw, while a false negative silently corrupts a dispatch and
+ * is invisible in the results. Any future marker form is caught by default rather than by
+ * anticipation.
+ */
+const ANNOTATION_VOCABULARY_RE = /^[\s>\-*]*(?:Derived|Visual|Named-but-undefined)\b/im;
+
+/**
  * Builds the dual-enumerator dispatch payload for ONE slice: quote lines only, via
  * `quoteLinesOnly` (`verify-derive-recheck.ts`) — the SAME decoration-tolerant, backstop-proofed
  * filter CHECK-04's blind-derivation payload uses, reused rather than re-derived so the two
@@ -116,16 +140,26 @@ const ANY_ANNOTATION_LINE_RE = /Derived \(p\.|Visual \(p\.|Named-but-undefined \
  */
 export function buildEnumeratorPayload(slice: { path: string; text: string }): string {
   const quotes = quoteLinesOnly(slice.text);
-  const lines = [ENUMERATE_TOKEN, `Slice: ${slice.path}`, '', ...quotes];
+  // Drop any surviving annotation line by VOCABULARY before assembly, so a marker form the
+  // citation-keyed filter never anticipated (bare `Derived:`, per doom-machine's CARDS.md) is
+  // removed rather than merely detected. Detection alone would make such a slice unprocessable.
+  const cleaned = quotes.filter((line) => !ANNOTATION_VOCABULARY_RE.test(line));
+  const lines = [ENUMERATE_TOKEN, `Slice: ${slice.path}`, '', ...cleaned];
   const payload = lines.join('\n');
 
-  if (ANY_ANNOTATION_LINE_RE.test(payload)) {
+  // Two independent backstops. ANY_ANNOTATION_LINE_RE shares the filter's citation vocabulary and
+  // catches decoration variants; ANNOTATION_VOCABULARY_RE deliberately does not, and catches
+  // marker-form variants. A single check keyed to the filter's own vocabulary is not a backstop —
+  // that assumption is what let bare `Derived:` lines reach a live dispatch (plan 177-18).
+  if (ANY_ANNOTATION_LINE_RE.test(payload) || ANNOTATION_VOCABULARY_RE.test(payload)) {
     throw new Error(
-      `buildEnumeratorPayload assembled a payload for ${slice.path} that still matches an ` +
-        `annotation family (Derived (p./Visual (p./Named-but-undefined (p.).\n` +
+      `buildEnumeratorPayload assembled a payload for ${slice.path} that still names an ` +
+        `annotation family (Derived / Visual / Named-but-undefined), with or without a page ` +
+        `citation.\n` +
         `The payload construction site, not the prompt text, is where the quote-only guarantee ` +
-        `is upheld — quoteLinesOnly() missed a decoration form. Fix the strip filter; never relax ` +
-        `this check to let the payload through.`,
+        `is upheld — an annotation reaching an enumerator turns independent derivation into ` +
+        `confirmation of the transcriber's own inference. Fix the strip filter; never relax this ` +
+        `check to let the payload through.`,
     );
   }
 

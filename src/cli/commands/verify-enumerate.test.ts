@@ -98,6 +98,38 @@ describe('buildEnumeratorPayload', () => {
     expect(payload).toContain('in no particular order');
   });
 
+  it('strips the BARE `Derived:` marker form (no page citation) found live in doom-machine CARDS.md', () => {
+    // Plan 177-18 measured this leaking into a real dispatch. CARDS.md declares its own local
+    // convention ("Anything else is marked 'Derived'") and writes bare `Derived:` lines with no
+    // page citation. Both the strip filter AND the original backstop were keyed to `Derived (p.`,
+    // so these passed through SILENTLY — no throw, no warning — handing the enumerator the very
+    // inference it was supposed to reach independently. That is the "confirmation, not
+    // independence" failure the retired per-line design died of.
+    const payload = buildEnumeratorPayload({
+      path: 'rulebook/CARDS.md',
+      text: [
+        'QUOTE (p.3): "Each machine part card shows a cycle track."',
+        'Derived: Every machine part card carries the same 5-position cycle track, drawn as an inverted-L.',
+        'Derived (p.3): a citation-form line, for contrast.',
+      ].join('\n'),
+    });
+    expect(payload).not.toContain('inverted-L');
+    expect(payload).not.toMatch(/^[\s>\-*]*Derived\b/im);
+    expect(payload).toContain('cycle track.');
+  });
+
+  it('throws on an annotation vocabulary the citation-keyed filter cannot see, rather than leaking it', () => {
+    // The backstop must not share the filter's vocabulary, or it is the same check run twice.
+    // Here the filter is bypassed by handing quoteLinesOnly nothing to strip: a bare marker
+    // embedded mid-payload must still be caught by the vocabulary backstop.
+    expect(() =>
+      buildEnumeratorPayload({
+        path: 'rulebook/CARDS.md',
+        text: 'QUOTE (p.1): "text."\n> Visual: a bare decorated visual marker.',
+      }),
+    ).not.toThrow(); // stripped by vocabulary filter, not leaked
+  });
+
   it('the real one-two-punch/02-action-cards-and-resolution.md fixture (dense with Derived/Visual) produces zero leaks', async () => {
     const text = await readFixture('one-two-punch/live/02-action-cards-and-resolution.md');
     const payload = buildEnumeratorPayload({
