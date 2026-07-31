@@ -1359,6 +1359,46 @@ describe('verifyDeriveRecordCommand', () => {
     ).rejects.toThrow(/--enumerator-a/);
   });
 
+  it('CR-04: --slice-path escaping rulebook/ (path traversal) is rejected BEFORE any read, never reads an arbitrary local file', async () => {
+    // A secret file OUTSIDE the project's rulebook/ dir entirely, at the project root — proves
+    // this is rejected before `fs.readFile` is ever reached, not merely that a nonexistent path
+    // fails.
+    const project = join(dir, 'project');
+    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, 'secret.txt'), 'do not leak this');
+
+    let message = '';
+    try {
+      await verifyDeriveRecordCommand({
+        project,
+        slicePath: 'rulebook/../secret.txt',
+        enumeratorA: 'a.json',
+        enumeratorB: 'b.json',
+        reconciler: 'r.json',
+      });
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/resolves outside/);
+    expect(message).toContain('rulebook');
+    expect(message).not.toContain('do not leak this');
+
+    // A deeper traversal escaping the project directory entirely is rejected the same way.
+    let message2 = '';
+    try {
+      await verifyDeriveRecordCommand({
+        project,
+        slicePath: '../../../../../../etc/passwd',
+        enumeratorA: 'a.json',
+        enumeratorB: 'b.json',
+        reconciler: 'r.json',
+      });
+    } catch (err) {
+      message2 = (err as Error).message;
+    }
+    expect(message2).toMatch(/resolves outside/);
+  });
+
   it('--json emits the recorded records, ledgerPath, and rejected — and nothing else on stdout', async () => {
     const slicePath = 'rulebook/01-x.md';
     const project = await setupProvenanceProject(

@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
 import { isPresentationLine } from './verify-classify.js';
@@ -1284,14 +1284,36 @@ export async function verifyDeriveRecordCommand(
   }
 
   const slicePath = options.slicePath;
-  const sliceFsPath = join(projectDir, slicePath);
+
+  // CR-04 (177.1 code review): `--slice-path` reaches `fs.readFile` directly off disk, and
+  // `join()` collapses `..` segments — without this guard, `--slice-path
+  // rulebook/../../../../etc/passwd` (or any path escaping `projectDir/rulebook`) is read without
+  // complaint. `slicePath` is always caller-supplied as `rulebook/<file>` (the exact shape
+  // `readLiveSlices`/`enumerateDerivedLines` report), so this resolves against `projectDir`
+  // itself (not `rulebook/` — that segment is already part of `slicePath`) and requires the
+  // result stay inside `projectDir/rulebook`. Mirrors `verify-classify.ts`'s `--live-slice` guard
+  // (T-174-14), validated BEFORE any read.
+  const rulebookDir = join(projectDir, 'rulebook');
+  const sliceAbsPath = resolve(projectDir, slicePath);
+  const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
+  if (
+    sliceRelToRulebook === '' ||
+    sliceRelToRulebook.startsWith('..') ||
+    isAbsolute(sliceRelToRulebook)
+  ) {
+    throw new Error(
+      `--slice-path "${slicePath}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
+        `Pass a path relative to the project root, of the form "rulebook/<file>.md".`,
+    );
+  }
+
   let sliceText: string;
   try {
-    sliceText = await fs.readFile(sliceFsPath, 'utf-8');
+    sliceText = await fs.readFile(sliceAbsPath, 'utf-8');
   } catch {
     throw new Error(
       `verify-derive-record could not read --slice-path "${slicePath}" (looked for it at ` +
-        `${sliceFsPath}).`,
+        `${sliceAbsPath}).`,
     );
   }
 
