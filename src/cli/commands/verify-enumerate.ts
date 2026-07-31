@@ -309,6 +309,34 @@ function isTolerantMatch(quote: string, candidate: string): boolean {
   return nq.includes(nc) || nc.includes(nq);
 }
 
+/**
+ * Normalized, de-duplicated word-token set — the shared primitive behind `findMatch`'s tie-break
+ * (CR-03). Splitting on whitespace after `normalizeForMatch` preserves digits as their own tokens,
+ * so "3 cards" and "10 cards" score differently even though both contain "cards" — the same
+ * digit-sensitivity `normalizeForMatch` itself is built to preserve.
+ */
+function normalizedTokenSet(text: string): Set<string> {
+  return new Set(normalizeForMatch(text).split(' ').filter((t) => t.length > 0));
+}
+
+/**
+ * Counts tokens shared between `a` and `b`'s normalized word sets — a coarse but effective
+ * specificity score for disambiguating which of several equally-ranked facts a claim's own
+ * `statement` field is actually describing. Independently-authored prose (a reconciler's
+ * synthesized claim statement vs. an enumerator's own fact statement) routinely does not share a
+ * contiguous substring at all — `isTolerantMatch`'s containment check is too strict for this —
+ * but genuinely-the-same fact still shares most of its content words (including any digits, which
+ * is exactly the specificity that matters here: "starts... with 3 cards" scores higher against a
+ * "...holding 3 cards" fact than a "...holding 10 cards" one).
+ */
+function tokenOverlapScore(a: string, b: string): number {
+  const ta = normalizedTokenSet(a);
+  const tb = normalizedTokenSet(b);
+  let score = 0;
+  for (const t of ta) if (tb.has(t)) score++;
+  return score;
+}
+
 // -------------------------------------------------------------------------------------------
 // validateGrounding — the mechanical core (177-EXPERIMENTS/README.md Finding 3's fix)
 // -------------------------------------------------------------------------------------------
@@ -362,6 +390,12 @@ function matchRank(quote: string, fact: EnumeratedFact): number {
   return Number.POSITIVE_INFINITY;
 }
 
+/** Discriminated outcome of {@link findMatch} — see that function's own comment. */
+type FindMatchOutcome =
+  | { kind: 'match'; fact: EnumeratedFact }
+  | { kind: 'none' }
+  | { kind: 'ambiguous'; candidates: EnumeratedFact[] };
+
 /**
  * Resolves a reconciler's quote to the fact it grounds in, DETERMINISTICALLY.
  *
@@ -372,23 +406,54 @@ function matchRank(quote: string, fact: EnumeratedFact): number {
  * what invalidated the RETIRED design's numbers — a metric that moves on its own cannot be tuned
  * against, and it took thirteen plans there to notice. It is not acceptable here.
  *
- * Selection is now total and order-independent: strongest match rank wins; ties break on the fact's
- * content-derived `id`, which is a sha256 of statement+sourceSentence and therefore stable across
- * runs, processes and list orderings. Two facts can only tie on id by being byte-identical, in which
- * case either choice is the same fact.
+ * Selection is total and order-independent: strongest match rank wins. Determinism alone is not
+ * enough, though — CR-03 (177.1 code review) found that when SEVERAL facts genuinely tie at the
+ * winning rank (the normal, expected case documented above `matchRank`: several facts sharing one
+ * `sourceSentence`, and the quote is that whole sentence), a deterministic tie-break on content-id
+ * still SILENTLY GROUNDS every such claim to the same one fact — wrong for any claim that actually
+ * intended a different tied candidate. `id`-order determinism made that failure reproducible, not
+ * correct.
+ *
+ * Ties are now disambiguated by `claimStatement` — the reconciler's OWN synthesized description for
+ * THIS specific claim (`ReconcilerBothClaim.statement`), which `validateGrounding` previously ignored
+ * for match resolution entirely. Exactly one tied candidate whose own `statement` tolerantly matches
+ * `claimStatement` breaks the tie in that candidate's favor. When zero or more than one tied
+ * candidate matches (the claim's own statement doesn't disambiguate, or disambiguates to more than
+ * one), this function refuses to guess — `{ kind: 'ambiguous' }` — rather than silently picking one;
+ * `validateGrounding` reports this as a rejection, never as a grounded fact.
  */
-function findMatch(quote: string, list: EnumeratedFact[]): EnumeratedFact | undefined {
-  let best: EnumeratedFact | undefined;
+function findMatch(quote: string, list: EnumeratedFact[], claimStatement: string): FindMatchOutcome {
+  let candidates: EnumeratedFact[] = [];
   let bestRank = Number.POSITIVE_INFINITY;
   for (const fact of list) {
     const rank = matchRank(quote, fact);
     if (rank === Number.POSITIVE_INFINITY) continue;
-    if (rank < bestRank || (rank === bestRank && best !== undefined && fact.id < best.id)) {
-      best = fact;
+    if (rank < bestRank) {
       bestRank = rank;
+      candidates = [fact];
+    } else if (rank === bestRank) {
+      candidates.push(fact);
     }
   }
-  return best;
+  if (candidates.length === 0) return { kind: 'none' };
+  if (candidates.length === 1) return { kind: 'match', fact: candidates[0] };
+
+  // Disambiguate by SPECIFICITY against the claim's own statement, not mere containment — an
+  // independently-authored reconciler statement and an enumerator's fact statement routinely
+  // describe the same fact in different words with no exact substring relationship at all.
+  let bestScore = -1;
+  let bestCandidates: EnumeratedFact[] = [];
+  for (const candidate of candidates) {
+    const score = tokenOverlapScore(claimStatement, candidate.statement);
+    if (score > bestScore) {
+      bestScore = score;
+      bestCandidates = [candidate];
+    } else if (score === bestScore) {
+      bestCandidates.push(candidate);
+    }
+  }
+  if (bestScore > 0 && bestCandidates.length === 1) return { kind: 'match', fact: bestCandidates[0] };
+  return { kind: 'ambiguous', candidates };
 }
 
 /**
@@ -413,8 +478,8 @@ export function validateGrounding(
   const rejected: GroundingRejection[] = [];
 
   for (const claim of claimedBoth) {
-    const matchA = findMatch(claim.quotedFromA, listA);
-    if (!matchA) {
+    const outcomeA = findMatch(claim.quotedFromA, listA, claim.statement);
+    if (outcomeA.kind === 'none') {
       rejected.push({
         claim,
         reason:
@@ -423,8 +488,26 @@ export function validateGrounding(
       });
       continue;
     }
-    const matchB = findMatch(claim.quotedFromB, listB);
-    if (!matchB) {
+    if (outcomeA.kind === 'ambiguous') {
+      // CR-03: several distinct A facts (commonly, several sharing one sourceSentence — the
+      // normal case documented above matchRank) tie at the winning rank, and this claim's own
+      // `statement` field doesn't disambiguate among them. Silently picking one would risk
+      // grounding this claim to a DIFFERENT fact than the one it actually intended (the exact
+      // "wrong operand substituted" failure mode CHECK-04 exists to catch) — refuse instead.
+      rejected.push({
+        claim,
+        reason:
+          `quotedFromA ("${claim.quotedFromA}") matches ${outcomeA.candidates.length} distinct ` +
+          `facts in enumerator A's list at equal strength (e.g. several facts sharing one source ` +
+          `sentence), and this claim's own statement ("${claim.statement}") does not disambiguate ` +
+          `among them — refusing to guess which fact this claim grounds to.`,
+      });
+      continue;
+    }
+    const matchA = outcomeA.fact;
+
+    const outcomeB = findMatch(claim.quotedFromB, listB, claim.statement);
+    if (outcomeB.kind === 'none') {
       rejected.push({
         claim,
         reason:
@@ -433,6 +516,18 @@ export function validateGrounding(
       });
       continue;
     }
+    if (outcomeB.kind === 'ambiguous') {
+      rejected.push({
+        claim,
+        reason:
+          `quotedFromB ("${claim.quotedFromB}") matches ${outcomeB.candidates.length} distinct ` +
+          `facts in enumerator B's list at equal strength (e.g. several facts sharing one source ` +
+          `sentence), and this claim's own statement ("${claim.statement}") does not disambiguate ` +
+          `among them — refusing to guess which fact this claim grounds to.`,
+      });
+      continue;
+    }
+    const matchB = outcomeB.fact;
 
     grounded.push({
       id: createHash('sha256').update(`grounded:${matchA.id}:${matchB.id}`).digest('hex').slice(0, 16),

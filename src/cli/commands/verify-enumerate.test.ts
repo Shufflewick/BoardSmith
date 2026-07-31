@@ -269,6 +269,55 @@ describe('validateGrounding — deterministic match selection', () => {
     expect(res.grounded.length).toBe(1);
     expect(res.grounded[0].matchedFactA.id).toBe(viaStatement.id);
   });
+
+  it('CR-03: two "both" claims quoting the SAME sourceSentence ground to DIFFERENT facts when each claim\'s own statement disambiguates', () => {
+    // "Draw 2 cards and discard 1 card each round." genuinely supports two distinct facts. A
+    // reconciler quoting the whole sentence for BOTH claims (permitted — quoting the specific
+    // sub-clause is not required) must not silently collapse both claims onto the SAME fact.
+    const shared = 'Draw 2 cards and discard 1 card each round.';
+    const drawFact = fact('Each round, players draw 2 cards.', shared, { magnitude: 2, unit: 'cards', approximate: false });
+    const discardFact = fact('Each round, players discard 1 card.', shared, { magnitude: 1, unit: 'cards', approximate: false });
+
+    const claim1: ReconcilerBothClaim = {
+      statement: 'Players draw 2 cards each round.',
+      quotedFromA: shared,
+      quotedFromB: shared,
+    };
+    const claim2: ReconcilerBothClaim = {
+      statement: 'Players discard 1 card each round.',
+      quotedFromA: shared,
+      quotedFromB: shared,
+    };
+
+    const result = validateGrounding([drawFact, discardFact], [drawFact, discardFact], [claim1, claim2]);
+
+    expect(result.rejected).toEqual([]);
+    expect(result.grounded).toHaveLength(2);
+    const [g1, g2] = result.grounded;
+    expect(g1.matchedFactA.id).toBe(drawFact.id);
+    expect(g1.matchedFactA.numericValue?.magnitude).toBe(2);
+    expect(g2.matchedFactA.id).toBe(discardFact.id);
+    expect(g2.matchedFactA.numericValue?.magnitude).toBe(1);
+  });
+
+  it('CR-03: when the claim\'s own statement does NOT disambiguate among equally-ranked candidates, the claim is REJECTED, never silently ground to an arbitrary one', () => {
+    const shared = 'Some ambiguous shared sentence that supports two unrelated facts.';
+    const f1 = fact('Totally unrelated wording one.', shared);
+    const f2 = fact('Totally unrelated wording two.', shared);
+
+    const claim: ReconcilerBothClaim = {
+      statement: 'A claim statement sharing no meaningful words with either fact at all.',
+      quotedFromA: shared,
+      quotedFromB: shared,
+    };
+
+    const result = validateGrounding([f1, f2], [f1, f2], [claim]);
+
+    expect(result.grounded).toEqual([]);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].reason).toMatch(/matches 2 distinct facts/);
+    expect(result.rejected[0].reason).toMatch(/does not disambiguate/);
+  });
 });
 
 describe('validateGrounding', () => {

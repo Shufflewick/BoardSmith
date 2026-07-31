@@ -950,6 +950,35 @@ export interface ReconcileSliceResult {
 }
 
 /**
+ * Sentinel stored in {@link buildGroundedByStatement}'s map when two DISTINCT grounded facts in
+ * the same slice share identical `statement` text — CR-01 (177.1 code review). Nothing enforces
+ * `statement` uniqueness across a slice's "both" claims; it is model-authored prose. Composing
+ * from whichever fact happened to be inserted last (the prior behavior) can silently substitute a
+ * different fact's magnitude into an arithmetic operand than the reconciler actually intended —
+ * fail-closed instead: a collision resolves to this sentinel, never to either fact.
+ */
+const AMBIGUOUS_OPERAND_STATEMENT = Symbol('ambiguous-operand-statement');
+type GroundedLookupValue = GroundedBothFact | typeof AMBIGUOUS_OPERAND_STATEMENT;
+
+/**
+ * Builds the `statement -> GroundedBothFact` lookup `resolveArithmeticSpec` resolves operand
+ * pointers through, refusing (never last-write-wins) when two distinct grounded facts in
+ * `grounded` share identical `statement` text (CR-01). A collision maps to
+ * `AMBIGUOUS_OPERAND_STATEMENT`, which every lookup site below must check for explicitly and
+ * report as an unresolvable operand — the same posture as "no match at all", never treated as a
+ * usable operand.
+ */
+function buildGroundedByStatement(
+  grounded: readonly GroundedBothFact[],
+): Map<string, GroundedLookupValue> {
+  const map = new Map<string, GroundedLookupValue>();
+  for (const g of grounded) {
+    map.set(g.statement, map.has(g.statement) ? AMBIGUOUS_OPERAND_STATEMENT : g);
+  }
+  return map;
+}
+
+/**
  * Resolves ONE `arithmeticSpec` against this proposal's grounding-validated "both" facts, and
  * performs the actual composition check through the real, unmodified `composeArithmeticClaim`/
  * `composeArithmeticChain` (`verify-enumerate.ts`) — this function's ONLY job is turning the
@@ -963,12 +992,23 @@ export interface ReconcileSliceResult {
 function resolveArithmeticSpec(
   spec: ArithmeticSpec,
   derivedLineText: string,
-  groundedByStatement: Map<string, GroundedBothFact>,
+  groundedByStatement: Map<string, GroundedLookupValue>,
 ): ComposeOutcome | ComposeChainOutcome {
   if (spec.kind === 'single') {
-    const operands: (GroundedBothFact | undefined)[] = spec.operandStatements.map((s) =>
+    const operands: (GroundedLookupValue | undefined)[] = spec.operandStatements.map((s) =>
       groundedByStatement.get(s),
     );
+    const ambiguousIndex = operands.findIndex((o) => o === AMBIGUOUS_OPERAND_STATEMENT);
+    if (ambiguousIndex !== -1) {
+      return {
+        ok: false,
+        reason:
+          `arithmeticSpec.operandStatements[${ambiguousIndex}] ("${spec.operandStatements[ambiguousIndex]}") ` +
+          `matches more than one distinct grounding-validated "both" fact for this slice (two "both" ` +
+          `claims share identical statement text) — code cannot tell which one this operand means, ` +
+          `and refuses to guess rather than silently pick either.`,
+      };
+    }
     const missingIndex = operands.findIndex((o) => !o);
     if (missingIndex !== -1) {
       return {
@@ -998,6 +1038,16 @@ function resolveArithmeticSpec(
       if (ref.kind !== 'fact') continue;
       if (operandIndexByStatement.has(ref.statement)) continue;
       const fact = groundedByStatement.get(ref.statement);
+      if (fact === AMBIGUOUS_OPERAND_STATEMENT) {
+        return {
+          ok: false,
+          reason:
+            `arithmeticSpec chain step references statement "${ref.statement}", which matches more ` +
+            `than one distinct grounding-validated "both" fact for this slice (two "both" claims ` +
+            `share identical statement text) — code cannot tell which one this operand means, and ` +
+            `refuses to guess rather than silently pick either.`,
+        };
+      }
       if (!fact) {
         return {
           ok: false,
@@ -1064,13 +1114,22 @@ export function reconcileSlice(input: {
   }));
 
   const grounding = validateGrounding(listA, listB, claimedBoth);
-  const groundedByStatement = new Map(grounding.grounded.map((g) => [g.statement, g] as const));
+  const groundedByStatement = buildGroundedByStatement(grounding.grounded);
 
   const composed: ComposedFact[] = [];
   const composeAttempts: ReconcileSliceComposeAttempt[] = [];
+  // CR-02: carries EACH proposal's own identity (its index in `derivedLineProposals`) through to
+  // its composed fact, if any — never re-derived afterward via a `claimText === derivedLineText`
+  // text lookup. `composed` is a flat pool accumulated across every `corroborated-by-composition`
+  // proposal in the slice; two different proposals can carry byte-identical `derivedLineText`
+  // (a repeated legend line, a duplicated annotation, two occurrences of the same templated
+  // sentence — all plausible in real rulebooks), and a text-keyed `.find()` would then hand a
+  // proposal whose OWN arithmetic was rejected the citation evidence of a DIFFERENT proposal that
+  // merely happens to share its line's wording.
+  const composedFactIdByIndex = new Map<number, string>();
 
-  for (const prop of reconciler.derivedLineProposals) {
-    if (prop.proposedClassification !== 'corroborated-by-composition') continue;
+  reconciler.derivedLineProposals.forEach((prop, index) => {
+    if (prop.proposedClassification !== 'corroborated-by-composition') return;
     if (!prop.arithmeticSpec) {
       composeAttempts.push({
         lineNumber: prop.lineNumber,
@@ -1081,7 +1140,7 @@ export function reconcileSlice(input: {
             'has nothing to check, so the proposal falls through to uncorroborated.',
         },
       });
-      continue;
+      return;
     }
     const outcome = resolveArithmeticSpec(
       prop.arithmeticSpec,
@@ -1089,17 +1148,23 @@ export function reconcileSlice(input: {
       groundedByStatement,
     );
     composeAttempts.push({ lineNumber: prop.lineNumber, outcome });
-    if (outcome.ok) composed.push(outcome.composed);
-  }
-
-  const claims: ReconcilerDerivedLineClaim[] = reconciler.derivedLineProposals.map((prop) => {
-    const citedFactIds = prop.citedBothStatements
-      .map((s) => groundedByStatement.get(s)?.id)
-      .filter((id): id is string => Boolean(id));
-    let composedFactId: string | undefined;
-    if (prop.proposedClassification === 'corroborated-by-composition') {
-      composedFactId = composed.find((c) => c.claimText === prop.derivedLineText)?.id;
+    if (outcome.ok) {
+      composed.push(outcome.composed);
+      composedFactIdByIndex.set(index, outcome.composed.id);
     }
+  });
+
+  const claims: ReconcilerDerivedLineClaim[] = reconciler.derivedLineProposals.map((prop, index) => {
+    // CR-01: an ambiguous (collided) statement lookup is never a usable citation, same posture as
+    // "not found" — filtered out below rather than propagating the sentinel as a fact id.
+    const citedFactIds = prop.citedBothStatements
+      .map((s) => groundedByStatement.get(s))
+      .filter((g): g is GroundedBothFact => g !== undefined && g !== AMBIGUOUS_OPERAND_STATEMENT)
+      .map((g) => g.id);
+    const composedFactId =
+      prop.proposedClassification === 'corroborated-by-composition'
+        ? composedFactIdByIndex.get(index)
+        : undefined;
     return {
       slicePath,
       lineNumber: prop.lineNumber,

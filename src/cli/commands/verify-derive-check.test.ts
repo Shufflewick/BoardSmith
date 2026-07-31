@@ -999,6 +999,146 @@ describe('reconcileSlice', () => {
       /MAX_ARITHMETIC_CHAIN_DEPTH|bounded at 3/,
     );
   });
+
+  it('CR-01: two grounded "both" facts sharing identical statement text fail closed (never last-write-wins) for an arithmeticSpec pointing at that statement', () => {
+    // Two DISTINCT "both" claims, deliberately given the SAME `statement` text but grounding to
+    // two DIFFERENT, correctly-validated facts (different quotes, different magnitudes on each
+    // side). Before the fix, `groundedByStatement` silently kept only the LAST-inserted one — an
+    // `arithmeticSpec` naming this shared statement text always resolved to fact #2 (magnitude 9),
+    // never fact #1 (magnitude 4), regardless of which one the reconciler actually intended.
+    const enumeratorA: EnumeratorReturn = {
+      facts: [
+        { statement: 'The first count.', sourceSentence: 'There are 4 widgets in the box.', numericValue: { magnitude: 4, unit: 'widgets', approximate: false } },
+        { statement: 'The second count.', sourceSentence: 'There are 9 gadgets in the crate.', numericValue: { magnitude: 9, unit: 'gadgets', approximate: false } },
+      ],
+    };
+    const enumeratorB: EnumeratorReturn = {
+      facts: [
+        { statement: 'The first count.', sourceSentence: 'There are 4 widgets in the box.', numericValue: { magnitude: 4, unit: 'widgets', approximate: false } },
+        { statement: 'The second count.', sourceSentence: 'There are 9 gadgets in the crate.', numericValue: { magnitude: 9, unit: 'gadgets', approximate: false } },
+      ],
+    };
+    const reconciler: ReconcilerReturn = {
+      both: [
+        // Both claims deliberately use the SAME `statement` text ("Shared label.") but ground to
+        // two different, genuinely distinct facts via distinct verbatim quotes.
+        { statement: 'Shared label.', quotedFromA: 'There are 4 widgets in the box.', quotedFromB: 'There are 4 widgets in the box.' },
+        { statement: 'Shared label.', quotedFromA: 'There are 9 gadgets in the crate.', quotedFromB: 'There are 9 gadgets in the crate.' },
+      ],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        {
+          lineNumber: 1,
+          derivedLineText: 'Derived (p.1): 4 widgets x 10 = 40 total units.',
+          proposedClassification: 'corroborated-by-composition',
+          citedBothStatements: ['Shared label.'],
+          arithmeticSpec: {
+            kind: 'single',
+            operation: 'multiply',
+            operandStatements: ['Shared label.', 'Shared label.'],
+            claimedResult: { magnitude: 40, unit: 'total units', approximate: false },
+          },
+        },
+      ],
+    };
+
+    const result = reconcileSlice({
+      projectDir: '/x',
+      slicePath: 'rulebook/x.md',
+      sliceText: '',
+      enumeratorA,
+      enumeratorB,
+      reconciler,
+      provenance: null,
+    });
+
+    // Two grounded facts (both quotes are genuinely traceable), but the ambiguous statement
+    // means the arithmeticSpec must refuse to resolve it, never silently pick the last one.
+    expect(result.grounding.grounded).toHaveLength(2);
+    expect(result.composed).toHaveLength(0);
+    expect(result.composeAttempts).toHaveLength(1);
+    expect(result.composeAttempts[0].outcome.ok).toBe(false);
+    expect((result.composeAttempts[0].outcome as { ok: false; reason: string }).reason).toMatch(
+      /matches more than one distinct grounding-validated "both" fact/,
+    );
+    expect(result.classifications[0].classification).toBe('uncorroborated');
+  });
+
+  it('CR-02: two Derived lines sharing identical text — the SECOND proposal (rejected arithmetic) never inherits the FIRST proposal (accepted arithmetic)\'s composedFactId', () => {
+    const enumeratorA: EnumeratorReturn = {
+      facts: [
+        { statement: 'There are 7 players.', sourceSentence: 'There are 7 players.', numericValue: { magnitude: 7, unit: 'players', approximate: false } },
+        { statement: 'There are 10 cards each.', sourceSentence: 'There are 10 cards each.', numericValue: { magnitude: 10, unit: 'cards', approximate: false } },
+      ],
+    };
+    const enumeratorB: EnumeratorReturn = {
+      facts: [
+        { statement: 'There are 7 players.', sourceSentence: 'There are 7 players.', numericValue: { magnitude: 7, unit: 'players', approximate: false } },
+        { statement: 'There are 10 cards each.', sourceSentence: 'There are 10 cards each.', numericValue: { magnitude: 10, unit: 'cards', approximate: false } },
+      ],
+    };
+    const sharedText = 'Derived (p.3): 7 x 10 = 70 cards.';
+    const reconciler: ReconcilerReturn = {
+      both: [
+        { statement: 'There are 7 players.', quotedFromA: 'There are 7 players.', quotedFromB: 'There are 7 players.' },
+        { statement: 'There are 10 cards each.', quotedFromA: 'There are 10 cards each.', quotedFromB: 'There are 10 cards each.' },
+      ],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        {
+          // Line 5: CORRECT arithmeticSpec — composes successfully.
+          lineNumber: 5,
+          derivedLineText: sharedText,
+          proposedClassification: 'corroborated-by-composition',
+          citedBothStatements: ['There are 7 players.', 'There are 10 cards each.'],
+          arithmeticSpec: {
+            kind: 'single',
+            operation: 'multiply',
+            operandStatements: ['There are 7 players.', 'There are 10 cards each.'],
+            claimedResult: { magnitude: 70, unit: 'cards', approximate: false },
+          },
+        },
+        {
+          // Line 12: byte-identical derivedLineText, but a WRONG claimedResult — must be rejected
+          // on its own arithmetic, never inherit line 5's composedFactId via a text-keyed lookup.
+          lineNumber: 12,
+          derivedLineText: sharedText,
+          proposedClassification: 'corroborated-by-composition',
+          citedBothStatements: ['There are 7 players.', 'There are 10 cards each.'],
+          arithmeticSpec: {
+            kind: 'single',
+            operation: 'multiply',
+            operandStatements: ['There are 7 players.', 'There are 10 cards each.'],
+            claimedResult: { magnitude: 999, unit: 'cards', approximate: false },
+          },
+        },
+      ],
+    };
+
+    const result = reconcileSlice({
+      projectDir: '/x',
+      slicePath: 'rulebook/x.md',
+      sliceText: '',
+      enumeratorA,
+      enumeratorB,
+      reconciler,
+      provenance: null,
+    });
+
+    expect(result.composed).toHaveLength(1);
+    expect(result.classifications).toHaveLength(2);
+
+    const line5 = result.classifications.find((c) => c.lineNumber === 5)!;
+    const line12 = result.classifications.find((c) => c.lineNumber === 12)!;
+
+    expect(line5.classification).toBe('corroborated-by-composition');
+    expect(line12.classification).not.toBe('corroborated-by-composition');
+    // Line 12's own arithmetic was wrong — it must fall through to uncorroborated, never cite
+    // line 5's unrelated composed fact as its own evidence.
+    expect(line12.classification).toBe('uncorroborated');
+  });
 });
 
 describe('parseSubagentJsonInput', () => {
