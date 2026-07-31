@@ -1,0 +1,45 @@
+```json
+{
+  "facts": [
+    {
+      "statement": "The solo variant rules are identical to the regular game, except the player is scoring against themselves rather than competing against other players.",
+      "sourceSentence": "Playing the single-player variant is the same as playing the regular game, the only difference is that you are scoring against yourself."
+    },
+    {
+      "statement": "The first solo challenge is to achieve a higher total score for each match.",
+      "sourceSentence": "To start, just try to get a higher total score for each match."
+    },
+    {
+      "statement": "The second solo challenge is to achieve a multiple of 7 as the final score in each game during the match.",
+      "sourceSentence": "After you've conquered that, attempt to get a multiple of 7 as your final score in each game during the match."
+    },
+    {
+      "statement": "The specific multiples of 7 referenced as target scores are 7, 14, 21, 28, 35, 42, and 49.",
+      "sourceSentence": "As a reminder multiples of 7 are 7, 14, 21, 28, 35, 42, and 49.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "target multiples of 7",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "To achieve a perfect solo match, the player must obtain one of each target multiple of 7 as a final score across games in the match, in no particular order.",
+      "sourceSentence": "Therefore for a perfect solo match you would have to achieve a score of 1 of each in no particular order.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "of each target multiple",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The third solo challenge is to achieve one of each of the 7 scoring hands in each game during the match in no particular order.",
+      "sourceSentence": "And after you've conquered that, attempt to get one of each of the 7 scoring hands in each game during the match in no particular order.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "scoring hands",
+        "approximate": false
+      }
+    }
+  ]
+}
+```

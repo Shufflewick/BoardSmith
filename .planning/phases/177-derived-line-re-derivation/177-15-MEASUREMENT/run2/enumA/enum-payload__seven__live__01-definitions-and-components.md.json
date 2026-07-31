@@ -1,0 +1,64 @@
+{
+  "facts": [
+    {
+      "statement": "A hand is the set of cards a player holds.",
+      "sourceSentence": "Hand: The cards each player holds."
+    },
+    {
+      "statement": "Each player begins the game with 3 cards in hand.",
+      "sourceSentence": "Hand: The cards each player holds. Each starts with 3 and ends the game with 10.",
+      "numericValue": { "magnitude": 3, "unit": "cards in starting hand", "approximate": false }
+    },
+    {
+      "statement": "Each player finishes the game holding 10 cards.",
+      "sourceSentence": "Hand: The cards each player holds. Each starts with 3 and ends the game with 10.",
+      "numericValue": { "magnitude": 10, "unit": "cards in ending hand", "approximate": false }
+    },
+    {
+      "statement": "A set is a group of cards whose numbers all match, requiring a minimum of 2 cards.",
+      "sourceSentence": "Set: 2+ cards with matching numbers.",
+      "numericValue": { "magnitude": 2, "unit": "cards minimum in a set", "approximate": false }
+    },
+    {
+      "statement": "Three cards showing 5, 5, 5 is given as an example of a set.",
+      "sourceSentence": "example: 5, 5, 5"
+    },
+    {
+      "statement": "A run is a group of cards in consecutive numeric order, requiring a minimum of 3 cards.",
+      "sourceSentence": "Run: 3+ cards in numeric order.",
+      "numericValue": { "magnitude": 3, "unit": "cards minimum in a run", "approximate": false }
+    },
+    {
+      "statement": "Cards showing 5, 6, 7 is given as an example of a run.",
+      "sourceSentence": "example: 5, 6, 7"
+    },
+    {
+      "statement": "Card numbers span the range 1 through 7.",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "numericValue": { "magnitude": 7, "unit": "highest card number", "approximate": false }
+    },
+    {
+      "statement": "The cards come in 4 colors.",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "numericValue": { "magnitude": 4, "unit": "colors", "approximate": false }
+    },
+    {
+      "statement": "Each distinct card exists in 4 copies.",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "numericValue": { "magnitude": 4, "unit": "copies of each card", "approximate": false }
+    },
+    {
+      "statement": "The game also includes 7 bonus point cards.",
+      "sourceSentence": "In addition, there are 7 bonus point cards.",
+      "numericValue": { "magnitude": 7, "unit": "bonus point cards", "approximate": false }
+    },
+    {
+      "statement": "The game's designer is JT Smith.",
+      "sourceSentence": "JT Smith"
+    },
+    {
+      "statement": "The game credits a list of play testers, beginning with Patrick Galagan and ending with Marylin Vanderhoof.",
+      "sourceSentence": "Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof"
+    }
+  ]
+}

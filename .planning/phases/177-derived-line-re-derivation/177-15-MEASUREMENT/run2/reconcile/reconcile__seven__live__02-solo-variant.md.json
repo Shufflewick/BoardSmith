@@ -1,0 +1,56 @@
+```json
+{
+  "both": [
+    {
+      "statement": "The solo variant is played the same as the regular game, the only difference being scoring against yourself.",
+      "quotedFromA": "The solo variant uses the same rules and procedures as the regular game.",
+      "quotedFromB": "The solo variant is played the same as the regular game, with the only difference being that you score against yourself."
+    },
+    {
+      "statement": "The first solo objective is to achieve a higher total score in each match.",
+      "quotedFromA": "The first solo objective is to beat your own total score for each match.",
+      "quotedFromB": "The first solo challenge is to achieve a higher total score in each match."
+    },
+    {
+      "statement": "The second solo objective is to achieve a multiple of 7 as the final score in each game during the match.",
+      "quotedFromA": "After completing the higher-total-score objective, the next solo objective is to finish every game of a match with a final score that is a multiple of 7.",
+      "quotedFromB": "The second solo challenge is to achieve a multiple of 7 as the final score in each game during the match."
+    },
+    {
+      "statement": "The valid multiples of 7 for solo scoring are 7, 14, 21, 28, 35, 42, and 49.",
+      "quotedFromA": "The multiples of 7 relevant to that objective are listed as 7, 14, 21, 28, 35, 42, and 49.",
+      "quotedFromB": "The valid multiples of 7 for solo scoring are 7, 14, 21, 28, 35, 42, and 49."
+    },
+    {
+      "statement": "A perfect solo match requires scoring one of each of the multiples of 7, in any order.",
+      "quotedFromA": "A perfect solo match requires scoring one of each listed multiple of 7, in any order.",
+      "quotedFromB": "A perfect solo match requires achieving a score matching each of the valid multiples (one of each) in no particular order."
+    },
+    {
+      "statement": "The third solo objective is to achieve one of each of the 7 scoring hands in each game during the match, in any order.",
+      "quotedFromA": "After completing the multiples-of-7 objective, the final solo objective is to achieve each of the 7 scoring hands across the games of a match, in any order.",
+      "quotedFromB": "The third solo challenge is to achieve one of each of the 7 scoring hands in each game during the match in no particular order."
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "The solo variant is played by a single player.",
+      "sourceSentence": "Playing the single-player variant is the same as playing the regular game, the only difference is that you are scoring against yourself."
+    },
+    {
+      "statement": "The only rules difference in the solo variant is that the player scores against their own prior results rather than against an opponent.",
+      "sourceSentence": "Playing the single-player variant is the same as playing the regular game, the only difference is that you are scoring against yourself."
+    },
+    {
+      "statement": "A match is composed of multiple individual games, each with its own final score.",
+      "sourceSentence": "After you've conquered that, attempt to get a multiple of 7 as your final score in each game during the match."
+    },
+    {
+      "statement": "The solo objectives form an ordered progression, each unlocked after conquering the previous one.",
+      "sourceSentence": "And after you've conquered that, attempt to get one of each of the 7 scoring hands in each game during the match in no particular order."
+    }
+  ],
+  "bOnly": [],
+  "derivedLineProposals": []
+}
+```

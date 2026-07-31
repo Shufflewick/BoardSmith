@@ -1,0 +1,255 @@
+```json
+{
+  "both": [
+    {
+      "statement": "The game is recommended for ages 14 and up.",
+      "quotedFromA": "The game has a recommended minimum age of 14.",
+      "quotedFromB": "The game is recommended for ages 14 and older."
+    },
+    {
+      "statement": "The game is played by 2 players.",
+      "quotedFromA": "The game is played by exactly two players.",
+      "quotedFromB": "The game is designed for 2 players."
+    },
+    {
+      "statement": "The stated playing time is 30 minutes.",
+      "quotedFromA": "The stated playing time is 30 minutes.",
+      "quotedFromB": "The standard game duration is 30 minutes."
+    },
+    {
+      "statement": "The game contains 2 Boxer Cards.",
+      "quotedFromA": "The game contains 2 Boxer Cards.",
+      "quotedFromB": "The game contains 2 Boxer Cards."
+    },
+    {
+      "statement": "The game contains 16 Action Cards.",
+      "quotedFromA": "The game contains 16 Action Cards.",
+      "quotedFromB": "The game contains 16 Action Cards."
+    },
+    {
+      "statement": "The game contains 6 Guard Cards.",
+      "quotedFromA": "The game contains 6 Guard Cards.",
+      "quotedFromB": "The game contains 6 Guard Cards."
+    },
+    {
+      "statement": "The game contains 1 Rules Sheet.",
+      "quotedFromA": "The game contains 1 Rules Sheet.",
+      "quotedFromB": "The game contains 1 Rules Sheet."
+    },
+    {
+      "statement": "A player wins by breaking all three of the opponent's Guards.",
+      "quotedFromA": "A player wins by knocking out the opponent, which is achieved by breaking all three of the opponent's Guards.",
+      "quotedFromB": "A player wins by breaking all three of their opponent's Guards."
+    },
+    {
+      "statement": "Each player chooses a color, red or blue, and takes all cards of that color.",
+      "quotedFromA": "During setup, each player chooses a color — either red or blue — and takes all cards of that color.",
+      "quotedFromB": "Each player must choose a color (red or blue) and take all cards of that color."
+    },
+    {
+      "statement": "Three designated table areas make up the ring.",
+      "quotedFromA": "The ring is made up of three designated table areas.",
+      "quotedFromB": "Three designated areas on the table make up the ring."
+    },
+    {
+      "statement": "The area in front of each player is their corner; the area between players is the center ring.",
+      "quotedFromA": "The area directly in front of each player is that player's corner, and the area between the two players is the center ring.",
+      "quotedFromB": "The area directly in front of each player is their respective corner and the area in-between them is the center ring."
+    },
+    {
+      "statement": "The blue player's boxer card starts in the blue player's corner.",
+      "quotedFromA": "At the start of the game, the blue player's boxer card begins in the blue player's corner.",
+      "quotedFromB": "The blue player starts with their Boxer card in their own corner."
+    },
+    {
+      "statement": "The red player's boxer card starts in the center ring.",
+      "quotedFromA": "At the start of the game, the red player's boxer card begins in the center ring.",
+      "quotedFromB": "The red player starts with their Boxer card in the center ring."
+    },
+    {
+      "statement": "Each player places their three Guard cards next to themselves with the ready sides face up.",
+      "quotedFromA": "Each player places their three Guard cards next to themselves with the ready sides face up.",
+      "quotedFromB": "Each player places three Guard cards face-up next to them with the ready side showing."
+    },
+    {
+      "statement": "Each player places one Rest card face up to create their own discard pile.",
+      "quotedFromA": "Each player creates their own discard pile by placing one of their Rest cards face up next to them.",
+      "quotedFromB": "Each player places one Rest card face-up to create their own discard pile."
+    },
+    {
+      "statement": "Each player holds their remaining cards in hand, hidden from their opponent.",
+      "quotedFromA": "Each player holds their remaining cards in hand, hidden from the opponent.",
+      "quotedFromB": "Each player holds their remaining cards in hand hidden from their opponent."
+    },
+    {
+      "statement": "The blue player chooses one card from their hand and discards it during setup.",
+      "quotedFromA": "During setup, the blue player chooses one card from their hand and discards it.",
+      "quotedFromB": "The blue player must choose one card from their hand and discard it."
+    },
+    {
+      "statement": "The blue player names a card that the red player must discard.",
+      "quotedFromA": "The blue player then names a card that the red player must discard.",
+      "quotedFromB": "The blue player must name a card that the red player must discard."
+    },
+    {
+      "statement": "The card blue discards and the card blue names for red need not be the same card.",
+      "quotedFromA": "The card blue discards and the card blue names for red need not be the same card.",
+      "quotedFromB": "The card blue discards and the card red must discard do not have to be the same card."
+    },
+    {
+      "statement": "These two setup discards are in addition to the Rest cards both players already discarded.",
+      "quotedFromA": "These two setup discards are additional to the Rest cards each player already discarded.",
+      "quotedFromB": "The additional discards during setup are in addition to the Rest cards already placed."
+    },
+    {
+      "statement": "Neither of the two additional setup discards may be a Rest card.",
+      "quotedFromA": "Neither of the two additional setup discards may be a Rest card.",
+      "quotedFromB": "Neither of the additional discards made during setup can be a Rest card."
+    },
+    {
+      "statement": "Each round consists of three phases, in order: Plan, Fight, and Discard.",
+      "quotedFromA": "Each round consists of three phases, in order: Plan, Fight, and Discard.",
+      "quotedFromB": "Each round consists of three phases: Plan, Fight, and Discard."
+    },
+    {
+      "statement": "Both players complete each phase simultaneously.",
+      "quotedFromA": "Both players complete each phase simultaneously.",
+      "quotedFromB": "Both players must complete each phase at the same time."
+    },
+    {
+      "statement": "In the Plan phase, a player chooses any two action cards from their hand and places them face-down in any order next to their boxer.",
+      "quotedFromA": "In the Plan phase, a player chooses any two action cards from their hand and places them face-down in any order next to their boxer.",
+      "quotedFromB": "In the Plan phase, each player chooses any two Action Cards from their hand."
+    },
+    {
+      "statement": "The card closest to the boxer is the first action; the other card is the second action.",
+      "quotedFromA": "Of the two planned cards, the one closest to the boxer is the first action and the other is the second action.",
+      "quotedFromB": "The card placed closest to the Boxer is the first action."
+    },
+    {
+      "statement": "Both players have the same set of cards.",
+      "quotedFromA": "Both players have the same set of cards.",
+      "quotedFromB": "Both players have the same set of cards available to them."
+    },
+    {
+      "statement": "Players may look through each other's discard pile at any time.",
+      "quotedFromA": "Players may look through each other's discard pile at any time.",
+      "quotedFromB": "Players may look through each other's discard pile at any time."
+    },
+    {
+      "statement": "In the Fight phase, both players simultaneously flip their first action card face up and compare the cards' timings to determine resolution order.",
+      "quotedFromA": "In the Fight phase, both players simultaneously flip their first action card face up and compare the cards' timings to determine resolution order.",
+      "quotedFromB": "In the Fight phase, both players flip their first Action Card face-up at the same time."
+    },
+    {
+      "statement": "The player whose card has the lower timing resolves their action first.",
+      "quotedFromA": "The player whose card has the lower timing resolves their action first.",
+      "quotedFromB": "The player with the lower timing value on their card resolves their action first."
+    },
+    {
+      "statement": "If both cards have the same timing, the actions resolve simultaneously.",
+      "quotedFromA": "If both cards have the same timing, the actions resolve simultaneously.",
+      "quotedFromB": "When both cards have the same timing value, both actions resolve simultaneously."
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "The game is titled 1-2 Punch.",
+      "sourceSentence": "\"1-2 PUNCH\""
+    },
+    {
+      "statement": "The game was designed by Chris Williams.",
+      "sourceSentence": "\"GAME DESIGN Chris Williams\""
+    },
+    {
+      "statement": "Character art is credited to Maristella Nicoletto.",
+      "sourceSentence": "\"CHARACTER ART Maristella Nicoletto\""
+    },
+    {
+      "statement": "Game art is credited to Kalli Williams.",
+      "sourceSentence": "\"GAME ART Kalli Williams\""
+    },
+    {
+      "statement": "The game's theme is a boxing match between two titans in a ring.",
+      "sourceSentence": "\"Ladies and gentlemen, boxing fans from around the world gather tonight to witness two titans clash in the ring!\""
+    },
+    {
+      "statement": "One boxer is Cadman Morris, associated with the blue corner and described as the challenger from Newport, Wales.",
+      "sourceSentence": "\"In the blue corner is our challenger hailing from Newport, Wales, weighing 153lbs, 5ft 9in tall, the one and only, the notorious, the warrior: Cadman Morris!\""
+    },
+    {
+      "statement": "Cadman Morris is described as weighing 153 lbs.",
+      "sourceSentence": "\"In the blue corner is our challenger hailing from Newport, Wales, weighing 153lbs, 5ft 9in tall, the one and only, the notorious, the warrior: Cadman Morris!\""
+    },
+    {
+      "statement": "The other boxer is Darius Akachi, described as wearing red and white trunks, an Olympic gold medal winner and the current heavyweight titleholder.",
+      "sourceSentence": "\"Wearing red and white trunks, weighing in at 216lbs and standing at an intimidating 6ft 3in, an Olympic gold medal winner and our current heavyweight titleholder, perhaps the greatest of all time: Darius Akachi!\""
+    },
+    {
+      "statement": "Darius Akachi is described as weighing 216 lbs.",
+      "sourceSentence": "\"Wearing red and white trunks, weighing in at 216lbs and standing at an intimidating 6ft 3in, an Olympic gold medal winner and our current heavyweight titleholder, perhaps the greatest of all time: Darius Akachi!\""
+    },
+    {
+      "statement": "1-2 Punch is a strategic boxing card game for two opposing players.",
+      "sourceSentence": "\"1-2 Punch is an easy to learn strategic boxing card game that pits two players against one another in the ring.\""
+    },
+    {
+      "statement": "The core skill of the game is predicting the opponent's moves in order to land punches.",
+      "sourceSentence": "\"Predict your opponent's moves to land the perfect punch!\""
+    },
+    {
+      "statement": "The Jab card has a timing of 1.",
+      "sourceSentence": "\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\""
+    },
+    {
+      "statement": "The Retreat card has a timing of 2.",
+      "sourceSentence": "\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\""
+    },
+    {
+      "statement": "In the worked example, Red's Jab resolves before Blue's Retreat because Jab's timing is lower.",
+      "sourceSentence": "\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\""
+    }
+  ],
+  "bOnly": [],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 32,
+      "derivedLineText": "Derived (p.1): The box contains 2 Boxer Cards, 16 Action Cards, 6 Guard Cards, and 1 Rules Sheet.",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "The game contains 2 Boxer Cards.",
+        "The game contains 16 Action Cards.",
+        "The game contains 6 Guard Cards.",
+        "The game contains 1 Rules Sheet."
+      ]
+    },
+    {
+      "lineNumber": 61,
+      "derivedLineText": "Derived (p.1): A round always proceeds through exactly three phases, in this order: Plan, Fight, Discard.",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "Each round consists of three phases, in order: Plan, Fight, and Discard."
+      ]
+    },
+    {
+      "lineNumber": 68,
+      "derivedLineText": "Derived (p.1): Each player commits exactly two action cards per round, placed face-down in a chosen order (first action, second action), before the Fight phase begins.",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "In the Plan phase, a player chooses any two action cards from their hand and places them face-down in any order next to their boxer.",
+        "The card closest to the boxer is the first action; the other card is the second action."
+      ]
+    },
+    {
+      "lineNumber": 81,
+      "derivedLineText": "Derived (p.1): Each action card carries a numeric timing value; when both players' first (or second) action cards are revealed, the card with the lower timing value resolves first, and cards with equal timing resolve simultaneously.",
+      "proposedClassification": "corroborated",
+      "citedBothStatements": [
+        "In the Fight phase, both players simultaneously flip their first action card face up and compare the cards' timings to determine resolution order.",
+        "The player whose card has the lower timing resolves their action first.",
+        "If both cards have the same timing, the actions resolve simultaneously."
+      ]
+    }
+  ]
+}
+```

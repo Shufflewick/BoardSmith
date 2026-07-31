@@ -1,0 +1,49 @@
+{
+  "facts": [
+    {
+      "statement": "The solo variant is played by a single player.",
+      "sourceSentence": "Playing the single-player variant is the same as playing the regular game, the only difference is that you are scoring against yourself.",
+      "numericValue": { "magnitude": 1, "unit": "player", "approximate": false }
+    },
+    {
+      "statement": "The solo variant uses the same rules and procedures as the regular game.",
+      "sourceSentence": "Playing the single-player variant is the same as playing the regular game, the only difference is that you are scoring against yourself."
+    },
+    {
+      "statement": "The only rules difference in the solo variant is that the player scores against their own prior results rather than against an opponent.",
+      "sourceSentence": "Playing the single-player variant is the same as playing the regular game, the only difference is that you are scoring against yourself."
+    },
+    {
+      "statement": "The first solo objective is to beat your own total score for each match.",
+      "sourceSentence": "To start, just try to get a higher total score for each match."
+    },
+    {
+      "statement": "After completing the higher-total-score objective, the next solo objective is to finish every game of a match with a final score that is a multiple of 7.",
+      "sourceSentence": "After you've conquered that, attempt to get a multiple of 7 as your final score in each game during the match.",
+      "numericValue": { "magnitude": 7, "unit": "score multiple", "approximate": false }
+    },
+    {
+      "statement": "The multiples of 7 relevant to that objective are listed as 7, 14, 21, 28, 35, 42, and 49.",
+      "sourceSentence": "As a reminder multiples of 7 are 7, 14, 21, 28, 35, 42, and 49.",
+      "numericValue": { "magnitude": 7, "unit": "listed multiples of 7", "approximate": false }
+    },
+    {
+      "statement": "A perfect solo match requires scoring one of each listed multiple of 7, in any order.",
+      "sourceSentence": "Therefore for a perfect solo match you would have to achieve a score of 1 of each in no particular order.",
+      "numericValue": { "magnitude": 1, "unit": "occurrence of each listed multiple", "approximate": false }
+    },
+    {
+      "statement": "After completing the multiples-of-7 objective, the final solo objective is to achieve each of the 7 scoring hands across the games of a match, in any order.",
+      "sourceSentence": "And after you've conquered that, attempt to get one of each of the 7 scoring hands in each game during the match in no particular order.",
+      "numericValue": { "magnitude": 7, "unit": "scoring hands", "approximate": false }
+    },
+    {
+      "statement": "A match is composed of multiple individual games, each with its own final score.",
+      "sourceSentence": "After you've conquered that, attempt to get a multiple of 7 as your final score in each game during the match."
+    },
+    {
+      "statement": "The solo objectives form an ordered progression, each unlocked after conquering the previous one.",
+      "sourceSentence": "And after you've conquered that, attempt to get one of each of the 7 scoring hands in each game during the match in no particular order."
+    }
+  ]
+}

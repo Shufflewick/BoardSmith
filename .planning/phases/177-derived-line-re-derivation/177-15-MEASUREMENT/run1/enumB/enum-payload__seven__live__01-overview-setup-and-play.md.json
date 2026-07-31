@@ -1,0 +1,122 @@
+```json
+{
+  "facts": [
+    {
+      "statement": "The game is a rummy-style card game.",
+      "sourceSentence": "Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up."
+    },
+    {
+      "statement": "The game supports between 1 and 7 players.",
+      "sourceSentence": "Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "players (maximum)",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A typical game plays in about 7 minutes.",
+      "sourceSentence": "Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "minutes",
+        "approximate": true
+      }
+    },
+    {
+      "statement": "The game is recommended for players aged 7 and older.",
+      "sourceSentence": "Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up."
+    },
+    {
+      "statement": "Each player receives one Ways to Score card during setup.",
+      "sourceSentence": "Give each player a \"Ways to Score\" card."
+    },
+    {
+      "statement": "Cards are placed face-down in the middle of the table and shuffled.",
+      "sourceSentence": "Create a mess of face-down cards in the middle of the table and mixes them around."
+    },
+    {
+      "statement": "Each player draws 3 cards from the middle to form their starting hand.",
+      "sourceSentence": "Each player should then draw 3 cards from the mess to form their hand.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each player draws 2 cards per round.",
+      "sourceSentence": "Each player draws 2 cards into their hand.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each player discards 1 card per round, placed face-up in their own discard pile.",
+      "sourceSentence": "Each player discards 1 card from their hand face-up off to the side of the table in their own discard pile."
+    },
+    {
+      "statement": "Each player will have 7 discards by the end of the game.",
+      "sourceSentence": "If you ever lose track of which round you are on, count your discards, you will have 7 discards when the game is over.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "discards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Discard piles are public information.",
+      "sourceSentence": "Discards are considered public information."
+    },
+    {
+      "statement": "The game ends when all players have 10 cards in hand.",
+      "sourceSentence": "If everyone has 10 cards, end the game; otherwise begin the next round.",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Scoring is based on each player's best hand of 7 cards.",
+      "sourceSentence": "Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Bonus point cards can be added to a player's score even if they extend beyond the hand of 7 cards.",
+      "sourceSentence": "Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score."
+    },
+    {
+      "statement": "A match consists of 7 games.",
+      "sourceSentence": "A match consists of 7 games.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "games",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Players track the total score across all games in a match.",
+      "sourceSentence": "Play 7 games and keep track of each player's score total."
+    },
+    {
+      "statement": "The player with the highest total score at the end of a match wins.",
+      "sourceSentence": "Whichever player has the highest total score at the end of the match wins!"
+    },
+    {
+      "statement": "The standard match format is a best of 7 series.",
+      "sourceSentence": "A full match of Seven is naturally played in a best of 7 series."
+    },
+    {
+      "statement": "Alternate match lengths of best of 3 games or best of 10 games are options.",
+      "sourceSentence": "That said, if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games."
+    }
+  ]
+}
+```

@@ -1,0 +1,341 @@
+{
+  "runLabel": "run1",
+  "slices": [
+    {
+      "slice": "seven__live__01-definitions-and-components.md",
+      "enumA_facts": 13,
+      "enumB_facts": 8,
+      "both_claimed": 8,
+      "both_grounded": 8,
+      "both_rejected": 0,
+      "rejections": [],
+      "derivedLineCountExpected": 1,
+      "composedResults": [
+        {
+          "lineNumber": 21,
+          "outcome": {
+            "ok": false,
+            "reason": "Operand \"Card numbers range from 1 to 7.\"'s two matched facts disagree on numeric value (A: 7 highest card number, B: 7 card numbers) — refusing to compose from an inconsistent operand."
+          }
+        }
+      ],
+      "classifications": [
+        {
+          "slicePath": "seven__live__01-definitions-and-components.md",
+          "lineNumber": 21,
+          "derivedLineText": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "Reconciler claimed \"corroborated-by-composition\" citing a composed-fact id that either does not exist or was verified against different Derived-line text — downgraded rather than trusted."
+        }
+      ],
+      "missedCount": 8,
+      "missed": [
+        "Each player begins the game with 3 cards in hand.",
+        "Each player ends the game with 10 cards in hand.",
+        "A set is 2 or more cards with matching numbers.",
+        "A run is 3 or more cards in numeric order.",
+        "Card numbers range from 1 to 7.",
+        "There are 4 colors of cards.",
+        "Each card exists in 4 copies.",
+        "The game includes 7 bonus point cards."
+      ]
+    },
+    {
+      "slice": "seven__live__01-overview-setup-and-play.md",
+      "enumA_facts": 24,
+      "enumB_facts": 19,
+      "both_claimed": 21,
+      "both_grounded": 21,
+      "both_rejected": 0,
+      "rejections": [],
+      "derivedLineCountExpected": 2,
+      "composedResults": [
+        {
+          "lineNumber": 36,
+          "outcome": {
+            "ok": false,
+            "reason": "could not parse a claimed numeric result from the Derived line text"
+          }
+        }
+      ],
+      "classifications": [
+        {
+          "slicePath": "seven__live__01-overview-setup-and-play.md",
+          "lineNumber": 36,
+          "derivedLineText": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end.",
+          "classification": "uncorroborated",
+          "citedFactIds": [],
+          "reason": "Reconciler claimed \"corroborated-by-composition\" citing a composed-fact id that either does not exist or was verified against different Derived-line text — downgraded rather than trusted."
+        },
+        {
+          "slicePath": "seven__live__01-overview-setup-and-play.md",
+          "lineNumber": 38,
+          "derivedLineText": "Derived (p.1): Rounds are played simultaneously by all players, not in turn order.",
+          "classification": "quote-unverified",
+          "citedFactIds": [],
+          "reason": "This project's rulebook has not been verified against its archived source (computeVerificationScope !== \"full\"). A suspect finding cannot be reported until quotes are verified — an unverified-quote defect is indistinguishable from a genuinely wrong inference (177-EXPERIMENTS/README.md CORRECTION, seven:11)."
+        }
+      ],
+      "missedCount": 21,
+      "missed": [
+        "The game (Seven) is a rummy-style card game.",
+        "The minimum player count is 1.",
+        "The maximum player count is 7.",
+        "A game takes roughly 7 minutes to play.",
+        "The recommended minimum player age is 7.",
+        "Each player receives one \"Ways to Score\" card during setup.",
+        "Setup creates a shared pool of face-down cards in the middle of the table, shuffled.",
+        "Each player's starting hand is 3 cards drawn from the mess.",
+        "In each round a player draws 2 cards into their hand.",
+        "In each round a player discards 1 card face-up into their own personal discard pile.",
+        "At the end of the game a player has 7 discards.",
+        "Discard piles are public information.",
+        "The game ends when all players have 10 cards in hand; otherwise the next round begins.",
+        "Scoring uses each player's best 7-card hand.",
+        "Bonus point cards add to a player's score even when they extend beyond the scored 7-card hand.",
+        "A match consists of 7 games.",
+        "Players play 7 games and track each player's running score total.",
+        "The player with the highest total score at match end wins the match.",
+        "The default/standard match format is a best-of-7 series.",
+        "Players may optionally shorten a match to a best of 3 games.",
+        "Players may optionally lengthen a match to a best of 10 games."
+      ]
+    },
+    {
+      "slice": "seven__live__02-solo-variant.md",
+      "enumA_facts": 8,
+      "enumB_facts": 6,
+      "both_claimed": 6,
+      "both_grounded": 6,
+      "both_rejected": 0,
+      "rejections": [],
+      "derivedLineCountExpected": 0,
+      "composedResults": [],
+      "classifications": [],
+      "missedCount": 6,
+      "missed": [
+        "The solo variant is played the same as the regular game, except the player scores against themselves rather than an opponent.",
+        "The first solo objective is to achieve a higher total score for each match.",
+        "The second solo objective is to achieve a multiple of 7 as the final score in each game during the match.",
+        "The multiples of 7 referenced are 7, 14, 21, 28, 35, 42, and 49.",
+        "A perfect solo match requires achieving one of each of the listed multiples, in no particular order.",
+        "The final solo objective is to make one of each of the 7 scoring hands in each game during the match, in no particular order."
+      ]
+    },
+    {
+      "slice": "one-two-punch__live__01-setup-and-round-structure.md",
+      "enumA_facts": 48,
+      "enumB_facts": 35,
+      "both_claimed": 31,
+      "both_grounded": 31,
+      "both_rejected": 0,
+      "rejections": [],
+      "derivedLineCountExpected": 4,
+      "composedResults": [],
+      "classifications": [
+        {
+          "slicePath": "one-two-punch__live__01-setup-and-round-structure.md",
+          "lineNumber": 32,
+          "derivedLineText": "Derived (p.1): The box contains 2 Boxer Cards, 16 Action Cards, 6 Guard Cards, and 1 Rules Sheet.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "5e119782d83f8c39",
+            "5e119782d83f8c39",
+            "5e119782d83f8c39"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "one-two-punch__live__01-setup-and-round-structure.md",
+          "lineNumber": 61,
+          "derivedLineText": "Derived (p.1): A round always proceeds through exactly three phases, in this order: Plan, Fight, Discard.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "a747ec680a4273c6"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "one-two-punch__live__01-setup-and-round-structure.md",
+          "lineNumber": 68,
+          "derivedLineText": "Derived (p.1): Each player commits exactly two action cards per round, placed face-down in a chosen order (first action, second action), before the Fight phase begins.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "ddcb93bb33d0cbc1",
+            "f13e5a67ad751f82"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "one-two-punch__live__01-setup-and-round-structure.md",
+          "lineNumber": 81,
+          "derivedLineText": "Derived (p.1): Each action card carries a numeric timing value; when both players' first (or second) action cards are revealed, the card with the lower timing value resolves first, and cards with equal timing resolve simultaneously.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "6b2a63a7235b7759",
+            "bb1cf92cad3c3efd",
+            "c693dcf87a1b71ae"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ],
+      "missedCount": 22,
+      "missed": [
+        "The game is for ages 14 and up.",
+        "The game is for 2 players.",
+        "A game takes 30 minutes.",
+        "1-2 Punch is a strategic boxing card game for two players, easy to learn.",
+        "The core activity is predicting the opponent's moves to land the perfect punch.",
+        "You win by knocking out your opponent by breaking all three of their Guards.",
+        "Each player chooses a color, red or blue, and takes all cards of that color.",
+        "Three areas are designated on the table to make up the ring.",
+        "The area directly in front of each player is their corner, and the area between them is the center ring.",
+        "The blue player's boxer card starts in their corner.",
+        "The red player's boxer card starts in the center ring.",
+        "Each player places their three Guard cards next to them with the ready sides face up.",
+        "Each player places one Rest card face up next to them to create their own discard pile.",
+        "Each player holds the remaining cards in hand hidden from their opponent.",
+        "The blue player chooses one card from their hand and discards it.",
+        "The blue player names a card that the red player must discard.",
+        "The blue player's own discard and the card named for red do not have to be the same card.",
+        "These two setup discards are in addition to the Rest cards both players already discarded.",
+        "Neither of the two additional setup discards may be a Rest card.",
+        "Both players must complete each phase at the same time.",
+        "Both players have the same set of cards.",
+        "Players may look through each other's discard pile at any time."
+      ]
+    },
+    {
+      "slice": "one-two-punch__live__02-action-cards-and-resolution.md",
+      "enumA_facts": 43,
+      "enumB_facts": 45,
+      "both_claimed": 44,
+      "both_grounded": 44,
+      "both_rejected": 0,
+      "rejections": [],
+      "derivedLineCountExpected": 7,
+      "composedResults": [],
+      "classifications": [
+        {
+          "slicePath": "one-two-punch__live__02-action-cards-and-resolution.md",
+          "lineNumber": 16,
+          "derivedLineText": "Derived (p.2): A Jab can only flip a ready Guard card to exhausted; it never removes/breaks a Guard card outright.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "a1f51d197a7e051f",
+            "00526900ce4962f0"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "one-two-punch__live__02-action-cards-and-resolution.md",
+          "lineNumber": 68,
+          "derivedLineText": "Derived (p.2): A \"broken\" Guard card is permanently removed from the game (returned to the box), distinct from \"exhausted\" (flipped face, remains in play and can be flipped back to ready by Rest). Punch can only break an already-exhausted Guard card; against an opponent with no exhausted Guards, Punch instead exhausts one of their ready Guards (same effect as a Jab in that case).",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "123f89eb172d06bd",
+            "7be6187933e3ef39",
+            "f50621c36b63d0a7",
+            "00526900ce4962f0",
+            "a1f51d197a7e051f"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "one-two-punch__live__02-action-cards-and-resolution.md",
+          "lineNumber": 82,
+          "derivedLineText": "Derived (p.2): Resolving a round's Fight phase is two sequential sub-steps — resolve both players' first action cards completely (in timing order), then reveal and resolve both players' second action cards (in timing order) — with cards from the first sub-step staying in place, unresolved into the discard pile, until the Discard phase.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "78186a2aea5c3366",
+            "87876d57aad537a9",
+            "b9e301760ec71da3",
+            "c26196a45d555416",
+            "a5b08b6016b50de5"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "one-two-punch__live__02-action-cards-and-resolution.md",
+          "lineNumber": 106,
+          "derivedLineText": "Derived (p.2): Win condition: reduce an opponent to 0 Guard cards (all 3 broken) to knock them out and win immediately. If both players' third Guard card is broken by the same action's resolution, the game ends in a draw instead of a win.",
+          "classification": "corroborated",
+          "citedFactIds": [
+            "e3bc13cd8bae1c70",
+            "d170df094a8d3256"
+          ],
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "slicePath": "one-two-punch__live__02-action-cards-and-resolution.md",
+          "lineNumber": 117,
+          "derivedLineText": "Derived (p.2): Each player's card set includes exactly 2 Rest cards (implied by the first Tip's warning against holding both at once).",
+          "classification": "quote-unverified",
+          "citedFactIds": [],
+          "reason": "This project's rulebook has not been verified against its archived source (computeVerificationScope !== \"full\"). A suspect finding cannot be reported until quotes are verified — an unverified-quote defect is indistinguishable from a genuinely wrong inference (177-EXPERIMENTS/README.md CORRECTION, seven:11)."
+        },
+        {
+          "slicePath": "one-two-punch__live__02-action-cards-and-resolution.md",
+          "lineNumber": 128,
+          "derivedLineText": "Derived (p.2): No edition or printing number is stated anywhere on this page; the only dating information is the 2020 copyright year in the colophon.",
+          "classification": "quote-unverified",
+          "citedFactIds": [],
+          "reason": "This project's rulebook has not been verified against its archived source (computeVerificationScope !== \"full\"). A suspect finding cannot be reported until quotes are verified — an unverified-quote defect is indistinguishable from a genuinely wrong inference (177-EXPERIMENTS/README.md CORRECTION, seven:11)."
+        },
+        {
+          "slicePath": "one-two-punch__live__02-action-cards-and-resolution.md",
+          "lineNumber": 132,
+          "derivedLineText": "Derived (p.2): This section marks no rules as variants, optional modules, or advanced/expert rules.",
+          "classification": "quote-unverified",
+          "citedFactIds": [],
+          "reason": "This project's rulebook has not been verified against its archived source (computeVerificationScope !== \"full\"). A suspect finding cannot be reported until quotes are verified — an unverified-quote defect is indistinguishable from a genuinely wrong inference (177-EXPERIMENTS/README.md CORRECTION, seven:11)."
+        }
+      ],
+      "missedCount": 32,
+      "missed": [
+        "The Jab action card has a timing value of 1.",
+        "If both boxers are in their corners, a Jab does nothing.",
+        "If all of the opponent's Guard cards are already exhausted, a Jab does nothing.",
+        "The Retreat action card has a timing value of 2.",
+        "If a boxer is already in their corner, Retreat does nothing.",
+        "If a boxer is in the center ring, Retreat moves that boxer to their corner.",
+        "The Advance action card has a timing value of 3.",
+        "If a boxer is already in the center ring and/or the opponent also plays Advance for the same action, Advance does nothing.",
+        "If conditions allow, Advance moves a boxer to the center ring.",
+        "If Advance resolves and the opponent is in the center ring, the opponent is pushed into their corner.",
+        "The Block action card has a timing value of 4.",
+        "If the opponent plays a Punch for the same action, Block ignores any effect of that Punch.",
+        "Block actions do not block Jabs.",
+        "If the opponent did not play a Punch for that action, Block does nothing.",
+        "The Punch action card has a timing value of 5.",
+        "If a boxer is in their corner, a Punch requires flipping one Guard card from ready to exhausted, then resolving.",
+        "If a boxer in their corner has no ready Guard cards, a Punch does nothing.",
+        "If a boxer is in the center ring, a Punch resolves without flipping a Guard card.",
+        "If a Punch is blocked or both boxers are in their respective corners, the Punch has no effect on the opponent.",
+        "Even when a Punch has no effect (blocked or both in corners), the puncher must still exhaust their own Guard card if in their corner.",
+        "If both players play Punch for the same action while one player is in the center ring, the player punching from their corner must finish exhausting their Guard card before either Punch resolves.",
+        "The Rest action card has a timing value of 6.",
+        "Resting reclaims all action cards from the discard pile into hand.",
+        "Resting does not take any action cards currently in play.",
+        "Flipping a Guard card during Rest is in addition to reclaiming discards.",
+        "After resolving both sets of action cards, place the two action cards played this round into the discard pile.",
+        "After discarding, begin a new round.",
+        "When Resting, only pick up cards currently in the discard pile, not the two action cards from that round.",
+        "A boxer may choose to play a Punch card from their corner without a ready Guard card, but it has no effect.",
+        "Playing a Punch from a corner without a ready Guard card does not force breaking the boxer's own Guard card.",
+        "In the plan phase, action cards may be placed in any order regardless of timing values.",
+        "A Block from the first action does not stop a Punch from the second action."
+      ]
+    }
+  ],
+  "provenance": {
+    "seven": null,
+    "one-two-punch": null
+  },
+  "totals": {
+    "totalBothClaims": 110,
+    "totalGrounded": 110,
+    "totalRejected": 0
+  }
+}

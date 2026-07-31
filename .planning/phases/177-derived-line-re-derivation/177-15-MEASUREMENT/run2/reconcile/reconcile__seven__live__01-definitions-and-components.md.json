@@ -1,0 +1,83 @@
+```json
+{
+  "both": [
+    {
+      "statement": "Each player starts the game with 3 cards in hand.",
+      "quotedFromA": "Each player begins the game with 3 cards in hand.",
+      "quotedFromB": "Each player starts the game with 3 cards in hand."
+    },
+    {
+      "statement": "Each player ends the game with 10 cards in hand.",
+      "quotedFromA": "Each player finishes the game holding 10 cards.",
+      "quotedFromB": "Each player ends the game with 10 cards in hand."
+    },
+    {
+      "statement": "A set is 2 or more cards with matching numbers.",
+      "quotedFromA": "A set is a group of cards whose numbers all match, requiring a minimum of 2 cards.",
+      "quotedFromB": "A set consists of 2 or more cards with matching numbers."
+    },
+    {
+      "statement": "A run is 3 or more cards in consecutive numeric order.",
+      "quotedFromA": "A run is a group of cards in consecutive numeric order, requiring a minimum of 3 cards.",
+      "quotedFromB": "A run consists of 3 or more cards in numeric order."
+    },
+    {
+      "statement": "Card numbers range from 1 to 7.",
+      "quotedFromA": "Card numbers span the range 1 through 7.",
+      "quotedFromB": "Card numbers range from 1 to 7."
+    },
+    {
+      "statement": "There are 4 colors of cards.",
+      "quotedFromA": "The cards come in 4 colors.",
+      "quotedFromB": "There are 4 colors of cards."
+    },
+    {
+      "statement": "There are 4 copies of each distinct card.",
+      "quotedFromA": "Each distinct card exists in 4 copies.",
+      "quotedFromB": "There are 4 copies of each number-color combination of card."
+    },
+    {
+      "statement": "There are 7 bonus point cards in the game.",
+      "quotedFromA": "The game also includes 7 bonus point cards.",
+      "quotedFromB": "There are 7 bonus point cards in the deck."
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "A hand is the set of cards a player holds.",
+      "sourceSentence": "Hand: The cards each player holds."
+    },
+    {
+      "statement": "Three cards showing 5, 5, 5 is given as an example of a set.",
+      "sourceSentence": "example: 5, 5, 5"
+    },
+    {
+      "statement": "Cards showing 5, 6, 7 is given as an example of a run.",
+      "sourceSentence": "example: 5, 6, 7"
+    },
+    {
+      "statement": "The game's designer is JT Smith.",
+      "sourceSentence": "JT Smith"
+    },
+    {
+      "statement": "The game credits a list of play testers, beginning with Patrick Galagan and ending with Marylin Vanderhoof.",
+      "sourceSentence": "Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof"
+    }
+  ],
+  "bOnly": [],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 21,
+      "derivedLineText": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+      "proposedClassification": "corroborated-by-composition",
+      "citedBothStatements": [
+        "Card numbers range from 1 to 7.",
+        "There are 4 colors of cards.",
+        "There are 4 copies of each distinct card.",
+        "There are 7 bonus point cards in the game."
+      ],
+      "arithmeticNote": "The 112-card figure is a product of the three operands 7 (numbers), 4 (colors), and 4 (copies), each independently found-by-both; the trailing '+7 bonus point cards' clause is separately found-by-both as its own fact rather than part of the multiplication. Code should verify 7 x 4 x 4 = 112 and confirm the bonus-card count is additive, not multiplied in."
+    }
+  ]
+}
+```

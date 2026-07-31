@@ -1,0 +1,148 @@
+```json
+{
+  "both": [
+    {
+      "statement": "The game (Seven) is a rummy-style card game.",
+      "quotedFromA": "The game is titled Seven and is a rummy-style card game.",
+      "quotedFromB": "The game is a rummy-style card game."
+    },
+    {
+      "statement": "The minimum player count is 1.",
+      "quotedFromA": "The minimum player count is 1.",
+      "quotedFromB": "The game supports between 1 and 7 players."
+    },
+    {
+      "statement": "The maximum player count is 7.",
+      "quotedFromA": "The maximum player count is 7.",
+      "quotedFromB": "The game supports between 1 and 7 players."
+    },
+    {
+      "statement": "A game takes roughly 7 minutes to play.",
+      "quotedFromA": "A game takes roughly 7 minutes to play.",
+      "quotedFromB": "A typical game plays in about 7 minutes."
+    },
+    {
+      "statement": "The recommended minimum player age is 7.",
+      "quotedFromA": "The recommended minimum player age is 7.",
+      "quotedFromB": "The game is recommended for players aged 7 and older."
+    },
+    {
+      "statement": "Each player receives one \"Ways to Score\" card during setup.",
+      "quotedFromA": "During setup, every player receives one \"Ways to Score\" card.",
+      "quotedFromB": "Each player receives one Ways to Score card during setup."
+    },
+    {
+      "statement": "Setup creates a shared pool of face-down cards in the middle of the table, shuffled.",
+      "quotedFromA": "Setup creates a shared pool of face-down cards in the middle of the table, shuffled by mixing them around.",
+      "quotedFromB": "Cards are placed face-down in the middle of the table and shuffled."
+    },
+    {
+      "statement": "Each player's starting hand is 3 cards drawn from the mess.",
+      "quotedFromA": "Each player's starting hand is 3 cards drawn from the mess.",
+      "quotedFromB": "Each player draws 3 cards from the middle to form their starting hand."
+    },
+    {
+      "statement": "In each round a player draws 2 cards into their hand.",
+      "quotedFromA": "In each round a player draws 2 cards into their hand.",
+      "quotedFromB": "Each player draws 2 cards per round."
+    },
+    {
+      "statement": "In each round a player discards 1 card face-up into their own personal discard pile.",
+      "quotedFromA": "In each round a player discards 1 card face-up into their own personal discard pile beside the table.",
+      "quotedFromB": "Each player discards 1 card per round, placed face-up in their own discard pile."
+    },
+    {
+      "statement": "At the end of the game a player has 7 discards.",
+      "quotedFromA": "At the end of the game a player has 7 discards.",
+      "quotedFromB": "Each player will have 7 discards by the end of the game."
+    },
+    {
+      "statement": "Discard piles are public information.",
+      "quotedFromA": "Discards are considered public information.",
+      "quotedFromB": "Discards are considered public information."
+    },
+    {
+      "statement": "The game ends when all players have 10 cards in hand; otherwise the next round begins.",
+      "quotedFromA": "If everyone has 10 cards, end the game; otherwise begin the next round.",
+      "quotedFromB": "The game ends when all players have 10 cards in hand."
+    },
+    {
+      "statement": "Scoring uses each player's best 7-card hand.",
+      "quotedFromA": "Scoring uses each player's best 7-card hand.",
+      "quotedFromB": "Scoring is based on each player's best hand of 7 cards."
+    },
+    {
+      "statement": "Bonus point cards add to a player's score even when they extend beyond the scored 7-card hand.",
+      "quotedFromA": "Bonus point cards add to a player's score even when they are not part of the scored 7-card hand.",
+      "quotedFromB": "Bonus point cards can be added to a player's score even if they extend beyond the hand of 7 cards."
+    },
+    {
+      "statement": "A match consists of 7 games.",
+      "quotedFromA": "A match is made up of 7 games.",
+      "quotedFromB": "A match consists of 7 games."
+    },
+    {
+      "statement": "Players play 7 games and track each player's running score total.",
+      "quotedFromA": "Players play 7 games and record each player's running score total across them.",
+      "quotedFromB": "Players track the total score across all games in a match."
+    },
+    {
+      "statement": "The player with the highest total score at match end wins the match.",
+      "quotedFromA": "The player with the highest cumulative score when the match ends wins the match.",
+      "quotedFromB": "The player with the highest total score at the end of a match wins."
+    },
+    {
+      "statement": "The default/standard match format is a best-of-7 series.",
+      "quotedFromA": "The default match format is a best-of-7 series.",
+      "quotedFromB": "The standard match format is a best of 7 series."
+    },
+    {
+      "statement": "Players may optionally shorten a match to a best of 3 games.",
+      "quotedFromA": "Players may optionally shorten a match to a best of 3 games.",
+      "quotedFromB": "Alternate match lengths of best of 3 games or best of 10 games are options."
+    },
+    {
+      "statement": "Players may optionally lengthen a match to a best of 10 games.",
+      "quotedFromA": "Players may optionally lengthen a match to a best of 10 games.",
+      "quotedFromB": "Alternate match lengths of best of 3 games or best of 10 games are options."
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "A player's discard count tells them which round they are on if they lose track.",
+      "sourceSentence": "If you ever lose track of which round you are on, count your discards, you will have 7 discards when the game is over."
+    },
+    {
+      "statement": "The game ends once all players hold 10 cards.",
+      "sourceSentence": "After all players have 10 cards, the game ends."
+    },
+    {
+      "statement": "Rounds are played simultaneously by all players.",
+      "sourceSentence": "p.1, Round (Simultaneous):"
+    }
+  ],
+  "bOnly": [],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 36,
+      "derivedLineText": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end.",
+      "proposedClassification": "corroborated-by-composition",
+      "citedBothStatements": [
+        "Each player's starting hand is 3 cards drawn from the mess.",
+        "In each round a player draws 2 cards into their hand.",
+        "In each round a player discards 1 card face-up into their own personal discard pile.",
+        "The game ends when all players have 10 cards in hand; otherwise the next round begins.",
+        "At the end of the game a player has 7 discards."
+      ],
+      "arithmeticNote": "Net per-round change is draw 2 minus discard 1 = +1 card/round; going from a 3-card starting hand to a 10-card ending hand is a difference of 7, i.e. 7 rounds, which the 7-discards-at-game-end fact should reconcile against (1 discard/round x 7 rounds = 7 discards). All four operand facts (starting hand size, draw-per-round, discard-per-round, ending hand size) plus the 7-discards fact are independently found-by-both; the arithmetic itself must be checked by composeArithmeticClaim, not asserted here."
+    },
+    {
+      "lineNumber": 38,
+      "derivedLineText": "Derived (p.1): Rounds are played simultaneously by all players, not in turn order.",
+      "proposedClassification": "uncorroborated",
+      "citedBothStatements": [],
+      "arithmeticNote": null
+    }
+  ]
+}
+```

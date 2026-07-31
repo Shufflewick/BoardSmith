@@ -1,0 +1,220 @@
+```json
+{
+  "facts": [
+    {
+      "statement": "The game is titled 1-2 Punch.",
+      "sourceSentence": "\"1-2 PUNCH\""
+    },
+    {
+      "statement": "The game is intended for players aged 14 and up.",
+      "sourceSentence": "\"14+ AGE\"",
+      "numericValue": { "magnitude": 14, "unit": "years (minimum age)", "approximate": true }
+    },
+    {
+      "statement": "The game is played by exactly two players.",
+      "sourceSentence": "\"2 PLAYERS\"",
+      "numericValue": { "magnitude": 2, "unit": "players", "approximate": false }
+    },
+    {
+      "statement": "A game is expected to take 30 minutes.",
+      "sourceSentence": "\"30 MINUTES\"",
+      "numericValue": { "magnitude": 30, "unit": "minutes", "approximate": true }
+    },
+    {
+      "statement": "The game was designed by Chris Williams.",
+      "sourceSentence": "\"GAME DESIGN Chris Williams\""
+    },
+    {
+      "statement": "Character art is by Maristella Nicoletto.",
+      "sourceSentence": "\"CHARACTER ART Maristella Nicoletto\""
+    },
+    {
+      "statement": "Game art is by Kalli Williams.",
+      "sourceSentence": "\"GAME ART Kalli Williams\""
+    },
+    {
+      "statement": "The theme is a boxing match between two titans in a ring.",
+      "sourceSentence": "\"Ladies and gentlemen, boxing fans from around the world gather tonight to witness two titans clash in the ring!\""
+    },
+    {
+      "statement": "The challenger boxer in the blue corner is named Cadman Morris, from Newport, Wales.",
+      "sourceSentence": "\"In the blue corner is our challenger hailing from Newport, Wales, weighing 153lbs, 5ft 9in tall, the one and only, the notorious, the warrior: Cadman Morris!\""
+    },
+    {
+      "statement": "Cadman Morris weighs 153lbs.",
+      "sourceSentence": "\"In the blue corner is our challenger hailing from Newport, Wales, weighing 153lbs, 5ft 9in tall...\"",
+      "numericValue": { "magnitude": 153, "unit": "lbs", "approximate": false }
+    },
+    {
+      "statement": "Cadman Morris stands 5 feet 9 inches tall.",
+      "sourceSentence": "\"...weighing 153lbs, 5ft 9in tall, the one and only, the notorious, the warrior: Cadman Morris!\"",
+      "numericValue": { "magnitude": 69, "unit": "inches (5ft 9in)", "approximate": false }
+    },
+    {
+      "statement": "The reigning heavyweight titleholder, an Olympic gold medal winner who wears red and white trunks, is named Darius Akachi.",
+      "sourceSentence": "\"Wearing red and white trunks, weighing in at 216lbs and standing at an intimidating 6ft 3in, an Olympic gold medal winner and our current heavyweight titleholder, perhaps the greatest of all time: Darius Akachi!\""
+    },
+    {
+      "statement": "Darius Akachi weighs 216lbs.",
+      "sourceSentence": "\"Wearing red and white trunks, weighing in at 216lbs and standing at an intimidating 6ft 3in...\"",
+      "numericValue": { "magnitude": 216, "unit": "lbs", "approximate": false }
+    },
+    {
+      "statement": "Darius Akachi stands 6 feet 3 inches tall.",
+      "sourceSentence": "\"...weighing in at 216lbs and standing at an intimidating 6ft 3in, an Olympic gold medal winner...\"",
+      "numericValue": { "magnitude": 75, "unit": "inches (6ft 3in)", "approximate": false }
+    },
+    {
+      "statement": "1-2 Punch is a strategic boxing card game for two opposing players, described as easy to learn.",
+      "sourceSentence": "\"1-2 Punch is an easy to learn strategic boxing card game that pits two players against one another in the ring.\"",
+      "numericValue": { "magnitude": 2, "unit": "players", "approximate": false }
+    },
+    {
+      "statement": "The core strategic activity is predicting the opponent's moves in order to land the right punch.",
+      "sourceSentence": "\"Predict your opponent's moves to land the perfect punch!\""
+    },
+    {
+      "statement": "The box contains 2 Boxer Cards.",
+      "sourceSentence": "\"2 Boxer Cards, 16 Action Cards, 6 Guard Cards, 1 Rules Sheet\"",
+      "numericValue": { "magnitude": 2, "unit": "Boxer Cards", "approximate": false }
+    },
+    {
+      "statement": "The box contains 16 Action Cards.",
+      "sourceSentence": "\"2 Boxer Cards, 16 Action Cards, 6 Guard Cards, 1 Rules Sheet\"",
+      "numericValue": { "magnitude": 16, "unit": "Action Cards", "approximate": false }
+    },
+    {
+      "statement": "The box contains 6 Guard Cards.",
+      "sourceSentence": "\"2 Boxer Cards, 16 Action Cards, 6 Guard Cards, 1 Rules Sheet\"",
+      "numericValue": { "magnitude": 6, "unit": "Guard Cards", "approximate": false }
+    },
+    {
+      "statement": "The box contains 1 Rules Sheet.",
+      "sourceSentence": "\"2 Boxer Cards, 16 Action Cards, 6 Guard Cards, 1 Rules Sheet\"",
+      "numericValue": { "magnitude": 1, "unit": "Rules Sheet", "approximate": false }
+    },
+    {
+      "statement": "You win by knocking out your opponent, which is accomplished by breaking all three of their Guards.",
+      "sourceSentence": "\"Knock out your opponent by breaking all three of their Guards.\"",
+      "numericValue": { "magnitude": 3, "unit": "Guards to break", "approximate": false }
+    },
+    {
+      "statement": "During setup each player picks a color, red or blue, and takes every card of that color.",
+      "sourceSentence": "\"1. Each player must choose a color (red or blue) and take all cards of that color.\"",
+      "numericValue": { "magnitude": 2, "unit": "color choices (red or blue)", "approximate": false }
+    },
+    {
+      "statement": "The ring is made up of three designated table areas.",
+      "sourceSentence": "\"2. Designate three areas on the table to make up the ring.\"",
+      "numericValue": { "magnitude": 3, "unit": "areas", "approximate": false }
+    },
+    {
+      "statement": "The area directly in front of each player is that player's corner, and the area between the two players is the center ring.",
+      "sourceSentence": "\"The area directly in front of each player is their respective corner and the area in-between them is the center ring.\""
+    },
+    {
+      "statement": "At the start of the game the blue player's boxer card begins in the blue player's corner.",
+      "sourceSentence": "\"3. The blue player must start with their boxer card in their corner and the red player must start with their boxer card in the center ring.\""
+    },
+    {
+      "statement": "At the start of the game the red player's boxer card begins in the center ring.",
+      "sourceSentence": "\"3. The blue player must start with their boxer card in their corner and the red player must start with their boxer card in the center ring.\""
+    },
+    {
+      "statement": "Each player places their three Guard cards beside themselves with the ready side face up.",
+      "sourceSentence": "\"a. Place your three Guard cards next to you with the ready sides face up.\"",
+      "numericValue": { "magnitude": 3, "unit": "Guard cards per player", "approximate": false }
+    },
+    {
+      "statement": "Each player starts their personal discard pile by placing one Rest card face up next to them.",
+      "sourceSentence": "\"b. Place one of your Rest cards face up next to you to create your own discard pile.\"",
+      "numericValue": { "magnitude": 1, "unit": "Rest card", "approximate": false }
+    },
+    {
+      "statement": "Each player holds the rest of their cards as a hand concealed from the opponent.",
+      "sourceSentence": "\"c. Hold the remaining cards in your hand hidden from your opponent.\""
+    },
+    {
+      "statement": "The blue player discards one card of their own choosing from hand during setup.",
+      "sourceSentence": "\"5. If you are the blue player, choose one card from your hand and discard it.\"",
+      "numericValue": { "magnitude": 1, "unit": "card", "approximate": false }
+    },
+    {
+      "statement": "After discarding, the blue player names a card that the red player is required to discard.",
+      "sourceSentence": "\"Next, you must name a card that the red player must discard.\""
+    },
+    {
+      "statement": "The blue player's own discard and the card they name for red need not be the same card.",
+      "sourceSentence": "\"These do not have to be the same cards and are in addition to the Rest cards both players already discarded.\""
+    },
+    {
+      "statement": "These two setup discards are extra, on top of the Rest cards each player already discarded.",
+      "sourceSentence": "\"These do not have to be the same cards and are in addition to the Rest cards both players already discarded.\""
+    },
+    {
+      "statement": "Neither of the two additional setup discards may be a Rest card.",
+      "sourceSentence": "\"Neither of these additional discards may be a Rest card.\""
+    },
+    {
+      "statement": "An illustrative setup case: Blue discards their Retreat card and instructs Red to discard their Punch card.",
+      "sourceSentence": "\"For example, Blue discards their Retreat and tells Red to discard their Punch.\""
+    },
+    {
+      "statement": "A round consists of three phases, in order: Plan, Fight, and Discard.",
+      "sourceSentence": "\"Each round has three phases: Plan, Fight, and Discard.\"",
+      "numericValue": { "magnitude": 3, "unit": "phases", "approximate": false }
+    },
+    {
+      "statement": "Both players carry out each phase simultaneously.",
+      "sourceSentence": "\"Both you and your opponent must complete each phase at the same time.\""
+    },
+    {
+      "statement": "In the Plan phase a player selects two action cards from hand and places them face-down next to their boxer in an order of their choice.",
+      "sourceSentence": "\"Choose any two action cards from your hand and place them in any order face-down next to your boxer.\"",
+      "numericValue": { "magnitude": 2, "unit": "action cards", "approximate": false }
+    },
+    {
+      "statement": "Of the two planned cards, the one nearest the boxer is the first action and the other is the second action.",
+      "sourceSentence": "\"The card closest to your boxer is your first action and the other card is your second action.\""
+    },
+    {
+      "statement": "Both players own identical sets of cards.",
+      "sourceSentence": "\"Both you and your opponent have the same set of cards and may look through each other's discard pile at any time.\""
+    },
+    {
+      "statement": "Either player may inspect the opponent's discard pile at any time.",
+      "sourceSentence": "\"Both you and your opponent have the same set of cards and may look through each other's discard pile at any time.\""
+    },
+    {
+      "statement": "In the Fight phase both players simultaneously reveal their first action card and compare the cards' timing values to set resolution order.",
+      "sourceSentence": "\"You and your opponent must flip your first action card face up at the same time and compare their timings to determine the order they are resolved.\""
+    },
+    {
+      "statement": "The card with the lower timing value resolves before the other.",
+      "sourceSentence": "\"The player with the lower timing on their card must resolve their action first.\""
+    },
+    {
+      "statement": "If both revealed cards share the same timing value, both actions resolve simultaneously.",
+      "sourceSentence": "\"If the timing is the same on both cards, they are resolved at the same time.\""
+    },
+    {
+      "statement": "The Jab card has a timing value of 1.",
+      "sourceSentence": "\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\"",
+      "numericValue": { "magnitude": 1, "unit": "timing", "approximate": false }
+    },
+    {
+      "statement": "The Retreat card has a timing value of 2.",
+      "sourceSentence": "\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\"",
+      "numericValue": { "magnitude": 2, "unit": "timing", "approximate": false }
+    },
+    {
+      "statement": "An illustrative timing case: a Jab played against a Retreat resolves first because its timing is lower.",
+      "sourceSentence": "\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\""
+    },
+    {
+      "statement": "Rest and Punch are named cards available to players.",
+      "sourceSentence": "\"For example, Blue discards their Retreat and tells Red to discard their Punch.\""
+    }
+  ]
+}
+```
