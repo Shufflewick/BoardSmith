@@ -391,7 +391,7 @@ today no designer can reach that tool.
 **Plans**: 8 plans
 - [x] 177.1-01-PLAN.md — Consolidate the five duplicated annotation-family regexes into one exported definition
 - [x] 177.1-02-PLAN.md — Move the ledger, atomic upsert-append, fence rejection, and read-path revalidation onto the eight-member dual-enumeration verdict set
-- [ ] 177.1-03-PLAN.md — Build reconcileSlice() and retarget verify-derive-record onto it; add a machine-readable arithmeticSpec to reconcile-facts.md
+- [x] 177.1-03-PLAN.md — Build reconcileSlice() and retarget verify-derive-record onto it; add a machine-readable arithmeticSpec to reconcile-facts.md
 - [ ] 177.1-04-PLAN.md — Build verify-derive-check (read/report) and register both commands in cli.ts
 - [ ] 177.1-05-PLAN.md — Rewrite verify-game.md Step 7, its Context-Economics carve-out, and Reference Files onto the dual-enumeration design
 - [ ] 177.1-06-PLAN.md — Pre-register the split bar from a zero-dispatch dry run, then replay 177-22 run1 through the product CLI
