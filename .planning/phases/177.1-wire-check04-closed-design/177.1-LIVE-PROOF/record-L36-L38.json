@@ -1,0 +1,52 @@
+{
+  "records": [
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "lineNumber": 36,
+      "derivedLineText": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end.",
+      "verdict": "corroborated-by-composition",
+      "reason": "Verified in code: 2 subtract 1 = 1; then 10 subtract 3 = 7; then 7 divide 1 = 7 (final: 7 rounds) (checked against this Derived line's own stated claim, never freely generated).",
+      "citedFactIds": [
+        "20431eeb16ce8c6f",
+        "1c4e8e30c5da951f",
+        "325c5181aff44d03",
+        "195b1b3498d1d2d7"
+      ],
+      "groundedQuotes": [
+        {
+          "statement": "Each player draws 2 cards into their hand each round.",
+          "quotedFromA": "In a round, each player draws two cards into their hand.",
+          "quotedFromB": "Each player draws 2 cards into their hand each round."
+        },
+        {
+          "statement": "Each player discards 1 card from their hand each round.",
+          "quotedFromA": "In a round, each player discards one card face-up to a personal discard pile beside the table.",
+          "quotedFromB": "Each player discards 1 card from their hand each round."
+        },
+        {
+          "statement": "The game ends when all players have 10 cards in hand.",
+          "quotedFromA": "The game ends once all players have ten cards.",
+          "quotedFromB": "The game ends when all players have 10 cards in hand."
+        },
+        {
+          "statement": "Each player draws 3 cards from the mess/center pool during setup to form their starting hand.",
+          "quotedFromA": "After the mess is created, each player draws three cards from it as their starting hand.",
+          "quotedFromB": "Each player draws 3 cards from the center pool during setup to form their initial hand."
+        }
+      ],
+      "recordedAt": "2026-07-31T22:30:00.825Z"
+    },
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "lineNumber": 38,
+      "derivedLineText": "Derived (p.1): Rounds are played simultaneously by all players, not in turn order.",
+      "verdict": "uncorroborated",
+      "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded.",
+      "citedFactIds": [],
+      "groundedQuotes": [],
+      "recordedAt": "2026-07-31T22:30:00.825Z"
+    }
+  ],
+  "ledgerPath": "rulebook/.derive-check/verdicts.md",
+  "rejected": []
+}

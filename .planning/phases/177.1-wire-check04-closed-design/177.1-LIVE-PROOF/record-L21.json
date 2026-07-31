@@ -1,0 +1,36 @@
+{
+  "records": [
+    {
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "lineNumber": 21,
+      "derivedLineText": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+      "verdict": "corroborated-by-composition",
+      "reason": "Verified in code: 7 highest card number multiply 4 colors multiply 4 copies per card = 112 numbered cards (checked against this Derived line's own stated claim, never freely generated).",
+      "citedFactIds": [
+        "abf03ccaf80155c8",
+        "dc1456d964b89a86",
+        "89c6e9f4130c9e6a"
+      ],
+      "groundedQuotes": [
+        {
+          "statement": "Card numbers range from 1 to 7.",
+          "quotedFromA": "Card numbers range from 1 to 7.",
+          "quotedFromB": "The numbered cards range from 1 to 7."
+        },
+        {
+          "statement": "Cards come in 4 colors.",
+          "quotedFromA": "Cards come in 4 colors.",
+          "quotedFromB": "There are 4 colors for the cards."
+        },
+        {
+          "statement": "Each card exists in 4 copies.",
+          "quotedFromA": "Each card exists in 4 copies.",
+          "quotedFromB": "There are 4 copies of each card."
+        }
+      ],
+      "recordedAt": "2026-07-31T22:29:49.455Z"
+    }
+  ],
+  "ledgerPath": "rulebook/.derive-check/verdicts.md",
+  "rejected": []
+}

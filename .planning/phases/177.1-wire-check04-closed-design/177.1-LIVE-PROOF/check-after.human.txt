@@ -1,0 +1,11 @@
+✓ Derive check — 3 rule-bearing candidate(s) across 2 slice(s), 0 pending
+  corroborated: 0
+  corroborated-by-composition: 2
+  uncorroborated: 1
+  contradicted: 0
+  quote-unverified: 0
+  absence-corroborated: 0
+  absence-contradicted: 0
+  absence-unverifiable: 0
+  ⚠ uncorroborated (worth a human glance, never a verdict) — rulebook/01-overview-setup-and-play.md:38
+    Reason: No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded.

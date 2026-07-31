@@ -1,0 +1,87 @@
+{
+  "projectDir": "/private/tmp/claude-501/-Users-jtsmith-BoardSmith/ec67162e-8441-486e-81a5-9664c77fbf70/scratchpad/177.1-08/seven",
+  "models": {
+    "enumeratorA": "claude-opus-5",
+    "enumeratorB": "claude-haiku-4-5-20251001",
+    "reconciler": "claude-sonnet-5"
+  },
+  "slices": [
+    {
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "candidates": 1,
+      "derivedLines": [
+        {
+          "lineNumber": 21,
+          "text": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards."
+        }
+      ]
+    },
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "candidates": 2,
+      "derivedLines": [
+        {
+          "lineNumber": 36,
+          "text": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end."
+        },
+        {
+          "lineNumber": 38,
+          "text": "Derived (p.1): Rounds are played simultaneously by all players, not in turn order."
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "lineNumber": 21,
+      "derivedLineText": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+      "verdict": "corroborated-by-composition",
+      "reason": "Verified in code: 7 highest card number multiply 4 colors multiply 4 copies per card = 112 numbered cards (checked against this Derived line's own stated claim, never freely generated).",
+      "citedFactIds": [
+        "abf03ccaf80155c8",
+        "dc1456d964b89a86",
+        "89c6e9f4130c9e6a"
+      ],
+      "status": "recorded"
+    },
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "lineNumber": 36,
+      "derivedLineText": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end.",
+      "verdict": "corroborated-by-composition",
+      "reason": "Verified in code: 2 subtract 1 = 1; then 10 subtract 3 = 7; then 7 divide 1 = 7 (final: 7 rounds) (checked against this Derived line's own stated claim, never freely generated).",
+      "citedFactIds": [
+        "20431eeb16ce8c6f",
+        "1c4e8e30c5da951f",
+        "325c5181aff44d03",
+        "195b1b3498d1d2d7"
+      ],
+      "status": "recorded"
+    },
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "lineNumber": 38,
+      "derivedLineText": "Derived (p.1): Rounds are played simultaneously by all players, not in turn order.",
+      "verdict": "uncorroborated",
+      "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded.",
+      "citedFactIds": [],
+      "status": "recorded"
+    }
+  ],
+  "verdictCounts": {
+    "corroborated": 0,
+    "corroborated-by-composition": 2,
+    "uncorroborated": 1,
+    "contradicted": 0,
+    "quote-unverified": 0,
+    "absence-corroborated": 0,
+    "absence-contradicted": 0,
+    "absence-unverifiable": 0
+  },
+  "pendingCount": 0,
+  "staleRecords": [],
+  "orphanedRecords": [],
+  "groundingRejections": [],
+  "missedFactCount": 0
+}

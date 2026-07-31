@@ -1,0 +1,97 @@
+```json
+{
+  "both": [
+    {
+      "statement": "Each player begins the game holding 3 cards.",
+      "quotedFromA": "Each player begins the game holding 3 cards.",
+      "quotedFromB": "Players begin with 3 cards in their hand."
+    },
+    {
+      "statement": "Each player ends the game holding 10 cards.",
+      "quotedFromA": "Each player ends the game holding 10 cards.",
+      "quotedFromB": "Players end the game with 10 cards in their hand."
+    },
+    {
+      "statement": "A Set is a group of two or more cards whose numbers match.",
+      "quotedFromA": "A Set is a group of two or more cards whose numbers match.",
+      "quotedFromB": "A Set requires a minimum of 2 cards with matching numbers."
+    },
+    {
+      "statement": "A Run is a group of three or more cards arranged in numeric order.",
+      "quotedFromA": "A Run is a group of three or more cards arranged in numeric order.",
+      "quotedFromB": "A Run requires a minimum of 3 cards in numeric order."
+    },
+    {
+      "statement": "Card numbers range from 1 to 7.",
+      "quotedFromA": "Card numbers range from 1 to 7.",
+      "quotedFromB": "The numbered cards range from 1 to 7."
+    },
+    {
+      "statement": "Cards come in 4 colors.",
+      "quotedFromA": "Cards come in 4 colors.",
+      "quotedFromB": "There are 4 colors for the cards."
+    },
+    {
+      "statement": "Each card exists in 4 copies.",
+      "quotedFromA": "Each card exists in 4 copies.",
+      "quotedFromB": "There are 4 copies of each card."
+    },
+    {
+      "statement": "The game includes 7 bonus point cards in addition to the numbered cards.",
+      "quotedFromA": "The game includes 7 bonus point cards in addition to the numbered cards.",
+      "quotedFromB": "There are 7 bonus point cards in addition to the numbered cards."
+    }
+  ],
+  "aOnly": [
+    {
+      "statement": "A player's hand is the set of cards that player holds.",
+      "sourceSentence": "Hand: The cards each player holds."
+    },
+    {
+      "statement": "An example of a valid Set is 5, 5, 5.",
+      "sourceSentence": "example: 5, 5, 5"
+    },
+    {
+      "statement": "An example of a valid Run is 5, 6, 7.",
+      "sourceSentence": "example: 5, 6, 7"
+    },
+    {
+      "statement": "The game's designer is JT Smith.",
+      "sourceSentence": "JT Smith"
+    },
+    {
+      "statement": "The play testers are Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, and Marylin Vanderhoof.",
+      "sourceSentence": "Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof"
+    }
+  ],
+  "bOnly": [],
+  "derivedLineProposals": [
+    {
+      "lineNumber": 21,
+      "derivedLineText": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+      "proposedClassification": "corroborated-by-composition",
+      "citedBothStatements": [
+        "Card numbers range from 1 to 7.",
+        "Cards come in 4 colors.",
+        "Each card exists in 4 copies.",
+        "The game includes 7 bonus point cards in addition to the numbered cards."
+      ],
+      "arithmeticNote": "The numbered-card total (112) is composed by multiplying the three found-by-both quantities: card numbers range 1-7 (7 numbers), 4 colors, and 4 copies per card. The separate '7 bonus point cards' clause is itself directly a found-by-both fact, not part of the multiplication.",
+      "arithmeticSpec": {
+        "kind": "single",
+        "operation": "multiply",
+        "operandStatements": [
+          "Card numbers range from 1 to 7.",
+          "Cards come in 4 colors.",
+          "Each card exists in 4 copies."
+        ],
+        "claimedResult": {
+          "magnitude": 112,
+          "unit": "numbered cards",
+          "approximate": false
+        }
+      }
+    }
+  ]
+}
+```

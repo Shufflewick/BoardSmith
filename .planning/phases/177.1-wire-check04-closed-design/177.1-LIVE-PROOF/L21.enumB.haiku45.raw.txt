@@ -1,0 +1,45 @@
+```json
+{
+  "facts": [
+    {
+      "statement": "Players begin with 3 cards in their hand.",
+      "sourceSentence": "Each starts with 3...",
+      "numericValue": { "magnitude": 3, "unit": "cards", "approximate": false }
+    },
+    {
+      "statement": "Players end the game with 10 cards in their hand.",
+      "sourceSentence": "...ends the game with 10.",
+      "numericValue": { "magnitude": 10, "unit": "cards", "approximate": false }
+    },
+    {
+      "statement": "A Set requires a minimum of 2 cards with matching numbers.",
+      "sourceSentence": "Set: 2+ cards with matching numbers.",
+      "numericValue": { "magnitude": 2, "unit": "cards", "approximate": false }
+    },
+    {
+      "statement": "A Run requires a minimum of 3 cards in numeric order.",
+      "sourceSentence": "Run: 3+ cards in numeric order.",
+      "numericValue": { "magnitude": 3, "unit": "cards", "approximate": false }
+    },
+    {
+      "statement": "The numbered cards range from 1 to 7.",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors..."
+    },
+    {
+      "statement": "There are 4 colors for the cards.",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors...",
+      "numericValue": { "magnitude": 4, "unit": "colors", "approximate": false }
+    },
+    {
+      "statement": "There are 4 copies of each card.",
+      "sourceSentence": "...with 4 copies of each card.",
+      "numericValue": { "magnitude": 4, "unit": "copies", "approximate": false }
+    },
+    {
+      "statement": "There are 7 bonus point cards in addition to the numbered cards.",
+      "sourceSentence": "...there are 7 bonus point cards.",
+      "numericValue": { "magnitude": 7, "unit": "bonus cards", "approximate": false }
+    }
+  ]
+}
+```
