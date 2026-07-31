@@ -1,0 +1,479 @@
+{
+  "classifications": [
+    {
+      "slicePath": "rulebook/02-action-cards-and-resolution.md",
+      "lineNumber": 16,
+      "derivedLineText": "Derived (p.2): A Jab can only flip a ready Guard card to exhausted; it never removes/breaks a Guard card outright.",
+      "classification": "corroborated",
+      "citedFactIds": [
+        "14750a41a29ac6d1",
+        "2214471f9bc7ee80"
+      ],
+      "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+    },
+    {
+      "slicePath": "rulebook/02-action-cards-and-resolution.md",
+      "lineNumber": 68,
+      "derivedLineText": "Derived (p.2): A \"broken\" Guard card is permanently removed from the game (returned to the box), distinct from \"exhausted\" (flipped face, remains in play and can be flipped back to ready by Rest). Punch can only break an already-exhausted Guard card; against an opponent with no exhausted Guards, Punch instead exhausts one of their ready Guards (same effect as a Jab in that case).",
+      "classification": "corroborated",
+      "citedFactIds": [
+        "7844b013a897be1d",
+        "5b15a393da91f28b",
+        "2214471f9bc7ee80",
+        "cb31530b27b61ce3"
+      ],
+      "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+    },
+    {
+      "slicePath": "rulebook/02-action-cards-and-resolution.md",
+      "lineNumber": 82,
+      "derivedLineText": "Derived (p.2): Resolving a round's Fight phase is two sequential sub-steps — resolve both players' first action cards completely (in timing order), then reveal and resolve both players' second action cards (in timing order) — with cards from the first sub-step staying in place, unresolved into the discard pile, until the Discard phase.",
+      "classification": "corroborated",
+      "citedFactIds": [
+        "f837faafeb084245",
+        "d10e13562bb492e9",
+        "fdad7ce52cfd2a4f",
+        "c04f7a5e68d42453"
+      ],
+      "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+    },
+    {
+      "slicePath": "rulebook/02-action-cards-and-resolution.md",
+      "lineNumber": 106,
+      "derivedLineText": "Derived (p.2): Win condition: reduce an opponent to 0 Guard cards (all 3 broken) to knock them out and win immediately. If both players' third Guard card is broken by the same action's resolution, the game ends in a draw instead of a win.",
+      "classification": "corroborated",
+      "citedFactIds": [
+        "c589835234204c15",
+        "67db4a5090aa9855"
+      ],
+      "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+    },
+    {
+      "slicePath": "rulebook/02-action-cards-and-resolution.md",
+      "lineNumber": 117,
+      "derivedLineText": "Derived (p.2): Each player's card set includes exactly 2 Rest cards (implied by the first Tip's warning against holding both at once).",
+      "classification": "uncorroborated",
+      "citedFactIds": [],
+      "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+    },
+    {
+      "slicePath": "rulebook/02-action-cards-and-resolution.md",
+      "lineNumber": 128,
+      "derivedLineText": "Derived (p.2): No edition or printing number is stated anywhere on this page; the only dating information is the 2020 copyright year in the colophon.",
+      "classification": "absence-corroborated",
+      "citedFactIds": [],
+      "reason": "None of the named target term(s) (edition, printing) appear anywhere in this passage's quote lines — mechanically confirms the claimed absence."
+    },
+    {
+      "slicePath": "rulebook/02-action-cards-and-resolution.md",
+      "lineNumber": 132,
+      "derivedLineText": "Derived (p.2): This section marks no rules as variants, optional modules, or advanced/expert rules.",
+      "classification": "absence-unverifiable",
+      "citedFactIds": [],
+      "reason": "Reconciler flagged this Derived line as an absence claim but named no explicit, literal, searchable target — dual enumeration structurally cannot corroborate a negative (no enumerator ever lists a fact that is not there), and this module refuses to guess a keyword to scan for on its own (177-01 precedent: recognizing an absence claim and naming a safe target for it is a judgment call, not a keyword list baked into this module). Reported honestly in its own bucket rather than downgraded to uncorroborated."
+    }
+  ],
+  "missed": [
+    {
+      "fact": {
+        "id": "b04a1dfbc8e3dc50",
+        "statement": "Jab does nothing if both boxers are in their corners.",
+        "quotedFromA": "If both boxers are in their corners: Do nothing. You can't reach your opponent!",
+        "quotedFromB": "If both boxers are in their corners: Do nothing. You can't reach your opponent!",
+        "matchedFactA": {
+          "id": "22bb6d84ac08e622",
+          "statement": "If both boxers are in their corners, Jab does nothing.",
+          "sourceSentence": "If both boxers are in their corners: Do nothing. You can't reach your opponent!"
+        },
+        "matchedFactB": {
+          "id": "5983f352cf37f9b7",
+          "statement": "If both boxers are in their corners, Jab does nothing because you cannot reach your opponent.",
+          "sourceSentence": "If both boxers are in their corners: Do nothing. You can't reach your opponent!"
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "a2724c1cf07a20c9",
+        "statement": "If all of the opponent's Guard cards are already exhausted, Jab does nothing.",
+        "quotedFromA": "If all their Guard cards are already exhausted, do nothing.",
+        "quotedFromB": "If all their Guard cards are already exhausted, do nothing.",
+        "matchedFactA": {
+          "id": "87a0e894181b348f",
+          "statement": "If all opponent's Guard cards are already exhausted, Jab does nothing.",
+          "sourceSentence": "If all their Guard cards are already exhausted, do nothing."
+        },
+        "matchedFactB": {
+          "id": "b4200b13d3fe9450",
+          "statement": "If all of the opponent's Guard cards are already exhausted, Jab does nothing.",
+          "sourceSentence": "If all their Guard cards are already exhausted, do nothing."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "e84dfb97b3d02077",
+        "statement": "If already in your corner, Retreat does nothing.",
+        "quotedFromA": "If you are already in your corner: Do nothing. You're already against the ropes!",
+        "quotedFromB": "If you are already in your corner: Do nothing. You're already against the ropes!",
+        "matchedFactA": {
+          "id": "d6f7ad63254c5ec0",
+          "statement": "If already in your corner, Retreat does nothing.",
+          "sourceSentence": "If you are already in your corner: Do nothing. You're already against the ropes!"
+        },
+        "matchedFactB": {
+          "id": "d6f7ad63254c5ec0",
+          "statement": "If already in your corner, Retreat does nothing.",
+          "sourceSentence": "If you are already in your corner: Do nothing. You're already against the ropes!"
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "4e988a81c13472b1",
+        "statement": "If in the center ring, Retreat moves your boxer to your corner.",
+        "quotedFromA": "If you are in the center ring: Move your boxer to your corner.",
+        "quotedFromB": "If you are in the center ring: Move your boxer to your corner.",
+        "matchedFactA": {
+          "id": "30cbc0a165b31076",
+          "statement": "Retreat moves your boxer from the center ring to your corner.",
+          "sourceSentence": "If you are in the center ring: Move your boxer to your corner."
+        },
+        "matchedFactB": {
+          "id": "5ee4215e47c0df1a",
+          "statement": "If in the center ring, Retreat moves your boxer to your corner.",
+          "sourceSentence": "If you are in the center ring: Move your boxer to your corner."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "6f050cf16e1a1ed1",
+        "statement": "If already in the center ring and/or opponent also plays Advance for the same action, Advance does nothing.",
+        "quotedFromA": "If you are already in the center ring and/or your opponent also plays an Advance card for the same action: Do nothing. You're just butting heads!",
+        "quotedFromB": "If you are already in the center ring and/or your opponent also plays an Advance card for the same action: Do nothing. You're just butting heads!",
+        "matchedFactA": {
+          "id": "618bb78052aaaa58",
+          "statement": "If already in the center ring and/or opponent also plays Advance for the same action, Advance does nothing.",
+          "sourceSentence": "If you are already in the center ring and/or your opponent also plays an Advance card for the same action: Do nothing. You're just butting heads!"
+        },
+        "matchedFactB": {
+          "id": "f9c786565fb29202",
+          "statement": "If already in the center ring or your opponent also plays Advance for the same action, Advance does nothing.",
+          "sourceSentence": "If you are already in the center ring and/or your opponent also plays an Advance card for the same action: Do nothing. You're just butting heads!"
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "c602da31ce0a3f61",
+        "statement": "If conditions are not met, Advance moves your boxer to the center ring.",
+        "quotedFromA": "If not: Move your boxer to the center ring.",
+        "quotedFromB": "If not: Move your boxer to the center ring.",
+        "matchedFactA": {
+          "id": "5c8f030ac61b66b4",
+          "statement": "Advance moves your boxer to the center ring.",
+          "sourceSentence": "If not: Move your boxer to the center ring."
+        },
+        "matchedFactB": {
+          "id": "0eeb85f586eb373a",
+          "statement": "If conditions are not met, Advance moves your boxer to the center ring.",
+          "sourceSentence": "If not: Move your boxer to the center ring."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "f73b0a1a1a583a24",
+        "statement": "When you Advance to the center ring and opponent is also in the center ring, opponent is pushed into their corner.",
+        "quotedFromA": "If your opponent is in the center ring, also push them into their corner.",
+        "quotedFromB": "If your opponent is in the center ring, also push them into their corner.",
+        "matchedFactA": {
+          "id": "abdb13e37a479927",
+          "statement": "When you Advance and your opponent is in the center ring, you also push them into their corner.",
+          "sourceSentence": "If your opponent is in the center ring, also push them into their corner."
+        },
+        "matchedFactB": {
+          "id": "4b905ee9dcfce732",
+          "statement": "When you Advance to the center ring, if your opponent is in the center ring, they are pushed into their corner.",
+          "sourceSentence": "If your opponent is in the center ring, also push them into their corner."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "399a128033e90d7a",
+        "statement": "If opponent plays a Punch for the same action, Block ignores any effect the Punch has on you.",
+        "quotedFromA": "If your opponent plays a Punch card for the same action: Ignore any effect their Punch has on you (see Punch).",
+        "quotedFromB": "If your opponent plays a Punch card for the same action: Ignore any effect their Punch has on you (see Punch).",
+        "matchedFactA": {
+          "id": "0ab161139e1a050a",
+          "statement": "If opponent plays a Punch for the same action, Block ignores any effect their Punch has on you.",
+          "sourceSentence": "If your opponent plays a Punch card for the same action: Ignore any effect their Punch has on you (see Punch)."
+        },
+        "matchedFactB": {
+          "id": "d53950aa2d2948ac",
+          "statement": "If opponent plays Punch for the same action, Block ignores any effect the Punch has on you.",
+          "sourceSentence": "If your opponent plays a Punch card for the same action: Ignore any effect their Punch has on you (see Punch)."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "87f35db01da48d86",
+        "statement": "Block actions do not block Jabs.",
+        "quotedFromA": "Block actions do not block Jabs.",
+        "quotedFromB": "Block actions do not block Jabs.",
+        "matchedFactA": {
+          "id": "fbb270af0b69095d",
+          "statement": "Block actions do not block Jabs.",
+          "sourceSentence": "Block actions do not block Jabs."
+        },
+        "matchedFactB": {
+          "id": "fbb270af0b69095d",
+          "statement": "Block actions do not block Jabs.",
+          "sourceSentence": "Block actions do not block Jabs."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "c74dc3daad9ddc27",
+        "statement": "If opponent does not play Punch for the same action, Block does nothing.",
+        "quotedFromA": "If not: Do nothing.",
+        "quotedFromB": "If not: Do nothing.",
+        "matchedFactA": {
+          "id": "b9cf2c00232132be",
+          "statement": "If opponent does not play Punch, Block does nothing.",
+          "sourceSentence": "If not: Do nothing."
+        },
+        "matchedFactB": {
+          "id": "efefc8b9a489df1c",
+          "statement": "If opponent does not play Punch for the same action, Block does nothing.",
+          "sourceSentence": "If not: Do nothing."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "11c63a2866cded44",
+        "statement": "If in your corner, Punch requires flipping one Guard card from ready to exhausted before resolving.",
+        "quotedFromA": "If you are in your corner: Flip one of your Guard cards from ready to exhausted, then resolve your Punch.",
+        "quotedFromB": "If you are in your corner: Flip one of your Guard cards from ready to exhausted, then resolve your Punch.",
+        "matchedFactA": {
+          "id": "8db8954c00c5aa19",
+          "statement": "If you are in your corner, you must flip one of your Guard cards from ready to exhausted before resolving your Punch.",
+          "sourceSentence": "If you are in your corner: Flip one of your Guard cards from ready to exhausted, then resolve your Punch."
+        },
+        "matchedFactB": {
+          "id": "bbbc8c2829abc9ce",
+          "statement": "If in your corner, Punch requires you to flip one Guard card from ready to exhausted before resolving the Punch.",
+          "sourceSentence": "If you are in your corner: Flip one of your Guard cards from ready to exhausted, then resolve your Punch."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "4042c0a7f0469e41",
+        "statement": "If in your corner with no ready Guard cards, Punch does nothing.",
+        "quotedFromA": "If you do not have any ready Guard cards, do nothing. You're up against the ropes!",
+        "quotedFromB": "If you do not have any ready Guard cards, do nothing. You're up against the ropes!",
+        "matchedFactA": {
+          "id": "d2aecf2dac60a772",
+          "statement": "If you are in your corner and have no ready Guard cards, your Punch does nothing.",
+          "sourceSentence": "If you do not have any ready Guard cards, do nothing. You're up against the ropes!"
+        },
+        "matchedFactB": {
+          "id": "a26369010e4ba53e",
+          "statement": "If in your corner with no ready Guard cards, Punch does nothing.",
+          "sourceSentence": "If you do not have any ready Guard cards, do nothing. You're up against the ropes!"
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "9902b7e68efaec1e",
+        "statement": "If in the center ring, Punch is resolved without flipping your own Guard card.",
+        "quotedFromA": "If you are in the center ring: Resolve your Punch without flipping your Guard card. You've got 'em on the ropes!",
+        "quotedFromB": "If you are in the center ring: Resolve your Punch without flipping your Guard card. You've got 'em on the ropes!",
+        "matchedFactA": {
+          "id": "1d0b62f9004074df",
+          "statement": "If you are in the center ring, you resolve your Punch without flipping your Guard card.",
+          "sourceSentence": "If you are in the center ring: Resolve your Punch without flipping your Guard card. You've got 'em on the ropes!"
+        },
+        "matchedFactB": {
+          "id": "1e50386912467a0c",
+          "statement": "If in the center ring, Punch is resolved without flipping your own Guard card.",
+          "sourceSentence": "If you are in the center ring: Resolve your Punch without flipping your Guard card. You've got 'em on the ropes!"
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "7fe9cbea1fdfa9aa",
+        "statement": "If your Punch is blocked or both players are in their respective corners, the Punch has no effect on the opponent.",
+        "quotedFromA": "If your Punch is blocked (see Block) or both you and your opponent are in your respective corners: Your Punch has no effect on your opponent; however, you must still exhaust your own guard card if you are in your corner.",
+        "quotedFromB": "If your Punch is blocked (see Block) or both you and your opponent are in your respective corners: Your Punch has no effect on your opponent...",
+        "matchedFactA": {
+          "id": "e117d1f898d0aeae",
+          "statement": "If your Punch is blocked or both players are in their respective corners, your Punch has no effect on opponent but you still exhaust your own Guard if in your corner.",
+          "sourceSentence": "If your Punch is blocked (see Block) or both you and your opponent are in your respective corners: Your Punch has no effect on your opponent; however, you must still exhaust your own guard card if you are in your corner."
+        },
+        "matchedFactB": {
+          "id": "321be0ff2cb23256",
+          "statement": "If your Punch is blocked or both you and your opponent are in your respective corners, your Punch has no effect on your opponent.",
+          "sourceSentence": "If your Punch is blocked (see Block) or both you and your opponent are in your respective corners: Your Punch has no effect on your opponent..."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "d754930850b85af0",
+        "statement": "Even when your Punch has no effect, you must still exhaust your own Guard card if you are in your corner.",
+        "quotedFromA": "If your Punch is blocked (see Block) or both you and your opponent are in your respective corners: Your Punch has no effect on your opponent; however, you must still exhaust your own guard card if you are in your corner.",
+        "quotedFromB": "...however, you must still exhaust your own guard card if you are in your corner.",
+        "matchedFactA": {
+          "id": "e117d1f898d0aeae",
+          "statement": "If your Punch is blocked or both players are in their respective corners, your Punch has no effect on opponent but you still exhaust your own Guard if in your corner.",
+          "sourceSentence": "If your Punch is blocked (see Block) or both you and your opponent are in your respective corners: Your Punch has no effect on your opponent; however, you must still exhaust your own guard card if you are in your corner."
+        },
+        "matchedFactB": {
+          "id": "fb7767756fa0d41a",
+          "statement": "Even if your Punch has no effect, you must still exhaust your own Guard card if you are in your corner.",
+          "sourceSentence": "...however, you must still exhaust your own guard card if you are in your corner."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "5c0f5a64a3626c3d",
+        "statement": "When both players play Punch for the same action while one is in the center ring, the player punching from their corner must finish exhausting their Guard card before either resolves their Punch.",
+        "quotedFromA": "If both you and your opponent play a Punch for the same action while one player is in the center ring: The player punching from their corner must finish exhausting their Guard card (if able) before either player may resolve their Punch.",
+        "quotedFromB": "If both you and your opponent play a Punch for the same action while one player is in the center ring: The player punching from their corner must finish exhausting their Guard card (if able) before either player may resolve their Punch.",
+        "matchedFactA": {
+          "id": "dd89a07d54b1da38",
+          "statement": "When both players Punch for the same action and one is in the center ring, the player punching from their corner must exhaust their Guard card first before either resolves their Punch.",
+          "sourceSentence": "If both you and your opponent play a Punch for the same action while one player is in the center ring: The player punching from their corner must finish exhausting their Guard card (if able) before either player may resolve their Punch."
+        },
+        "matchedFactB": {
+          "id": "b4f7e0147be550b4",
+          "statement": "If both you and your opponent play Punch for the same action while one player is in the center ring, the player punching from their corner must finish exhausting their Guard card before either player resolves their Punch.",
+          "sourceSentence": "If both you and your opponent play a Punch for the same action while one player is in the center ring: The player punching from their corner must finish exhausting their Guard card (if able) before either player may resolve their Punch."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "7302d35a574f1369",
+        "statement": "Resting lets you reclaim all action cards from your discard pile and add them to your hand.",
+        "quotedFromA": "Reclaim your discards: Take all the action cards in your discard pile and add them to your hand.",
+        "quotedFromB": "Reclaim your discards: Take all the action cards in your discard pile and add them to your hand.",
+        "matchedFactA": {
+          "id": "ae6f688c9ba48174",
+          "statement": "Rest lets you reclaim all action cards from your discard pile and add them to your hand.",
+          "sourceSentence": "Reclaim your discards: Take all the action cards in your discard pile and add them to your hand."
+        },
+        "matchedFactB": {
+          "id": "a8be64aee6025796",
+          "statement": "When resting, you reclaim all action cards from your discard pile and add them to your hand.",
+          "sourceSentence": "Reclaim your discards: Take all the action cards in your discard pile and add them to your hand."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "f8c23cc5f1b42eda",
+        "statement": "When resting, you do not take any action cards currently in play.",
+        "quotedFromA": "Do not take any of the action cards currently in play.",
+        "quotedFromB": "Do not take any of the action cards currently in play.",
+        "matchedFactA": {
+          "id": "42b80503491cec7f",
+          "statement": "When Resting, do not take action cards currently in play.",
+          "sourceSentence": "Do not take any of the action cards currently in play."
+        },
+        "matchedFactB": {
+          "id": "83f137190f12f4ff",
+          "statement": "When resting, do not take any action cards currently in play.",
+          "sourceSentence": "Do not take any of the action cards currently in play."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "da9ada88f4da6a64",
+        "statement": "Flipping a Guard card back to ready during Rest happens in addition to reclaiming discards.",
+        "quotedFromA": "If any of your Guard cards are EXHAUSTED: Flip one Guard card back to ready. This is in addition to reclaiming your discards.",
+        "quotedFromB": "This is in addition to reclaiming your discards.",
+        "matchedFactA": {
+          "id": "514eb92798afb2c1",
+          "statement": "If any of your Guard cards are exhausted when you Rest, flip one Guard card back to ready in addition to reclaiming discards.",
+          "sourceSentence": "If any of your Guard cards are EXHAUSTED: Flip one Guard card back to ready. This is in addition to reclaiming your discards.",
+          "numericValue": {
+            "magnitude": 1,
+            "unit": "Guard cards flipped to ready",
+            "approximate": false
+          }
+        },
+        "matchedFactB": {
+          "id": "682a72d91f908420",
+          "statement": "Flipping a Guard card back to ready when resting happens in addition to reclaiming discards.",
+          "sourceSentence": "This is in addition to reclaiming your discards."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "256010fa78baf88a",
+        "statement": "In the plan phase, action cards may be placed in any order regardless of their timing values.",
+        "quotedFromA": "In the plan phase, you may place any action cards, regardless of their timings, in any order. The timing on the cards does not matter in this phase.",
+        "quotedFromB": "In the plan phase, you may place any action cards, regardless of their timings, in any order. The timing on the cards does not matter in this phase.",
+        "matchedFactA": {
+          "id": "594c92e054f08758",
+          "statement": "In the plan phase, action cards may be placed in any order regardless of their timing values.",
+          "sourceSentence": "In the plan phase, you may place any action cards, regardless of their timings, in any order. The timing on the cards does not matter in this phase."
+        },
+        "matchedFactB": {
+          "id": "37593559ee2aaf0b",
+          "statement": "In the plan phase, you may place any action cards in any order regardless of their timings.",
+          "sourceSentence": "In the plan phase, you may place any action cards, regardless of their timings, in any order. The timing on the cards does not matter in this phase."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "6079192f3459567c",
+        "statement": "In the fight phase, the first set of action cards is always completely resolved before the second set of action cards.",
+        "quotedFromA": "In the fight phase, the first set of action cards are always completely resolved before the second set of action cards.",
+        "quotedFromB": "In the fight phase, the first set of action cards are always completely resolved before the second set of action cards. For example, a Block from the first action will not stop a Punch from the second action.",
+        "matchedFactA": {
+          "id": "a116d8908afd71a4",
+          "statement": "In the fight phase, the first set of action cards are always completely resolved before the second set.",
+          "sourceSentence": "In the fight phase, the first set of action cards are always completely resolved before the second set of action cards."
+        },
+        "matchedFactB": {
+          "id": "e8d9c8a8015b4bdd",
+          "statement": "In the fight phase, the first set of action cards is always completely resolved before the second set of action cards, so effects from the first set do not carry over to the second set.",
+          "sourceSentence": "In the fight phase, the first set of action cards are always completely resolved before the second set of action cards. For example, a Block from the first action will not stop a Punch from the second action."
+        }
+      }
+    },
+    {
+      "fact": {
+        "id": "b98e505de8cc789c",
+        "statement": "A Block from the first action will not stop a Punch from the second action.",
+        "quotedFromA": "For example, a Block from the first action will not stop a Punch from the second action.",
+        "quotedFromB": "In the fight phase, the first set of action cards are always completely resolved before the second set of action cards. For example, a Block from the first action will not stop a Punch from the second action.",
+        "matchedFactA": {
+          "id": "ca9430179e99dd70",
+          "statement": "A Block from the first action will not stop a Punch from the second action.",
+          "sourceSentence": "For example, a Block from the first action will not stop a Punch from the second action."
+        },
+        "matchedFactB": {
+          "id": "e8d9c8a8015b4bdd",
+          "statement": "In the fight phase, the first set of action cards is always completely resolved before the second set of action cards, so effects from the first set do not carry over to the second set.",
+          "sourceSentence": "In the fight phase, the first set of action cards are always completely resolved before the second set of action cards. For example, a Block from the first action will not stop a Punch from the second action."
+        }
+      }
+    }
+  ]
+}

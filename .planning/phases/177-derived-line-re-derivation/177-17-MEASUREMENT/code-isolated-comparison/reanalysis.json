@@ -1,0 +1,234 @@
+{
+  "run1": [
+    {
+      "slice": "seven__live__01-definitions-and-components.md",
+      "both_claimed": 8,
+      "both_grounded": 8,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": [
+        {
+          "lineNumber": 21,
+          "classification": "corroborated-by-composition",
+          "reason": "Verified in code: 7 highest card number multiply 4 colors multiply 4 copies per card = 112 cards (checked against this Derived line's own stated claim, never freely generated)."
+        }
+      ]
+    },
+    {
+      "slice": "seven__live__01-overview-setup-and-play.md",
+      "both_claimed": 21,
+      "both_grounded": 21,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": [
+        {
+          "lineNumber": 36,
+          "classification": "corroborated-by-composition",
+          "reason": "Verified in code: 2 subtract 1 = 1; then 10 subtract 3 = 7; then 7 divide 1 = 7 (final: 7 rounds) (checked against this Derived line's own stated claim, never freely generated)."
+        },
+        {
+          "lineNumber": 38,
+          "classification": "uncorroborated",
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        }
+      ]
+    },
+    {
+      "slice": "seven__live__02-solo-variant.md",
+      "both_claimed": 6,
+      "both_grounded": 6,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": []
+    },
+    {
+      "slice": "one-two-punch__live__01-setup-and-round-structure.md",
+      "both_claimed": 31,
+      "both_grounded": 31,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": [
+        {
+          "lineNumber": 32,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 61,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 68,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 81,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ]
+    },
+    {
+      "slice": "one-two-punch__live__02-action-cards-and-resolution.md",
+      "both_claimed": 44,
+      "both_grounded": 44,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": [
+        {
+          "lineNumber": 16,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 68,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 82,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 106,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 117,
+          "classification": "uncorroborated",
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        },
+        {
+          "lineNumber": 128,
+          "classification": "absence-corroborated",
+          "reason": "None of the named target term(s) (edition, printing) appear anywhere in this passage's quote lines — mechanically confirms the claimed absence."
+        },
+        {
+          "lineNumber": 132,
+          "classification": "absence-unverifiable",
+          "reason": "Reconciler flagged this Derived line as an absence claim but named no explicit, literal, searchable target — dual enumeration structurally cannot corroborate a negative (no enumerator ever lists a fact that is not there), and this module refuses to guess a keyword to scan for on its own (177-01 precedent: recognizing an absence claim and naming a safe target for it is a judgment call, not a keyword list baked into this module). Reported honestly in its own bucket rather than downgraded to uncorroborated."
+        }
+      ]
+    }
+  ],
+  "run2": [
+    {
+      "slice": "seven__live__01-definitions-and-components.md",
+      "both_claimed": 8,
+      "both_grounded": 8,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": [
+        {
+          "lineNumber": 21,
+          "classification": "corroborated-by-composition",
+          "reason": "Verified in code: 7 highest card number multiply 4 colors multiply 4 copies of each card = 112 cards (checked against this Derived line's own stated claim, never freely generated)."
+        }
+      ]
+    },
+    {
+      "slice": "seven__live__01-overview-setup-and-play.md",
+      "both_claimed": 22,
+      "both_grounded": 22,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": [
+        {
+          "lineNumber": 36,
+          "classification": "corroborated-by-composition",
+          "reason": "Verified in code: 2 subtract 1 = 1; then 10 subtract 3 = 7; then 7 divide 1 = 7 (final: 7 rounds) (checked against this Derived line's own stated claim, never freely generated)."
+        },
+        {
+          "lineNumber": 38,
+          "classification": "uncorroborated",
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        }
+      ]
+    },
+    {
+      "slice": "seven__live__02-solo-variant.md",
+      "both_claimed": 6,
+      "both_grounded": 6,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": []
+    },
+    {
+      "slice": "one-two-punch__live__01-setup-and-round-structure.md",
+      "both_claimed": 30,
+      "both_grounded": 30,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": [
+        {
+          "lineNumber": 32,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 61,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 68,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 81,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        }
+      ]
+    },
+    {
+      "slice": "one-two-punch__live__02-action-cards-and-resolution.md",
+      "both_claimed": 45,
+      "both_grounded": 45,
+      "both_rejected": 0,
+      "rejections": [],
+      "classifications": [
+        {
+          "lineNumber": 16,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 68,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 82,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 106,
+          "classification": "corroborated",
+          "reason": "Every cited fact passed grounding validation (verbatim-traceable to both enumerator lists)."
+        },
+        {
+          "lineNumber": 117,
+          "classification": "uncorroborated",
+          "reason": "No grounded fact corroborates this Derived line, and the rulebook source is quote-verified, so the gap is reported rather than downgraded."
+        },
+        {
+          "lineNumber": 128,
+          "classification": "absence-corroborated",
+          "reason": "None of the named target term(s) (edition, printing) appear anywhere in this passage's quote lines — mechanically confirms the claimed absence."
+        },
+        {
+          "lineNumber": 132,
+          "classification": "absence-unverifiable",
+          "reason": "Reconciler flagged this Derived line as an absence claim but named no explicit, literal, searchable target — dual enumeration structurally cannot corroborate a negative (no enumerator ever lists a fact that is not there), and this module refuses to guess a keyword to scan for on its own (177-01 precedent: recognizing an absence claim and naming a safe target for it is a judgment call, not a keyword list baked into this module). Reported honestly in its own bucket rather than downgraded to uncorroborated."
+        }
+      ]
+    }
+  ]
+}
