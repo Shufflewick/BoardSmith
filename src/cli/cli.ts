@@ -39,9 +39,9 @@ import {
 import { verifyRulingRecheckCommand } from './commands/verify-ruling-recheck.js';
 import { verifyRepairStatusCommand } from './commands/verify-repair.js';
 import {
-  verifyDeriveRecheckCommand,
+  verifyDeriveCheckCommand,
   verifyDeriveRecordCommand,
-} from './commands/verify-derive-recheck.js';
+} from './commands/verify-derive-check.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -416,56 +416,46 @@ program
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyRepairStatusCommand);
 
-// CHECK-04 (177-CONTEXT.md): re-derives every rule-bearing Derived line independently of the
-// original transcription pass, using only the current slice's quote lines, and reports any
-// disagreement citing both derivations verbatim. Project-level and source-free BY CONSTRUCTION —
-// neither command registers --run-id (decision 14) or a bypass option of any kind.
-// `verify-derive-record` is the ONLY write surface for CHECK-04's ledger (177-10, closing CR-05).
+// CHECK-04 (177.1-CONTEXT.md decision 2): dual-enumeration derived-line check — two
+// independently-dispatched enumerators (claude-opus-5, claude-haiku-4-5-20251001) each read a
+// slice's quote lines, a reconciler (claude-sonnet-5) grounds their overlap and cross-checks it
+// against every `Derived (p.N):` line, and the CLI classifies each into one of eight verdicts
+// (corroborated / corroborated-by-composition / uncorroborated / contradicted /
+// quote-unverified / absence-corroborated / absence-contradicted / absence-unverifiable). Advisory
+// — the check always exits 0; a non-corroboration is worth a human glance, never a build gate.
+// Both commands are project-level and source-free BY CONSTRUCTION — neither registers --run-id
+// or any bypass option of any kind. `verify-derive-record` is the ONLY write surface for
+// CHECK-04's ledger (carried forward from CR-05).
 program
-  .command('verify-derive-recheck')
+  .command('verify-derive-check')
   .description(
-    "Re-derive every rule-bearing Derived line independently of the original transcription, " +
-      'reporting one of four verdicts (agrees / disagrees / underivable / not-rule-bearing) per ' +
-      'line, citing both derivations on disagreement (read-only, project-level, source-free, ' +
-      'machine-readable)',
+    'Enumerate every rule-bearing Derived line project-wide, join each to its recorded ' +
+      'dual-enumeration verdict, and hand back the exact enumerator dispatch payload for every ' +
+      'slice still pending (read-only, project-level, source-free, machine-readable, exits 0 ' +
+      'unconditionally)',
   )
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyDeriveRecheckCommand);
+  .action(verifyDeriveCheckCommand);
 
 program
   .command('verify-derive-record')
   .description(
-    "Record one Derived line's blind re-derivation verdict, atomically upserted into the " +
-      'project-level ledger (the ONLY write surface for CHECK-04)',
+    "Read one slice's two enumerator returns and its reconciler return, classify every " +
+      "Derived line into one of CHECK-04's eight dual-enumeration verdicts, and atomically " +
+      'upsert-append every classification into the project-level ledger (the ONLY write ' +
+      'surface for CHECK-04)',
   )
   .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .requiredOption('--slice-path <path>', 'The rulebook/ slice the Derived line lives in')
-  .requiredOption('--line-number <n>', "The Derived line's 1-based line number in that slice")
-  .requiredOption('--original-line <text>', 'The original Derived (p.N): ... line, verbatim')
+  .requiredOption('--slice-path <path>', 'The rulebook/ slice the Derived lines live in')
+  .requiredOption('--enumerator-a <file>', "Enumerator A's structured JSON return (claude-opus-5)")
   .requiredOption(
-    '--verdict <agrees|disagrees|underivable|not-rule-bearing>',
-    'The comparison dispatch\'s verdict',
+    '--enumerator-b <file>',
+    "Enumerator B's structured JSON return (claude-haiku-4-5-20251001)",
   )
-  .requiredOption('--reasoning <text>', 'The reasoning behind the verdict — the artifact itself')
   .requiredOption(
-    '--rederived-value <text>',
-    'The blind dispatch\'s own rederivedValue, verbatim (either its derived reading, or the ' +
-      'literal underivable/not-rule-bearing)',
-  )
-  .option(
-    '--original-reading <text>',
-    'For disagrees: the original derivation quoted verbatim',
-  )
-  .option(
-    '--rederived-reading <text>',
-    'For disagrees: the blind re-derivation quoted verbatim',
-  )
-  .option('--source-quote <text...>', 'Quote line(s) the blind dispatch cited (repeatable)')
-  .option(
-    '--fact-alignment <same-fact|different-fact>',
-    'For agrees/disagrees: whether the rederived reading addressed the SAME fact the original ' +
-      'line asserts, or a DIFFERENT one the payload targeting collapsed onto (177-11)',
+    '--reconciler <file>',
+    "The reconciler's structured JSON return (claude-sonnet-5)",
   )
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyDeriveRecordCommand);
