@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { promises as fs, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -9,6 +9,7 @@ import {
   DERIVE_CHECK_VERDICTS,
   DERIVE_CHECK_LEDGER_BEGIN,
   DERIVE_CHECK_LEDGER_END,
+  DERIVE_CHECK_MODELS,
   createDeriveCheckRecord,
   deriveCheckLedgerPath,
   replaceDeriveCheckVerdicts,
@@ -17,6 +18,7 @@ import {
   reconcileSlice,
   parseSubagentJsonInput,
   verifyDeriveRecordCommand,
+  verifyDeriveCheckCommand,
   type DeriveCheckRecord,
   type EnumeratorReturn,
   type ReconcilerReturn,
@@ -1243,5 +1245,317 @@ describe('verifyDeriveRecordCommand', () => {
       .join('\n')
       .replace(/\/\*[\s\S]*?\*\//g, '');
     expect(stripped).not.toMatch(/--force|--skip|--overwrite|--run-id/);
+  });
+});
+
+// ===========================================================================================
+// Task 1 (177.1-04) — verifyDeriveCheckCommand: the read/report surface
+// ===========================================================================================
+
+describe('verifyDeriveCheckCommand', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-check-command-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  async function makeProject(files: Record<string, string>): Promise<string> {
+    const project = join(dir, 'project');
+    for (const [relPath, text] of Object.entries(files)) {
+      const full = join(project, relPath);
+      await fs.mkdir(dirname(full), { recursive: true });
+      await fs.writeFile(full, text);
+    }
+    return project;
+  }
+
+  it('reports every Derived line pending, with zero manufactured verdicts, when no ledger has ever been written', async () => {
+    const project = await makeProject({
+      'rulebook/01-x.md': 'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 7 unique numbers.\n',
+    });
+
+    const result = await verifyDeriveCheckCommand({ project });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]).toMatchObject({
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 3,
+      derivedLineText: 'Derived (p.1): There are 7 unique numbers.',
+      verdict: 'pending',
+      status: 'pending',
+      reason: '',
+      citedFactIds: [],
+    });
+    expect(result.pendingCount).toBe(1);
+    for (const v of DERIVE_CHECK_VERDICTS) {
+      expect(result.verdictCounts[v]).toBe(0);
+    }
+  });
+
+  it('names the three pinned model ids exactly, as string literals', async () => {
+    const project = await makeProject({ 'rulebook/01-x.md': 'Nothing to derive here.\n' });
+    const result = await verifyDeriveCheckCommand({ project });
+    expect(result.models).toEqual({
+      enumeratorA: 'claude-opus-5',
+      enumeratorB: 'claude-haiku-4-5-20251001',
+      reconciler: 'claude-sonnet-5',
+    });
+    expect(result.models).toEqual(DERIVE_CHECK_MODELS);
+  });
+
+  it('never gains a verdictCounts key outside DERIVE_CHECK_VERDICTS, and carries all eight explicitly', async () => {
+    const project = await makeProject({ 'rulebook/01-x.md': 'Nothing to derive here.\n' });
+    const result = await verifyDeriveCheckCommand({ project });
+    expect(Object.keys(result.verdictCounts).sort()).toEqual([...DERIVE_CHECK_VERDICTS].sort());
+  });
+
+  it('candidate enumeration is PROJECT-WIDE: a populated .verify/<run-id>/slices/ tree and a rulebook/source/ decoy never change the result', async () => {
+    const files = {
+      'rulebook/01-x.md': 'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 7 unique numbers.\n',
+    };
+    const withoutDecoy = await makeProject(files);
+    const withDecoy = await makeProject({
+      ...files,
+      '.verify/run-abc123/slices/rulebook/01-x.md': 'STALE STAGED COPY — must never be read.\n',
+      'rulebook/source/rules.pdf': 'not a real pdf, must never be read',
+    });
+
+    const resultWithout = await verifyDeriveCheckCommand({ project: withoutDecoy });
+    const resultWithDecoy = await verifyDeriveCheckCommand({ project: withDecoy });
+
+    expect({ ...resultWithDecoy, projectDir: '' }).toEqual({ ...resultWithout, projectDir: '' });
+
+    const beforeHash = await hashProject(withDecoy);
+    await verifyDeriveCheckCommand({ project: withDecoy });
+    expect(await hashProject(withDecoy)).toBe(beforeHash);
+  });
+
+  it('a slice whose only Derived (p.N): occurrence is the annotation-convention legend (literal placeholder, no digit) yields zero candidates', async () => {
+    const project = await makeProject({
+      'rulebook/CARDS.md':
+        '# Cards\n\n' +
+        '> `Derived (p.N):` (a rule-bearing inference — affects legality, scoring, or sequencing), or\n' +
+        '> `Visual (p.N):` (a presentation-only note).\n',
+    });
+
+    const result = await verifyDeriveCheckCommand({ project });
+
+    expect(result.findings).toHaveLength(0);
+    expect(result.slices).toHaveLength(0);
+  });
+
+  it('a slice whose legend line escapes its usual backtick decoration still yields zero candidates for it, mechanically', async () => {
+    const project = await makeProject({
+      'rulebook/CARDS.md': 'Derived (p.N): explains the annotation convention above.\n',
+    });
+
+    const result = await verifyDeriveCheckCommand({ project });
+
+    expect(result.findings).toHaveLength(0);
+  });
+
+  it('emits enumeratorPayload (the exact buildEnumeratorPayload bytes) and derivedLines for a slice with pending candidates', async () => {
+    const project = await makeProject({
+      'rulebook/01-x.md':
+        'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 7 unique numbers.\n',
+    });
+
+    const result = await verifyDeriveCheckCommand({ project });
+
+    expect(result.slices).toHaveLength(1);
+    const slice = result.slices[0];
+    expect(slice.slicePath).toBe('rulebook/01-x.md');
+    expect(slice.candidates).toBe(1);
+    expect(slice.payloadError).toBeUndefined();
+    expect(slice.enumeratorPayload).toContain('BS-ENUMERATE-V1');
+    expect(slice.enumeratorPayload).toContain('Card numbers range from 1 to 7.');
+    expect(slice.enumeratorPayload).not.toMatch(/Derived \(p\./i);
+    expect(slice.derivedLines).toEqual([
+      { lineNumber: 3, text: 'Derived (p.1): There are 7 unique numbers.' },
+    ]);
+  });
+
+  it('does NOT emit enumeratorPayload for a slice whose every candidate is already ledger-recorded', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const text = 'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 7 unique numbers.\n';
+    const project = await makeProject({ [slicePath]: text });
+
+    await recordDeriveCheckVerdicts(project, [
+      createDeriveCheckRecord({
+        slicePath,
+        lineNumber: 3,
+        derivedLineText: 'Derived (p.1): There are 7 unique numbers.',
+        verdict: 'corroborated',
+        reason: 'Both enumerators found the range fact.',
+        citedFactIds: ['fact-1'],
+      }),
+    ]);
+
+    const result = await verifyDeriveCheckCommand({ project });
+
+    expect(result.slices).toHaveLength(1);
+    expect(result.slices[0].enumeratorPayload).toBeUndefined();
+    expect(result.slices[0].payloadError).toBeUndefined();
+    expect(result.findings[0].status).toBe('recorded');
+    expect(result.findings[0].verdict).toBe('corroborated');
+    expect(result.verdictCounts.corroborated).toBe(1);
+    expect(result.pendingCount).toBe(0);
+  });
+
+  it('reports payloadError, never a silently-skipped slice, when buildEnumeratorPayload throws', async () => {
+    // The payload's own "Slice: <path>" line carries an unremovable annotation-family citation —
+    // buildEnumeratorPayload's construction-site backstop throws, and this command must report
+    // that as payloadError, never dispatch it, and never drop the slice from the report.
+    const slicePath = 'rulebook/Derived (p.1) note.md';
+    const project = await makeProject({
+      [slicePath]: 'Card numbers range from 1 to 7.\n\nDerived (p.2): There are 7 unique numbers.\n',
+    });
+
+    const result = await verifyDeriveCheckCommand({ project });
+
+    expect(result.slices).toHaveLength(1);
+    expect(result.slices[0].enumeratorPayload).toBeUndefined();
+    expect(result.slices[0].payloadError).toContain(slicePath);
+  });
+
+  it('a ledger record whose derivedLineText no longer matches the current slice text is reported in staleRecords, and the finding reports pending (CR-03)', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await makeProject({
+      [slicePath]: 'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 7 unique numbers, now edited.\n',
+    });
+
+    await recordDeriveCheckVerdicts(project, [
+      createDeriveCheckRecord({
+        slicePath,
+        lineNumber: 3,
+        derivedLineText: 'Derived (p.1): There are 7 unique numbers.',
+        verdict: 'corroborated',
+        reason: 'Both enumerators found the range fact.',
+        citedFactIds: ['fact-1'],
+      }),
+    ]);
+
+    const result = await verifyDeriveCheckCommand({ project });
+
+    expect(result.findings[0].status).toBe('pending');
+    expect(result.findings[0].verdict).toBe('pending');
+    expect(result.staleRecords).toHaveLength(1);
+    expect(result.staleRecords[0]).toContain(`${slicePath}:3`);
+    expect(result.verdictCounts.corroborated).toBe(0);
+  });
+
+  it('a ledger record whose location matches no current candidate is reported in orphanedRecords, never silently absorbed (WR-03)', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await makeProject({ [slicePath]: 'Nothing to derive here.\n' });
+
+    await recordDeriveCheckVerdicts(project, [
+      createDeriveCheckRecord({
+        slicePath: 'rulebook/deleted-slice.md',
+        lineNumber: 7,
+        derivedLineText: 'Derived (p.1): A line from a slice that no longer exists.',
+        verdict: 'contradicted',
+        reason: 'The source directly contradicts this.',
+        citedFactIds: ['fact-9'],
+      }),
+    ]);
+
+    const result = await verifyDeriveCheckCommand({ project });
+
+    expect(result.orphanedRecords).toHaveLength(1);
+    expect(result.orphanedRecords[0]).toContain('rulebook/deleted-slice.md:7');
+  });
+
+  it('missing rulebook/ throws one actionable line naming --project, no stack, no .ts: leak', async () => {
+    const project = join(dir, 'no-rulebook-project');
+    await fs.mkdir(project, { recursive: true });
+
+    await expect(verifyDeriveCheckCommand({ project })).rejects.toThrow(/--project/);
+    try {
+      await verifyDeriveCheckCommand({ project });
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).not.toMatch(/\bat .*\(/);
+      expect(message).not.toMatch(/\.ts:\d+/);
+    }
+  });
+
+  it('an unreadable rulebook/ (EACCES) reports the real condition, not "No rulebook/ directory" (WR-02)', async () => {
+    const project = join(dir, 'eacces-project');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    await fs.chmod(rulebookDir, 0o000);
+    try {
+      await expect(verifyDeriveCheckCommand({ project })).rejects.toThrow(/could not be read/);
+      try {
+        await verifyDeriveCheckCommand({ project });
+      } catch (err) {
+        expect((err as Error).message).not.toMatch(/No rulebook\/ directory/);
+      }
+    } finally {
+      await fs.chmod(rulebookDir, 0o755);
+    }
+  });
+
+  it('--json emits the result and nothing else on stdout', async () => {
+    const project = await makeProject({
+      'rulebook/01-x.md': 'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 7 unique numbers.\n',
+    });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const result = await verifyDeriveCheckCommand({ project, json: true });
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const printed = logSpy.mock.calls[0][0] as string;
+      expect(() => JSON.parse(printed)).not.toThrow();
+      expect(JSON.parse(printed)).toEqual(JSON.parse(JSON.stringify(result)));
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('process.exitCode stays undefined after a run whose ledger contains a contradicted record (CONTEXT decision 14 — advisory, never a gate)', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await makeProject({
+      [slicePath]: 'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 5 colors.\n',
+    });
+
+    await recordDeriveCheckVerdicts(project, [
+      createDeriveCheckRecord({
+        slicePath,
+        lineNumber: 3,
+        derivedLineText: 'Derived (p.1): There are 5 colors.',
+        verdict: 'contradicted',
+        reason: 'The source directly contradicts this.',
+        citedFactIds: ['fact-1'],
+      }),
+    ]);
+
+    const before = process.exitCode;
+    const result = await verifyDeriveCheckCommand({ project });
+
+    expect(result.findings[0].verdict).toBe('contradicted');
+    expect(process.exitCode).toBe(before);
+  });
+
+  it('grep-count: this module never assigns process.exitCode anywhere (source-level pin, comment-stripped)', () => {
+    const src = readFileSync(join(__dirname, 'verify-derive-check.ts'), 'utf-8');
+    const stripped = src
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//'))
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(stripped).not.toMatch(/process\.exitCode\s*=/);
+  });
+
+  it('grep-count: exactly one "No rulebook/ directory" message exists in the module (WR-10)', () => {
+    const src = readFileSync(join(__dirname, 'verify-derive-check.ts'), 'utf-8').replace(
+      /^\s*\*.*$/gm,
+      '',
+    );
+    const matches = src.match(/No rulebook\/ directory/g) ?? [];
+    expect(matches).toHaveLength(1);
   });
 });

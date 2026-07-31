@@ -2,12 +2,15 @@ import { promises as fs } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
+import { isPresentationLine } from './verify-classify.js';
+import { DERIVED_LINE_RE, annotationLineStartRe } from './derived-line-pattern.js';
 import {
   createEnumeratedFact,
   validateGrounding,
   composeArithmeticClaim,
   composeArithmeticChain,
   classifyDerivedLines,
+  buildEnumeratorPayload,
   QuoteVerifiedProvenance,
   type DerivedLineClassification,
   type NumericValue,
@@ -25,6 +28,19 @@ import {
   type DerivedLineClassificationResult,
   type MissedFact,
 } from './verify-enumerate.js';
+
+/**
+ * The three pinned model ids the SKILL orchestrator dispatches (177.1-CONTEXT.md decision 4) —
+ * exactly what `177-22-MEASUREMENT/driver.mjs:17-19` dispatched. Cross-family independence
+ * between the two enumerators was load-bearing in every CHECK-04 measurement; pinning these here
+ * means an orchestrator can never silently substitute a different model and quietly weaken that
+ * independence premise.
+ */
+export const DERIVE_CHECK_MODELS = Object.freeze({
+  enumeratorA: 'claude-opus-5',
+  enumeratorB: 'claude-haiku-4-5-20251001',
+  reconciler: 'claude-sonnet-5',
+} as const);
 
 /**
  * `verify-derive-check.ts` — CHECK-04's mechanical core, RETARGETED onto the closed
@@ -58,6 +74,216 @@ import {
  * `atomicWriteFile` (`verify-run.ts`) — the ONE atomic write path in the repo — never a second
  * `fs.writeFile`/`writeFileSync` call.
  */
+
+// -------------------------------------------------------------------------------------------
+// readLiveSlices / annotationBody / quoteLinesOnly / enumerateDerivedLines — MOVED wholesale from
+// the retired `verify-derive-recheck.ts` (177.1-CONTEXT.md decision 6). These are the
+// design-agnostic parts the CHECK-04 closure note already named as carrying forward unchanged:
+// the live-tree read, the decoration-normalization choke point, the quote-only payload filter,
+// and candidate enumeration. The targeting-specific machinery (`focusQuoteWindow`,
+// `blindDeriveHandle`, `buildBlindDerivePayload`, `derivePayloadSet`, `factAlignment`) is NOT
+// moved — it is retired-design-specific and is deleted outright in 177.1-07.
+// -------------------------------------------------------------------------------------------
+
+/**
+ * Reads the LIVE `rulebook/*.md` tree directly — the same source `verify-classify.ts`'s
+ * `computeRunPairs` already reads (excluding `INDEX.md`, the archive manifest, and
+ * `00-visual-survey.md`, `ingest-archive.ts`'s presentation-by-design UI-ask handoff artifact).
+ * This is the correct "which files are slices" definition for a source-free, run-less check
+ * (decision 14): CHECK-04 targets live slices with NO staged prerequisite and never constructs a
+ * `.verify/<runId>/` staging path — proven behaviorally by
+ * `verifyDeriveCheckCommand`'s own `.verify/` decoy test.
+ */
+export async function readLiveSlices(
+  projectDir: string,
+): Promise<{ path: string; text: string }[]> {
+  const rulebookDir = join(projectDir, 'rulebook');
+  let names: string[];
+  try {
+    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
+    names = entries
+      .filter(
+        (e) =>
+          e.isFile() &&
+          e.name.endsWith('.md') &&
+          e.name !== 'INDEX.md' &&
+          e.name !== '00-visual-survey.md',
+      )
+      .map((e) => e.name)
+      .sort();
+  } catch (err) {
+    // (WR-02/WR-10): this is the ONE "no rulebook/" message in the module — only ENOENT means
+    // "does not exist"; any other errno (EACCES, ENOTDIR, ...) is a real, different condition and
+    // must say so, never be reported as a missing directory.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new Error(
+        `No rulebook/ directory in ${projectDir}.\n` +
+          `Pass --project <dir> to target the bs-project this check should read.`,
+      );
+    }
+    throw new Error(
+      `rulebook/ exists at ${rulebookDir} but could not be read (${code ?? 'unknown error'}).\n` +
+        `Pass --project <dir> to target the bs-project this check should read, and confirm the ` +
+        `directory is accessible.`,
+    );
+  }
+  return Promise.all(
+    names.map(async (name) => ({
+      path: `rulebook/${name}`,
+      text: await fs.readFile(join(rulebookDir, name), 'utf-8'),
+    })),
+  );
+}
+
+/**
+ * Leading blockquote markers, list bullets, and ordered-list markers, repeatable (a line can be
+ * both quoted AND bulleted, e.g. `> - Derived (p.1): ...`) — stripped before every prefix test.
+ * This is the ONE decoration-normalization site (`annotationBody`, immediately below); no caller
+ * re-derives its own trim/strip logic.
+ */
+const LINE_DECORATION_RE = /^(?:[>\-*+]\s*|\d+\.\s+)*/;
+
+/**
+ * Trims `line` and strips any leading markdown decoration (blockquote markers, list bullets,
+ * ordered-list markers), returning the annotation-testable body. `quoteLinesOnly` and
+ * `enumerateDerivedLines` both route through this single function before testing any of the three
+ * prefix regexes below, so the two can never diverge on what counts as decoration (CR-01). Not
+ * applied to anything else — a directly-quoted sentence's own leading `"` is never decoration and
+ * must never be stripped.
+ */
+export function annotationBody(line: string): string {
+  return line.trim().replace(LINE_DECORATION_RE, '');
+}
+
+/**
+ * Built via the shared `annotationLineStartRe` factory (`derived-line-pattern.ts`) rather than a
+ * hand-spelled literal — equivalent to the former `/^Visual \(p\.[^)]*\)/i`.
+ */
+const VISUAL_LINE_RE = annotationLineStartRe('Visual');
+/**
+ * A `Named-but-undefined` line is an ingest-time INFERENCE about undefined terminology, not
+ * directly-quoted rulebook prose — excluded from every "quote lines only" payload alongside
+ * `Derived`/`Visual`.
+ *
+ * Built via the shared `annotationLineStartRe` factory rather than a hand-spelled literal —
+ * equivalent to the former `/^Named-but-undefined \(p\.[^)]*\)/i`.
+ */
+const NAMED_BUT_UNDEFINED_LINE_RE = annotationLineStartRe('Named-but-undefined');
+
+/**
+ * True when `line` (already `.trim()`ed) belongs in a "quote lines only" payload: not blank, not
+ * a markdown heading, and not one of the three annotation-family lines (via `annotationBody`, the
+ * single decoration-normalization site).
+ */
+function isQuoteLine(line: string): boolean {
+  if (line.length === 0 || line.startsWith('#')) return false;
+  const body = annotationBody(line);
+  return (
+    !DERIVED_LINE_RE.test(body) && !VISUAL_LINE_RE.test(body) && !NAMED_BUT_UNDEFINED_LINE_RE.test(body)
+  );
+}
+
+/**
+ * Selects ONLY directly-quoted rulebook content and its citation headers from `sliceText` — the
+ * deliberate INVERSE of `ruleBearingLines()` (`verify-classify.ts`), which KEEPS unqualified
+ * `Derived` lines because they are rule-bearing for classification purposes. Every enumerator
+ * payload `buildEnumeratorPayload` (`verify-enumerate.ts`) builds is assembled from exactly this
+ * filter's output — reused rather than re-derived, so the two modules can never diverge on what
+ * counts as a quote line (this is WR-07's deny-list; the allow-list inversion is Phase 178's, per
+ * 177.1-CONTEXT.md decision 9 — NOT inverted here).
+ *
+ * Drops blank lines and markdown headings (`#`). Bare `p.N, <label>:` citation headers are
+ * RETAINED (they carry no rule content of their own, but an enumerator needs them to know which
+ * page a quote comes from) along with the directly-quoted prose beneath them.
+ *
+ * This is the single construction site for what counts as a "quote line" in this module — no
+ * caller re-derives its own subset of a slice's content.
+ */
+export function quoteLinesOnly(sliceText: string): string[] {
+  return sliceText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(isQuoteLine);
+}
+
+// -------------------------------------------------------------------------------------------
+// enumerateDerivedLines — enumerate-and-report, never silently drop
+// -------------------------------------------------------------------------------------------
+
+export interface DerivedLineEntry {
+  slicePath: string;
+  /** 1-based, matching the file's own line numbering. */
+  lineNumber: number;
+  /** The line's own verbatim, trimmed text. */
+  text: string;
+}
+
+export interface EnumerateDerivedLinesResult {
+  /** Every `Derived (p.` line surviving `isPresentationLine` exclusion — reaches the subagent. */
+  candidates: DerivedLineEntry[];
+  /** `Derived (p.` lines the mechanical presentation filter excluded, reported not dropped. */
+  excluded: DerivedLineEntry[];
+}
+
+/**
+ * A `Derived (p.N):` occurrence whose citation body contains NO digit at all — the literal
+ * annotation-convention LEGEND text some rulebooks (e.g. `doom-machine/rulebook/CARDS.md`) write
+ * to explain the `Derived (p.N):` convention itself, using the letter `N` as a placeholder, not a
+ * real page citation. `DERIVED_LINE_RE`'s citation body (`[^)]*`) matches this literal text same
+ * as a real citation would — it is NOT a real annotation and must never become a candidate. This
+ * is the harness's own disclosed 177-21 fix (`extract-corpus.mjs`'s `DERIVED_ANYWHERE_RE`,
+ * `/Derived\s*\(p\.\d/i`, requiring an actual digit), carried into the product path here rather
+ * than left as a measurement-only patch: the retired `verify-derive-recheck.ts` never carried
+ * this fix, because its own real `buildEnumeratorPayload`/`quoteLinesOnly` pipeline happened never
+ * to be exercised against a slice where the legend line escapes its usual backtick/quote
+ * decoration. A future rulebook writing that legend WITHOUT decoration must still yield zero
+ * candidates for it, mechanically, not by accident of formatting.
+ */
+const DERIVED_CITATION_LEGEND_PLACEHOLDER_RE = /^Derived \(p\.[^0-9)]*\)/i;
+
+/**
+ * Enumerates every `Derived (p.` line in the live tree, split into the mechanically-excluded
+ * presentation subset and the surviving candidates a judgment subagent evaluates. The
+ * annotation-convention legend placeholder (`Derived (p.N):`, no digit) is recognized and
+ * excluded from BOTH `candidates` and `excluded` — it is not a real annotation of either kind, so
+ * it is silently skipped from this function's accounting entirely, exactly as the real
+ * `buildEnumeratorPayload`/`quoteLinesOnly` pipeline already treats it (it is never a quote line
+ * either).
+ *
+ * Does NOT decide rule-bearingness here — that is the reconciler's job. `isPresentationLine` only
+ * catches the QUALIFIED presentation forms (`— diagram description:`, `— art:`, `Visual (p.N):`);
+ * an unqualified presentation-shaped line reaches `candidates` by design, depending entirely on a
+ * competent reconciler dispatch returning `uncorroborated`/similar for it.
+ */
+export function enumerateDerivedLines(
+  slices: { path: string; text: string }[],
+): EnumerateDerivedLinesResult {
+  const candidates: DerivedLineEntry[] = [];
+  const excluded: DerivedLineEntry[] = [];
+
+  for (const slice of slices) {
+    const rawLines = slice.text.split('\n');
+    rawLines.forEach((rawLine, index) => {
+      const line = rawLine.trim();
+      const body = annotationBody(line);
+      if (!DERIVED_LINE_RE.test(body)) return;
+      if (DERIVED_CITATION_LEGEND_PLACEHOLDER_RE.test(body)) return;
+      const entry: DerivedLineEntry = {
+        slicePath: slice.path,
+        lineNumber: index + 1,
+        text: line,
+      };
+      if (isPresentationLine(body)) {
+        excluded.push(entry);
+      } else {
+        candidates.push(entry);
+      }
+    });
+  }
+
+  return { candidates, excluded };
+}
 
 // -------------------------------------------------------------------------------------------
 // DERIVE_CHECK_VERDICTS — compile-time tied to DerivedLineClassification (177.1-02)
@@ -387,6 +613,247 @@ export async function readDeriveCheckVerdicts(projectDir: string): Promise<Deriv
       );
     }
   });
+}
+
+// -------------------------------------------------------------------------------------------
+// verifyDeriveCheckCommand — the read/report surface (177.1-04)
+// -------------------------------------------------------------------------------------------
+
+export interface VerifyDeriveCheckOptions {
+  project?: string;
+  json?: boolean;
+}
+
+export interface VerifyDeriveCheckSlice {
+  slicePath: string;
+  /** Count of candidates surviving `isPresentationLine` exclusion in this slice. */
+  candidates: number;
+  /**
+   * Emitted ONLY when this slice has at least one pending candidate (not yet ledger-recorded, or
+   * stale) — a fully-recorded slice does not need re-dispatching, and emitting its payload would
+   * put quote lines on stdout for no reason. The exact `buildEnumeratorPayload` output bytes.
+   */
+  enumeratorPayload?: string;
+  /** Names the slice `buildEnumeratorPayload` threw for; the slice is never dispatched when set. */
+  payloadError?: string;
+  /** lineNumber + verbatim text for every surviving candidate in this slice, for the reconciler. */
+  derivedLines: { lineNumber: number; text: string }[];
+}
+
+export interface VerifyDeriveCheckFinding {
+  slicePath: string;
+  lineNumber: number;
+  derivedLineText: string;
+  verdict: DeriveCheckVerdict | 'pending';
+  reason: string;
+  citedFactIds: string[];
+  status: 'recorded' | 'pending';
+}
+
+export interface VerifyDeriveCheckResult {
+  projectDir: string;
+  models: typeof DERIVE_CHECK_MODELS;
+  slices: VerifyDeriveCheckSlice[];
+  findings: VerifyDeriveCheckFinding[];
+  verdictCounts: Record<DeriveCheckVerdict, number>;
+  pendingCount: number;
+  staleRecords: string[];
+  orphanedRecords: string[];
+  /**
+   * Always empty: this is a READ/REPORT command — it never dispatches an enumerator or
+   * reconciler and never runs `reconcileSlice`/`validateGrounding` itself, so it has no grounding
+   * rejections of its own to report. Present for `--json` shape stability with the write
+   * surface's own `rejected` field (`verifyDeriveRecordCommand`); a fabricating reconciler's
+   * rejections are surfaced there, at record time, not re-derived here from a ledger that does
+   * not persist them.
+   */
+  groundingRejections: GroundingRejection[];
+  /** Always 0, for the same reason as `groundingRejections` above. */
+  missedFactCount: number;
+}
+
+function emptyDeriveCheckVerdictCounts(): Record<DeriveCheckVerdict, number> {
+  const counts = {} as Record<DeriveCheckVerdict, number>;
+  for (const v of DERIVE_CHECK_VERDICTS) counts[v] = 0;
+  return counts;
+}
+
+/**
+ * `boardsmith verify-derive-check` — CHECK-04's read/report surface: enumerates every live-tree
+ * `Derived` line PROJECT-WIDE (never scoped to stale chunks, never reading a `rulebook/.verify/`
+ * staging path — `readLiveSlices` reads only `rulebook/*.md`), joins each surviving candidate to
+ * whatever `verify-derive-record` has already persisted to the project-level ledger, and hands
+ * back the exact `buildEnumeratorPayload` bytes for every slice with at least one pending
+ * candidate so the orchestrator can dispatch it without re-deriving anything itself.
+ *
+ * ADVISORY, EXIT 0, NEVER GATES (177.1-CONTEXT.md decision 14): this function never assigns
+ * `process.exitCode` anywhere, including when the ledger contains a `contradicted` record — a
+ * rewiring is exactly the kind of change that could silently flip a gate, so this posture is
+ * pinned by a behavioral test asserting `process.exitCode` stays `undefined` even then. A
+ * non-corroboration is reported to a human as "worth a glance", never as a verdict of failure.
+ *
+ * Only an unreadable project/rulebook throws (via `readLiveSlices`), with a single actionable
+ * line naming `--project` — no stack frame, no `.ts:` reference.
+ */
+export async function verifyDeriveCheckCommand(
+  options: VerifyDeriveCheckOptions = {},
+): Promise<VerifyDeriveCheckResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  const liveSlices = await readLiveSlices(projectDir);
+  const { candidates } = enumerateDerivedLines(liveSlices);
+  const sliceTextByPath = new Map(liveSlices.map((s) => [s.path, s.text] as const));
+
+  const recorded = await readDeriveCheckVerdicts(projectDir);
+  const recordedByLocation = new Map(recorded.map((r) => [deriveCheckKey(r), r] as const));
+  const candidateLocations = new Set(candidates.map((c) => deriveCheckKey(c)));
+
+  const candidatesBySlice = new Map<string, DerivedLineEntry[]>();
+  for (const c of candidates) {
+    const list = candidatesBySlice.get(c.slicePath) ?? [];
+    list.push(c);
+    candidatesBySlice.set(c.slicePath, list);
+  }
+
+  const verdictCounts = emptyDeriveCheckVerdictCounts();
+  const staleRecords: string[] = [];
+  let pendingCount = 0;
+
+  const findings: VerifyDeriveCheckFinding[] = candidates.map((entry) => {
+    const record = recordedByLocation.get(deriveCheckKey(entry));
+    // CR-03: the join is on LOCATION + TEXT, never location alone. A record whose
+    // `derivedLineText` no longer matches the current candidate's text was recorded against text
+    // that has since been edited or shifted — inheriting its verdict would report a false
+    // corroboration/contradiction of text that was never reconciled. Report it `pending` and
+    // surface the mismatch in `staleRecords` instead of silently reusing the stale verdict.
+    if (record && record.derivedLineText === entry.text) {
+      verdictCounts[record.verdict]++;
+      return {
+        slicePath: entry.slicePath,
+        lineNumber: entry.lineNumber,
+        derivedLineText: entry.text,
+        verdict: record.verdict,
+        reason: record.reason,
+        citedFactIds: record.citedFactIds,
+        status: 'recorded' as const,
+      };
+    }
+    if (record) {
+      staleRecords.push(
+        `${entry.slicePath}:${entry.lineNumber} has a recorded verdict for different text ` +
+          `("${record.derivedLineText}") — reporting it pending, never inheriting a verdict for ` +
+          `a line that changed.`,
+      );
+    }
+    pendingCount++;
+    return {
+      slicePath: entry.slicePath,
+      lineNumber: entry.lineNumber,
+      derivedLineText: entry.text,
+      verdict: 'pending' as const,
+      reason: '',
+      citedFactIds: [],
+      status: 'pending' as const,
+    };
+  });
+
+  // WR-03: a ledger record whose location matches no current candidate (a deleted slice, a moved
+  // line, a line the presentation filter now excludes) is reported as an orphan, never silently
+  // discarded.
+  const orphanedRecords = recorded
+    .filter((r) => !candidateLocations.has(deriveCheckKey(r)))
+    .map(
+      (r) =>
+        `${r.slicePath}:${r.lineNumber} has a recorded verdict ("${r.verdict}") for a location ` +
+        `that matches no current candidate.`,
+    );
+
+  const slices: VerifyDeriveCheckSlice[] = [];
+  for (const [slicePath, sliceCandidates] of candidatesBySlice) {
+    const hasPending = sliceCandidates.some((c) => {
+      const record = recordedByLocation.get(deriveCheckKey(c));
+      return !record || record.derivedLineText !== c.text;
+    });
+    const derivedLines = sliceCandidates
+      .slice()
+      .sort((a, b) => a.lineNumber - b.lineNumber)
+      .map((c) => ({ lineNumber: c.lineNumber, text: c.text }));
+
+    const sliceEntry: VerifyDeriveCheckSlice = {
+      slicePath,
+      candidates: sliceCandidates.length,
+      derivedLines,
+    };
+
+    // Emit `enumeratorPayload` ONLY for slices with pending candidates — a fully-recorded slice
+    // does not need re-dispatching.
+    if (hasPending) {
+      const sliceText = sliceTextByPath.get(slicePath) ?? '';
+      try {
+        sliceEntry.enumeratorPayload = buildEnumeratorPayload({ path: slicePath, text: sliceText });
+      } catch (err) {
+        // A slice whose payload throws is reported with `payloadError` naming the slice, never
+        // silently skipped and never dispatched.
+        sliceEntry.payloadError = `${slicePath}: ${(err as Error).message}`;
+      }
+    }
+
+    slices.push(sliceEntry);
+  }
+  slices.sort((a, b) => a.slicePath.localeCompare(b.slicePath));
+
+  const result: VerifyDeriveCheckResult = {
+    projectDir,
+    models: DERIVE_CHECK_MODELS,
+    slices,
+    findings,
+    verdictCounts,
+    pendingCount,
+    staleRecords,
+    orphanedRecords,
+    groundingRejections: [],
+    missedFactCount: 0,
+  };
+
+  // `--json` emits the result and nothing else on stdout.
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  console.log(
+    chalk.green(
+      `✓ Derive check — ${candidates.length} rule-bearing candidate(s) across ${slices.length} ` +
+        `slice(s), ${pendingCount} pending`,
+    ),
+  );
+  for (const v of DERIVE_CHECK_VERDICTS) {
+    console.log(`  ${v}: ${verdictCounts[v]}`);
+  }
+  for (const finding of findings) {
+    if (
+      finding.status === 'pending' ||
+      finding.verdict === 'corroborated' ||
+      finding.verdict === 'corroborated-by-composition'
+    ) {
+      continue;
+    }
+    console.log(
+      chalk.yellow(
+        `  ⚠ ${finding.verdict} (worth a human glance, never a verdict) — ` +
+          `${finding.slicePath}:${finding.lineNumber}`,
+      ),
+    );
+    console.log(`    Reason: ${finding.reason}`);
+  }
+  for (const stale of staleRecords) {
+    console.log(chalk.yellow(`  ⚠ STALE — ${stale}`));
+  }
+  for (const orphan of orphanedRecords) {
+    console.log(chalk.yellow(`  ⚠ ORPHANED — ${orphan}`));
+  }
+
+  return result;
 }
 
 // -------------------------------------------------------------------------------------------

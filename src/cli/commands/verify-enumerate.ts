@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { computeVerificationScope, SCOPE_FULL } from './chunk-provenance.js';
-import { quoteLinesOnly } from './verify-derive-recheck.js';
+import { quoteLinesOnly } from './verify-derive-check.js';
 import { ANNOTATION_CITATION_RE, ANNOTATION_VOCABULARY_RE } from './derived-line-pattern.js';
 
 /**
