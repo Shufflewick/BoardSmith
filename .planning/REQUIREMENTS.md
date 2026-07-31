@@ -260,6 +260,52 @@ the tag.
       to an allow-list) is a separate, deliberately deferred item** (dated 2026-07-30, per
       `177-08-PLAN.md`'s own instruction) — not a blocker to this disposition, recorded honestly as
       open rather than silently dropped.
+
+      **AMENDMENT (2026-07-30, post-phase) — CHECK-04's approach is re-scoped. The requirement text
+      above records what was tried and remains accurate as history; the acceptance approach below
+      supersedes it.** Two post-hoc experiments (`.planning/phases/177-derived-line-re-derivation/177-EXPERIMENTS/`,
+      see its `README.md`) established two things the phase itself never examined:
+      (1) **8 of the 16 lines under test are descriptions of images**, not inferences from text —
+      structurally unanswerable by a text-only subagent. Confirmed by two independent classification
+      passes agreeing 15/16. `seven`'s transcription tags visual observations as plain
+      `Derived (p.N):`, so the presentation filter (which only recognizes qualified forms) could not
+      exclude them. Same-category lines scored oppositely, PASS and FAIL, under the existing
+      mechanism.
+      (2) **The existing mechanism is non-deterministic** — Track A's clean-population re-run scored
+      3/7 (42.9%), essentially unchanged, and `one-two-punch:82` flipped PASS→FAIL on a fresh
+      dispatch of an *identical payload*. The 6/16 figure was therefore never a measurement of a
+      fixed quantity, and the whole gap-closure sequence was tuning against a moving metric.
+      **The blocking insight is that per-line blind re-derivation asks an unanswerable question:**
+      you cannot instruct a subagent to re-derive *a specific* fact without naming the fact, which
+      is the one thing that must stay hidden. No amount of payload-construction work removes that.
+      **New acceptance approach — dual enumeration with reconciliation.** Two subagents independently
+      enumerate every fact a passage supports (each tagged with its source sentence); a third
+      reconciles them into found-by-both / found-by-one. Facts found by both are well-supported;
+      facts found by one warrant attention. Existing `Derived` lines are then cross-referenced as
+      corroborated / uncorroborated / missed-by-transcription. No targeting is required, so the
+      failure mode above cannot arise. Measured on real data (Track B, 15 dispatches): zero false
+      disagreements on the exact 10 lines that broke the old design, image lines self-sorted 7/8
+      with no filter, one **genuine transcription bug caught** (`seven:11`'s misattributed sentence
+      fragment) and two real facts found that the transcription omitted entirely — a capability the
+      per-line design structurally lacks.
+      **Known open weakness of the new approach:** multi-hop arithmetic syntheses
+      (`seven:21`, `seven:36`, `one-two-punch:52`) are systematically under-corroborated — every
+      sub-fact is found by both enumerators but neither performs the final arithmetic, so the
+      conclusion buckets as uncorroborated regardless of correctness. Fix candidate: instruct the
+      reconciler to attempt cross-fact arithmetic, not only literal-meaning matching.
+      **Not yet established:** the agreement signal's strength. The spot-check (~20 facts, zero
+      errors) ran on a corpus of near-verbatim restatements that never posed a question two runs
+      could get wrong the same way. Requires an ambiguous passage and ideally two *different models*
+      before the corroboration signal can be trusted.
+      **Confidence: low-to-moderate** — 5 passages, 2 games, 7 clean lines. Enough to establish the
+      direction, not enough to fix a hit rate.
+      **Prerequisite work, independent of CHECK-04:** `seven`'s ingest transcription mislabels
+      picture descriptions as `Derived`. That defeats the Phase 170 `Derived`/`Visual` split for
+      every downstream consumer, not just this check, and should be fixed regardless of which
+      verification design is adopted.
+      **Infrastructure retained:** the ledger, the `verify-derive-record` CLI write surface,
+      enumeration, and the blind-independence guarantee (CR-01/CR-07) are design-agnostic and carry
+      forward unchanged. Only the judgment step is replaced.
 - [x] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
       commit hash, and any chunk whose code moved since the human last approved it is reported.
 - [ ] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
