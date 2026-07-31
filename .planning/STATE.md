@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-13-PLAN.md — the sixth and final gap-closure plan (177-08..13), closing Phase 177 with an honest disposition. Measured the phase goal ('rule-bearing inferences get an independent second opinion') in its own unit rather than inferring it from the success criteria: 177-GOAL-MEASUREMENT.md computes, per rule-bearing Derived line across the 16 real dispatch candidates, whether it received a genuine independent second opinion about that line's own fact (a four-condition unit: enumeration, independence, targeting, recording), citing 177-PROOF-2.md throughout. Result: 6/16 (37.5%) — seven 2/10 (20%), one-two-punch 4/6 (67%). GOAL NOT MET. 10 of 16 fail on the targeting condition: 4 mechanically ambiguous (shared focus passage between seven:19/21 and seven:36/38), 6 off-target despite a uniquely-scoped focus window (seven:8/14/11/17, one-two-punch:52/49) — the new finding 177-12 surfaced, that a correctly and uniquely narrowed focus passage does not reliably steer the blind subagent's own derivation to the fact that passage supports. Applied 177-TARGETING-PREDICTION.md's own pre-committed failure rule (already fired in 177-12); introduced no new threshold. CHECK-04's REQUIREMENTS.md entry rewritten against 177-PROOF-2.md and 177-GOAL-MEASUREMENT.md: stays OPEN/PARTIAL — SC-2/SC-3 MET, SC-1 NOT MET, goal NOT MET, residual named as concrete next-attempt work (require the blind subagent to cite which sentence(s) it derived from, or resolve the 4 mechanically-ambiguous shared-passage collisions). ROADMAP.md Phase 177's Result block rewritten with the final re-measured numbers including the regression (offTargetDisagreements 100% vs. the original run's 89%); the phase checkbox stays unchecked (goal unmet) though all 13 plans (7 original + 6 gap-closure) are now marked complete in the plan list. Findings ledger accounts for all 18 177-REVIEW.md findings: 17 fixed (CR-01..07, WR-01..06, WR-08..11), WR-07 (quoteLinesOnly deny-list-to-allow-list inversion) deliberately deferred, dated 2026-07-30, reason recorded. Both prediction files (177-PREDICTION.md, 177-TARGETING-PREDICTION.md) reconfirmed with empty git diff — no retrofitting anywhere in this 6-plan sequence. Full npm test 4033/4033 green (no source code touched — proof-only/documentation plan). This closes Phase 177 execution; CHECK-04 remains open for a future phase to resume with the residual named above. See .planning/phases/177-derived-line-re-derivation/177-13-SUMMARY.md and 177-GOAL-MEASUREMENT.md."
-last_updated: "2026-07-31T05:00:00Z"
-last_activity: 2026-07-30 -- Phase 177 gap-closure plan 13 executed (final plan of the phase; goal measured in its own unit at 6/16 = 37.5%, NOT MET; CHECK-04 left OPEN/PARTIAL on evidence; all 18 review findings accounted for, 17 fixed / 1 deliberately deferred)
+stopped_at: "Completed 177.1-01-PLAN.md — consolidated the five duplicated annotation-family regexes into derived-line-pattern.ts. Next: 177.1-02-PLAN.md (move the ledger onto the dual-enumeration verdict set)."
+last_updated: "2026-07-31T22:00:00.000Z"
+last_activity: 2026-07-31
 progress:
-  total_phases: 10
+  total_phases: 12
   completed_phases: 7
-  total_plans: 60
-  completed_plans: 60
-  percent: 70
+  total_plans: 81
+  completed_plans: 73
+  percent: 58
 ---
 
 # Project State
@@ -21,9 +21,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 177 — Derived-Line Re-Derivation (CHECK-04) — EXECUTED, goal NOT MET; CHECK-04 left OPEN. Milestone's next executable phase is 178 (Worked-Example Tests, TBD plans) or completing Phase 170 (5/10).
+**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plan 01 of 8 complete (consolidated the annotation-family regexes); plans 02-08 remain (ledger move, reconcileSlice, CLI surface, verify-game.md rewrite, split-bar proof, retired-design deletion, live end-to-end run).
 
 ## Current Position
+
+`177.1-01-PLAN.md` (2026-07-31) consolidated the five duplicated `Derived`/`Visual`/`Named-but-undefined`
+annotation-family regexes into one exported, mechanically-built pattern set in the existing
+no-imports leaf module `derived-line-pattern.ts` (`ANNOTATION_FAMILIES`, `ANNOTATION_CITATION_RE`,
+`ANNOTATION_VOCABULARY_RE`, `annotationLineStartRe`, `ANNOTATION_CITATION_SOURCES`), so Phase 178's
+fourth line-kind (`Example`) requires editing exactly one list. `verify-enumerate.ts` and
+`verify-derive-recheck.ts` now import these exports instead of hand-spelling five independent
+copies; the two consolidated regexes are test-pinned byte-equal (`.source`/`.flags`) to the two
+literals they replace — the zero-behavior-change proof. A new single-definition grep gate in
+`derived-line-pattern.test.ts` walks `src/` and fails the build if a sixth hand-spelled copy is
+ever introduced; confirmed red before the consolidation, green after. **Finding, recorded rather
+than silently resolved**: `verify-classify.ts`'s `PRESENTATION_EXCLUSION_MARKERS` was measured
+NOT element-wise derivable from the family list (different citation body, missing
+`Named-but-undefined`, doubled `Derived` schema variants for pre-170 legacy qualifiers) — left as
+its own literal per the plan's explicit instruction, with a comment naming the difference. Full
+`npm test`: 4146/4146 green (baseline 4130 + 16 new tests, 242→243 files, zero regressions);
+`npx tsc --noEmit` clean except the pre-existing unrelated `docs/seed-to-state.test.ts` rootDir
+error (confirmed present identically on a clean stash of this plan's changes). No packages
+installed. See `.planning/phases/177.1-wire-check04-closed-design/177.1-01-SUMMARY.md`. **7 of 8
+plans remain in Phase 177.1** — `177.1-02` (move the ledger, atomic upsert-append, fence rejection,
+and read-path revalidation onto the eight-member dual-enumeration verdict set) is next.
+
+---
 
 Phase: 177 (Derived-Line Re-Derivation) — ALL 13 PLANS COMPLETE (7 original + 6 gap-closure). Phase
 goal measured NOT MET in its own unit (6/16, 37.5%); CHECK-04 stays OPEN/PARTIAL in

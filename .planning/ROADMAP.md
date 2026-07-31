@@ -389,7 +389,7 @@ today no designer can reach that tool.
      rewiring, not silently changed by it.
 
 **Plans**: 8 plans
-- [ ] 177.1-01-PLAN.md — Consolidate the five duplicated annotation-family regexes into one exported definition
+- [x] 177.1-01-PLAN.md — Consolidate the five duplicated annotation-family regexes into one exported definition
 - [ ] 177.1-02-PLAN.md — Move the ledger, atomic upsert-append, fence rejection, and read-path revalidation onto the eight-member dual-enumeration verdict set
 - [ ] 177.1-03-PLAN.md — Build reconcileSlice() and retarget verify-derive-record onto it; add a machine-readable arithmeticSpec to reconcile-facts.md
 - [ ] 177.1-04-PLAN.md — Build verify-derive-check (read/report) and register both commands in cli.ts
