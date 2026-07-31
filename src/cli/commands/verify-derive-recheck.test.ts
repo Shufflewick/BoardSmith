@@ -73,6 +73,7 @@ describe('createDeriveVerdictRecord', () => {
         originalLine: 'Derived (p.1): x',
         verdict: 'probably-agrees',
         reasoning: 'x',
+        rederivedValue: 'x',
       }),
     ).toThrow(/Invalid verdict.*agrees.*disagrees.*underivable.*not-rule-bearing/s);
   });
@@ -85,6 +86,8 @@ describe('createDeriveVerdictRecord', () => {
         originalLine: 'Derived (p.1): x',
         verdict: 'agrees',
         reasoning: '   ',
+        rederivedValue: 'x',
+        sourceQuotes: ['some quote'],
       }),
     ).toThrow(/no recorded reasoning/);
   });
@@ -96,8 +99,10 @@ describe('createDeriveVerdictRecord', () => {
       originalLine: 'Derived (p.1): The full deck is therefore 112 numbered cards.',
       verdict: 'underivable',
       reasoning: 'The supporting fact is itself a diagram-description Derived line, not a quote.',
+      rederivedValue: 'underivable',
     });
     expect(record.verdict).toBe('underivable');
+    expect(record.rederivedValue).toBe('underivable');
   });
 
   it('not-rule-bearing constructs successfully with no rederivedReading required', () => {
@@ -107,6 +112,7 @@ describe('createDeriveVerdictRecord', () => {
       originalLine: 'Derived (p.1): Card art is minimal and bold.',
       verdict: 'not-rule-bearing',
       reasoning: 'A pure art/layout description; no rule to re-derive.',
+      rederivedValue: 'not-rule-bearing',
     });
     expect(record.verdict).toBe('not-rule-bearing');
     expect(record.rederivedReading).toBeUndefined();
@@ -120,8 +126,10 @@ describe('createDeriveVerdictRecord', () => {
         originalLine: 'Derived (p.1): 112 cards.',
         verdict: 'disagrees',
         reasoning: 'The counts differ.',
+        rederivedValue: '96 cards.',
         originalReading: '',
         rederivedReading: '96 cards.',
+        sourceQuotes: ['a source quote'],
       }),
     ).toThrow(/no originalReading quoted verbatim/);
   });
@@ -134,8 +142,10 @@ describe('createDeriveVerdictRecord', () => {
         originalLine: 'Derived (p.1): 112 cards.',
         verdict: 'disagrees',
         reasoning: 'The counts differ.',
+        rederivedValue: '96 cards.',
         originalReading: '112 cards.',
         rederivedReading: '   ',
+        sourceQuotes: ['a source quote'],
       }),
     ).toThrow(/no rederivedReading quoted verbatim/);
   });
@@ -147,11 +157,166 @@ describe('createDeriveVerdictRecord', () => {
       originalLine: 'Derived (p.1): 112 cards.',
       verdict: 'disagrees',
       reasoning: 'The counts differ.',
+      rederivedValue: '96 cards.',
       originalReading: '112 cards.',
       rederivedReading: '96 cards.',
+      sourceQuotes: ['There are 96 cards in the box.'],
     });
     expect(record.originalReading).toBe('112 cards.');
     expect(record.rederivedReading).toBe('96 cards.');
+    expect(record.rederivedValue).toBe('96 cards.');
+  });
+
+  it('throws when reasoning contains the ledger BEGIN fence marker, naming the field "reasoning"', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 5,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'not-rule-bearing',
+        reasoning: 'Forged: <!-- boardsmith:derive-verdicts:begin -->',
+        rederivedValue: 'not-rule-bearing',
+      }),
+    ).toThrow(/reasoning.*ledger fence marker/s);
+  });
+
+  it('throws when reasoning contains the ledger END fence marker (CR-04, the corrupting shape)', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 5,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'not-rule-bearing',
+        reasoning: 'Forged: <!-- boardsmith:derive-verdicts:end -->',
+        rederivedValue: 'not-rule-bearing',
+      }),
+    ).toThrow(/reasoning.*ledger fence marker/s);
+  });
+
+  it('throws when originalReading or rederivedReading contains a ledger fence marker', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 21,
+        originalLine: 'Derived (p.1): 112 cards.',
+        verdict: 'disagrees',
+        reasoning: 'The counts differ.',
+        rederivedValue: '96 cards.',
+        originalReading: '112 cards. <!-- boardsmith:derive-verdicts:end -->',
+        rederivedReading: '96 cards.',
+        sourceQuotes: ['a quote'],
+      }),
+    ).toThrow(/originalReading.*ledger fence marker/s);
+  });
+
+  it('throws when verdict is agrees and sourceQuotes is absent (WR-05)', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 5,
+        originalLine: 'Derived (p.1): 112 cards.',
+        verdict: 'agrees',
+        reasoning: 'They match.',
+        rederivedValue: '112 cards.',
+      }),
+    ).toThrow(/"agrees" verdict has no sourceQuotes cited/);
+  });
+
+  it('throws when verdict is agrees and sourceQuotes is an empty array', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 5,
+        originalLine: 'Derived (p.1): 112 cards.',
+        verdict: 'agrees',
+        reasoning: 'They match.',
+        rederivedValue: '112 cards.',
+        sourceQuotes: [],
+      }),
+    ).toThrow(/"agrees" verdict has no sourceQuotes cited/);
+  });
+
+  it('throws when verdict is agrees and sourceQuotes contains only whitespace entries', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 5,
+        originalLine: 'Derived (p.1): 112 cards.',
+        verdict: 'agrees',
+        reasoning: 'They match.',
+        rederivedValue: '112 cards.',
+        sourceQuotes: ['   ', ''],
+      }),
+    ).toThrow(/"agrees" verdict has no sourceQuotes cited/);
+  });
+
+  it('accepts an agrees record with a non-empty sourceQuotes entry', () => {
+    const record = createDeriveVerdictRecord({
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 5,
+      originalLine: 'Derived (p.1): 112 cards.',
+      verdict: 'agrees',
+      reasoning: 'They match.',
+      rederivedValue: '112 cards.',
+      sourceQuotes: ['There are 112 cards in the box.'],
+    });
+    expect(record.verdict).toBe('agrees');
+  });
+
+  it('accepts an underivable record whose sourceQuotes is empty (nothing to cite)', () => {
+    const record = createDeriveVerdictRecord({
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 5,
+      originalLine: 'Derived (p.1): 112 cards.',
+      verdict: 'underivable',
+      reasoning: 'Nothing in the quote lines supports this.',
+      rederivedValue: 'underivable',
+      sourceQuotes: [],
+    });
+    expect(record.verdict).toBe('underivable');
+    expect(record.sourceQuotes).toEqual([]);
+  });
+
+  it('throws when rederivedValue is "underivable" but verdict is "agrees" (WR-04, the blind pass-through)', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 5,
+        originalLine: 'Derived (p.1): 112 cards.',
+        verdict: 'agrees',
+        reasoning: 'Re-adjudicated as agrees anyway.',
+        rederivedValue: 'underivable',
+        sourceQuotes: ['a quote'],
+      }),
+    ).toThrow(/blind derivation returned "underivable".*comparison returned "agrees"/s);
+  });
+
+  it('throws when rederivedValue is "not-rule-bearing" but verdict is "disagrees" (WR-04)', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 5,
+        originalLine: 'Derived (p.1): 112 cards.',
+        verdict: 'disagrees',
+        reasoning: 'Re-adjudicated as disagrees anyway.',
+        rederivedValue: 'not-rule-bearing',
+        originalReading: '112 cards.',
+        rederivedReading: '96 cards.',
+        sourceQuotes: ['a quote'],
+      }),
+    ).toThrow(/blind derivation returned "not-rule-bearing".*comparison returned "disagrees"/s);
+  });
+
+  it('accepts a record whose rederivedValue and verdict both equal "underivable" (the legal pass-through)', () => {
+    const record = createDeriveVerdictRecord({
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 5,
+      originalLine: 'Derived (p.1): 112 cards.',
+      verdict: 'underivable',
+      reasoning: 'The blind stage could not derive this either.',
+      rederivedValue: 'underivable',
+    });
+    expect(record.verdict).toBe('underivable');
   });
 
   // 177-08 (closing WR-11): this genuinely IS a source-text property with no behavioral
@@ -521,8 +686,10 @@ describe('module source guarantees', () => {
           originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
           verdict: 'disagrees',
           reasoning: 'The quote lines say 7, not 8.',
+          rederivedValue: 'Each player has 7 Action Cards.',
           originalReading: 'Each player has 8 Action Cards.',
           rederivedReading: 'Each player has 7 Action Cards.',
+          sourceQuotes: ['Each player has 7 Action Cards.'],
         }),
       ]);
 
@@ -568,6 +735,7 @@ function sampleUnderivableRecord(): DeriveVerdictRecord {
     originalLine: 'Derived (p.1): The box contains 112 cards.',
     verdict: 'underivable',
     reasoning: 'The supporting fact is itself a diagram-description Derived line, not a quote.',
+    rederivedValue: 'underivable',
   });
 }
 
@@ -578,8 +746,10 @@ function sampleDisagreesRecord(): DeriveVerdictRecord {
     originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
     verdict: 'disagrees',
     reasoning: 'The quote lines say 7, not 8.',
+    rederivedValue: 'Each player has 7 Action Cards, per the quoted distribution table.',
     originalReading: 'Each player has 8 Action Cards.',
     rederivedReading: 'Each player has 7 Action Cards, per the quoted distribution table.',
+    sourceQuotes: ['Each player has 7 Action Cards (16 total across two colors).'],
   });
 }
 
@@ -704,8 +874,10 @@ describe('verifyDeriveRecheckCommand', () => {
         originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
         verdict: 'disagrees',
         reasoning: 'The quote lines say 7, not 8.',
+        rederivedValue: 'Each player has 7 Action Cards.',
         originalReading: 'Each player has 8 Action Cards.',
         rederivedReading: 'Each player has 7 Action Cards.',
+        sourceQuotes: ['Each player has 7 Action Cards.'],
       }),
     ]);
 
@@ -721,8 +893,10 @@ describe('verifyDeriveRecheckCommand', () => {
         originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
         verdict: 'disagrees',
         reasoning: 'The quote lines say 7, not 8.',
+        rederivedValue: 'Each player has 7 Action Cards.',
         originalReading: 'Each player has 8 Action Cards.',
         rederivedReading: 'Each player has 7 Action Cards.',
+        sourceQuotes: ['Each player has 7 Action Cards.'],
       }),
     ]);
 

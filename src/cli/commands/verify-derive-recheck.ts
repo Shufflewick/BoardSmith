@@ -115,12 +115,19 @@ export interface DeriveVerdictRecord {
   rederivedReading?: string;
   /** The quote lines the blind-derivation dispatch actually cited in support of its answer. */
   sourceQuotes: string[];
+  /**
+   * The blind-derivation dispatch's own `rederivedValue`, verbatim (177-09, closing WR-04): either
+   * the literal sentinel `underivable`/`not-rule-bearing`, or the blind stage's actual derived
+   * reading text. Persisted so the pass-through rule (decision below) is auditable in the ledger,
+   * not merely enforced in memory at construction time.
+   */
+  rederivedValue: string;
 }
 
 /**
  * Validates and constructs a `DeriveVerdictRecord` from a subagent's returned verdict. This is
- * the ONLY place a verdict string is checked against `DERIVE_VERDICTS`; every recording path in
- * this module routes through it. Throws when:
+ * the ONLY place a verdict string is checked against `DERIVE_VERDICTS`; every recording path AND
+ * the read path (`readDeriveVerdicts`, 177-09 closing CR-02) route through it. Throws when:
  *
  *   - the verdict is outside `DERIVE_VERDICTS` (message names all four legal verdicts)
  *   - `reasoning` is empty or whitespace-only
@@ -129,6 +136,14 @@ export interface DeriveVerdictRecord {
  *     designer needs to adjudicate)
  *   - the verdict is `disagrees` and `rederivedReading` is empty/missing (same reason, the other
  *     side)
+ *   - `reasoning`, `originalReading`, or `rederivedReading` contains the ledger's own begin/end
+ *     fence marker (177-09, closing CR-04 — `reasoning` is model-controlled free prose and
+ *     `JSON.stringify` does not escape `<`, so an unrejected fence permanently corrupts the ledger)
+ *   - the verdict is `agrees`/`disagrees` and `sourceQuotes` has no non-empty entry (177-09,
+ *     closing WR-05 — a confirmation or disagreement citing no material is not a valid record)
+ *   - `rederivedValue` is `underivable`/`not-rule-bearing` and `verdict` differs from it (177-09,
+ *     closing WR-04 — the blind stage's two terminal outcomes are passed through unchanged by the
+ *     comparison stage, never re-adjudicated)
  *
  * Modeled as additional `if` blocks inside this same function — never a second validator
  * elsewhere in the module.
@@ -139,6 +154,7 @@ export function createDeriveVerdictRecord(input: {
   originalLine: string;
   verdict: string;
   reasoning: string;
+  rederivedValue: string;
   originalReading?: string;
   rederivedReading?: string;
   sourceQuotes?: string[];
@@ -175,12 +191,55 @@ export function createDeriveVerdictRecord(input: {
     }
   }
 
+  // 177-09 (closing CR-04): reject any field carrying the ledger's own fence marker at the one
+  // construction site — the read path (`readDeriveVerdicts`) re-enters this same choke point, so
+  // a fence can never reach a ledger, written by any caller, through any path.
+  for (const [field, value] of [
+    ['reasoning', input.reasoning],
+    ['originalReading', input.originalReading],
+    ['rederivedReading', input.rederivedReading],
+  ] as const) {
+    if (value && (value.includes(DERIVE_LEDGER_BEGIN) || value.includes(DERIVE_LEDGER_END))) {
+      throw new Error(
+        `${location}'s ${field} contains a ledger fence marker.\n` +
+          `Re-dispatch the subagent; a verdict field may never carry the ledger's own delimiters.`,
+      );
+    }
+  }
+
+  // 177-09 (closing WR-05): an agrees/disagrees verdict citing no material is not a valid record.
+  if (
+    (input.verdict === 'agrees' || input.verdict === 'disagrees') &&
+    (!input.sourceQuotes || input.sourceQuotes.every((q) => q.trim().length === 0))
+  ) {
+    throw new Error(
+      `${location}'s "${input.verdict}" verdict has no sourceQuotes cited.\n` +
+        `An agrees/disagrees verdict must cite at least one non-empty source quote — a ` +
+        `confirmation or disagreement citing no material is not a valid record.`,
+    );
+  }
+
+  // 177-09 (closing WR-04): the blind stage's two terminal outcomes are passed through unchanged
+  // by the comparison stage — a compare subagent may never re-adjudicate an underivable/
+  // not-rule-bearing blind return into agrees/disagrees.
+  if (
+    (input.rederivedValue === 'underivable' || input.rederivedValue === 'not-rule-bearing') &&
+    input.verdict !== input.rederivedValue
+  ) {
+    throw new Error(
+      `${location}: the blind derivation returned "${input.rederivedValue}" but the comparison ` +
+        `returned "${input.verdict}". That verdict is passed through unchanged, never ` +
+        `re-adjudicated.`,
+    );
+  }
+
   return {
     slicePath: input.slicePath,
     lineNumber: input.lineNumber,
     originalLine: input.originalLine,
     verdict: input.verdict,
     reasoning: input.reasoning,
+    rederivedValue: input.rederivedValue,
     ...(input.originalReading !== undefined ? { originalReading: input.originalReading } : {}),
     ...(input.rederivedReading !== undefined
       ? { rederivedReading: input.rederivedReading }
