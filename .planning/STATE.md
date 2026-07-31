@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-10-PLAN.md — the third of six gap-closure plans (177-08..13), closing GAP 3's headline blocker from 177-REVIEW.md: CR-05 (CHECK-04 had no way to record a verdict end-to-end — cli.ts registered only the read-only report) and CR-03 (verdicts joined by line number only, so an edited line could silently inherit a stale verdict), plus WR-02, WR-03, WR-06, WR-08, and WR-10. Task 1: verifyDeriveRecheckCommand's join now requires record.originalLine === entry.text at the same slicePath:lineNumber location — a mismatch reports pending and is named in a new staleRecords array, never inherits a verdict for text that changed (CR-03). orphanedRecords surfaces every ledger record matching no current candidate location (WR-03). Extracted formatReading() so a disagrees finding's missing reading never interpolates the literal 'undefined' (WR-06) — discovered while testing that 177-09's CR-02 fix had already made the WR-06 scenario unreachable end-to-end, proved directly rather than assumed. Deleted the redundant fs.access pre-check; readLiveSlices is now the sole 'no rulebook/' throw site, distinguishing ENOENT from a real unreadable-directory condition via a real EACCES fixture (WR-02/WR-10). Task 2: added verifyDeriveRecordCommand / boardsmith verify-derive-record — CHECK-04's ONLY write surface, registered in cli.ts immediately after verify-derive-recheck with no --run-id (decision 14) and no --force/--skip/--overwrite/env-var bypass of any kind, delegating all verdict validation to createDeriveVerdictRecord and persisting through 177-09's upsert-append recordDeriveVerdict. Proved end-to-end with a REAL BUILT CLI (node dist/cli.js, not the test harness): two successive verify-derive-record calls for different lines both survived and were reported by verify-derive-recheck --json. Task 3: verify-game.md Step 7's recording sentence now names boardsmith verify-derive-record (one call per line, atomic upsert-append), replacing the recordDeriveVerdicts prose that named no callable CLI entry point. derive-recheck.md's 'Your inputs' now attributes the stripping to buildBlindDerivePayload, never the orchestrator, and adds Named-but-undefined to the never-given list (WR-08). Added a drift guard to verify.test.ts reading cli.ts's real registered commands and cross-checking every verify-* command named in verify-game.md/bs/verify/*.md against that live set — the guard that makes CR-05's own failure mode (skill text naming a non-existent entry point) hard to reintroduce silently. Swept both modified files for other stale claims beyond the two named in advance; none found. **Both negative pins were empirically proven to fail when reverted**, using a scratch-directory backup rather than git stash: reverting the CR-03 join predicate to location-only failed the new pinned test with the real observed 'expected agrees to be pending' output; deleting the verify-derive-record registration from cli.ts failed the drift guard with the real observed 'Array [ \"verify-game.md: verify-derive-record\" ]' output; both reverts confirmed git diff --stat clean before restoring. npx vitest run src/cli/commands/verify-derive-recheck.test.ts: 77/77 green (up from 64). npx vitest run src/cli/slash-command/bs/verify.test.ts: 93/93 green. Full npm test (mandatory, not a subdirectory subset): 4003/4003 green across 241 files (baseline 3987 + 16 net new, zero regressions). npx tsc --noEmit clean except the pre-existing unrelated docs/seed-to-state.test.ts rootDir error. A real built-CLI --help invocation confirmed no --run-id and no bypass flag on verify-derive-record. One documented acceptance-criteria grep deviation (not a code defect): the literal 'createDeriveVerdictRecord|recordDeriveVerdict outside verify-derive-recheck.{ts,test.ts}' grep returns zero because cli.ts registers the verifyDeriveRecordCommand wrapper (matching every sibling write command's convention), not the lower-level functions by name — the underlying CR-05 condition is genuinely closed, proved by the real end-to-end CLI invocation instead. CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 3 of 6 gap-closure plans; 177-11 (CR-07, the blind-derivation payload still hands the subagent a resolvable slicePath:lineNumber pointer) through 177-13 (re-measure the phase goal, dispose of CHECK-04) remain. See .planning/phases/177-derived-line-re-derivation/177-10-SUMMARY.md."
-last_updated: "2026-07-31T00:35:00Z"
-last_activity: 2026-07-30 -- Phase 177 gap-closure plan 10 executed (CR-05/CR-03/WR-02/WR-03/WR-06/WR-08/WR-10 closed; CHECK-04 stays OPEN/PARTIAL)
+stopped_at: "Completed 177-11-PLAN.md — the fourth of six gap-closure plans (177-08..13), closing CR-07 from 177-REVIEW.md and the phase's own self-reported goal failure from 177-PROOF.md §3 (the targeting-collapse where every multi-candidate slice in the real corpus re-derived the same dominant fact regardless of nominal target). blindDeriveHandle(entry) replaces the resolvable Slice:/Target line: pointer with an opaque sha256-truncated digest — the ONLY target identifier a blind prompt now carries. focusQuoteWindow(sliceText, lineNumber) narrows the payload to the target's own citation passage, treating markdown headings as passage boundaries too (the plan-checker's required fix, proven against the real fixture 174-FIXTURES/seven/live/01-definitions-and-components.md:33). derivePayloadSet computes, mechanically, which candidates in a slice share an identical non-empty focus passage (targetingAmbiguous/sharedFocusWith) — the irreducible residual reported per-finding, never hidden. factAlignment ('same-fact' | 'different-fact') is a required FIELD on agrees/disagrees records, never a fifth DERIVE_VERDICTS member (decision 6 held, still exactly four). VerifyDeriveRecheckResult gains offTargetDisagreements/genuineDisagreements/targetingAmbiguousCount, additive to the unchanged four-key verdictCounts shape. Both subagent contracts updated by reference plus a new drift guard one level deeper than 177-10's command-existence guard. Three negative pins empirically proven to fail when reverted: removing the upward-walk markdown-heading check failed the fixture-keyed regression test with the real observed wrong-passage output; reintroducing the Slice:/Target line: pointer failed 2 tests asserting its absence; deleting the factAlignment validation block failed 3 throw tests; all three reverts confirmed git diff --stat clean before restoring. npx vitest run src/cli/commands/verify-derive-recheck.test.ts: 100/100 green (up from 77). npx vitest run src/cli/slash-command/bs/verify.test.ts: 100/100 green (up from 93). Full npm test (mandatory, not a subdirectory subset): 4033/4033 green across 241 files (baseline 4003 + 30 net new, zero regressions). npx tsc --noEmit clean except the pre-existing unrelated docs/seed-to-state.test.ts rootDir error. Task 1 and Task 2 committed together (both touch the exact same interleaved files); Task 3 committed separately. CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 4 of 6 gap-closure plans; 177-12 (re-run the live proof against a pre-registered prediction) through 177-13 (re-measure the phase goal, dispose of CHECK-04) remain. See .planning/phases/177-derived-line-re-derivation/177-11-SUMMARY.md."
+last_updated: "2026-07-31T01:10:00Z"
+last_activity: 2026-07-30 -- Phase 177 gap-closure plan 11 executed (CR-07 closed; targeting-collapse fix + factAlignment instrument added; CHECK-04 stays OPEN/PARTIAL)
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 60
-  completed_plans: 57
-  percent: 95
+  completed_plans: 58
+  percent: 97
 ---
 
 # Project State
@@ -25,8 +25,53 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 10/13 plans complete (7 original +
-3 of 6 gap-closure plans).
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 11/13 plans complete (7 original +
+4 of 6 gap-closure plans).
+
+`177-11-PLAN.md` (2026-07-30) is the fourth of six gap-closure plans (177-08..13), closing CR-07
+from `177-REVIEW.md` and the phase's own self-reported goal failure from `177-PROOF.md` §3 — the
+headline finding that `buildBlindDerivePayload`'s `Target line` identifier carried no information
+the blind subagent could use to tell WHICH fact was under test in a multi-candidate slice, so the
+measured 56% `disagrees` rate was dominated by targeting-collapse artifacts, not genuine
+mismatches. `blindDeriveHandle(entry)` replaces the resolvable `Slice:`/`Target line:` pointer with
+an opaque sha256-truncated digest — the ONLY target identifier a blind prompt now carries, closing
+CR-07's leak vector (a subagent with file-read tools had a literal path and line number to follow
+back to the withheld line). `focusQuoteWindow(sliceText, lineNumber)` narrows the payload to the
+target's own citation passage, walking upward to the nearest `p.N, <label>:` header and treating
+markdown HEADINGS as passage boundaries too, in addition to citation headers — the plan-checker's
+required fix, proven against the real fixture
+`174-FIXTURES/seven/live/01-definitions-and-components.md:33` (a `Derived` line severed from its
+nearest citation header by an intervening `## Visual notes (p.1)` heading now gets an honest empty/
+degraded focus window instead of silently attaching to the unrelated preceding "Play Testers"
+passage). `derivePayloadSet` computes, mechanically, which candidates in a slice share an identical
+non-empty focus passage (`targetingAmbiguous`/`sharedFocusWith`) — the irreducible residual that
+cannot be resolved without leaking the withheld inference, reported per-finding rather than hidden.
+`factAlignment` (`'same-fact'` | `'different-fact'`) is a required FIELD on `agrees`/`disagrees`
+records — never a fifth `DERIVE_VERDICTS` member (decision 6 held, still exactly four).
+`VerifyDeriveRecheckResult` gains `offTargetDisagreements`/`genuineDisagreements`/
+`targetingAmbiguousCount`, additive to the unchanged four-key `verdictCounts` shape. Both subagent
+contracts (`derive-recheck.md`, `derive-compare.md`) updated to the new payload shape and required
+return by reference, plus a new drift guard one level deeper than 177-10's command-existence guard
+(every field `derive-compare.md`'s RETURN object declares must have a matching `--option` on
+`verify-derive-record`). **Three negative pins empirically proven to fail when reverted**: removing
+the upward-walk markdown-heading check failed the fixture-keyed regression test with the real
+observed wrong-passage output (`Play Testers` content instead of `[]`); reintroducing the
+`Slice:`/`Target line:` pointer failed 2 tests asserting its absence; deleting the `factAlignment`
+validation block failed 3 throw-expectation tests; all three reverts confirmed `git diff --stat`
+clean before restoring. `npx vitest run src/cli/commands/verify-derive-recheck.test.ts`: 100/100
+green (up from 77). `npx vitest run src/cli/slash-command/bs/verify.test.ts`: 100/100 green (up
+from 93). **Full `npm test`** (mandatory, not a subdirectory subset): 4033/4033 green across 241
+files (baseline 4003 + 30 net new, zero regressions). `npx tsc --noEmit` clean except the
+pre-existing unrelated `docs/seed-to-state.test.ts` rootDir error. Task 1 and Task 2 were committed
+together in a single commit (both touch the exact same 2-3 files and were interleaved by design —
+`derivePayloadSet` calls `focusQuoteWindow` directly); Task 3 (the disjoint skill-text files) was
+committed separately. **CHECK-04 stays OPEN/PARTIAL in `REQUIREMENTS.md`** — this is 4 of 6
+gap-closure plans; `177-12` (re-run the live proof against a pre-registered prediction, measuring
+whether this plan's fix actually reduces the targeting-collapse artifact rate) and `177-13`
+(re-measure the phase goal, dispose of CHECK-04) remain. See
+`.planning/phases/177-derived-line-re-derivation/177-11-SUMMARY.md`.
+
+---
 
 `177-10-PLAN.md` (2026-07-30) is the third of six gap-closure plans (177-08..13), closing GAP 3's
 headline blocker from `177-REVIEW.md`: CR-05 (CHECK-04 had no way to record a verdict end-to-end —

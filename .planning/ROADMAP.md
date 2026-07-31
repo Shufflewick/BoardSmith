@@ -301,7 +301,7 @@ Gap-closure plans (from `177-VERIFICATION.md` 3/6 must-haves + `177-REVIEW.md` 7
 - [x] 177-08-PLAN.md — GAP 2 / CR-01: decoration-proof strip + enumerate via one shared `annotationBody`, payload backstop throw, shared citation regex with `ingest-archive.ts` (WR-01), `Visual`-marker symmetry (WR-09), empirically-proven pins
 - [x] 177-09-PLAN.md — Ledger integrity before exposure: fence-injection rejection (CR-04), read-path revalidation through the single choke point (CR-02), upsert-append `recordDeriveVerdict` (CR-06), evidence requirement (WR-05), blind pass-through cross-check (WR-04)
 - [x] 177-10-PLAN.md — GAP 3 / CR-05: the missing `verify-derive-record` CLI write surface, `originalLine`-aware join (CR-03), orphan + staleness reporting (WR-03), printer and error-path fixes (WR-06/WR-02/WR-10), Step 7 corrected and pinned
-- [ ] 177-11-PLAN.md — GAP 1: opaque `blindDeriveHandle` replaces the resolvable pointer (CR-07), quote-local focus narrowing so per-candidate payloads differ, mechanical payload-distinctness, and `factAlignment` as the artifact-vs-genuine instrument
+- [x] 177-11-PLAN.md — GAP 1: opaque `blindDeriveHandle` replaces the resolvable pointer (CR-07), quote-local focus narrowing so per-candidate payloads differ, mechanical payload-distinctness, and `factAlignment` as the artifact-vs-genuine instrument
 - [ ] 177-12-PLAN.md — Pre-register the targeting metric (committed before any dispatch), then re-run the live proof: real `claude -p` on `cp -R` copies, every verdict recorded through the real CLI, originals byte-identical → `177-PROOF-2.md`
 - [ ] 177-13-PLAN.md — Measure the phase GOAL in its own unit and report it honestly; dispose of CHECK-04 on that evidence alone; account for all 18 review findings as fixed or deferred
 
@@ -339,7 +339,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 174. Verify Classifier | 8/8 | Reopened — goal NOT MET (decision 19 applied, §8) | - |
 | 175. Impact Map & Repair Gating | 8/8 | Complete   | 2026-07-30 |
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
-| 177. Derived-Line Re-Derivation | 10/13 | In Progress|  |
+| 177. Derived-Line Re-Derivation | 11/13 | In Progress|  |
 | 178. Worked-Example Tests | 0/TBD | Not started | - |
 | 179. Source-Free Verification Mode | 0/TBD | Not started | - |
 
