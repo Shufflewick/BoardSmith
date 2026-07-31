@@ -425,17 +425,18 @@ dated 2026-07-30, routed to Phase 178. See `177.1-LIVE-PROOF/PROOF.md` and
   1. `build/test.md` generates an executable test for every worked example in a newly-built chunk's cited slices.
   2. Running worked-example replay against a reference game's cited slices executes each example against the real engine and reports any mismatch as a finding.
   3. Both mechanisms share the same example-to-test derivation logic rather than duplicating it.
-**Plans**: 10 plans
+**Plans**: 11 plans
   - [ ] 178-01-PLAN.md — Example-line identification: family widening at a measured scope, WR-07 decision, ingest marker
   - [ ] 178-02-PLAN.md — example-derivation.ts: WorkedExample spec, caller-assigned ids, both dispatch payload builders (SC-3)
   - [ ] 178-03-PLAN.md — CHECK-06 ledger + verify-example-replay read/report command
   - [ ] 178-04-PLAN.md — verify-example-record write surface, provenance gating, CLI registration
-  - [ ] 178-05-PLAN.md — verify-example-emit: one generated test file per chunk, sandbox-scanned
-  - [ ] 178-06-PLAN.md — extract-example.md / translate-example.md subagent contracts + installer probes
-  - [ ] 178-07-PLAN.md — build/test.md worked-example step (TEST-01), build-blocking, renumbered sequence
-  - [ ] 178-08-PLAN.md — verify-game.md Step 8 (CHECK-06), Close renumbered to Step 9
-  - [ ] 178-09-PLAN.md — Pre-registration: expected extraction + satisfiability audit, committed alone
-  - [ ] 178-10-PLAN.md — Live proof on all three reference games, generated tests executed, closure notes
+  - [ ] 178-05-PLAN.md — verify-example-translate: the CLI surface for the translation dispatch payload + one-implementation guard (SC-3)
+  - [ ] 178-06-PLAN.md — verify-example-emit: one generated test file per chunk, sandbox-scanned
+  - [ ] 178-07-PLAN.md — extract-example.md / translate-example.md subagent contracts + installer probes
+  - [ ] 178-08-PLAN.md — build/test.md worked-example step (TEST-01), build-blocking, renumbered sequence
+  - [ ] 178-09-PLAN.md — verify-game.md Step 8 (CHECK-06), Close renumbered to Step 9
+  - [ ] 178-10-PLAN.md — Pre-registration: expected extraction + satisfiability audit, committed alone
+  - [ ] 178-11-PLAN.md — Live proof on all three reference games, generated tests executed, closure notes
 
 ### Phase 179: Source-Free Verification Mode
 **Goal**: A project whose source rulebook is unavailable still gets a verification pass — an honest, reduced one, never a failure and never a silent full-scope claim.
