@@ -177,8 +177,10 @@ slice's quote lines only — never the original `Derived` line itself; the paylo
 the target line's own text, not composed by this orchestrator reading a slice. A SEPARATE dispatch
 then carries `${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md`'s `BS-DERIVE-COMPARE-V1`
 handshake, the original line, and the blind subagent's already-recorded reading, and returns one of
-the four `DERIVE_VERDICTS`. Both readings are recorded through `recordDeriveVerdicts`'s one atomic
-ledger write, then reported by formatting `boardsmith verify-derive-recheck --json`'s output —
+the four `DERIVE_VERDICTS`. Both readings are recorded through exactly ONE `boardsmith verify-derive-record` invocation per
+`Derived` line — the CLI write surface's atomic upsert-append, never a whole-ledger rewrite, so
+calling it for a later line never destroys a verdict already recorded for an earlier one — then
+reported by formatting `boardsmith verify-derive-recheck --json`'s output —
 **formatted, never computed** by this skill, the same discipline Step 8's Close already holds.
 Findings citing BOTH derivations verbatim are reported and exit 0 — a `disagrees` verdict is
 advisory, never a Close gate.

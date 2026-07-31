@@ -560,13 +560,21 @@ describe('derive-recheck.md / derive-compare.md — the two CHECK-04 judgment co
     expect(doc).not.toContain('BS-DERIVE-V1');
   });
 
-  it('derive-recheck.md states the never-given list in one place', () => {
+  it('derive-recheck.md states the never-given list in one place, including Named-but-undefined (WR-08)', () => {
     const doc = flat(read('verify/derive-recheck.md'));
     expect(doc).toMatch(
       /you are NEVER given[\s\S]*?the `Derived` line you are re-deriving/,
     );
     expect(doc).toContain('any OTHER `Derived` line from this slice or any other slice');
     expect(doc).toContain('any `Visual` line at all');
+    expect(doc).toContain('any `Named-but-undefined` line at all');
+  });
+
+  it('derive-recheck.md attributes the stripping to buildBlindDerivePayload, never the orchestrator (WR-08)', () => {
+    const doc = flat(read('verify/derive-recheck.md'));
+    expect(doc).toMatch(/buildBlindDerivePayload.*verify-derive-recheck\.ts/);
+    expect(doc).toMatch(/the orchestrator itself never opens the slice/);
+    expect(doc).not.toMatch(/already stripped out by the orchestrator/);
   });
 
   it('derive-recheck.md\'s RETURN block has no verdict field and no agrees/disagrees as something it returns', () => {
@@ -713,11 +721,13 @@ describe('verify-game.md — CHECK-04 routing and Reference Files (177-05)', () 
     expect(skill).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/derive-compare.md');
   });
 
-  it('names both handshake tokens and the verify-derive-recheck report command', () => {
+  it('names both handshake tokens, the report command, and the recording command (CR-05: recordDeriveVerdicts named no callable entry point)', () => {
     const skill = read('verify-game.md');
     expect(skill).toContain('BS-DERIVE-V1');
     expect(skill).toContain('BS-DERIVE-COMPARE-V1');
     expect(skill).toContain('verify-derive-recheck');
+    expect(skill).toContain('boardsmith verify-derive-record');
+    expect(skill).not.toContain('recordDeriveVerdicts');
   });
 
   it('states the check is project-wide and independent of staleness/repair scoping', () => {
@@ -884,5 +894,66 @@ describe('verify-game.md — repair/ruling-recheck routing and swept boundary cl
       /\(`reopen-playtest`,\s*`close-without-replaytest`,\s*or\s*`unknown-drift`\)/,
     );
     expect(skill).toMatch(/REPAIR_GATE_DISPOSITIONS/);
+  });
+});
+
+describe('drift guard — every named boardsmith verify-* command actually exists in cli.ts (177-10, closing CR-05\'s failure mode)', () => {
+  // CR-05's defect was skill text prescribing a call pattern (`recordDeriveVerdicts`) with no
+  // registered CLI entry point. This guard makes that class of drift impossible to reintroduce
+  // silently: every `verify-*` command name named across verify-game.md and bs/verify/*.md must
+  // be a real `.command('verify-...')` registration in cli.ts, not a name that only ever existed
+  // in prose.
+  //
+  // Matches a backtick-wrapped token starting with `verify-` (optionally preceded by
+  // "boardsmith "), followed by either the closing backtick directly or a space and more content
+  // before the closing backtick — deliberately excluding a bare `.ts`/`.md` file-reference suffix
+  // (e.g. `verify-derive-recheck.ts`, `verify-run.ts`), which names a MODULE, not a CLI command.
+  const CMD_MENTION_RE = /`(?:boardsmith )?(verify-[a-z][a-z-]*)(?:\s[^`]*)?`/g;
+
+  function registeredCliCommands(): Set<string> {
+    const cliSource = readFileSync(
+      join(__dirname, '..', '..', 'cli.ts'),
+      'utf-8',
+    );
+    const names = new Set<string>();
+    for (const m of cliSource.matchAll(/\.command\('(verify-[a-z-]+)'\)/g)) {
+      names.add(m[1]);
+    }
+    return names;
+  }
+
+  function mentionedCommands(text: string): Set<string> {
+    const names = new Set<string>();
+    for (const m of text.matchAll(CMD_MENTION_RE)) {
+      names.add(m[1]);
+    }
+    return names;
+  }
+
+  it('every verify-* command mentioned in verify-game.md and bs/verify/*.md is registered in cli.ts', () => {
+    const registered = registeredCliCommands();
+    expect(registered.size).toBeGreaterThan(0);
+
+    const unregistered: string[] = [];
+    for (const file of ALL_VERIFY_FILES) {
+      const mentioned = mentionedCommands(read(file));
+      for (const name of mentioned) {
+        if (!registered.has(name)) {
+          unregistered.push(`${file}: ${name}`);
+        }
+      }
+    }
+    expect(unregistered).toEqual([]);
+  });
+
+  it('the guard is a real regression detector: removing verify-derive-record from cli.ts fails this guard (observed, then restored)', () => {
+    const registered = registeredCliCommands();
+    const withoutDeriveRecord = new Set(registered);
+    withoutDeriveRecord.delete('verify-derive-record');
+
+    const mentioned = mentionedCommands(read('verify-game.md'));
+    const wouldFail = [...mentioned].some((name) => !withoutDeriveRecord.has(name));
+    expect(wouldFail).toBe(true);
+    expect(mentioned.has('verify-derive-record')).toBe(true);
   });
 });

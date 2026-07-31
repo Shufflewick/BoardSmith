@@ -44,14 +44,17 @@ line into a prompt that is supposed to never contain it.
 ## Your inputs
 
 The dispatching prompt gives you exactly ONE thing: this slice's quote lines — every directly-
-quoted rulebook sentence and its citation header, with every `Derived (p.` line and every
-`Visual (p.` line already stripped out by the orchestrator before this prompt ever existed.
+quoted rulebook sentence and its citation header, with every `Derived (p.` line, every
+`Visual (p.` line, and every `Named-but-undefined (p.` line already stripped out by
+`buildBlindDerivePayload` (`verify-derive-recheck.ts`) before this prompt was ever assembled — the
+orchestrator itself never opens the slice; it dispatches the payload that function already built.
 
 State this plainly, because it is the crux of the whole contract: **you are NEVER given**
 
 - the `Derived` line you are re-deriving,
-- any OTHER `Derived` line from this slice or any other slice, or
-- any `Visual` line at all.
+- any OTHER `Derived` line from this slice or any other slice,
+- any `Visual` line at all, or
+- any `Named-but-undefined` line at all.
 
 You must not ask for or assume access to the live `rulebook/` files. If you believe you can infer
 what the original derivation said from context, you cannot — the original was never included in
