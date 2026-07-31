@@ -1,0 +1,9 @@
+BS-ENUMERATE-V1
+Slice: rulebook/01-card-anatomy.md
+
+p.1 (panel -11-), CARD ANATOMY (callout labels, verbatim):
+"1  Card name"
+"2  Roll conditions needed to damage machine part"
+"3  Machine part cycle track"
+"4  Cycle icon effects"
+Diagram description (p.1, panel -11-): a single portrait teal machine part card with four numbered callouts pointing to it. (1) points at the title bar across the top of the card (the sample card's name reads as "RECYCLING UNIT"). (2) points at the yellow roll-condition tiles on the middle-right of the card face. (3) points at the vertical column of track squares running down the left side of the card, which holds the yellow HP die. (4) points at the small colored icon badges embedded in the track / lower card area that fire when the die lands on them. Numbered markers 1-4 run down the left edge of the card, with matching numbered legend entries on the right.

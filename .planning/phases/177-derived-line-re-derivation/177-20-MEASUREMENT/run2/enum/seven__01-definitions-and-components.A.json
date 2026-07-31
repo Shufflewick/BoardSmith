@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 13216,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "a99e69e0-577d-4a18-b22a-8847ac23ba06",
+    "total_cost_usd": 0.049028,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 32186,
+      "output_tokens": 1317,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1317,
+          "cache_read_input_tokens": 32186,
+          "cache_creation_input_tokens": 0,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-5": {
+        "inputTokens": 2,
+        "outputTokens": 1317,
+        "cacheReadInputTokens": 32186,
+        "cacheCreationInputTokens": 0,
+        "webSearchRequests": 0,
+        "costUSD": 0.049028,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-opus-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"facts\": [{\"statement\": \"A hand is the set of cards a player holds.\", \"sourceSentence\": \"Hand: The cards each player holds.\"}, {\"statement\": \"Each player begins the game holding 3 cards.\", \"sourceSentence\": \"Each starts with 3 and ends the game with 10.\", \"numericValue\": {\"magnitude\": 3, \"unit\": \"cards in hand at start\", \"approximate\": false}}, {\"statement\": \"Each player finishes the game holding 10 cards.\", \"sourceSentence\": \"Each starts with 3 and ends the game with 10.\", \"numericValue\": {\"magnitude\": 10, \"unit\": \"cards in hand at end\", \"approximate\": false}}, {\"statement\": \"A set is a group of two or more cards whose numbers match.\", \"sourceSentence\": \"Set: 2+ cards with matching numbers.\", \"numericValue\": {\"magnitude\": 2, \"unit\": \"cards minimum for a set\", \"approximate\": false}}, {\"statement\": \"Three cards all showing the number 5 is given as an example of a set.\", \"sourceSentence\": \"example: 5, 5, 5\"}, {\"statement\": \"A run is a group of three or more cards in consecutive numeric order.\", \"sourceSentence\": \"Run: 3+ cards in numeric order.\", \"numericValue\": {\"magnitude\": 3, \"unit\": \"cards minimum for a run\", \"approximate\": false}}, {\"statement\": \"The cards 5, 6, 7 are given as an example of a run.\", \"sourceSentence\": \"example: 5, 6, 7\"}, {\"statement\": \"Card numbers range from 1 to 7.\", \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\", \"numericValue\": {\"magnitude\": 7, \"unit\": \"highest card number\", \"approximate\": false}}, {\"statement\": \"The cards come in 4 colors.\", \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\", \"numericValue\": {\"magnitude\": 4, \"unit\": \"colors\", \"approximate\": false}}, {\"statement\": \"Each distinct card exists in 4 copies.\", \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\", \"numericValue\": {\"magnitude\": 4, \"unit\": \"copies of each card\", \"approximate\": false}}, {\"statement\": \"The game additionally includes 7 bonus point cards.\", \"sourceSentence\": \"In addition, there are 7 bonus point cards.\", \"numericValue\": {\"magnitude\": 7, \"unit\": \"bonus point cards\", \"approximate\": false}}, {\"statement\": \"The game's designer is JT Smith.\", \"sourceSentence\": \"JT Smith\"}, {\"statement\": \"The credited play testers are Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, and Marylin Vanderhoof.\", \"sourceSentence\": \"Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof\"}]}",
+    "ttft_ms": 13280,
+    "ttft_stream_ms": 1514,
+    "time_to_request_ms": 92,
+    "type": "result",
+    "duration_ms": 13302,
+    "uuid": "e9d28025-2956-4a76-9999-98cc9818947e"
+  },
+  "facts": "{\"facts\": [{\"statement\": \"A hand is the set of cards a player holds.\", \"sourceSentence\": \"Hand: The cards each player holds.\"}, {\"statement\": \"Each player begins the game holding 3 cards.\", \"sourceSentence\": \"Each starts with 3 and ends the game with 10.\", \"numericValue\": {\"magnitude\": 3, \"unit\": \"cards in hand at start\", \"approximate\": false}}, {\"statement\": \"Each player finishes the game holding 10 cards.\", \"sourceSentence\": \"Each starts with 3 and ends the game with 10.\", \"numericValue\": {\"magnitude\": 10, \"unit\": \"cards in hand at end\", \"approximate\": false}}, {\"statement\": \"A set is a group of two or more cards whose numbers match.\", \"sourceSentence\": \"Set: 2+ cards with matching numbers.\", \"numericValue\": {\"magnitude\": 2, \"unit\": \"cards minimum for a set\", \"approximate\": false}}, {\"statement\": \"Three cards all showing the number 5 is given as an example of a set.\", \"sourceSentence\": \"example: 5, 5, 5\"}, {\"statement\": \"A run is a group of three or more cards in consecutive numeric order.\", \"sourceSentence\": \"Run: 3+ cards in numeric order.\", \"numericValue\": {\"magnitude\": 3, \"unit\": \"cards minimum for a run\", \"approximate\": false}}, {\"statement\": \"The cards 5, 6, 7 are given as an example of a run.\", \"sourceSentence\": \"example: 5, 6, 7\"}, {\"statement\": \"Card numbers range from 1 to 7.\", \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\", \"numericValue\": {\"magnitude\": 7, \"unit\": \"highest card number\", \"approximate\": false}}, {\"statement\": \"The cards come in 4 colors.\", \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\", \"numericValue\": {\"magnitude\": 4, \"unit\": \"colors\", \"approximate\": false}}, {\"statement\": \"Each distinct card exists in 4 copies.\", \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\", \"numericValue\": {\"magnitude\": 4, \"unit\": \"copies of each card\", \"approximate\": false}}, {\"statement\": \"The game additionally includes 7 bonus point cards.\", \"sourceSentence\": \"In addition, there are 7 bonus point cards.\", \"numericValue\": {\"magnitude\": 7, \"unit\": \"bonus point cards\", \"approximate\": false}}, {\"statement\": \"The game's designer is JT Smith.\", \"sourceSentence\": \"JT Smith\"}, {\"statement\": \"The credited play testers are Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, and Marylin Vanderhoof.\", \"sourceSentence\": \"Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof\"}]}"
+}

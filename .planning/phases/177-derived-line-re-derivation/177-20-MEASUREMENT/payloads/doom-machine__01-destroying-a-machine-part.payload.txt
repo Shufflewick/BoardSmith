@@ -1,0 +1,12 @@
+BS-ENUMERATE-V1
+Slice: rulebook/01-destroying-a-machine-part.md
+
+p.1 (panel -7-), DESTROYING A MACHINE PART:
+"If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn)."
+"Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool."
+"Then, shift any remaining machine part cards in play to close the gap."
+p.1 (panel -7-), DESTROYED CARD EFFECTS:
+"Some machine part cards have a yellow X icon and effect on them. These effects are triggered and resolved immediately when that part is destroyed."
+Diagram description (p.1, panel -7-): a yellow banner with a circled-X icon reading "DEAL 1 DMG TO ALL PARTS IN PLAY", with an arrow pointing to a sample teal machine part card that shows the same yellow destroy-effect banner across its lower area. The sample card also shows its title bar, a cycle track column of icons down the left, and yellow roll-condition tiles on its right side.
+Worked example content (p.1, panel -7-, verbatim from card art):
+"DEAL 1 DMG TO ALL PARTS IN PLAY"

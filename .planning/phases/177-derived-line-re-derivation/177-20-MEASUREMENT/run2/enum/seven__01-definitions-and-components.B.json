@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 62795,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "a8c51497-5f30-4a3e-b20a-1d373435998b",
+    "total_cost_usd": 0.0561505,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9031,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 7182,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9031,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 7182,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9031,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9031
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 7182,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9031,
+        "webSearchRequests": 0,
+        "costUSD": 0.0561505,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"Hand is defined as the cards each player holds.\",\n      \"sourceSentence\": \"Hand: The cards each player holds.\"\n    },\n    {\n      \"statement\": \"Each player starts with 3 cards in their hand.\",\n      \"sourceSentence\": \"Each starts with 3\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player ends the game with 10 cards in their hand.\",\n      \"sourceSentence\": \"ends the game with 10\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"A Set is 2 or more cards with matching numbers.\",\n      \"sourceSentence\": \"Set: 2+ cards with matching numbers.\",\n      \"numericValue\": {\n        \"magnitude\": 2,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"An example of a Set is three cards all numbered 5.\",\n      \"sourceSentence\": \"example: 5, 5, 5\"\n    },\n    {\n      \"statement\": \"A Run is 3 or more cards in numeric order.\",\n      \"sourceSentence\": \"Run: 3+ cards in numeric order.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"An example of a Run is cards numbered 5, 6, and 7 in sequence.\",\n      \"sourceSentence\": \"example: 5, 6, 7\"\n    },\n    {\n      \"statement\": \"Card numbers range from 1 to 7.\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"Cards are printed in 4 colors.\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"numericValue\": {\n        \"magnitude\": 4,\n        \"unit\": \"colors\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There are 4 copies of each number-color combination.\",\n      \"sourceSentence\": \"with 4 copies of each card.\",\n      \"numericValue\": {\n        \"magnitude\": 4,\n        \"unit\": \"copies\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There are 7 bonus point cards.\",\n      \"sourceSentence\": \"In addition, there are 7 bonus point cards.\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"bonus point cards\",\n        \"approximate\": false\n      }\n    }\n  ]\n}\n```",
+    "ttft_ms": 57991,
+    "ttft_stream_ms": 1254,
+    "time_to_request_ms": 42,
+    "type": "result",
+    "duration_ms": 62836,
+    "uuid": "afdc99c8-d2c7-4d47-a4ef-82623e0e3a92"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"Hand is defined as the cards each player holds.\",\n      \"sourceSentence\": \"Hand: The cards each player holds.\"\n    },\n    {\n      \"statement\": \"Each player starts with 3 cards in their hand.\",\n      \"sourceSentence\": \"Each starts with 3\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player ends the game with 10 cards in their hand.\",\n      \"sourceSentence\": \"ends the game with 10\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"A Set is 2 or more cards with matching numbers.\",\n      \"sourceSentence\": \"Set: 2+ cards with matching numbers.\",\n      \"numericValue\": {\n        \"magnitude\": 2,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"An example of a Set is three cards all numbered 5.\",\n      \"sourceSentence\": \"example: 5, 5, 5\"\n    },\n    {\n      \"statement\": \"A Run is 3 or more cards in numeric order.\",\n      \"sourceSentence\": \"Run: 3+ cards in numeric order.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"An example of a Run is cards numbered 5, 6, and 7 in sequence.\",\n      \"sourceSentence\": \"example: 5, 6, 7\"\n    },\n    {\n      \"statement\": \"Card numbers range from 1 to 7.\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"Cards are printed in 4 colors.\",\n      \"sourceSentence\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"numericValue\": {\n        \"magnitude\": 4,\n        \"unit\": \"colors\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There are 4 copies of each number-color combination.\",\n      \"sourceSentence\": \"with 4 copies of each card.\",\n      \"numericValue\": {\n        \"magnitude\": 4,\n        \"unit\": \"copies\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There are 7 bonus point cards.\",\n      \"sourceSentence\": \"In addition, there are 7 bonus point cards.\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"bonus point cards\",\n        \"approximate\": false\n      }\n    }\n  ]\n}"
+}

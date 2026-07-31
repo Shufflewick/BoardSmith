@@ -1,0 +1,64 @@
+{
+  "facts": [
+    {
+      "statement": "When a machine part's HP die is reduced to zero, the card is removed from play",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn)."
+    },
+    {
+      "statement": "When a machine part is destroyed, its die is added to the player's permanent dice pool",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero, remove the card from play and add that part's die to your permanent dice pool (set it aside with your other spent dice until the start of the next turn)."
+    },
+    {
+      "statement": "Dice in the permanent pool are set aside until the start of the next turn",
+      "sourceSentence": "(set it aside with your other spent dice until the start of the next turn)"
+    },
+    {
+      "statement": "A permanent dice pool cannot exceed 10 dice total",
+      "sourceSentence": "Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A permanent dice pool cannot contain more than 5 black dice",
+      "sourceSentence": "Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "black dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A permanent dice pool cannot contain more than 5 yellow dice",
+      "sourceSentence": "Note: you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool.",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "yellow dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "After a machine part is destroyed, remaining machine part cards in play shift to close the gap",
+      "sourceSentence": "Then, shift any remaining machine part cards in play to close the gap."
+    },
+    {
+      "statement": "Some machine part cards have a yellow X icon with an associated destroy effect",
+      "sourceSentence": "Some machine part cards have a yellow X icon and effect on them."
+    },
+    {
+      "statement": "Destroy effects on machine part cards trigger and resolve immediately when that card is destroyed",
+      "sourceSentence": "These effects are triggered and resolved immediately when that part is destroyed."
+    },
+    {
+      "statement": "At least one destroy effect card has the effect 'DEAL 1 DMG TO ALL PARTS IN PLAY'",
+      "sourceSentence": "DEAL 1 DMG TO ALL PARTS IN PLAY",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "damage",
+        "approximate": false
+      }
+    }
+  ]
+}

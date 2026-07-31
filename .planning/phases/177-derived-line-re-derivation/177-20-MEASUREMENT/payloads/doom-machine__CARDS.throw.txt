@@ -1,0 +1,2 @@
+buildEnumeratorPayload assembled a payload for rulebook/CARDS.md that still names an annotation family (Derived / Visual / Named-but-undefined), with or without a page citation.
+The payload construction site, not the prompt text, is where the quote-only guarantee is upheld — an annotation reaching an enumerator turns independent derivation into confirmation of the transcriber's own inference. Fix the strip filter; never relax this check to let the payload through.

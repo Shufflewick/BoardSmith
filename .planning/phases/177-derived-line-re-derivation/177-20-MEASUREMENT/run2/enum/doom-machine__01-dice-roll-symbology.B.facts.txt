@@ -1,0 +1,58 @@
+{
+  "facts": [
+    {
+      "statement": "The first symbol requires 3 dice.",
+      "sourceSentence": "3 dice required.",
+      "numericValue": { "magnitude": 3, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the first symbol, the first die plus the second die must equal the third die's value.",
+      "sourceSentence": "1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)"
+    },
+    {
+      "statement": "The second symbol requires 3 dice.",
+      "sourceSentence": "3 dice required.",
+      "numericValue": { "magnitude": 3, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the second symbol, all dice must show six pips.",
+      "sourceSentence": "They must all be sixes."
+    },
+    {
+      "statement": "The third symbol requires 2 dice.",
+      "sourceSentence": "2 dice required.",
+      "numericValue": { "magnitude": 2, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the third symbol, both dice must show the same value.",
+      "sourceSentence": "They must be doubles."
+    },
+    {
+      "statement": "The fourth symbol requires 1 die.",
+      "sourceSentence": "1 die required.",
+      "numericValue": { "magnitude": 1, "unit": "die", "approximate": false }
+    },
+    {
+      "statement": "For the fourth symbol, the die can show either 2 pips or 3 pips.",
+      "sourceSentence": "It can be either a 2 or a 3 value."
+    },
+    {
+      "statement": "The fifth symbol requires 2 dice.",
+      "sourceSentence": "2 dice required.",
+      "numericValue": { "magnitude": 2, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the fifth symbol, one die must show 3 pips and another die must show greater than 3 pips.",
+      "sourceSentence": "One must be a 3, another greater than 3."
+    },
+    {
+      "statement": "The sixth symbol requires 2 dice.",
+      "sourceSentence": "2 dice required.",
+      "numericValue": { "magnitude": 2, "unit": "dice", "approximate": false }
+    },
+    {
+      "statement": "For the sixth symbol, one die must show 4 pips and another die must show 5 pips.",
+      "sourceSentence": "They must be a 4 and a 5."
+    }
+  ]
+}

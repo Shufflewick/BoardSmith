@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 18282,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "92554d84-8bd9-408e-b53f-1a8e1f7c3765",
+    "total_cost_usd": 0.06364500000000001,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 32020,
+      "output_tokens": 1905,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1905,
+          "cache_read_input_tokens": 32020,
+          "cache_creation_input_tokens": 0,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-5": {
+        "inputTokens": 2,
+        "outputTokens": 1905,
+        "cacheReadInputTokens": 32020,
+        "cacheCreationInputTokens": 0,
+        "webSearchRequests": 0,
+        "costUSD": 0.06364500000000001,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-opus-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"facts\":[{\"statement\":\"A turn's first phase is Phase I: Dice Roll / Resolution.\",\"sourceSentence\":\"PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine.\"},{\"statement\":\"On each turn the player rolls their available dice.\",\"sourceSentence\":\"PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine.\"},{\"statement\":\"Rolled dice are allocated in various ways, which include modifying your rolls, defending against incoming damage, and dealing damage to parts of the Doom Machine.\",\"sourceSentence\":\"PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine.\"},{\"statement\":\"Phase II is called The Machine Phase and begins once the player has allocated and resolved all of their dice.\",\"sourceSentence\":\"PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card.\"},{\"statement\":\"During the Machine Phase the machine cycles its remaining parts and resolves their effects.\",\"sourceSentence\":\"PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card.\"},{\"statement\":\"After cycling and resolving its parts, the machine grows by one additional card.\",\"sourceSentence\":\"PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"additional card\",\"approximate\":false}},{\"statement\":\"The phase loop repeats until one of two end conditions occurs: the player reveals and destroys the Doom Core, or the machine destroys the player.\",\"sourceSentence\":\"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine.\"},{\"statement\":\"The player wins/ends the loop by revealing and destroying the Doom Core.\",\"sourceSentence\":\"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine.\"},{\"statement\":\"The loop also ends if the player is destroyed by the machine.\",\"sourceSentence\":\"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine.\"},{\"statement\":\"At the start of the player's turn, all of their available dice are rolled.\",\"sourceSentence\":\"At the start of your turn, roll all of your available dice (you start with 5 black dice and may gain up to 5 additional yellow dice from destroyed machine part cards).\"},{\"statement\":\"The player begins with five black dice.\",\"sourceSentence\":\"you start with 5 black dice\",\"numericValue\":{\"magnitude\":5,\"unit\":\"black dice\",\"approximate\":false}},{\"statement\":\"The player may acquire as many as five extra yellow dice over the course of play.\",\"sourceSentence\":\"may gain up to 5 additional yellow dice from destroyed machine part cards\",\"numericValue\":{\"magnitude\":5,\"unit\":\"additional yellow dice\",\"approximate\":true}},{\"statement\":\"Additional yellow dice are gained from destroyed machine part cards.\",\"sourceSentence\":\"may gain up to 5 additional yellow dice from destroyed machine part cards\"},{\"statement\":\"Dice are allocated among the available options according to what the player rolled.\",\"sourceSentence\":\"Allocate them in any of the following available ways, based on your rolls:\"},{\"statement\":\"One available allocation option is activating any available utilities.\",\"sourceSentence\":\"1) ACTIVATE ANY AVAILABLE UTILITIES\"},{\"statement\":\"One available allocation option is playing dice to your shields.\",\"sourceSentence\":\"2) PLAY DICE TO YOUR SHIELDS\"},{\"statement\":\"One available allocation option is dealing damage to machine parts.\",\"sourceSentence\":\"3) DEAL DAMAGE TO MACHINE PARTS\"}]}",
+    "ttft_ms": 5719,
+    "ttft_stream_ms": 1350,
+    "time_to_request_ms": 16,
+    "type": "result",
+    "duration_ms": 18309,
+    "uuid": "6eb3577a-1cd7-4d56-a1cf-d984a36b6f1e"
+  },
+  "facts": "{\"facts\":[{\"statement\":\"A turn's first phase is Phase I: Dice Roll / Resolution.\",\"sourceSentence\":\"PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine.\"},{\"statement\":\"On each turn the player rolls their available dice.\",\"sourceSentence\":\"PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine.\"},{\"statement\":\"Rolled dice are allocated in various ways, which include modifying your rolls, defending against incoming damage, and dealing damage to parts of the Doom Machine.\",\"sourceSentence\":\"PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice, and allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine.\"},{\"statement\":\"Phase II is called The Machine Phase and begins once the player has allocated and resolved all of their dice.\",\"sourceSentence\":\"PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card.\"},{\"statement\":\"During the Machine Phase the machine cycles its remaining parts and resolves their effects.\",\"sourceSentence\":\"PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card.\"},{\"statement\":\"After cycling and resolving its parts, the machine grows by one additional card.\",\"sourceSentence\":\"PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts, resolve their effects, then grow by 1 additional card.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"additional card\",\"approximate\":false}},{\"statement\":\"The phase loop repeats until one of two end conditions occurs: the player reveals and destroys the Doom Core, or the machine destroys the player.\",\"sourceSentence\":\"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine.\"},{\"statement\":\"The player wins/ends the loop by revealing and destroying the Doom Core.\",\"sourceSentence\":\"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine.\"},{\"statement\":\"The loop also ends if the player is destroyed by the machine.\",\"sourceSentence\":\"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine.\"},{\"statement\":\"At the start of the player's turn, all of their available dice are rolled.\",\"sourceSentence\":\"At the start of your turn, roll all of your available dice (you start with 5 black dice and may gain up to 5 additional yellow dice from destroyed machine part cards).\"},{\"statement\":\"The player begins with five black dice.\",\"sourceSentence\":\"you start with 5 black dice\",\"numericValue\":{\"magnitude\":5,\"unit\":\"black dice\",\"approximate\":false}},{\"statement\":\"The player may acquire as many as five extra yellow dice over the course of play.\",\"sourceSentence\":\"may gain up to 5 additional yellow dice from destroyed machine part cards\",\"numericValue\":{\"magnitude\":5,\"unit\":\"additional yellow dice\",\"approximate\":true}},{\"statement\":\"Additional yellow dice are gained from destroyed machine part cards.\",\"sourceSentence\":\"may gain up to 5 additional yellow dice from destroyed machine part cards\"},{\"statement\":\"Dice are allocated among the available options according to what the player rolled.\",\"sourceSentence\":\"Allocate them in any of the following available ways, based on your rolls:\"},{\"statement\":\"One available allocation option is activating any available utilities.\",\"sourceSentence\":\"1) ACTIVATE ANY AVAILABLE UTILITIES\"},{\"statement\":\"One available allocation option is playing dice to your shields.\",\"sourceSentence\":\"2) PLAY DICE TO YOUR SHIELDS\"},{\"statement\":\"One available allocation option is dealing damage to machine parts.\",\"sourceSentence\":\"3) DEAL DAMAGE TO MACHINE PARTS\"}]}"
+}

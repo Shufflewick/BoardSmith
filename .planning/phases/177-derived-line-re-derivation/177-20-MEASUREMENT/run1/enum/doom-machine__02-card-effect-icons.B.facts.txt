@@ -1,0 +1,77 @@
+{
+  "facts": [
+    {
+      "statement": "The Damage icon effect targets a player's shields before HP.",
+      "sourceSentence": "Damage - Hits player's shields first, if blocked, then HP if any carries over."
+    },
+    {
+      "statement": "When a Damage effect is blocked by shields, any remaining damage targets HP.",
+      "sourceSentence": "Damage - Hits player's shields first, if blocked, then HP if any carries over."
+    },
+    {
+      "statement": "The Power / Sentience icon effect moves the corresponding token up or down the Doom Machine track.",
+      "sourceSentence": "Power / Sentience - Move the corresponding token up or down the Doom Machine track."
+    },
+    {
+      "statement": "The Power + Sentience icon effect can increase or decrease both Power and Sentience.",
+      "sourceSentence": "Power + Sentience - Increase or decrease both Power and Sentience."
+    },
+    {
+      "statement": "When the Broken Shield icon is activated, only 1 shield die can be placed on the next turn.",
+      "sourceSentence": "Broken Shield - When activated, only 1 shield dice can be placed next turn.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "shield die",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The Destroy Effect icon triggers immediately when a part card is destroyed.",
+      "sourceSentence": "Destroy Effect - Immediately triggers when a part card is destroyed."
+    },
+    {
+      "statement": "The Repair icon effect restores a part card's HP up to its maximum starting health.",
+      "sourceSentence": "Repair - Restores part card's HP (only up to its maximum starting health)."
+    },
+    {
+      "statement": "The Gear icon effect instantly triggers an additional track cycle for any cards immediately adjacent to it.",
+      "sourceSentence": "Gear - Instantly triggers an additional track cycle for any cards immediately adjacent to it."
+    },
+    {
+      "statement": "The Lock icon effect allows you to choose one die, set it aside, and it will not be rolled or placed on the next turn.",
+      "sourceSentence": "Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn."
+    },
+    {
+      "statement": "The Damage icon is visually represented as a yellow or green starburst or explosion glyph.",
+      "sourceSentence": "Damage: a yellow/green starburst or explosion glyph."
+    },
+    {
+      "statement": "The Power / Sentience icon consists of two side-by-side badges: a battery or power-cell glyph for Power shown in black and teal, and an eye glyph for Sentience shown in yellow.",
+      "sourceSentence": "Power / Sentience: two side-by-side badges — a battery/power-cell glyph (Power, black/teal) and an eye glyph (Sentience, yellow)."
+    },
+    {
+      "statement": "The Power + Sentience icon is visually represented as an eye glyph badge.",
+      "sourceSentence": "Power + Sentience: an eye glyph badge (shown for the combined effect)."
+    },
+    {
+      "statement": "The Broken Shield icon is visually represented as a green cracked shield glyph.",
+      "sourceSentence": "Broken Shield: a green cracked shield glyph."
+    },
+    {
+      "statement": "The Destroy Effect icon is visually represented as a yellow circled X.",
+      "sourceSentence": "Destroy Effect: a yellow circled X."
+    },
+    {
+      "statement": "The Repair icon is visually represented as a yellow heart with a triangle.",
+      "sourceSentence": "Repair: a yellow heart with a triangle."
+    },
+    {
+      "statement": "The Gear icon is visually represented as a cogwheel glyph in a blue ring.",
+      "sourceSentence": "Gear: a cogwheel glyph in a blue ring."
+    },
+    {
+      "statement": "The Lock icon is visually represented as a padlock glyph in an orange ring.",
+      "sourceSentence": "Lock: a padlock glyph in an orange ring."
+    }
+  ]
+}

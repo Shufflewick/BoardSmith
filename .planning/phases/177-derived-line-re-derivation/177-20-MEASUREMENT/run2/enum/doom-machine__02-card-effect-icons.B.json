@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 17211,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "9ffdab50-a5a0-4bdf-a9a0-1f678eeb0415",
+    "total_cost_usd": 0.0310785,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9295,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 2062,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9295,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 2062,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9295,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9295
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 2062,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9295,
+        "webSearchRequests": 0,
+        "costUSD": 0.0310785,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"Damage effect hits player's shields first.\",\n      \"sourceSentence\": \"Damage - Hits player's shields first, if blocked, then HP if any carries over.\"\n    },\n    {\n      \"statement\": \"If damage is blocked by shields, remaining damage can carry over to HP.\",\n      \"sourceSentence\": \"Damage - Hits player's shields first, if blocked, then HP if any carries over.\"\n    },\n    {\n      \"statement\": \"Power/Sentience effect moves the corresponding token up or down the Doom Machine track.\",\n      \"sourceSentence\": \"Power / Sentience - Move the corresponding token up or down the Doom Machine track.\"\n    },\n    {\n      \"statement\": \"Power + Sentience effect increases or decreases both Power and Sentience.\",\n      \"sourceSentence\": \"Power + Sentience - Increase or decrease both Power and Sentience.\"\n    },\n    {\n      \"statement\": \"When Broken Shield is activated, only 1 shield die can be placed next turn.\",\n      \"sourceSentence\": \"Broken Shield - When activated, only 1 shield dice can be placed next turn.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"shield die\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Destroy Effect triggers immediately when a part card is destroyed.\",\n      \"sourceSentence\": \"Destroy Effect - Immediately triggers when a part card is destroyed.\"\n    },\n    {\n      \"statement\": \"Repair effect restores a part card's HP up to its maximum starting health.\",\n      \"sourceSentence\": \"Repair - Restores part card's HP (only up to its maximum starting health).\"\n    },\n    {\n      \"statement\": \"Gear effect instantly triggers an additional track cycle for cards immediately adjacent to it.\",\n      \"sourceSentence\": \"Gear - Instantly triggers an additional track cycle for any cards immediately adjacent to it.\"\n    },\n    {\n      \"statement\": \"Lock effect allows choosing one die to set aside.\",\n      \"sourceSentence\": \"Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn.\"\n    },\n    {\n      \"statement\": \"A locked die does not get rolled or placed on the next turn.\",\n      \"sourceSentence\": \"Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn.\"\n    },\n    {\n      \"statement\": \"There are 8 circular icon badges arranged in a column.\",\n      \"sourceSentence\": \"Icon art description (p.2, panel -12-): eight circular icon badges in a column, each ringed in a distinct color on a dark teal card back\",\n      \"numericValue\": {\n        \"magnitude\": 8,\n        \"unit\": \"icon badges\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each icon badge is ringed in a distinct color.\",\n      \"sourceSentence\": \"Icon art description (p.2, panel -12-): eight circular icon badges in a column, each ringed in a distinct color on a dark teal card back\"\n    },\n    {\n      \"statement\": \"The icon badges are on a dark teal card back.\",\n      \"sourceSentence\": \"Icon art description (p.2, panel -12-): eight circular icon badges in a column, each ringed in a distinct color on a dark teal card back\"\n    },\n    {\n      \"statement\": \"The Damage icon is a yellow/green starburst or explosion glyph.\",\n      \"sourceSentence\": \"Damage: a yellow/green starburst or explosion glyph.\"\n    },\n    {\n      \"statement\": \"The Power/Sentience icon consists of two side-by-side badges: a battery/power-cell glyph (Power, black/teal) and an eye glyph (Sentience, yellow).\",\n      \"sourceSentence\": \"Power / Sentience: two side-by-side badges — a battery/power-cell glyph (Power, black/teal) and an eye glyph (Sentience, yellow).\"\n    },\n    {\n      \"statement\": \"The Power + Sentience icon is an eye glyph badge.\",\n      \"sourceSentence\": \"Power + Sentience: an eye glyph badge (shown for the combined effect).\"\n    },\n    {\n      \"statement\": \"The Broken Shield icon is a green cracked shield glyph.\",\n      \"sourceSentence\": \"Broken Shield: a green cracked shield glyph.\"\n    },\n    {\n      \"statement\": \"The Destroy Effect icon is a yellow circled X.\",\n      \"sourceSentence\": \"Destroy Effect: a yellow circled X.\"\n    },\n    {\n      \"statement\": \"The Repair icon is a yellow heart with a triangle.\",\n      \"sourceSentence\": \"Repair: a yellow heart with a triangle.\"\n    },\n    {\n      \"statement\": \"The Gear icon is a cogwheel glyph in a blue ring.\",\n      \"sourceSentence\": \"Gear: a cogwheel glyph in a blue ring.\"\n    },\n    {\n      \"statement\": \"The Lock icon is a padlock glyph in an orange ring.\",\n      \"sourceSentence\": \"Lock: a padlock glyph in an orange ring.\"\n    }\n  ]\n}\n```",
+    "ttft_ms": 8325,
+    "ttft_stream_ms": 1408,
+    "time_to_request_ms": 31,
+    "type": "result",
+    "duration_ms": 17246,
+    "uuid": "7731d99d-5e89-4938-acb1-a67c28a028b6"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"Damage effect hits player's shields first.\",\n      \"sourceSentence\": \"Damage - Hits player's shields first, if blocked, then HP if any carries over.\"\n    },\n    {\n      \"statement\": \"If damage is blocked by shields, remaining damage can carry over to HP.\",\n      \"sourceSentence\": \"Damage - Hits player's shields first, if blocked, then HP if any carries over.\"\n    },\n    {\n      \"statement\": \"Power/Sentience effect moves the corresponding token up or down the Doom Machine track.\",\n      \"sourceSentence\": \"Power / Sentience - Move the corresponding token up or down the Doom Machine track.\"\n    },\n    {\n      \"statement\": \"Power + Sentience effect increases or decreases both Power and Sentience.\",\n      \"sourceSentence\": \"Power + Sentience - Increase or decrease both Power and Sentience.\"\n    },\n    {\n      \"statement\": \"When Broken Shield is activated, only 1 shield die can be placed next turn.\",\n      \"sourceSentence\": \"Broken Shield - When activated, only 1 shield dice can be placed next turn.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"shield die\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Destroy Effect triggers immediately when a part card is destroyed.\",\n      \"sourceSentence\": \"Destroy Effect - Immediately triggers when a part card is destroyed.\"\n    },\n    {\n      \"statement\": \"Repair effect restores a part card's HP up to its maximum starting health.\",\n      \"sourceSentence\": \"Repair - Restores part card's HP (only up to its maximum starting health).\"\n    },\n    {\n      \"statement\": \"Gear effect instantly triggers an additional track cycle for cards immediately adjacent to it.\",\n      \"sourceSentence\": \"Gear - Instantly triggers an additional track cycle for any cards immediately adjacent to it.\"\n    },\n    {\n      \"statement\": \"Lock effect allows choosing one die to set aside.\",\n      \"sourceSentence\": \"Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn.\"\n    },\n    {\n      \"statement\": \"A locked die does not get rolled or placed on the next turn.\",\n      \"sourceSentence\": \"Lock - Choose one of your die and set it aside. It does not get rolled or placed on your next turn.\"\n    },\n    {\n      \"statement\": \"There are 8 circular icon badges arranged in a column.\",\n      \"sourceSentence\": \"Icon art description (p.2, panel -12-): eight circular icon badges in a column, each ringed in a distinct color on a dark teal card back\",\n      \"numericValue\": {\n        \"magnitude\": 8,\n        \"unit\": \"icon badges\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each icon badge is ringed in a distinct color.\",\n      \"sourceSentence\": \"Icon art description (p.2, panel -12-): eight circular icon badges in a column, each ringed in a distinct color on a dark teal card back\"\n    },\n    {\n      \"statement\": \"The icon badges are on a dark teal card back.\",\n      \"sourceSentence\": \"Icon art description (p.2, panel -12-): eight circular icon badges in a column, each ringed in a distinct color on a dark teal card back\"\n    },\n    {\n      \"statement\": \"The Damage icon is a yellow/green starburst or explosion glyph.\",\n      \"sourceSentence\": \"Damage: a yellow/green starburst or explosion glyph.\"\n    },\n    {\n      \"statement\": \"The Power/Sentience icon consists of two side-by-side badges: a battery/power-cell glyph (Power, black/teal) and an eye glyph (Sentience, yellow).\",\n      \"sourceSentence\": \"Power / Sentience: two side-by-side badges — a battery/power-cell glyph (Power, black/teal) and an eye glyph (Sentience, yellow).\"\n    },\n    {\n      \"statement\": \"The Power + Sentience icon is an eye glyph badge.\",\n      \"sourceSentence\": \"Power + Sentience: an eye glyph badge (shown for the combined effect).\"\n    },\n    {\n      \"statement\": \"The Broken Shield icon is a green cracked shield glyph.\",\n      \"sourceSentence\": \"Broken Shield: a green cracked shield glyph.\"\n    },\n    {\n      \"statement\": \"The Destroy Effect icon is a yellow circled X.\",\n      \"sourceSentence\": \"Destroy Effect: a yellow circled X.\"\n    },\n    {\n      \"statement\": \"The Repair icon is a yellow heart with a triangle.\",\n      \"sourceSentence\": \"Repair: a yellow heart with a triangle.\"\n    },\n    {\n      \"statement\": \"The Gear icon is a cogwheel glyph in a blue ring.\",\n      \"sourceSentence\": \"Gear: a cogwheel glyph in a blue ring.\"\n    },\n    {\n      \"statement\": \"The Lock icon is a padlock glyph in an orange ring.\",\n      \"sourceSentence\": \"Lock: a padlock glyph in an orange ring.\"\n    }\n  ]\n}"
+}

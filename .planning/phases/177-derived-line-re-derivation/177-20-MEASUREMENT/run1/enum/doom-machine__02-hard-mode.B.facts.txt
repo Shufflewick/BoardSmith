@@ -1,0 +1,47 @@
+{
+  "facts": [
+    {
+      "statement": "HARD MODE is an optional rule variation for a tougher challenge and longer game.",
+      "sourceSentence": "For a tougher challenge and longer game, try playing HARD MODE using the follow rule variations:"
+    },
+    {
+      "statement": "In normal game setup, 6 cards are removed at random.",
+      "sourceSentence": "Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.",
+      "numericValue": {"magnitude": 6, "unit": "cards", "approximate": false}
+    },
+    {
+      "statement": "In HARD MODE, all 16 cards are used during setup instead of removing some at random.",
+      "sourceSentence": "Setup the game as you normally would, but instead of removing 6 cards at random, use all 16.",
+      "numericValue": {"magnitude": 16, "unit": "cards", "approximate": false}
+    },
+    {
+      "statement": "In HARD MODE, the player HP tracking card is flipped to its B side.",
+      "sourceSentence": "Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot."
+    },
+    {
+      "statement": "When the HP tracking card is flipped to B side, shield slots are reduced by one.",
+      "sourceSentence": "Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.",
+      "numericValue": {"magnitude": 1, "unit": "shield slot reduction", "approximate": false}
+    },
+    {
+      "statement": "When the HP tracking card is flipped to B side, re-roll slots are reduced by one.",
+      "sourceSentence": "Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.",
+      "numericValue": {"magnitude": 1, "unit": "re-roll slot reduction", "approximate": false}
+    },
+    {
+      "statement": "When the HP tracking card is flipped to B side, roll modifier slots are reduced by one.",
+      "sourceSentence": "Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot.",
+      "numericValue": {"magnitude": 1, "unit": "roll modifier slot reduction", "approximate": false}
+    },
+    {
+      "statement": "In a normal game, no more than 4 dice can be placed on shields per turn.",
+      "sourceSentence": "In a normal game, no more than 4 dice can be placed this way per turn.",
+      "numericValue": {"magnitude": 4, "unit": "dice", "approximate": false}
+    },
+    {
+      "statement": "In HARD MODE, no more than 3 dice can be placed on shields per turn.",
+      "sourceSentence": "In Hard Mode, no more than 3 dice can be placed this way per turn.",
+      "numericValue": {"magnitude": 3, "unit": "dice", "approximate": false}
+    }
+  ]
+}

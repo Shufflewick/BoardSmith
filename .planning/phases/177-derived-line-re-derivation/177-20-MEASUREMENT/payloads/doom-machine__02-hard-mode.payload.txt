@@ -1,0 +1,14 @@
+BS-ENUMERATE-V1
+Slice: rulebook/02-hard-mode.md
+
+> Variant: HARD MODE is an optional rule variation ("rule variations" per p.2, panel -10-). Out of scope by default unless the designer opts in.
+> Section note: begins on PDF page 2 (panel -10-) and continues on PDF page 1 (panel -11-).
+p.2 (panel -10-), HARD MODE:
+"For a tougher challenge and longer game, try playing HARD MODE using the follow rule variations:"
+"1) Setup the game as you normally would, but instead of removing 6 cards at random, use all 16."
+p.1 (panel -11-), HARD MODE (CONTINUED):
+"2) Flip the player HP tracking card to the B side: you now have one less shield slot, re-roll slot, and roll modifier slot."
+"Good luck, you'll need it!"
+Related Hard Mode rule stated elsewhere —
+p.1 (panel -5-), PLAY DICE TO YOUR SHIELDS:
+"In a normal game, no more than 4 dice can be placed this way per turn. In Hard Mode, no more than 3 dice can be placed this way per turn."

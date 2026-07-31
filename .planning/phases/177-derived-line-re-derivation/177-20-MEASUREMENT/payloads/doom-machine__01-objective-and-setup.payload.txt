@@ -1,0 +1,27 @@
+BS-ENUMERATE-V1
+Slice: rulebook/01-objective-and-setup.md
+
+> Source note: the PDF is a print-imposed booklet. PDF page 1 carries rulebook panels -1-, -3-, -5-, -7-, -9-, -11-, -13-; PDF page 2 carries panels -6-, -4-, -2-, -12-, -10-, -8-, and Credits. Citations below give the PDF page and the printed panel number.
+p.1 (panel -1-), HOW TO PLAY:
+"Hate Reading? Watch the How to Play Video:"
+"https://nathanmeunier.com/doom"
+p.1 (panel -1-), OBJECTIVE:
+"Uncover and destroy The Doom Core before you succumb to total extinction."
+p.1 (panel -1-), SETUP:
+"1) Set the Doom Machine tracking card to your left. Place corresponding tracking cubes on the zero spaces of the Sentience (yellow) and Power (black) tracks."
+"2) Find the "Doom Core" machine part card, and place it face down to the right of the Doom Machine tracking card."
+"3) Shuffle the remaining machine part cards and remove 6 at random (set them back in the tin, as they won't be used for this run). Place the 9 remaining cards face down on top of the Doom Core to create the machine deck."
+"4) Place the Player HP (health points) tracking card below the machine deck. Set the white tracking cube on the 10 space of the Player HP track."
+p.2 (panel -2-), SETUP (CONTINUED):
+"5) Draw the top 3 cards from the machine deck and place them face up, in a line, to the immediate right of the deck. These are the starting machine parts you will face."
+"6) Take one yellow die for each revealed machine part card and place it on the yellow dice slot on the cycle track on each card, setting the die face to match the indicated machine part's HP (health points)."
+"7) Set the remaining unused yellow dice aside for now, then place your 5 black starting dice in front of you. Setup is complete!"
+p.2 (panel -2-), SETUP LAYOUT (diagram legend, verbatim):
+"A) Doom Machine Tracker + Cubes"
+"B) Machine Deck"
+"C) Player HP Tracker + Cube"
+"D) Starting Machine Part Cards"
+"E) Machine Part Die"
+"F) Extra Machine Dice Pool"
+"G) Starting Player Dice"
+Diagram description (p.2, panel -2-, "SETUP LAYOUT"): A schematic row of card-shaped rectangles across the top. Leftmost is a portrait card labeled "A" (the Doom Machine Tracker, drawn with two small tracking cubes at its base — one yellow, one black). To its right, a portrait card labeled "B" (the face-down Machine Deck). To the right of B are three blank portrait card outlines in a line, the middle one labeled "D", each with a small yellow die drawn on it and a short underline beneath — these are the 3 starting machine part cards, each carrying a machine part die ("E"). Below and left of the row sits a portrait card labeled "C" (Player HP Tracker) with a small cube; to its left is a loose cluster of yellow dice ("F", the extra machine dice pool) drawn as a grid of small yellow squares. Beneath that cluster is a small group of black dice ("G", the starting player dice).

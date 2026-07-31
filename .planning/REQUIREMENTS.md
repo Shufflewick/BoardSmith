@@ -318,6 +318,39 @@ the tag.
       **Infrastructure retained:** the ledger, the `verify-derive-record` CLI write surface,
       enumeration, and the blind-independence guarantee (CR-01/CR-07) are design-agnostic and carry
       forward unchanged. Only the judgment step is replaced.
+
+      **AMENDMENT 2 (2026-07-31, plan 177-20) — one consolidated measurement of current code
+      (`b1a9bc35`), all three reference games, run twice for determinism. STILL OPEN.** Prior
+      amendment's design is real and working on most of the corpus, but this run's own
+      pre-committed closing criteria (`177-20-MEASUREMENT/PRE-REGISTRATION.md`, `f56add71`) require
+      ALL FIVE to hold, and one does not: **determinism failed on 1 of 28 dispatchable lines**
+      (`seven` L21, `corroborated-by-composition` → `uncorroborated` between two runs of unchanged
+      input), traced to a genuine, newly-discovered code defect — `validateGrounding`'s `findMatch`
+      picks the FIRST list entry matching a quote (`Array.find`), silently mis-attributing the wrong
+      fact's `numericValue` when multiple facts in one enumerator's list share an identical
+      `sourceSentence` (common when one source sentence backs several distinct numbers). Not fixed
+      in this run, per honesty discipline (measurement, not remediation). A second, related defect
+      was also found and disclosed: `ANNOTATION_VOCABULARY_RE` (the `d1c7199a` independence fix)
+      does not tolerate a leading `(` before `Derived:`, so a parenthesized bare-`Derived:` line
+      (`doom-machine/CARDS.md` L140) still leaks past both the strip filter and its own backstop —
+      latent and unexercised in this run's real dispatches only because that same file is
+      independently blocked from dispatch entirely by an unrelated mid-line citation defect (L270).
+      **Every other closing criterion PASSED on this run's real evidence:** zero `contradicted` (in
+      either run); grounding rejections (3 total across 487 "both" claims, both runs) were all real
+      reconciler quoting-rule violations, mechanically caught, zero fabrications passed through;
+      independence confirmed by `grep` against all 28 real dispatched payloads (zero annotation
+      lines, zero missing tokens), not by assertion; every one of the 33 real `Derived` lines is
+      attributable to a named category — 28 dispatched-and-classified (17-18 corroborated, 1-2
+      corroborated-by-composition, 7-8 uncorroborated each individually named: cross-slice
+      reference x3, "up to N" hedge ambiguity x1, conservative unit-incompatibility arithmetic
+      refusal x1, the `findMatch` defect x1 in run 2, 2 genuine dual-enumeration misses; 2
+      absence-*), and 5 (`doom-machine/CARDS.md`, entirely) blocked by a real, disclosed,
+      uncorrected game-repo transcription defect, not worked around this time (177-18 manually
+      stripped the offending line to keep measuring; this run did not, and reports the block itself
+      as the finding). Full detail, both runs' raw dispatch data, and the two code-defect writeups:
+      `177-CONSOLIDATED-PROOF.md`, `177-20-MEASUREMENT/`. **CHECK-04 remains open** — two specific,
+      actionable code fixes are named for whoever closes it next (disambiguate `findMatch`;
+      widen `ANNOTATION_VOCABULARY_RE`'s tolerated leading-decoration set to include `(`).
 - [x] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
       commit hash, and any chunk whose code moved since the human last approved it is reported.
 - [ ] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
@@ -376,7 +409,7 @@ the tag.
 | VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
 | CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
 | CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
-| CHECK-04 | Phase 177 | PARTIAL — left OPEN after a 6-plan gap-closure sequence (177-08..13). Goal measured in its own unit: 6/16 (37.5%) real candidates got a genuine second opinion (`177-GOAL-MEASUREMENT.md`, citing `177-PROOF-2.md`). SC-2/SC-3 MET; SC-1 NOT MET — the 177-11 targeting fix (opaque handle + quote-local focus narrowing) closed CR-07 but did NOT close the artifact problem on re-measurement: `offTargetDisagreements` is 8/8 (100%) of `disagrees` verdicts, worse than the pre-fix 8/9 (89%), per `177-TARGETING-PREDICTION.md`'s own pre-committed failure rule firing as written. New finding: a uniquely-scoped focus passage does not reliably steer the blind subagent's own derivation to the fact it supports (6 of 10 failing lines have a unique focus window). 17/18 review findings fixed; WR-07 deliberately deferred. |
+| CHECK-04 | Phase 177 | STILL OPEN after re-scoping to dual enumeration + reconciliation and a consolidated, twice-run, all-three-games measurement of current code (177-20, `177-CONSOLIDATED-PROOF.md`). Original per-line blind re-derivation design (177-01..13) PARTIAL — left OPEN after a 6-plan gap-closure sequence; goal measured in its own unit: 6/16 (37.5%) real candidates got a genuine second opinion (`177-GOAL-MEASUREMENT.md`, citing `177-PROOF-2.md`); retired per `177-EXPERIMENTS/README.md` (asks an unanswerable targeting question). Replacement design (177-14..20): 28/33 real Derived lines across `seven`/`one-two-punch`/`doom-machine` got a genuine dual-enumeration attempt on current code (`b1a9bc35`), run twice; determinism failed on 1/28 (a real, newly-found `validateGrounding` defect), blocking closure per this run's own pre-committed criteria despite zero contradicted/zero fabrications/confirmed independence on the rest. Two named, unfixed code defects carried forward. |
 | CHECK-06 | Phase 178 | Pending |
 | TEST-01 | Phase 178 | Pending |
 | VERIFY-09 | Phase 179 | Pending |

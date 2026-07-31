@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 6926,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "e262a97c-8e97-4d41-8c2e-11be71db64a8",
+    "total_cost_usd": 0.1592655,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 13688,
+      "cache_read_input_tokens": 18151,
+      "output_tokens": 532,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 13688,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 532,
+          "cache_read_input_tokens": 18151,
+          "cache_creation_input_tokens": 13688,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 13688
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-5": {
+        "inputTokens": 2,
+        "outputTokens": 532,
+        "cacheReadInputTokens": 18151,
+        "cacheCreationInputTokens": 13688,
+        "webSearchRequests": 0,
+        "costUSD": 0.1592655,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-opus-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"facts\":[{\"statement\":\"Damage dealt by a machine part card is always applied to your shields first, provided you still have shields remaining.\",\"sourceSentence\":\"Any time a machine part card deals you damage, it will always damage your shields first (if you have any remaining).\"},{\"statement\":\"When taking damage, you reduce the value of your shield dice before anything else.\",\"sourceSentence\":\"As damage is taken, reduce the value of shield dice first until they are completely expended (and removed to your spent dice pile).\"},{\"statement\":\"A shield die that has been completely expended is removed to your spent dice pile.\",\"sourceSentence\":\"As damage is taken, reduce the value of shield dice first until they are completely expended (and removed to your spent dice pile).\"},{\"statement\":\"Damage that the shield dice cannot absorb carries over and is applied directly to your HP.\",\"sourceSentence\":\"Any remaining damage that hasn't been absorbed by your shield dice will carry over and deal direct damage to your HP.\"},{\"statement\":\"Destroying the Doom Core wins the game.\",\"sourceSentence\":\"You win the game when the Doom Core has been destroyed.\"},{\"statement\":\"Clearing all machine part cards is not required in order to win.\",\"sourceSentence\":\"You don't have to clear all of the machine part cards to win.\"},{\"statement\":\"If your HP reaches zero, you are destroyed by the machine and lose the game.\",\"sourceSentence\":\"However, if your HP is reduced to zero, the machine destroys you first, and you lose.\",\"numericValue\":{\"magnitude\":0,\"unit\":\"HP\",\"approximate\":false}}]}",
+    "ttft_ms": 6916,
+    "ttft_stream_ms": 1950,
+    "time_to_request_ms": 17,
+    "type": "result",
+    "duration_ms": 6954,
+    "uuid": "bdab5405-7973-40bd-a1d9-86a4eee404d9"
+  },
+  "facts": "{\"facts\":[{\"statement\":\"Damage dealt by a machine part card is always applied to your shields first, provided you still have shields remaining.\",\"sourceSentence\":\"Any time a machine part card deals you damage, it will always damage your shields first (if you have any remaining).\"},{\"statement\":\"When taking damage, you reduce the value of your shield dice before anything else.\",\"sourceSentence\":\"As damage is taken, reduce the value of shield dice first until they are completely expended (and removed to your spent dice pile).\"},{\"statement\":\"A shield die that has been completely expended is removed to your spent dice pile.\",\"sourceSentence\":\"As damage is taken, reduce the value of shield dice first until they are completely expended (and removed to your spent dice pile).\"},{\"statement\":\"Damage that the shield dice cannot absorb carries over and is applied directly to your HP.\",\"sourceSentence\":\"Any remaining damage that hasn't been absorbed by your shield dice will carry over and deal direct damage to your HP.\"},{\"statement\":\"Destroying the Doom Core wins the game.\",\"sourceSentence\":\"You win the game when the Doom Core has been destroyed.\"},{\"statement\":\"Clearing all machine part cards is not required in order to win.\",\"sourceSentence\":\"You don't have to clear all of the machine part cards to win.\"},{\"statement\":\"If your HP reaches zero, you are destroyed by the machine and lose the game.\",\"sourceSentence\":\"However, if your HP is reduced to zero, the machine destroys you first, and you lose.\",\"numericValue\":{\"magnitude\":0,\"unit\":\"HP\",\"approximate\":false}}]}"
+}

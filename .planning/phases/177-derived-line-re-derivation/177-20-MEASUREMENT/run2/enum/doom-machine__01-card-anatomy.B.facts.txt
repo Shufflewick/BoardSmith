@@ -1,0 +1,54 @@
+{
+  "facts": [
+    {
+      "statement": "Card anatomy includes four labeled components: card name, roll conditions needed to damage machine part, machine part cycle track, and cycle icon effects",
+      "sourceSentence": "CARD ANATOMY (callout labels, verbatim): 1  Card name, 2  Roll conditions needed to damage machine part, 3  Machine part cycle track, 4  Cycle icon effects",
+      "numericValue": {"magnitude": 4, "unit": "labeled components", "approximate": false}
+    },
+    {
+      "statement": "The card name is located in the title bar at the top of the card",
+      "sourceSentence": "(1) points at the title bar across the top of the card"
+    },
+    {
+      "statement": "An example card name is RECYCLING UNIT",
+      "sourceSentence": "the sample card's name reads as \"RECYCLING UNIT\""
+    },
+    {
+      "statement": "Roll conditions needed to damage machine parts are displayed as yellow roll-condition tiles on the middle-right of the card face",
+      "sourceSentence": "(2) points at the yellow roll-condition tiles on the middle-right of the card face"
+    },
+    {
+      "statement": "The machine part cycle track is a vertical column of track squares on the left side of the card",
+      "sourceSentence": "(3) points at the vertical column of track squares running down the left side of the card"
+    },
+    {
+      "statement": "The cycle track holds a yellow HP die",
+      "sourceSentence": "which holds the yellow HP die"
+    },
+    {
+      "statement": "Cycle icon effects are represented as small colored icon badges embedded in the track or lower card area",
+      "sourceSentence": "the small colored icon badges embedded in the track / lower card area"
+    },
+    {
+      "statement": "The icon badges fire or activate when the die lands on them",
+      "sourceSentence": "that fire when the die lands on them"
+    },
+    {
+      "statement": "There are numbered markers on the left edge of the card",
+      "sourceSentence": "Numbered markers 1-4 run down the left edge of the card",
+      "numericValue": {"magnitude": 4, "unit": "numbered markers", "approximate": false}
+    },
+    {
+      "statement": "Matching numbered legend entries appear on the right side of the card",
+      "sourceSentence": "with matching numbered legend entries on the right"
+    },
+    {
+      "statement": "Machine part cards are oriented in portrait",
+      "sourceSentence": "a single portrait teal machine part card"
+    },
+    {
+      "statement": "Machine part cards are colored teal",
+      "sourceSentence": "a single portrait teal machine part card"
+    }
+  ]
+}

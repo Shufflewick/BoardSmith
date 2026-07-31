@@ -1,0 +1,84 @@
+{
+  "facts": [
+    {
+      "statement": "Machine part cards are processed from left to right during the machine phase.",
+      "sourceSentence": "At the start of the machine phase, go from left to right down the row of machine parts in play, cycling each card's track and resolving its abilities as follows:"
+    },
+    {
+      "statement": "Each machine part card has a yellow die on a cycle track.",
+      "sourceSentence": "Move a machine part card's yellow die 1 space down its cycle track."
+    },
+    {
+      "statement": "The yellow die moves 1 space down the cycle track each turn.",
+      "sourceSentence": "Move a machine part card's yellow die 1 space down its cycle track.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "space",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Landing on an icon immediately triggers that icon's ability.",
+      "sourceSentence": "If that dice lands on an icon, immediately trigger that icon's corresponding ability."
+    },
+    {
+      "statement": "Landing on a dead space resets the die to the starting position.",
+      "sourceSentence": "Note: If moving the die places it on a dead space (darkened square), then move that die back to the starting position on the track."
+    },
+    {
+      "statement": "Shields can prevent damage.",
+      "sourceSentence": "If they don't have enough shields to prevent some or all of that damage."
+    },
+    {
+      "statement": "Unblocked damage reduces HP directly.",
+      "sourceSentence": "Unblocked damage carries over and reduces HP directly."
+    },
+    {
+      "statement": "After all cards cycle, slide the entire machine part row 1 space to the right.",
+      "sourceSentence": "Now, carefully slide the entire machine part card row one space to the right.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "space",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Draw a new machine part card and place it in the available space.",
+      "sourceSentence": "Draw a new machine part card and slot it into the available space."
+    },
+    {
+      "statement": "Add a yellow HP die to the new card's first cycle tracking space and set it to that card's starting HP value.",
+      "sourceSentence": "Add a yellow HP die to the first cycle tracking space on the new card, setting the die face to the correct starting HP value for that card."
+    },
+    {
+      "statement": "A maximum of 10 machine parts can be in play at once.",
+      "sourceSentence": "there can never be more than 10 machine parts in play at any given time.",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "machine parts",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "When 10 cards are active, skip drawing a new card.",
+      "sourceSentence": "If 10 cards are active on the line, then skip drawing a new card and proceed with play."
+    },
+    {
+      "statement": "After all machine parts cycle and a new card is added, gather all spent dice (including any new dice obtained by defeating machine parts) and return to Phase I.",
+      "sourceSentence": "When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I."
+    },
+    {
+      "statement": "Soul Harvester is a machine part card.",
+      "sourceSentence": "a teal machine part card titled \"SOUL HARVESTER\""
+    },
+    {
+      "statement": "Soul Harvester's damage icon ability deals 5 damage to the player.",
+      "sourceSentence": "The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player.",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "damage",
+        "approximate": false
+      }
+    }
+  ]
+}

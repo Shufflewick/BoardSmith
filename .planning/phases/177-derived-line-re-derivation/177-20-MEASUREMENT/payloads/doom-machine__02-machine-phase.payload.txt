@@ -1,0 +1,19 @@
+BS-ENUMERATE-V1
+Slice: rulebook/02-machine-phase.md
+
+> Section note: begins on PDF page 2 (panel -8-) and continues on PDF page 1 (panel -9-).
+p.2 (panel -8-), PHASE II: THE MACHINE PHASE:
+"At the start of the machine phase, go from left to right down the row of machine parts in play, cycling each card's track and resolving its abilities as follows:"
+"1) Move a machine part card's yellow die 1 space down its cycle track. If that dice lands on an icon, immediately trigger that icon's corresponding ability."
+p.2 (panel -8-), EXAMPLE:
+"The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player. If they don't have enough shields to prevent some or all of that damage. Unblocked damage carries over and reduces HP directly."
+p.2 (panel -8-), Note:
+"Note: If moving the die places it on a dead space (darkened square), then move that die back to the starting position on the track."
+Diagram description (p.2, panel -8-, the EXAMPLE image): a teal machine part card titled "SOUL HARVESTER" with a skull-and-gears illustration. Down its left side runs a vertical cycle track of square spaces; a yellow die sits on one space with a white downward arrow showing it moving one space to the next space, which bears a green/teal damage icon. To the right of the track are yellow roll-condition tiles: a "? - ? - ?" style three-die condition row, and below it two labeled yellow strips reading "DEAL 5 DMG" and "TAKE 1 DMG" (the card's icon effects). The card's HP/health value and additional small icons appear along the bottom edge.
+p.1 (panel -9-), PHASE II (CONTINUED):
+"2) Proceed to the next machine part card in the line (moving right) and repeat the card cycling process until all part cards have increased their cycle track by 1 and resolved any abilities/effects that are triggered."
+"3) Now, carefully slide the entire machine part card row one space to the right. Draw a new machine part card and slot it into the available space."
+"4) Add a yellow HP die to the first cycle tracking space on the new card, setting the die face to the correct starting HP value for that card."
+"Note: there can never be more than 10 machine parts in play at any given time. If 10 cards are active on the line, then skip drawing a new card and proceed with play."
+p.1 (panel -9-), MACHINE CYCLE COMPLETE:
+"When all machine part cards have cycled and a new card is added to the line, gather all of your spent dice (including any new dice you may have obtained by defeating machine parts) and return to Phase I."

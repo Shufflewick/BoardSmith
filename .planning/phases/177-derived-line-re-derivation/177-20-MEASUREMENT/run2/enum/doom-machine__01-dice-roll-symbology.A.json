@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 21793,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "d008c33d-62a3-420a-b162-71d7faf95e72",
+    "total_cost_usd": 0.1983955,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 14041,
+      "cache_read_input_tokens": 18151,
+      "output_tokens": 1956,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 14041,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1956,
+          "cache_read_input_tokens": 18151,
+          "cache_creation_input_tokens": 14041,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 14041
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-5": {
+        "inputTokens": 2,
+        "outputTokens": 1956,
+        "cacheReadInputTokens": 18151,
+        "cacheCreationInputTokens": 14041,
+        "webSearchRequests": 0,
+        "costUSD": 0.1983955,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-opus-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"facts\":[{\"statement\":\"The passage's section covers dice roll symbology and gives examples of it.\",\"sourceSentence\":\"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"},{\"statement\":\"One symbol is written as two unknown die faces added together equalling a third unknown die face.\",\"sourceSentence\":\"Symbol shown: [ ? ] + [ ? ] = [ ? ]\"},{\"statement\":\"The addition-equals symbol calls for three dice.\",\"sourceSentence\":\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the addition-equals symbol, the values of the first and second dice added together must equal the value of the third die.\",\"sourceSentence\":\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\"},{\"statement\":\"An example given for the addition-equals requirement is a 2 and a 4 satisfying a 6.\",\"sourceSentence\":\"(i.e. 2+4=6)\"},{\"statement\":\"Another symbol is written as three six-pip die faces joined by a plus and an equals sign.\",\"sourceSentence\":\"Symbol shown: [ 6 ] + [ 6 ] = [ 6 ]  (three six-pip die faces)\"},{\"statement\":\"The all-sixes symbol calls for three dice.\",\"sourceSentence\":\"3 dice required. They must all be sixes.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the all-sixes symbol, every one of the dice must show a six.\",\"sourceSentence\":\"3 dice required. They must all be sixes.\",\"numericValue\":{\"magnitude\":6,\"unit\":\"pip value\",\"approximate\":false}},{\"statement\":\"Another symbol is written as one unknown die face equalling another unknown die face.\",\"sourceSentence\":\"Symbol shown: [ ? ] = [ ? ]\"},{\"statement\":\"The equals symbol between two unknown faces calls for two dice.\",\"sourceSentence\":\"2 dice required. They must be doubles.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the equals symbol between two unknown faces, the two dice must be doubles.\",\"sourceSentence\":\"2 dice required. They must be doubles.\"},{\"statement\":\"Another symbol is written as a two-pip face and a three-pip face separated by a slash.\",\"sourceSentence\":\"Symbol shown: [ 2 ] / [ 3 ]  (a two-pip face and a three-pip face separated by a slash)\"},{\"statement\":\"The slash symbol between a 2 and a 3 calls for one die.\",\"sourceSentence\":\"1 die required. It can be either a 2 or a 3 value.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"die\",\"approximate\":false}},{\"statement\":\"For the slash symbol between a 2 and a 3, the single die may show either a value of 2 or a value of 3.\",\"sourceSentence\":\"1 die required. It can be either a 2 or a 3 value.\"},{\"statement\":\"Another symbol is written as an unknown die face, a greater-than sign, and a three-pip die face.\",\"sourceSentence\":\"Symbol shown: [ ? ] > [ 3 ]  (a \\\"?\\\" die, a greater-than sign, and a three-pip die face)\"},{\"statement\":\"The greater-than-3 symbol calls for two dice.\",\"sourceSentence\":\"2 dice required. One must be a 3, another greater than 3.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the greater-than-3 symbol, one die must show a 3 and the other must show a value greater than 3.\",\"sourceSentence\":\"2 dice required. One must be a 3, another greater than 3.\"},{\"statement\":\"Another symbol is written as a four-pip face and a five-pip face joined by a plus sign.\",\"sourceSentence\":\"Symbol shown: [ 4 ] + [ 5 ]  (a four-pip face and a five-pip face)\"},{\"statement\":\"The 4-plus-5 symbol calls for two dice.\",\"sourceSentence\":\"2 dice required. They must be a 4 and a 5.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the 4-plus-5 symbol, one die must show a 4 and the other must show a 5.\",\"sourceSentence\":\"2 dice required. They must be a 4 and a 5.\"},{\"statement\":\"This symbology appears on page 1, in the panel labeled -13-.\",\"sourceSentence\":\"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"}]}",
+    "ttft_ms": 7947,
+    "ttft_stream_ms": 2285,
+    "time_to_request_ms": 27,
+    "type": "result",
+    "duration_ms": 21833,
+    "uuid": "8d5943fa-b4ea-44f4-9ab2-fa9990f821f7"
+  },
+  "facts": "{\"facts\":[{\"statement\":\"The passage's section covers dice roll symbology and gives examples of it.\",\"sourceSentence\":\"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"},{\"statement\":\"One symbol is written as two unknown die faces added together equalling a third unknown die face.\",\"sourceSentence\":\"Symbol shown: [ ? ] + [ ? ] = [ ? ]\"},{\"statement\":\"The addition-equals symbol calls for three dice.\",\"sourceSentence\":\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the addition-equals symbol, the values of the first and second dice added together must equal the value of the third die.\",\"sourceSentence\":\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\"},{\"statement\":\"An example given for the addition-equals requirement is a 2 and a 4 satisfying a 6.\",\"sourceSentence\":\"(i.e. 2+4=6)\"},{\"statement\":\"Another symbol is written as three six-pip die faces joined by a plus and an equals sign.\",\"sourceSentence\":\"Symbol shown: [ 6 ] + [ 6 ] = [ 6 ]  (three six-pip die faces)\"},{\"statement\":\"The all-sixes symbol calls for three dice.\",\"sourceSentence\":\"3 dice required. They must all be sixes.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the all-sixes symbol, every one of the dice must show a six.\",\"sourceSentence\":\"3 dice required. They must all be sixes.\",\"numericValue\":{\"magnitude\":6,\"unit\":\"pip value\",\"approximate\":false}},{\"statement\":\"Another symbol is written as one unknown die face equalling another unknown die face.\",\"sourceSentence\":\"Symbol shown: [ ? ] = [ ? ]\"},{\"statement\":\"The equals symbol between two unknown faces calls for two dice.\",\"sourceSentence\":\"2 dice required. They must be doubles.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the equals symbol between two unknown faces, the two dice must be doubles.\",\"sourceSentence\":\"2 dice required. They must be doubles.\"},{\"statement\":\"Another symbol is written as a two-pip face and a three-pip face separated by a slash.\",\"sourceSentence\":\"Symbol shown: [ 2 ] / [ 3 ]  (a two-pip face and a three-pip face separated by a slash)\"},{\"statement\":\"The slash symbol between a 2 and a 3 calls for one die.\",\"sourceSentence\":\"1 die required. It can be either a 2 or a 3 value.\",\"numericValue\":{\"magnitude\":1,\"unit\":\"die\",\"approximate\":false}},{\"statement\":\"For the slash symbol between a 2 and a 3, the single die may show either a value of 2 or a value of 3.\",\"sourceSentence\":\"1 die required. It can be either a 2 or a 3 value.\"},{\"statement\":\"Another symbol is written as an unknown die face, a greater-than sign, and a three-pip die face.\",\"sourceSentence\":\"Symbol shown: [ ? ] > [ 3 ]  (a \\\"?\\\" die, a greater-than sign, and a three-pip die face)\"},{\"statement\":\"The greater-than-3 symbol calls for two dice.\",\"sourceSentence\":\"2 dice required. One must be a 3, another greater than 3.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the greater-than-3 symbol, one die must show a 3 and the other must show a value greater than 3.\",\"sourceSentence\":\"2 dice required. One must be a 3, another greater than 3.\"},{\"statement\":\"Another symbol is written as a four-pip face and a five-pip face joined by a plus sign.\",\"sourceSentence\":\"Symbol shown: [ 4 ] + [ 5 ]  (a four-pip face and a five-pip face)\"},{\"statement\":\"The 4-plus-5 symbol calls for two dice.\",\"sourceSentence\":\"2 dice required. They must be a 4 and a 5.\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For the 4-plus-5 symbol, one die must show a 4 and the other must show a 5.\",\"sourceSentence\":\"2 dice required. They must be a 4 and a 5.\"},{\"statement\":\"This symbology appears on page 1, in the panel labeled -13-.\",\"sourceSentence\":\"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"}]}"
+}

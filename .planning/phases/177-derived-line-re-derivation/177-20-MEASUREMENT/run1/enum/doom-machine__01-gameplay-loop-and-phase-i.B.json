@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 93258,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "d0e3db4c-1f09-4c2b-aa6c-4e88b0f4215f",
+    "total_cost_usd": 0.0740105,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9011,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 10762,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9011,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 10762,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9011,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9011
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 10762,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9011,
+        "webSearchRequests": 0,
+        "costUSD": 0.0740105,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"Phase I is called 'DICE ROLL / RESOLUTION'\",\n      \"sourceSentence\": \"PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice\"\n    },\n    {\n      \"statement\": \"Phase II is called 'THE MACHINE PHASE'\",\n      \"sourceSentence\": \"PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice\"\n    },\n    {\n      \"statement\": \"On each turn, players roll all available dice\",\n      \"sourceSentence\": \"On each turn, you will roll your available dice\"\n    },\n    {\n      \"statement\": \"Players start with 5 black dice\",\n      \"sourceSentence\": \"you start with 5 black dice\",\n      \"numericValue\": {\n        \"magnitude\": 5,\n        \"unit\": \"black dice\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Players may gain up to 5 additional yellow dice\",\n      \"sourceSentence\": \"may gain up to 5 additional yellow dice\",\n      \"numericValue\": {\n        \"magnitude\": 5,\n        \"unit\": \"yellow dice\",\n        \"approximate\": true\n      }\n    },\n    {\n      \"statement\": \"Additional yellow dice come from destroyed machine part cards\",\n      \"sourceSentence\": \"may gain up to 5 additional yellow dice from destroyed machine part cards\"\n    },\n    {\n      \"statement\": \"Players allocate dice to modify their rolls\",\n      \"sourceSentence\": \"allocate them in various ways to modify your rolls\"\n    },\n    {\n      \"statement\": \"Players allocate dice to defend against incoming damage\",\n      \"sourceSentence\": \"allocate them in various ways... defend against incoming damage\"\n    },\n    {\n      \"statement\": \"Players allocate dice to deal damage to parts of the Doom Machine\",\n      \"sourceSentence\": \"allocate them in various ways... deal damage to parts of the Doom Machine\"\n    },\n    {\n      \"statement\": \"Players allocate dice based on their rolls\",\n      \"sourceSentence\": \"Allocate them in any of the following available ways, based on your rolls\"\n    },\n    {\n      \"statement\": \"Players can activate available utilities as a dice allocation option\",\n      \"sourceSentence\": \"1) ACTIVATE ANY AVAILABLE UTILITIES\"\n    },\n    {\n      \"statement\": \"Players can play dice to their shields as a dice allocation option\",\n      \"sourceSentence\": \"2) PLAY DICE TO YOUR SHIELDS\"\n    },\n    {\n      \"statement\": \"Players can deal damage to machine parts as a dice allocation option\",\n      \"sourceSentence\": \"3) DEAL DAMAGE TO MACHINE PARTS\"\n    },\n    {\n      \"statement\": \"After a player allocates and resolves all their dice, the machine cycles its remaining parts\",\n      \"sourceSentence\": \"Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts\"\n    },\n    {\n      \"statement\": \"During the machine phase, the machine resolves the effects of its parts\",\n      \"sourceSentence\": \"resolve their effects\"\n    },\n    {\n      \"statement\": \"During the machine phase, the machine grows by 1 additional card\",\n      \"sourceSentence\": \"grow by 1 additional card\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The game loop ends when the player has revealed and destroyed the Doom Core\",\n      \"sourceSentence\": \"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine\"\n    },\n    {\n      \"statement\": \"The game loop ends when the player is destroyed by the machine\",\n      \"sourceSentence\": \"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine\"\n    }\n  ]\n}\n```",
+    "ttft_ms": 87023,
+    "ttft_stream_ms": 1036,
+    "time_to_request_ms": 59,
+    "type": "result",
+    "duration_ms": 93317,
+    "uuid": "908bc6e2-255d-463f-959f-d52e517051d1"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"Phase I is called 'DICE ROLL / RESOLUTION'\",\n      \"sourceSentence\": \"PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice\"\n    },\n    {\n      \"statement\": \"Phase II is called 'THE MACHINE PHASE'\",\n      \"sourceSentence\": \"PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice\"\n    },\n    {\n      \"statement\": \"On each turn, players roll all available dice\",\n      \"sourceSentence\": \"On each turn, you will roll your available dice\"\n    },\n    {\n      \"statement\": \"Players start with 5 black dice\",\n      \"sourceSentence\": \"you start with 5 black dice\",\n      \"numericValue\": {\n        \"magnitude\": 5,\n        \"unit\": \"black dice\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Players may gain up to 5 additional yellow dice\",\n      \"sourceSentence\": \"may gain up to 5 additional yellow dice\",\n      \"numericValue\": {\n        \"magnitude\": 5,\n        \"unit\": \"yellow dice\",\n        \"approximate\": true\n      }\n    },\n    {\n      \"statement\": \"Additional yellow dice come from destroyed machine part cards\",\n      \"sourceSentence\": \"may gain up to 5 additional yellow dice from destroyed machine part cards\"\n    },\n    {\n      \"statement\": \"Players allocate dice to modify their rolls\",\n      \"sourceSentence\": \"allocate them in various ways to modify your rolls\"\n    },\n    {\n      \"statement\": \"Players allocate dice to defend against incoming damage\",\n      \"sourceSentence\": \"allocate them in various ways... defend against incoming damage\"\n    },\n    {\n      \"statement\": \"Players allocate dice to deal damage to parts of the Doom Machine\",\n      \"sourceSentence\": \"allocate them in various ways... deal damage to parts of the Doom Machine\"\n    },\n    {\n      \"statement\": \"Players allocate dice based on their rolls\",\n      \"sourceSentence\": \"Allocate them in any of the following available ways, based on your rolls\"\n    },\n    {\n      \"statement\": \"Players can activate available utilities as a dice allocation option\",\n      \"sourceSentence\": \"1) ACTIVATE ANY AVAILABLE UTILITIES\"\n    },\n    {\n      \"statement\": \"Players can play dice to their shields as a dice allocation option\",\n      \"sourceSentence\": \"2) PLAY DICE TO YOUR SHIELDS\"\n    },\n    {\n      \"statement\": \"Players can deal damage to machine parts as a dice allocation option\",\n      \"sourceSentence\": \"3) DEAL DAMAGE TO MACHINE PARTS\"\n    },\n    {\n      \"statement\": \"After a player allocates and resolves all their dice, the machine cycles its remaining parts\",\n      \"sourceSentence\": \"Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts\"\n    },\n    {\n      \"statement\": \"During the machine phase, the machine resolves the effects of its parts\",\n      \"sourceSentence\": \"resolve their effects\"\n    },\n    {\n      \"statement\": \"During the machine phase, the machine grows by 1 additional card\",\n      \"sourceSentence\": \"grow by 1 additional card\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The game loop ends when the player has revealed and destroyed the Doom Core\",\n      \"sourceSentence\": \"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine\"\n    },\n    {\n      \"statement\": \"The game loop ends when the player is destroyed by the machine\",\n      \"sourceSentence\": \"This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine\"\n    }\n  ]\n}"
+}

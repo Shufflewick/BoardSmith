@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 18854,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "cbcf57bb-3606-463a-a375-775175382de8",
+    "total_cost_usd": 0.1917255,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 13859,
+      "cache_read_input_tokens": 18151,
+      "output_tokens": 1762,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 13859,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1762,
+          "cache_read_input_tokens": 18151,
+          "cache_creation_input_tokens": 13859,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 13859
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-5": {
+        "inputTokens": 2,
+        "outputTokens": 1762,
+        "cacheReadInputTokens": 18151,
+        "cacheCreationInputTokens": 13859,
+        "webSearchRequests": 0,
+        "costUSD": 0.1917255,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-opus-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"facts\":[{\"statement\":\"The symbol showing two unspecified dice added together equalling a third unspecified die requires three dice.\",\"sourceSentence\":\"Symbol shown: [ ? ] + [ ? ] = [ ? ]\\n\\\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\\\"\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, the values of the first and second dice added together must equal the value of the third die.\",\"sourceSentence\":\"1st die + 2nd die must = the value of the third die.\",\"approximate\":false},{\"statement\":\"The passage gives 2 plus 4 equalling 6 as an example of satisfying the sum symbol.\",\"sourceSentence\":\"(i.e. 2+4=6)\"},{\"statement\":\"The symbol showing three six-pip faces requires three dice.\",\"sourceSentence\":\"Symbol shown: [ 6 ] + [ 6 ] = [ 6 ]  (three six-pip die faces)\\n\\\"3 dice required. They must all be sixes.\\\"\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, every one of the required dice must show a six.\",\"sourceSentence\":\"They must all be sixes.\",\"numericValue\":{\"magnitude\":6,\"unit\":\"pip value\",\"approximate\":false}},{\"statement\":\"The symbol showing one unspecified die equal to another unspecified die requires two dice.\",\"sourceSentence\":\"Symbol shown: [ ? ] = [ ? ]\\n\\\"2 dice required. They must be doubles.\\\"\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, the two dice must be doubles (show the same value).\",\"sourceSentence\":\"They must be doubles.\"},{\"statement\":\"The symbol showing a two-pip face and a three-pip face separated by a slash requires one die.\",\"sourceSentence\":\"Symbol shown: [ 2 ] / [ 3 ]  (a two-pip face and a three-pip face separated by a slash)\\n\\\"1 die required. It can be either a 2 or a 3 value.\\\"\",\"numericValue\":{\"magnitude\":1,\"unit\":\"die\",\"approximate\":false}},{\"statement\":\"For that symbol, the single die may show a value of either 2 or 3.\",\"sourceSentence\":\"It can be either a 2 or a 3 value.\"},{\"statement\":\"The symbol showing an unspecified die, a greater-than sign, and a three-pip face requires two dice.\",\"sourceSentence\":\"Symbol shown: [ ? ] > [ 3 ]  (a \\\"?\\\" die, a greater-than sign, and a three-pip die face)\\n\\\"2 dice required. One must be a 3, another greater than 3.\\\"\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, one of the two dice must show a 3 and the other must show a value greater than 3.\",\"sourceSentence\":\"One must be a 3, another greater than 3.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"pip value\",\"approximate\":false}},{\"statement\":\"The symbol showing a four-pip face and a five-pip face requires two dice.\",\"sourceSentence\":\"Symbol shown: [ 4 ] + [ 5 ]  (a four-pip face and a five-pip face)\\n\\\"2 dice required. They must be a 4 and a 5.\\\"\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, the two dice must show a 4 and a 5.\",\"sourceSentence\":\"They must be a 4 and a 5.\"}]}",
+    "ttft_ms": 8328,
+    "ttft_stream_ms": 1803,
+    "time_to_request_ms": 18,
+    "type": "result",
+    "duration_ms": 18878,
+    "uuid": "bf2e9de2-65fc-4b63-93d6-a6a1afc2f543"
+  },
+  "facts": "{\"facts\":[{\"statement\":\"The symbol showing two unspecified dice added together equalling a third unspecified die requires three dice.\",\"sourceSentence\":\"Symbol shown: [ ? ] + [ ? ] = [ ? ]\\n\\\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\\\"\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, the values of the first and second dice added together must equal the value of the third die.\",\"sourceSentence\":\"1st die + 2nd die must = the value of the third die.\",\"approximate\":false},{\"statement\":\"The passage gives 2 plus 4 equalling 6 as an example of satisfying the sum symbol.\",\"sourceSentence\":\"(i.e. 2+4=6)\"},{\"statement\":\"The symbol showing three six-pip faces requires three dice.\",\"sourceSentence\":\"Symbol shown: [ 6 ] + [ 6 ] = [ 6 ]  (three six-pip die faces)\\n\\\"3 dice required. They must all be sixes.\\\"\",\"numericValue\":{\"magnitude\":3,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, every one of the required dice must show a six.\",\"sourceSentence\":\"They must all be sixes.\",\"numericValue\":{\"magnitude\":6,\"unit\":\"pip value\",\"approximate\":false}},{\"statement\":\"The symbol showing one unspecified die equal to another unspecified die requires two dice.\",\"sourceSentence\":\"Symbol shown: [ ? ] = [ ? ]\\n\\\"2 dice required. They must be doubles.\\\"\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, the two dice must be doubles (show the same value).\",\"sourceSentence\":\"They must be doubles.\"},{\"statement\":\"The symbol showing a two-pip face and a three-pip face separated by a slash requires one die.\",\"sourceSentence\":\"Symbol shown: [ 2 ] / [ 3 ]  (a two-pip face and a three-pip face separated by a slash)\\n\\\"1 die required. It can be either a 2 or a 3 value.\\\"\",\"numericValue\":{\"magnitude\":1,\"unit\":\"die\",\"approximate\":false}},{\"statement\":\"For that symbol, the single die may show a value of either 2 or 3.\",\"sourceSentence\":\"It can be either a 2 or a 3 value.\"},{\"statement\":\"The symbol showing an unspecified die, a greater-than sign, and a three-pip face requires two dice.\",\"sourceSentence\":\"Symbol shown: [ ? ] > [ 3 ]  (a \\\"?\\\" die, a greater-than sign, and a three-pip die face)\\n\\\"2 dice required. One must be a 3, another greater than 3.\\\"\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, one of the two dice must show a 3 and the other must show a value greater than 3.\",\"sourceSentence\":\"One must be a 3, another greater than 3.\",\"numericValue\":{\"magnitude\":3,\"unit\":\"pip value\",\"approximate\":false}},{\"statement\":\"The symbol showing a four-pip face and a five-pip face requires two dice.\",\"sourceSentence\":\"Symbol shown: [ 4 ] + [ 5 ]  (a four-pip face and a five-pip face)\\n\\\"2 dice required. They must be a 4 and a 5.\\\"\",\"numericValue\":{\"magnitude\":2,\"unit\":\"dice\",\"approximate\":false}},{\"statement\":\"For that symbol, the two dice must show a 4 and a 5.\",\"sourceSentence\":\"They must be a 4 and a 5.\"}]}"
+}

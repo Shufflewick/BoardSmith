@@ -1,0 +1,91 @@
+{
+  "facts": [
+    {
+      "statement": "Destroying a machine part requires reducing its HP die to zero",
+      "sourceSentence": "If you successfully destroy a machine part by reducing its HP die to zero..."
+    },
+    {
+      "statement": "When a machine part is destroyed, the card is removed from play",
+      "sourceSentence": "remove the card from play"
+    },
+    {
+      "statement": "When a machine part is destroyed, that part's die is added to the player's permanent dice pool",
+      "sourceSentence": "add that part's die to your permanent dice pool"
+    },
+    {
+      "statement": "Spent dice are set aside with other spent dice until the start of the next turn",
+      "sourceSentence": "set it aside with your other spent dice until the start of the next turn"
+    },
+    {
+      "statement": "The permanent dice pool cannot exceed 10 dice total",
+      "sourceSentence": "you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The maximum permanent dice pool includes 5 black dice",
+      "sourceSentence": "you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "black dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The maximum permanent dice pool includes 5 yellow dice",
+      "sourceSentence": "you can never have more than 10 dice (5 black and 5 yellow) in your permanent pool",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "yellow dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "After a machine part is destroyed, remaining machine part cards in play are shifted to close the gap",
+      "sourceSentence": "shift any remaining machine part cards in play to close the gap"
+    },
+    {
+      "statement": "Some machine part cards have a yellow X icon",
+      "sourceSentence": "Some machine part cards have a yellow X icon and effect on them"
+    },
+    {
+      "statement": "Some machine part cards have destroy effects",
+      "sourceSentence": "Some machine part cards have a yellow X icon and effect on them"
+    },
+    {
+      "statement": "Destroy effects are triggered when a machine part is destroyed",
+      "sourceSentence": "These effects are triggered and resolved immediately when that part is destroyed"
+    },
+    {
+      "statement": "Destroy effects are resolved immediately when a machine part is destroyed",
+      "sourceSentence": "These effects are triggered and resolved immediately when that part is destroyed"
+    },
+    {
+      "statement": "The destroy effect icon appears as a yellow banner with a circled-X",
+      "sourceSentence": "a yellow banner with a circled-X icon reading \"DEAL 1 DMG TO ALL PARTS IN PLAY\""
+    },
+    {
+      "statement": "An example destroy effect reads \"DEAL 1 DMG TO ALL PARTS IN PLAY\"",
+      "sourceSentence": "a yellow banner with a circled-X icon reading \"DEAL 1 DMG TO ALL PARTS IN PLAY\""
+    },
+    {
+      "statement": "Destroy effect banners appear in the lower area of machine part cards",
+      "sourceSentence": "a sample teal machine part card that shows the same yellow destroy-effect banner across its lower area"
+    },
+    {
+      "statement": "The sample machine part card has a title bar",
+      "sourceSentence": "The sample card also shows its title bar, a cycle track column of icons down the left, and yellow roll-condition tiles on its right side"
+    },
+    {
+      "statement": "The sample machine part card has a cycle track column of icons on the left side",
+      "sourceSentence": "The sample card also shows its title bar, a cycle track column of icons down the left, and yellow roll-condition tiles on its right side"
+    },
+    {
+      "statement": "The sample machine part card has yellow roll-condition tiles on the right side",
+      "sourceSentence": "The sample card also shows its title bar, a cycle track column of icons down the left, and yellow roll-condition tiles on its right side"
+    }
+  ]
+}

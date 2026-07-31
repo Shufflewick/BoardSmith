@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 23409,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "bb4c25c2-8b24-4995-88bf-e5cb0411c270",
+    "total_cost_usd": 0.1580277,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 17684,
+      "cache_read_input_tokens": 29259,
+      "output_tokens": 2876,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 17684,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 2876,
+          "cache_read_input_tokens": 29259,
+          "cache_creation_input_tokens": 17684,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 17684
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 2876,
+        "cacheReadInputTokens": 29259,
+        "cacheCreationInputTokens": 17684,
+        "webSearchRequests": 0,
+        "costUSD": 0.1580277,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"both\": [\n    {\n      \"statement\": \"A hand is the set of cards a player holds.\",\n      \"quotedFromA\": \"Hand: The cards each player holds.\",\n      \"quotedFromB\": \"Hand: The cards each player holds.\"\n    },\n    {\n      \"statement\": \"Each player starts the game with 3 cards in hand.\",\n      \"quotedFromA\": \"Each starts with 3 and ends the game with 10.\",\n      \"quotedFromB\": \"Each starts with 3\"\n    },\n    {\n      \"statement\": \"Each player ends the game with 10 cards in hand.\",\n      \"quotedFromA\": \"Each starts with 3 and ends the game with 10.\",\n      \"quotedFromB\": \"ends the game with 10\"\n    },\n    {\n      \"statement\": \"A Set is 2 or more cards with matching numbers.\",\n      \"quotedFromA\": \"Set: 2+ cards with matching numbers.\",\n      \"quotedFromB\": \"Set: 2+ cards with matching numbers.\"\n    },\n    {\n      \"statement\": \"Three cards all numbered 5 is given as an example of a Set.\",\n      \"quotedFromA\": \"example: 5, 5, 5\",\n      \"quotedFromB\": \"example: 5, 5, 5\"\n    },\n    {\n      \"statement\": \"A Run is 3 or more cards in numeric order.\",\n      \"quotedFromA\": \"Run: 3+ cards in numeric order.\",\n      \"quotedFromB\": \"Run: 3+ cards in numeric order.\"\n    },\n    {\n      \"statement\": \"Cards numbered 5, 6, 7 are given as an example of a Run.\",\n      \"quotedFromA\": \"example: 5, 6, 7\",\n      \"quotedFromB\": \"example: 5, 6, 7\"\n    },\n    {\n      \"statement\": \"Card numbers range from 1 to 7.\",\n      \"quotedFromA\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"quotedFromB\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"Cards come in 4 colors.\",\n      \"quotedFromA\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"quotedFromB\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"There are 4 copies of each card.\",\n      \"quotedFromA\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"quotedFromB\": \"with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"There are 7 bonus point cards.\",\n      \"quotedFromA\": \"In addition, there are 7 bonus point cards.\",\n      \"quotedFromB\": \"In addition, there are 7 bonus point cards.\"\n    }\n  ],\n  \"aOnly\": [\n    {\n      \"statement\": \"The game's designer is JT Smith.\",\n      \"sourceSentence\": \"JT Smith\"\n    },\n    {\n      \"statement\": \"The credited play testers are Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, and Marylin Vanderhoof.\",\n      \"sourceSentence\": \"Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof\"\n    }\n  ],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 21,\n      \"derivedLineText\": \"Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \\\"+1\\\" bonus point cards.\",\n      \"proposedClassification\": \"corroborated-by-composition\",\n      \"citedBothStatements\": [\n        \"Card numbers range from 1 to 7.\",\n        \"Cards come in 4 colors.\",\n        \"There are 4 copies of each card.\",\n        \"There are 7 bonus point cards.\"\n      ],\n      \"arithmeticNote\": \"The 112-card total is the product of three independently corroborated operands (7 numbers x 4 colors x 4 copies); the trailing 7 bonus point cards is a separately corroborated addend, not part of the multiplication.\"\n    }\n  ]\n}\n```",
+    "ttft_ms": 12318,
+    "ttft_stream_ms": 1724,
+    "time_to_request_ms": 40,
+    "type": "result",
+    "duration_ms": 23447,
+    "uuid": "73cc721b-be97-43f2-a242-6ac92bb60d22"
+  },
+  "reconcile": "{\n  \"both\": [\n    {\n      \"statement\": \"A hand is the set of cards a player holds.\",\n      \"quotedFromA\": \"Hand: The cards each player holds.\",\n      \"quotedFromB\": \"Hand: The cards each player holds.\"\n    },\n    {\n      \"statement\": \"Each player starts the game with 3 cards in hand.\",\n      \"quotedFromA\": \"Each starts with 3 and ends the game with 10.\",\n      \"quotedFromB\": \"Each starts with 3\"\n    },\n    {\n      \"statement\": \"Each player ends the game with 10 cards in hand.\",\n      \"quotedFromA\": \"Each starts with 3 and ends the game with 10.\",\n      \"quotedFromB\": \"ends the game with 10\"\n    },\n    {\n      \"statement\": \"A Set is 2 or more cards with matching numbers.\",\n      \"quotedFromA\": \"Set: 2+ cards with matching numbers.\",\n      \"quotedFromB\": \"Set: 2+ cards with matching numbers.\"\n    },\n    {\n      \"statement\": \"Three cards all numbered 5 is given as an example of a Set.\",\n      \"quotedFromA\": \"example: 5, 5, 5\",\n      \"quotedFromB\": \"example: 5, 5, 5\"\n    },\n    {\n      \"statement\": \"A Run is 3 or more cards in numeric order.\",\n      \"quotedFromA\": \"Run: 3+ cards in numeric order.\",\n      \"quotedFromB\": \"Run: 3+ cards in numeric order.\"\n    },\n    {\n      \"statement\": \"Cards numbered 5, 6, 7 are given as an example of a Run.\",\n      \"quotedFromA\": \"example: 5, 6, 7\",\n      \"quotedFromB\": \"example: 5, 6, 7\"\n    },\n    {\n      \"statement\": \"Card numbers range from 1 to 7.\",\n      \"quotedFromA\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"quotedFromB\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"Cards come in 4 colors.\",\n      \"quotedFromA\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"quotedFromB\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"There are 4 copies of each card.\",\n      \"quotedFromA\": \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.\",\n      \"quotedFromB\": \"with 4 copies of each card.\"\n    },\n    {\n      \"statement\": \"There are 7 bonus point cards.\",\n      \"quotedFromA\": \"In addition, there are 7 bonus point cards.\",\n      \"quotedFromB\": \"In addition, there are 7 bonus point cards.\"\n    }\n  ],\n  \"aOnly\": [\n    {\n      \"statement\": \"The game's designer is JT Smith.\",\n      \"sourceSentence\": \"JT Smith\"\n    },\n    {\n      \"statement\": \"The credited play testers are Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, and Marylin Vanderhoof.\",\n      \"sourceSentence\": \"Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof\"\n    }\n  ],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 21,\n      \"derivedLineText\": \"Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \\\"+1\\\" bonus point cards.\",\n      \"proposedClassification\": \"corroborated-by-composition\",\n      \"citedBothStatements\": [\n        \"Card numbers range from 1 to 7.\",\n        \"Cards come in 4 colors.\",\n        \"There are 4 copies of each card.\",\n        \"There are 7 bonus point cards.\"\n      ],\n      \"arithmeticNote\": \"The 112-card total is the product of three independently corroborated operands (7 numbers x 4 colors x 4 copies); the trailing 7 bonus point cards is a separately corroborated addend, not part of the multiplication.\"\n    }\n  ]\n}"
+}

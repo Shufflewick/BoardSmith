@@ -1,0 +1,319 @@
+{
+  "slices": [
+    {
+      "game": "seven",
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/seven/rulebook/01-definitions-and-components.md",
+      "derivedLines": [
+        {
+          "lineNumber": 21,
+          "text": "Derived (p.1): The full deck is therefore 7 numbers x 4 colors x 4 copies = 112 numbered cards, plus 7 \"+1\" bonus point cards.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 789,
+      "throwMessage": null
+    },
+    {
+      "game": "seven",
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/seven/rulebook/01-overview-setup-and-play.md",
+      "derivedLines": [
+        {
+          "lineNumber": 36,
+          "text": "Derived (p.1): The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 38,
+          "text": "Derived (p.1): Rounds are played simultaneously by all players, not in turn order.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 1586,
+      "throwMessage": null
+    },
+    {
+      "game": "one-two-punch",
+      "slicePath": "rulebook/01-setup-and-round-structure.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/one-two-punch/rulebook/01-setup-and-round-structure.md",
+      "derivedLines": [
+        {
+          "lineNumber": 32,
+          "text": "Derived (p.1): The box contains 2 Boxer Cards, 16 Action Cards, 6 Guard Cards, and 1 Rules Sheet.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 61,
+          "text": "Derived (p.1): A round always proceeds through exactly three phases, in this order: Plan, Fight, Discard.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 68,
+          "text": "Derived (p.1): Each player commits exactly two action cards per round, placed face-down in a chosen order (first action, second action), before the Fight phase begins.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 81,
+          "text": "Derived (p.1): Each action card carries a numeric timing value; when both players' first (or second) action cards are revealed, the card with the lower timing value resolves first, and cards with equal timing resolve simultaneously.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 3273,
+      "throwMessage": null
+    },
+    {
+      "game": "one-two-punch",
+      "slicePath": "rulebook/02-action-cards-and-resolution.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/one-two-punch/rulebook/02-action-cards-and-resolution.md",
+      "derivedLines": [
+        {
+          "lineNumber": 16,
+          "text": "Derived (p.2): A Jab can only flip a ready Guard card to exhausted; it never removes/breaks a Guard card outright.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 68,
+          "text": "Derived (p.2): A \"broken\" Guard card is permanently removed from the game (returned to the box), distinct from \"exhausted\" (flipped face, remains in play and can be flipped back to ready by Rest). Punch can only break an already-exhausted Guard card; against an opponent with no exhausted Guards, Punch instead exhausts one of their ready Guards (same effect as a Jab in that case).",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 82,
+          "text": "Derived (p.2): Resolving a round's Fight phase is two sequential sub-steps — resolve both players' first action cards completely (in timing order), then reveal and resolve both players' second action cards (in timing order) — with cards from the first sub-step staying in place, unresolved into the discard pile, until the Discard phase.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 106,
+          "text": "Derived (p.2): Win condition: reduce an opponent to 0 Guard cards (all 3 broken) to knock them out and win immediately. If both players' third Guard card is broken by the same action's resolution, the game ends in a draw instead of a win.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 117,
+          "text": "Derived (p.2): Each player's card set includes exactly 2 Rest cards (implied by the first Tip's warning against holding both at once).",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 128,
+          "text": "Derived (p.2): No edition or printing number is stated anywhere on this page; the only dating information is the 2020 copyright year in the colophon.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 132,
+          "text": "Derived (p.2): This section marks no rules as variants, optional modules, or advanced/expert rules.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 5680,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/01-card-anatomy.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/01-card-anatomy.md",
+      "derivedLines": [
+        {
+          "lineNumber": 11,
+          "text": "Derived (p.1): A machine part card carries four rule-bearing regions — name, roll conditions (damage requirements), a cycle track the part's yellow HP die moves down, and cycle icon effects triggered when the die lands on an icon.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 898,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/01-destroying-a-machine-part.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/01-destroying-a-machine-part.md",
+      "derivedLines": [
+        {
+          "lineNumber": 16,
+          "text": "Derived (p.1): Destroying a part converts its yellow HP die into a player die, so the player's pool grows as parts are destroyed, capped at 10 dice (5 black + 5 yellow).",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 1180,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/01-dice-roll-symbology.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/01-dice-roll-symbology.md",
+      "derivedLines": [
+        {
+          "lineNumber": 25,
+          "text": "Derived (p.1): Roll conditions on machine part cards are expressed with a compact symbol language: \"?\" means any value, an explicit pip face means an exact value, \"/\" means either-or, \"+\" and \"=\" express arithmetic/equality relations across dice, and \">\" expresses a comparison.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 805,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/01-gameplay-loop-and-phase-i.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/01-gameplay-loop-and-phase-i.md",
+      "derivedLines": [
+        {
+          "lineNumber": 13,
+          "text": "Derived (p.1): The game is a repeating two-phase loop (Phase I player dice allocation, Phase II machine phase) that ends only in a win (Doom Core destroyed) or a loss (player destroyed).",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 15,
+          "text": "Derived (p.1): The player's dice pool ranges from 5 dice (5 black) up to 10 dice (5 black + 5 yellow), and all available dice are re-rolled at the start of each turn.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 1015,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/01-objective-and-setup.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/01-objective-and-setup.md",
+      "derivedLines": [
+        {
+          "lineNumber": 34,
+          "text": "Derived (p.1, p.2): The machine deck for a normal game is 9 face-up-drawable machine part cards stacked on top of the face-down Doom Core, so the Doom Core is the final card of the deck. Of those 9, the top 3 are immediately revealed in step 5, leaving 6 face down above the Doom Core.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 36,
+          "text": "Derived (p.1): The Doom Machine tracking card has two tracks — Sentience (yellow) and Power (black) — each starting at zero.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 38,
+          "text": "Derived (p.1): Player HP starts at 10.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 2880,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/02-card-effect-icons.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/02-card-effect-icons.md",
+      "derivedLines": [
+        {
+          "lineNumber": 25,
+          "text": "Derived (p.2): These icons appear on machine part cycle tracks; a part's die landing on an icon during the machine phase triggers the corresponding effect (see Phase II, p.2 panel -8-).",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 1509,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/02-hard-mode.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/02-hard-mode.md",
+      "derivedLines": [
+        {
+          "lineNumber": 19,
+          "text": "Derived (p.1, p.2): Hard Mode changes exactly three things: the full card pool is used instead of a reduced one, the Player HP card's B side offers one fewer shield slot / re-roll slot / +-modifier slot, and the per-turn shield dice limit drops from 4 to 3.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 933,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/02-machine-phase.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/02-machine-phase.md",
+      "derivedLines": [
+        {
+          "lineNumber": 26,
+          "text": "Derived (p.1, p.2): Each machine phase, every part in play advances one step on its own cycle track (wrapping back to the start if it would land on a dead space), and then one new part card joins the line from the left, up to a maximum of 10 parts.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 2583,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/02-player-actions.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/02-player-actions.md",
+      "derivedLines": [
+        {
+          "lineNumber": 23,
+          "text": "Derived (p.2): Utility slots (+/- modifier slots and re-roll slots) live on the Player HP tracking card, since Hard Mode removes a shield slot, a re-roll slot, and a roll modifier slot by flipping that card (see p.1, panel -11-).",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 3624,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/02-taking-damage-and-winning.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/02-taking-damage-and-winning.md",
+      "derivedLines": [
+        {
+          "lineNumber": 9,
+          "text": "Derived (p.2): Shield strength is consumed by reducing the face values of the dice sitting in shield slots; once a shield die's value is exhausted it goes to the spent dice pile.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 11,
+          "text": "Derived (p.2): The only win condition is destroying the Doom Core; the only loss condition is Player HP reaching zero.",
+          "form": "line-start"
+        }
+      ],
+      "payloadOk": true,
+      "payloadLength": 708,
+      "throwMessage": null
+    },
+    {
+      "game": "doom-machine",
+      "slicePath": "rulebook/CARDS.md",
+      "fullPath": "/Users/jtsmith/BoardSmithGames/doom-machine/rulebook/CARDS.md",
+      "derivedLines": [
+        {
+          "lineNumber": 19,
+          "text": "Derived (p.1, p.3): Every machine part card carries the **same 5-position cycle track**, drawn as an inverted-L:",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 30,
+          "text": "Derived: the yellow-vs-grey connector colour is the reliable tell for live-vs-dead; the hatch fill corroborates it.",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 70,
+          "text": "- Derived (p.1, p.3): However, the tracks are **not** inert — their consequences are printed on the MACHINE PART",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 140,
+          "text": "(Derived: effectively a 2-space loop — die goes slot → Damage → dead → back to slot.)",
+          "form": "line-start"
+        },
+        {
+          "lineNumber": 270,
+          "text": "`+ = / >`). Derived (p.3), by symmetry with the documented `[?] > [3]` example (\"2 dice required. One must be",
+          "form": "mid-line-residual"
+        }
+      ],
+      "payloadOk": false,
+      "payloadLength": null,
+      "throwMessage": "buildEnumeratorPayload assembled a payload for rulebook/CARDS.md that still names an annotation family (Derived / Visual / Named-but-undefined), with or without a page citation.\nThe payload construction site, not the prompt text, is where the quote-only guarantee is upheld — an annotation reaching an enumerator turns independent derivation into confirmation of the transcriber's own inference. Fix the strip filter; never relax this check to let the payload through."
+    }
+  ]
+}

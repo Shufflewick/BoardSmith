@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 108395,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "a95c4cd6-013b-4c73-a3ad-f69a38573bcb",
+    "total_cost_usd": 0.0635627,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 30777,
+      "output_tokens": 12095,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 12095,
+          "cache_read_input_tokens": 30777,
+          "cache_creation_input_tokens": 0,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 12095,
+        "cacheReadInputTokens": 30777,
+        "cacheCreationInputTokens": 0,
+        "webSearchRequests": 0,
+        "costUSD": 0.0635627,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"Card anatomy includes four labeled components: card name, roll conditions needed to damage machine part, machine part cycle track, and cycle icon effects\",\n      \"sourceSentence\": \"CARD ANATOMY (callout labels, verbatim): 1  Card name, 2  Roll conditions needed to damage machine part, 3  Machine part cycle track, 4  Cycle icon effects\",\n      \"numericValue\": {\"magnitude\": 4, \"unit\": \"labeled components\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"The card name is located in the title bar at the top of the card\",\n      \"sourceSentence\": \"(1) points at the title bar across the top of the card\"\n    },\n    {\n      \"statement\": \"An example card name is RECYCLING UNIT\",\n      \"sourceSentence\": \"the sample card's name reads as \\\"RECYCLING UNIT\\\"\"\n    },\n    {\n      \"statement\": \"Roll conditions needed to damage machine parts are displayed as yellow roll-condition tiles on the middle-right of the card face\",\n      \"sourceSentence\": \"(2) points at the yellow roll-condition tiles on the middle-right of the card face\"\n    },\n    {\n      \"statement\": \"The machine part cycle track is a vertical column of track squares on the left side of the card\",\n      \"sourceSentence\": \"(3) points at the vertical column of track squares running down the left side of the card\"\n    },\n    {\n      \"statement\": \"The cycle track holds a yellow HP die\",\n      \"sourceSentence\": \"which holds the yellow HP die\"\n    },\n    {\n      \"statement\": \"Cycle icon effects are represented as small colored icon badges embedded in the track or lower card area\",\n      \"sourceSentence\": \"the small colored icon badges embedded in the track / lower card area\"\n    },\n    {\n      \"statement\": \"The icon badges fire or activate when the die lands on them\",\n      \"sourceSentence\": \"that fire when the die lands on them\"\n    },\n    {\n      \"statement\": \"There are numbered markers on the left edge of the card\",\n      \"sourceSentence\": \"Numbered markers 1-4 run down the left edge of the card\",\n      \"numericValue\": {\"magnitude\": 4, \"unit\": \"numbered markers\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"Matching numbered legend entries appear on the right side of the card\",\n      \"sourceSentence\": \"with matching numbered legend entries on the right\"\n    },\n    {\n      \"statement\": \"Machine part cards are oriented in portrait\",\n      \"sourceSentence\": \"a single portrait teal machine part card\"\n    },\n    {\n      \"statement\": \"Machine part cards are colored teal\",\n      \"sourceSentence\": \"a single portrait teal machine part card\"\n    }\n  ]\n}\n```",
+    "ttft_ms": 104174,
+    "ttft_stream_ms": 1064,
+    "time_to_request_ms": 31,
+    "type": "result",
+    "duration_ms": 108426,
+    "uuid": "a5becb41-342b-4b67-b4ed-08985846c0e4"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"Card anatomy includes four labeled components: card name, roll conditions needed to damage machine part, machine part cycle track, and cycle icon effects\",\n      \"sourceSentence\": \"CARD ANATOMY (callout labels, verbatim): 1  Card name, 2  Roll conditions needed to damage machine part, 3  Machine part cycle track, 4  Cycle icon effects\",\n      \"numericValue\": {\"magnitude\": 4, \"unit\": \"labeled components\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"The card name is located in the title bar at the top of the card\",\n      \"sourceSentence\": \"(1) points at the title bar across the top of the card\"\n    },\n    {\n      \"statement\": \"An example card name is RECYCLING UNIT\",\n      \"sourceSentence\": \"the sample card's name reads as \\\"RECYCLING UNIT\\\"\"\n    },\n    {\n      \"statement\": \"Roll conditions needed to damage machine parts are displayed as yellow roll-condition tiles on the middle-right of the card face\",\n      \"sourceSentence\": \"(2) points at the yellow roll-condition tiles on the middle-right of the card face\"\n    },\n    {\n      \"statement\": \"The machine part cycle track is a vertical column of track squares on the left side of the card\",\n      \"sourceSentence\": \"(3) points at the vertical column of track squares running down the left side of the card\"\n    },\n    {\n      \"statement\": \"The cycle track holds a yellow HP die\",\n      \"sourceSentence\": \"which holds the yellow HP die\"\n    },\n    {\n      \"statement\": \"Cycle icon effects are represented as small colored icon badges embedded in the track or lower card area\",\n      \"sourceSentence\": \"the small colored icon badges embedded in the track / lower card area\"\n    },\n    {\n      \"statement\": \"The icon badges fire or activate when the die lands on them\",\n      \"sourceSentence\": \"that fire when the die lands on them\"\n    },\n    {\n      \"statement\": \"There are numbered markers on the left edge of the card\",\n      \"sourceSentence\": \"Numbered markers 1-4 run down the left edge of the card\",\n      \"numericValue\": {\"magnitude\": 4, \"unit\": \"numbered markers\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"Matching numbered legend entries appear on the right side of the card\",\n      \"sourceSentence\": \"with matching numbered legend entries on the right\"\n    },\n    {\n      \"statement\": \"Machine part cards are oriented in portrait\",\n      \"sourceSentence\": \"a single portrait teal machine part card\"\n    },\n    {\n      \"statement\": \"Machine part cards are colored teal\",\n      \"sourceSentence\": \"a single portrait teal machine part card\"\n    }\n  ]\n}"
+}

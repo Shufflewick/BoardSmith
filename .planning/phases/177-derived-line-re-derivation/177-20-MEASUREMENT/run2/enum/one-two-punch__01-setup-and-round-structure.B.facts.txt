@@ -1,0 +1,203 @@
+{
+  "facts": [
+    {
+      "statement": "The game is for 2 players.",
+      "sourceSentence": "2 PLAYERS",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "players",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The minimum age to play is 14 years.",
+      "sourceSentence": "14+ AGE",
+      "numericValue": {
+        "magnitude": 14,
+        "unit": "years",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The standard game duration is 30 minutes.",
+      "sourceSentence": "30 MINUTES",
+      "numericValue": {
+        "magnitude": 30,
+        "unit": "minutes",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The game contains 2 Boxer Cards.",
+      "sourceSentence": "2 Boxer Cards, 16 Action Cards, 6 Guard Cards, 1 Rules Sheet",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "Boxer Cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The game contains 16 Action Cards.",
+      "sourceSentence": "2 Boxer Cards, 16 Action Cards, 6 Guard Cards, 1 Rules Sheet",
+      "numericValue": {
+        "magnitude": 16,
+        "unit": "Action Cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The game contains 6 Guard Cards.",
+      "sourceSentence": "2 Boxer Cards, 16 Action Cards, 6 Guard Cards, 1 Rules Sheet",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "Guard Cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "To win, a player must knock out their opponent by breaking all three of the opponent's Guards.",
+      "sourceSentence": "Knock out your opponent by breaking all three of their Guards."
+    },
+    {
+      "statement": "Each player chooses to play as either the red or blue color.",
+      "sourceSentence": "Each player must choose a color (red or blue) and take all cards of that color."
+    },
+    {
+      "statement": "Each player takes possession of all cards matching their chosen color.",
+      "sourceSentence": "Each player must choose a color (red or blue) and take all cards of that color."
+    },
+    {
+      "statement": "Three distinct areas on the table comprise the ring.",
+      "sourceSentence": "Designate three areas on the table to make up the ring. The area directly in front of each player is their respective corner and the area in-between them is the center ring.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "table areas",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each player's corner is the area directly in front of that player.",
+      "sourceSentence": "The area directly in front of each player is their respective corner and the area in-between them is the center ring."
+    },
+    {
+      "statement": "The center ring is the area between the two players.",
+      "sourceSentence": "The area directly in front of each player is their respective corner and the area in-between them is the center ring."
+    },
+    {
+      "statement": "The blue player's boxer card starts in the blue player's corner.",
+      "sourceSentence": "The blue player must start with their boxer card in their corner and the red player must start with their boxer card in the center ring."
+    },
+    {
+      "statement": "The red player's boxer card starts in the center ring.",
+      "sourceSentence": "The blue player must start with their boxer card in their corner and the red player must start with their boxer card in the center ring."
+    },
+    {
+      "statement": "Each player places 3 Guard cards next to themselves with the ready sides facing up.",
+      "sourceSentence": "Place your three Guard cards next to you with the ready sides face up.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "Guard Cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each player places one Rest card face up next to themselves to create their own discard pile.",
+      "sourceSentence": "Place one of your Rest cards face up next to you to create your own discard pile."
+    },
+    {
+      "statement": "Each player holds remaining cards in their hand hidden from their opponent.",
+      "sourceSentence": "Hold the remaining cards in your hand hidden from your opponent."
+    },
+    {
+      "statement": "The blue player chooses one card from their hand and discards it.",
+      "sourceSentence": "If you are the blue player, choose one card from your hand and discard it."
+    },
+    {
+      "statement": "The blue player names a specific card that the red player must discard.",
+      "sourceSentence": "Next, you must name a card that the red player must discard."
+    },
+    {
+      "statement": "The card the blue player discards and the card the blue player names for red to discard do not have to be the same card.",
+      "sourceSentence": "These do not have to be the same cards and are in addition to the Rest cards both players already discarded."
+    },
+    {
+      "statement": "These initial special discards are in addition to the Rest cards both players have already discarded.",
+      "sourceSentence": "These do not have to be the same cards and are in addition to the Rest cards both players already discarded."
+    },
+    {
+      "statement": "Neither of the special initial discards may be a Rest card.",
+      "sourceSentence": "Neither of these additional discards may be a Rest card."
+    },
+    {
+      "statement": "Each round consists of three phases: Plan, Fight, and Discard.",
+      "sourceSentence": "Each round has three phases: Plan, Fight, and Discard. Both you and your opponent must complete each phase at the same time."
+    },
+    {
+      "statement": "Both players must complete each phase at the same time.",
+      "sourceSentence": "Both you and your opponent must complete each phase at the same time."
+    },
+    {
+      "statement": "In the Plan phase, a player chooses 2 action cards from their hand.",
+      "sourceSentence": "Choose any two action cards from your hand and place them in any order face-down next to your boxer.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "action cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "In the Plan phase, a player places the chosen action cards in any order face-down next to their boxer.",
+      "sourceSentence": "Choose any two action cards from your hand and place them in any order face-down next to your boxer."
+    },
+    {
+      "statement": "The action card closest to a player's boxer is that player's first action.",
+      "sourceSentence": "The card closest to your boxer is your first action and the other card is your second action."
+    },
+    {
+      "statement": "The other action card is that player's second action.",
+      "sourceSentence": "The card closest to your boxer is your first action and the other card is your second action."
+    },
+    {
+      "statement": "Both players have the same set of action cards available.",
+      "sourceSentence": "Both you and your opponent have the same set of cards and may look through each other's discard pile at any time."
+    },
+    {
+      "statement": "Players may look through each other's discard piles at any time.",
+      "sourceSentence": "Both you and your opponent have the same set of cards and may look through each other's discard pile at any time."
+    },
+    {
+      "statement": "In the Fight phase, both players flip their first action card face up at the same time.",
+      "sourceSentence": "You and your opponent must flip your first action card face up at the same time and compare their timings to determine the order they are resolved."
+    },
+    {
+      "statement": "Cards have timing values that determine the order of resolution.",
+      "sourceSentence": "You and your opponent must flip your first action card face up at the same time and compare their timings to determine the order they are resolved."
+    },
+    {
+      "statement": "The player with the lower timing value on their card resolves their action first.",
+      "sourceSentence": "The player with the lower timing on their card must resolve their action first."
+    },
+    {
+      "statement": "If both cards have the same timing value, they are resolved at the same time.",
+      "sourceSentence": "If the timing is the same on both cards, they are resolved at the same time."
+    },
+    {
+      "statement": "The Jab card has a timing value of 1.",
+      "sourceSentence": "For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "timing",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The Retreat card has a timing value of 2.",
+      "sourceSentence": "For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "timing",
+        "approximate": false
+      }
+    }
+  ]
+}
