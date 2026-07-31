@@ -98,6 +98,21 @@ describe('buildEnumeratorPayload', () => {
     expect(payload).toContain('in no particular order');
   });
 
+  it('strips a PARENTHESISED annotation — the leading-decoration form the enumerated character class missed', () => {
+    // Verbatim shape from doom-machine CARDS.md:140. The first version of ANNOTATION_VOCABULARY_RE
+    // enumerated leading decoration as [\s>\-*] and this leaked straight past it, into a live
+    // dispatch. The pattern now consumes ALL non-alphanumerics rather than a guessed set.
+    const payload = buildEnumeratorPayload({
+      path: 'rulebook/CARDS.md',
+      text: [
+        'QUOTE (p.1): "The die advances one slot each machine phase."',
+        '  (Derived: effectively a 2-space loop — die goes slot -> Damage -> dead -> back to slot.)',
+      ].join('\n'),
+    });
+    expect(payload).not.toContain('2-space loop');
+    expect(payload).toContain('advances one slot');
+  });
+
   it('strips the BARE `Derived:` marker form (no page citation) found live in doom-machine CARDS.md', () => {
     // Plan 177-18 measured this leaking into a real dispatch. CARDS.md declares its own local
     // convention ("Anything else is marked 'Derived'") and writes bare `Derived:` lines with no
@@ -214,6 +229,47 @@ describe('createEnumeratedFact', () => {
 function fact(statement: string, sourceSentence: string, numericValue?: EnumeratedFact['numericValue']): EnumeratedFact {
   return createEnumeratedFact({ statement, sourceSentence, numericValue });
 }
+
+describe('validateGrounding — deterministic match selection', () => {
+  it('resolves the SAME fact regardless of enumerator list order when several facts share a sourceSentence', () => {
+    // The 177-20 consolidated run found seven L21 classifying differently across two runs on
+    // unchanged input: several of that slice's facts share one sourceSentence (normal — one
+    // rulebook sentence supports many facts), and `list.find()` returned whichever came first.
+    // Order-dependence is non-determinism, and non-determinism is what invalidated the retired
+    // design's numbers.
+    const shared = 'There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.';
+    const f1 = fact('The deck spans 7 numbers.', shared);
+    const f2 = fact('There are 4 colors.', shared);
+    const f3 = fact('There are 4 copies of each card.', shared);
+
+    const claim = (): ReconcilerBothClaim => ({
+      statement: 'There are 4 colors.',
+      quotedFromA: shared,
+      quotedFromB: shared,
+    });
+
+    const forward = validateGrounding([f1, f2, f3], [f1, f2, f3], [claim()]);
+    const reverse = validateGrounding([f3, f2, f1], [f3, f2, f1], [claim()]);
+
+    expect(forward.grounded.length).toBe(1);
+    expect(reverse.grounded.length).toBe(1);
+    expect(forward.grounded[0].matchedFactA.id).toBe(reverse.grounded[0].matchedFactA.id);
+    expect(forward.grounded[0].matchedFactB.id).toBe(reverse.grounded[0].matchedFactB.id);
+  });
+
+  it('prefers a statement match over a sourceSentence match, so the most specific fact wins', () => {
+    const shared = 'Each player draws 2 cards into their hand.';
+    const viaSource = fact('Some other consequence of the draw rule.', shared);
+    const viaStatement = fact(shared, 'p.1, Round (Simultaneous):');
+    const res = validateGrounding(
+      [viaSource, viaStatement],
+      [viaSource, viaStatement],
+      [{ statement: shared, quotedFromA: shared, quotedFromB: shared }],
+    );
+    expect(res.grounded.length).toBe(1);
+    expect(res.grounded[0].matchedFactA.id).toBe(viaStatement.id);
+  });
+});
 
 describe('validateGrounding', () => {
   it('accepts a claim whose quotes genuinely appear (verbatim) in both lists', () => {

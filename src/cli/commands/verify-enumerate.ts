@@ -137,7 +137,21 @@ const ANY_ANNOTATION_LINE_RE = /Derived \(p\.|Visual \(p\.|Named-but-undefined \
  * is invisible in the results. Any future marker form is caught by default rather than by
  * anticipation.
  */
-const ANNOTATION_VOCABULARY_RE = /^[\s>\-*]*(?:Derived|Visual|Named-but-undefined)\b/im;
+/*
+ * Leading decoration is skipped by consuming ALL non-alphanumeric characters, NOT by enumerating a
+ * character class. The first version of this pattern read `^[\s>\-*]*` — I picked the decoration
+ * characters I could think of, and the 177-20 consolidated run found `(Derived: ...)` in
+ * doom-machine's CARDS.md leaking straight past it.
+ *
+ * That is the same mistake this constant was introduced to fix, made inside the fix itself, and it
+ * is now the fourth instance in this milestone: the retired design's "structural" independence that
+ * was incidental; a backstop keyed to the same citation vocabulary as the filter it guarded; a test
+ * helper that made unit strings match by construction; and this. Every one held for the shapes
+ * someone had enumerated and was described as universal.
+ *
+ * So this deliberately enumerates nothing. Anything that is not a letter or digit is decoration.
+ */
+const ANNOTATION_VOCABULARY_RE = /^[^A-Za-z0-9]*(?:Derived|Visual|Named-but-undefined)\b/im;
 
 /**
  * Builds the dual-enumerator dispatch payload for ONE slice: quote lines only, via
@@ -354,10 +368,47 @@ export interface GroundingResult {
   rejected: GroundingRejection[];
 }
 
+/**
+ * Match strength, lowest = strongest. A quote may legitimately match several facts — most commonly
+ * because SEVERAL facts share one `sourceSentence`, which is normal: a single rulebook sentence
+ * routinely supports multiple facts.
+ */
+function matchRank(quote: string, fact: EnumeratedFact): number {
+  const nq = normalizeForMatch(quote);
+  if (nq.length > 0 && nq === normalizeForMatch(fact.statement)) return 0;
+  if (isTolerantMatch(quote, fact.statement)) return 1;
+  if (nq.length > 0 && nq === normalizeForMatch(fact.sourceSentence)) return 2;
+  if (isTolerantMatch(quote, fact.sourceSentence)) return 3;
+  return Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Resolves a reconciler's quote to the fact it grounds in, DETERMINISTICALLY.
+ *
+ * This previously used `list.find(...)` — first match wins, so the answer depended on the order the
+ * enumerator happened to emit its facts. The 177-20 consolidated run caught the consequence: `seven`
+ * L21 classified differently between two runs on unchanged input, because several of that slice's
+ * facts share one `sourceSentence` and a different one won each time. Non-determinism is exactly
+ * what invalidated the RETIRED design's numbers — a metric that moves on its own cannot be tuned
+ * against, and it took thirteen plans there to notice. It is not acceptable here.
+ *
+ * Selection is now total and order-independent: strongest match rank wins; ties break on the fact's
+ * content-derived `id`, which is a sha256 of statement+sourceSentence and therefore stable across
+ * runs, processes and list orderings. Two facts can only tie on id by being byte-identical, in which
+ * case either choice is the same fact.
+ */
 function findMatch(quote: string, list: EnumeratedFact[]): EnumeratedFact | undefined {
-  return list.find(
-    (fact) => isTolerantMatch(quote, fact.statement) || isTolerantMatch(quote, fact.sourceSentence),
-  );
+  let best: EnumeratedFact | undefined;
+  let bestRank = Number.POSITIVE_INFINITY;
+  for (const fact of list) {
+    const rank = matchRank(quote, fact);
+    if (rank === Number.POSITIVE_INFINITY) continue;
+    if (rank < bestRank || (rank === bestRank && best !== undefined && fact.id < best.id)) {
+      best = fact;
+      bestRank = rank;
+    }
+  }
+  return best;
 }
 
 /**
