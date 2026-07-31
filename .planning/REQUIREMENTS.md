@@ -505,10 +505,16 @@ the tag.
         `arithmeticSpec` — for both a `single` and a `chain` claim — that code accepts as correct; all
         three live classifications (L21, L36, L38) landed IN-SET against the pre-registered permitted
         label sets, zero out-of-set results.
-      - **WR-07 (`quoteLinesOnly`'s deny-list → allow-list inversion) STAYS OPEN**, dated 2026-07-30,
-        routed to Phase 178 — this phase's `quoteLinesOnly` port carried the deny-list posture forward
-        unchanged (177.1-02); the inversion itself was explicitly out of this phase's scope and is not
-        silently resolved by the reachability work above.
+      - **WR-07 (`quoteLinesOnly`'s deny-list → allow-list inversion) RESOLVED 2026-07-31 by Phase
+        178 Plan 01, Task 2: Option B chosen — the deny-list is kept, `Example (p.N):` is added to
+        it (measured zero-behavior-change on all three reference games, since none carries an
+        `Example (p.` line today), and CHECK-06 gets its own separate extraction payload builder
+        for the `Example` lines `quoteLinesOnly` now excludes.** Full evidence and the rejected
+        Option A (allow-list inversion) are recorded in
+        `.planning/phases/178-worked-example-tests/178-WR07-DECISION.md`. (Prior history: this
+        phase's `quoteLinesOnly` port carried the deny-list posture forward unchanged in 177.1-02;
+        the inversion itself was explicitly out of 177.1's scope and was not silently resolved by
+        the reachability work above; WR-07 was routed to Phase 178, dated 2026-07-30.)
       - Findings surfaced while moving the design (recorded, not silently absorbed): behavior that
         only made sense for the retired four-verdict set was found and removed during the ledger move
         (177.1-02); the `arithmeticSpec` gap between the measurement harness's own hand-curated
