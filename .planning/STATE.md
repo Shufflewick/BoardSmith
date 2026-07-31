@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-08-PLAN.md — the first of six gap-closure plans (177-08..13), closing GAP 2/CR-01 from 177-VERIFICATION.md/177-REVIEW.md. Added annotationBody() as the single decoration-normalization site quoteLinesOnly and enumerateDerivedLines both route through, so a blockquote (>) or list (-, 1.) decorated Derived/Visual/Named-but-undefined line can no longer leak into the blind payload or drop from enumeration — the code reviewer had proven this leak live against a temp project. Widened DERIVED_LINE_RE/VISUAL_LINE_RE/NAMED_BUT_UNDEFINED_LINE_RE to accept any citation body and extracted a shared DERIVED_LINE_RE into a new dependency-free leaf module (derived-line-pattern.ts) so ingest-archive.ts's relabeller consumes the same definition instead of a second literal (WR-01) — a direct import from verify-derive-recheck.ts would have closed a real circular import (ingest-archive -> verify-derive-recheck -> verify-classify -> chunk-provenance -> ingest-archive), observed live via a TypeError before the leaf-module fix. Added a construction-site backstop: buildBlindDerivePayload now throws on any assembled payload still matching an annotation family, independent of which prefix regex missed it — the part that makes the guarantee structural rather than a wider deny-list. Both new negative pins (the decoration-strip fix, the payload backstop) were empirically proven to fail when reverted: reintroducing the pre-fix ^-anchored annotationBody failed 6 tests (the two new leak/silent-drop regressions plus all four annotationBody unit tests); separately deleting the backstop failed the pinned backstop-throw test with 'expected [Function] to throw an error'; both reverts confirmed clean via git diff --stat before proceeding. Replaced the four tautological readFileSync-and-grep 'module source guarantees' tests with behavioral assertions (temp-project decoy trees including a populated rulebook/.verify/<run-id>/slices/ tree, whole-project file inventory, process.exitCode). Also closed WR-09: PRESENTATION_EXCLUSION_MARKERS' optional parenthetical qualifier is now applied symmetrically to the Visual marker (previously only on the two Derived markers) and widened from [^)]+ to [^:]* so a qualifier with its own nested parens is recognized, pinned together with the 4 real decision-13 lines. npm test (src/cli/commands/): 635/635 green (up from before this plan); npx tsc --noEmit clean except the pre-existing unrelated docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 1 of 6 gap-closure plans; 177-09 through 177-13 remain. See .planning/phases/177-derived-line-re-derivation/177-08-SUMMARY.md."
-last_updated: "2026-07-30T23:45:00Z"
-last_activity: 2026-07-30 -- Phase 177 gap-closure plan 08 executed (CR-01/WR-01/WR-09 closed; CHECK-04 stays OPEN/PARTIAL)
+stopped_at: "Completed 177-09-PLAN.md — the second of six gap-closure plans (177-08..13), closing GAP 3's ledger-integrity findings from 177-REVIEW.md ahead of 177-10's write surface: CR-04 (ledger fence injection), CR-02 (readDeriveVerdicts bypassing the single validation choke point), CR-06 (recordDeriveVerdicts replacing the whole ledger on every call), WR-05 (evidence-free agrees/disagrees), and WR-04 (the blind underivable/not-rule-bearing pass-through had no code cross-check). createDeriveVerdictRecord now throws on 7 conditions (up from 4): the three new blocks reject any reasoning/originalReading/rederivedReading carrying the ledger's own begin/end fence marker (JSON.stringify does not escape '<', so unrejected model-controlled reasoning could corrupt the ledger permanently), require at least one non-empty sourceQuotes entry for agrees/disagrees (underivable/not-rule-bearing may still cite none), and reject a rederivedValue (now a required input, persisted on DeriveVerdictRecord for ledger auditability) of underivable/not-rule-bearing paired with a differing verdict. readDeriveVerdicts no longer does JSON.parse(l) as DeriveVerdictRecord with zero validation — every parsed line now re-enters createDeriveVerdictRecord, so a malformed-JSON line throws one actionable message naming the ledger path and 1-based record index (never a raw SyntaxError) and an out-of-enum verdict throws instead of reaching the report (zero 'as DeriveVerdictRecord' casts remain, grep-gated). recordDeriveVerdicts renamed to replaceDeriveVerdicts (kept exported as the explicit full-rewrite path) and a new recordDeriveVerdict(projectDir, record) singular callable added: reads the ledger, upserts by slicePath:lineNumber (existing order preserved, updated record appended last), writes the merged set through replaceDeriveVerdicts — still exactly one durable write path in the module (zero writeFile( call sites outside atomicWriteFile). All three negative pins (CR-04's fence rejection, CR-02's revalidation, CR-06's upsert) were empirically proven to fail when reverted, using a scratch-directory backup rather than git stash: deleting the CR-04 fence block failed 3 tests; reverting readDeriveVerdicts to the pre-fix cast failed 4 tests and independently reproduced the reviewer's exact 'verdictCounts: { TOTALLY-BOGUS: NaN }' output; making recordDeriveVerdict call replaceDeriveVerdicts([record]) directly (the pre-fix destructive shape) failed 1 test ('expected length 2 but got 1'); all three reverts confirmed git diff --stat clean before restoring. All three tasks were authored in a single pass then reconstructed into 3 task-scoped commits from git blob content (each intermediate state independently tsc-clean and vitest-green: 55/55 after Task 1, 61/61 after Task 2, 64/64 after Task 3). npx vitest run src/cli/commands/verify-derive-recheck.test.ts: 64/64 green (up from 44). Full npm test (mandatory per the orchestrator's explicit instruction, not a subdirectory subset): 3987/3987 green across 241 files (baseline 3967 + 20 net new, zero regressions) — this baseline-tracking discipline exists because 177-08's own subdirectory-only test run had shipped a real regression the orchestrator later caught and fixed (commit 9ebc38bb). npx tsc --noEmit clean except the pre-existing unrelated docs/seed-to-state.test.ts rootDir error. CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 2 of 6 gap-closure plans; 177-10 through 177-13 remain. See .planning/phases/177-derived-line-re-derivation/177-09-SUMMARY.md."
+last_updated: "2026-07-30T23:59:00Z"
+last_activity: 2026-07-30 -- Phase 177 gap-closure plan 09 executed (CR-02/CR-04/CR-06/WR-04/WR-05 closed; CHECK-04 stays OPEN/PARTIAL)
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 60
-  completed_plans: 55
-  percent: 92
+  completed_plans: 56
+  percent: 93
 ---
 
 # Project State
@@ -25,8 +25,59 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 8/13 plans complete (7 original +
-1 of 6 gap-closure plans).
+Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 9/13 plans complete (7 original +
+2 of 6 gap-closure plans).
+
+`177-09-PLAN.md` (2026-07-30) is the second of six gap-closure plans (177-08..13), closing GAP 3's
+ledger-integrity findings from `177-REVIEW.md` — deliberately sequenced BEFORE `177-10` exposes a
+write command on the ledger, so the write surface is never built on a destructive or unvalidated
+API. Closed CR-04 (ledger fence injection): `recordDeriveVerdicts` wrote `JSON.stringify(record)`
+between literal HTML-comment fences, and `JSON.stringify` does not escape `<`, so a subagent-
+authored `reasoning` string (fully model-controlled free prose) containing the ledger's own END
+fence would corrupt the ledger permanently — `createDeriveVerdictRecord` now throws on any
+`reasoning`/`originalReading`/`rederivedReading` carrying either fence marker, naming the offending
+field. Closed CR-02 (`readDeriveVerdicts` bypassing the single validation choke point): it
+previously did `JSON.parse(l) as DeriveVerdictRecord` with zero validation, so a hand-edited or
+out-of-enum ledger record reached the report unvalidated and corrupted `verdictCounts` with a
+`NaN`/`null` key — every parsed line now re-enters `createDeriveVerdictRecord`, so a malformed-JSON
+line throws one actionable message naming the ledger's relative path and 1-based record index
+(never a raw `SyntaxError`), and an out-of-enum verdict throws through the choke point instead of
+reaching `--json` (zero `as DeriveVerdictRecord` casts remain, grep-gated). Closed CR-06
+(`recordDeriveVerdicts` replacing the whole ledger on every call, while `verify-game.md` Step 7
+prescribes per-line recording — the documented pattern silently destroyed every prior verdict):
+renamed to `replaceDeriveVerdicts` (kept exported as the explicit, documented full-rewrite path)
+and added `recordDeriveVerdict(projectDir, record)` (singular) — reads the existing ledger, upserts
+by `slicePath:lineNumber` (existing order preserved, updated record appended last), writes the
+merged set through `replaceDeriveVerdicts` — still exactly one durable write path in the module
+(zero `writeFile(` call sites outside `atomicWriteFile`, grep-gated). Also closed WR-05 (an
+`agrees`/`disagrees` verdict could be recorded citing zero source quotes — `sourceQuotes` now
+required non-empty for those two verdicts, `underivable` may still cite none) and WR-04 (the blind
+stage's `underivable`/`not-rule-bearing` pass-through was prompt-only with no code cross-check —
+`rederivedValue`, the blind stage's own return, is now a required input persisted on
+`DeriveVerdictRecord`, and a compare verdict contradicting it throws naming both labels).
+**All three negative pins were empirically proven to fail when reverted**, using a scratch-directory
+backup rather than `git stash` (forbidden inside this working tree per the destructive-git
+prohibition): deleting the CR-04 fence-rejection block failed 3 tests; reverting `readDeriveVerdicts`
+to the pre-fix cast failed 4 tests and independently reproduced the reviewer's exact
+`verdictCounts: { "TOTALLY-BOGUS": NaN, ... }` output from `177-REVIEW.md`; making
+`recordDeriveVerdict` call `replaceDeriveVerdicts([record])` directly (the pre-fix destructive
+shape) failed the two-different-locations test with `expected length 2 but got 1`; all three
+reverts confirmed `git diff --stat` clean before restoring. All three tasks were authored in a
+single pass then reconstructed into 3 task-scoped commits from git blob content, each intermediate
+state independently `tsc --noEmit`-clean and `vitest run`-green (55/55 after Task 1, 61/61 after
+Task 2, 64/64 after Task 3) before being committed. `npx vitest run
+src/cli/commands/verify-derive-recheck.test.ts`: 64/64 green (up from 44, +20 net new tests).
+**Full `npm test`** (mandatory per the orchestrator's explicit instruction, not a subdirectory
+subset — 177-08's own subdirectory-only run had shipped a real regression the orchestrator later
+caught and fixed in `9ebc38bb`): 3987/3987 green across 241 files (baseline 3967, zero
+regressions). `npx tsc --noEmit` clean except the pre-existing unrelated
+`docs/seed-to-state.test.ts` rootDir error. **CHECK-04 stays OPEN/PARTIAL in `REQUIREMENTS.md`** —
+this is 2 of 6 gap-closure plans; `177-10` (the missing `verify-derive-record` CLI write surface
+per CR-05, `originalLine`-aware join per CR-03, orphan/staleness reporting per WR-03,
+printer/error-path fixes) through `177-13` (re-measure the phase goal, dispose of CHECK-04) remain.
+See `.planning/phases/177-derived-line-re-derivation/177-09-SUMMARY.md`.
+
+---
 
 `177-08-PLAN.md` (2026-07-30) is the first of six gap-closure plans (177-08..13) responding to
 `177-VERIFICATION.md` (3/6 must-haves) and `177-REVIEW.md` (7 critical + 11 warning findings, both
