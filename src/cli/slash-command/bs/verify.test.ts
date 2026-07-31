@@ -50,6 +50,8 @@ const ALL_VERIFY_FILES = [
   'verify/repair-dispatch.md',
   'verify/derive-recheck.md',
   'verify/derive-compare.md',
+  'verify/enumerate-facts.md',
+  'verify/reconcile-facts.md',
 ];
 
 describe('verify-game.md — entry point shape (VERIFY-01)', () => {
@@ -751,6 +753,136 @@ describe('derive-recheck.md / derive-compare.md — the two CHECK-04 judgment co
       // it must detect the missing leaf and repopulate it.
       await installClaudeCommand({ local: true, force: false, skipLink: true });
       expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-recheck.md'))).toBe(true);
+    });
+  });
+});
+
+describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement judgment contracts (177-15)', () => {
+  it('enumerate-facts.md carries the BS-ENUMERATE-V1 token and a DISPATCH REJECTED block', () => {
+    const doc = read('verify/enumerate-facts.md');
+    expect(doc).toContain('BS-ENUMERATE-V1');
+    expect(doc).toContain('DISPATCH REJECTED');
+  });
+
+  it('reconcile-facts.md carries the BS-RECONCILE-V1 token and a DISPATCH REJECTED block', () => {
+    const doc = read('verify/reconcile-facts.md');
+    expect(doc).toContain('BS-RECONCILE-V1');
+    expect(doc).toContain('DISPATCH REJECTED');
+  });
+
+  it('the two tokens are distinct: reconcile-facts.md never carries BS-ENUMERATE-V1 as its own token', () => {
+    const doc = read('verify/reconcile-facts.md');
+    expect(doc).not.toContain('BS-ENUMERATE-V1');
+  });
+
+  it('enumerate-facts.md\'s ENUMERATE_TOKEN pin matches the real exported constant (cross-file lexicon pin)', async () => {
+    const { ENUMERATE_TOKEN } = await import('../../commands/verify-enumerate.js');
+    expect(ENUMERATE_TOKEN).toBe('BS-ENUMERATE-V1');
+    const doc = read('verify/enumerate-facts.md');
+    expect(doc).toContain(ENUMERATE_TOKEN);
+  });
+
+  it('enumerate-facts.md never sees Derived/Visual/Named-but-undefined lines and never performs arithmetic', () => {
+    const doc = flat(read('verify/enumerate-facts.md'));
+    expect(doc).toMatch(/any `Derived \(p\.N\):` line from this slice or any other slice/);
+    expect(doc).toMatch(/any `Visual \(p\.N\):` line at all/);
+    expect(doc).toMatch(/any `Named-but-undefined \(p\.N\):` line at all/);
+    expect(doc).toMatch(/Do NOT perform arithmetic/);
+    expect(doc).toMatch(/You are an enumerator, not a calculator/);
+  });
+
+  it('enumerate-facts.md states the approximate flag is load-bearing, citing the measured false-precision fabrication', () => {
+    const doc = flat(read('verify/enumerate-facts.md'));
+    expect(doc).toMatch(/approximate.{0,20}flag is load-bearing/);
+    expect(doc).toMatch(/about 7 minutes.{0,80}49 minutes/);
+  });
+
+  it('enumerate-facts.md RETURN block has no verdict/classification field, only facts', () => {
+    const doc = read('verify/enumerate-facts.md');
+    const idx = doc.indexOf('## RETURN a structured object only');
+    expect(idx).toBeGreaterThan(-1);
+    const returnSection = doc.slice(idx, doc.indexOf('## Scope limit'));
+    const objectBlock = returnSection.slice(
+      returnSection.indexOf('```'),
+      returnSection.indexOf('```', returnSection.indexOf('```') + 3) + 3,
+    );
+    expect(objectBlock).toContain('facts');
+    expect(objectBlock).not.toMatch(/\bverdict\b/);
+    expect(objectBlock).not.toMatch(/\bclassification\b/);
+  });
+
+  it('reconcile-facts.md forbids computing values and requires verbatim per-list quotes for every "both" claim', () => {
+    const doc = flat(read('verify/reconcile-facts.md'));
+    expect(doc).toMatch(
+      /You may never state a numeric value, a composed quantity, or any claim that is not literally\s*present/,
+    );
+    expect(doc).toMatch(/quotedFromA.{0,20}quotedFromB.{0,200}REQUIRED/);
+    expect(doc).toMatch(/validateGrounding.{0,300}mechanically checks/);
+  });
+
+  it('reconcile-facts.md cites both measured reconciler fabrications by name ("5 cards each" and invented arithmetic grounding)', () => {
+    const doc = flat(read('verify/reconcile-facts.md'));
+    expect(doc).toMatch(/5 cards each/);
+    expect(doc).toMatch(/invented operand grounding on an unrelated pairing/);
+  });
+
+  it('reconcile-facts.md states fabrications are detected and reported, never silently dropped', () => {
+    const doc = flat(read('verify/reconcile-facts.md'));
+    expect(doc).toMatch(/REJECTED and\s*REPORTED/);
+    expect(doc).toMatch(/not silently dropped/);
+  });
+
+  it('reconcile-facts.md states it proposes Derived-line coverage and flags arithmetic for CODE, never evaluating it itself', () => {
+    const doc = flat(read('verify/reconcile-facts.md'));
+    expect(doc).toMatch(/corroborated-by-composition/);
+    expect(doc).toMatch(/Flag this line for CODE to verify the arithmetic/);
+    expect(doc).toMatch(/never compute or confirm the arithmetic yourself/);
+    expect(doc).toMatch(/composeArithmeticClaim/);
+  });
+
+  it('reconcile-facts.md cites the quote-provenance guard (seven:11 CORRECTION) without asserting it decides that gate itself', () => {
+    const doc = flat(read('verify/reconcile-facts.md'));
+    expect(doc).toMatch(/QuoteVerifiedProvenance/);
+    expect(doc).toMatch(/quote-unverified/);
+    expect(doc).toMatch(/seven:11/);
+  });
+
+  it('both new contracts carry a scope-limit sentence', () => {
+    const enumerate = read('verify/enumerate-facts.md');
+    const reconcile = read('verify/reconcile-facts.md');
+    expect(enumerate).toContain('## Scope limit');
+    expect(reconcile).toContain('## Scope limit');
+  });
+
+  describe('installer leaf probes — real install proves both contracts ship (177-15)', () => {
+    let tempDir: string;
+    let origCwd: string;
+    let skillsRoot: string;
+
+    beforeAll(async () => {
+      const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
+      origCwd = process.cwd();
+      tempDir = mkdtempSync(join(tmpdir(), 'bs-install-enumerate-'));
+      process.chdir(tempDir);
+      await installClaudeCommand({ local: true, force: true, skipLink: true });
+      skillsRoot = join(tempDir, '.claude', 'skills');
+    });
+
+    afterAll(() => {
+      process.chdir(origCwd);
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it('both new contract files land under .claude/skills/bs-shared/verify/', () => {
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'enumerate-facts.md'))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'reconcile-facts.md'))).toBe(true);
+    });
+
+    it('deleting one installed contract file flips the installer to report a partial (not complete) install', async () => {
+      const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
+      rmSync(join(skillsRoot, 'bs-shared', 'verify', 'enumerate-facts.md'), { force: true });
+      await installClaudeCommand({ local: true, force: false, skipLink: true });
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'enumerate-facts.md'))).toBe(true);
     });
   });
 });

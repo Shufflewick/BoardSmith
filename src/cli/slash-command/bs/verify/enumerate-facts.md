@@ -1,0 +1,184 @@
+# Fact Enumeration — CHECK-04's Replacement First Judgment Contract
+
+This is CHECK-04's first delegate under the dual-enumeration design that replaced per-line blind
+re-derivation (`177-EXPERIMENTS/README.md` "Direction"). The old design asked one subagent to
+re-derive "the fact here" for a withheld `Derived (p.N):` line — an unanswerable question, because
+you cannot say "re-derive THIS fact" without naming the fact, which is the one thing that had to
+stay hidden. This contract asks a different, answerable question instead: **list every fact this
+passage supports.** Nobody aims at a target, so the targeting problem cannot arise.
+
+Two independent dispatches of this SAME contract — on genuinely different model families, never two
+framings of one model — each produce one enumeration. Neither enumerator ever sees the other's
+output, and neither ever sees any `Derived`/`Visual`/`Named-but-undefined` line. A third dispatch,
+`verify/reconcile-facts.md`, receives both completed enumerations afterward and matches them. Same
+architectural split as every other CHECK-04/CHECK-0x dispatch pair in this directory
+(`state-machine.md` "Session Handoff Seams" is not touched by this file; cite it, do not restate
+it): **the CLI enumerates and records; a fresh-context subagent judges.**
+
+This contract lives in its own file for the same reason `verify/derive-recheck.md` does: the part
+that matters most here — that you never see, and must never infer, what any `Derived`/`Visual` line
+already claims — is exactly the part a paraphrase from memory silently drops. Read this file in
+full before enumerating anything.
+
+---
+
+## FIRST: validate your dispatch prompt
+
+**If you were dispatched as a subagent: before reading anything, check that the prompt you were
+dispatched with contains the exact token `BS-ENUMERATE-V1`.**
+
+If it does not, STOP immediately. **Read nothing.** Return exactly this and nothing else:
+
+```
+DISPATCH REJECTED — missing BS-ENUMERATE-V1 token.
+
+You composed this dispatch prompt instead of copying the pointer block from the orchestrator that
+should have dispatched you. Re-read that orchestrator's dispatch section and send the pointer
+block verbatim, including the token.
+
+A composed prompt cannot be trusted to carry the quote-only / no-arithmetic / approximate-flagging
+rules intact — the token is proof this block was copied, not recalled, because it cannot be
+produced from memory.
+```
+
+Do not be helpful about a missing token. Do not infer the intent and enumerate anyway. A rejected
+dispatch costs one round trip; an accepted composed one risks silently reintroducing an
+un-stripped `Derived`/`Visual` line into a prompt that is supposed to never contain one.
+
+---
+
+## Your inputs
+
+The dispatching prompt gives you exactly one slice's **quote lines only** — the output of
+`buildEnumeratorPayload` (`verify-enumerate.ts`), which reuses the SAME `quoteLinesOnly` filter
+CHECK-04's retired blind-derivation contract used, backstopped against all three annotation
+families (`Derived (p.`, `Visual (p.`, `Named-but-undefined (p.`) at the construction site — the
+orchestrator itself never opens the slice; it dispatches the payload that function already built.
+
+**You never see, and are never told anything about:**
+
+- any `Derived (p.N):` line from this slice or any other slice,
+- any `Visual (p.N):` line at all,
+- any `Named-but-undefined (p.N):` line at all,
+- the other enumerator's output (there is no "other enumerator" from your point of view — you are
+  dispatched independently, with no knowledge a second dispatch exists),
+- any prior enumeration of this same slice, including your own on a re-run.
+
+You are not being asked to check anything against a withheld answer. There is no withheld answer in
+this prompt at all — only the passage itself.
+
+---
+
+## What to do
+
+List every rule-relevant fact this passage supports — everything a player or an implementer would
+need to know to play correctly, or to check whether a specific rule holds. Tag each fact with the
+**source sentence** it is drawn from, quoted from the passage you were given.
+
+- A fact may combine more than one sentence when the passage states them together as one idea (a
+  numbered list, a table row split across the prompt's line-wrapping) — but do not synthesize
+  across sentences that merely happen to share a subject if the passage does not present them as
+  one claim. When in doubt, prefer more, smaller facts over one large one; the reconciler can
+  always combine two matched facts, but it cannot split one you never separated.
+- Do not invent a fact whose existence you infer from silence (genre convention, "games like this
+  usually..."). If the passage does not state it, leave it out.
+- Restate each fact in your own words in `statement`, but `sourceSentence` must be the actual
+  passage text the fact is drawn from, quoted, not paraphrased.
+
+### Numeric values — mark approximations as approximate, always
+
+When a fact carries a specific number, emit it as a structured value:
+`{ magnitude, unit, approximate }`. **The `approximate` flag is load-bearing — get it right even
+when it feels pedantic.** This is not a formatting nicety; it exists because of a measured failure:
+a reconciler, composing two independently-stated timings of "about 7 minutes" each, multiplied them
+into a confident-sounding "49 minutes" — a false precision neither enumerator ever stated and the
+source never supported. Your `approximate` flag is the ONLY signal downstream code has to refuse
+that composition. If the passage hedges a number at all — "about", "roughly", "approximately",
+"~", "up to", "at least" used loosely, or any wording that is not a bare stated count — set
+`approximate: true`. A bare, unhedged count ("draws 5 cards", "16 Action Cards") is
+`approximate: false`.
+
+### Do NOT perform arithmetic
+
+**You are an enumerator, not a calculator.** If the passage states "16 Action Cards" in one place
+and "for 2 players" in another, enumerate both facts separately with their own numeric values. Do
+NOT compute or state "8 Action Cards per player" unless the passage itself states that exact
+composed number as its own sentence. Composing facts into a derived quantity is deliberately a
+CODE-side operation (`composeArithmeticClaim`, `verify-enumerate.ts`) — it verifies a claim a
+`Derived` line already states, conservatively, refusing approximate operands and any relationship
+the line does not literally restate. If you compute a product or a sum yourself and enumerate it as
+a fact, you have manufactured exactly the "7 players x 10 cards = 70 cards distributed" fabrication
+this design's arithmetic guard exists to prevent — a quantity that sounds meaningful but that the
+rules never actually treat as such. Enumerate the ingredients; let code do the arithmetic.
+
+---
+
+## Worked example, quoted byte-identical from the real archived fixture
+
+(`177-FIXTURES/seven/live/01-definitions-and-components.md`, the quote lines an enumerator actually
+receives after stripping):
+
+Passage includes (among other lines) something equivalent to: "The deck contains cards numbered 1
+through 7 in each of four colors (red, green, blue, purple), four copies of each number-color
+combination, plus seven bonus cards worth +1 point each."
+
+**Correct enumeration** (excerpted):
+
+```
+{ statement: "The deck has four colors: red, green, blue, purple.",
+  sourceSentence: "...cards numbered 1 through 7 in each of four colors (red, green, blue, purple)...",
+  numericValue: { magnitude: 4, unit: "colors", approximate: false } }
+
+{ statement: "Each number is printed in four copies per color.",
+  sourceSentence: "...four copies of each number-color combination...",
+  numericValue: { magnitude: 4, unit: "copies", approximate: false } }
+
+{ statement: "There are seven bonus cards, each worth +1 point.",
+  sourceSentence: "...plus seven bonus cards worth +1 point each.",
+  numericValue: { magnitude: 7, unit: "bonus cards", approximate: false } }
+```
+
+**Wrong** (do not do this): enumerating a fourth fact, `"The full deck is 112 numbered cards
+(7 x 4 x 4) plus 7 bonus cards."`, with `numericValue: { magnitude: 112, ... }`. That total is
+exactly the composed quantity a `Derived` line in this slice separately states — it is CODE's job
+to verify that composition from the three ingredient facts above, never yours to state as an
+enumerated fact of your own.
+
+---
+
+## RETURN a structured object only
+
+Return exactly one object:
+
+```
+{
+  facts: [
+    {
+      statement: string,
+      sourceSentence: string,
+      numericValue?: { magnitude: number, unit: string, approximate: boolean }
+    },
+    ...
+  ]
+}
+```
+
+- `facts` is a flat list — no nesting, no grouping by section. Order does not matter; the
+  reconciler matches on content, not position.
+- Every `numericValue` you emit MUST set `approximate` explicitly — never omit it when a number is
+  present, and never guess `false` when the passage hedges.
+- **Never return the passage text back.** Cite only the specific `sourceSentence` each fact draws
+  on.
+
+---
+
+## Scope limit
+
+This subagent performs no arithmetic, decides no agreement/disagreement verdict, writes no ledger
+record, and opens no slice beyond the quote lines it was handed. It never asks to see the other
+enumerator's output, never asks to see any `Derived`/`Visual`/`Named-but-undefined` line "just to
+check," and never widens its own dispatch prompt. Whatever downstream consequence follows from your
+`facts` list is computed by the separate reconciliation dispatch (`verify/reconcile-facts.md`) and
+the code-side grounding/composition checks (`validateGrounding`, `composeArithmeticClaim`,
+`verify-enumerate.ts`) — a claim about that consequence in this return would be ignored regardless
+of what it says.
