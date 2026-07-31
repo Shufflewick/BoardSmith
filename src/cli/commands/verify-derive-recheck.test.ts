@@ -6,12 +6,16 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   DERIVE_VERDICTS,
+  FACT_ALIGNMENTS,
   BLIND_DERIVE_TOKEN,
   createDeriveVerdictRecord,
   readLiveSlices,
   quoteLinesOnly,
+  focusQuoteWindow,
   enumerateDerivedLines,
   buildBlindDerivePayload,
+  blindDeriveHandle,
+  derivePayloadSet,
   annotationBody,
   replaceDeriveVerdicts,
   recordDeriveVerdict,
@@ -164,6 +168,7 @@ describe('createDeriveVerdictRecord', () => {
       originalReading: '112 cards.',
       rederivedReading: '96 cards.',
       sourceQuotes: ['There are 96 cards in the box.'],
+      factAlignment: 'same-fact',
     });
     expect(record.originalReading).toBe('112 cards.');
     expect(record.rederivedReading).toBe('96 cards.');
@@ -262,6 +267,7 @@ describe('createDeriveVerdictRecord', () => {
       reasoning: 'They match.',
       rederivedValue: '112 cards.',
       sourceQuotes: ['There are 112 cards in the box.'],
+      factAlignment: 'same-fact',
     });
     expect(record.verdict).toBe('agrees');
   });
@@ -338,6 +344,114 @@ describe('createDeriveVerdictRecord', () => {
       expect(src).not.toContain(marker);
     }
     expect(src).not.toMatch(/RULE_BEARING(?:NESS)?_(?:KEYWORDS|PHRASES|MARKERS)/);
+  });
+});
+
+// ===========================================================================================
+// Task 2 (177-11) — factAlignment: a FIELD, never a fifth verdict
+// ===========================================================================================
+
+describe('factAlignment (177-11)', () => {
+  it('FACT_ALIGNMENTS is the locked two-member set, frozen', () => {
+    expect(FACT_ALIGNMENTS).toEqual(['same-fact', 'different-fact']);
+    expect(Object.isFrozen(FACT_ALIGNMENTS)).toBe(true);
+  });
+
+  it('DERIVE_VERDICTS stays frozen at exactly four members — factAlignment never becomes a fifth verdict (177-CONTEXT.md decision 6)', () => {
+    expect(DERIVE_VERDICTS).toHaveLength(4);
+    expect(DERIVE_VERDICTS).toEqual(['agrees', 'disagrees', 'underivable', 'not-rule-bearing']);
+  });
+
+  it('THROWS for a disagrees record with no factAlignment', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'disagrees',
+        reasoning: 'They differ.',
+        rederivedValue: 'y',
+        originalReading: 'x',
+        rederivedReading: 'y',
+        sourceQuotes: ['a quote'],
+      }),
+    ).toThrow(/no valid factAlignment/);
+  });
+
+  it('THROWS for an agrees record with no factAlignment', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'agrees',
+        reasoning: 'They match.',
+        rederivedValue: 'x',
+        sourceQuotes: ['a quote'],
+      }),
+    ).toThrow(/no valid factAlignment/);
+  });
+
+  it('THROWS for an out-of-enum factAlignment value', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'agrees',
+        reasoning: 'They match.',
+        rederivedValue: 'x',
+        sourceQuotes: ['a quote'],
+        factAlignment: 'somewhat-related-fact',
+      }),
+    ).toThrow(/no valid factAlignment/);
+  });
+
+  it('does not require factAlignment for underivable/not-rule-bearing — those have no rederived reading to align', () => {
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'underivable',
+        reasoning: 'No supporting quote line exists.',
+        rederivedValue: 'underivable',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'not-rule-bearing',
+        reasoning: 'Page-layout note only.',
+        rederivedValue: 'not-rule-bearing',
+      }),
+    ).not.toThrow();
+  });
+
+  it('round-trips through the ledger: readDeriveVerdicts preserves factAlignment', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-factalign-'));
+    try {
+      const record = createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): x',
+        verdict: 'disagrees',
+        reasoning: 'They differ.',
+        rederivedValue: 'y',
+        originalReading: 'x',
+        rederivedReading: 'y',
+        sourceQuotes: ['a quote'],
+        factAlignment: 'different-fact',
+      });
+      await recordDeriveVerdict(dir, record);
+      const read = await readDeriveVerdicts(dir);
+      expect(read).toHaveLength(1);
+      expect(read[0].factAlignment).toBe('different-fact');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -568,6 +682,261 @@ describe('buildBlindDerivePayload', () => {
       /still matches an annotation family/,
     );
   });
+
+  // 177-11 (closing CR-07): the resolvable Slice:/Target line: pointer is gone, replaced by an
+  // opaque handle.
+  it('never contains "Slice: " or a resolvable "Target line:" pointer — the CR-07 leak vector', () => {
+    const slice = { path: 'rulebook/01-x.md', text: 'p.1, X:\n"quoted."' };
+    const entry: DerivedLineEntry = { slicePath: slice.path, lineNumber: 3, text: 'Derived (p.1): x' };
+    const payload = buildBlindDerivePayload(slice, entry);
+    expect(payload).not.toContain('Slice: ');
+    expect(payload).not.toContain('Target line:');
+    expect(payload).not.toContain(slice.path);
+    expect(payload).toContain(`Target: ${blindDeriveHandle(entry)}`);
+  });
+
+  it('for every one of the 22 real Derived lines, the payload contains neither slicePath nor the standalone lineNumber token, and contains its own blindDeriveHandle, which differs for every candidate', async () => {
+    const seenHandles = new Set<string>();
+    let checked = 0;
+    for (const game of Object.keys(GAME_FILES)) {
+      const slices = await loadGameSlices(game);
+      const sliceByPath = new Map(slices.map((s) => [s.path, s] as const));
+      const { candidates, excluded } = enumerateDerivedLines(slices);
+      for (const entry of [...candidates, ...excluded]) {
+        const slice = sliceByPath.get(entry.slicePath)!;
+        const payload = buildBlindDerivePayload(slice, entry);
+        expect(payload).not.toContain(entry.slicePath);
+        // The line number may legitimately appear as part of a page citation ("p.1") elsewhere in
+        // quoted content — what must never appear is the exact pre-fix pointer shape.
+        expect(payload).not.toMatch(/Target line:\s*\S+:\d+/);
+        const handle = blindDeriveHandle(entry);
+        expect(payload).toContain(handle);
+        expect(seenHandles.has(handle)).toBe(false);
+        seenHandles.add(handle);
+        checked++;
+      }
+    }
+    expect(checked).toBe(22);
+    expect(seenHandles.size).toBe(22);
+  });
+
+  it('for the real 5-candidate seven/01-definitions-and-components.md slice (lines 8, 14, 19, 21, 33), payloads are pairwise DISTINCT where their focus passages differ — fails against the pre-fix builder, which produced 5 identical payloads modulo the line number', async () => {
+    const slices = await loadGameSlices('seven');
+    const slice = slices.find((s) => s.path === 'rulebook/01-definitions-and-components.md')!;
+    const { candidates } = enumerateDerivedLines([slice]);
+    const targetLines = [8, 14, 19, 21, 33];
+    const entries = targetLines.map(
+      (n) => candidates.find((c) => c.lineNumber === n)!,
+    );
+    expect(entries.every((e) => e !== undefined)).toBe(true);
+
+    const withFocus = entries.map((entry) => ({
+      entry,
+      focus: focusQuoteWindow(slice.text, entry.lineNumber).focus,
+    }));
+
+    // Lines 8 and 14 sit under DIFFERENT citation passages (the Set definition vs. the Run
+    // definition) — their focus content must differ.
+    const focus8 = withFocus.find((w) => w.entry.lineNumber === 8)!.focus.join('\n');
+    const focus14 = withFocus.find((w) => w.entry.lineNumber === 14)!.focus.join('\n');
+    expect(focus8).not.toBe(focus14);
+    expect(focus8.length).toBeGreaterThan(0);
+    expect(focus14.length).toBeGreaterThan(0);
+
+    // Line 33 (the plan-checker's own cited case) is severed from any citation header by the
+    // intervening "## Visual notes (p.1)" heading — its focus window must be the honest DEGRADED
+    // empty case, distinct from every non-empty focus above.
+    const focus33 = withFocus.find((w) => w.entry.lineNumber === 33)!.focus;
+    expect(focus33).toEqual([]);
+
+    // Pairwise: for every pair whose focus differs, the assembled payloads differ in their focus
+    // section content (not merely by the always-unique handle).
+    for (let i = 0; i < withFocus.length; i++) {
+      for (let j = i + 1; j < withFocus.length; j++) {
+        const a = withFocus[i];
+        const b = withFocus[j];
+        const aKey = a.focus.join('\n');
+        const bKey = b.focus.join('\n');
+        if (aKey !== bKey) {
+          expect(aKey).not.toBe(bKey);
+        }
+      }
+    }
+  });
+
+  // The plan-checker's REQUIRED fix: markdown headings are passage boundaries too, not just
+  // citation headers. Keyed exactly to the real fixture line the plan checker cited.
+  it('174-FIXTURES/seven/live/01-definitions-and-components.md:33 — a Derived line severed from its nearest citation header by an intervening "## Visual notes (p.1)" heading gets an EMPTY focus window, never the unrelated preceding "p.1, Play Testers:" passage', async () => {
+    const slices = await loadGameSlices('seven');
+    const slice = slices.find((s) => s.path === 'rulebook/01-definitions-and-components.md')!;
+    // Confirm the fixture shape this test is keyed to has not silently drifted.
+    const rawLines = slice.text.split('\n');
+    expect(rawLines[30]).toBe('## Visual notes (p.1)');
+    expect(rawLines[27]).toBe('p.1, Play Testers:');
+    expect(rawLines[32]).toContain('Derived (p.1): Card art is minimal');
+
+    const { focus, rest } = focusQuoteWindow(slice.text, 33);
+    expect(focus).toEqual([]);
+    // Degraded fallback: the full quote set, never the wrong-but-distinct Play Testers passage.
+    expect(rest).toEqual(quoteLinesOnly(slice.text));
+    expect(rest.some((l) => l.includes('Patrick Galagan'))).toBe(true);
+
+    const payload = buildBlindDerivePayload(slice, {
+      slicePath: slice.path,
+      lineNumber: 33,
+      text: rawLines[32],
+    });
+    expect(payload).toMatch(/DEGRADED/);
+    expect(payload).not.toMatch(/Focus passage/);
+  });
+});
+
+describe('blindDeriveHandle', () => {
+  it('is a stable short hex digest — the same entry always maps to the same handle', () => {
+    const entry: DerivedLineEntry = {
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 4,
+      text: 'Derived (p.1): x',
+    };
+    expect(blindDeriveHandle(entry)).toBe(blindDeriveHandle({ ...entry }));
+    expect(blindDeriveHandle(entry)).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  it('two different entries never collide within one slice candidate set', () => {
+    const entries: DerivedLineEntry[] = Array.from({ length: 30 }, (_, i) => ({
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: i + 1,
+      text: `Derived (p.1): line ${i + 1}`,
+    }));
+    const handles = new Set(entries.map(blindDeriveHandle));
+    expect(handles.size).toBe(entries.length);
+  });
+
+  it('does not depend on entry.text — two entries at the same location with different text produce the same handle (identity/ordering only, never content)', () => {
+    const a: DerivedLineEntry = { slicePath: 'rulebook/01-x.md', lineNumber: 4, text: 'Derived (p.1): a' };
+    const b: DerivedLineEntry = { slicePath: 'rulebook/01-x.md', lineNumber: 4, text: 'Derived (p.1): totally different' };
+    expect(blindDeriveHandle(a)).toBe(blindDeriveHandle(b));
+  });
+});
+
+describe('focusQuoteWindow', () => {
+  it('a target line above the first citation header yields an empty focus window and the full quote set as rest', () => {
+    const sliceText = ['Derived (p.1): a rule-bearing note.', '', 'p.1, X:', '"quoted."'].join('\n');
+    const { focus, rest } = focusQuoteWindow(sliceText, 1);
+    expect(focus).toEqual([]);
+    expect(rest).toEqual(quoteLinesOnly(sliceText));
+  });
+
+  it('a target line inside a citation passage gets exactly that passage as focus, and the rest as context', () => {
+    const sliceText = [
+      'p.1, A:',
+      '"quote A1."',
+      '"quote A2."',
+      '',
+      'Derived (p.1): about A.',
+      '',
+      'p.1, B:',
+      '"quote B1."',
+      '',
+      'Derived (p.1): about B.',
+    ].join('\n');
+    const { focus: focusA } = focusQuoteWindow(sliceText, 5);
+    expect(focusA).toEqual(['p.1, A:', '"quote A1."', '"quote A2."']);
+    const { focus: focusB } = focusQuoteWindow(sliceText, 10);
+    expect(focusB).toEqual(['p.1, B:', '"quote B1."']);
+  });
+
+  it('a markdown heading between the target and the nearest citation header severs the passage — empty focus, never the heading-preceding passage', () => {
+    const sliceText = [
+      'p.1, A:',
+      '"quote A1."',
+      '',
+      '## A section break',
+      '',
+      'Derived (p.1): about something under the new heading.',
+    ].join('\n');
+    const { focus, rest } = focusQuoteWindow(sliceText, 6);
+    expect(focus).toEqual([]);
+    expect(rest).toEqual(['p.1, A:', '"quote A1."']);
+  });
+
+  it('a citation header immediately below a markdown heading correctly governs a target line under IT, not the passage above the heading', () => {
+    const sliceText = [
+      'p.1, A:',
+      '"quote A1."',
+      '',
+      '## A section break',
+      '',
+      'p.1, B:',
+      '"quote B1."',
+      '',
+      'Derived (p.1): about B.',
+    ].join('\n');
+    const { focus } = focusQuoteWindow(sliceText, 9);
+    expect(focus).toEqual(['p.1, B:', '"quote B1."']);
+  });
+
+  it('never reads entry.text — focusQuoteWindow does not take an entry at all, only sliceText and a lineNumber', () => {
+    // Behavioral pin: the function signature itself is the guarantee. Calling it with a
+    // lineNumber that does not correspond to any Derived line at all still partitions correctly,
+    // proving no "entry" object (and therefore no entry.text) is involved in the computation.
+    const sliceText = ['p.1, A:', '"quote A1."', '', 'Derived (p.1): about A.'].join('\n');
+    const { focus } = focusQuoteWindow(sliceText, 4);
+    expect(focus).toEqual(['p.1, A:', '"quote A1."']);
+  });
+});
+
+describe('derivePayloadSet', () => {
+  it('for the real seven/01-definitions-and-components.md 5-candidate slice, sharedFocusWith matches the fixture\'s own citation-passage grouping: lines 19 and 21 share a passage (both under "p.1, Distribution of Cards:"); lines 8 and 14 do not share with anything (each under its own Definitions passage); line 33 is degraded (empty focus, never counted as shared)', async () => {
+    const slices = await loadGameSlices('seven');
+    const slice = slices.find((s) => s.path === 'rulebook/01-definitions-and-components.md')!;
+    const { candidates } = enumerateDerivedLines([slice]);
+    const targetLines = [8, 14, 19, 21, 33];
+    const entries = targetLines.map((n) => candidates.find((c) => c.lineNumber === n)!);
+
+    const result = derivePayloadSet(slice, entries);
+    const byLine = new Map(result.map((r) => [r.entry.lineNumber, r]));
+
+    const line19 = byLine.get(19)!;
+    const line21 = byLine.get(21)!;
+    expect(line19.targetingAmbiguous).toBe(true);
+    expect(line21.targetingAmbiguous).toBe(true);
+    expect(line19.sharedFocusWith).toEqual([`${slice.path}:21`]);
+    expect(line21.sharedFocusWith).toEqual([`${slice.path}:19`]);
+
+    const line8 = byLine.get(8)!;
+    const line14 = byLine.get(14)!;
+    expect(line8.targetingAmbiguous).toBe(false);
+    expect(line8.sharedFocusWith).toEqual([]);
+    expect(line14.targetingAmbiguous).toBe(false);
+    expect(line14.sharedFocusWith).toEqual([]);
+
+    const line33 = byLine.get(33)!;
+    expect(line33.focus).toEqual([]);
+    expect(line33.targetingAmbiguous).toBe(false);
+    expect(line33.sharedFocusWith).toEqual([]);
+  });
+
+  it('two independently-degraded (empty-focus) candidates are never reported as sharing a focus passage with each other', () => {
+    const sliceText = [
+      'Derived (p.1): above the first header, no passage governs this one.',
+      '',
+      '## A heading',
+      '',
+      'Derived (p.1): severed from any header by the heading above.',
+      '',
+      'p.1, X:',
+      '"a real passage."',
+    ].join('\n');
+    const entries: DerivedLineEntry[] = [
+      { slicePath: 'rulebook/01-x.md', lineNumber: 1, text: sliceText.split('\n')[0] },
+      { slicePath: 'rulebook/01-x.md', lineNumber: 5, text: sliceText.split('\n')[4] },
+    ];
+    const result = derivePayloadSet({ path: 'rulebook/01-x.md', text: sliceText }, entries);
+    expect(result.every((r) => r.focus.length === 0)).toBe(true);
+    expect(result.every((r) => r.targetingAmbiguous === false)).toBe(true);
+    expect(result.every((r) => r.sharedFocusWith.length === 0)).toBe(true);
+  });
 });
 
 describe('annotationBody', () => {
@@ -694,6 +1063,7 @@ describe('module source guarantees', () => {
           originalReading: 'Each player has 8 Action Cards.',
           rederivedReading: 'Each player has 7 Action Cards.',
           sourceQuotes: ['Each player has 7 Action Cards.'],
+          factAlignment: 'same-fact',
         }),
       );
 
@@ -754,6 +1124,7 @@ function sampleDisagreesRecord(): DeriveVerdictRecord {
     originalReading: 'Each player has 8 Action Cards.',
     rederivedReading: 'Each player has 7 Action Cards, per the quoted distribution table.',
     sourceQuotes: ['Each player has 7 Action Cards (16 total across two colors).'],
+    factAlignment: 'same-fact',
   });
 }
 
@@ -1038,6 +1409,7 @@ describe('verifyDeriveRecheckCommand', () => {
         originalReading: 'Each player has 8 Action Cards.',
         rederivedReading: 'Each player has 7 Action Cards.',
         sourceQuotes: ['Each player has 7 Action Cards.'],
+        factAlignment: 'same-fact',
       }),
     );
 
@@ -1058,6 +1430,7 @@ describe('verifyDeriveRecheckCommand', () => {
         originalReading: 'Each player has 8 Action Cards.',
         rederivedReading: 'Each player has 7 Action Cards.',
         sourceQuotes: ['Each player has 7 Action Cards.'],
+        factAlignment: 'same-fact',
       }),
     );
 
@@ -1135,6 +1508,7 @@ describe('verifyDeriveRecheckCommand', () => {
         reasoning: 'Matches the quoted component count.',
         rederivedValue: 'The box contains 112 cards.',
         sourceQuotes: ['The box contains 112 cards.'],
+        factAlignment: 'same-fact',
       }),
     );
 
@@ -1175,6 +1549,7 @@ describe('verifyDeriveRecheckCommand', () => {
         reasoning: 'Matched at the time.',
         rederivedValue: 'A rule from a slice that no longer exists.',
         sourceQuotes: ['some quote'],
+        factAlignment: 'same-fact',
       }),
     );
 
@@ -1254,6 +1629,82 @@ describe('verifyDeriveRecheckCommand', () => {
     const matches = source.match(/No rulebook\/ directory/g) ?? [];
     expect(matches).toHaveLength(1);
   });
+
+  // 177-11: the mechanical instrument separating a targeting-collapse artifact from a genuine
+  // content disagreement — a disagrees + different-fact record increments offTargetDisagreements
+  // and NOT genuineDisagreements, and both appear in --json.
+  it('a disagrees + different-fact record increments offTargetDisagreements and NOT genuineDisagreements; a disagrees + same-fact record does the reverse; both counts appear in --json', async () => {
+    await recordDeriveVerdict(
+      dir,
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 4,
+        originalLine: 'Derived (p.1): The box contains 112 cards.',
+        verdict: 'disagrees',
+        reasoning: 'The blind stage re-derived a different fact than line 4 asserts.',
+        rederivedValue: 'Each player has 7 Action Cards.',
+        originalReading: 'The box contains 112 cards.',
+        rederivedReading: 'Each player has 7 Action Cards.',
+        sourceQuotes: ['Each player has 7 Action Cards.'],
+        factAlignment: 'different-fact',
+      }),
+    );
+    await recordDeriveVerdict(
+      dir,
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
+        verdict: 'disagrees',
+        reasoning: 'A genuine numeric conflict about the same subject.',
+        rederivedValue: 'Each player has 7 Action Cards.',
+        originalReading: 'Each player has 8 Action Cards.',
+        rederivedReading: 'Each player has 7 Action Cards.',
+        sourceQuotes: ['Each player has 7 Action Cards.'],
+        factAlignment: 'same-fact',
+      }),
+    );
+
+    const logs: string[] = [];
+    const spy = (msg?: unknown) => logs.push(String(msg));
+    const original = console.log;
+    console.log = spy;
+    let result;
+    try {
+      result = await verifyDeriveRecheckCommand({ project: dir, json: true });
+    } finally {
+      console.log = original;
+    }
+
+    expect(result.offTargetDisagreements).toBe(1);
+    expect(result.genuineDisagreements).toBe(1);
+    expect(result.verdictCounts.disagrees).toBe(2);
+
+    const parsed = JSON.parse(logs[0]);
+    expect(parsed.offTargetDisagreements).toBe(1);
+    expect(parsed.genuineDisagreements).toBe(1);
+  });
+
+  it('targetingAmbiguousCount and per-finding sharedFocusWith are computed mechanically from the live slice, independent of any recorded verdict', async () => {
+    // Two Derived lines that genuinely share a citation passage: both under "p.1, Distribution:".
+    await fs.writeFile(
+      join(dir, 'rulebook', '02-shared.md'),
+      [
+        'p.1, Distribution:',
+        '"Each player has 7 Action Cards."',
+        '',
+        'Derived (p.1): first inference about distribution.',
+        'Derived (p.1): second inference about distribution.',
+      ].join('\n'),
+    );
+
+    const result = await verifyDeriveRecheckCommand({ project: dir });
+    const sharedFindings = result.findings.filter((f) => f.slicePath === 'rulebook/02-shared.md');
+    expect(sharedFindings).toHaveLength(2);
+    expect(sharedFindings.every((f) => f.targetingAmbiguous)).toBe(true);
+    expect(sharedFindings[0].sharedFocusWith).toEqual([`rulebook/02-shared.md:${sharedFindings[1].lineNumber}`]);
+    expect(result.targetingAmbiguousCount).toBeGreaterThanOrEqual(2);
+  });
 });
 
 // ===========================================================================================
@@ -1281,6 +1732,7 @@ describe('verifyDeriveRecordCommand', () => {
       reasoning: 'Matches the quoted component count.',
       rederivedValue: 'The box contains 112 cards.',
       sourceQuote: ['The box contains 112 cards.'],
+      factAlignment: 'same-fact',
     });
 
     const recorded = await readDeriveVerdicts(dir);
@@ -1300,6 +1752,7 @@ describe('verifyDeriveRecordCommand', () => {
       reasoning: 'Matches the quoted component count.',
       rederivedValue: 'The box contains 112 cards.',
       sourceQuote: ['The box contains 112 cards.'],
+      factAlignment: 'same-fact',
     });
     await verifyDeriveRecordCommand({
       project: dir,
@@ -1312,6 +1765,7 @@ describe('verifyDeriveRecordCommand', () => {
       originalReading: 'Each player has 8 Action Cards.',
       rederivedReading: 'Each player has 7 Action Cards.',
       sourceQuote: ['Each player has 7 Action Cards.'],
+      factAlignment: 'same-fact',
     });
 
     const recorded = await readDeriveVerdicts(dir);
@@ -1365,6 +1819,7 @@ describe('verifyDeriveRecordCommand', () => {
         reasoning: 'Matches the quoted component count.',
         rederivedValue: 'The box contains 112 cards.',
         sourceQuote: ['The box contains 112 cards.'],
+        factAlignment: 'same-fact',
         json: true,
       });
     } finally {

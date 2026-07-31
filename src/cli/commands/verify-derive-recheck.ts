@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { isPresentationLine } from './verify-classify.js';
@@ -36,6 +37,22 @@ import { DERIVED_LINE_RE } from './derived-line-pattern.js';
  * the construction site: it throws on any assembled string matching an annotation family,
  * independent of which prefix regex missed it. A decoration form nobody anticipated fails loudly
  * instead of leaking — that is what makes the guarantee structural rather than incidental.
+ *
+ * THE TARGET IDENTIFIER IS AN OPAQUE HANDLE, NEVER A RESOLVABLE COORDINATE (177-11, closing
+ * CR-07): a Claude Code subagent has file-read tools, so the pre-fix pair of a bare slice-path
+ * line and a `Target line: {path}:{lineNumber}` line was a pointer the blind dispatch could
+ * follow straight back to the withheld line — one tool call away from confirmation, not
+ * independence.
+ * `blindDeriveHandle` replaces both with an opaque sha256-truncated digest; the mapping back to
+ * `(slicePath, lineNumber)` lives with the orchestrator, never inside the prompt. `focusQuoteWindow`
+ * additionally narrows the payload to the target's own citation passage — positionally, from the
+ * quote lines `quoteLinesOnly` already retained, never from `entry.text` — so per-candidate
+ * payloads for a shared slice genuinely differ where the underlying passages differ, closing the
+ * targeting-collapse artifact `177-PROOF.md` §3 measured (every multi-candidate slice in the real
+ * corpus re-deriving the same dominant fact regardless of nominal target). Two candidates that
+ * genuinely share one citation passage cannot be told apart without leaking the inference — that
+ * residual is real and is reported per-finding (`targetingAmbiguous`/`sharedFocusWith`), never
+ * hidden behind a payload that merely looks different.
  *
  * This module reads the LIVE `rulebook/*.md` tree directly, never a staged `.verify/<runId>/`
  * tree (177-CONTEXT.md decision 12; 177-RESEARCH.md Pitfall 3) — `resolveFreshTranscription`
@@ -91,6 +108,30 @@ function isDeriveVerdict(value: string): value is DeriveVerdict {
 }
 
 // -------------------------------------------------------------------------------------------
+// factAlignment — a FIELD, never a fifth verdict (177-11; 177-CONTEXT.md decision 6 stays frozen
+// at exactly four DERIVE_VERDICTS members)
+// -------------------------------------------------------------------------------------------
+
+/**
+ * Answers exactly one question, separate from `verdict`: did the blind stage's rederived reading
+ * actually address the fact the original line asserts? `177-PROOF.md` §3 measured that most of a
+ * real run's `disagrees` verdicts were NOT genuine content disagreements — they were the blind
+ * stage re-deriving a DIFFERENT fact than the one nominally under test, an artifact of the
+ * pre-177-11 payload carrying no usable targeting information in a multi-candidate slice.
+ * `same-fact` is `one-two-punch:52`'s shape (a real numeric conflict about the SAME subject);
+ * `different-fact` is every one of the `seven` art/imagery lines whose collapsed re-derivation
+ * landed on shared deck-arithmetic instead. Required on every `agrees`/`disagrees` record; not
+ * meaningful for the two terminal blind outcomes (`underivable`/`not-rule-bearing`), which have no
+ * rederived reading to align in the first place.
+ */
+export const FACT_ALIGNMENTS = Object.freeze(['same-fact', 'different-fact'] as const);
+export type FactAlignment = (typeof FACT_ALIGNMENTS)[number];
+
+function isFactAlignment(value: string): value is FactAlignment {
+  return (FACT_ALIGNMENTS as readonly string[]).includes(value);
+}
+
+// -------------------------------------------------------------------------------------------
 // DeriveVerdictRecord — the CLI-validated, subagent-supplied verdict record
 // -------------------------------------------------------------------------------------------
 
@@ -123,6 +164,14 @@ export interface DeriveVerdictRecord {
    * not merely enforced in memory at construction time.
    */
   rederivedValue: string;
+  /**
+   * Required for `agrees`/`disagrees` (177-11): did the rederived reading address the SAME fact
+   * the original line asserts (`same-fact`), or a different one the payload's targeting collapsed
+   * onto (`different-fact`)? A separate measurement field, never a fifth `DERIVE_VERDICTS` member
+   * (177-CONTEXT.md decision 6 stays frozen at four). Optional for `underivable`/`not-rule-bearing`
+   * — those have no rederived reading to align.
+   */
+  factAlignment?: FactAlignment;
 }
 
 /**
@@ -145,6 +194,10 @@ export interface DeriveVerdictRecord {
  *   - `rederivedValue` is `underivable`/`not-rule-bearing` and `verdict` differs from it (177-09,
  *     closing WR-04 — the blind stage's two terminal outcomes are passed through unchanged by the
  *     comparison stage, never re-adjudicated)
+ *   - the verdict is `agrees`/`disagrees` and `factAlignment` is missing or not one of
+ *     `FACT_ALIGNMENTS` (177-11 — the instrument that separates a targeting-collapse artifact from
+ *     a genuine content disagreement is only trustworthy if it is required, not optional, on every
+ *     record that can carry it)
  *
  * Modeled as additional `if` blocks inside this same function — never a second validator
  * elsewhere in the module.
@@ -159,6 +212,7 @@ export function createDeriveVerdictRecord(input: {
   originalReading?: string;
   rederivedReading?: string;
   sourceQuotes?: string[];
+  factAlignment?: string;
 }): DeriveVerdictRecord {
   const location = `${input.slicePath}:${input.lineNumber}`;
 
@@ -234,6 +288,22 @@ export function createDeriveVerdictRecord(input: {
     );
   }
 
+  // 177-11: factAlignment is required on agrees/disagrees — the mechanical instrument that tells
+  // a targeting-collapse artifact (different-fact) apart from a genuine content disagreement
+  // (same-fact) from the recorded ledger alone, per-record, with no threshold and no re-reading of
+  // free-prose reasoning to guess at it after the fact.
+  if (input.verdict === 'agrees' || input.verdict === 'disagrees') {
+    if (!input.factAlignment || !isFactAlignment(input.factAlignment)) {
+      throw new Error(
+        `${location}'s "${input.verdict}" verdict has no valid factAlignment.\n` +
+          `Expected one of: ${FACT_ALIGNMENTS.join(', ')}. factAlignment answers whether the ` +
+          `blind stage's rederived reading addressed the fact the original line asserts — ` +
+          `required so a targeting-collapse artifact can be told apart from a genuine content ` +
+          `disagreement mechanically, from the ledger alone.`,
+      );
+    }
+  }
+
   return {
     slicePath: input.slicePath,
     lineNumber: input.lineNumber,
@@ -244,6 +314,9 @@ export function createDeriveVerdictRecord(input: {
     ...(input.originalReading !== undefined ? { originalReading: input.originalReading } : {}),
     ...(input.rederivedReading !== undefined
       ? { rederivedReading: input.rederivedReading }
+      : {}),
+    ...(input.factAlignment !== undefined && isFactAlignment(input.factAlignment)
+      ? { factAlignment: input.factAlignment }
       : {}),
     sourceQuotes: input.sourceQuotes ?? [],
   };
@@ -353,6 +426,21 @@ const NAMED_BUT_UNDEFINED_LINE_RE = /^Named-but-undefined \(p\.[^)]*\)/i;
 const ANY_ANNOTATION_LINE_RE = /Derived \(p\.|Visual \(p\.|Named-but-undefined \(p\./i;
 
 /**
+ * True when `line` (already `.trim()`ed) belongs in a "quote lines only" payload: not blank, not
+ * a markdown heading, and not one of the three annotation-family lines (via `annotationBody`, the
+ * single decoration-normalization site). This is the ONE predicate `quoteLinesOnly` and
+ * `focusQuoteWindow` both route through, so the two can never diverge on what counts as a quote
+ * line — the same single-choke-point shape `annotationBody` itself established (177-08).
+ */
+function isQuoteLine(line: string): boolean {
+  if (line.length === 0 || line.startsWith('#')) return false;
+  const body = annotationBody(line);
+  return (
+    !DERIVED_LINE_RE.test(body) && !VISUAL_LINE_RE.test(body) && !NAMED_BUT_UNDEFINED_LINE_RE.test(body)
+  );
+}
+
+/**
  * Selects ONLY directly-quoted rulebook content and its citation headers from `sliceText` — the
  * deliberate INVERSE of `ruleBearingLines()` (`verify-classify.ts`), which KEEPS unqualified
  * `Derived` lines because they are rule-bearing for classification purposes. CHECK-04 needs the
@@ -373,15 +461,101 @@ export function quoteLinesOnly(sliceText: string): string[] {
   return sliceText
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => {
-      if (line.length === 0 || line.startsWith('#')) return false;
-      const body = annotationBody(line);
-      return (
-        !DERIVED_LINE_RE.test(body) &&
-        !VISUAL_LINE_RE.test(body) &&
-        !NAMED_BUT_UNDEFINED_LINE_RE.test(body)
-      );
-    });
+    .filter(isQuoteLine);
+}
+
+// -------------------------------------------------------------------------------------------
+// focusQuoteWindow — quote-local passage narrowing (177-11, closing CR-07 together with
+// blindDeriveHandle below)
+// -------------------------------------------------------------------------------------------
+
+/**
+ * A bare `p.N, <label>:` citation header — the SAME shape `verify-classify.ts`'s own
+ * (unexported) `CITATION_HEADER_RE` tests for. Not imported from there: that module's constant is
+ * private, and duplicating a one-line regex literal here is cheaper than widening that module's
+ * export surface for a single shared pattern.
+ */
+const CITATION_HEADER_RE = /^p\.\d+,.*:$/;
+
+/**
+ * A markdown heading — a passage boundary `focusQuoteWindow` treats identically to a citation
+ * header (plan-checker's required fix, keyed to the real fixture
+ * `174-FIXTURES/seven/live/01-definitions-and-components.md:33`). `quoteLinesOnly` already strips
+ * headings entirely before any prefix test runs, so a heading carries no quote-line content of its
+ * own — but it still marks a real section break in the ORIGINAL file, and a citation header from a
+ * PRECEDING section must never be treated as governing a target line that sits in a different
+ * section with no citation header of its own.
+ */
+const MARKDOWN_HEADING_RE = /^#/;
+
+/**
+ * Partitions `quoteLinesOnly(sliceText)` into the quote lines belonging to the target line's own
+ * citation passage (`focus`) and everything else (`rest`) — positionally, from `sliceText`'s raw
+ * line structure, never from `entry.text` (which this function never receives at all).
+ *
+ * The passage is: walk UPWARD from `lineNumber` to the nearest citation header, THEN walk DOWNWARD
+ * from that header through the line before the next citation header, the next markdown heading, or
+ * end of slice — whichever comes first.
+ *
+ * MARKDOWN HEADINGS ARE PASSAGE BOUNDARIES TOO, not just citation headers (plan-checker's required
+ * fix): walking upward, a heading encountered BEFORE any citation header SEVERS the target from
+ * whatever citation header sits above that heading — that header governs a different section and
+ * must never be picked up as this target's passage. Proven against the real fixture
+ * `174-FIXTURES/seven/live/01-definitions-and-components.md:33` (`Derived (p.1): Card art is
+ * minimal...`, one of `177-PROOF.md` §3's own cited collapse artifacts): the nearest citation
+ * header ABOVE line 33 is `p.1, Play Testers:` (line 28), but a `## Visual notes (p.1)` heading
+ * (line 31) sits between them — without the heading-boundary check, the focus window would
+ * silently attach line 33 to the semantically unrelated Play Testers passage. With it, this case
+ * is correctly reported as the DEGRADED empty-focus case below, never a wrong-but-distinct one.
+ *
+ * Returns `{ focus: [], rest: quoteLinesOnly(sliceText) }` — the honest degraded case — when no
+ * citation header governs the target line at all, whether because the target sits above the first
+ * citation header in the slice, or because a heading severs it from one that would otherwise
+ * apply. The caller (`buildBlindDerivePayload`) labels this explicitly in the payload rather than
+ * silently presenting the whole slice as if it were the focus passage.
+ */
+export function focusQuoteWindow(
+  sliceText: string,
+  lineNumber: number,
+): { focus: string[]; rest: string[] } {
+  const rawLines = sliceText.split('\n').map((line) => line.trim());
+  const targetIdx = lineNumber - 1;
+
+  let headerIdx = -1;
+  for (let i = targetIdx - 1; i >= 0; i--) {
+    const line = rawLines[i];
+    if (line === undefined) continue;
+    if (MARKDOWN_HEADING_RE.test(line)) break; // severed — a heading governs first, stop scanning
+    if (CITATION_HEADER_RE.test(line)) {
+      headerIdx = i;
+      break;
+    }
+  }
+
+  if (headerIdx === -1) {
+    return { focus: [], rest: quoteLinesOnly(sliceText) };
+  }
+
+  let boundaryIdx = rawLines.length;
+  for (let i = headerIdx + 1; i < rawLines.length; i++) {
+    if (CITATION_HEADER_RE.test(rawLines[i]) || MARKDOWN_HEADING_RE.test(rawLines[i])) {
+      boundaryIdx = i;
+      break;
+    }
+  }
+
+  const focus: string[] = [];
+  const rest: string[] = [];
+  rawLines.forEach((line, i) => {
+    if (!isQuoteLine(line)) return;
+    if (i >= headerIdx && i < boundaryIdx) {
+      focus.push(line);
+    } else {
+      rest.push(line);
+    }
+  });
+
+  return { focus, rest };
 }
 
 // -------------------------------------------------------------------------------------------
@@ -451,39 +625,84 @@ export function enumerateDerivedLines(
 export const BLIND_DERIVE_TOKEN = 'BS-DERIVE-V1';
 
 /**
+ * Returns a stable, opaque short hex digest of `${entry.slicePath}:${entry.lineNumber}` — the
+ * ONLY target identifier a blind dispatch prompt may carry (177-11, closing CR-07). The same
+ * entry always maps to the same handle; two different entries never collide within one slice's
+ * candidate set (sha256 truncated to 12 hex chars, ~2^48 space, over a candidate count in the
+ * tens per slice — collision risk is not a real concern at this scale). The mapping back to
+ * `(slicePath, lineNumber)` lives with the orchestrator dispatching the prompt, never inside the
+ * prompt itself — that is what makes the pointer unresolvable to the subagent holding it: nothing
+ * a file-read tool could act on, because a hash is not a path.
+ */
+export function blindDeriveHandle(entry: DerivedLineEntry): string {
+  return createHash('sha256')
+    .update(`${entry.slicePath}:${entry.lineNumber}`)
+    .digest('hex')
+    .slice(0, 12);
+}
+
+/**
  * Builds the blind-derivation dispatch prompt for ONE `Derived` line's slice. This is the SINGLE
- * construction site for that prompt — no caller may append to its output before dispatch. It
- * receives `entry` for identity/ordering ONLY (`entry.slicePath`/`entry.lineNumber` name which
- * line the dispatch is for); `entry.text` — the original `Derived` line itself — is NEVER read
- * or emitted here. The payload's only source material is `quoteLinesOnly(slice.text)`, which has
- * already stripped every `Derived`/`Visual`/`Named-but-undefined` line from the slice.
+ * construction site for that prompt — no caller may append to its output before dispatch.
+ * `entry.text` — the original `Derived` line itself — is NEVER read or emitted here; the ONLY use
+ * of `entry` is `blindDeriveHandle(entry)` (an opaque handle, not a path) and
+ * `entry.lineNumber` fed positionally into `focusQuoteWindow` (which itself never reads
+ * `entry.text` either — the partition is computed from `slice.text`'s own line structure).
  *
  * A derivation that has seen the original `Derived` line is not a second opinion, it is a
  * confirmation — it would report high agreement whether or not the original derivation was
- * sound. This function is where that independence guarantee is either upheld or broken; it is
- * upheld here by construction, not by instruction, because `entry.text` is structurally absent
- * from the assembled string.
+ * sound. This function is where that independence guarantee is either upheld or broken. Three
+ * things uphold it, all structural, none a prompt instruction alone (177-11, closing CR-07):
  *
- * CONSTRUCTION-SITE BACKSTOP (177-08, closing CR-01): after assembly, the payload is tested
- * against `ANY_ANNOTATION_LINE_RE` and THROWS — never silently emits — if it still matches. This
- * check is independent of `DERIVED_LINE_RE`/`VISUAL_LINE_RE`/`NAMED_BUT_UNDEFINED_LINE_RE`/
- * `annotationBody`: it does not care WHY a line leaked, only THAT one did. The prefix regexes can
- * still miss a decoration form nobody anticipated; this backstop is the reason a miss fails loudly
- * at the one construction site rather than leaking into a dispatched prompt.
+ *   (a) `entry.text` is structurally absent from the assembled string — grep the source, it is
+ *       never interpolated anywhere in this function;
+ *   (b) the construction-site backstop below (177-08, unchanged) throws on any assembled payload
+ *       still matching an annotation family, independent of which prefix regex missed it;
+ *   (c) the target is identified ONLY by `blindDeriveHandle` — no resolvable `Slice:`/
+ *       `Target line:` coordinate is ever emitted, so a subagent with file-read tools has nothing
+ *       in the prompt to act on even if it tried.
+ *
+ * The payload is narrowed by `focusQuoteWindow` to the target's own citation passage where one can
+ * be found (closing the targeting-collapse artifact `177-PROOF.md` §3 measured — every
+ * multi-candidate slice in the real corpus previously re-deriving the same dominant fact
+ * regardless of nominal target, because the raw line number carried no locatable meaning inside a
+ * quote-only payload). When no citation passage governs the target line, the payload says so
+ * explicitly and falls back to the full quote set labelled DEGRADED — never silently identical to
+ * a case where narrowing succeeded.
  */
 export function buildBlindDerivePayload(
   slice: { path: string; text: string },
   entry: DerivedLineEntry,
 ): string {
-  const quotes = quoteLinesOnly(slice.text);
-  const payload = [
-    BLIND_DERIVE_TOKEN,
-    `Slice: ${slice.path}`,
-    `Target line: ${entry.slicePath}:${entry.lineNumber}`,
-    'Quoted rulebook content for this slice — your ONLY source material. No Derived or Visual',
-    'line from this slice, or any other slice, is included below or anywhere in this prompt:',
-    ...quotes,
-  ].join('\n');
+  const handle = blindDeriveHandle(entry);
+  const { focus, rest } = focusQuoteWindow(slice.text, entry.lineNumber);
+
+  const lines = [BLIND_DERIVE_TOKEN, `Target: ${handle}`];
+
+  if (focus.length > 0) {
+    lines.push(
+      'Focus passage — the fact under test is the one THIS passage supports. Derive your answer',
+      'from these lines. No Derived or Visual line from this slice, or any other slice, is',
+      'included below or anywhere in this prompt:',
+      ...focus,
+      '',
+      "Context — the rest of this slice's quoted content, for resolving terminology ONLY. This is",
+      'NOT the passage under test:',
+      ...rest,
+    );
+  } else {
+    lines.push(
+      'No citation-header passage could be located for this target line — it sits above the',
+      "first citation header in its slice, or a section heading severs it from one that would",
+      'otherwise apply. Falling back to the full slice below as DEGRADED context: every quote',
+      'line here is background only, none of it is labelled as the passage under test. No',
+      'Derived or Visual line from this slice, or any other slice, is included below or anywhere',
+      'in this prompt:',
+      ...rest,
+    );
+  }
+
+  const payload = lines.join('\n');
 
   if (ANY_ANNOTATION_LINE_RE.test(payload)) {
     throw new Error(
@@ -496,6 +715,63 @@ export function buildBlindDerivePayload(
   }
 
   return payload;
+}
+
+// -------------------------------------------------------------------------------------------
+// derivePayloadSet — the per-slice construction site that also computes the residual (177-11)
+// -------------------------------------------------------------------------------------------
+
+export interface DerivePayloadSetEntry {
+  entry: DerivedLineEntry;
+  payload: string;
+  focus: string[];
+  /**
+   * Locations (`slicePath:lineNumber`) of OTHER candidates in this same slice whose focus passage
+   * is byte-for-byte identical to this one's — computed mechanically, with no threshold and no
+   * model involvement. Empty focus windows (the degraded case) are never counted as "shared" with
+   * one another: two independently-degraded candidates are not proven to be about the same fact,
+   * only that neither could be narrowed — a real passage collision requires a real, non-empty,
+   * identical passage.
+   */
+  sharedFocusWith: string[];
+  /** `true` exactly when `sharedFocusWith` is non-empty. */
+  targetingAmbiguous: boolean;
+}
+
+/**
+ * Builds every candidate's payload for ONE slice via `buildBlindDerivePayload`, and computes,
+ * mechanically, which candidates share an identical non-empty focus passage. Two `Derived` lines
+ * under the same citation passage are a case where no payload can distinguish them without
+ * leaking the inference itself — that residual is real, and the correct engineering answer is to
+ * REPORT it per-finding (`targetingAmbiguous`/`sharedFocusWith`), never to hide it behind a
+ * payload that merely looks different because its opaque handle always differs.
+ */
+export function derivePayloadSet(
+  slice: { path: string; text: string },
+  candidates: DerivedLineEntry[],
+): DerivePayloadSetEntry[] {
+  const computed = candidates.map((entry) => ({
+    entry,
+    payload: buildBlindDerivePayload(slice, entry),
+    focus: focusQuoteWindow(slice.text, entry.lineNumber).focus,
+  }));
+
+  return computed.map((c, i) => {
+    const focusKey = c.focus.join('\n');
+    const sharedFocusWith =
+      focusKey.length === 0
+        ? []
+        : computed
+            .filter((other, j) => j !== i && other.focus.join('\n') === focusKey)
+            .map((other) => `${other.entry.slicePath}:${other.entry.lineNumber}`);
+    return {
+      entry: c.entry,
+      payload: c.payload,
+      focus: c.focus,
+      sharedFocusWith,
+      targetingAmbiguous: sharedFocusWith.length > 0,
+    };
+  });
 }
 
 // -------------------------------------------------------------------------------------------
@@ -609,6 +885,7 @@ export async function verifyDeriveRecordCommand(
     originalReading?: string;
     rederivedReading?: string;
     sourceQuote?: string[];
+    factAlignment?: string;
     json?: boolean;
   } = {},
 ): Promise<VerifyDeriveRecordResult> {
@@ -652,6 +929,7 @@ export async function verifyDeriveRecordCommand(
     originalReading: options.originalReading,
     rederivedReading: options.rederivedReading,
     sourceQuotes: options.sourceQuote,
+    factAlignment: options.factAlignment,
   });
 
   const { ledgerPath } = await recordDeriveVerdict(projectDir, record);
@@ -733,6 +1011,7 @@ export async function readDeriveVerdicts(projectDir: string): Promise<DeriveVerd
         rederivedReading:
           r.rederivedReading !== undefined ? String(r.rederivedReading) : undefined,
         sourceQuotes: Array.isArray(r.sourceQuotes) ? (r.sourceQuotes as string[]) : [],
+        factAlignment: r.factAlignment !== undefined ? String(r.factAlignment) : undefined,
       });
     } catch (err) {
       throw new Error(
@@ -758,6 +1037,16 @@ export interface DeriveRecheckFinding {
   originalReading?: string;
   /** Present, verbatim, on every `disagrees` finding (decision 8). */
   rederivedReading?: string;
+  /** Present on every `agrees`/`disagrees` finding (177-11) — a FIELD, never a fifth verdict. */
+  factAlignment?: FactAlignment;
+  /**
+   * `true` when another candidate in this slice shares this candidate's exact focus passage
+   * (177-11) — a residual `focusQuoteWindow` cannot resolve without leaking the withheld
+   * inference. Reported per-finding, never absorbed into `verdictCounts`.
+   */
+  targetingAmbiguous: boolean;
+  /** Locations of the other candidate(s) sharing this one's focus passage; empty when unambiguous. */
+  sharedFocusWith: string[];
 }
 
 export interface VerifyDeriveRecheckResult {
@@ -781,6 +1070,25 @@ export interface VerifyDeriveRecheckResult {
    * markers now exclude. Never silently dropped from the report.
    */
   orphanedRecords: string[];
+  /**
+   * Count of candidates whose focus passage is shared with at least one other candidate in the
+   * same slice (177-11) — computed mechanically from `derivePayloadSet`, independent of any
+   * recorded verdict. A non-zero count names a real residual: those candidates cannot be
+   * distinguished by payload alone without leaking the withheld inference.
+   */
+  targetingAmbiguousCount: number;
+  /**
+   * `disagrees` findings whose recorded `factAlignment` is `different-fact` (177-11) — the blind
+   * stage addressed a DIFFERENT fact than the one under test, a targeting artifact rather than a
+   * content finding. Reported separately from `genuineDisagreements`, never folded into it.
+   */
+  offTargetDisagreements: number;
+  /**
+   * `disagrees` findings whose recorded `factAlignment` is `same-fact` (177-11) — the blind stage
+   * addressed the SAME fact under test and still reached an incompatible reading. This is the
+   * class of finding SC-2 promises a designer.
+   */
+  genuineDisagreements: number;
 }
 
 function emptyDeriveVerdictCounts(): Record<DeriveVerdict, number> {
@@ -833,10 +1141,38 @@ export async function verifyDeriveRecheckCommand(
   const recordedByLocation = new Map(recorded.map((r) => [deriveVerdictKey(r), r] as const));
   const candidateLocations = new Set(candidates.map((c) => deriveVerdictKey(c)));
 
+  // 177-11: targetingAmbiguous/sharedFocusWith are computed per-SLICE (a shared focus passage is
+  // only meaningful among candidates that came from the same slice), via the same
+  // derivePayloadSet the dispatch driver itself calls — never a second, divergent computation.
+  const sliceByPath = new Map(slices.map((s) => [s.path, s] as const));
+  const candidatesBySlice = new Map<string, DerivedLineEntry[]>();
+  for (const c of candidates) {
+    const list = candidatesBySlice.get(c.slicePath) ?? [];
+    list.push(c);
+    candidatesBySlice.set(c.slicePath, list);
+  }
+  const ambiguityByLocation = new Map<string, { targetingAmbiguous: boolean; sharedFocusWith: string[] }>();
+  for (const [slicePath, sliceCandidates] of candidatesBySlice) {
+    const slice = sliceByPath.get(slicePath);
+    if (!slice) continue;
+    for (const payloadEntry of derivePayloadSet(slice, sliceCandidates)) {
+      ambiguityByLocation.set(deriveVerdictKey(payloadEntry.entry), {
+        targetingAmbiguous: payloadEntry.targetingAmbiguous,
+        sharedFocusWith: payloadEntry.sharedFocusWith,
+      });
+    }
+  }
+
   const verdictCounts = emptyDeriveVerdictCounts();
   const staleRecords: string[] = [];
+  let offTargetDisagreements = 0;
+  let genuineDisagreements = 0;
   const findings: DeriveRecheckFinding[] = candidates.map((entry) => {
     const record = recordedByLocation.get(deriveVerdictKey(entry));
+    const ambiguity = ambiguityByLocation.get(deriveVerdictKey(entry)) ?? {
+      targetingAmbiguous: false,
+      sharedFocusWith: [],
+    };
     // 177-10 (closing CR-03): the join is on LOCATION + TEXT, never location alone. A record
     // whose `originalLine` no longer matches the current candidate's text was recorded against
     // text that has since been edited or shifted — inheriting its verdict would report a false
@@ -844,6 +1180,10 @@ export async function verifyDeriveRecheckCommand(
     // mismatch in `staleRecords` instead of silently reusing the stale verdict.
     if (record && record.originalLine === entry.text) {
       verdictCounts[record.verdict]++;
+      if (record.verdict === 'disagrees') {
+        if (record.factAlignment === 'different-fact') offTargetDisagreements++;
+        else if (record.factAlignment === 'same-fact') genuineDisagreements++;
+      }
       return {
         slicePath: entry.slicePath,
         lineNumber: entry.lineNumber,
@@ -856,6 +1196,8 @@ export async function verifyDeriveRecheckCommand(
         ...(record.rederivedReading !== undefined
           ? { rederivedReading: record.rederivedReading }
           : {}),
+        ...(record.factAlignment !== undefined ? { factAlignment: record.factAlignment } : {}),
+        ...ambiguity,
       };
     }
     if (record) {
@@ -871,6 +1213,7 @@ export async function verifyDeriveRecheckCommand(
       originalLine: entry.text,
       verdict: 'pending' as const,
       reasoning: '',
+      ...ambiguity,
     };
   });
 
@@ -885,6 +1228,8 @@ export async function verifyDeriveRecheckCommand(
         `that matches no current candidate.`,
     );
 
+  const targetingAmbiguousCount = findings.filter((f) => f.targetingAmbiguous).length;
+
   const result: VerifyDeriveRecheckResult = {
     project: projectDir,
     enumeratedCount: candidates.length,
@@ -893,6 +1238,9 @@ export async function verifyDeriveRecheckCommand(
     findings,
     staleRecords,
     orphanedRecords,
+    targetingAmbiguousCount,
+    offTargetDisagreements,
+    genuineDisagreements,
   };
 
   if (options.json) {
@@ -909,12 +1257,24 @@ export async function verifyDeriveRecheckCommand(
   for (const v of DERIVE_VERDICTS) {
     console.log(`  ${v}: ${verdictCounts[v]}`);
   }
+  console.log(`  Genuine disagreements (same-fact): ${genuineDisagreements}`);
+  console.log(`  Off-target disagreements (different-fact, targeting artifact): ${offTargetDisagreements}`);
+  console.log(`  Targeting-ambiguous candidates (shared focus passage): ${targetingAmbiguousCount}`);
   for (const finding of findings) {
     if (finding.verdict === 'disagrees') {
       console.log(chalk.yellow(`  ⚠ DISAGREES — ${finding.slicePath}:${finding.lineNumber}`));
       console.log(`    Original:   ${formatReading(finding.originalReading)}`);
       console.log(`    Rederived:  ${formatReading(finding.rederivedReading)}`);
       console.log(`    Reasoning:  ${finding.reasoning}`);
+      console.log(`    FactAlignment: ${finding.factAlignment ?? '(missing)'}`);
+    }
+    if (finding.targetingAmbiguous) {
+      console.log(
+        chalk.yellow(
+          `  ⚠ TARGETING-AMBIGUOUS — ${finding.slicePath}:${finding.lineNumber} shares its ` +
+            `focus passage with: ${finding.sharedFocusWith.join(', ')}`,
+        ),
+      );
     }
   }
   for (const stale of staleRecords) {

@@ -462,6 +462,11 @@ program
     'For disagrees: the blind re-derivation quoted verbatim',
   )
   .option('--source-quote <text...>', 'Quote line(s) the blind dispatch cited (repeatable)')
+  .option(
+    '--fact-alignment <same-fact|different-fact>',
+    'For agrees/disagrees: whether the rederived reading addressed the SAME fact the original ' +
+      'line asserts, or a DIFFERENT one the payload targeting collapsed onto (177-11)',
+  )
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyDeriveRecordCommand);
 
