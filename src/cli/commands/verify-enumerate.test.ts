@@ -895,6 +895,186 @@ describe('QuoteVerifiedProvenance', () => {
 });
 
 // ===========================================================================================
+// QuoteVerifiedProvenance.covers() — the per-slice, multi-source-honest fix (177-19)
+//
+// Reproduces the exact doom-machine shape (177-18-SUMMARY.md): a project with TWO root-level
+// source documents (`rules.pdf`, `cards.pdf`), only `rules.pdf` archived. Before this plan,
+// `QuoteVerifiedProvenance` was a project-wide flag and every slice — including CARDS.md, whose
+// quotes come from the UNARCHIVED `cards.pdf` — was silently treated as quote-verified.
+// ===========================================================================================
+
+/** Builds a project with an archived source at `rulebook/source/<archivedName>` AND, optionally,
+ * extra root-level files that look like unarchived rulebook sources (per
+ * `CANDIDATE_SOURCE_EXTENSIONS`). Mirrors real reference-game layout: the archived file's own
+ * ORIGINAL copy also sits at the project root (that is where `ingest-archive` copies FROM), so
+ * every real single-source project already has exactly one root-level candidate — the archived
+ * one itself — and `unarchivedSources` still resolves to `[]` for it (case (1) below). */
+async function buildProjectWithSources(
+  label: string,
+  archivedName: string,
+  rootExtras: string[],
+): Promise<{ project: string; provenance: QuoteVerifiedProvenance }> {
+  const project = join(dir, label);
+  const rulebookDir = join(project, 'rulebook');
+  await fs.mkdir(rulebookDir, { recursive: true });
+  const sourceBuf = Buffer.from(`%PDF-1.4 fake bytes ${label}\n`);
+  const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+  const relArchivedPath = `rulebook/source/${archivedName}`;
+  await fs.writeFile(
+    join(rulebookDir, 'INDEX.md'),
+    renderIndex({
+      gameName: label,
+      edition: 'First Printing 2020',
+      archivedPath: relArchivedPath,
+      sourceHash,
+      transcribed: '2026-07-28',
+    }),
+  );
+  await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
+  await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+  // The archived file's own original, at the project root — matches every real reference game.
+  await fs.writeFile(join(project, archivedName), sourceBuf);
+  for (const extra of rootExtras) {
+    await fs.writeFile(join(project, extra), Buffer.from(`fake bytes for ${extra}\n`));
+  }
+  const provenance = await QuoteVerifiedProvenance.obtain(project);
+  if (!provenance) throw new Error('test setup failed to construct provenance');
+  return { project, provenance };
+}
+
+describe('QuoteVerifiedProvenance.covers() — multi-source honesty (177-19)', () => {
+  it('case 1 — genuinely single-source: unarchivedSources is [] and every slice is covered', async () => {
+    const { provenance } = await buildProjectWithSources('single-source', 'rules.pdf', []);
+    expect(provenance.unarchivedSources).toEqual([]);
+    expect(provenance.covers('rulebook/01-objective-and-setup.md')).toBe(true);
+    expect(provenance.covers('rulebook/CARDS.md')).toBe(true);
+  });
+
+  it('case 3 (the doom-machine shape) — one unarchived source: a name-matching slice is NOT covered, an unrelated one is', async () => {
+    const { provenance } = await buildProjectWithSources('two-source-doom-machine', 'rules.pdf', [
+      'cards.pdf',
+    ]);
+    expect(provenance.unarchivedSources).toEqual(['cards.pdf']);
+    // CARDS.md's stem ("cards") matches cards.pdf's stem ("cards") — not covered.
+    expect(provenance.covers('rulebook/CARDS.md')).toBe(false);
+    // An ordinary rules.pdf-sourced slice shares no name with cards.pdf — covered.
+    expect(provenance.covers('rulebook/01-objective-and-setup.md')).toBe(true);
+    expect(provenance.covers('rulebook/02-machine-phase.md')).toBe(true);
+  });
+
+  it('case 2 — two or more unarchived candidates: refuses to vouch for ANY slice (too ambiguous to attempt the heuristic)', async () => {
+    const { provenance } = await buildProjectWithSources('three-source', 'rules.pdf', [
+      'cards.pdf',
+      'appendix.pdf',
+    ]);
+    expect(provenance.unarchivedSources.sort()).toEqual(['appendix.pdf', 'cards.pdf']);
+    expect(provenance.covers('rulebook/CARDS.md')).toBe(false);
+    expect(provenance.covers('rulebook/01-objective-and-setup.md')).toBe(false);
+  });
+
+  it('short stems (below MIN_STEM_MATCH_LENGTH) fail closed rather than risk an unreliable match', async () => {
+    const { provenance } = await buildProjectWithSources('short-stem', 'rules.pdf', ['faq.pdf']);
+    expect(provenance.unarchivedSources).toEqual(['faq.pdf']);
+    // "faq" (3 chars) and the slice's own short stem are both below the trust threshold —
+    // conservative default is uncovered, not a risky match attempt.
+    expect(provenance.covers('rulebook/faq.md')).toBe(false);
+  });
+});
+
+describe('classifyDerivedLines — provenance gated per-slice, not per-project (177-19)', () => {
+  it('EMPIRICAL PROOF the gap existed and is now closed: a CARDS.md-shaped uncorroborated claim downgrades to quote-unverified even though the project has non-null provenance, while a rules.pdf-shaped claim in the SAME project does not', async () => {
+    const { provenance } = await buildProjectWithSources(
+      'classify-multi-source',
+      'rules.pdf',
+      ['cards.pdf'],
+    );
+
+    const cardsClaim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/CARDS.md',
+      lineNumber: 30,
+      derivedLineText: 'Derived: the yellow-vs-grey connector colour is the reliable tell.',
+      proposedClassification: 'uncorroborated',
+      citedFactIds: [],
+    };
+    const rulesClaim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/01-objective-and-setup.md',
+      lineNumber: 36,
+      derivedLineText: 'Derived (p.1): some unsupported inference.',
+      proposedClassification: 'uncorroborated',
+      citedFactIds: [],
+    };
+
+    const result = classifyDerivedLines({
+      claims: [cardsClaim, rulesClaim],
+      groundedBoth: [],
+      composed: [],
+      provenance,
+    });
+
+    const cardsResult = result.classifications.find((c) => c.slicePath === 'rulebook/CARDS.md')!;
+    const rulesResult = result.classifications.find(
+      (c) => c.slicePath === 'rulebook/01-objective-and-setup.md',
+    )!;
+
+    // The fix: CARDS.md is downgraded — provenance does not cover it (cards.pdf, its real
+    // source, was never archived).
+    expect(cardsResult.classification).toBe('quote-unverified');
+    expect(cardsResult.reason).toMatch(/does not cover/);
+    expect(cardsResult.reason).toMatch(/cards\.pdf/);
+
+    // rules.pdf's own slice is unaffected — the archived source genuinely covers it.
+    expect(rulesResult.classification).toBe('uncorroborated');
+  });
+
+  it('a `contradicted` proposal on an uncovered slice downgrades to quote-unverified rather than reporting a confident false accusation', async () => {
+    const { provenance } = await buildProjectWithSources(
+      'classify-multi-source-contradicted',
+      'rules.pdf',
+      ['cards.pdf'],
+    );
+    const fact = groundedNumeric('some corroborated fact', 3, 'x');
+    const claim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/CARDS.md',
+      lineNumber: 140,
+      derivedLineText: '(Derived: effectively a 2-space loop.)',
+      proposedClassification: 'contradicted',
+      citedFactIds: [fact.id],
+    };
+    const result = classifyDerivedLines({
+      claims: [claim],
+      groundedBoth: [fact],
+      composed: [],
+      provenance,
+    });
+    expect(result.classifications[0].classification).toBe('quote-unverified');
+  });
+
+  it('an `absence` proposal on an uncovered slice downgrades to quote-unverified, mirroring the uncorroborated/contradicted gate', async () => {
+    const { provenance } = await buildProjectWithSources(
+      'classify-multi-source-absence',
+      'rules.pdf',
+      ['cards.pdf'],
+    );
+    const claim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/CARDS.md',
+      lineNumber: 200,
+      derivedLineText: 'Derived: no card ever has more than one Lock icon.',
+      proposedClassification: 'absence',
+      citedFactIds: [],
+      absenceTargets: ['second lock icon'],
+    };
+    const result = classifyDerivedLines({
+      claims: [claim],
+      groundedBoth: [],
+      composed: [],
+      provenance,
+      passages: { 'rulebook/CARDS.md': 'p.3: some passage text.\n' },
+    });
+    expect(result.classifications[0].classification).toBe('quote-unverified');
+  });
+});
+
+// ===========================================================================================
 // classifyDerivedLines — cross-reference + the quote-provenance downgrade guard
 // ===========================================================================================
 
