@@ -279,10 +279,23 @@ export async function readLiveSlices(
       )
       .map((e) => e.name)
       .sort();
-  } catch {
+  } catch (err) {
+    // 177-10 (closing WR-02/WR-10): this is the ONE "no rulebook/" message left in the module —
+    // the redundant directory pre-check in `verifyDeriveRecheckCommand` is gone, and this is
+    // the sole place the `--project` sentence lives. Only ENOENT means "does not exist"; any
+    // other errno (EACCES, ENOTDIR, ...) is a real, different condition and must say so, never be
+    // reported as a missing directory.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new Error(
+        `No rulebook/ directory in ${projectDir}.\n` +
+          `Pass --project <dir> to target the bs-project this check should read.`,
+      );
+    }
     throw new Error(
-      `No rulebook/ directory in ${projectDir}.\n` +
-        `CHECK-04 re-derives Derived lines against the live rulebook — nothing to read here.`,
+      `rulebook/ exists at ${rulebookDir} but could not be read (${code ?? 'unknown error'}).\n` +
+        `Pass --project <dir> to target the bs-project this check should read, and confirm the ` +
+        `directory is accessible.`,
     );
   }
   return Promise.all(
@@ -660,12 +673,37 @@ export interface VerifyDeriveRecheckResult {
   presentationExcludedCount: number;
   verdictCounts: Record<DeriveVerdict, number>;
   findings: DeriveRecheckFinding[];
+  /**
+   * One human-readable line per ledger record whose `originalLine` no longer matches the current
+   * candidate's text at that location (177-10, closing CR-03) — the line was edited or shifted
+   * since the verdict was recorded, so the finding reports `pending` rather than inheriting a
+   * verdict for text that was never re-derived.
+   */
+  staleRecords: string[];
+  /**
+   * One human-readable line per ledger record whose location matches no current candidate
+   * (177-10, closing WR-03) — a deleted slice, a moved line, or a line the widened presentation
+   * markers now exclude. Never silently dropped from the report.
+   */
+  orphanedRecords: string[];
 }
 
 function emptyDeriveVerdictCounts(): Record<DeriveVerdict, number> {
   const counts = {} as Record<DeriveVerdict, number>;
   for (const v of DERIVE_VERDICTS) counts[v] = 0;
   return counts;
+}
+
+/**
+ * Renders a `disagrees` finding's `originalReading`/`rederivedReading` for the human report
+ * (177-10, closing WR-06). `createDeriveVerdictRecord` + the read path's revalidation
+ * (177-09, CR-02) together mean an empty reading cannot reach a `disagrees` finding through any
+ * path this module exposes today — but a designer-facing report must never interpolate a
+ * possibly-undefined value directly (that path is what produced the literal string `undefined`),
+ * so the printer always routes through this explicit fallback rather than trusting the type.
+ */
+export function formatReading(value: string | undefined): string {
+  return value ?? '(missing — re-run the comparison dispatch)';
 }
 
 /**
@@ -689,27 +727,27 @@ export async function verifyDeriveRecheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<VerifyDeriveRecheckResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const rulebookDir = join(projectDir, 'rulebook');
-  try {
-    await fs.access(rulebookDir);
-  } catch {
-    throw new Error(
-      `No rulebook/ directory in ${projectDir}.\n` +
-        `Pass --project <dir> to target the bs-project this check should read.`,
-    );
-  }
 
+  // 177-10 (closing WR-10): the redundant directory pre-check that used to live here is gone —
+  // it succeeded for a regular file named `rulebook` and so never established what its message
+  // claimed. `readLiveSlices` is now the ONE "no rulebook/" throw site in this module (see also
+  // WR-02, closed there).
   const slices = await readLiveSlices(projectDir);
   const { candidates, excluded } = enumerateDerivedLines(slices);
   const recorded = await readDeriveVerdicts(projectDir);
-  const recordedByLocation = new Map(
-    recorded.map((r) => [`${r.slicePath}:${r.lineNumber}`, r] as const),
-  );
+  const recordedByLocation = new Map(recorded.map((r) => [deriveVerdictKey(r), r] as const));
+  const candidateLocations = new Set(candidates.map((c) => deriveVerdictKey(c)));
 
   const verdictCounts = emptyDeriveVerdictCounts();
+  const staleRecords: string[] = [];
   const findings: DeriveRecheckFinding[] = candidates.map((entry) => {
-    const record = recordedByLocation.get(`${entry.slicePath}:${entry.lineNumber}`);
-    if (record) {
+    const record = recordedByLocation.get(deriveVerdictKey(entry));
+    // 177-10 (closing CR-03): the join is on LOCATION + TEXT, never location alone. A record
+    // whose `originalLine` no longer matches the current candidate's text was recorded against
+    // text that has since been edited or shifted — inheriting its verdict would report a false
+    // confirmation of text that was never re-derived. Report it `pending` and surface the
+    // mismatch in `staleRecords` instead of silently reusing the stale verdict.
+    if (record && record.originalLine === entry.text) {
       verdictCounts[record.verdict]++;
       return {
         slicePath: entry.slicePath,
@@ -725,6 +763,13 @@ export async function verifyDeriveRecheckCommand(
           : {}),
       };
     }
+    if (record) {
+      staleRecords.push(
+        `${entry.slicePath}:${entry.lineNumber} has a recorded verdict for different text ` +
+          `("${record.originalLine}") — reporting it pending, never inheriting a verdict for a ` +
+          `line that changed.`,
+      );
+    }
     return {
       slicePath: entry.slicePath,
       lineNumber: entry.lineNumber,
@@ -734,12 +779,25 @@ export async function verifyDeriveRecheckCommand(
     };
   });
 
+  // 177-10 (closing WR-03): a ledger record whose location matches no current candidate (a
+  // deleted slice, a moved line, a line the widened presentation markers now exclude) is reported
+  // as an orphan, never silently discarded — enumerate-and-report, the module's stated posture.
+  const orphanedRecords = recorded
+    .filter((r) => !candidateLocations.has(deriveVerdictKey(r)))
+    .map(
+      (r) =>
+        `${r.slicePath}:${r.lineNumber} has a recorded verdict ("${r.verdict}") for a location ` +
+        `that matches no current candidate.`,
+    );
+
   const result: VerifyDeriveRecheckResult = {
     project: projectDir,
     enumeratedCount: candidates.length,
     presentationExcludedCount: excluded.length,
     verdictCounts,
     findings,
+    staleRecords,
+    orphanedRecords,
   };
 
   if (options.json) {
@@ -759,10 +817,16 @@ export async function verifyDeriveRecheckCommand(
   for (const finding of findings) {
     if (finding.verdict === 'disagrees') {
       console.log(chalk.yellow(`  ⚠ DISAGREES — ${finding.slicePath}:${finding.lineNumber}`));
-      console.log(`    Original:   ${finding.originalReading}`);
-      console.log(`    Rederived:  ${finding.rederivedReading}`);
+      console.log(`    Original:   ${formatReading(finding.originalReading)}`);
+      console.log(`    Rederived:  ${formatReading(finding.rederivedReading)}`);
       console.log(`    Reasoning:  ${finding.reasoning}`);
     }
+  }
+  for (const stale of staleRecords) {
+    console.log(chalk.yellow(`  ⚠ STALE — ${stale}`));
+  }
+  for (const orphan of orphanedRecords) {
+    console.log(chalk.yellow(`  ⚠ ORPHANED — ${orphan}`));
   }
 
   return result;

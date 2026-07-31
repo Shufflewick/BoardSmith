@@ -17,6 +17,7 @@ import {
   recordDeriveVerdict,
   readDeriveVerdicts,
   verifyDeriveRecheckCommand,
+  formatReading,
   type DerivedLineEntry,
   type DeriveVerdictRecord,
 } from './verify-derive-recheck.js';
@@ -1119,5 +1120,137 @@ describe('verifyDeriveRecheckCommand', () => {
     const result = await verifyDeriveRecheckCommand({ project: dir });
     expect(result.findings.every((f) => f.verdict === 'pending')).toBe(true);
     expect(result.findings.length).toBeGreaterThan(0);
+  });
+
+  // 177-10, closing CR-03: the join is on LOCATION + TEXT, never location alone.
+  it('a ledger record recorded for line 4, then the line text rewritten, reports pending and lists a staleRecords entry (CR-03 executed proof — fails against the pre-fix line-number-only join)', async () => {
+    await recordDeriveVerdict(
+      dir,
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 4,
+        originalLine: 'Derived (p.1): The box contains 112 cards.',
+        verdict: 'agrees',
+        reasoning: 'Matches the quoted component count.',
+        rederivedValue: 'The box contains 112 cards.',
+        sourceQuotes: ['The box contains 112 cards.'],
+      }),
+    );
+
+    // Rewrite line 4 in place — same location, different text, exactly the CR-03 proof shape.
+    await fs.writeFile(
+      join(dir, 'rulebook', '01-x.md'),
+      [
+        'p.1, Components:',
+        '"The box contains 112 cards."',
+        '',
+        'Derived (p.1): A COMPLETELY DIFFERENT RULE.',
+        '',
+        'p.1, Distribution:',
+        '"Each player has 7 Action Cards."',
+        '',
+        'Derived (p.1): Each player has 8 Action Cards.',
+      ].join('\n'),
+    );
+
+    const result = await verifyDeriveRecheckCommand({ project: dir });
+    const finding = result.findings.find((f) => f.lineNumber === 4)!;
+    expect(finding.verdict).toBe('pending');
+    expect(result.staleRecords).toHaveLength(1);
+    expect(result.staleRecords[0]).toContain('rulebook/01-x.md:4');
+    expect(result.staleRecords[0]).toContain('The box contains 112 cards.');
+    // A stale record must never contribute to verdictCounts (it never counted as a live agrees).
+    expect(result.verdictCounts.agrees).toBe(0);
+  });
+
+  it('a ledger record whose location matches no current candidate is reported in orphanedRecords, never silently absorbed (WR-03)', async () => {
+    await recordDeriveVerdict(
+      dir,
+      createDeriveVerdictRecord({
+        slicePath: 'rulebook/deleted-slice.md',
+        lineNumber: 7,
+        originalLine: 'Derived (p.9): A rule from a slice that no longer exists.',
+        verdict: 'agrees',
+        reasoning: 'Matched at the time.',
+        rederivedValue: 'A rule from a slice that no longer exists.',
+        sourceQuotes: ['some quote'],
+      }),
+    );
+
+    const result = await verifyDeriveRecheckCommand({ project: dir });
+    expect(result.orphanedRecords).toHaveLength(1);
+    expect(result.orphanedRecords[0]).toContain('rulebook/deleted-slice.md:7');
+    // The orphan never manufactures a phantom finding.
+    expect(result.findings.some((f) => f.slicePath === 'rulebook/deleted-slice.md')).toBe(false);
+  });
+
+  it('formatReading never interpolates the literal "undefined" for a missing reading (WR-06)', () => {
+    // `createDeriveVerdictRecord` + the read path's revalidation (CR-02, closed in 177-09)
+    // together mean a `disagrees` finding with a missing reading cannot reach the printer through
+    // any path this module exposes today (attempting to hand-seed such a ledger record is itself
+    // rejected by `readDeriveVerdicts`'s revalidation — proof that CR-02 already closed the
+    // "reachable through the unvalidated read path" route WR-06 originally named). The printer's
+    // fallback is still exercised directly here, defensively, since a designer-facing report must
+    // never trust the type over interpolating a value that could be undefined at runtime.
+    expect(formatReading(undefined)).toBe('(missing — re-run the comparison dispatch)');
+    expect(formatReading('Each player has 7 Action Cards.')).toBe(
+      'Each player has 7 Action Cards.',
+    );
+  });
+
+  it('hand-seeding a ledger record with a missing disagrees reading is rejected by the read path, proving WR-06\'s original "reachable via CR-02" route is closed', async () => {
+    const ledgerDir = join(dir, 'rulebook', '.derive-recheck');
+    await fs.mkdir(ledgerDir, { recursive: true });
+    const record = {
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 9,
+      originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
+      verdict: 'disagrees',
+      reasoning: 'Old-format record with a missing reading.',
+      rederivedValue: 'Each player has 7 Action Cards.',
+      sourceQuotes: ['Each player has 7 Action Cards.'],
+      // originalReading / rederivedReading deliberately absent.
+    };
+    await fs.writeFile(
+      join(ledgerDir, 'DERIVE-VERDICTS.md'),
+      `# Derive Verdicts (CHECK-04) — project-level, no run-id\n\n` +
+        `<!-- boardsmith:derive-verdicts:begin -->\n` +
+        `${JSON.stringify(record)}\n` +
+        `<!-- boardsmith:derive-verdicts:end -->\n`,
+    );
+
+    await expect(verifyDeriveRecheckCommand({ project: dir })).rejects.toThrow(
+      /no originalReading quoted verbatim/,
+    );
+  });
+
+  it('rulebook/ present but unreadable (EACCES) reports the real condition, not "No rulebook/ directory" (WR-02)', async () => {
+    const unreadableDir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-recheck-eacces-'));
+    const rulebookDir = join(unreadableDir, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    await fs.chmod(rulebookDir, 0o000);
+    try {
+      await expect(verifyDeriveRecheckCommand({ project: unreadableDir })).rejects.toThrow(
+        /could not be read/,
+      );
+      try {
+        await verifyDeriveRecheckCommand({ project: unreadableDir });
+      } catch (err) {
+        const message = (err as Error).message;
+        expect(message).not.toMatch(/No rulebook\/ directory/);
+      }
+    } finally {
+      await fs.chmod(rulebookDir, 0o755);
+      await fs.rm(unreadableDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exactly one "No rulebook/ directory" message exists in the module source (WR-10 — the redundant pre-check is gone)', () => {
+    const source = readFileSync(
+      join(__dirname, 'verify-derive-recheck.ts'),
+      'utf-8',
+    ).replace(/^\s*\*.*$/gm, '');
+    const matches = source.match(/No rulebook\/ directory/g) ?? [];
+    expect(matches).toHaveLength(1);
   });
 });
