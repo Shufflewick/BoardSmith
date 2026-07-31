@@ -1,0 +1,36 @@
+{
+  "facts": [
+    {
+      "statement": "Machine part cards have a portrait orientation",
+      "sourceSentence": "a single portrait teal machine part card"
+    },
+    {
+      "statement": "Machine part cards are teal in color",
+      "sourceSentence": "a single portrait teal machine part card"
+    },
+    {
+      "statement": "Machine part cards have a name element positioned in the title bar at the top of the card",
+      "sourceSentence": "(1) points at the title bar across the top of the card"
+    },
+    {
+      "statement": "Machine part cards have roll conditions indicated by yellow roll-condition tiles positioned on the middle-right of the card face",
+      "sourceSentence": "(2) points at the yellow roll-condition tiles on the middle-right of the card face"
+    },
+    {
+      "statement": "Machine part cards have a machine part cycle track consisting of a vertical column of track squares positioned on the left side of the card",
+      "sourceSentence": "(3) points at the vertical column of track squares running down the left side of the card"
+    },
+    {
+      "statement": "The machine part cycle track contains a yellow HP die",
+      "sourceSentence": "which holds the yellow HP die"
+    },
+    {
+      "statement": "Machine part cards have cycle icon effects represented by small colored icon badges embedded in the track or lower card area",
+      "sourceSentence": "(4) points at the small colored icon badges embedded in the track / lower card area"
+    },
+    {
+      "statement": "The cycle icon badges fire when the die lands on them",
+      "sourceSentence": "that fire when the die lands on them"
+    }
+  ]
+}

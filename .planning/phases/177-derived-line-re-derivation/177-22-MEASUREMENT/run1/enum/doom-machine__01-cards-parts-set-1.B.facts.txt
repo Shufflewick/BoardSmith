@@ -1,0 +1,303 @@
+{
+  "facts": [
+    {
+      "statement": "This card is a machine part.",
+      "sourceSentence": "**Type:** machine part"
+    },
+    {
+      "statement": "This card starts with 3 health points.",
+      "sourceSentence": "**Starting HP: 3** (yellow die shows 3 pips)",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "starting HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card's roll condition requires three dice, all showing one pip.",
+      "sourceSentence": "**Roll condition (1 tile):** `[1] + [1] + [1]` — three black die faces each showing one pip, joined by \"+\". Meaning (per 01-dice-roll-symbology.md, cf. the \"all sixes\" example): **3 dice required; they must all be 1s.**",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card's cycle track has 5 spaces.",
+      "sourceSentence": "**Cycle track (5 spaces, top → bottom → right):**",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "spaces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Cycle position 1 has an HP die slot set to 3.",
+      "sourceSentence": "1. HP die slot (die set to 3)",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Cycle position 2 has a Power+Sentience icon.",
+      "sourceSentence": "2. Power+Sentience icon"
+    },
+    {
+      "statement": "Cycle position 3 is a blank space with no icon.",
+      "sourceSentence": "3. Blank space (no icon)"
+    },
+    {
+      "statement": "Cycle position 4 has a Power+Sentience icon.",
+      "sourceSentence": "4. Power+Sentience icon"
+    },
+    {
+      "statement": "Cycle position 5 is dead space (hatched).",
+      "sourceSentence": "5. Dead space (hatched)"
+    },
+    {
+      "statement": "This card grants +1 Power.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 3 (Power+Sentience strip): \"+1 POWER AND +1 SENTIENCE\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Power",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card grants +1 Sentience.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 3 (Power+Sentience strip): \"+1 POWER AND +1 SENTIENCE\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Sentience",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "When destroyed, this card deals 1 damage to all parts in play.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 3: \"DEAL 1 DMG TO ALL PARTS IN PLAY\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card is a machine part.",
+      "sourceSentence": "**Type:** machine part"
+    },
+    {
+      "statement": "This card starts with 6 health points.",
+      "sourceSentence": "**Starting HP: 6**",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "starting HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card's roll condition requires one die showing either 2 or 3 pips.",
+      "sourceSentence": "**Roll condition (1 tile):** `[2] / [3]` — a two-pip face, a slash, a three-pip face. Meaning: **1 die required; it can be either a 2 or a 3.**",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card's cycle track has 5 spaces.",
+      "sourceSentence": "**Cycle track (5 spaces):**",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "spaces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Cycle position 1 has an HP die slot set to 6.",
+      "sourceSentence": "1. HP die slot (6)",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Cycle position 2 is damage.",
+      "sourceSentence": "2. Damage"
+    },
+    {
+      "statement": "Cycle position 3 is damage.",
+      "sourceSentence": "3. Damage"
+    },
+    {
+      "statement": "Cycle position 4 is damage.",
+      "sourceSentence": "4. Damage"
+    },
+    {
+      "statement": "Cycle position 5 is dead space (hatched).",
+      "sourceSentence": "5. Dead space (hatched)"
+    },
+    {
+      "statement": "This card's effect deals damage equal to the health points of the left adjacent part.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 2 col 1 (Damage strip): \"DEAL DMG = HP OF LEFT ADJACENT PART\""
+    },
+    {
+      "statement": "When destroyed, this card deals 2 damage to the left adjacent part.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 2 col 1: \"DEAL 2 DMG TO LEFT ADJACENT PART\"",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card is a machine part.",
+      "sourceSentence": "**Type:** machine part"
+    },
+    {
+      "statement": "This card starts with 4 health points.",
+      "sourceSentence": "**Starting HP: 4**",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "starting HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card's roll condition requires two dice, both showing 6 pips.",
+      "sourceSentence": "**Roll condition (1 tile):** `[6] + [6]` — two six-pip faces joined by \"+\". Meaning: **2 dice required; they must both be 6s.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card's cycle track has 5 spaces.",
+      "sourceSentence": "**Cycle track (5 spaces):**",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "spaces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Cycle position 1 has an HP die slot set to 4.",
+      "sourceSentence": "1. HP die slot (4)",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Cycle position 2 is damage.",
+      "sourceSentence": "2. Damage"
+    },
+    {
+      "statement": "Cycle position 3 is damage.",
+      "sourceSentence": "3. Damage"
+    },
+    {
+      "statement": "Cycle position 4 is broken shield.",
+      "sourceSentence": "4. Broken Shield"
+    },
+    {
+      "statement": "Cycle position 5 is dead space (hatched).",
+      "sourceSentence": "5. Dead space (hatched)"
+    },
+    {
+      "statement": "This card's damage effect deals 3 damage.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 2 col 2 (Damage strip): \"DEAL 3 DMG\"",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card's broken shield effect restricts shield dice to only 1 die playable next turn.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 2 col 2 (Broken Shield strip): \"ONLY 1 SHIELD DIE CAN BE PLAYED NEXT TURN\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "shield die",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card has no printed destroy effect.",
+      "sourceSentence": "**Destroy effect:** none printed."
+    },
+    {
+      "statement": "This card is a machine part.",
+      "sourceSentence": "**Type:** machine part"
+    },
+    {
+      "statement": "This card starts with 4 health points.",
+      "sourceSentence": "**Starting HP: 4**",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "starting HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card's roll condition requires two dice that are doubles.",
+      "sourceSentence": "**Roll condition (1 tile):** `[?] = [?]` — two \"?\" faces joined by \"=\". Meaning: **2 dice required; they must be doubles.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This card's cycle track has 5 spaces.",
+      "sourceSentence": "**Cycle track (5 spaces):**",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "spaces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Cycle position 1 has an HP die slot set to 4.",
+      "sourceSentence": "1. HP die slot (4)",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Cycle position 2 is damage.",
+      "sourceSentence": "2. Damage"
+    },
+    {
+      "statement": "Cycle position 3 is dead space (hatched).",
+      "sourceSentence": "3. Dead space (hatched)"
+    },
+    {
+      "statement": "Cycle position 4 is dead space (hatched).",
+      "sourceSentence": "4. Dead space (hatched)"
+    },
+    {
+      "statement": "Cycle position 5 is dead space (hatched).",
+      "sourceSentence": "5. Dead space (hatched)"
+    },
+    {
+      "statement": "This card's damage effect deals 1 damage for every part card in play.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 2 col 3 (Damage strip): \"DEAL 1 DMG FOR EVERY PART CARD IN PLAY\""
+    },
+    {
+      "statement": "When destroyed, this card reduces Power by 1.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 2 col 3: \"-1 POWER\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Power",
+        "approximate": false
+      }
+    }
+  ]
+}

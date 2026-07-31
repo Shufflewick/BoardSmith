@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 87615,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "069598d8-ba3a-4270-aaaa-ef3f221c1627",
+    "total_cost_usd": 0.0741036,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 13160,
+      "cache_read_input_tokens": 17536,
+      "output_tokens": 9204,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 13160,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 9204,
+          "cache_read_input_tokens": 17536,
+          "cache_creation_input_tokens": 13160,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 13160
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 9204,
+        "cacheReadInputTokens": 17536,
+        "cacheCreationInputTokens": 13160,
+        "webSearchRequests": 0,
+        "costUSD": 0.0741036,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"Machine part cards have a portrait orientation\",\n      \"sourceSentence\": \"a single portrait teal machine part card\"\n    },\n    {\n      \"statement\": \"Machine part cards are teal in color\",\n      \"sourceSentence\": \"a single portrait teal machine part card\"\n    },\n    {\n      \"statement\": \"Machine part cards have a name element positioned in the title bar at the top of the card\",\n      \"sourceSentence\": \"(1) points at the title bar across the top of the card\"\n    },\n    {\n      \"statement\": \"Machine part cards have roll conditions indicated by yellow roll-condition tiles positioned on the middle-right of the card face\",\n      \"sourceSentence\": \"(2) points at the yellow roll-condition tiles on the middle-right of the card face\"\n    },\n    {\n      \"statement\": \"Machine part cards have a machine part cycle track consisting of a vertical column of track squares positioned on the left side of the card\",\n      \"sourceSentence\": \"(3) points at the vertical column of track squares running down the left side of the card\"\n    },\n    {\n      \"statement\": \"The machine part cycle track contains a yellow HP die\",\n      \"sourceSentence\": \"which holds the yellow HP die\"\n    },\n    {\n      \"statement\": \"Machine part cards have cycle icon effects represented by small colored icon badges embedded in the track or lower card area\",\n      \"sourceSentence\": \"(4) points at the small colored icon badges embedded in the track / lower card area\"\n    },\n    {\n      \"statement\": \"The cycle icon badges fire when the die lands on them\",\n      \"sourceSentence\": \"that fire when the die lands on them\"\n    }\n  ]\n}\n```",
+    "ttft_ms": 85412,
+    "ttft_stream_ms": 1527,
+    "time_to_request_ms": 429,
+    "type": "result",
+    "duration_ms": 88474,
+    "uuid": "3371f023-067a-410b-8019-fa5397e98d1e"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"Machine part cards have a portrait orientation\",\n      \"sourceSentence\": \"a single portrait teal machine part card\"\n    },\n    {\n      \"statement\": \"Machine part cards are teal in color\",\n      \"sourceSentence\": \"a single portrait teal machine part card\"\n    },\n    {\n      \"statement\": \"Machine part cards have a name element positioned in the title bar at the top of the card\",\n      \"sourceSentence\": \"(1) points at the title bar across the top of the card\"\n    },\n    {\n      \"statement\": \"Machine part cards have roll conditions indicated by yellow roll-condition tiles positioned on the middle-right of the card face\",\n      \"sourceSentence\": \"(2) points at the yellow roll-condition tiles on the middle-right of the card face\"\n    },\n    {\n      \"statement\": \"Machine part cards have a machine part cycle track consisting of a vertical column of track squares positioned on the left side of the card\",\n      \"sourceSentence\": \"(3) points at the vertical column of track squares running down the left side of the card\"\n    },\n    {\n      \"statement\": \"The machine part cycle track contains a yellow HP die\",\n      \"sourceSentence\": \"which holds the yellow HP die\"\n    },\n    {\n      \"statement\": \"Machine part cards have cycle icon effects represented by small colored icon badges embedded in the track or lower card area\",\n      \"sourceSentence\": \"(4) points at the small colored icon badges embedded in the track / lower card area\"\n    },\n    {\n      \"statement\": \"The cycle icon badges fire when the die lands on them\",\n      \"sourceSentence\": \"that fire when the die lands on them\"\n    }\n  ]\n}"
+}

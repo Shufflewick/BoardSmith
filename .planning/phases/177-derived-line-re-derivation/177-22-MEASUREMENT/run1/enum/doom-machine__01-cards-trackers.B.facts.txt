@@ -1,0 +1,167 @@
+{
+  "facts": [
+    {
+      "statement": "The card displays the text label 'PLAYER HP'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 1: \"PLAYER HP\""
+    },
+    {
+      "statement": "The card displays the text label 'A SIDE'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 1: \"A SIDE\""
+    },
+    {
+      "statement": "The card displays the text label 'SHIELD'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 1: \"SHIELD\""
+    },
+    {
+      "statement": "The card displays the text label '1X ROUND'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 1: \"1X ROUND\""
+    },
+    {
+      "statement": "The card displays the text label 'UTILITY'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 1: \"UTILITY\""
+    },
+    {
+      "statement": "The Player HP track has a heart badge at the top.",
+      "sourceSentence": "heart badge at top, then a serpentine numbered track: 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0."
+    },
+    {
+      "statement": "The Player HP track is a serpentine numbered track with spaces ranging from 10 down to 0.",
+      "sourceSentence": "then a serpentine numbered track: 10, 9 / 7, 8 / 6, 5 / 3, 4 / 2, 1 / 0. (11 spaces, 10 down to 0.)",
+      "numericValue": {
+        "magnitude": 11,
+        "unit": "spaces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The SHIELD section has 4 slots with shield-with-plus badges arranged in a 2x2 grid.",
+      "sourceSentence": "SHIELD section: 4 slots. Four shield-with-\"+\" badges in a 2x2 arrangement.",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "shield slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The UTILITY section (labeled '1X ROUND') has 6 slots total.",
+      "sourceSentence": "UTILITY section (labelled \"1X ROUND\"): 6 slots total —",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "utility slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The UTILITY section contains 3 roll-modifier slots marked with '+/-'.",
+      "sourceSentence": "3 x \"+/-\" roll-modifier slots",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "roll-modifier slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The UTILITY section contains 3 re-roll slots marked with a two-white-dice glyph.",
+      "sourceSentence": "3 x re-roll slots (two-white-dice glyph)",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "re-roll slots",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The UTILITY section layout has row 1 with two '+/-' slots, row 2 with one '+/-' and one re-roll slot, and row 3 with two re-roll slots.",
+      "sourceSentence": "Printed layout: row 1 = [+/-] [+/-]; row 2 = [+/-] [dice]; row 3 = [dice] [dice]."
+    },
+    {
+      "statement": "The Player HP tracker has no roll conditions.",
+      "sourceSentence": "No roll conditions, no cycle track, no destroy effect."
+    },
+    {
+      "statement": "The Player HP tracker has no cycle track.",
+      "sourceSentence": "No roll conditions, no cycle track, no destroy effect."
+    },
+    {
+      "statement": "The Player HP tracker has no destroy effect.",
+      "sourceSentence": "No roll conditions, no cycle track, no destroy effect."
+    },
+    {
+      "statement": "The Doom Machine card displays the word 'THE'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 2: \"THE\""
+    },
+    {
+      "statement": "The Doom Machine card displays the word 'DOOM'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 2: \"DOOM\""
+    },
+    {
+      "statement": "The Doom Machine card displays the word 'MACHINE'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 2: \"MACHINE\""
+    },
+    {
+      "statement": "The Doom Machine card displays the word 'SENTIENCE'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 2: \"SENTIENCE\""
+    },
+    {
+      "statement": "The Doom Machine card displays the word 'POWER'.",
+      "sourceSentence": "QUOTE — cards.pdf p.1, row 1 col 2: \"POWER\""
+    },
+    {
+      "statement": "The Sentience track displays the numerals 10, 9, 7, 8, 6, 5, 3, 4, 2, 1, 0 from top to bottom.",
+      "sourceSentence": "QUOTE (Sentience track numerals, top to bottom): \"10\" \"9\" \"7\" \"8\" \"6\" \"5\" \"3\" \"4\" \"2\" \"1\" \"0\"",
+      "numericValue": {
+        "magnitude": 11,
+        "unit": "numerals",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The Power track displays the numerals 10, 9, 7, 8, 6, 5, 3, 4, 2, 1, 0 from top to bottom.",
+      "sourceSentence": "QUOTE (Power track numerals, top to bottom): \"10\" \"9\" \"7\" \"8\" \"6\" \"5\" \"3\" \"4\" \"2\" \"1\" \"0\"",
+      "numericValue": {
+        "magnitude": 11,
+        "unit": "numerals",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The Doom Machine card has two parallel serpentine tracks, each ranging from 0 to 10.",
+      "sourceSentence": "Two parallel serpentine 0–10 tracks."
+    },
+    {
+      "statement": "A yellow eye badge marks the Sentience track and is positioned above the left track.",
+      "sourceSentence": "Art: an eye badge (Sentience, yellow) above the left track"
+    },
+    {
+      "statement": "A black battery badge marks the Power track and is positioned above the right track.",
+      "sourceSentence": "Art: a battery badge (Power, black) above the right track"
+    },
+    {
+      "statement": "A 'THE DOOM MACHINE' logo plate is positioned between the two tracks.",
+      "sourceSentence": "the \"THE DOOM MACHINE\" logo plate between them"
+    },
+    {
+      "statement": "The Doom Machine tracker card does not define what the Power and Sentience tracks do.",
+      "sourceSentence": "This card does NOT define what the Power and Sentience tracks do."
+    },
+    {
+      "statement": "The Doom Machine card defines only the range (0 through 10) for the Power and Sentience tracks.",
+      "sourceSentence": "It defines only their RANGE (0 through 10)."
+    },
+    {
+      "statement": "No threshold is printed anywhere on the Doom Machine card.",
+      "sourceSentence": "No threshold, no trigger, no win/loss condition, no per-turn effect is printed anywhere on it."
+    },
+    {
+      "statement": "No trigger condition is printed anywhere on the Doom Machine card.",
+      "sourceSentence": "No threshold, no trigger, no win/loss condition, no per-turn effect is printed anywhere on it."
+    },
+    {
+      "statement": "No win/loss condition is printed anywhere on the Doom Machine card.",
+      "sourceSentence": "No threshold, no trigger, no win/loss condition, no per-turn effect is printed anywhere on it."
+    },
+    {
+      "statement": "No per-turn effect is printed anywhere on the Doom Machine card.",
+      "sourceSentence": "No threshold, no trigger, no win/loss condition, no per-turn effect is printed anywhere on it."
+    }
+  ]
+}

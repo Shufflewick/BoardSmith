@@ -1,0 +1,126 @@
+{
+  "facts": [
+    {
+      "statement": "Players may place any number of unallocated dice on available utility slots.",
+      "sourceSentence": "You may place any number of unallocated dice on available utility slots."
+    },
+    {
+      "statement": "Each utility slot can only be used once per turn.",
+      "sourceSentence": "Each utility slot can only be used once per turn, and all dice you intend to place into utility slots must be placed there and immediately resolved (re-rolled or modified) before any of them can be re-allocated to either shields or part damage."
+    },
+    {
+      "statement": "Utility dice must be placed and immediately resolved before being re-allocated to shields or part damage.",
+      "sourceSentence": "all dice you intend to place into utility slots must be placed there and immediately resolved (re-rolled or modified) before any of them can be re-allocated to either shields or part damage."
+    },
+    {
+      "statement": "When placed on a modifier slot, a die is immediately rotated and modified by ±1 pip.",
+      "sourceSentence": "When placing a die on a dice modifier slot, immediately rotate and modify its face value by +/-1 pip.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "pip",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Modified dice remain on the utility slot until all other utility dice have been resolved.",
+      "sourceSentence": "Leave it on its utility slot until all other utility dice have been resolved."
+    },
+    {
+      "statement": "Sixes may not be changed to ones.",
+      "sourceSentence": "Sixes may NOT be changed to ones and ones may NOT be changed to sixes."
+    },
+    {
+      "statement": "Ones may not be changed to sixes.",
+      "sourceSentence": "Sixes may NOT be changed to ones and ones may NOT be changed to sixes."
+    },
+    {
+      "statement": "When placed on a re-roll slot, a die is immediately re-rolled and placed back on the slot until all other utility dice are resolved.",
+      "sourceSentence": "When placing a die on a re-roll slot, immediately re-roll it and place it back on the slot until all other utility dice are resolved."
+    },
+    {
+      "statement": "Once re-rolled, a die cannot be placed on a modifier slot to be further modified.",
+      "sourceSentence": "Once a die is re-rolled, it cannot be placed on a +/- slot to be further modified."
+    },
+    {
+      "statement": "Once all utility dice are resolved, they are removed and allocated to shields or damage if possible.",
+      "sourceSentence": "Once all utility dice are resolved (i.e. re-rolled or modified +/-1), remove them from your card and allocate them to either shields or damage, if possible."
+    },
+    {
+      "statement": "Unallocated dice that cannot be played are spent at the end of the turn.",
+      "sourceSentence": "Unallocated dice that cannot be played are considered spent at the end of your turn."
+    },
+    {
+      "statement": "Unallocated dice can be placed on shield slots, granting shield strength equal to the total face value of the placed dice.",
+      "sourceSentence": "You may place unallocated dice (including dice that have been modified via utility slots) to the available shield slots, gaining shield strength equal to the total face value of all dice placed there."
+    },
+    {
+      "statement": "In normal game mode, a maximum of 4 dice can be placed on shield slots per turn.",
+      "sourceSentence": "In a normal game, no more than 4 dice can be placed this way per turn.",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "In Hard Mode, a maximum of 3 dice can be placed on shield slots per turn.",
+      "sourceSentence": "In Hard Mode, no more than 3 dice can be placed this way per turn.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Shield dice do not persist between rounds and are re-rolled at the start of the next turn.",
+      "sourceSentence": "Additionally, dice used for shields do not persist from round to round. They're re-rolled at the start of your next turn."
+    },
+    {
+      "statement": "A player may deal 1 point of damage to a machine part by fulfilling roll conditions and allocating required dice.",
+      "sourceSentence": "You may deal 1 damage to a given machine part by successfully fulfilling the roll conditions (on the middle right side of the card) and allocating the required dice to the part.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "point of damage",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Some machine parts can be damaged with a single die.",
+      "sourceSentence": "Some parts can be damaged by a single dice, others require a specific combo of 2-3 dice.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Some machine parts require a specific combination of 2 to 3 dice to damage.",
+      "sourceSentence": "Some parts can be damaged by a single dice, others require a specific combo of 2-3 dice."
+    },
+    {
+      "statement": "When successfully damaged, a machine part's HP die face is rotated to reduce it by 1 pip.",
+      "sourceSentence": "When a part is successfully damaged, rotate the part's yellow HP die face to reduce it by 1 pip, then place the dice you used to damage that part below the card.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "pip",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Dice used to damage a part are placed below the card.",
+      "sourceSentence": "When a part is successfully damaged, rotate the part's yellow HP die face to reduce it by 1 pip, then place the dice you used to damage that part below the card."
+    },
+    {
+      "statement": "Dice used for damage are spent and cannot be re-used until the next turn.",
+      "sourceSentence": "These dice are spent and cannot be re-used until your next turn."
+    },
+    {
+      "statement": "A machine part can be damaged more than once per turn if the player has enough dice to fulfill the damage condition.",
+      "sourceSentence": "A machine part can be damaged more than once per turn, but you must have enough dice to completely fulfill the damage condition each time."
+    },
+    {
+      "statement": "The Machine Phase begins when all dice are allocated and resolved, or when no more playable dice remain.",
+      "sourceSentence": "When all of your dice have been allocated and resolved, and/or you have no more playable dice to play, proceed to the Machine Phase."
+    }
+  ]
+}

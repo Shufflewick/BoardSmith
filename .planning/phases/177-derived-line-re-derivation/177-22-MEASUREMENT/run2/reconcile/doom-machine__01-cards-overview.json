@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 33039,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "c52bf26c-babf-465d-b16e-2f26461aa693",
+    "total_cost_usd": 0.1807827,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 19139,
+      "cache_read_input_tokens": 29259,
+      "output_tokens": 3811,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 19139,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 3811,
+          "cache_read_input_tokens": 29259,
+          "cache_creation_input_tokens": 19139,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 19139
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 3811,
+        "cacheReadInputTokens": 29259,
+        "cacheCreationInputTokens": 19139,
+        "webSearchRequests": 0,
+        "costUSD": 0.1807827,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"both\": [\n    {\n      \"statement\": \"There are 15 machine part cards that are non-Core.\",\n      \"quotedFromA\": \"15 machine part cards (non-Core)\",\n      \"quotedFromB\": \"15 machine part cards (non-Core)\"\n    },\n    {\n      \"statement\": \"There is one Doom Core card named \\\"THE DOOM CORE\\\".\",\n      \"quotedFromA\": \"1 Doom Core card (\\\"THE DOOM CORE\\\")\",\n      \"quotedFromB\": \"1 Doom Core card (\\\"THE DOOM CORE\\\")\"\n    },\n    {\n      \"statement\": \"There is one Doom Machine tracking card.\",\n      \"quotedFromA\": \"1 Doom Machine tracking card\",\n      \"quotedFromB\": \"1 Doom Machine tracking card\"\n    },\n    {\n      \"statement\": \"There is one Player HP tracking card, double-sided with A side on page 1 and B side on page 2.\",\n      \"quotedFromA\": \"1 Player HP tracking card (double-sided: A side p.1, B side p.2)\",\n      \"quotedFromB\": \"1 Player HP tracking card (double-sided: A side p.1, B side p.2)\"\n    },\n    {\n      \"statement\": \"The component list totals 18 distinct card faces.\",\n      \"quotedFromA\": \"18 distinct faces total.\",\n      \"quotedFromB\": \"18 distinct faces total.\"\n    },\n    {\n      \"statement\": \"Three squares run down the left edge of the cycle track.\",\n      \"quotedFromA\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"quotedFromB\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\"\n    },\n    {\n      \"statement\": \"Two additional squares run rightward along the bottom of the cycle track.\",\n      \"quotedFromA\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"quotedFromB\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\"\n    },\n    {\n      \"statement\": \"Track positions 2 through 5 may hold icons, blanks, or dead spaces.\",\n      \"quotedFromA\": \"Positions 2–5 hold icons, blanks, or dead spaces.\",\n      \"quotedFromB\": \"Positions 2–5 hold icons, blanks, or dead spaces.\"\n    },\n    {\n      \"statement\": \"Movement along the track proceeds in order 1 → 2 → 3 → 4 → 5.\",\n      \"quotedFromA\": \"Order of travel = 1 → 2 → 3 → 4 → 5.\",\n      \"quotedFromB\": \"Order of travel = 1 → 2 → 3 → 4 → 5.\"\n    },\n    {\n      \"statement\": \"Icon spaces are live spaces with an effect badge, connected to neighbours by a yellow connector bar.\",\n      \"quotedFromA\": \"**Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar.\",\n      \"quotedFromB\": \"**Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar.\"\n    },\n    {\n      \"statement\": \"Blank spaces are live, plain dark-teal spaces with no icon and no effect, also yellow-connected.\",\n      \"quotedFromA\": \"**Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected.\",\n      \"quotedFromB\": \"**Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected.\"\n    },\n    {\n      \"statement\": \"Dead spaces are darkened, diagonally-hatched squares connected by dull grey/teal bars, not yellow.\",\n      \"quotedFromA\": \"**Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow.\",\n      \"quotedFromB\": \"**Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow.\"\n    },\n    {\n      \"statement\": \"Landing on a dead space sends the die back to position 1.\",\n      \"quotedFromA\": \"Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1.\",\n      \"quotedFromB\": \"Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1.\"\n    }\n  ],\n  \"aOnly\": [\n    {\n      \"statement\": \"The card artwork file consists of four letter-sized pages laid out in a 3x3 grid per page.\",\n      \"sourceSentence\": \"Source: `/Users/jtsmith/BoardSmithGames/doom-machine/cards.pdf` (4 letter pages, 3x3 grid per page).\"\n    },\n    {\n      \"statement\": \"Pages 1 and 3 of the file contain the card faces, totaling 18 faces.\",\n      \"sourceSentence\": \"**p.1 and p.3 = card FACES** (18 faces total).\"\n    },\n    {\n      \"statement\": \"Pages 2 and 4 of the file contain the card backs.\",\n      \"sourceSentence\": \"**p.2 and p.4 = card BACKS** — confirmed: every slot is the \\\"DOOM MACHINE / BY NATHAN MEUNIER\\\" back art, EXCEPT p.2 row 1 col 3, which is the **Player HP card's B side** (the duplex-mirror of the Player HP A side at p.1 row 1 col 1).\"\n    },\n    {\n      \"statement\": \"The slot at page 2, row 1, column 3 is the Player HP card's B side, the duplex-mirror of the A side at page 1, row 1, column 1, rather than standard back art.\",\n      \"sourceSentence\": \"EXCEPT p.2 row 1 col 3, which is the **Player HP card's B side** (the duplex-mirror of the Player HP A side at p.1 row 1 col 1).\"\n    },\n    {\n      \"statement\": \"Page 4 contains nine identical card backs with no exceptions.\",\n      \"sourceSentence\": \"p.4 is nine identical backs, no exceptions.\"\n    },\n    {\n      \"statement\": \"There are three kinds of track space.\",\n      \"sourceSentence\": \"Three kinds of space appear:\"\n    }\n  ],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 33,\n      \"derivedLineText\": \"Derived (p.1, p.3): Position 1 is always the **yellow HP die slot** (the die is printed there showing the card's starting HP as pips).\",\n      \"proposedClassification\": \"uncorroborated\",\n      \"citedBothStatements\": []\n    }\n  ]\n}\n```",
+    "ttft_ms": 18779,
+    "ttft_stream_ms": 1842,
+    "time_to_request_ms": 29,
+    "type": "result",
+    "duration_ms": 33059,
+    "uuid": "b7a09ae4-4ca5-471a-8262-0a0072b53885"
+  },
+  "reconcile": "{\n  \"both\": [\n    {\n      \"statement\": \"There are 15 machine part cards that are non-Core.\",\n      \"quotedFromA\": \"15 machine part cards (non-Core)\",\n      \"quotedFromB\": \"15 machine part cards (non-Core)\"\n    },\n    {\n      \"statement\": \"There is one Doom Core card named \\\"THE DOOM CORE\\\".\",\n      \"quotedFromA\": \"1 Doom Core card (\\\"THE DOOM CORE\\\")\",\n      \"quotedFromB\": \"1 Doom Core card (\\\"THE DOOM CORE\\\")\"\n    },\n    {\n      \"statement\": \"There is one Doom Machine tracking card.\",\n      \"quotedFromA\": \"1 Doom Machine tracking card\",\n      \"quotedFromB\": \"1 Doom Machine tracking card\"\n    },\n    {\n      \"statement\": \"There is one Player HP tracking card, double-sided with A side on page 1 and B side on page 2.\",\n      \"quotedFromA\": \"1 Player HP tracking card (double-sided: A side p.1, B side p.2)\",\n      \"quotedFromB\": \"1 Player HP tracking card (double-sided: A side p.1, B side p.2)\"\n    },\n    {\n      \"statement\": \"The component list totals 18 distinct card faces.\",\n      \"quotedFromA\": \"18 distinct faces total.\",\n      \"quotedFromB\": \"18 distinct faces total.\"\n    },\n    {\n      \"statement\": \"Three squares run down the left edge of the cycle track.\",\n      \"quotedFromA\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"quotedFromB\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\"\n    },\n    {\n      \"statement\": \"Two additional squares run rightward along the bottom of the cycle track.\",\n      \"quotedFromA\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"quotedFromB\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\"\n    },\n    {\n      \"statement\": \"Track positions 2 through 5 may hold icons, blanks, or dead spaces.\",\n      \"quotedFromA\": \"Positions 2–5 hold icons, blanks, or dead spaces.\",\n      \"quotedFromB\": \"Positions 2–5 hold icons, blanks, or dead spaces.\"\n    },\n    {\n      \"statement\": \"Movement along the track proceeds in order 1 → 2 → 3 → 4 → 5.\",\n      \"quotedFromA\": \"Order of travel = 1 → 2 → 3 → 4 → 5.\",\n      \"quotedFromB\": \"Order of travel = 1 → 2 → 3 → 4 → 5.\"\n    },\n    {\n      \"statement\": \"Icon spaces are live spaces with an effect badge, connected to neighbours by a yellow connector bar.\",\n      \"quotedFromA\": \"**Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar.\",\n      \"quotedFromB\": \"**Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar.\"\n    },\n    {\n      \"statement\": \"Blank spaces are live, plain dark-teal spaces with no icon and no effect, also yellow-connected.\",\n      \"quotedFromA\": \"**Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected.\",\n      \"quotedFromB\": \"**Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected.\"\n    },\n    {\n      \"statement\": \"Dead spaces are darkened, diagonally-hatched squares connected by dull grey/teal bars, not yellow.\",\n      \"quotedFromA\": \"**Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow.\",\n      \"quotedFromB\": \"**Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow.\"\n    },\n    {\n      \"statement\": \"Landing on a dead space sends the die back to position 1.\",\n      \"quotedFromA\": \"Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1.\",\n      \"quotedFromB\": \"Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1.\"\n    }\n  ],\n  \"aOnly\": [\n    {\n      \"statement\": \"The card artwork file consists of four letter-sized pages laid out in a 3x3 grid per page.\",\n      \"sourceSentence\": \"Source: `/Users/jtsmith/BoardSmithGames/doom-machine/cards.pdf` (4 letter pages, 3x3 grid per page).\"\n    },\n    {\n      \"statement\": \"Pages 1 and 3 of the file contain the card faces, totaling 18 faces.\",\n      \"sourceSentence\": \"**p.1 and p.3 = card FACES** (18 faces total).\"\n    },\n    {\n      \"statement\": \"Pages 2 and 4 of the file contain the card backs.\",\n      \"sourceSentence\": \"**p.2 and p.4 = card BACKS** — confirmed: every slot is the \\\"DOOM MACHINE / BY NATHAN MEUNIER\\\" back art, EXCEPT p.2 row 1 col 3, which is the **Player HP card's B side** (the duplex-mirror of the Player HP A side at p.1 row 1 col 1).\"\n    },\n    {\n      \"statement\": \"The slot at page 2, row 1, column 3 is the Player HP card's B side, the duplex-mirror of the A side at page 1, row 1, column 1, rather than standard back art.\",\n      \"sourceSentence\": \"EXCEPT p.2 row 1 col 3, which is the **Player HP card's B side** (the duplex-mirror of the Player HP A side at p.1 row 1 col 1).\"\n    },\n    {\n      \"statement\": \"Page 4 contains nine identical card backs with no exceptions.\",\n      \"sourceSentence\": \"p.4 is nine identical backs, no exceptions.\"\n    },\n    {\n      \"statement\": \"There are three kinds of track space.\",\n      \"sourceSentence\": \"Three kinds of space appear:\"\n    }\n  ],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 33,\n      \"derivedLineText\": \"Derived (p.1, p.3): Position 1 is always the **yellow HP die slot** (the die is printed there showing the card's starting HP as pips).\",\n      \"proposedClassification\": \"uncorroborated\",\n      \"citedBothStatements\": []\n    }\n  ]\n}"
+}

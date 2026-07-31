@@ -1,0 +1,36 @@
+{
+  "facts": [
+    {
+      "statement": "Machine part cards can deal damage to the player.",
+      "sourceSentence": "Any time a machine part card deals you damage, it will always damage your shields first (if you have any remaining)."
+    },
+    {
+      "statement": "Shields absorb damage before HP when a player has remaining shields.",
+      "sourceSentence": "Any time a machine part card deals you damage, it will always damage your shields first (if you have any remaining)."
+    },
+    {
+      "statement": "Shield dice values are reduced as damage is taken until they are completely expended.",
+      "sourceSentence": "As damage is taken, reduce the value of shield dice first until they are completely expended (and removed to your spent dice pile)."
+    },
+    {
+      "statement": "Completely expended shield dice are removed to the spent dice pile.",
+      "sourceSentence": "As damage is taken, reduce the value of shield dice first until they are completely expended (and removed to your spent dice pile)."
+    },
+    {
+      "statement": "Damage not absorbed by shields carries over to deal direct damage to the player's HP.",
+      "sourceSentence": "Any remaining damage that hasn't been absorbed by your shield dice will carry over and deal direct damage to your HP."
+    },
+    {
+      "statement": "The game is won when the Doom Core has been destroyed.",
+      "sourceSentence": "You win the game when the Doom Core has been destroyed."
+    },
+    {
+      "statement": "It is not necessary to clear all machine part cards in order to win the game.",
+      "sourceSentence": "You don't have to clear all of the machine part cards to win."
+    },
+    {
+      "statement": "The game is lost if the player's HP is reduced to zero.",
+      "sourceSentence": "However, if your HP is reduced to zero, the machine destroys you first, and you lose."
+    }
+  ]
+}

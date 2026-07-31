@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 141864,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "104fd14d-68f6-4466-bb5e-4b3f977950b7",
+    "total_cost_usd": 0.09671849999999999,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9245,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 15210,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9245,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 15210,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9245,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9245
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 15210,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9245,
+        "webSearchRequests": 0,
+        "costUSD": 0.09671849999999999,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"Seven is a rummy-style card game\",\n      \"sourceSentence\": \"Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up.\"\n    },\n    {\n      \"statement\": \"The game supports 1 to 7 players\",\n      \"sourceSentence\": \"for 1 to 7 players\"\n    },\n    {\n      \"statement\": \"A game plays in about 7 minutes\",\n      \"sourceSentence\": \"plays in about 7 minutes\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"minutes\",\n        \"approximate\": true\n      }\n    },\n    {\n      \"statement\": \"The game is recommended for ages 7 and up\",\n      \"sourceSentence\": \"recommended for ages 7 and up\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"age\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player is given a Ways to Score card during setup\",\n      \"sourceSentence\": \"Give each player a \\\"Ways to Score\\\" card.\"\n    },\n    {\n      \"statement\": \"A pile of face-down cards is created in the center of the table and mixed\",\n      \"sourceSentence\": \"Create a mess of face-down cards in the middle of the table and mixes them around.\"\n    },\n    {\n      \"statement\": \"Each player draws 3 cards from the central pile initially to form their starting hand\",\n      \"sourceSentence\": \"Each player should then draw 3 cards from the mess to form their hand.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Round actions are simultaneous among all players\",\n      \"sourceSentence\": \"Round (Simultaneous):\"\n    },\n    {\n      \"statement\": \"Each player draws 2 cards during each round\",\n      \"sourceSentence\": \"Each player draws 2 cards into their hand.\",\n      \"numericValue\": {\n        \"magnitude\": 2,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player discards 1 card face-up to their personal discard pile during each round\",\n      \"sourceSentence\": \"Each player discards 1 card from their hand face-up off to the side of the table in their own discard pile.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player will have 7 discards when the game ends\",\n      \"sourceSentence\": \"you will have 7 discards when the game is over.\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"discards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Discard piles are public information\",\n      \"sourceSentence\": \"Discards are considered public information.\"\n    },\n    {\n      \"statement\": \"The game ends when all players have 10 cards\",\n      \"sourceSentence\": \"If everyone has 10 cards, end the game; otherwise begin the next round.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player scores using their best 7-card hand, with bonus point cards added to the score\",\n      \"sourceSentence\": \"Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score.\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"A match consists of 7 games\",\n      \"sourceSentence\": \"A match consists of 7 games.\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"games\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player's cumulative score should be tracked across all games in the match\",\n      \"sourceSentence\": \"Play 7 games and keep track of each player's score total.\"\n    },\n    {\n      \"statement\": \"The player with the highest cumulative score at the end of the match wins\",\n      \"sourceSentence\": \"Whichever player has the highest total score at the end of the match wins!\"\n    },\n    {\n      \"statement\": \"Matches can be played as a best of 3 series as an alternative format\",\n      \"sourceSentence\": \"if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"games\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Matches can be played as a best of 10 series as an alternative format\",\n      \"sourceSentence\": \"if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"games\",\n        \"approximate\": false\n      }\n    }\n  ]\n}\n```",
+    "ttft_ms": 133271,
+    "ttft_stream_ms": 1395,
+    "time_to_request_ms": 454,
+    "type": "result",
+    "duration_ms": 142760,
+    "uuid": "5719f921-1ead-4a67-a034-10e50ce46fd8"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"Seven is a rummy-style card game\",\n      \"sourceSentence\": \"Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up.\"\n    },\n    {\n      \"statement\": \"The game supports 1 to 7 players\",\n      \"sourceSentence\": \"for 1 to 7 players\"\n    },\n    {\n      \"statement\": \"A game plays in about 7 minutes\",\n      \"sourceSentence\": \"plays in about 7 minutes\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"minutes\",\n        \"approximate\": true\n      }\n    },\n    {\n      \"statement\": \"The game is recommended for ages 7 and up\",\n      \"sourceSentence\": \"recommended for ages 7 and up\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"age\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player is given a Ways to Score card during setup\",\n      \"sourceSentence\": \"Give each player a \\\"Ways to Score\\\" card.\"\n    },\n    {\n      \"statement\": \"A pile of face-down cards is created in the center of the table and mixed\",\n      \"sourceSentence\": \"Create a mess of face-down cards in the middle of the table and mixes them around.\"\n    },\n    {\n      \"statement\": \"Each player draws 3 cards from the central pile initially to form their starting hand\",\n      \"sourceSentence\": \"Each player should then draw 3 cards from the mess to form their hand.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Round actions are simultaneous among all players\",\n      \"sourceSentence\": \"Round (Simultaneous):\"\n    },\n    {\n      \"statement\": \"Each player draws 2 cards during each round\",\n      \"sourceSentence\": \"Each player draws 2 cards into their hand.\",\n      \"numericValue\": {\n        \"magnitude\": 2,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player discards 1 card face-up to their personal discard pile during each round\",\n      \"sourceSentence\": \"Each player discards 1 card from their hand face-up off to the side of the table in their own discard pile.\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player will have 7 discards when the game ends\",\n      \"sourceSentence\": \"you will have 7 discards when the game is over.\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"discards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Discard piles are public information\",\n      \"sourceSentence\": \"Discards are considered public information.\"\n    },\n    {\n      \"statement\": \"The game ends when all players have 10 cards\",\n      \"sourceSentence\": \"If everyone has 10 cards, end the game; otherwise begin the next round.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player scores using their best 7-card hand, with bonus point cards added to the score\",\n      \"sourceSentence\": \"Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score.\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"A match consists of 7 games\",\n      \"sourceSentence\": \"A match consists of 7 games.\",\n      \"numericValue\": {\n        \"magnitude\": 7,\n        \"unit\": \"games\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Each player's cumulative score should be tracked across all games in the match\",\n      \"sourceSentence\": \"Play 7 games and keep track of each player's score total.\"\n    },\n    {\n      \"statement\": \"The player with the highest cumulative score at the end of the match wins\",\n      \"sourceSentence\": \"Whichever player has the highest total score at the end of the match wins!\"\n    },\n    {\n      \"statement\": \"Matches can be played as a best of 3 series as an alternative format\",\n      \"sourceSentence\": \"if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"games\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Matches can be played as a best of 10 series as an alternative format\",\n      \"sourceSentence\": \"if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games.\",\n      \"numericValue\": {\n        \"magnitude\": 10,\n        \"unit\": \"games\",\n        \"approximate\": false\n      }\n    }\n  ]\n}"
+}

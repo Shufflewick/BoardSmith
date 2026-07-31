@@ -1,0 +1,37 @@
+[
+  {
+    "lineNumber": 16,
+    "text": "Derived (p.2): A Jab can only flip a ready Guard card to exhausted; it never removes/breaks a Guard card outright.",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 68,
+    "text": "Derived (p.2): A \"broken\" Guard card is permanently removed from the game (returned to the box), distinct from \"exhausted\" (flipped face, remains in play and can be flipped back to ready by Rest). Punch can only break an already-exhausted Guard card; against an opponent with no exhausted Guards, Punch instead exhausts one of their ready Guards (same effect as a Jab in that case).",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 82,
+    "text": "Derived (p.2): Resolving a round's Fight phase is two sequential sub-steps — resolve both players' first action cards completely (in timing order), then reveal and resolve both players' second action cards (in timing order) — with cards from the first sub-step staying in place, unresolved into the discard pile, until the Discard phase.",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 106,
+    "text": "Derived (p.2): Win condition: reduce an opponent to 0 Guard cards (all 3 broken) to knock them out and win immediately. If both players' third Guard card is broken by the same action's resolution, the game ends in a draw instead of a win.",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 117,
+    "text": "Derived (p.2): Each player's card set includes exactly 2 Rest cards (implied by the first Tip's warning against holding both at once).",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 128,
+    "text": "Derived (p.2): No edition or printing number is stated anywhere on this page; the only dating information is the 2020 copyright year in the colophon.",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 132,
+    "text": "Derived (p.2): This section marks no rules as variants, optional modules, or advanced/expert rules.",
+    "form": "line-start"
+  }
+]

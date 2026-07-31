@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 36111,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "79ea3443-1d26-4e24-8fd9-bdf4285d359d",
+    "total_cost_usd": 0.17685869999999998,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 17770,
+      "cache_read_input_tokens": 29259,
+      "output_tokens": 4097,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 17770,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 4097,
+          "cache_read_input_tokens": 29259,
+          "cache_creation_input_tokens": 17770,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 17770
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 4097,
+        "cacheReadInputTokens": 29259,
+        "cacheCreationInputTokens": 17770,
+        "webSearchRequests": 0,
+        "costUSD": 0.17685869999999998,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"both\": [\n    {\n      \"statement\": \"Three dice are required for the [?] + [?] = [?] symbol.\",\n      \"quotedFromA\": \"The [?] + [?] = [?] symbol calls for three dice.\",\n      \"quotedFromB\": \"Three dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"The sum of the first two dice must equal the value of the third die.\",\n      \"quotedFromA\": \"For the [?] + [?] = [?] symbol, the sum of the first two dice must equal the value of the third die.\",\n      \"quotedFromB\": \"The sum of the first two dice must equal the value of the third die.\"\n    },\n    {\n      \"statement\": \"Three dice are required for the three-six-pip symbol.\",\n      \"quotedFromA\": \"The symbol showing three six-pip die faces calls for three dice.\",\n      \"quotedFromB\": \"Three dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"All three dice must show the value six.\",\n      \"quotedFromA\": \"For the three-six-pip symbol, every one of the dice must show a six.\",\n      \"quotedFromB\": \"All three dice must show the value six.\"\n    },\n    {\n      \"statement\": \"Two dice are required for the [?] = [?] symbol.\",\n      \"quotedFromA\": \"The [?] = [?] symbol calls for two dice.\",\n      \"quotedFromB\": \"Two dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"The two dice must show matching values (doubles).\",\n      \"quotedFromA\": \"For the [?] = [?] symbol, the two dice must show the same value (doubles).\",\n      \"quotedFromB\": \"The two dice must show matching values.\"\n    },\n    {\n      \"statement\": \"One die is required for the [2] / [3] symbol.\",\n      \"quotedFromA\": \"The [2] / [3] symbol calls for one die.\",\n      \"quotedFromB\": \"One die is required for this condition.\"\n    },\n    {\n      \"statement\": \"The die must show either a 2 or a 3.\",\n      \"quotedFromA\": \"For the [2] / [3] symbol, the single die may show either a 2 or a 3.\",\n      \"quotedFromB\": \"The die must show either a 2 or a 3.\"\n    },\n    {\n      \"statement\": \"Two dice are required for the [?] > [3] symbol.\",\n      \"quotedFromA\": \"The [?] > [3] symbol calls for two dice.\",\n      \"quotedFromB\": \"Two dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"One die must show a 3 and the other must show a value greater than 3.\",\n      \"quotedFromA\": \"For the [?] > [3] symbol, one die must show a 3 and the other must show a value greater than 3.\",\n      \"quotedFromB\": \"One die must show a 3 and another must show a value greater than 3.\"\n    },\n    {\n      \"statement\": \"Two dice are required for the [4] + [5] symbol.\",\n      \"quotedFromA\": \"The [4] + [5] symbol calls for two dice.\",\n      \"quotedFromB\": \"Two dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"One die must show a 4 and the other must show a 5.\",\n      \"quotedFromA\": \"For the [4] + [5] symbol, the two dice must show a 4 and a 5.\",\n      \"quotedFromB\": \"One die must show a 4 and the other must show a 5.\"\n    }\n  ],\n  \"aOnly\": [\n    {\n      \"statement\": \"An example satisfying the [?] + [?] = [?] symbol is 2 plus 4 equalling 6.\",\n      \"sourceSentence\": \"(i.e. 2+4=6)\"\n    },\n    {\n      \"statement\": \"A slash between two die faces indicates a choice between those two values.\",\n      \"sourceSentence\": \"Symbol shown: [ 2 ] / [ 3 ]  (a two-pip face and a three-pip face separated by a slash)\"\n    },\n    {\n      \"statement\": \"A \\\"?\\\" in a dice symbol stands for a die of unspecified value.\",\n      \"sourceSentence\": \"Symbol shown: [ ? ] > [ 3 ]  (a \\\"?\\\" die, a greater-than sign, and a three-pip die face)\"\n    },\n    {\n      \"statement\": \"Dice roll symbology is documented on page 1, panel -13-, in a section titled DICE ROLL SYMBOLOGY / EXAMPLES.\",\n      \"sourceSentence\": \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"\n    }\n  ],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 25,\n      \"derivedLineText\": \"Derived (p.1): Roll conditions on machine part cards are expressed with a compact symbol language: \\\"?\\\" means any value, an explicit pip face means an exact value, \\\"/\\\" means either-or, \\\"+\\\" and \\\"=\\\" express arithmetic/equality relations across dice, and \\\">\\\" expresses a comparison.\",\n      \"proposedClassification\": \"uncorroborated\",\n      \"citedBothStatements\": []\n    }\n  ]\n}\n```",
+    "ttft_ms": 24098,
+    "ttft_stream_ms": 1011,
+    "time_to_request_ms": 32,
+    "type": "result",
+    "duration_ms": 36144,
+    "uuid": "dfe37a00-39ff-44ca-b224-5e2e68acfcf2"
+  },
+  "reconcile": "{\n  \"both\": [\n    {\n      \"statement\": \"Three dice are required for the [?] + [?] = [?] symbol.\",\n      \"quotedFromA\": \"The [?] + [?] = [?] symbol calls for three dice.\",\n      \"quotedFromB\": \"Three dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"The sum of the first two dice must equal the value of the third die.\",\n      \"quotedFromA\": \"For the [?] + [?] = [?] symbol, the sum of the first two dice must equal the value of the third die.\",\n      \"quotedFromB\": \"The sum of the first two dice must equal the value of the third die.\"\n    },\n    {\n      \"statement\": \"Three dice are required for the three-six-pip symbol.\",\n      \"quotedFromA\": \"The symbol showing three six-pip die faces calls for three dice.\",\n      \"quotedFromB\": \"Three dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"All three dice must show the value six.\",\n      \"quotedFromA\": \"For the three-six-pip symbol, every one of the dice must show a six.\",\n      \"quotedFromB\": \"All three dice must show the value six.\"\n    },\n    {\n      \"statement\": \"Two dice are required for the [?] = [?] symbol.\",\n      \"quotedFromA\": \"The [?] = [?] symbol calls for two dice.\",\n      \"quotedFromB\": \"Two dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"The two dice must show matching values (doubles).\",\n      \"quotedFromA\": \"For the [?] = [?] symbol, the two dice must show the same value (doubles).\",\n      \"quotedFromB\": \"The two dice must show matching values.\"\n    },\n    {\n      \"statement\": \"One die is required for the [2] / [3] symbol.\",\n      \"quotedFromA\": \"The [2] / [3] symbol calls for one die.\",\n      \"quotedFromB\": \"One die is required for this condition.\"\n    },\n    {\n      \"statement\": \"The die must show either a 2 or a 3.\",\n      \"quotedFromA\": \"For the [2] / [3] symbol, the single die may show either a 2 or a 3.\",\n      \"quotedFromB\": \"The die must show either a 2 or a 3.\"\n    },\n    {\n      \"statement\": \"Two dice are required for the [?] > [3] symbol.\",\n      \"quotedFromA\": \"The [?] > [3] symbol calls for two dice.\",\n      \"quotedFromB\": \"Two dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"One die must show a 3 and the other must show a value greater than 3.\",\n      \"quotedFromA\": \"For the [?] > [3] symbol, one die must show a 3 and the other must show a value greater than 3.\",\n      \"quotedFromB\": \"One die must show a 3 and another must show a value greater than 3.\"\n    },\n    {\n      \"statement\": \"Two dice are required for the [4] + [5] symbol.\",\n      \"quotedFromA\": \"The [4] + [5] symbol calls for two dice.\",\n      \"quotedFromB\": \"Two dice are required for this condition.\"\n    },\n    {\n      \"statement\": \"One die must show a 4 and the other must show a 5.\",\n      \"quotedFromA\": \"For the [4] + [5] symbol, the two dice must show a 4 and a 5.\",\n      \"quotedFromB\": \"One die must show a 4 and the other must show a 5.\"\n    }\n  ],\n  \"aOnly\": [\n    {\n      \"statement\": \"An example satisfying the [?] + [?] = [?] symbol is 2 plus 4 equalling 6.\",\n      \"sourceSentence\": \"(i.e. 2+4=6)\"\n    },\n    {\n      \"statement\": \"A slash between two die faces indicates a choice between those two values.\",\n      \"sourceSentence\": \"Symbol shown: [ 2 ] / [ 3 ]  (a two-pip face and a three-pip face separated by a slash)\"\n    },\n    {\n      \"statement\": \"A \\\"?\\\" in a dice symbol stands for a die of unspecified value.\",\n      \"sourceSentence\": \"Symbol shown: [ ? ] > [ 3 ]  (a \\\"?\\\" die, a greater-than sign, and a three-pip die face)\"\n    },\n    {\n      \"statement\": \"Dice roll symbology is documented on page 1, panel -13-, in a section titled DICE ROLL SYMBOLOGY / EXAMPLES.\",\n      \"sourceSentence\": \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\"\n    }\n  ],\n  \"bOnly\": [],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 25,\n      \"derivedLineText\": \"Derived (p.1): Roll conditions on machine part cards are expressed with a compact symbol language: \\\"?\\\" means any value, an explicit pip face means an exact value, \\\"/\\\" means either-or, \\\"+\\\" and \\\"=\\\" express arithmetic/equality relations across dice, and \\\">\\\" expresses a comparison.\",\n      \"proposedClassification\": \"uncorroborated\",\n      \"citedBothStatements\": []\n    }\n  ]\n}"
+}

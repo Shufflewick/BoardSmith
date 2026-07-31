@@ -1,0 +1,85 @@
+{
+  "facts": [
+    {
+      "statement": "Each player starts the game with 3 cards in their hand",
+      "sourceSentence": "Each starts with 3 and ends the game with 10.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "starting cards in hand",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each player's hand contains 10 cards when the game ends",
+      "sourceSentence": "Each starts with 3 and ends the game with 10.",
+      "numericValue": {
+        "magnitude": 10,
+        "unit": "ending cards in hand",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A Set is formed by 2 or more cards with matching numbers",
+      "sourceSentence": "Set: 2+ cards with matching numbers.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "minimum cards in Set",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "A Run is formed by 3 or more cards in consecutive numeric order",
+      "sourceSentence": "Run: 3+ cards in numeric order.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "minimum cards in Run",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Card numbers have a minimum value of 1",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "minimum card number",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Card numbers have a maximum value of 7",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "maximum card number",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The numbered cards come in 4 different colors",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "colors",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Each distinct card (number-color combination) appears 4 times in the deck",
+      "sourceSentence": "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card.",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "copies of each card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "There are 7 bonus point cards in the deck in addition to the numbered cards",
+      "sourceSentence": "In addition, there are 7 bonus point cards.",
+      "numericValue": {
+        "magnitude": 7,
+        "unit": "bonus point cards",
+        "approximate": false
+      }
+    }
+  ]
+}

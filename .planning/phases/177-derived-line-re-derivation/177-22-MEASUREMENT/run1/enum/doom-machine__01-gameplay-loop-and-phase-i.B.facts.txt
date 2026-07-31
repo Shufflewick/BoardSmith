@@ -1,0 +1,71 @@
+{
+  "facts": [
+    {
+      "statement": "On each turn, you roll all your available dice",
+      "sourceSentence": "On each turn, you will roll your available dice"
+    },
+    {
+      "statement": "You allocate dice in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine",
+      "sourceSentence": "allocate them in various ways to modify your rolls, defend against incoming damage, and deal damage to parts of the Doom Machine"
+    },
+    {
+      "statement": "You start the game with 5 black dice",
+      "sourceSentence": "you start with 5 black dice",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "black dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "You may gain up to 5 additional yellow dice from destroyed machine part cards",
+      "sourceSentence": "may gain up to 5 additional yellow dice from destroyed machine part cards",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "yellow dice",
+        "approximate": true
+      }
+    },
+    {
+      "statement": "You can activate any available utilities as a dice allocation option",
+      "sourceSentence": "1) ACTIVATE ANY AVAILABLE UTILITIES"
+    },
+    {
+      "statement": "You can play dice to your shields as a dice allocation option",
+      "sourceSentence": "2) PLAY DICE TO YOUR SHIELDS"
+    },
+    {
+      "statement": "You can deal damage to machine parts as a dice allocation option",
+      "sourceSentence": "3) DEAL DAMAGE TO MACHINE PARTS"
+    },
+    {
+      "statement": "After you allocate and resolve all your dice, the machine cycles its remaining parts",
+      "sourceSentence": "Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts"
+    },
+    {
+      "statement": "The machine resolves the effects of its parts during the Machine Phase",
+      "sourceSentence": "resolve their effects"
+    },
+    {
+      "statement": "The machine grows by 1 additional card each cycle",
+      "sourceSentence": "then grow by 1 additional card",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The game loop continues until you reveal and destroy the Doom Core or you are destroyed by the machine",
+      "sourceSentence": "This loop continues until either you have revealed and destroyed the Doom Core or you are destroyed by the machine"
+    },
+    {
+      "statement": "Phase I is the Dice Roll / Resolution phase, occurring on each turn",
+      "sourceSentence": "PHASE I: DICE ROLL / RESOLUTION - On each turn, you will roll your available dice"
+    },
+    {
+      "statement": "Phase II is The Machine Phase, occurring after the player resolves their dice",
+      "sourceSentence": "PHASE II: THE MACHINE PHASE - Once you have allocated and resolved all of your dice, the machine will cycle its remaining parts"
+    }
+  ]
+}

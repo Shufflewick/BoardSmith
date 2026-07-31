@@ -1,0 +1,52 @@
+BS-ENUMERATE-V1
+Slice: rulebook/03-cards-parts-set-2.md
+
+> See `01-cards-overview.md` for the source note (QUOTE/Derived/Visual legend), the card
+> inventory, and the shared cycle-track notation used by every machine part card below.
+- **Type:** machine part
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[?] = [?]`
+Meaning: **2 dice required; they must be doubles.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Sentience
+3. Sentience
+4. Dead space (hatched)
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.3, row 2 col 1 (Sentience strip): "+1 SENTIENCE"
+- **Destroy effect:**
+- QUOTE — cards.pdf p.3, row 2 col 1: "+2 POWER"
+- **Type:** machine part
+- **Starting HP: 6**
+- **Roll condition (1 tile):** `[?] < [3]` — a "?" face, a **less-than** sign, a three-pip face.
+- **NOTE:** the "<" operator is NOT listed in the rulebook's DICE ROLL SYMBOLOGY panel (which documents only
+`+ = / >`).
+a 3, another greater than 3"): **2 dice required; one must be a 3, another less than 3.** Flagged for the
+designer to confirm — the glyph itself is unambiguously a "<", but its meaning is undocumented.
+- **Cycle track (5 spaces):**
+1. HP die slot (6)
+2. Lock
+3. Blank space (no icon)
+4. Lock
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.3, row 2 col 2 (Lock strip, large text): "LOCK 1 DIE"
+- QUOTE — cards.pdf p.3, row 2 col 2 (same strip, small text beneath): "IF SENTIENCE IS > 6 REMOVE THAT DIE FROM PLAY"
+- **Destroy effect:** none printed.
+- **Type:** machine part
+- **Starting HP: 6**
+- **Roll condition (1 tile):** `[1] / [6]` — a one-pip face, a slash, a six-pip face.
+Meaning: **1 die required; it can be either a 1 or a 6.**
+- **Cycle track (5 spaces):**
+1. HP die slot (6)
+2. Damage
+3. Damage
+4. Repair
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.3, row 2 col 3 (Damage strip): "DEAL 4 DMG"
+- QUOTE — cards.pdf p.3, row 2 col 3 (Repair strip): "REPAIR 2 TO ANY ADJACENT PARTS"
+- **Destroy effect:** none printed.
+- Note: the Repair icon here is a yellow HEART containing a triangle glyph (not the wrench described in
+`02-card-effect-icons.md`'s art notes). It sits beside the "REPAIR 2..." text, so its identity is certain.

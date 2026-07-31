@@ -1,0 +1,62 @@
+{
+  "facts": [
+    {
+      "statement": "Three dice are required.",
+      "sourceSentence": "3 dice required.",
+      "numericValue": {"magnitude": 3, "unit": "dice", "approximate": false}
+    },
+    {
+      "statement": "The first die plus the second die must equal the value of the third die.",
+      "sourceSentence": "1st die + 2nd die must = the value of the third die."
+    },
+    {
+      "statement": "Three dice are required.",
+      "sourceSentence": "3 dice required.",
+      "numericValue": {"magnitude": 3, "unit": "dice", "approximate": false}
+    },
+    {
+      "statement": "All three dice must show six.",
+      "sourceSentence": "They must all be sixes."
+    },
+    {
+      "statement": "Two dice are required.",
+      "sourceSentence": "2 dice required.",
+      "numericValue": {"magnitude": 2, "unit": "dice", "approximate": false}
+    },
+    {
+      "statement": "Both dice must show the same value (doubles).",
+      "sourceSentence": "They must be doubles."
+    },
+    {
+      "statement": "One die is required.",
+      "sourceSentence": "1 die required.",
+      "numericValue": {"magnitude": 1, "unit": "die", "approximate": false}
+    },
+    {
+      "statement": "The die must show either a 2 or a 3.",
+      "sourceSentence": "It can be either a 2 or a 3 value."
+    },
+    {
+      "statement": "Two dice are required.",
+      "sourceSentence": "2 dice required.",
+      "numericValue": {"magnitude": 2, "unit": "dice", "approximate": false}
+    },
+    {
+      "statement": "One die must show a 3.",
+      "sourceSentence": "One must be a 3, another greater than 3."
+    },
+    {
+      "statement": "Another die must show a value greater than 3.",
+      "sourceSentence": "One must be a 3, another greater than 3."
+    },
+    {
+      "statement": "Two dice are required.",
+      "sourceSentence": "2 dice required.",
+      "numericValue": {"magnitude": 2, "unit": "dice", "approximate": false}
+    },
+    {
+      "statement": "The two dice must show a 4 and a 5.",
+      "sourceSentence": "They must be a 4 and a 5."
+    }
+  ]
+}

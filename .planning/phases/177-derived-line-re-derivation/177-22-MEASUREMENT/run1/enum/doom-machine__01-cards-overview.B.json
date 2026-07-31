@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 37243,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "d0253003-8ef2-4af5-975b-5e8faa0cd2b7",
+    "total_cost_usd": 0.0432695,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9593,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 4381,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9593,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 4381,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9593,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9593
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 4381,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9593,
+        "webSearchRequests": 0,
+        "costUSD": 0.0432695,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"There are 15 machine part cards that are non-Core type.\",\n      \"sourceSentence\": \"- 15 machine part cards (non-Core)\",\n      \"numericValue\": {\n        \"magnitude\": 15,\n        \"unit\": \"machine part cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There is 1 Doom Core card.\",\n      \"sourceSentence\": \"- 1 Doom Core card (\\\"THE DOOM CORE\\\")\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"Doom Core card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There is 1 Doom Machine tracking card.\",\n      \"sourceSentence\": \"- 1 Doom Machine tracking card\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"Doom Machine tracking card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There is 1 Player HP tracking card.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"Player HP tracking card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The Player HP card is double-sided.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\"\n    },\n    {\n      \"statement\": \"The Player HP card's A side is located on page 1.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\"\n    },\n    {\n      \"statement\": \"The Player HP card's B side is located on page 2.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\"\n    },\n    {\n      \"statement\": \"There are 18 distinct card faces total.\",\n      \"sourceSentence\": \"- **18 distinct faces total.**\",\n      \"numericValue\": {\n        \"magnitude\": 18,\n        \"unit\": \"distinct faces\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The movement space has 3 squares running down the left edge.\",\n      \"sourceSentence\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"squares\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The movement space has 2 more squares running right along the bottom.\",\n      \"sourceSentence\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"numericValue\": {\n        \"magnitude\": 2,\n        \"unit\": \"squares\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Positions 2 through 5 hold icons, blanks, or dead spaces.\",\n      \"sourceSentence\": \"Positions 2–5 hold icons, blanks, or dead spaces.\"\n    },\n    {\n      \"statement\": \"The order of travel through positions is 1, 2, 3, 4, then 5.\",\n      \"sourceSentence\": \"Order of travel = 1 → 2 → 3 → 4 → 5.\"\n    },\n    {\n      \"statement\": \"Icon spaces are live spaces with an effect badge.\",\n      \"sourceSentence\": \"- **Icon space** — a live space with an effect badge.\"\n    },\n    {\n      \"statement\": \"Icon spaces are connected to their neighbors by a YELLOW connector bar.\",\n      \"sourceSentence\": \"Connected to its neighbours by a YELLOW connector bar.\"\n    },\n    {\n      \"statement\": \"Blank spaces are live spaces.\",\n      \"sourceSentence\": \"- **Blank space** — a live space, plain dark-teal, no icon (no effect fires).\"\n    },\n    {\n      \"statement\": \"Blank spaces are plain dark-teal with no icon.\",\n      \"sourceSentence\": \"- **Blank space** — a live space, plain dark-teal, no icon (no effect fires).\"\n    },\n    {\n      \"statement\": \"Blank spaces fire no effects.\",\n      \"sourceSentence\": \"- **Blank space** — a live space, plain dark-teal, no icon (no effect fires).\"\n    },\n    {\n      \"statement\": \"Blank spaces are YELLOW-connected.\",\n      \"sourceSentence\": \"Also YELLOW-connected.\"\n    },\n    {\n      \"statement\": \"Dead spaces are DARKENED with diagonal hatching.\",\n      \"sourceSentence\": \"- **Dead space** — a DARKENED, diagonally-HATCHED square.\"\n    },\n    {\n      \"statement\": \"Dead spaces are connected by dull grey/teal bars, not yellow.\",\n      \"sourceSentence\": \"Connected by dull grey/teal bars, not yellow.\"\n    },\n    {\n      \"statement\": \"Landing on a dead space sends the die back to position 1.\",\n      \"sourceSentence\": \"Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1.\"\n    }\n  ]\n}\n```",
+    "ttft_ms": 28070,
+    "ttft_stream_ms": 1505,
+    "time_to_request_ms": 445,
+    "type": "result",
+    "duration_ms": 38127,
+    "uuid": "baf95888-76db-4c49-8a82-c94567d3d752"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"There are 15 machine part cards that are non-Core type.\",\n      \"sourceSentence\": \"- 15 machine part cards (non-Core)\",\n      \"numericValue\": {\n        \"magnitude\": 15,\n        \"unit\": \"machine part cards\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There is 1 Doom Core card.\",\n      \"sourceSentence\": \"- 1 Doom Core card (\\\"THE DOOM CORE\\\")\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"Doom Core card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There is 1 Doom Machine tracking card.\",\n      \"sourceSentence\": \"- 1 Doom Machine tracking card\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"Doom Machine tracking card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"There is 1 Player HP tracking card.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\",\n      \"numericValue\": {\n        \"magnitude\": 1,\n        \"unit\": \"Player HP tracking card\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The Player HP card is double-sided.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\"\n    },\n    {\n      \"statement\": \"The Player HP card's A side is located on page 1.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\"\n    },\n    {\n      \"statement\": \"The Player HP card's B side is located on page 2.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\"\n    },\n    {\n      \"statement\": \"There are 18 distinct card faces total.\",\n      \"sourceSentence\": \"- **18 distinct faces total.**\",\n      \"numericValue\": {\n        \"magnitude\": 18,\n        \"unit\": \"distinct faces\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The movement space has 3 squares running down the left edge.\",\n      \"sourceSentence\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"numericValue\": {\n        \"magnitude\": 3,\n        \"unit\": \"squares\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"The movement space has 2 more squares running right along the bottom.\",\n      \"sourceSentence\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"numericValue\": {\n        \"magnitude\": 2,\n        \"unit\": \"squares\",\n        \"approximate\": false\n      }\n    },\n    {\n      \"statement\": \"Positions 2 through 5 hold icons, blanks, or dead spaces.\",\n      \"sourceSentence\": \"Positions 2–5 hold icons, blanks, or dead spaces.\"\n    },\n    {\n      \"statement\": \"The order of travel through positions is 1, 2, 3, 4, then 5.\",\n      \"sourceSentence\": \"Order of travel = 1 → 2 → 3 → 4 → 5.\"\n    },\n    {\n      \"statement\": \"Icon spaces are live spaces with an effect badge.\",\n      \"sourceSentence\": \"- **Icon space** — a live space with an effect badge.\"\n    },\n    {\n      \"statement\": \"Icon spaces are connected to their neighbors by a YELLOW connector bar.\",\n      \"sourceSentence\": \"Connected to its neighbours by a YELLOW connector bar.\"\n    },\n    {\n      \"statement\": \"Blank spaces are live spaces.\",\n      \"sourceSentence\": \"- **Blank space** — a live space, plain dark-teal, no icon (no effect fires).\"\n    },\n    {\n      \"statement\": \"Blank spaces are plain dark-teal with no icon.\",\n      \"sourceSentence\": \"- **Blank space** — a live space, plain dark-teal, no icon (no effect fires).\"\n    },\n    {\n      \"statement\": \"Blank spaces fire no effects.\",\n      \"sourceSentence\": \"- **Blank space** — a live space, plain dark-teal, no icon (no effect fires).\"\n    },\n    {\n      \"statement\": \"Blank spaces are YELLOW-connected.\",\n      \"sourceSentence\": \"Also YELLOW-connected.\"\n    },\n    {\n      \"statement\": \"Dead spaces are DARKENED with diagonal hatching.\",\n      \"sourceSentence\": \"- **Dead space** — a DARKENED, diagonally-HATCHED square.\"\n    },\n    {\n      \"statement\": \"Dead spaces are connected by dull grey/teal bars, not yellow.\",\n      \"sourceSentence\": \"Connected by dull grey/teal bars, not yellow.\"\n    },\n    {\n      \"statement\": \"Landing on a dead space sends the die back to position 1.\",\n      \"sourceSentence\": \"Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1.\"\n    }\n  ]\n}"
+}

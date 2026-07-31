@@ -1,0 +1,7 @@
+[
+  {
+    "lineNumber": 25,
+    "text": "Derived (p.1): Roll conditions on machine part cards are expressed with a compact symbol language: \"?\" means any value, an explicit pip face means an exact value, \"/\" means either-or, \"+\" and \"=\" express arithmetic/equality relations across dice, and \">\" expresses a comparison.",
+    "form": "line-start"
+  }
+]

@@ -1,0 +1,65 @@
+{
+  "facts": [
+    {
+      "statement": "There are 15 machine part cards that are non-Core.",
+      "sourceSentence": "- 15 machine part cards (non-Core)",
+      "numericValue": { "magnitude": 15, "unit": "machine part cards", "approximate": false }
+    },
+    {
+      "statement": "There is one Doom Core card named \"THE DOOM CORE\".",
+      "sourceSentence": "- 1 Doom Core card (\"THE DOOM CORE\")",
+      "numericValue": { "magnitude": 1, "unit": "Doom Core card", "approximate": false }
+    },
+    {
+      "statement": "There is one Doom Machine tracking card.",
+      "sourceSentence": "- 1 Doom Machine tracking card",
+      "numericValue": { "magnitude": 1, "unit": "Doom Machine tracking card", "approximate": false }
+    },
+    {
+      "statement": "There is one Player HP tracking card that is double-sided, with an A side on page 1 and a B side on page 2.",
+      "sourceSentence": "- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)",
+      "numericValue": { "magnitude": 1, "unit": "Player HP tracking card", "approximate": false }
+    },
+    {
+      "statement": "There are 18 distinct card faces total.",
+      "sourceSentence": "- **18 distinct faces total.**",
+      "numericValue": { "magnitude": 18, "unit": "distinct card faces", "approximate": false }
+    },
+    {
+      "statement": "Three squares are arranged vertically down the left edge of the cycle track.",
+      "sourceSentence": "three squares running DOWN the left edge, then two more running RIGHT along the bottom.",
+      "numericValue": { "magnitude": 3, "unit": "squares", "approximate": false }
+    },
+    {
+      "statement": "Two additional squares are arranged horizontally along the bottom of the cycle track.",
+      "sourceSentence": "three squares running DOWN the left edge, then two more running RIGHT along the bottom.",
+      "numericValue": { "magnitude": 2, "unit": "squares", "approximate": false }
+    },
+    {
+      "statement": "Positions 2 through 5 contain icons, blanks, or dead spaces.",
+      "sourceSentence": "Positions 2–5 hold icons, blanks, or dead spaces.",
+      "numericValue": { "magnitude": 4, "unit": "positions", "approximate": false }
+    },
+    {
+      "statement": "The order of travel through the cycle track is 1, then 2, then 3, then 4, then 5 in sequence.",
+      "sourceSentence": "Order of travel = 1 → 2 → 3 → 4 → 5.",
+      "numericValue": { "magnitude": 5, "unit": "positions in travel sequence", "approximate": false }
+    },
+    {
+      "statement": "Icon spaces are live spaces with an effect badge and are connected to adjacent spaces by yellow connector bars.",
+      "sourceSentence": "**Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar."
+    },
+    {
+      "statement": "Blank spaces are live spaces with a plain dark-teal appearance, contain no icon, and do not fire any effect. They are connected by yellow connectors.",
+      "sourceSentence": "**Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected."
+    },
+    {
+      "statement": "Dead spaces are darkened and diagonally-hatched squares connected by dull grey or teal bars instead of yellow bars.",
+      "sourceSentence": "**Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow."
+    },
+    {
+      "statement": "When a player's die lands on a dead space, the die is sent back to position 1.",
+      "sourceSentence": "Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1."
+    }
+  ]
+}

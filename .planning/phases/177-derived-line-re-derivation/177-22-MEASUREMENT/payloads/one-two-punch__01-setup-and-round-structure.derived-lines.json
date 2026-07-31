@@ -1,0 +1,22 @@
+[
+  {
+    "lineNumber": 32,
+    "text": "Derived (p.1): The box contains 2 Boxer Cards, 16 Action Cards, 6 Guard Cards, and 1 Rules Sheet.",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 61,
+    "text": "Derived (p.1): A round always proceeds through exactly three phases, in this order: Plan, Fight, Discard.",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 68,
+    "text": "Derived (p.1): Each player commits exactly two action cards per round, placed face-down in a chosen order (first action, second action), before the Fight phase begins.",
+    "form": "line-start"
+  },
+  {
+    "lineNumber": 81,
+    "text": "Derived (p.1): Each action card carries a numeric timing value; when both players' first (or second) action cards are revealed, the card with the lower timing value resolves first, and cards with equal timing resolve simultaneously.",
+    "form": "line-start"
+  }
+]

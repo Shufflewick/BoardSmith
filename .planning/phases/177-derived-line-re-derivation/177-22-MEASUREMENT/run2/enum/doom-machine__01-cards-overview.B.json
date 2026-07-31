@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 78223,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "63253f93-266d-4bab-8fdd-6391ffb6204f",
+    "total_cost_usd": 0.0645815,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9434,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 8707,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9434,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 8707,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9434,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9434
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 8707,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9434,
+        "webSearchRequests": 0,
+        "costUSD": 0.0645815,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"There are 15 machine part cards that are non-Core.\",\n      \"sourceSentence\": \"- 15 machine part cards (non-Core)\",\n      \"numericValue\": { \"magnitude\": 15, \"unit\": \"machine part cards\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There is one Doom Core card named \\\"THE DOOM CORE\\\".\",\n      \"sourceSentence\": \"- 1 Doom Core card (\\\"THE DOOM CORE\\\")\",\n      \"numericValue\": { \"magnitude\": 1, \"unit\": \"Doom Core card\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There is one Doom Machine tracking card.\",\n      \"sourceSentence\": \"- 1 Doom Machine tracking card\",\n      \"numericValue\": { \"magnitude\": 1, \"unit\": \"Doom Machine tracking card\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There is one Player HP tracking card that is double-sided, with an A side on page 1 and a B side on page 2.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\",\n      \"numericValue\": { \"magnitude\": 1, \"unit\": \"Player HP tracking card\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There are 18 distinct card faces total.\",\n      \"sourceSentence\": \"- **18 distinct faces total.**\",\n      \"numericValue\": { \"magnitude\": 18, \"unit\": \"distinct card faces\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Three squares are arranged vertically down the left edge of the cycle track.\",\n      \"sourceSentence\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"numericValue\": { \"magnitude\": 3, \"unit\": \"squares\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Two additional squares are arranged horizontally along the bottom of the cycle track.\",\n      \"sourceSentence\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"numericValue\": { \"magnitude\": 2, \"unit\": \"squares\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Positions 2 through 5 contain icons, blanks, or dead spaces.\",\n      \"sourceSentence\": \"Positions 2–5 hold icons, blanks, or dead spaces.\",\n      \"numericValue\": { \"magnitude\": 4, \"unit\": \"positions\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"The order of travel through the cycle track is 1, then 2, then 3, then 4, then 5 in sequence.\",\n      \"sourceSentence\": \"Order of travel = 1 → 2 → 3 → 4 → 5.\",\n      \"numericValue\": { \"magnitude\": 5, \"unit\": \"positions in travel sequence\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Icon spaces are live spaces with an effect badge and are connected to adjacent spaces by yellow connector bars.\",\n      \"sourceSentence\": \"**Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar.\"\n    },\n    {\n      \"statement\": \"Blank spaces are live spaces with a plain dark-teal appearance, contain no icon, and do not fire any effect. They are connected by yellow connectors.\",\n      \"sourceSentence\": \"**Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected.\"\n    },\n    {\n      \"statement\": \"Dead spaces are darkened and diagonally-hatched squares connected by dull grey or teal bars instead of yellow bars.\",\n      \"sourceSentence\": \"**Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow.\"\n    },\n    {\n      \"statement\": \"When a player's die lands on a dead space, the die is sent back to position 1.\",\n      \"sourceSentence\": \"Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1.\"\n    }\n  ]\n}\n```",
+    "ttft_ms": 70767,
+    "ttft_stream_ms": 1635,
+    "time_to_request_ms": 49,
+    "type": "result",
+    "duration_ms": 78277,
+    "uuid": "c654dfdd-6b49-4589-bd62-31534abc1cdf"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"There are 15 machine part cards that are non-Core.\",\n      \"sourceSentence\": \"- 15 machine part cards (non-Core)\",\n      \"numericValue\": { \"magnitude\": 15, \"unit\": \"machine part cards\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There is one Doom Core card named \\\"THE DOOM CORE\\\".\",\n      \"sourceSentence\": \"- 1 Doom Core card (\\\"THE DOOM CORE\\\")\",\n      \"numericValue\": { \"magnitude\": 1, \"unit\": \"Doom Core card\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There is one Doom Machine tracking card.\",\n      \"sourceSentence\": \"- 1 Doom Machine tracking card\",\n      \"numericValue\": { \"magnitude\": 1, \"unit\": \"Doom Machine tracking card\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There is one Player HP tracking card that is double-sided, with an A side on page 1 and a B side on page 2.\",\n      \"sourceSentence\": \"- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)\",\n      \"numericValue\": { \"magnitude\": 1, \"unit\": \"Player HP tracking card\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"There are 18 distinct card faces total.\",\n      \"sourceSentence\": \"- **18 distinct faces total.**\",\n      \"numericValue\": { \"magnitude\": 18, \"unit\": \"distinct card faces\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Three squares are arranged vertically down the left edge of the cycle track.\",\n      \"sourceSentence\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"numericValue\": { \"magnitude\": 3, \"unit\": \"squares\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Two additional squares are arranged horizontally along the bottom of the cycle track.\",\n      \"sourceSentence\": \"three squares running DOWN the left edge, then two more running RIGHT along the bottom.\",\n      \"numericValue\": { \"magnitude\": 2, \"unit\": \"squares\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Positions 2 through 5 contain icons, blanks, or dead spaces.\",\n      \"sourceSentence\": \"Positions 2–5 hold icons, blanks, or dead spaces.\",\n      \"numericValue\": { \"magnitude\": 4, \"unit\": \"positions\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"The order of travel through the cycle track is 1, then 2, then 3, then 4, then 5 in sequence.\",\n      \"sourceSentence\": \"Order of travel = 1 → 2 → 3 → 4 → 5.\",\n      \"numericValue\": { \"magnitude\": 5, \"unit\": \"positions in travel sequence\", \"approximate\": false }\n    },\n    {\n      \"statement\": \"Icon spaces are live spaces with an effect badge and are connected to adjacent spaces by yellow connector bars.\",\n      \"sourceSentence\": \"**Icon space** — a live space with an effect badge. Connected to its neighbours by a YELLOW connector bar.\"\n    },\n    {\n      \"statement\": \"Blank spaces are live spaces with a plain dark-teal appearance, contain no icon, and do not fire any effect. They are connected by yellow connectors.\",\n      \"sourceSentence\": \"**Blank space** — a live space, plain dark-teal, no icon (no effect fires). Also YELLOW-connected.\"\n    },\n    {\n      \"statement\": \"Dead spaces are darkened and diagonally-hatched squares connected by dull grey or teal bars instead of yellow bars.\",\n      \"sourceSentence\": \"**Dead space** — a DARKENED, diagonally-HATCHED square. Connected by dull grey/teal bars, not yellow.\"\n    },\n    {\n      \"statement\": \"When a player's die lands on a dead space, the die is sent back to position 1.\",\n      \"sourceSentence\": \"Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1.\"\n    }\n  ]\n}"
+}

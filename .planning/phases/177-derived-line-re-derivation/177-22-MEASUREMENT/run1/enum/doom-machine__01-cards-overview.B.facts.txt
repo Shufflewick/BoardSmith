@@ -1,0 +1,123 @@
+{
+  "facts": [
+    {
+      "statement": "There are 15 machine part cards that are non-Core type.",
+      "sourceSentence": "- 15 machine part cards (non-Core)",
+      "numericValue": {
+        "magnitude": 15,
+        "unit": "machine part cards",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "There is 1 Doom Core card.",
+      "sourceSentence": "- 1 Doom Core card (\"THE DOOM CORE\")",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Doom Core card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "There is 1 Doom Machine tracking card.",
+      "sourceSentence": "- 1 Doom Machine tracking card",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Doom Machine tracking card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "There is 1 Player HP tracking card.",
+      "sourceSentence": "- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "Player HP tracking card",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The Player HP card is double-sided.",
+      "sourceSentence": "- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)"
+    },
+    {
+      "statement": "The Player HP card's A side is located on page 1.",
+      "sourceSentence": "- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)"
+    },
+    {
+      "statement": "The Player HP card's B side is located on page 2.",
+      "sourceSentence": "- 1 Player HP tracking card (double-sided: A side p.1, B side p.2)"
+    },
+    {
+      "statement": "There are 18 distinct card faces total.",
+      "sourceSentence": "- **18 distinct faces total.**",
+      "numericValue": {
+        "magnitude": 18,
+        "unit": "distinct faces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The movement space has 3 squares running down the left edge.",
+      "sourceSentence": "three squares running DOWN the left edge, then two more running RIGHT along the bottom.",
+      "numericValue": {
+        "magnitude": 3,
+        "unit": "squares",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The movement space has 2 more squares running right along the bottom.",
+      "sourceSentence": "three squares running DOWN the left edge, then two more running RIGHT along the bottom.",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "squares",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "Positions 2 through 5 hold icons, blanks, or dead spaces.",
+      "sourceSentence": "Positions 2–5 hold icons, blanks, or dead spaces."
+    },
+    {
+      "statement": "The order of travel through positions is 1, 2, 3, 4, then 5.",
+      "sourceSentence": "Order of travel = 1 → 2 → 3 → 4 → 5."
+    },
+    {
+      "statement": "Icon spaces are live spaces with an effect badge.",
+      "sourceSentence": "- **Icon space** — a live space with an effect badge."
+    },
+    {
+      "statement": "Icon spaces are connected to their neighbors by a YELLOW connector bar.",
+      "sourceSentence": "Connected to its neighbours by a YELLOW connector bar."
+    },
+    {
+      "statement": "Blank spaces are live spaces.",
+      "sourceSentence": "- **Blank space** — a live space, plain dark-teal, no icon (no effect fires)."
+    },
+    {
+      "statement": "Blank spaces are plain dark-teal with no icon.",
+      "sourceSentence": "- **Blank space** — a live space, plain dark-teal, no icon (no effect fires)."
+    },
+    {
+      "statement": "Blank spaces fire no effects.",
+      "sourceSentence": "- **Blank space** — a live space, plain dark-teal, no icon (no effect fires)."
+    },
+    {
+      "statement": "Blank spaces are YELLOW-connected.",
+      "sourceSentence": "Also YELLOW-connected."
+    },
+    {
+      "statement": "Dead spaces are DARKENED with diagonal hatching.",
+      "sourceSentence": "- **Dead space** — a DARKENED, diagonally-HATCHED square."
+    },
+    {
+      "statement": "Dead spaces are connected by dull grey/teal bars, not yellow.",
+      "sourceSentence": "Connected by dull grey/teal bars, not yellow."
+    },
+    {
+      "statement": "Landing on a dead space sends the die back to position 1.",
+      "sourceSentence": "Per the rulebook (`02-machine-phase.md`), landing on a dead space sends the die back to position 1."
+    }
+  ]
+}

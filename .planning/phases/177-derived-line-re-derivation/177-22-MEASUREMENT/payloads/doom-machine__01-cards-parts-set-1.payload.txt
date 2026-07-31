@@ -1,0 +1,62 @@
+BS-ENUMERATE-V1
+Slice: rulebook/01-cards-parts-set-1.md
+
+> See `01-cards-overview.md` for the source note (QUOTE/Derived/Visual legend), the card
+> inventory, and the shared cycle-track notation used by every machine part card below.
+- **Type:** machine part
+- **Starting HP: 3** (yellow die shows 3 pips)
+- **Roll condition (1 tile):** `[1] + [1] + [1]` — three black die faces each showing one pip, joined by "+".
+Meaning (per 01-dice-roll-symbology.md, cf. the "all sixes" example): **3 dice required; they must all be 1s.**
+- **Cycle track (5 spaces, top → bottom → right):**
+1. HP die slot (die set to 3)
+2. Power+Sentience icon
+3. Blank space (no icon)
+4. Power+Sentience icon
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.1, row 1 col 3 (Power+Sentience strip): "+1 POWER AND +1 SENTIENCE"
+- **Destroy effect (yellow X banner):**
+- QUOTE — cards.pdf p.1, row 1 col 3: "DEAL 1 DMG TO ALL PARTS IN PLAY"
+- (This is the card used as the destroy-effect example in the rulebook, p.1 panel -7-.)
+- **Type:** machine part
+- **Starting HP: 6**
+- **Roll condition (1 tile):** `[2] / [3]` — a two-pip face, a slash, a three-pip face.
+Meaning: **1 die required; it can be either a 2 or a 3.**
+- **Cycle track (5 spaces):**
+1. HP die slot (6)
+2. Damage
+3. Damage
+4. Damage
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.1, row 2 col 1 (Damage strip): "DEAL DMG = HP OF LEFT ADJACENT PART"
+- **Destroy effect:**
+- QUOTE — cards.pdf p.1, row 2 col 1: "DEAL 2 DMG TO LEFT ADJACENT PART"
+- **Type:** machine part
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[6] + [6]` — two six-pip faces joined by "+".
+Meaning: **2 dice required; they must both be 6s.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Damage
+3. Damage
+4. Broken Shield
+5. Dead space (hatched)
+- **Effects (printed order):**
+- QUOTE — cards.pdf p.1, row 2 col 2 (Damage strip): "DEAL 3 DMG"
+- QUOTE — cards.pdf p.1, row 2 col 2 (Broken Shield strip): "ONLY 1 SHIELD DIE CAN BE PLAYED NEXT TURN"
+- **Destroy effect:** none printed.
+- **Type:** machine part
+- **Starting HP: 4**
+- **Roll condition (1 tile):** `[?] = [?]` — two "?" faces joined by "=".
+Meaning: **2 dice required; they must be doubles.**
+- **Cycle track (5 spaces):**
+1. HP die slot (4)
+2. Damage
+3. Dead space (hatched)
+4. Dead space (hatched)
+5. Dead space (hatched)
+- **Effects:**
+- QUOTE — cards.pdf p.1, row 2 col 3 (Damage strip): "DEAL 1 DMG FOR EVERY PART CARD IN PLAY"
+- **Destroy effect:**
+- QUOTE — cards.pdf p.1, row 2 col 3: "-1 POWER"

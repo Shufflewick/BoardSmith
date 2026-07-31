@@ -1,0 +1,197 @@
+{
+  "facts": [
+    {
+      "statement": "This machine part card has 4 hit points at the start.",
+      "sourceSentence": "**Starting HP: 4**",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The roll condition is represented by the symbol [?] = [?].",
+      "sourceSentence": "**Roll condition (1 tile):** `[?] = [?]`"
+    },
+    {
+      "statement": "Activating this card requires rolling 2 dice that must show identical values (doubles).",
+      "sourceSentence": "Meaning: **2 dice required; they must be doubles.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The card's cycle track contains 5 spaces.",
+      "sourceSentence": "**Cycle track (5 spaces):**",
+      "numericValue": {
+        "magnitude": 5,
+        "unit": "spaces",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The first cycle track space is an HP die slot with a value of 4.",
+      "sourceSentence": "1. HP die slot (4)",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The second cycle track space contains the Sentience effect.",
+      "sourceSentence": "2. Sentience"
+    },
+    {
+      "statement": "The third cycle track space contains the Sentience effect.",
+      "sourceSentence": "3. Sentience"
+    },
+    {
+      "statement": "The fourth cycle track space is dead space (hatched).",
+      "sourceSentence": "4. Dead space (hatched)"
+    },
+    {
+      "statement": "The fifth cycle track space is dead space (hatched).",
+      "sourceSentence": "5. Dead space (hatched)"
+    },
+    {
+      "statement": "When activated, this card grants +1 Sentience.",
+      "sourceSentence": "QUOTE — cards.pdf p.3, row 2 col 1 (Sentience strip): \"+1 SENTIENCE\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "SENTIENCE",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "When destroyed, this card grants +2 Power.",
+      "sourceSentence": "QUOTE — cards.pdf p.3, row 2 col 1: \"+2 POWER\"",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "POWER",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "This machine part card has 6 hit points at the start.",
+      "sourceSentence": "**Starting HP: 6**",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The roll condition is represented by the notation [?] < [3].",
+      "sourceSentence": "**Roll condition (1 tile):** `[?] < [3]` — a \"?\" face, a **less-than** sign, a three-pip face."
+    },
+    {
+      "statement": "Activating this card requires rolling 2 dice, with one die showing 3 and the other die showing a value less than 3.",
+      "sourceSentence": "**2 dice required; one must be a 3, another less than 3.**",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "dice",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The less-than (<) operator used in this roll condition is not listed in the rulebook's DICE ROLL SYMBOLOGY panel, which documents only + = / >.",
+      "sourceSentence": "**NOTE:** the \"<\" operator is NOT listed in the rulebook's DICE ROLL SYMBOLOGY panel (which documents only `+ = / >`)."
+    },
+    {
+      "statement": "The roll condition glyph is unambiguously a less-than symbol, but its meaning is undocumented and flagged for designer confirmation.",
+      "sourceSentence": "Flagged for the designer to confirm — the glyph itself is unambiguously a \"<\", but its meaning is undocumented."
+    },
+    {
+      "statement": "The first cycle track space is an HP die slot with a value of 6.",
+      "sourceSentence": "1. HP die slot (6)",
+      "numericValue": {
+        "magnitude": 6,
+        "unit": "HP",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The second cycle track space contains the Lock effect.",
+      "sourceSentence": "2. Lock"
+    },
+    {
+      "statement": "The third cycle track space is blank with no icon.",
+      "sourceSentence": "3. Blank space (no icon)"
+    },
+    {
+      "statement": "The fourth cycle track space contains the Lock effect.",
+      "sourceSentence": "4. Lock"
+    },
+    {
+      "statement": "When activated, this card locks 1 die.",
+      "sourceSentence": "QUOTE — cards.pdf p.3, row 2 col 2 (Lock strip, large text): \"LOCK 1 DIE\"",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "If Sentience is greater than 6, the locked die is removed from play.",
+      "sourceSentence": "QUOTE — cards.pdf p.3, row 2 col 2 (same strip, small text beneath): \"IF SENTIENCE IS > 6 REMOVE THAT DIE FROM PLAY\""
+    },
+    {
+      "statement": "This card has no printed destroy effect.",
+      "sourceSentence": "**Destroy effect:** none printed."
+    },
+    {
+      "statement": "The roll condition is represented by the notation [1] / [6].",
+      "sourceSentence": "**Roll condition (1 tile):** `[1] / [6]` — a one-pip face, a slash, a six-pip face."
+    },
+    {
+      "statement": "Activating this card requires rolling 1 die that can show either a 1 or a 6.",
+      "sourceSentence": "Meaning: **1 die required; it can be either a 1 or a 6.**",
+      "numericValue": {
+        "magnitude": 1,
+        "unit": "die",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The second cycle track space contains the Damage effect.",
+      "sourceSentence": "2. Damage"
+    },
+    {
+      "statement": "The third cycle track space contains the Damage effect.",
+      "sourceSentence": "3. Damage"
+    },
+    {
+      "statement": "The fourth cycle track space contains the Repair effect.",
+      "sourceSentence": "4. Repair"
+    },
+    {
+      "statement": "When activated, this card deals 4 damage.",
+      "sourceSentence": "QUOTE — cards.pdf p.3, row 2 col 3 (Damage strip): \"DEAL 4 DMG\"",
+      "numericValue": {
+        "magnitude": 4,
+        "unit": "DMG",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "When activated, this card repairs 2 hit points to any adjacent parts.",
+      "sourceSentence": "QUOTE — cards.pdf p.3, row 2 col 3 (Repair strip): \"REPAIR 2 TO ANY ADJACENT PARTS\"",
+      "numericValue": {
+        "magnitude": 2,
+        "unit": "repair",
+        "approximate": false
+      }
+    },
+    {
+      "statement": "The Repair icon is depicted as a yellow heart containing a triangle glyph, not the wrench described in the card effect icons documentation.",
+      "sourceSentence": "Note: the Repair icon here is a yellow HEART containing a triangle glyph (not the wrench described in `02-card-effect-icons.md`'s art notes)."
+    },
+    {
+      "statement": "The Repair icon is positioned beside the \"REPAIR 2...\" text, confirming its identity.",
+      "sourceSentence": "It sits beside the \"REPAIR 2...\" text, so its identity is certain."
+    }
+  ]
+}

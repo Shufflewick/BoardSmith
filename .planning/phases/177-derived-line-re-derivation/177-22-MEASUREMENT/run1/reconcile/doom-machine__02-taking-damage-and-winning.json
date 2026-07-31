@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 25615,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "76edb01c-6b12-4def-9912-b6f3c6faead0",
+    "total_cost_usd": 0.1511847,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 16646,
+      "cache_read_input_tokens": 29259,
+      "output_tokens": 2835,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 16646,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 2835,
+          "cache_read_input_tokens": 29259,
+          "cache_creation_input_tokens": 16646,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 16646
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 2835,
+        "cacheReadInputTokens": 29259,
+        "cacheCreationInputTokens": 16646,
+        "webSearchRequests": 0,
+        "costUSD": 0.1511847,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"both\": [\n    {\n      \"statement\": \"Shields absorb damage before HP when a player has remaining shields.\",\n      \"quotedFromA\": \"When a machine part card deals damage to you, the damage is applied to your shields first, provided you still have shields remaining.\",\n      \"quotedFromB\": \"Shields absorb damage before HP when a player has remaining shields.\"\n    },\n    {\n      \"statement\": \"Shield dice values are reduced as damage is taken until they are completely expended.\",\n      \"quotedFromA\": \"Taking damage reduces the value of shield dice before anything else.\",\n      \"quotedFromB\": \"Shield dice values are reduced as damage is taken until they are completely expended.\"\n    },\n    {\n      \"statement\": \"Completely expended shield dice are removed to the spent dice pile.\",\n      \"quotedFromA\": \"Shield dice that are completely expended are removed to the player's spent dice pile.\",\n      \"quotedFromB\": \"Completely expended shield dice are removed to the spent dice pile.\"\n    },\n    {\n      \"statement\": \"Damage not absorbed by shields carries over to deal direct damage to the player's HP.\",\n      \"quotedFromA\": \"Damage not absorbed by shield dice carries over and is applied directly to the player's HP.\",\n      \"quotedFromB\": \"Damage not absorbed by shields carries over to deal direct damage to the player's HP.\"\n    },\n    {\n      \"statement\": \"The game is won when the Doom Core has been destroyed.\",\n      \"quotedFromA\": \"The player wins the game when the Doom Core is destroyed.\",\n      \"quotedFromB\": \"The game is won when the Doom Core has been destroyed.\"\n    },\n    {\n      \"statement\": \"It is not necessary to clear all machine part cards in order to win the game.\",\n      \"quotedFromA\": \"Clearing all machine part cards is not required in order to win.\",\n      \"quotedFromB\": \"It is not necessary to clear all machine part cards in order to win the game.\"\n    },\n    {\n      \"statement\": \"The game is lost if the player's HP is reduced to zero.\",\n      \"quotedFromA\": \"If the player's HP reaches zero, the machine destroys the player and the player loses.\",\n      \"quotedFromB\": \"The game is lost if the player's HP is reduced to zero.\"\n    }\n  ],\n  \"aOnly\": [],\n  \"bOnly\": [\n    {\n      \"statement\": \"Machine part cards can deal damage to the player.\",\n      \"sourceSentence\": \"Any time a machine part card deals you damage, it will always damage your shields first (if you have any remaining).\"\n    }\n  ],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 9,\n      \"derivedLineText\": \"Derived (p.2): Shield strength is consumed by reducing the face values of the dice sitting in shield slots; once a shield die's value is exhausted it goes to the spent dice pile.\",\n      \"proposedClassification\": \"corroborated\",\n      \"citedBothStatements\": [\n        \"Shield dice values are reduced as damage is taken until they are completely expended.\",\n        \"Completely expended shield dice are removed to the spent dice pile.\"\n      ]\n    },\n    {\n      \"lineNumber\": 11,\n      \"derivedLineText\": \"Derived (p.2): The only win condition is destroying the Doom Core; the only loss condition is Player HP reaching zero.\",\n      \"proposedClassification\": \"corroborated\",\n      \"citedBothStatements\": [\n        \"The game is won when the Doom Core has been destroyed.\",\n        \"The game is lost if the player's HP is reduced to zero.\"\n      ]\n    }\n  ]\n}\n```",
+    "ttft_ms": 18733,
+    "ttft_stream_ms": 1953,
+    "time_to_request_ms": 122,
+    "type": "result",
+    "duration_ms": 25740,
+    "uuid": "9c00bff3-4167-4d09-80d8-7f57da9cad45"
+  },
+  "reconcile": "{\n  \"both\": [\n    {\n      \"statement\": \"Shields absorb damage before HP when a player has remaining shields.\",\n      \"quotedFromA\": \"When a machine part card deals damage to you, the damage is applied to your shields first, provided you still have shields remaining.\",\n      \"quotedFromB\": \"Shields absorb damage before HP when a player has remaining shields.\"\n    },\n    {\n      \"statement\": \"Shield dice values are reduced as damage is taken until they are completely expended.\",\n      \"quotedFromA\": \"Taking damage reduces the value of shield dice before anything else.\",\n      \"quotedFromB\": \"Shield dice values are reduced as damage is taken until they are completely expended.\"\n    },\n    {\n      \"statement\": \"Completely expended shield dice are removed to the spent dice pile.\",\n      \"quotedFromA\": \"Shield dice that are completely expended are removed to the player's spent dice pile.\",\n      \"quotedFromB\": \"Completely expended shield dice are removed to the spent dice pile.\"\n    },\n    {\n      \"statement\": \"Damage not absorbed by shields carries over to deal direct damage to the player's HP.\",\n      \"quotedFromA\": \"Damage not absorbed by shield dice carries over and is applied directly to the player's HP.\",\n      \"quotedFromB\": \"Damage not absorbed by shields carries over to deal direct damage to the player's HP.\"\n    },\n    {\n      \"statement\": \"The game is won when the Doom Core has been destroyed.\",\n      \"quotedFromA\": \"The player wins the game when the Doom Core is destroyed.\",\n      \"quotedFromB\": \"The game is won when the Doom Core has been destroyed.\"\n    },\n    {\n      \"statement\": \"It is not necessary to clear all machine part cards in order to win the game.\",\n      \"quotedFromA\": \"Clearing all machine part cards is not required in order to win.\",\n      \"quotedFromB\": \"It is not necessary to clear all machine part cards in order to win the game.\"\n    },\n    {\n      \"statement\": \"The game is lost if the player's HP is reduced to zero.\",\n      \"quotedFromA\": \"If the player's HP reaches zero, the machine destroys the player and the player loses.\",\n      \"quotedFromB\": \"The game is lost if the player's HP is reduced to zero.\"\n    }\n  ],\n  \"aOnly\": [],\n  \"bOnly\": [\n    {\n      \"statement\": \"Machine part cards can deal damage to the player.\",\n      \"sourceSentence\": \"Any time a machine part card deals you damage, it will always damage your shields first (if you have any remaining).\"\n    }\n  ],\n  \"derivedLineProposals\": [\n    {\n      \"lineNumber\": 9,\n      \"derivedLineText\": \"Derived (p.2): Shield strength is consumed by reducing the face values of the dice sitting in shield slots; once a shield die's value is exhausted it goes to the spent dice pile.\",\n      \"proposedClassification\": \"corroborated\",\n      \"citedBothStatements\": [\n        \"Shield dice values are reduced as damage is taken until they are completely expended.\",\n        \"Completely expended shield dice are removed to the spent dice pile.\"\n      ]\n    },\n    {\n      \"lineNumber\": 11,\n      \"derivedLineText\": \"Derived (p.2): The only win condition is destroying the Doom Core; the only loss condition is Player HP reaching zero.\",\n      \"proposedClassification\": \"corroborated\",\n      \"citedBothStatements\": [\n        \"The game is won when the Doom Core has been destroyed.\",\n        \"The game is lost if the player's HP is reduced to zero.\"\n      ]\n    }\n  ]\n}"
+}

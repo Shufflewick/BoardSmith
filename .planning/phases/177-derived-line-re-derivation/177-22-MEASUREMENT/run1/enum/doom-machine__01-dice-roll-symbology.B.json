@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 121837,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "3712815c-842b-41a1-91bc-320326d1404e",
+    "total_cost_usd": 0.08773349999999999,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 9210,
+      "cache_read_input_tokens": 21685,
+      "output_tokens": 13427,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 9210,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 10,
+          "output_tokens": 13427,
+          "cache_read_input_tokens": 21685,
+          "cache_creation_input_tokens": 9210,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 9210
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-haiku-4-5-20251001": {
+        "inputTokens": 10,
+        "outputTokens": 13427,
+        "cacheReadInputTokens": 21685,
+        "cacheCreationInputTokens": 9210,
+        "webSearchRequests": 0,
+        "costUSD": 0.08773349999999999,
+        "contextWindow": 200000,
+        "maxOutputTokens": 32000,
+        "canonicalModel": "claude-haiku-4-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"facts\": [\n    {\n      \"statement\": \"Three dice are required.\",\n      \"sourceSentence\": \"3 dice required.\",\n      \"numericValue\": {\"magnitude\": 3, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"The first die plus the second die must equal the value of the third die.\",\n      \"sourceSentence\": \"1st die + 2nd die must = the value of the third die.\"\n    },\n    {\n      \"statement\": \"Three dice are required.\",\n      \"sourceSentence\": \"3 dice required.\",\n      \"numericValue\": {\"magnitude\": 3, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"All three dice must show six.\",\n      \"sourceSentence\": \"They must all be sixes.\"\n    },\n    {\n      \"statement\": \"Two dice are required.\",\n      \"sourceSentence\": \"2 dice required.\",\n      \"numericValue\": {\"magnitude\": 2, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"Both dice must show the same value (doubles).\",\n      \"sourceSentence\": \"They must be doubles.\"\n    },\n    {\n      \"statement\": \"One die is required.\",\n      \"sourceSentence\": \"1 die required.\",\n      \"numericValue\": {\"magnitude\": 1, \"unit\": \"die\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"The die must show either a 2 or a 3.\",\n      \"sourceSentence\": \"It can be either a 2 or a 3 value.\"\n    },\n    {\n      \"statement\": \"Two dice are required.\",\n      \"sourceSentence\": \"2 dice required.\",\n      \"numericValue\": {\"magnitude\": 2, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"One die must show a 3.\",\n      \"sourceSentence\": \"One must be a 3, another greater than 3.\"\n    },\n    {\n      \"statement\": \"Another die must show a value greater than 3.\",\n      \"sourceSentence\": \"One must be a 3, another greater than 3.\"\n    },\n    {\n      \"statement\": \"Two dice are required.\",\n      \"sourceSentence\": \"2 dice required.\",\n      \"numericValue\": {\"magnitude\": 2, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"The two dice must show a 4 and a 5.\",\n      \"sourceSentence\": \"They must be a 4 and a 5.\"\n    }\n  ]\n}\n```",
+    "ttft_ms": 118096,
+    "ttft_stream_ms": 1715,
+    "time_to_request_ms": 455,
+    "type": "result",
+    "duration_ms": 122746,
+    "uuid": "befb0a51-7710-4899-92b7-56a05c81a041"
+  },
+  "facts": "{\n  \"facts\": [\n    {\n      \"statement\": \"Three dice are required.\",\n      \"sourceSentence\": \"3 dice required.\",\n      \"numericValue\": {\"magnitude\": 3, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"The first die plus the second die must equal the value of the third die.\",\n      \"sourceSentence\": \"1st die + 2nd die must = the value of the third die.\"\n    },\n    {\n      \"statement\": \"Three dice are required.\",\n      \"sourceSentence\": \"3 dice required.\",\n      \"numericValue\": {\"magnitude\": 3, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"All three dice must show six.\",\n      \"sourceSentence\": \"They must all be sixes.\"\n    },\n    {\n      \"statement\": \"Two dice are required.\",\n      \"sourceSentence\": \"2 dice required.\",\n      \"numericValue\": {\"magnitude\": 2, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"Both dice must show the same value (doubles).\",\n      \"sourceSentence\": \"They must be doubles.\"\n    },\n    {\n      \"statement\": \"One die is required.\",\n      \"sourceSentence\": \"1 die required.\",\n      \"numericValue\": {\"magnitude\": 1, \"unit\": \"die\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"The die must show either a 2 or a 3.\",\n      \"sourceSentence\": \"It can be either a 2 or a 3 value.\"\n    },\n    {\n      \"statement\": \"Two dice are required.\",\n      \"sourceSentence\": \"2 dice required.\",\n      \"numericValue\": {\"magnitude\": 2, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"One die must show a 3.\",\n      \"sourceSentence\": \"One must be a 3, another greater than 3.\"\n    },\n    {\n      \"statement\": \"Another die must show a value greater than 3.\",\n      \"sourceSentence\": \"One must be a 3, another greater than 3.\"\n    },\n    {\n      \"statement\": \"Two dice are required.\",\n      \"sourceSentence\": \"2 dice required.\",\n      \"numericValue\": {\"magnitude\": 2, \"unit\": \"dice\", \"approximate\": false}\n    },\n    {\n      \"statement\": \"The two dice must show a 4 and a 5.\",\n      \"sourceSentence\": \"They must be a 4 and a 5.\"\n    }\n  ]\n}"
+}

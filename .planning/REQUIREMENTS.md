@@ -394,6 +394,53 @@ the tag.
       dispatched to two independently-sampled, non-deterministic models, without either an
       enumeration-granularity mechanism this run did not test or a redefinition of the criterion
       itself — neither attempted here, per this run's own scope (measurement, not remediation).
+
+      **AMENDMENT 4 (2026-07-31, plan 177-22) — the density hypothesis tested directly and
+      REFUTED at the aggregate level; STILL OPEN, on a worse determinism reading.** Between 177-21
+      and this run, `doom-machine`'s `CARDS.md` (435 lines, 125-150 facts/enumerator, the densest
+      slice in the corpus) was split into 9 page-anchored slices (doom-machine commit `7e05243`),
+      content preservation proven mechanically before this run started. This run (current HEAD,
+      unchanged since `564f1a42` — no BoardSmith source touched — pre-registered
+      `9e272f58` before any dispatch) repeats 177-21's method exactly on the same 32 real `Derived`
+      lines, now spread across 18 slices instead of 15, both runs, 108 real `claude -p` dispatches
+      (two explicit different-family model ids, `claude-opus-5`/`claude-haiku-4-5-20251001`, plus a
+      `claude-sonnet-5` reconciler). **The specific line 177-21 flipped
+      (`CARDS.md` L143, now `01-cards-parts-set-1.md` L66) is stable in both runs of this
+      measurement** — the density hypothesis holds for the one case it was built to explain. **But
+      determinism overall got WORSE, not better: 4/32 lines (12.5%) flip between runs, versus
+      177-21's 1/32 (3.1%) and 177-20's 1/28 (3.6%), and 3 of the 4 new flips occur on ordinary,
+      previously-stable slices never touched by the split** (`seven/01-definitions-and-components.md`
+      L21 — the `7x4x4=112` arithmetic line, stable through both 177-20 and 177-21 — and
+      `seven/01-overview-setup-and-play.md` L38, and `one-two-punch/02-action-cards-and-resolution.md`
+      L117). Each flip is individually traced (`177-CLOSURE-PROOF.md`): 3 of 4 are enumerator B
+      (haiku) omitting or restating a fact differently across runs on a small, ordinary-sized slice
+      (13-50 facts/enumerator, nowhere near the old `CARDS.md`'s 125-150); the 4th (`seven` L21) is
+      a newly-observed failure shape — a decomposition-driven grounding-pairing collision that
+      `composeArithmeticClaim`'s own internal-consistency check correctly caught and refused rather
+      than silently mis-composing. **Conclusion: slice density is not the (sole) cause of this
+      design's cross-run instability — it is a general property of independently-sampled,
+      non-deterministic enumerator models, present at any corpus size.** Splitting the one known
+      dense slice removed that one instability locus without addressing the underlying cause.
+      **Every other closing criterion PASSED on this run's real evidence, the second consecutive
+      definitive run to do so:** zero `contradicted` (0/32, both runs); grounding rejections (1 run
+      1, 8 run 2, all genuine reconciler Rule-2 quoting violations, mechanically caught, zero
+      fabrications passed); independence confirmed by grep of the real production regexes against
+      all 18 real dispatched payloads (zero matches) — a coarser exploratory grep's 4 hits were all
+      the same genuine, transcribed cross-reference sentence the split introduced
+      (`"...QUOTE/Derived/Visual legend..."`), disclosed and distinguished from an actual leak;
+      every non-corroborated line in both runs traces to a named mechanical category. A disclosed,
+      fixed, non-case-tuned measurement-harness bug (not a corpus or code finding): run 1's haiku
+      enumerator emitted syntactically invalid JSON (an unescaped quote echoing the source
+      document's own quoted text) for one slice; repaired generically in the harness's JSON-parsing
+      step before re-running analysis on already-completed dispatch data, disclosed alongside its
+      repair count (`177-22-MEASUREMENT/repair-log-run1.json`). Full detail, both runs' raw dispatch
+      data (108 real `claude -p` calls): `177-CLOSURE-PROOF.md`, `177-22-MEASUREMENT/`. **CHECK-04
+      remains open.** What remains open is now more clearly a design-level question than either
+      prior amendment could show: whether byte-identical classification determinism is achievable
+      at all against hosted, temperature-bearing enumerator models without either (a) redefining the
+      determinism criterion (e.g., stability of the underlying grounded-fact set rather than the
+      final classification label) or (b) a seed/temperature control this run's CLI dispatch surface
+      does not expose — neither attempted here, per measurement-not-remediation scope.
 - [x] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
       commit hash, and any chunk whose code moved since the human last approved it is reported.
 - [ ] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
@@ -452,7 +499,7 @@ the tag.
 | VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
 | CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
 | CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
-| CHECK-04 | Phase 177 | STILL OPEN after the definitive consolidated measurement (177-21, `177-FINAL-PROOF.md`). Original per-line blind re-derivation design (177-01..13) PARTIAL — left OPEN after a 6-plan gap-closure sequence; goal measured in its own unit: 6/16 (37.5%) real candidates got a genuine second opinion (`177-GOAL-MEASUREMENT.md`, citing `177-PROOF-2.md`); retired per `177-EXPERIMENTS/README.md` (asks an unanswerable targeting question). Replacement design (177-14..21), dual enumeration + reconciliation: 177-20 found 28/33 dispatchable lines with determinism failing on 1/28, traced to a real `validateGrounding`/`findMatch` defect; that defect (and a related `ANNOTATION_VOCABULARY_RE` gap) is now CONFIRMED FIXED (`564f1a42`) and re-verified live in 177-21 — `seven` L21 stable in both runs, `CARDS.md` no longer blocked at all. 177-21 measured ALL 32 real Derived lines (corrected count; a harness artifact inflated the prior 33), both runs, 100% attempted for the first time — but determinism STILL failed, on a different line (`CARDS.md` L143), traced this time to real cross-run enumerator-output variance (haiku decomposing a dense slice differently between runs) rather than a code defect. Zero contradicted, zero fabrications, confirmed independence, full explainability all PASS on both runs. CHECK-04 stays open per the run's own pre-registered rule; no specific unfixed code defect is named this time — the open question is whether byte-identical determinism is achievable at all against non-deterministic enumerator models on a large slice. |
+| CHECK-04 | Phase 177 | STILL OPEN after the density-hypothesis test (177-22, `177-CLOSURE-PROOF.md`). Original per-line blind re-derivation design (177-01..13) PARTIAL — left OPEN after a 6-plan gap-closure sequence; goal measured in its own unit: 6/16 (37.5%) real candidates got a genuine second opinion (`177-GOAL-MEASUREMENT.md`, citing `177-PROOF-2.md`); retired per `177-EXPERIMENTS/README.md` (asks an unanswerable targeting question). Replacement design (177-14..22), dual enumeration + reconciliation: 177-20 found 28/33 dispatchable lines with determinism failing on 1/28, traced to a real `validateGrounding`/`findMatch` defect; that defect (and a related `ANNOTATION_VOCABULARY_RE` gap) is now CONFIRMED FIXED (`564f1a42`) and re-verified live in 177-21 — `seven` L21 stable in both runs, `CARDS.md` no longer blocked at all. 177-21 measured ALL 32 real Derived lines (corrected count; a harness artifact inflated the prior 33), both runs, 100% attempted for the first time — but determinism STILL failed, on a different line (`CARDS.md` L143), traced to real cross-run enumerator-output variance (haiku decomposing a dense slice differently between runs). 177-22 tested the resulting density hypothesis directly against a real code change: `doom-machine`'s `CARDS.md` was split into 9 normal-sized page-anchored slices (content preservation proven mechanically) and the exact line that flipped in 177-21 is now stable in both runs — but determinism got WORSE in aggregate (4/32 lines flip, 12.5%, vs 177-21's 1/32) and 3 of the 4 new flips occur on ordinary slices never touched by the split, including `seven` L21 (the `7x4x4=112` line, stable through 177-20 and 177-21). Density is refuted as the (sole) cause — cross-run instability is a general property of non-deterministic enumerator models at any corpus size. Zero contradicted, zero fabrications, confirmed independence, full explainability all PASS on both 177-22 runs, same as 177-21. CHECK-04 stays open; the open question is now explicitly whether byte-identical classification determinism is achievable at all against hosted, temperature-bearing enumerator models without redefining the criterion or controlling a seed the CLI dispatch surface does not expose. |
 | CHECK-06 | Phase 178 | Pending |
 | TEST-01 | Phase 178 | Pending |
 | VERIFY-09 | Phase 179 | Pending |
