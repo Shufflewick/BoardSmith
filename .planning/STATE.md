@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177.1-01-PLAN.md — consolidated the five duplicated annotation-family regexes into derived-line-pattern.ts. Next: 177.1-02-PLAN.md (move the ledger onto the dual-enumeration verdict set)."
-last_updated: "2026-07-31T22:00:00.000Z"
+stopped_at: "Completed 177.1-02-PLAN.md — moved CHECK-04's ledger (atomic upsert-append, fence rejection, read-path revalidation, evidence requirement) onto the dual-enumeration verdict set in verify-derive-check.ts. Next: 177.1-03-PLAN.md (reconcileSlice() and retarget verify-derive-record)."
+last_updated: "2026-07-31T23:00:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 12
@@ -21,30 +21,39 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plan 01 of 8 complete (consolidated the annotation-family regexes); plans 02-08 remain (ledger move, reconcileSlice, CLI surface, verify-game.md rewrite, split-bar proof, retired-design deletion, live end-to-end run).
+**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline. Plans 01-02 of 8
+complete (annotation-family regex consolidation; ledger moved onto the dual-enumeration verdict
+set); plans 03-08 remain (reconcileSlice + CLI retarget, CLI surface, verify-game.md rewrite,
+split-bar proof, retired-design deletion, live end-to-end run).
 
 ## Current Position
 
-`177.1-01-PLAN.md` (2026-07-31) consolidated the five duplicated `Derived`/`Visual`/`Named-but-undefined`
-annotation-family regexes into one exported, mechanically-built pattern set in the existing
-no-imports leaf module `derived-line-pattern.ts` (`ANNOTATION_FAMILIES`, `ANNOTATION_CITATION_RE`,
-`ANNOTATION_VOCABULARY_RE`, `annotationLineStartRe`, `ANNOTATION_CITATION_SOURCES`), so Phase 178's
-fourth line-kind (`Example`) requires editing exactly one list. `verify-enumerate.ts` and
-`verify-derive-recheck.ts` now import these exports instead of hand-spelling five independent
-copies; the two consolidated regexes are test-pinned byte-equal (`.source`/`.flags`) to the two
-literals they replace — the zero-behavior-change proof. A new single-definition grep gate in
-`derived-line-pattern.test.ts` walks `src/` and fails the build if a sixth hand-spelled copy is
-ever introduced; confirmed red before the consolidation, green after. **Finding, recorded rather
-than silently resolved**: `verify-classify.ts`'s `PRESENTATION_EXCLUSION_MARKERS` was measured
-NOT element-wise derivable from the family list (different citation body, missing
-`Named-but-undefined`, doubled `Derived` schema variants for pre-170 legacy qualifiers) — left as
-its own literal per the plan's explicit instruction, with a comment naming the difference. Full
-`npm test`: 4146/4146 green (baseline 4130 + 16 new tests, 242→243 files, zero regressions);
-`npx tsc --noEmit` clean except the pre-existing unrelated `docs/seed-to-state.test.ts` rootDir
-error (confirmed present identically on a clean stash of this plan's changes). No packages
-installed. See `.planning/phases/177.1-wire-check04-closed-design/177.1-01-SUMMARY.md`. **7 of 8
-plans remain in Phase 177.1** — `177.1-02` (move the ledger, atomic upsert-append, fence rejection,
-and read-path revalidation onto the eight-member dual-enumeration verdict set) is next.
+`177.1-02-PLAN.md` (2026-07-31) created `src/cli/commands/verify-derive-check.ts`, MOVING the
+retired `verify-derive-recheck.ts` ledger's proven machinery — atomic upsert-append (CR-06),
+fence-injection rejection at the single construction site (CR-04), read-path revalidation through
+that same choke point (CR-02), and the evidence requirement (WR-05 analog) — onto the eight-member
+dual-enumeration verdict set. `DERIVE_CHECK_VERDICTS` imports `DerivedLineClassification` by type
+from `verify-enumerate.ts` (never re-spelled) with a compile-time exhaustiveness guard, demonstrated
+live to fail `tsc` when a member is removed, then restored. `createDeriveCheckRecord` is the one
+construction site enforcing verdict-in-set, non-empty `reason`, fence rejection across
+`reason`/`derivedLineText`/every `groundedQuotes` string (naming the exact field), and the
+evidence rule (`corroborated`/`corroborated-by-composition`/`contradicted` require non-empty
+`citedFactIds`; the other five verdicts construct fine empty). The ledger
+(`rulebook/.derive-check/verdicts.md`, project-level, no run-id) reuses `atomicWriteFile`;
+`recordDeriveCheckVerdicts` is array-shaped (a deliberate shape change — the dual-enumeration unit
+of work is a slice, not one line) while preserving the exact upsert-by-key/preserve-order/
+append-last semantics. **Finding, recorded rather than silently adapted**: the retired record's
+`rederivedValue`/`originalReading`/`rederivedReading`/`factAlignment` fields and the WR-04
+pass-through cross-check have no analogue under dual enumeration (no second BLIND reading to align
+against) — dropped entirely; `groundedQuotes` is the replacement evidence artifact. 36 new tests
+proving every moved guarantee, including a hand-seeded ledger record carrying the RETIRED verdict
+`agrees` rejected on read. `verify-derive-recheck.ts` left completely untouched and live — its
+deletion is 177.1-07's job. Full `npm test`: 4182/4182 green (baseline 4146 + 36 new tests,
+243→244 files, zero regressions); `npx tsc --noEmit` clean except the pre-existing unrelated
+`docs/seed-to-state.test.ts` rootDir error. No packages installed. See
+`.planning/phases/177.1-wire-check04-closed-design/177.1-02-SUMMARY.md`. **6 of 8 plans remain in
+Phase 177.1** — `177.1-03` (`reconcileSlice()` and retarget `verify-derive-record` onto this new
+ledger) is next.
 
 ---
 
