@@ -131,6 +131,35 @@ any, cover its claim, and one of:
   by both" facts you believe are ingredients anywhere in the compound relationship, via
   `arithmeticNote`, is enough; still propose `corroborated-by-composition` and still never compute
   or confirm any part of the arithmetic yourself.
+
+  **Also supply `arithmeticSpec`** — a machine-readable pointer, ADDITIVE to (never a replacement
+  for) `arithmeticNote` above. `arithmeticNote` is free prose for a human reader; `arithmeticSpec`
+  is the same pointer in a shape code can actually consume, because free prose cannot drive
+  `composeArithmeticClaim`/`composeArithmeticChain`. Populate it for every `corroborated-by-
+  composition` proposal:
+
+  - `arithmeticSpec.kind` — `'single'` for one arithmetic operation, `'chain'` for a genuine
+    compound relationship (more than one step, a later step consuming an earlier step's result).
+  - **`'single'` only:** `arithmeticSpec.operation` — one of `'add' | 'subtract' | 'multiply' |
+    'divide'` — and `arithmeticSpec.operandStatements` — an array of the verbatim `statement` text
+    of the "found by both" entries you are naming as operands, IN OPERAND ORDER (the same facts
+    `citedBothStatements` already names; this just gives code an ordered, structured pointer to
+    them instead of asking it to guess the order from prose).
+  - **`'chain'` only:** `arithmeticSpec.steps` — an ordered list of
+    `{ operation, operandRefs: [{kind:'fact', statement} | {kind:'stepResult', index}] }`, one
+    entry per step, at most `MAX_ARITHMETIC_CHAIN_DEPTH` (3, `verify-enumerate.ts`) steps. Each
+    `operandRefs` entry is either `{kind:'fact', statement}` (a "found by both" statement, verbatim)
+    or `{kind:'stepResult', index}` (an EARLIER step's own computed result, referenced by that
+    step's 0-based position in `steps`).
+  - `arithmeticSpec.claimedResult` — `{ magnitude, unit, approximate }`, READ OFF the `Derived`
+    line's OWN literal text (the number it already states), never computed by you.
+
+  **This does not loosen Rule 1.** You are still naming WHICH facts and WHICH operation the
+  `Derived` line itself asserts — never performing or confirming the arithmetic. CODE performs the
+  computation from the operands you named and REJECTS the composition outright if the computed
+  result does not equal your `claimedResult` — a wrong `claimedResult` is caught, never trusted,
+  exactly like a fabricated quote is caught by `validateGrounding`. The magnitude you write into
+  `claimedResult` is never computed by you; it is copied from the `Derived` line's own text.
 - **`uncorroborated`** — no "found by both" fact covers this claim, and nothing found by both
   contradicts it either. This is the honest default when the passage plausibly supports the line
   but neither enumerator happened to state it as its own fact (this is common and expected for
@@ -195,6 +224,18 @@ Return exactly one object:
       proposedClassification: 'corroborated' | 'corroborated-by-composition' | 'uncorroborated' | 'contradicted' | 'absence',
       citedBothStatements: string[],
       arithmeticNote?: string,
+      arithmeticSpec?: {
+        kind: 'single' | 'chain',
+        operation?: 'add' | 'subtract' | 'multiply' | 'divide',        // 'single' only
+        operandStatements?: string[],                                   // 'single' only
+        steps?: Array<{                                                 // 'chain' only
+          operation: 'add' | 'subtract' | 'multiply' | 'divide',
+          operandRefs: Array<
+            { kind: 'fact', statement: string } | { kind: 'stepResult', index: number }
+          >
+        }>,
+        claimedResult: { magnitude: number, unit: string, approximate: boolean }
+      },
       absenceTargets?: string[]
     }
   ]
@@ -213,6 +254,10 @@ Return exactly one object:
   `corroborated-by-composition` only (including the compound/multi-step case — see above) — it is
   a POINTER for code to check, never a computed result you are asserting yourself. Leave it unset
   for every other classification.
+- `arithmeticSpec` is the SAME pointer as `arithmeticNote`, in the machine-readable shape above —
+  populate it for every `corroborated-by-composition` proposal, alongside `arithmeticNote`, never
+  instead of it. `claimedResult.magnitude` is read off the `Derived` line's own text, never
+  computed by you. Leave it unset for every other classification.
 - `absenceTargets` is for `'absence'` only — literal, verbatim search term(s), never a paraphrase,
   never invented by you beyond what the passage's own claim already names. Leave it unset (or an
   empty array) when no safe literal target exists, per the guidance above — never populate it with

@@ -847,6 +847,49 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     expect(doc).toMatch(/seven:11/);
   });
 
+  it('reconcile-facts.md adds a machine-readable arithmeticSpec, additive to arithmeticNote (177.1-03)', () => {
+    const doc = flat(read('verify/reconcile-facts.md'));
+    expect(doc).toMatch(/arithmeticSpec/);
+    expect(doc).toMatch(/operandStatements/);
+    expect(doc).toMatch(/claimedResult/);
+    expect(doc).toMatch(/arithmeticSpec.{0,400}never computed by you/);
+  });
+
+  it('reconcile-facts.md still carries arithmeticNote (additive, not replaced) alongside arithmeticSpec', () => {
+    const doc = read('verify/reconcile-facts.md');
+    expect((doc.match(/arithmeticNote/g) ?? []).length).toBeGreaterThanOrEqual(1);
+    expect((doc.match(/arithmeticSpec/g) ?? []).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('reconcile-facts.md names MAX_ARITHMETIC_CHAIN_DEPTH by name rather than restating its value unsourced', () => {
+    const doc = read('verify/reconcile-facts.md');
+    expect(doc).toContain('MAX_ARITHMETIC_CHAIN_DEPTH');
+  });
+
+  it('reconcile-facts.md still carries its BS-RECONCILE-V1 token and DISPATCH REJECTED block after the arithmeticSpec addition', () => {
+    const doc = read('verify/reconcile-facts.md');
+    expect(doc).toContain('BS-RECONCILE-V1');
+    expect(doc).toContain('DISPATCH REJECTED');
+  });
+
+  it('reconcile-facts.md names every member of the real exported ArithmeticOp union (cross-file lexicon pin)', async () => {
+    // ArithmeticOp is not itself exported as a runtime value (it is a type), so this pins the
+    // literal string union declared in verify-enumerate.ts against the contract's own prose,
+    // rather than importing a type at runtime (which is not possible).
+    const src = readFileSync(
+      join(__dirname, '..', '..', 'commands', 'verify-enumerate.ts'),
+      'utf-8',
+    );
+    const match = src.match(/export type ArithmeticOp = ([^;]+);/);
+    expect(match).not.toBeNull();
+    const ops = Array.from(match![1].matchAll(/'([a-z]+)'/g)).map((m) => m[1]);
+    expect(ops.length).toBeGreaterThan(0);
+    const doc = read('verify/reconcile-facts.md');
+    for (const op of ops) {
+      expect(doc).toContain(`'${op}'`);
+    }
+  });
+
   it('both new contracts carry a scope-limit sentence', () => {
     const enumerate = read('verify/enumerate-facts.md');
     const reconcile = read('verify/reconcile-facts.md');
