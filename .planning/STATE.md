@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177-12-PLAN.md — the fifth of six gap-closure plans (177-08..13): re-ran the full live CHECK-04 corpus against 177-11's targeting fix with 28 real claude -p dispatches (16 blind + 12 compare) through the real boardsmith verify-derive-record CLI, and measured that the fix DID NOT close the targeting-collapse artifact problem 177-PROOF.md self-reported. 177-TARGETING-PREDICTION.md (commit f0b6a038) was committed alone, before any dispatch, naming a concrete FAILURE outcome (offTargetDisagreements remaining >50% of disagrees) as concretely as the success outcome — that rule fired exactly as predicted: offTargetDisagreements is 8/8 (100%) of this run's disagrees verdicts, exceeding 177-PROOF.md's own pre-fix ratio of 8/9 (89%); genuineDisagreements is 0/16. targetingAmbiguousCount (4/16, all in seven) was the one fully mechanical metric and was predicted exactly by a zero-dispatch dry-run. New finding this proof surfaces and hands to 177-13: a correctly and UNIQUELY narrowed focus passage does not reliably cause the blind subagent to derive the fact that passage supports — 6 of 8 off-target disagreements occurred on lines with a unique focus window, meaning focusQuoteWindow's payload-construction fix is necessary but not sufficient; the remaining gap is in the blind subagent's own derivation judgment, not in anything verify-derive-recheck.ts computes. Both reference-game originals confirmed byte-identical (whole-tree sha256) before and after, both still at their pinned commits. A real authoring defect in the already-committed, immutable 177-TARGETING-PREDICTION.md was found during predicted-vs-measured reconciliation (one-two-punch:95 named in two contradictory buckets; seven:11/seven:42 never individually predicted) and disclosed rather than silently resolved. No source code changed — full npm test 4033/4033 green (unchanged baseline). CHECK-04 stays OPEN/PARTIAL in REQUIREMENTS.md — this is 5 of 6 gap-closure plans; 177-13 (re-measure the phase goal, dispose of CHECK-04) remains. See .planning/phases/177-derived-line-re-derivation/177-12-SUMMARY.md."
-last_updated: "2026-07-31T03:15:00Z"
-last_activity: 2026-07-30 -- Phase 177 gap-closure plan 12 executed (live re-proof of the targeting fix run on real dispatch data; measured FAILURE reported honestly per pre-registered interpretation rule; CHECK-04 stays OPEN/PARTIAL)
+stopped_at: "Completed 177-13-PLAN.md — the sixth and final gap-closure plan (177-08..13), closing Phase 177 with an honest disposition. Measured the phase goal ('rule-bearing inferences get an independent second opinion') in its own unit rather than inferring it from the success criteria: 177-GOAL-MEASUREMENT.md computes, per rule-bearing Derived line across the 16 real dispatch candidates, whether it received a genuine independent second opinion about that line's own fact (a four-condition unit: enumeration, independence, targeting, recording), citing 177-PROOF-2.md throughout. Result: 6/16 (37.5%) — seven 2/10 (20%), one-two-punch 4/6 (67%). GOAL NOT MET. 10 of 16 fail on the targeting condition: 4 mechanically ambiguous (shared focus passage between seven:19/21 and seven:36/38), 6 off-target despite a uniquely-scoped focus window (seven:8/14/11/17, one-two-punch:52/49) — the new finding 177-12 surfaced, that a correctly and uniquely narrowed focus passage does not reliably steer the blind subagent's own derivation to the fact that passage supports. Applied 177-TARGETING-PREDICTION.md's own pre-committed failure rule (already fired in 177-12); introduced no new threshold. CHECK-04's REQUIREMENTS.md entry rewritten against 177-PROOF-2.md and 177-GOAL-MEASUREMENT.md: stays OPEN/PARTIAL — SC-2/SC-3 MET, SC-1 NOT MET, goal NOT MET, residual named as concrete next-attempt work (require the blind subagent to cite which sentence(s) it derived from, or resolve the 4 mechanically-ambiguous shared-passage collisions). ROADMAP.md Phase 177's Result block rewritten with the final re-measured numbers including the regression (offTargetDisagreements 100% vs. the original run's 89%); the phase checkbox stays unchecked (goal unmet) though all 13 plans (7 original + 6 gap-closure) are now marked complete in the plan list. Findings ledger accounts for all 18 177-REVIEW.md findings: 17 fixed (CR-01..07, WR-01..06, WR-08..11), WR-07 (quoteLinesOnly deny-list-to-allow-list inversion) deliberately deferred, dated 2026-07-30, reason recorded. Both prediction files (177-PREDICTION.md, 177-TARGETING-PREDICTION.md) reconfirmed with empty git diff — no retrofitting anywhere in this 6-plan sequence. Full npm test 4033/4033 green (no source code touched — proof-only/documentation plan). This closes Phase 177 execution; CHECK-04 remains open for a future phase to resume with the residual named above. See .planning/phases/177-derived-line-re-derivation/177-13-SUMMARY.md and 177-GOAL-MEASUREMENT.md."
+last_updated: "2026-07-31T05:00:00Z"
+last_activity: 2026-07-30 -- Phase 177 gap-closure plan 13 executed (final plan of the phase; goal measured in its own unit at 6/16 = 37.5%, NOT MET; CHECK-04 left OPEN/PARTIAL on evidence; all 18 review findings accounted for, 17 fixed / 1 deliberately deferred)
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 60
-  completed_plans: 59
-  percent: 98
+  completed_plans: 60
+  percent: 100
 ---
 
 # Project State
@@ -21,12 +21,58 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 177 — Derived-Line Re-Derivation (CHECK-04) — EXECUTING
+**Current focus:** Phase 177 — Derived-Line Re-Derivation (CHECK-04) — EXECUTED, goal NOT MET; CHECK-04 left OPEN. Milestone's next executable phase is 178 (Worked-Example Tests, TBD plans) or completing Phase 170 (5/10).
 
 ## Current Position
 
-Phase: 177 (Derived-Line Re-Derivation) — EXECUTING gap-closure, 12/13 plans complete (7 original +
-5 of 6 gap-closure plans).
+Phase: 177 (Derived-Line Re-Derivation) — ALL 13 PLANS COMPLETE (7 original + 6 gap-closure). Phase
+goal measured NOT MET in its own unit (6/16, 37.5%); CHECK-04 stays OPEN/PARTIAL in
+`REQUIREMENTS.md`; the ROADMAP checkbox stays unchecked. Phase execution is finished — what
+remains for CHECK-04 is future-phase work, not a plan within 177.
+
+`177-13-PLAN.md` (2026-07-30) is the sixth and final gap-closure plan (177-08..13). Task 1 computed
+the phase goal ("rule-bearing inferences get an independent second opinion") in its own unit —
+`177-GOAL-MEASUREMENT.md`, per rule-bearing `Derived` line across the 16 real dispatch candidates,
+applying the plan's own four-condition test (enumeration, independence, targeting, recording), every
+number cited from `177-PROOF-2.md`, never recomputed by hand. **Result: 6/16 (37.5%) received a
+genuine independent second opinion about that line's own fact** — `seven` 2/10 (20%),
+`one-two-punch` 4/6 (67%). 10 of 16 fail on the targeting condition: 4 mechanically ambiguous
+(`seven:19`/`21`, `seven:36`/`38` — shared, indistinguishable focus passages) and 6 off-target
+despite a UNIQUELY-scoped focus window (`seven:8`/`14`/`11`/`17`, `one-two-punch:52`/`49` — the new
+finding `177-12` surfaced: a correctly and uniquely narrowed passage does not reliably steer the
+blind subagent's own derivation to the fact that passage supports). This applies
+`177-TARGETING-PREDICTION.md`'s own pre-committed failure rule, which already fired in `177-12` —
+no new threshold was introduced, and both `git diff` on `177-PREDICTION.md` and
+`177-TARGETING-PREDICTION.md` remain empty, reconfirmed at the end of this final plan. States
+SC-1/SC-2/SC-3 status separately from the goal status (2/3 criteria MET, goal NOT MET — unlike Phase
+174's divergence pattern, here SC-1's own prior failure already signalled the same outcome the
+goal's own unit now confirms and quantifies) and names the residual as concrete next-attempt work:
+either force the blind subagent to cite the specific sentence(s) it derived from (making an
+off-target derivation visible at the blind stage itself), or resolve the 4 mechanically-ambiguous
+shared-passage collisions without reintroducing a leak risk. Task 2 rewrote CHECK-04's
+`REQUIREMENTS.md` entry against `177-PROOF-2.md`/`177-GOAL-MEASUREMENT.md` (stays `[ ]` OPEN/PARTIAL,
+citing the 37.5% figure and both proof runs), rewrote ROADMAP.md Phase 177's `**Result:**` block
+with the final re-measured numbers (including the regression — `offTargetDisagreements` 100% this
+run vs. 89% pre-fix), marked all 13 plans `[x]` in the phase's plan list while leaving the
+top-level phase checkbox unchecked (goal unmet, following Phase 174's own precedent for an honest
+per-phase disposition independent of plan-completion), and added a complete findings ledger to
+`177-GOAL-MEASUREMENT.md` accounting for all 18 `177-REVIEW.md` findings — 17 fixed (CR-01 through
+CR-07, WR-01 through WR-06, WR-08 through WR-11, each naming the closing plan and its empirical
+negative-pin proof) and WR-07 (the `quoteLinesOnly` deny-list-to-allow-list inversion) deliberately
+deferred, dated 2026-07-30 per `177-08-PLAN.md`'s own instruction, with the reason recorded (the
+construction-site backstop from CR-01's fix mitigates the same leak risk an allow-list inversion
+would also address; the inversion itself is real, unattempted future work). No source code was
+modified by this plan — full `npm test`: 4033/4033 green, identical to the pre-plan baseline.
+**Phase 177 execution is complete.** CHECK-04 remains open for a future phase to resume, carrying
+forward the specific negative finding this 6-plan gap-closure sequence surfaces: blind re-derivation
+of a specific inference from a shared or adjacent-topic passage is harder than the original design
+assumed, and the next attempt should not re-try payload-construction fixes without first
+establishing whether the failure is in subagent reading comprehension or a remaining
+payload-construction defect. See
+`.planning/phases/177-derived-line-re-derivation/177-13-SUMMARY.md` and
+`.planning/phases/177-derived-line-re-derivation/177-GOAL-MEASUREMENT.md`.
+
+---
 
 `177-12-PLAN.md` (2026-07-30) is the fifth of six gap-closure plans (177-08..13): pre-registration
 and the live re-proof. Task 1 committed `177-TARGETING-PREDICTION.md` (`f0b6a038`) ALONE, before

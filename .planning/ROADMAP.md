@@ -31,7 +31,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 174: Verify Classifier** - Two-dimension classification (provenance + rule delta), tuned and validated against real pass-1-vs-pass-2 output (completed 2026-07-31, 8 plans. Reopened mid-phase when the goal measured NOT MET; gap-closure plan 174-08 added decision 19's per-citation attribution ladder, roughly halving both games' stale fractions on real data — `one-two-punch` 100%→54.5% (11/11→6/11), `seven` 87.5%→37.5% (14/16→6/16), untuned. **Goal MET under the ROADMAP's literal bar** ("does not flag EVERY chunk as stale"); the stricter "small, explainable subset" bar that 174-08 measured against was added mid-phase by the orchestrator, not in the original spec, and the user ruled the ROADMAP wording governs — see decision 19's RESOLVED note and `174-PROOF.md` §7/§8. Residual stale chunks genuinely cite the changed rule. Carried to 175/176: anchor density in short, heavily cross-referenced rulebooks keeps the staleness set broader than ideal.)
 - [x] **Phase 175: Impact Map & Repair Gating** - Contradictory human gate, cross-file staleness flip, scoped re-playtest (code-changed chunks only) (completed 2026-07-30, 8 plans, all 3 requirements CLOSED. VERIFY-04/05 proven live on real reference-game data; VERIFY-06's mechanism is correct but its real-data payoff is honestly NOT demonstrated — 1 of 12 real rules-stale chunks across both games closes without re-playtesting, not because drift-check returned `unknown` as anticipated, but because most stale chunks' code genuinely drifted for reasons unrelated to the rules finding. See `175-PROOF.md` §§4-9.)
 - [x] **Phase 176: Stale-Chunk Repair** - Ruling re-validation against fresh transcription + the three audit lenses re-run per stale chunk (completed 2026-07-30)
-- [ ] **Phase 177: Derived-Line Re-Derivation** - Independent re-derivation of rule-bearing `Derived` lines, disagreements reported
+- [ ] **Phase 177: Derived-Line Re-Derivation** - Independent re-derivation of rule-bearing `Derived` lines, disagreements reported (13 plans executed — 7 original + 6 gap-closure — goal remains NOT MET on re-measured evidence; see Result below)
 - [ ] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay
 - [ ] **Phase 179: Source-Free Verification Mode** - `/bs-verify-game` degrades honestly when source is unavailable, naming which defect classes went unchecked
 
@@ -268,25 +268,36 @@ Plans:
   1. Every rule-bearing `Derived` line in a verified project is re-derived independently of the original transcription pass, using only quote lines present in the current slice.
   2. A disagreement between the original and re-derived value is reported as a finding, citing both derivations.
   3. The check runs with no source rulebook present and correctly ignores `Visual` lines as out of scope.
-**Plans**: 13 plans (7 original + 6 gap-closure)
+**Plans**: 13 plans (7 original + 6 gap-closure) — ALL 13 EXECUTED
 
-**Result (initial 7 plans):** NOT MET — SC-1 fails on real dispatch data. All 22 real `Derived` lines were enumerated
-(16 real dispatch candidates + 6 mechanically presentation-excluded); 29 real `claude -p` dispatches
-(16 blind + 13 comparison) measured a distribution of `agrees` 4, `disagrees` 9, `underivable` 1,
-`not-rule-bearing` 2 (of 16), against a committed-before-measurement prediction of 5/1/3/7 for the
-same 16-line subset — 5 hits, 11 misses. The blind-independence STRUCTURAL guarantee (decision 5: the
-re-deriving subagent never sees the target line's own text) is proven — real grep on all 16 dispatched
-prompts found zero `Derived (p.`/`Visual (p.` leaks. But the dispatch payload's `Target line`
-identifier carries no information the subagent can use to distinguish WHICH candidate fact is under
-test when a slice has more than one `Derived` line — true of every multi-candidate slice in this
-corpus — so the blind stage repeatedly re-derives the single most obviously derivable fact in a shared
-slice regardless of the nominal target. This dominates the measured 56% `disagrees` rate with
-targeting-collapse artifacts, not genuine original-vs-rederivation content mismatches (one genuine
-on-topic disagreement was found: `one-two-punch:52`, 8 vs. 6 Action Cards). SC-2 (citing both
-derivations) and SC-3 (source-free, ignores `Visual` — proven on constructed input only, zero real
-`Visual` lines in either reference game, same disposition Phase 176 used) are MET. Both
-`~/BoardSmithGames/{seven,one-two-punch}` originals confirmed byte-identical (whole-tree sha256,
-empty diff) before and after all 29 dispatches. Full detail: `177-PROOF.md` §§1-4.
+**Result (FINAL, after all 13 plans, goal re-measured in its own unit):** NOT MET.
+`177-GOAL-MEASUREMENT.md` computes the phase goal ("rule-bearing inferences get an independent
+second opinion") in its own unit, per rule-bearing line, citing `177-PROOF-2.md` throughout: **6 of
+16 real dispatch candidates (37.5%) received a genuine second opinion about that line's own fact** —
+`seven` 2/10 (20%), `one-two-punch` 4/6 (67%). SC-2 and SC-3 remain MET; **SC-1 remains NOT MET**,
+and the gap-closure sequence's own targeting fix (`177-11`: opaque `blindDeriveHandle` +
+`focusQuoteWindow` quote-local narrowing) did **not** close it when re-measured on live dispatch
+data (`177-12`, 28 real `claude -p` dispatches against a pre-registered, immutable prediction
+committed before any dispatch — `177-TARGETING-PREDICTION.md`, `git diff` empty both before and
+after this entire sequence). `offTargetDisagreements` measured 8 of 8 `disagrees` verdicts (100%)
+this run — WORSE than the original run's 8/9 (89%) — firing `177-TARGETING-PREDICTION.md`'s own
+pre-committed failure rule exactly as written: "THE FIX DID NOT WORK." A new, more specific finding
+explains why: 6 of the 10 failing lines have a UNIQUELY-scoped focus passage and still land
+off-target — a correctly and uniquely narrowed focus passage does not reliably steer the blind
+subagent's own derivation to the fact that passage actually supports. The remaining defect is in
+subagent judgment given a correctly-scoped prompt, not in payload construction — `focusQuoteWindow`
+worked exactly as designed at its own layer (its one fully mechanical metric,
+`targetingAmbiguousCount`, was predicted exactly, 4/16, by a zero-dispatch dry-run). This gap-closure
+sequence's real infrastructure work — a working write surface (CR-05), fence-injection-proof and
+revalidating ledger (CR-02/CR-04/CR-06), decoration-proof independence (CR-01), an opaque target
+handle (CR-07), stale/orphan-aware reporting (CR-03/WR-03), and 12 more warning-level fixes — closed
+17 of 18 `177-REVIEW.md` findings (WR-07's deny-list-to-allow-list inversion deliberately deferred,
+dated 2026-07-30). None of that infrastructure resolves the targeting-judgment gap, which is what
+keeps CHECK-04 open. Both `~/BoardSmithGames/{seven,one-two-punch}` originals confirmed
+byte-identical (whole-tree sha256, empty diff) before and after all dispatches across both live
+proof runs (29 + 28 = 57 real `claude -p` dispatches total across `177-07` and `177-12`). Full
+detail: `177-PROOF.md` §§1-4 (initial run), `177-PROOF-2.md` §§1-4 (post-fix re-proof),
+`177-GOAL-MEASUREMENT.md` (final goal-unit measurement and findings ledger).
 
 Plans:
 - [x] 177-01-PLAN.md — Widen `PRESENTATION_EXCLUSION_MARKERS` (decision 13), pinned by the 4 real slipping lines + a negative over-exclusion test; keep the cross-file lexicon pin honest; note 174's results stand
@@ -303,7 +314,7 @@ Gap-closure plans (from `177-VERIFICATION.md` 3/6 must-haves + `177-REVIEW.md` 7
 - [x] 177-10-PLAN.md — GAP 3 / CR-05: the missing `verify-derive-record` CLI write surface, `originalLine`-aware join (CR-03), orphan + staleness reporting (WR-03), printer and error-path fixes (WR-06/WR-02/WR-10), Step 7 corrected and pinned
 - [x] 177-11-PLAN.md — GAP 1: opaque `blindDeriveHandle` replaces the resolvable pointer (CR-07), quote-local focus narrowing so per-candidate payloads differ, mechanical payload-distinctness, and `factAlignment` as the artifact-vs-genuine instrument
 - [x] 177-12-PLAN.md — Pre-register the targeting metric (committed before any dispatch), then re-run the live proof: real `claude -p` on `cp -R` copies, every verdict recorded through the real CLI, originals byte-identical → `177-PROOF-2.md`
-- [ ] 177-13-PLAN.md — Measure the phase GOAL in its own unit and report it honestly; dispose of CHECK-04 on that evidence alone; account for all 18 review findings as fixed or deferred
+- [x] 177-13-PLAN.md — Measure the phase GOAL in its own unit and report it honestly (6/16, 37.5%, NOT MET); dispose of CHECK-04 on that evidence alone (stays OPEN); account for all 18 review findings as fixed (17) or deferred (WR-07, 1)
 
 ### Phase 178: Worked-Example Tests
 **Goal**: Worked examples in the rulebook stop being a one-time seed for hand-written tests and become an accumulating, automatically-derived executable test suite in both build and verify.

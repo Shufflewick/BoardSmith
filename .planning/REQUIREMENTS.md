@@ -214,25 +214,52 @@ the tag.
       no source present.
 - [ ] **CHECK-04**: Derived-line re-derivation — every rule-bearing `Derived` line is re-derived
       independently of pass 1 and disagreements reported. Runs with no source present. **PARTIAL —
-      left OPEN, not closed.** SC-2 and SC-3 are MET on real evidence (`177-PROOF.md` §4): the
-      citing-both-derivations mechanism works unconditionally (`createDeriveVerdictRecord`, 9/9 real
-      `disagrees` records this run carry both fields), and the check is source-free by construction
-      with the same constructed-input-only disposition Phase 176 used for its Visual-lines gap (zero
-      real `Visual (p.` lines in either reference game). **SC-1 is NOT MET** (`177-PROOF.md` §4):
-      the blind-independence STRUCTURAL guarantee (the re-deriving subagent never sees the target
-      line's own text) is proven by real grep on all 16 dispatched prompts, zero leaks
-      (`177-PROOF.md` §2) — but `buildBlindDerivePayload`'s `Target line` identifier carries no
-      information the blind subagent can use to distinguish WHICH candidate fact is under test when
-      a slice has more than one `Derived` line, which is true of every multi-candidate slice in the
-      real 16-line corpus. Measured on real dispatch data (`177-PROOF.md` §3): the blind stage
-      repeatedly re-derives the single most obviously derivable fact in a shared slice regardless of
-      the nominal target, producing a 56% (9/16) `disagrees` rate dominated by targeting-collapse
-      artifacts rather than genuine original-vs-rederivation content mismatches. Verdicts exercised
-      on REAL data: all four (`agrees` 4, `disagrees` 9, `underivable` 1, `not-rule-bearing` 2 of 16
-      real dispatched candidates, `177-PROOF.md` §3) — unlike CHECK-01/CHECK-02, this check's full
-      four-verdict set was exercised live, not only structurally. What remains open: a redesign of
-      the dispatch payload's target-identification mechanism (out of scope for this proof-only plan)
-      before CHECK-04 can be closed.
+      left OPEN, not closed, on re-measured evidence after a full 6-plan gap-closure sequence
+      (177-08..13).** The phase's own goal, measured in its own unit
+      (`177-GOAL-MEASUREMENT.md`, citing `177-PROOF-2.md` §§1-3 throughout): **6 of 16 real
+      dispatch candidates (37.5%) received an independent second opinion genuinely about that
+      line's own fact** — `seven` 2/10 (20%), `one-two-punch` 4/6 (67%). SC-2 and SC-3 remain MET
+      on real evidence: the citing-both-derivations mechanism works unconditionally
+      (`createDeriveVerdictRecord`, 8/8 real `disagrees` records this run carry both fields), and
+      the check is source-free by construction with the same constructed-input-only disposition
+      Phase 176 used for its Visual-lines gap (zero real `Visual (p.` lines in either reference
+      game). **SC-1 remains NOT MET, and the gap-closure sequence's own targeting fix (`177-11`)
+      did not close it when re-measured on live dispatch data (`177-12`/`177-PROOF-2.md`).** The
+      blind-independence STRUCTURAL guarantee is now proven decoration-proof (CR-01, closed
+      `177-08`) and no longer leaks a resolvable coordinate (CR-07, closed `177-11` —
+      `blindDeriveHandle`'s opaque digest replaced the `Slice:`/`Target line:` pointer). But
+      re-running the full live corpus after that fix (`177-12`, 28 real `claude -p` dispatches)
+      measured `offTargetDisagreements` at 8 of 8 `disagrees` verdicts (100%) — WORSE than the
+      pre-fix `177-PROOF.md` ratio (8/9, 89%) — against `177-TARGETING-PREDICTION.md`'s own
+      pre-committed failure rule, which fired exactly as written: "THE FIX DID NOT WORK." A new,
+      more specific finding explains why: 6 of the 10 failing lines in the re-measured corpus have
+      a UNIQUELY-scoped focus passage (`targetingAmbiguous: false`) and still land off-target — a
+      correctly and uniquely narrowed focus passage does not reliably steer the blind subagent's
+      own derivation to the fact that passage actually supports. `focusQuoteWindow`'s
+      payload-construction fix worked exactly as designed at its own layer (zero coordinate leaks;
+      its one fully mechanical metric, `targetingAmbiguousCount`, was predicted exactly, 4/16, by a
+      zero-dispatch dry-run) — the remaining defect is in the blind subagent's own derivation
+      judgment given a correctly-scoped prompt, not in anything `verify-derive-recheck.ts`
+      computes. This is a genuinely different, more specific defect than the one 177-11 closed, not
+      a re-statement of the same gap. The write surface, ledger integrity, and decoration-tolerance
+      gaps this sequence also closed (CR-02 through CR-06, WR-01 through WR-06, WR-08 through
+      WR-11 — 17 of 18 `177-REVIEW.md` findings; see `177-GOAL-MEASUREMENT.md`'s findings ledger)
+      are real, substantial, correctly-built infrastructure — CHECK-04 can now record a verdict
+      end-to-end, cannot be corrupted by model-controlled text, and reports stale/orphaned records
+      honestly. None of that infrastructure work resolves the targeting-judgment gap, which is what
+      keeps CHECK-04 open. Verdicts exercised on REAL data across both proof runs: all four
+      (`agrees`, `disagrees`, `underivable`, `not-rule-bearing`) on both the pre-fix and post-fix
+      16-candidate corpora — unlike CHECK-01/CHECK-02, this check's full four-verdict set has now
+      been exercised live twice, not only structurally. **What remains open, named as concrete
+      work (`177-GOAL-MEASUREMENT.md`'s residual section):** a mechanism that either (a) forces the
+      blind subagent to cite which specific sentence(s) within its focus passage it derived from,
+      making an off-target derivation visible and reportable at the blind stage itself, or (b)
+      resolves the 4 mechanically-ambiguous lines' shared-passage collision without reintroducing a
+      leak risk. Neither was attempted in this gap-closure sequence — both are genuinely unresolved
+      next-attempt work, not vague future polish. **WR-07 (inverting `quoteLinesOnly`'s deny-list
+      to an allow-list) is a separate, deliberately deferred item** (dated 2026-07-30, per
+      `177-08-PLAN.md`'s own instruction) — not a blocker to this disposition, recorded honestly as
+      open rather than silently dropped.
 - [x] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
       commit hash, and any chunk whose code moved since the human last approved it is reported.
 - [ ] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
@@ -291,7 +318,7 @@ the tag.
 | VERIFY-06 | Phase 175 | Complete — `175-PROOF.md` §5/§6 (payoff measured, honestly NOT demonstrated on this data; decision 13 proven LIVE) |
 | CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
 | CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
-| CHECK-04 | Phase 177 | PARTIAL — left OPEN. SC-2/SC-3 MET on real evidence; SC-1 NOT MET — real dispatch data (`177-PROOF.md` §§2-4) shows the blind-independence structural guarantee (never sees the original) holds, but the dispatch payload's target-line identification cannot distinguish which candidate fact is under test in a multi-candidate slice, dominating the measured 56% `disagrees` rate with targeting-collapse artifacts. All four verdicts exercised on REAL data (`agrees` 4, `disagrees` 9, `underivable` 1, `not-rule-bearing` 2 of 16 real candidates). |
+| CHECK-04 | Phase 177 | PARTIAL — left OPEN after a 6-plan gap-closure sequence (177-08..13). Goal measured in its own unit: 6/16 (37.5%) real candidates got a genuine second opinion (`177-GOAL-MEASUREMENT.md`, citing `177-PROOF-2.md`). SC-2/SC-3 MET; SC-1 NOT MET — the 177-11 targeting fix (opaque handle + quote-local focus narrowing) closed CR-07 but did NOT close the artifact problem on re-measurement: `offTargetDisagreements` is 8/8 (100%) of `disagrees` verdicts, worse than the pre-fix 8/9 (89%), per `177-TARGETING-PREDICTION.md`'s own pre-committed failure rule firing as written. New finding: a uniquely-scoped focus passage does not reliably steer the blind subagent's own derivation to the fact it supports (6 of 10 failing lines have a unique focus window). 17/18 review findings fixed; WR-07 deliberately deferred. |
 | CHECK-06 | Phase 178 | Pending |
 | TEST-01 | Phase 178 | Pending |
 | VERIFY-09 | Phase 179 | Pending |
