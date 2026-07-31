@@ -575,6 +575,101 @@ export async function recordDeriveVerdict(
   return replaceDeriveVerdicts(projectDir, merged);
 }
 
+// -------------------------------------------------------------------------------------------
+// verifyDeriveRecordCommand — the write surface (177-10, closing CR-05)
+// -------------------------------------------------------------------------------------------
+
+export interface VerifyDeriveRecordResult {
+  record: DeriveVerdictRecord;
+  ledgerPath: string;
+}
+
+/**
+ * `boardsmith verify-derive-record` — the ONLY write surface for CHECK-04's ledger (177-10,
+ * closing CR-05: `cli.ts` previously registered only the read-only `verify-derive-recheck`
+ * report, so nothing outside a test file could ever populate a verdict — `verifyDeriveRecheckCommand`
+ * would report every candidate `pending` forever).
+ *
+ * Parses `options`, delegates ALL verdict validation to `createDeriveVerdictRecord` (the one
+ * choke point — this command adds no second validator), and persists through `recordDeriveVerdict`
+ * (177-09's upsert-append callable — never `replaceDeriveVerdicts`, the destructive full-rewrite
+ * path). Registers no `--run-id` (177-CONTEXT.md decision 14 — CHECK-04 is project-level) and no
+ * `--force`/`--skip`/`--overwrite`/env-var bypass of any kind, matching every sibling write
+ * command's posture (`verify-classify-record`, `verify-impact-adjudicate`).
+ */
+export async function verifyDeriveRecordCommand(
+  options: {
+    project?: string;
+    slicePath?: string;
+    lineNumber?: string | number;
+    originalLine?: string;
+    verdict?: string;
+    reasoning?: string;
+    rederivedValue?: string;
+    originalReading?: string;
+    rederivedReading?: string;
+    sourceQuote?: string[];
+    json?: boolean;
+  } = {},
+): Promise<VerifyDeriveRecordResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  // Missing-option guards only — never a second pass over verdict semantics. Every check below is
+  // "was the CLI flag supplied at all", not "is the supplied value a legal verdict" (that is
+  // createDeriveVerdictRecord's job, delegated to below, never re-implemented here).
+  if (!options.slicePath) {
+    throw new Error('verify-derive-record requires --slice-path <path>.');
+  }
+  if (options.lineNumber === undefined) {
+    throw new Error('verify-derive-record requires --line-number <n>.');
+  }
+  const lineNumber = Number(options.lineNumber);
+  if (!Number.isFinite(lineNumber)) {
+    throw new Error(`--line-number must be a number, got "${options.lineNumber}".`);
+  }
+  if (!options.originalLine) {
+    throw new Error('verify-derive-record requires --original-line <text>.');
+  }
+  if (!options.rederivedValue) {
+    throw new Error('verify-derive-record requires --rederived-value <text>.');
+  }
+  if (!options.verdict) {
+    throw new Error(
+      `verify-derive-record requires --verdict <${DERIVE_VERDICTS.join('|')}>.`,
+    );
+  }
+  if (!options.reasoning) {
+    throw new Error('verify-derive-record requires --reasoning <text>.');
+  }
+
+  const record = createDeriveVerdictRecord({
+    slicePath: options.slicePath,
+    lineNumber,
+    originalLine: options.originalLine,
+    verdict: options.verdict,
+    reasoning: options.reasoning,
+    rederivedValue: options.rederivedValue,
+    originalReading: options.originalReading,
+    rederivedReading: options.rederivedReading,
+    sourceQuotes: options.sourceQuote,
+  });
+
+  const { ledgerPath } = await recordDeriveVerdict(projectDir, record);
+
+  const result: VerifyDeriveRecordResult = { record, ledgerPath };
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+  console.log(
+    chalk.green(
+      `✓ Recorded derive verdict for ${record.slicePath}:${record.lineNumber}: ${record.verdict}`,
+    ),
+  );
+  console.log(`  Ledger: ${ledgerPath}`);
+  return result;
+}
+
 /**
  * Round-trips exactly what `replaceDeriveVerdicts`/`recordDeriveVerdict` wrote, including a
  * record whose verdict is `underivable`. Returns an empty array (never throws) when no ledger has

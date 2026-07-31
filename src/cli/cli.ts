@@ -38,7 +38,10 @@ import {
 } from './commands/verify-impact.js';
 import { verifyRulingRecheckCommand } from './commands/verify-ruling-recheck.js';
 import { verifyRepairStatusCommand } from './commands/verify-repair.js';
-import { verifyDeriveRecheckCommand } from './commands/verify-derive-recheck.js';
+import {
+  verifyDeriveRecheckCommand,
+  verifyDeriveRecordCommand,
+} from './commands/verify-derive-recheck.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -416,7 +419,8 @@ program
 // CHECK-04 (177-CONTEXT.md): re-derives every rule-bearing Derived line independently of the
 // original transcription pass, using only the current slice's quote lines, and reports any
 // disagreement citing both derivations verbatim. Project-level and source-free BY CONSTRUCTION —
-// this command registers no --run-id (decision 14) and no bypass option of any kind.
+// neither command registers --run-id (decision 14) or a bypass option of any kind.
+// `verify-derive-record` is the ONLY write surface for CHECK-04's ledger (177-10, closing CR-05).
 program
   .command('verify-derive-recheck')
   .description(
@@ -428,6 +432,38 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyDeriveRecheckCommand);
+
+program
+  .command('verify-derive-record')
+  .description(
+    "Record one Derived line's blind re-derivation verdict, atomically upserted into the " +
+      'project-level ledger (the ONLY write surface for CHECK-04)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--slice-path <path>', 'The rulebook/ slice the Derived line lives in')
+  .requiredOption('--line-number <n>', "The Derived line's 1-based line number in that slice")
+  .requiredOption('--original-line <text>', 'The original Derived (p.N): ... line, verbatim')
+  .requiredOption(
+    '--verdict <agrees|disagrees|underivable|not-rule-bearing>',
+    'The comparison dispatch\'s verdict',
+  )
+  .requiredOption('--reasoning <text>', 'The reasoning behind the verdict — the artifact itself')
+  .requiredOption(
+    '--rederived-value <text>',
+    'The blind dispatch\'s own rederivedValue, verbatim (either its derived reading, or the ' +
+      'literal underivable/not-rule-bearing)',
+  )
+  .option(
+    '--original-reading <text>',
+    'For disagrees: the original derivation quoted verbatim',
+  )
+  .option(
+    '--rederived-reading <text>',
+    'For disagrees: the blind re-derivation quoted verbatim',
+  )
+  .option('--source-quote <text...>', 'Quote line(s) the blind dispatch cited (repeatable)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyDeriveRecordCommand);
 
 // Claude Code integration
 const claudeCmd = program

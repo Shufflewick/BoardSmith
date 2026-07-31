@@ -17,6 +17,7 @@ import {
   recordDeriveVerdict,
   readDeriveVerdicts,
   verifyDeriveRecheckCommand,
+  verifyDeriveRecordCommand,
   formatReading,
   type DerivedLineEntry,
   type DeriveVerdictRecord,
@@ -1252,5 +1253,149 @@ describe('verifyDeriveRecheckCommand', () => {
     ).replace(/^\s*\*.*$/gm, '');
     const matches = source.match(/No rulebook\/ directory/g) ?? [];
     expect(matches).toHaveLength(1);
+  });
+});
+
+// ===========================================================================================
+// Task 2 (177-10) — verifyDeriveRecordCommand: the missing write surface (closing CR-05)
+// ===========================================================================================
+
+describe('verifyDeriveRecordCommand', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-record-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('records a verdict readable by verify-derive-recheck --json — the observable CR-05 said did not exist', async () => {
+    await verifyDeriveRecordCommand({
+      project: dir,
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 4,
+      originalLine: 'Derived (p.1): The box contains 112 cards.',
+      verdict: 'agrees',
+      reasoning: 'Matches the quoted component count.',
+      rederivedValue: 'The box contains 112 cards.',
+      sourceQuote: ['The box contains 112 cards.'],
+    });
+
+    const recorded = await readDeriveVerdicts(dir);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].verdict).toBe('agrees');
+    expect(recorded[0].slicePath).toBe('rulebook/01-x.md');
+    expect(recorded[0].lineNumber).toBe(4);
+  });
+
+  it('recording a second verdict for a DIFFERENT line preserves the first (the upsert-append from 177-09, exercised through the real command)', async () => {
+    await verifyDeriveRecordCommand({
+      project: dir,
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 4,
+      originalLine: 'Derived (p.1): The box contains 112 cards.',
+      verdict: 'agrees',
+      reasoning: 'Matches the quoted component count.',
+      rederivedValue: 'The box contains 112 cards.',
+      sourceQuote: ['The box contains 112 cards.'],
+    });
+    await verifyDeriveRecordCommand({
+      project: dir,
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 9,
+      originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
+      verdict: 'disagrees',
+      reasoning: 'The quote lines say 7, not 8.',
+      rederivedValue: 'Each player has 7 Action Cards.',
+      originalReading: 'Each player has 8 Action Cards.',
+      rederivedReading: 'Each player has 7 Action Cards.',
+      sourceQuote: ['Each player has 7 Action Cards.'],
+    });
+
+    const recorded = await readDeriveVerdicts(dir);
+    expect(recorded).toHaveLength(2);
+    expect(recorded.some((r) => r.lineNumber === 4 && r.verdict === 'agrees')).toBe(true);
+    expect(recorded.some((r) => r.lineNumber === 9 && r.verdict === 'disagrees')).toBe(true);
+  });
+
+  it('an invalid verdict exits non-zero with createDeriveVerdictRecord\'s own message — validation is delegated, never re-implemented', async () => {
+    await expect(
+      verifyDeriveRecordCommand({
+        project: dir,
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 4,
+        originalLine: 'Derived (p.1): The box contains 112 cards.',
+        verdict: 'probably-agrees',
+        reasoning: 'x',
+        rederivedValue: 'x',
+      }),
+    ).rejects.toThrow(/Invalid verdict.*agrees.*disagrees.*underivable.*not-rule-bearing/s);
+  });
+
+  it('a disagrees verdict missing originalReading throws createDeriveVerdictRecord\'s own message, not a second validator\'s', async () => {
+    await expect(
+      verifyDeriveRecordCommand({
+        project: dir,
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 9,
+        originalLine: 'Derived (p.1): Each player has 8 Action Cards.',
+        verdict: 'disagrees',
+        reasoning: 'The quote lines say 7, not 8.',
+        rederivedValue: 'Each player has 7 Action Cards.',
+        rederivedReading: 'Each player has 7 Action Cards.',
+        sourceQuote: ['Each player has 7 Action Cards.'],
+      }),
+    ).rejects.toThrow(/no originalReading quoted verbatim/);
+  });
+
+  it('--json emits the recorded record and the relative ledger path and nothing else on stdout', async () => {
+    const logs: string[] = [];
+    const spy = (msg?: unknown) => logs.push(String(msg));
+    const original = console.log;
+    console.log = spy;
+    try {
+      await verifyDeriveRecordCommand({
+        project: dir,
+        slicePath: 'rulebook/01-x.md',
+        lineNumber: 4,
+        originalLine: 'Derived (p.1): The box contains 112 cards.',
+        verdict: 'agrees',
+        reasoning: 'Matches the quoted component count.',
+        rederivedValue: 'The box contains 112 cards.',
+        sourceQuote: ['The box contains 112 cards.'],
+        json: true,
+      });
+    } finally {
+      console.log = original;
+    }
+    expect(logs).toHaveLength(1);
+    const parsed = JSON.parse(logs[0]);
+    expect(parsed.record.verdict).toBe('agrees');
+    expect(parsed.ledgerPath).toBe('rulebook/.derive-recheck/DERIVE-VERDICTS.md');
+  });
+
+  it('missing --slice-path throws a clear message naming the flag', async () => {
+    await expect(
+      verifyDeriveRecordCommand({
+        project: dir,
+        lineNumber: 4,
+        originalLine: 'x',
+        verdict: 'agrees',
+        reasoning: 'x',
+        rederivedValue: 'x',
+        sourceQuote: ['x'],
+      }),
+    ).rejects.toThrow(/--slice-path/);
+  });
+
+  it('registers no --force, --skip, --overwrite, or bypass option of any kind (source-level pin)', () => {
+    const source = readFileSync(join(__dirname, '..', 'cli.ts'), 'utf-8');
+    const block = source.slice(
+      source.indexOf("verify-derive-record'"),
+      source.indexOf('.action(verifyDeriveRecordCommand)') + 40,
+    );
+    expect(block).not.toMatch(/force|skip|overwrite/i);
   });
 });
