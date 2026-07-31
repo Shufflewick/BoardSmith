@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 177.1-08-PLAN.md — Phase 177.1 COMPLETE (8/8). CHECK-04's design is now designer-reachable, proven live. Next: Phase 178."
-last_updated: "2026-07-31T23:15:00.000Z"
+stopped_at: "Completed 178-01-PLAN.md — Example (p.N): recognizer, WR-07 resolved (Option B), ingest marker added. Next: Phase 178 plan 02 (example-derivation.ts)."
+last_updated: "2026-07-31T23:55:09.333Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 8
   total_plans: 73
-  completed_plans: 80
+  completed_plans: 81
   percent: 73
 ---
 
@@ -21,16 +21,46 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 177.1 — Wire CHECK-04's Closed Design Into The Pipeline — **COMPLETE (8/8
-plans)**. All 8 plans done (annotation-family regex consolidation; ledger moved onto the
-dual-enumeration verdict set; reconcileSlice() + verify-derive-record retarget + arithmeticSpec;
-verifyDeriveCheckCommand + both commands registered in cli.ts; verify-game.md Step 7 rewritten onto
-the dual-enumeration design; zero-dispatch pre-registration + product-path replay proof against
-177-22 run1; retired blind per-line design deleted; live end-to-end dispatch proof on `seven` +
-CHECK-04 delivery note). Next: Phase 178 (CHECK-06 worked-example replay, TEST-01, WR-07's deferred
-`quoteLinesOnly` allow-list inversion).
+**Current focus:** Phase 178 — Worked-Example Tests — **1/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 01 created the
+`Example (p.N):` recognizer at a measured, split scope, resolved WR-07 (Option B — deny-list kept,
+CHECK-06 gets its own payload builder), and added the ingest marker. Next: Phase 178 plan 02 (the
+shared `example-derivation.ts` module).
 
 ## Current Position
+
+`178-01-PLAN.md` (2026-07-31) — Phase 178 wave 1 of 11 — created the `Example (p.N):`
+worked-example recognizer at a measured, split scope, resolved WR-07 explicitly, and added the
+ingest marker. Task 1 measured the real blast radius of naively appending `Example` to
+`ANNOTATION_FAMILIES` against all three reference games' live slices via the REAL
+`buildEnumeratorPayload`/`quoteLinesOnly`: zero `Example (p.` citation lines exist in any game
+today (behavior-neutral for a citation-keyed addition), but a naive VOCABULARY-keyed widening
+would sweep up `seven`'s two real quote lines (`"example: 5, 5, 5"` / `"example: 5, 6, 7"`) — and,
+contra the plan's own `<measured_hazard>` hypothesis, the real failure mode is a **silent strip**
+of those lines from the payload (the vocabulary regex strips them before its own backstop check
+ever runs), not a throw — a worse, error-free failure the split design also happens to prevent.
+Task 2 resolved WR-07 as **Option B**: `quoteLinesOnly`'s deny-list is kept and gains `Example`;
+CHECK-06 (a later plan) gets its own separate extraction payload builder for the `Example` lines
+this now excludes, rather than inverting to an allow-list — chosen because Option B is measured
+zero-behavior-change on the entire live corpus while an inversion would re-open CHECK-04's
+already-closed 32-line-corpus composition question. Full evidence in
+`178-WR07-DECISION.md`; `REQUIREMENTS.md`'s WR-07 paragraph updated, history preserved. Task 3
+implemented the split: `derived-line-pattern.ts`'s `ANNOTATION_FAMILIES` (citation-keyed) widened
+to four names; a new `VOCABULARY_KEYED_FAMILIES` (the original three) now drives
+`ANNOTATION_VOCABULARY_RE`, pinned byte-identical. `verify-derive-check.ts` gained
+`EXAMPLE_LINE_RE` (wired into `isQuoteLine`'s deny-list) and now exports `VISUAL_LINE_RE` for plan
+178-02's extraction module (`seven`'s Run-example contradiction lives only in a `Visual` line).
+`transcription-subagent.md` gained an `### EXAMPLE markers` section (marks a worked example IN
+ADDITION TO, never instead of, the quote/Derived/Visual line it illustrates; never resolves a
+source contradiction — transcribes both sides), pinned by a new `ingest.test.ts` PROC-01 describe
+block. `verify-classify.ts` untouched (confirmed via empty `git diff --stat` plus a
+source-assertion test). **Full `npm test`: 244 files / 4153 tests / 0 failing** (baseline
+4125/244). CHECK-06/TEST-01 requirement checkboxes deliberately left unchecked — this plan builds
+only the identification mechanism, not the replay/generation machinery. See
+`.planning/phases/178-worked-example-tests/178-01-SUMMARY.md`. **10 of 11 plans remain in Phase
+178** — `178-02` (the shared `example-derivation.ts` module) is next.
+
+---
 
 `177.1-08-PLAN.md` (2026-07-31) — the final plan of Phase 177.1 — ran the INSTALLED
 `/bs-verify-game` Step 7 sequence for real against a `cp -R` staged `seven`: 6 genuine `claude -p`
@@ -1662,6 +1692,7 @@ Recent decisions affecting current work:
 - [Phase 174-04]: Applied CONTEXT.md decision 18 (added after the plan was authored) in place of the plan's original Task 3 text — chunk staleness is derived from a classification record's quotedPass1 matched against the specific live slice(s) a chunk cites, never from the pair/group verdict wholesale, because real reference games pair into exactly one group each and a group-verdict-keyed roll-up would mark every chunk stale from one sharper line anywhere in the rulebook
 - [Phase 174-04]: ClassificationRecord widened with optional quotedPass1/quotedPass2 fields (beyond 174-02's original schema) so decision 18's line-level attribution has a quote to match against, retained on the persisted ledger record itself
 - [Phase 174-04]: VERIFY-01/VERIFY-03/VERIFY-07 NOT marked complete despite appearing in this plan's frontmatter requirements — plans 174-05/06/07 build the skill-text/subagent-dispatch integration that makes these CLI commands reachable from /bs-verify-game; marking now would repeat the premature-completion pattern Phase 173 already caught twice
+- [Phase 178]: WR-07 resolved as Option B: quoteLinesOnly deny-list kept, Example added to it; CHECK-06 gets its own extraction payload builder rather than an allow-list inversion. — Measured zero-behavior-change on all three reference games (178-01-MEASUREMENT/RESULTS.md); an allow-list would re-open CHECK-04's already-closed corpus composition question.
 
 ### Pending Todos
 
@@ -1673,10 +1704,10 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-30T02:05:00.000Z
-Stopped at: Completed 174-07-PLAN.md — phase closeout, Phase 174 COMPLETE (7/7). Next: Phase 175 (Impact Map & Repair Gating).
+Last session: 2026-07-31T23:55:09.322Z
+Stopped at: Completed 178-01-PLAN.md — Example (p.N): recognizer, WR-07 resolved (Option B), ingest marker added. Next: Phase 178 plan 02 (example-derivation.ts).
 Resume file: 
-None
+178-02-PLAN.md
 
 ## Operator Next Steps
 

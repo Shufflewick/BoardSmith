@@ -426,7 +426,7 @@ dated 2026-07-30, routed to Phase 178. See `177.1-LIVE-PROOF/PROOF.md` and
   2. Running worked-example replay against a reference game's cited slices executes each example against the real engine and reports any mismatch as a finding.
   3. Both mechanisms share the same example-to-test derivation logic rather than duplicating it.
 **Plans**: 11 plans
-  - [ ] 178-01-PLAN.md — Example-line identification: family widening at a measured scope, WR-07 decision, ingest marker
+  - [x] 178-01-PLAN.md — Example-line identification: family widening at a measured scope, WR-07 decision, ingest marker
   - [ ] 178-02-PLAN.md — example-derivation.ts: WorkedExample spec, caller-assigned ids, both dispatch payload builders (SC-3)
   - [ ] 178-03-PLAN.md — CHECK-06 ledger + verify-example-replay read/report command
   - [ ] 178-04-PLAN.md — verify-example-record write surface, provenance gating, CLI registration
@@ -463,7 +463,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 175. Impact Map & Repair Gating | 8/8 | Complete   | 2026-07-30 |
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
 | 177. Derived-Line Re-Derivation | 13/13 | Executed — goal NOT MET (6/16, 37.5%; CHECK-04 stays OPEN, see Result) | - |
-| 178. Worked-Example Tests | 0/TBD | Not started | - |
+| 178. Worked-Example Tests | 1/11 | In Progress|  |
 | 179. Source-Free Verification Mode | 0/TBD | Not started | - |
 
 ## Shipped Milestones
