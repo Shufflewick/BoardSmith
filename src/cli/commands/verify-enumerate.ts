@@ -53,6 +53,35 @@ import { quoteLinesOnly } from './verify-derive-recheck.js';
  * whitespace/punctuation/case/minor-wording restatement so a genuine paraphrase is not rejected as
  * fabrication, and the threshold that draws that line is a documented judgment call (see
  * `MIN_MATCH_LENGTH` below), not a measured constant. Treat it as a heuristic, not a guarantee.
+ *
+ * TWO STRUCTURAL GAPS CLOSED IN 177-17 (both left open, and named, by 177-15/177-16's live
+ * measurement — see `177-EXPERIMENTS/README.md`'s "Its real weakness" section and the task brief
+ * that drove this plan):
+ *
+ *   4. MULTI-STEP ARITHMETIC (`composeArithmeticClaim` performs exactly one operation per call, so
+ *      a genuine COMPOUND relationship — `seven` L36's "draw2/discard1 nets +1/round; 10-3=7 span;
+ *      7 span / 1 net = 7 rounds" — never reached composition at all). `composeArithmeticChain`
+ *      extends the same conservative posture (CHECK a stated relationship, never GENERATE one) to a
+ *      bounded sequence of steps, where a later step may consume an earlier step's own computed
+ *      result as one of its operands. Every leaf operand still traces to a `GroundedBothFact`; every
+ *      intermediate result must itself be a value the `Derived` line literally states (an
+ *      intermediate is not a free variable); the chain depth is bounded at
+ *      `MAX_ARITHMETIC_CHAIN_DEPTH`, stated and justified where that constant is declared.
+ *
+ *   5. ABSENCE CLAIMS ("No edition or printing number is stated...", "This section marks no rules
+ *      as variants...") assert that something is NOT present. Two enumerators listing facts a
+ *      passage SUPPORTS structurally cannot produce "X is absent" — dual enumeration has no
+ *      mechanism to corroborate a negative, ever, by construction. Bucketing these as
+ *      `uncorroborated` (the old behavior) is misleading: it looks identical to "the enumerators
+ *      tried and failed to agree," when in fact this design cannot ask the question at all. The
+ *      classifier now recognizes an explicit `'absence'` proposal (the RECONCILER's judgment call —
+ *      never a keyword list baked into this module, per 177-01's deliberate precedent of shipping
+ *      no absence-detection keyword list) and, ONLY when the reconciler names literal, searchable
+ *      target term(s), mechanically scans the passage's own quote lines (never the `Derived` line's
+ *      own text, which would trivially self-contradict) for those terms — a string check, same
+ *      posture as `validateGrounding`. When no safe target was named, the claim is honestly
+ *      reported as `absence-unverifiable`, its own explicit bucket, never silently downgraded to
+ *      `uncorroborated`.
  */
 
 // -------------------------------------------------------------------------------------------
@@ -366,6 +395,12 @@ export interface ComposedFact {
    * having it silently absorbed. Absent when every operand's units matched after normalization.
    */
   unitVariance?: string[];
+  /**
+   * Present ONLY for a multi-step composition (`composeArithmeticChain`) — one entry per chain
+   * step, in order, recording that step's own magnitudes/operation/result for traceability. Absent
+   * for a single-step `composeArithmeticClaim` result.
+   */
+  chainSteps?: string[];
 }
 
 export type ComposeOutcome = { ok: true; composed: ComposedFact } | { ok: false; reason: string };
@@ -411,6 +446,81 @@ const ARITHMETIC_EPSILON = 1e-9;
  *     unverifiable rather than composed);
  *   - the computed result does not match the claimed result (within float tolerance).
  */
+/**
+ * The single construction site for "what numeric value does this operand contribute, and is it
+ * even eligible to compose at all." Shared, unmodified, between `composeArithmeticClaim` (one
+ * step) and `composeArithmeticChain` (a bounded sequence of steps) — the two functions must never
+ * diverge on what counts as a trustworthy operand, so the check lives here exactly once.
+ */
+type ExtractedOperand =
+  | { ok: true; value: NumericValue; unitVariance?: string }
+  | { ok: false; reason: string };
+
+function extractOperandValue(op: GroundedBothFact): ExtractedOperand {
+  const valueA = op.matchedFactA.numericValue;
+  const valueB = op.matchedFactB.numericValue;
+  let unitVariance: string | undefined;
+  if (valueA && valueB) {
+    // Magnitude and approximate must agree EXACTLY — both are semantically load-bearing, and a
+    // disagreement on either means the two enumerators are not describing the same quantity.
+    const disagree =
+      valueA.magnitude !== valueB.magnitude || valueA.approximate !== valueB.approximate;
+    if (disagree) {
+      return {
+        ok: false,
+        reason:
+          `Operand "${op.statement}"'s two matched facts disagree on numeric value ` +
+          `(A: ${valueA.magnitude} ${valueA.unit}, B: ${valueB.magnitude} ${valueB.unit}) — ` +
+          `refusing to compose from an inconsistent operand.`,
+      };
+    }
+    // Unit wording is NOT compared by string equality. The two enumerators are dispatched
+    // independently and never coordinate on vocabulary, so they routinely label the same
+    // magnitude differently — real observed pairs from the 177-15 measurement:
+    // "highest card number"/"card numbers" and "4 copies of each card"/"4 copies". An exact
+    // string check refused every real composition on this corpus (0/2 verified) while every
+    // magnitude matched exactly. That was brittleness, not a correctness signal.
+    //
+    // Units still cannot be ignored outright, or "7 players" would compose with "10 minutes".
+    // The rule is token compatibility: one label's tokens must be a subset of the other's, so
+    // a narrower phrasing may stand in for a broader one but genuinely different kinds refuse.
+    //
+    // HONESTY: this is a heuristic, not a guarantee. It admits "cards" against "bonus cards"
+    // when magnitudes coincide. Two things bound that risk — magnitude equality is already
+    // required, and this function only ever CHECKS a composition the Derived line itself
+    // states, never generates one. A surviving variance is reported on the result rather than
+    // silently accepted, so a reader can weigh it.
+    if (!unitsCompatible(valueA.unit, valueB.unit)) {
+      return {
+        ok: false,
+        reason:
+          `Operand "${op.statement}"'s two matched facts describe different kinds of quantity ` +
+          `(A: "${valueA.unit}", B: "${valueB.unit}") — refusing to compose across unlike units.`,
+      };
+    }
+    if (normalizeUnitTokens(valueA.unit).join(' ') !== normalizeUnitTokens(valueB.unit).join(' ')) {
+      unitVariance = `"${valueA.unit}" / "${valueB.unit}"`;
+    }
+  }
+  const value = valueA ?? valueB;
+  if (!value) {
+    return {
+      ok: false,
+      reason: `Operand "${op.statement}" carries no numeric value on either matched fact — cannot compose.`,
+    };
+  }
+  if (value.approximate) {
+    return {
+      ok: false,
+      reason:
+        `Operand "${op.statement}" is stated as approximate (${value.magnitude} ${value.unit}) — ` +
+        `composing an approximate operand into a precise conclusion is exactly the false-` +
+        `precision fabrication this module exists to prevent.`,
+    };
+  }
+  return { ok: true, value, ...(unitVariance !== undefined ? { unitVariance } : {}) };
+}
+
 export function composeArithmeticClaim(input: {
   derivedLineText: string;
   operation: ArithmeticOp;
@@ -428,67 +538,10 @@ export function composeArithmeticClaim(input: {
   const operandValues: NumericValue[] = [];
   const unitVariances: string[] = [];
   for (const op of operands) {
-    const valueA = op.matchedFactA.numericValue;
-    const valueB = op.matchedFactB.numericValue;
-    if (valueA && valueB) {
-      // Magnitude and approximate must agree EXACTLY — both are semantically load-bearing, and a
-      // disagreement on either means the two enumerators are not describing the same quantity.
-      const disagree =
-        valueA.magnitude !== valueB.magnitude || valueA.approximate !== valueB.approximate;
-      if (disagree) {
-        return {
-          ok: false,
-          reason:
-            `Operand "${op.statement}"'s two matched facts disagree on numeric value ` +
-            `(A: ${valueA.magnitude} ${valueA.unit}, B: ${valueB.magnitude} ${valueB.unit}) — ` +
-            `refusing to compose from an inconsistent operand.`,
-        };
-      }
-      // Unit wording is NOT compared by string equality. The two enumerators are dispatched
-      // independently and never coordinate on vocabulary, so they routinely label the same
-      // magnitude differently — real observed pairs from the 177-15 measurement:
-      // "highest card number"/"card numbers" and "4 copies of each card"/"4 copies". An exact
-      // string check refused every real composition on this corpus (0/2 verified) while every
-      // magnitude matched exactly. That was brittleness, not a correctness signal.
-      //
-      // Units still cannot be ignored outright, or "7 players" would compose with "10 minutes".
-      // The rule is token compatibility: one label's tokens must be a subset of the other's, so
-      // a narrower phrasing may stand in for a broader one but genuinely different kinds refuse.
-      //
-      // HONESTY: this is a heuristic, not a guarantee. It admits "cards" against "bonus cards"
-      // when magnitudes coincide. Two things bound that risk — magnitude equality is already
-      // required, and this function only ever CHECKS a composition the Derived line itself
-      // states, never generates one. A surviving variance is reported on the result rather than
-      // silently accepted, so a reader can weigh it.
-      if (!unitsCompatible(valueA.unit, valueB.unit)) {
-        return {
-          ok: false,
-          reason:
-            `Operand "${op.statement}"'s two matched facts describe different kinds of quantity ` +
-            `(A: "${valueA.unit}", B: "${valueB.unit}") — refusing to compose across unlike units.`,
-        };
-      }
-      if (normalizeUnitTokens(valueA.unit).join(' ') !== normalizeUnitTokens(valueB.unit).join(' ')) {
-        unitVariances.push(`"${valueA.unit}" / "${valueB.unit}"`);
-      }
-    }
-    const value = valueA ?? valueB;
-    if (!value) {
-      return {
-        ok: false,
-        reason: `Operand "${op.statement}" carries no numeric value on either matched fact — cannot compose.`,
-      };
-    }
-    if (value.approximate) {
-      return {
-        ok: false,
-        reason:
-          `Operand "${op.statement}" is stated as approximate (${value.magnitude} ${value.unit}) — ` +
-          `composing an approximate operand into a precise conclusion is exactly the false-` +
-          `precision fabrication this module exists to prevent.`,
-      };
-    }
-    operandValues.push(value);
+    const extracted = extractOperandValue(op);
+    if (!extracted.ok) return extracted;
+    if (extracted.unitVariance !== undefined) unitVariances.push(extracted.unitVariance);
+    operandValues.push(extracted.value);
   }
 
   for (const value of operandValues) {
@@ -528,6 +581,192 @@ export function composeArithmeticClaim(input: {
     operandIds: operands.map((o) => o.id),
     claimText: derivedLineText,
     ...(unitVariances.length > 0 ? { unitVariance: unitVariances } : {}),
+  };
+
+  return { ok: true, composed };
+}
+
+// -------------------------------------------------------------------------------------------
+// composeArithmeticChain — bounded multi-step composition (177-17, closes the measured
+// "seven L36" gap: composeArithmeticClaim performs exactly one operation per call, so a genuine
+// COMPOUND relationship never reached composition at all)
+// -------------------------------------------------------------------------------------------
+
+/**
+ * How deep a chain may go. `seven` L36 — the only real multi-step compound measured in this
+ * corpus ("draw 2 / discard 1 nets +1 card per round; starting at 3 cards and ending at 10 cards
+ * means 7 rounds") — needs exactly 3: (1) net = draw(2) − discard(1); (2) span = end(10) −
+ * start(3); (3) rounds = span ÷ net. Bounded at exactly that depth, not padded with headroom —
+ * this function CHECKS a stated relationship, never explores one, and a generous bound is an
+ * invitation to search for compositions the `Derived` line never actually makes (the same
+ * fabrication risk `composeArithmeticClaim`'s single-step design was built to refuse). Extending
+ * this bound should require measuring another real multi-step failure, not raising it
+ * speculatively "to be safe."
+ */
+export const MAX_ARITHMETIC_CHAIN_DEPTH = 3;
+
+/** One operand reference inside a chain step: either a leaf grounded fact, or an earlier step's own computed result. */
+export type ChainOperandRef = { kind: 'fact'; index: number } | { kind: 'stepResult'; index: number };
+
+/**
+ * One step of a bounded arithmetic chain. `operandRefs` may mix leaf facts (`kind: 'fact'`,
+ * indexing into the flat `operands` array passed to `composeArithmeticChain`) with references to
+ * an EARLIER step's own result (`kind: 'stepResult'`, indexing into `steps` by position, strictly
+ * less than the step's own index — a chain is a strict sequence, never a DAG, and never permits a
+ * step to reference itself or a step that has not run yet).
+ */
+export interface ArithmeticChainStep {
+  operation: ArithmeticOp;
+  operandRefs: ChainOperandRef[];
+}
+
+export type ComposeChainOutcome = { ok: true; composed: ComposedFact } | { ok: false; reason: string };
+
+/**
+ * Composes a BOUNDED SEQUENCE of arithmetic steps, where a later step may consume an earlier
+ * step's own computed result as one of its operands — the shape `composeArithmeticClaim` cannot
+ * express (it performs exactly one operation). Every constraint that function enforces on a single
+ * step is preserved here, per step:
+ *
+ *   - every LEAF operand must trace to a `GroundedBothFact` (via `extractOperandValue` — the exact
+ *     same magnitude-agreement / unit-compatibility / approximate-refusal checks, never relaxed
+ *     for the chain case);
+ *   - an INTERMEDIATE result is NOT a free variable: it must itself be a value the `Derived` line
+ *     under test literally states (the same "does the line mention this digit" check
+ *     `composeArithmeticClaim` applies to every leaf operand), or the chain is refused. This is
+ *     what keeps a chain from drifting into inventing an unstated intermediate quantity to bridge
+ *     two otherwise-unrelated numbers.
+ *   - the chain is bounded at `MAX_ARITHMETIC_CHAIN_DEPTH` steps — see that constant's comment;
+ *   - the FINAL step's result must match `claimedResult` (within float tolerance), exactly like
+ *     `composeArithmeticClaim`;
+ *   - this function CHECKS a chain of operations the caller supplies (sourced from the `Derived`
+ *     line under test); it never invents which operations to try or in what order — the same
+ *     conservative posture as the single-step function, extended, not loosened, to more than one
+ *     step.
+ *
+ * Refuses (returns `{ ok: false, reason }`, never throws) on any of the same per-operand failures
+ * `composeArithmeticClaim` refuses on, plus: fewer than one step; more than `MAX_ARITHMETIC_CHAIN_DEPTH`
+ * steps; a step with fewer than two operand references; a `stepResult` reference to a step that
+ * has not yet run (self- or forward-reference); an intermediate result the `Derived` line never
+ * mentions; a final result that does not match `claimedResult`.
+ */
+export function composeArithmeticChain(input: {
+  derivedLineText: string;
+  steps: ArithmeticChainStep[];
+  operands: GroundedBothFact[];
+  claimedResult: NumericValue;
+}): ComposeChainOutcome {
+  const { derivedLineText, steps, operands, claimedResult } = input;
+
+  validateNumericValue(claimedResult, 'composeArithmeticChain.claimedResult');
+
+  if (steps.length < 1) {
+    return { ok: false, reason: 'composeArithmeticChain requires at least one step.' };
+  }
+  if (steps.length > MAX_ARITHMETIC_CHAIN_DEPTH) {
+    return {
+      ok: false,
+      reason:
+        `composeArithmeticChain refuses a chain of ${steps.length} steps — bounded at ` +
+        `${MAX_ARITHMETIC_CHAIN_DEPTH} (see MAX_ARITHMETIC_CHAIN_DEPTH's comment: this bound keeps ` +
+        `composition CHECKING a stated relationship, never exploring an open-ended one).`,
+    };
+  }
+
+  const stepResults: NumericValue[] = [];
+  const usedFactIds: string[] = [];
+  const unitVariances: string[] = [];
+  const chainStepStatements: string[] = [];
+
+  for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
+    const step = steps[stepIdx];
+    if (step.operandRefs.length < 2) {
+      return { ok: false, reason: `Chain step ${stepIdx} requires at least two operand references.` };
+    }
+
+    const stepMagnitudes: number[] = [];
+    let lastUnit = '';
+
+    for (const ref of step.operandRefs) {
+      if (ref.kind === 'fact') {
+        const op = operands[ref.index];
+        if (!op) {
+          return {
+            ok: false,
+            reason: `Chain step ${stepIdx} references operand index ${ref.index}, out of range.`,
+          };
+        }
+        const extracted = extractOperandValue(op);
+        if (!extracted.ok) return extracted;
+        if (extracted.unitVariance !== undefined) unitVariances.push(extracted.unitVariance);
+        if (!derivedLineText.includes(String(extracted.value.magnitude))) {
+          return {
+            ok: false,
+            reason:
+              `The Derived line under test does not mention chain step ${stepIdx}'s operand value ` +
+              `${extracted.value.magnitude} (from "${op.statement}") — refusing to compose a ` +
+              `relationship the line itself never states.`,
+          };
+        }
+        stepMagnitudes.push(extracted.value.magnitude);
+        lastUnit = extracted.value.unit;
+        usedFactIds.push(op.id);
+      } else {
+        if (ref.index >= stepIdx) {
+          return {
+            ok: false,
+            reason:
+              `Chain step ${stepIdx} references step ${ref.index}'s result, which has not been ` +
+              `computed yet — a chain is a strict sequence; a step may only reference an EARLIER ` +
+              `step's own result, never itself or a later one.`,
+          };
+        }
+        const prior = stepResults[ref.index];
+        if (!derivedLineText.includes(String(prior.magnitude))) {
+          return {
+            ok: false,
+            reason:
+              `The Derived line under test does not mention the intermediate value ` +
+              `${prior.magnitude} computed at chain step ${ref.index} — an intermediate is not a ` +
+              `free variable; it must be a value the Derived line itself states, or the chain is ` +
+              `refused.`,
+          };
+        }
+        stepMagnitudes.push(prior.magnitude);
+        lastUnit = prior.unit;
+      }
+    }
+
+    const computed = reduceOperation(step.operation, stepMagnitudes);
+    const resultUnit = stepIdx === steps.length - 1 ? claimedResult.unit : lastUnit;
+    stepResults.push({ magnitude: computed, unit: resultUnit, approximate: false });
+    chainStepStatements.push(`${stepMagnitudes.join(` ${step.operation} `)} = ${computed}`);
+  }
+
+  const finalResult = stepResults[stepResults.length - 1];
+  if (Math.abs(finalResult.magnitude - claimedResult.magnitude) > ARITHMETIC_EPSILON) {
+    return {
+      ok: false,
+      reason:
+        `Chain computed ${finalResult.magnitude} from its final step, but the claimed result is ` +
+        `${claimedResult.magnitude} — arithmetic does not check out.`,
+    };
+  }
+
+  const composed: ComposedFact = {
+    id: createHash('sha256')
+      .update(`composed-chain:${derivedLineText}:${chainStepStatements.join('|')}`)
+      .digest('hex')
+      .slice(0, 16),
+    statement:
+      `${chainStepStatements.join('; then ')} ` +
+      `(final: ${claimedResult.magnitude}${claimedResult.unit ? ' ' + claimedResult.unit : ''})`,
+    value: claimedResult,
+    operation: steps[steps.length - 1].operation,
+    operandIds: usedFactIds,
+    claimText: derivedLineText,
+    ...(unitVariances.length > 0 ? { unitVariance: unitVariances } : {}),
+    chainSteps: chainStepStatements,
   };
 
   return { ok: true, composed };
@@ -607,17 +846,29 @@ export class QuoteVerifiedProvenance {
 // -------------------------------------------------------------------------------------------
 
 /**
- * The five classification outcomes. `quote-unverified` is a DOWNGRADE state, never a verdict a
+ * The classification outcomes. `quote-unverified` is a DOWNGRADE state, never a verdict a
  * reconciler asserts directly — it is the mechanical result of a `contradicted`/`uncorroborated`
  * proposal reaching this module with no `QuoteVerifiedProvenance` to back it (see
  * `classifyDerivedLines` below).
+ *
+ * `absence-corroborated`/`absence-contradicted`/`absence-unverifiable` (177-17) exist because dual
+ * enumeration STRUCTURALLY cannot corroborate a claim that something is absent — no enumerator
+ * ever lists a fact that is not there, by construction. Bucketing an absence claim as plain
+ * `uncorroborated` would misleadingly look identical to "both enumerators tried and failed to
+ * agree," when the true situation is "this design cannot ask this question at all." See the
+ * `'absence'` branch in `classifyDerivedLines` for the mechanical (never keyword-guessed) check
+ * that produces `absence-corroborated`/`absence-contradicted`, and for exactly when a claim falls
+ * back to the honest `absence-unverifiable` bucket instead.
  */
 export type DerivedLineClassification =
   | 'corroborated'
   | 'corroborated-by-composition'
   | 'uncorroborated'
   | 'contradicted'
-  | 'quote-unverified';
+  | 'quote-unverified'
+  | 'absence-corroborated'
+  | 'absence-contradicted'
+  | 'absence-unverifiable';
 
 /**
  * The reconciler's proposed classification for one `Derived` line, citing the grounded facts (or
@@ -630,11 +881,28 @@ export interface ReconcilerDerivedLineClaim {
   slicePath: string;
   lineNumber: number;
   derivedLineText: string;
-  proposedClassification: 'corroborated' | 'corroborated-by-composition' | 'uncorroborated' | 'contradicted';
+  proposedClassification:
+    | 'corroborated'
+    | 'corroborated-by-composition'
+    | 'uncorroborated'
+    | 'contradicted'
+    | 'absence';
   /** Grounded-both-bucket fact ids cited as support (corroborated) or conflict (contradicted). */
   citedFactIds: string[];
   /** For corroborated-by-composition only: the composed-fact id being cited. */
   composedFactId?: string;
+  /**
+   * For `'absence'` only. Literal, verbatim search term(s) the RECONCILER names as exactly what
+   * the `Derived` line claims is absent (e.g. `["edition", "printing"]` for "No edition or
+   * printing number is stated..."). NEVER synthesized by this module — recognizing that a
+   * `Derived` line is an absence claim, and naming a safe literal target for it, is a judgment
+   * call this codebase deliberately leaves to the model (177-01's precedent: no absence-detection
+   * keyword list ships in this module). Omit or leave empty when no safe, unambiguous literal
+   * target exists (e.g. a claim spanning several synonymous concepts, like "no variants, optional
+   * modules, or advanced/expert rules") — that claim is reported `absence-unverifiable` rather
+   * than checked with a guessed keyword that would produce false confidence.
+   */
+  absenceTargets?: string[];
 }
 
 export interface DerivedLineClassificationResult {
@@ -674,15 +942,26 @@ export interface ClassifyDerivedLinesResult {
  * unconditionally — there is no code path in this function that can report a "suspect" finding
  * without that value present. This is the fix for 177-EXPERIMENTS/README.md's CORRECTION: a
  * broken quote line upstream of both enumerators must never be allowed to manufacture a confident
- * false accusation against a `Derived` line that was actually correct.
+ * false accusation against a `Derived` line that was actually correct. The SAME guard applies to
+ * `'absence'` proposals that resolve to `absence-corroborated`/`absence-contradicted` — that check
+ * also reads the passage's quote lines, which carry the identical upstream-transcription risk, and
+ * is downgraded to `quote-unverified` under the identical rule when `provenance` is absent.
  */
 export function classifyDerivedLines(input: {
   claims: ReconcilerDerivedLineClaim[];
   groundedBoth: GroundedBothFact[];
   composed: ComposedFact[];
   provenance: QuoteVerifiedProvenance | null;
+  /**
+   * Raw slice markdown text, keyed by `slicePath`, needed ONLY to check `'absence'` proposals.
+   * `quoteLinesOnly()` is applied internally before scanning — matching exactly what the real
+   * enumerators saw, and deliberately excluding the `Derived` line's OWN text, which always
+   * literally contains its own claimed-absent term(s) and would otherwise trivially self-
+   * contradict every absence claim. Omit when this batch has no `'absence'` proposals to check.
+   */
+  passages?: Record<string, string>;
 }): ClassifyDerivedLinesResult {
-  const { claims, groundedBoth, composed, provenance } = input;
+  const { claims, groundedBoth, composed, provenance, passages } = input;
   const groundedById = new Map(groundedBoth.map((f) => [f.id, f] as const));
   const composedById = new Map(composed.map((c) => [c.id, c] as const));
   const citedFactIds = new Set<string>();
@@ -734,6 +1013,80 @@ export function classifyDerivedLines(input: {
         classification: 'corroborated-by-composition',
         citedFactIds: c.operandIds,
         reason: `Verified in code: ${c.statement} (checked against this Derived line's own stated claim, never freely generated).`,
+      };
+    }
+
+    if (claim.proposedClassification === 'absence') {
+      if (!claim.absenceTargets || claim.absenceTargets.length === 0) {
+        return {
+          ...base,
+          classification: 'absence-unverifiable',
+          citedFactIds: [],
+          reason:
+            'Reconciler flagged this Derived line as an absence claim but named no explicit, ' +
+            'literal, searchable target — dual enumeration structurally cannot corroborate a ' +
+            'negative (no enumerator ever lists a fact that is not there), and this module refuses ' +
+            'to guess a keyword to scan for on its own (177-01 precedent: recognizing an absence ' +
+            'claim and naming a safe target for it is a judgment call, not a keyword list baked ' +
+            'into this module). Reported honestly in its own bucket rather than downgraded to ' +
+            'uncorroborated.',
+        };
+      }
+
+      const passage = passages?.[claim.slicePath];
+      if (!passage) {
+        return {
+          ...base,
+          classification: 'absence-unverifiable',
+          citedFactIds: [],
+          reason:
+            `No passage text was supplied for "${claim.slicePath}" to check the named absence ` +
+            `target(s) against — cannot mechanically verify without it.`,
+        };
+      }
+
+      // Same provenance guard as uncorroborated/contradicted below, and for the identical reason:
+      // the scan below reads this passage's own quote lines, which carry the same upstream-
+      // transcription risk (177-EXPERIMENTS/README.md CORRECTION, seven:11) whether the finding is
+      // "no grounded fact corroborates this" or "the target term does/doesn't appear in the text."
+      if (!provenance) {
+        return {
+          ...base,
+          classification: 'quote-unverified',
+          citedFactIds: [],
+          reason:
+            "This project's rulebook has not been verified against its archived source " +
+            '(computeVerificationScope !== "full"). An absence check reads this passage\'s own ' +
+            'quote lines, which carries the identical upstream-transcription risk as any other ' +
+            'suspect finding — downgraded rather than reported (177-EXPERIMENTS/README.md ' +
+            'CORRECTION, seven:11).',
+        };
+      }
+
+      // Scan the REAL quote lines an enumerator actually saw (quoteLinesOnly), never the raw slice
+      // text — the Derived line's own annotation text always literally contains its claimed-absent
+      // term(s) ("No edition..." contains "edition"), so scanning anything wider than the quote
+      // lines would make every absence claim trivially self-contradict.
+      const quoteText = quoteLinesOnly(passage).join('\n').toLowerCase();
+      const found = claim.absenceTargets.filter((t) => quoteText.includes(t.toLowerCase()));
+
+      if (found.length > 0) {
+        return {
+          ...base,
+          classification: 'absence-contradicted',
+          citedFactIds: [],
+          reason:
+            `The passage's own quote lines literally contain "${found.join('", "')}" — the claimed ` +
+            `absence does not hold.`,
+        };
+      }
+      return {
+        ...base,
+        classification: 'absence-corroborated',
+        citedFactIds: [],
+        reason:
+          `None of the named target term(s) (${claim.absenceTargets.join(', ')}) appear anywhere ` +
+          `in this passage's quote lines — mechanically confirms the claimed absence.`,
       };
     }
 

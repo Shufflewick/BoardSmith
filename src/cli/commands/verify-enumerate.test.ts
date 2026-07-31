@@ -11,6 +11,8 @@ import {
   createEnumeratedFact,
   validateGrounding,
   composeArithmeticClaim,
+  composeArithmeticChain,
+  MAX_ARITHMETIC_CHAIN_DEPTH,
   QuoteVerifiedProvenance,
   classifyDerivedLines,
   type EnumeratedFact,
@@ -18,6 +20,7 @@ import {
   type ReconcilerBothClaim,
   type ComposedFact,
   type ReconcilerDerivedLineClaim,
+  type ArithmeticChainStep,
 } from './verify-enumerate.js';
 
 /**
@@ -556,6 +559,222 @@ describe('composeArithmeticClaim', () => {
 });
 
 // ===========================================================================================
+// composeArithmeticChain — bounded multi-step composition (177-17, closes the "seven L36" gap:
+// composeArithmeticClaim performs exactly one operation per call, so a genuine COMPOUND
+// relationship never reached composition at all — 177-15-MEASUREMENT's own measured finding)
+// ===========================================================================================
+
+describe('composeArithmeticChain', () => {
+  it('verifies the REAL seven L36 chain: net = draw(2) - discard(1); span = end(10) - start(3); rounds = span / net', () => {
+    // Derived (p.1): "The round structure is draw 2 / discard 1, netting +1 card per round;
+    // starting at 3 cards and ending at 10 cards means 7 rounds, matching the 7 discards stated
+    // as the count at game end." Verbatim text, from the real 177-FIXTURES corpus.
+    const derivedLineText =
+      'The round structure is draw 2 / discard 1, netting +1 card per round; starting at 3 cards ' +
+      'and ending at 10 cards means 7 rounds, matching the 7 discards stated as the count at game end.';
+    const operands = [
+      groundedNumeric('In each round a player draws 2 cards into their hand.', 2, 'cards'),
+      groundedNumeric('In each round a player discards 1 card face-up.', 1, 'card'),
+      groundedNumeric('The game ends when all players have 10 cards in hand.', 10, 'cards'),
+      groundedNumeric("Each player's starting hand is 3 cards.", 3, 'cards'),
+    ];
+    const steps: ArithmeticChainStep[] = [
+      // step 0: net = 2 - 1 = 1
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 0 }, { kind: 'fact', index: 1 }] },
+      // step 1: span = 10 - 3 = 7
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 2 }, { kind: 'fact', index: 3 }] },
+      // step 2: rounds = span / net = 7 / 1 = 7
+      { operation: 'divide', operandRefs: [{ kind: 'stepResult', index: 1 }, { kind: 'stepResult', index: 0 }] },
+    ];
+    const outcome = composeArithmeticChain({
+      derivedLineText,
+      steps,
+      operands,
+      claimedResult: { magnitude: 7, unit: 'rounds', approximate: false },
+    });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.composed.value.magnitude).toBe(7);
+      expect(outcome.composed.chainSteps).toHaveLength(3);
+      expect(outcome.composed.operandIds).toEqual(operands.map((o) => o.id));
+    }
+  });
+
+  it('is a genuinely DISTINCT bucket from corroborated-by-composition (never merged) — same shape, traceable back to its chain', () => {
+    const derivedLineText = '7 x 4 = 28, then 28 - 3 = 25.';
+    const operands = [groundedNumeric('7', 7, 'x'), groundedNumeric('4', 4, 'x'), groundedNumeric('3', 3, 'x')];
+    const steps: ArithmeticChainStep[] = [
+      { operation: 'multiply', operandRefs: [{ kind: 'fact', index: 0 }, { kind: 'fact', index: 1 }] },
+      { operation: 'subtract', operandRefs: [{ kind: 'stepResult', index: 0 }, { kind: 'fact', index: 2 }] },
+    ];
+    const outcome = composeArithmeticChain({
+      derivedLineText,
+      steps,
+      operands,
+      claimedResult: { magnitude: 25, unit: 'x', approximate: false },
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    // 28 (the intermediate) is present in the text, and 25 is the final claimed value — both
+    // required for the chain to proceed at all, proven by the sibling refusal tests below.
+    expect(outcome.composed.chainSteps).toEqual(['7 multiply 4 = 28', '28 subtract 3 = 25']);
+  });
+
+  it('bounds chain depth at MAX_ARITHMETIC_CHAIN_DEPTH — refuses one step beyond it', () => {
+    expect(MAX_ARITHMETIC_CHAIN_DEPTH).toBe(3);
+    const operands = [
+      groundedNumeric('2', 2, 'x'),
+      groundedNumeric('1', 1, 'x'),
+      groundedNumeric('10', 10, 'x'),
+      groundedNumeric('3', 3, 'x'),
+      groundedNumeric('5', 5, 'x'),
+    ];
+    // 4 steps — one beyond the bound.
+    const tooManySteps: ArithmeticChainStep[] = [
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 0 }, { kind: 'fact', index: 1 }] },
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 2 }, { kind: 'fact', index: 3 }] },
+      { operation: 'divide', operandRefs: [{ kind: 'stepResult', index: 1 }, { kind: 'stepResult', index: 0 }] },
+      { operation: 'add', operandRefs: [{ kind: 'stepResult', index: 2 }, { kind: 'fact', index: 4 }] },
+    ];
+    const outcome = composeArithmeticChain({
+      derivedLineText: '2 1 10 3 5 7 12',
+      steps: tooManySteps,
+      operands,
+      claimedResult: { magnitude: 12, unit: 'x', approximate: false },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toMatch(/bounded at 3/);
+  });
+
+  it('EMPIRICALLY PROVEN bound: a 3-step chain at the bound still succeeds (the bound refuses depth 4, not depth 3)', () => {
+    // Reruns the real seven L36 chain (exactly 3 steps) to prove the bound is not off-by-one in
+    // the wrong direction — refusing the exact depth the one real measured case requires would be
+    // as broken as not bounding it at all.
+    const derivedLineText =
+      'draw 2 / discard 1, netting +1 card per round; starting at 3 cards and ending at 10 cards means 7 rounds.';
+    const operands = [
+      groundedNumeric('draws 2', 2, 'cards'),
+      groundedNumeric('discards 1', 1, 'card'),
+      groundedNumeric('ending 10', 10, 'cards'),
+      groundedNumeric('starting 3', 3, 'cards'),
+    ];
+    const steps: ArithmeticChainStep[] = [
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 0 }, { kind: 'fact', index: 1 }] },
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 2 }, { kind: 'fact', index: 3 }] },
+      { operation: 'divide', operandRefs: [{ kind: 'stepResult', index: 1 }, { kind: 'stepResult', index: 0 }] },
+    ];
+    const outcome = composeArithmeticChain({
+      derivedLineText,
+      steps,
+      operands,
+      claimedResult: { magnitude: 7, unit: 'rounds', approximate: false },
+    });
+    expect(outcome.ok).toBe(true);
+  });
+
+  it('refuses when an intermediate result is NOT mentioned in the Derived line — an intermediate is not a free variable', () => {
+    // draw 3, discard 1 -> net = 2 (never stated); end 10, start 4 -> span = 6 (never stated);
+    // rounds = span / net = 3. Every LEAF value (3, 1, 10, 4) and the final claimed result (3)
+    // are mentioned; neither intermediate (2 or 6) is — a Derived line that states only the raw
+    // ingredients and the final answer, never the bridging quantity, must not let the chain
+    // silently invent that bridge.
+    const derivedLineText =
+      'Starting at 4 cards and ending at 10 cards, drawing 3 and discarding 1 each round, eventually means 3 rounds.';
+    const operands = [
+      groundedNumeric('draws 3', 3, 'cards'),
+      groundedNumeric('discards 1', 1, 'card'),
+      groundedNumeric('ending 10', 10, 'cards'),
+      groundedNumeric('starting 4', 4, 'cards'),
+    ];
+    const steps: ArithmeticChainStep[] = [
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 0 }, { kind: 'fact', index: 1 }] }, // net = 2, unmentioned
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 2 }, { kind: 'fact', index: 3 }] }, // span = 6, unmentioned
+      { operation: 'divide', operandRefs: [{ kind: 'stepResult', index: 1 }, { kind: 'stepResult', index: 0 }] },
+    ];
+    const outcome = composeArithmeticChain({
+      derivedLineText,
+      steps,
+      operands,
+      claimedResult: { magnitude: 3, unit: 'rounds', approximate: false },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toMatch(/does not mention the intermediate value/);
+  });
+
+  it('refuses a forward/self reference — a chain is a strict sequence, never a DAG', () => {
+    const derivedLineText = '2 1 10 3 7';
+    const operands = [
+      groundedNumeric('2', 2, 'x'),
+      groundedNumeric('1', 1, 'x'),
+      groundedNumeric('10', 10, 'x'),
+      groundedNumeric('3', 3, 'x'),
+    ];
+    const steps: ArithmeticChainStep[] = [
+      // step 0 illegally references step 1's result, which has not run yet.
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 0 }, { kind: 'stepResult', index: 1 }] },
+      { operation: 'subtract', operandRefs: [{ kind: 'fact', index: 2 }, { kind: 'fact', index: 3 }] },
+    ];
+    const outcome = composeArithmeticChain({
+      derivedLineText,
+      steps,
+      operands,
+      claimedResult: { magnitude: 7, unit: 'x', approximate: false },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toMatch(/has not been computed yet/);
+  });
+
+  it('still refuses an approximate leaf operand, inherited unmodified from composeArithmeticClaim', () => {
+    const derivedLineText = 'about 7 games at about 7 minutes nets 49, minus 1 is 48.';
+    const operands = [
+      groundedNumeric('about 7 games', 7, 'games', true),
+      groundedNumeric('about 7 minutes', 7, 'minutes', true),
+      groundedNumeric('1', 1, 'x'),
+    ];
+    const steps: ArithmeticChainStep[] = [
+      { operation: 'multiply', operandRefs: [{ kind: 'fact', index: 0 }, { kind: 'fact', index: 1 }] },
+      { operation: 'subtract', operandRefs: [{ kind: 'stepResult', index: 0 }, { kind: 'fact', index: 2 }] },
+    ];
+    const outcome = composeArithmeticChain({
+      derivedLineText,
+      steps,
+      operands,
+      claimedResult: { magnitude: 48, unit: 'x', approximate: true },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toMatch(/approximate/);
+  });
+
+  it('refuses when the final computed result does not match the claimed result', () => {
+    const derivedLineText = '7 x 4 = 28, then 28 - 3 = 100.';
+    const operands = [groundedNumeric('7', 7, 'x'), groundedNumeric('4', 4, 'x'), groundedNumeric('3', 3, 'x')];
+    const steps: ArithmeticChainStep[] = [
+      { operation: 'multiply', operandRefs: [{ kind: 'fact', index: 0 }, { kind: 'fact', index: 1 }] },
+      { operation: 'subtract', operandRefs: [{ kind: 'stepResult', index: 0 }, { kind: 'fact', index: 2 }] },
+    ];
+    const outcome = composeArithmeticChain({
+      derivedLineText,
+      steps,
+      operands,
+      claimedResult: { magnitude: 100, unit: 'x', approximate: false },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toMatch(/does not check out/);
+  });
+
+  it('refuses zero steps', () => {
+    const outcome = composeArithmeticChain({
+      derivedLineText: 'x',
+      steps: [],
+      operands: [groundedNumeric('7', 7, 'x')],
+      claimedResult: { magnitude: 7, unit: 'x', approximate: false },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toMatch(/at least one step/);
+  });
+});
+
+// ===========================================================================================
 // QuoteVerifiedProvenance — the structural quote-provenance guard
 // ===========================================================================================
 
@@ -877,5 +1096,171 @@ describe('classifyDerivedLines', () => {
       provenance: null,
     });
     expect(result.missed).toEqual([]);
+  });
+});
+
+// ===========================================================================================
+// classifyDerivedLines — absence claims (177-17, closes the "otp L128/L132" gap: dual
+// enumeration structurally cannot corroborate a negative, so an absence claim must never
+// masquerade as plain `uncorroborated`)
+// ===========================================================================================
+
+describe('classifyDerivedLines — absence claims', () => {
+  async function fullProvenance(label: string): Promise<QuoteVerifiedProvenance> {
+    const project = join(dir, label);
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from(`%PDF-1.4 fake bytes ${label}\n`);
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash,
+        transcribed: '2026-07-28',
+      }),
+    );
+    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    const provenance = await QuoteVerifiedProvenance.obtain(project);
+    if (!provenance) throw new Error('test setup failed to construct provenance');
+    return provenance;
+  }
+
+  it('lands `absence-unverifiable` when the reconciler names no searchable target (otp L132 shape: "no rules marked as variants, optional modules, or advanced/expert rules") — never guessed', () => {
+    // This is the WORKED EXAMPLE the plan itself warns about: three loosely-related concepts
+    // (variants / optional modules / advanced-expert rules), no single literal phrase reliably
+    // stands in for all three, and guessing one would produce false confidence. The reconciler is
+    // expected to leave absenceTargets empty for exactly this shape, and this module must honor
+    // that rather than inventing a keyword scan on its own.
+    const claim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/02-action-cards.md',
+      lineNumber: 132,
+      derivedLineText:
+        'Derived (p.2): This section marks no rules as variants, optional modules, or advanced/expert rules.',
+      proposedClassification: 'absence',
+      citedFactIds: [],
+      absenceTargets: [],
+    };
+    const result = classifyDerivedLines({ claims: [claim], groundedBoth: [], composed: [], provenance: null });
+    expect(result.classifications[0].classification).toBe('absence-unverifiable');
+    expect(result.classifications[0].reason).toMatch(/no explicit, literal, searchable target/);
+  });
+
+  it('lands `absence-unverifiable` (not a crash, not a silent pass) when no passage text was supplied for the slice', () => {
+    const claim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/missing-passage.md',
+      lineNumber: 1,
+      derivedLineText: 'Derived (p.1): No edition is stated.',
+      proposedClassification: 'absence',
+      citedFactIds: [],
+      absenceTargets: ['edition'],
+    };
+    const result = classifyDerivedLines({
+      claims: [claim],
+      groundedBoth: [],
+      composed: [],
+      provenance: null,
+      passages: {}, // no entry for this slicePath
+    });
+    expect(result.classifications[0].classification).toBe('absence-unverifiable');
+    expect(result.classifications[0].reason).toMatch(/No passage text was supplied/);
+  });
+
+  it('THE STRUCTURAL GUARD: downgrades to `quote-unverified` when a searchable target IS named but provenance is null — same rule as uncorroborated/contradicted', () => {
+    const claim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 1,
+      derivedLineText: 'Derived (p.1): No edition is stated anywhere.',
+      proposedClassification: 'absence',
+      citedFactIds: [],
+      absenceTargets: ['edition'],
+    };
+    const result = classifyDerivedLines({
+      claims: [claim],
+      groundedBoth: [],
+      composed: [],
+      provenance: null,
+      passages: { 'rulebook/01-x.md': 'p.1, X:\n"Some quote line with no dating information."' },
+    });
+    expect(result.classifications[0].classification).toBe('quote-unverified');
+  });
+
+  it('resolves `absence-corroborated` on the REAL otp L128 case: "edition"/"printing" genuinely do not appear in the real passage', async () => {
+    const provenance = await fullProvenance('otp-absence-corroborated');
+    const passageText = await readFixture('one-two-punch/live/02-action-cards-and-resolution.md');
+    const claim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/02-action-cards-and-resolution.md',
+      lineNumber: 128,
+      derivedLineText:
+        'Derived (p.2): No edition or printing number is stated anywhere on this page; the only ' +
+        'dating information is the 2020 copyright year in the colophon.',
+      proposedClassification: 'absence',
+      citedFactIds: [],
+      absenceTargets: ['edition', 'printing'],
+    };
+    const result = classifyDerivedLines({
+      claims: [claim],
+      groundedBoth: [],
+      composed: [],
+      provenance,
+      passages: { 'rulebook/02-action-cards-and-resolution.md': passageText },
+    });
+    expect(result.classifications[0].classification).toBe('absence-corroborated');
+    expect(result.classifications[0].reason).toMatch(/mechanically confirms the claimed absence/);
+  });
+
+  it('the scan excludes the Derived line\'s OWN text — otherwise every absence claim would trivially self-contradict (its own text always contains the claimed-absent word)', async () => {
+    // Sanity-checks the previous test's mechanism directly: the Derived line text itself contains
+    // the literal word "edition" ("No edition..."). If the scan searched the raw slice text
+    // (annotations included) rather than quoteLinesOnly()'s output, this claim would ALWAYS
+    // resolve `absence-contradicted` against itself, regardless of what the real passage says —
+    // which would make the check worthless. Reusing the previous test's real result proves that
+    // did not happen: the outcome was `absence-corroborated`, not `absence-contradicted`.
+    const provenance = await fullProvenance('otp-absence-self-contradiction-guard');
+    const passageText = await readFixture('one-two-punch/live/02-action-cards-and-resolution.md');
+    expect(passageText).toContain('Derived (p.2): No edition or printing number is stated');
+    const claim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/02-action-cards-and-resolution.md',
+      lineNumber: 128,
+      derivedLineText: 'Derived (p.2): No edition or printing number is stated anywhere on this page.',
+      proposedClassification: 'absence',
+      citedFactIds: [],
+      absenceTargets: ['edition', 'printing'],
+    };
+    const result = classifyDerivedLines({
+      claims: [claim],
+      groundedBoth: [],
+      composed: [],
+      provenance,
+      passages: { 'rulebook/02-action-cards-and-resolution.md': passageText },
+    });
+    expect(result.classifications[0].classification).toBe('absence-corroborated');
+  });
+
+  it('resolves `absence-contradicted` when the named target genuinely appears in the passage\'s own quote lines', async () => {
+    const provenance = await fullProvenance('absence-contradicted');
+    const claim: ReconcilerDerivedLineClaim = {
+      slicePath: 'rulebook/01-x.md',
+      lineNumber: 1,
+      derivedLineText: 'Derived (p.1): No edition is stated anywhere on this page.',
+      proposedClassification: 'absence',
+      citedFactIds: [],
+      absenceTargets: ['edition'],
+    };
+    const result = classifyDerivedLines({
+      claims: [claim],
+      groundedBoth: [],
+      composed: [],
+      provenance,
+      passages: {
+        'rulebook/01-x.md': 'p.1, Colophon:\n"This is the Second Edition, printed in 2020."',
+      },
+    });
+    expect(result.classifications[0].classification).toBe('absence-contradicted');
+    expect(result.classifications[0].reason).toMatch(/literally contain "edition"/);
   });
 });
