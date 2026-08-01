@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 50465,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "32ff1af6-6d3e-4419-803f-f666c606e46f",
+    "total_cost_usd": 0.1727793,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 14240,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 5237,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 14240,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 5237,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 14240,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 14240
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 5237,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 14240,
+        "webSearchRequests": 0,
+        "costUSD": 0.1727793,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"examples\": [\n    {\n      \"lineNumber\": 6,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\",\n      \"setup\": \"A dice roll of three dice showing 2, 4, and 6 (first die = 2, second die = 4, third die = 6).\",\n      \"expected\": \"The symbol's requirement is satisfied because the first die plus the second die (2 + 4) equals the value of the third die (6), as stated by the illustration \\\"i.e. 2+4=6\\\".\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 9,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"3 dice required. They must all be sixes.\",\n      \"setup\": \"A dice roll of three dice, each showing a 6 (6, 6, 6).\",\n      \"expected\": \"The symbol's requirement is satisfied because all three dice are sixes.\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"3 dice required. They must all be sixes.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 12,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"2 dice required. They must be doubles.\",\n      \"setup\": \"A dice roll of two dice showing the same value as each other (e.g. two dice both showing 5).\",\n      \"expected\": \"The symbol's requirement is satisfied because the two dice are doubles (match each other).\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"2 dice required. They must be doubles.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 15,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"1 die required. It can be either a 2 or a 3 value.\",\n      \"setup\": \"A dice roll of one die showing a 2 (alternatively, a 3).\",\n      \"expected\": \"The symbol's requirement is satisfied because the single die's value is either 2 or 3.\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"1 die required. It can be either a 2 or a 3 value.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 18,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"2 dice required. One must be a 3, another greater than 3.\",\n      \"setup\": \"A dice roll of two dice showing a 3 and a 5 (one die = 3, other die = 5, which is greater than 3).\",\n      \"expected\": \"The symbol's requirement is satisfied because one die shows 3 and the other die's value (5) is greater than 3.\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"2 dice required. One must be a 3, another greater than 3.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 21,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"2 dice required. They must be a 4 and a 5.\",\n      \"setup\": \"A dice roll of two dice showing a 4 and a 5.\",\n      \"expected\": \"The symbol's requirement is satisfied because the two dice show exactly a 4 and a 5.\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"2 dice required. They must be a 4 and a 5.\\\"\"\n      ]\n    }\n  ]\n}\n```",
+    "ttft_ms": 41328,
+    "ttft_stream_ms": 1220,
+    "time_to_request_ms": 48,
+    "type": "result",
+    "duration_ms": 50511,
+    "uuid": "0be771c5-12f2-479a-b6ff-351f77daf030"
+  },
+  "result": "{\n  \"examples\": [\n    {\n      \"lineNumber\": 6,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\",\n      \"setup\": \"A dice roll of three dice showing 2, 4, and 6 (first die = 2, second die = 4, third die = 6).\",\n      \"expected\": \"The symbol's requirement is satisfied because the first die plus the second die (2 + 4) equals the value of the third die (6), as stated by the illustration \\\"i.e. 2+4=6\\\".\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 9,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"3 dice required. They must all be sixes.\",\n      \"setup\": \"A dice roll of three dice, each showing a 6 (6, 6, 6).\",\n      \"expected\": \"The symbol's requirement is satisfied because all three dice are sixes.\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"3 dice required. They must all be sixes.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 12,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"2 dice required. They must be doubles.\",\n      \"setup\": \"A dice roll of two dice showing the same value as each other (e.g. two dice both showing 5).\",\n      \"expected\": \"The symbol's requirement is satisfied because the two dice are doubles (match each other).\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"2 dice required. They must be doubles.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 15,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"1 die required. It can be either a 2 or a 3 value.\",\n      \"setup\": \"A dice roll of one die showing a 2 (alternatively, a 3).\",\n      \"expected\": \"The symbol's requirement is satisfied because the single die's value is either 2 or 3.\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"1 die required. It can be either a 2 or a 3 value.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 18,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"2 dice required. One must be a 3, another greater than 3.\",\n      \"setup\": \"A dice roll of two dice showing a 3 and a 5 (one die = 3, other die = 5, which is greater than 3).\",\n      \"expected\": \"The symbol's requirement is satisfied because one die shows 3 and the other die's value (5) is greater than 3.\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"2 dice required. One must be a 3, another greater than 3.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 21,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"2 dice required. They must be a 4 and a 5.\",\n      \"setup\": \"A dice roll of two dice showing a 4 and a 5.\",\n      \"expected\": \"The symbol's requirement is satisfied because the two dice show exactly a 4 and a 5.\",\n      \"supportingQuoteLines\": [\n        \"p.1 (panel -13-), DICE ROLL SYMBOLOGY / EXAMPLES:\",\n        \"\\\"2 dice required. They must be a 4 and a 5.\\\"\"\n      ]\n    }\n  ]\n}"
+}

@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 12260,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "c384d37d-c3bd-4b82-b31a-48f855d3458d",
+    "total_cost_usd": 0.1229073,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 16478,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 1017,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 16478,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1017,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 16478,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 16478
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 1017,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 16478,
+        "webSearchRequests": 0,
+        "costUSD": 0.1229073,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"testCode\": \"\",\n  \"imports\": [],\n  \"verdictHint\": \"unexecutable\",\n  \"unexecutableReason\": \"image-derived-indeterminate\"\n}\n```",
+    "ttft_ms": 12018,
+    "ttft_stream_ms": 1332,
+    "time_to_request_ms": 73,
+    "type": "result",
+    "duration_ms": 12339,
+    "uuid": "2877ed39-4a68-484b-9e4a-b96bde751745"
+  },
+  "result": "{\n  \"testCode\": \"\",\n  \"imports\": [],\n  \"verdictHint\": \"unexecutable\",\n  \"unexecutableReason\": \"image-derived-indeterminate\"\n}"
+}

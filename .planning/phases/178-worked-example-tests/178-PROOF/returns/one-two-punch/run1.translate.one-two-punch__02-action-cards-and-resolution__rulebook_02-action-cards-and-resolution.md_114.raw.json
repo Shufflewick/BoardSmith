@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 21393,
+    "num_turns": 3,
+    "stop_reason": "end_turn",
+    "session_id": "1dfef75f-1cc0-4a98-aab8-0651a0963f1e",
+    "total_cost_usd": 0.1619568,
+    "usage": {
+      "input_tokens": 6,
+      "cache_creation_input_tokens": 18092,
+      "cache_read_input_tokens": 121756,
+      "output_tokens": 1124,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 18092,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 50,
+          "cache_read_input_tokens": 47157,
+          "cache_creation_input_tokens": 196,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 196
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 6,
+        "outputTokens": 1124,
+        "cacheReadInputTokens": 121756,
+        "cacheCreationInputTokens": 18092,
+        "webSearchRequests": 0,
+        "costUSD": 0.1619568,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"testCode\": \"\", \"imports\": [], \"verdictHint\": \"unexecutable\", \"unexecutableReason\": \"no-matching-symbol\"}",
+    "ttft_ms": 12087,
+    "ttft_stream_ms": 2594,
+    "time_to_request_ms": 29,
+    "type": "result",
+    "duration_ms": 21442,
+    "uuid": "2346d35a-5030-41c8-be8d-b027edfc5f0a"
+  },
+  "result": "{\"testCode\": \"\", \"imports\": [], \"verdictHint\": \"unexecutable\", \"unexecutableReason\": \"no-matching-symbol\"}"
+}

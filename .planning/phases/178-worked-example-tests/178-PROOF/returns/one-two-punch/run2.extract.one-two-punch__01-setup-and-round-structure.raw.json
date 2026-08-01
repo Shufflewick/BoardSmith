@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 28385,
+    "num_turns": 2,
+    "stop_reason": "end_turn",
+    "session_id": "494396fc-a904-4beb-9681-7f6ffac370b5",
+    "total_cost_usd": 0.1682769,
+    "usage": {
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 17639,
+      "cache_read_input_tokens": 74453,
+      "output_tokens": 2673,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 17639,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 980,
+          "cache_read_input_tokens": 45192,
+          "cache_creation_input_tokens": 1708,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 1708
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 4,
+        "outputTokens": 2673,
+        "cacheReadInputTokens": 74453,
+        "cacheCreationInputTokens": 17639,
+        "webSearchRequests": 0,
+        "costUSD": 0.1682769,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"examples\": [\n    {\n      \"lineNumber\": 52,\n      \"pageCitation\": \"p.1, Starting a New Game\",\n      \"kind\": \"transition\",\n      \"sourceText\": \"\\\"For example, Blue discards their Retreat and tells Red to discard their Punch.\\\"\",\n      \"setup\": \"Blue and Red have each completed setup steps 1-4 (colors chosen, Guards placed ready-side up, one Rest card discarded face up to start their own discard pile, remaining cards held hidden in hand). It is the blue player's turn to make the additional discards described in step 5.\",\n      \"action\": \"Blue chooses a card from their hand (their Retreat) and discards it, then names a card (Punch) that the red player must discard from their hand.\",\n      \"expected\": \"Blue's Retreat card is added to Blue's discard pile, and Red discards their Punch card to Red's discard pile — both discards in addition to the Rest cards each player already discarded in step 4b.\",\n      \"supportingQuoteLines\": [\n        \"51: p.1, Starting a New Game (worked example, italic):\",\n        \"49: \\\"5. If you are the blue player, choose one card from your hand and discard it. Next, you must name a card that the red player must discard. These do not have to be the same cards and are in addition to the Rest cards both players already discarded. Neither of these additional discards may be a Rest card.\\\"\",\n        \"52: \\\"For example, Blue discards their Retreat and tells Red to discard their Punch.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 79,\n      \"pageCitation\": \"p.1, 2) FIGHT\",\n      \"kind\": \"transition\",\n      \"sourceText\": \"\\\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\\\"\",\n      \"setup\": \"Red's first action card is a Jab (timing 1) and Blue's first action card is a Retreat (timing 2), both currently face-down as set during the Plan phase.\",\n      \"action\": \"Both players flip their first action card face up at the same time and compare the timings printed on the two cards.\",\n      \"expected\": \"Because Red's Jab has a lower timing (1) than Blue's Retreat (2), Red's Jab resolves first.\",\n      \"supportingQuoteLines\": [\n        \"78: p.1, 2) FIGHT (worked example, italic):\",\n        \"75: \\\"You and your opponent must flip your first action card face up at the same time and compare their timings to determine the order they are resolved.\\\"\",\n        \"76: \\\"The player with the lower timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.\\\"\",\n        \"79: \\\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\\\"\"\n      ]\n    }\n  ]\n}\n```",
+    "ttft_ms": 19624,
+    "ttft_stream_ms": 2468,
+    "time_to_request_ms": 42,
+    "type": "result",
+    "duration_ms": 29602,
+    "uuid": "88c0affd-843a-4e9c-be32-2c5e66e0e3c0"
+  },
+  "result": "{\n  \"examples\": [\n    {\n      \"lineNumber\": 52,\n      \"pageCitation\": \"p.1, Starting a New Game\",\n      \"kind\": \"transition\",\n      \"sourceText\": \"\\\"For example, Blue discards their Retreat and tells Red to discard their Punch.\\\"\",\n      \"setup\": \"Blue and Red have each completed setup steps 1-4 (colors chosen, Guards placed ready-side up, one Rest card discarded face up to start their own discard pile, remaining cards held hidden in hand). It is the blue player's turn to make the additional discards described in step 5.\",\n      \"action\": \"Blue chooses a card from their hand (their Retreat) and discards it, then names a card (Punch) that the red player must discard from their hand.\",\n      \"expected\": \"Blue's Retreat card is added to Blue's discard pile, and Red discards their Punch card to Red's discard pile — both discards in addition to the Rest cards each player already discarded in step 4b.\",\n      \"supportingQuoteLines\": [\n        \"51: p.1, Starting a New Game (worked example, italic):\",\n        \"49: \\\"5. If you are the blue player, choose one card from your hand and discard it. Next, you must name a card that the red player must discard. These do not have to be the same cards and are in addition to the Rest cards both players already discarded. Neither of these additional discards may be a Rest card.\\\"\",\n        \"52: \\\"For example, Blue discards their Retreat and tells Red to discard their Punch.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 79,\n      \"pageCitation\": \"p.1, 2) FIGHT\",\n      \"kind\": \"transition\",\n      \"sourceText\": \"\\\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\\\"\",\n      \"setup\": \"Red's first action card is a Jab (timing 1) and Blue's first action card is a Retreat (timing 2), both currently face-down as set during the Plan phase.\",\n      \"action\": \"Both players flip their first action card face up at the same time and compare the timings printed on the two cards.\",\n      \"expected\": \"Because Red's Jab has a lower timing (1) than Blue's Retreat (2), Red's Jab resolves first.\",\n      \"supportingQuoteLines\": [\n        \"78: p.1, 2) FIGHT (worked example, italic):\",\n        \"75: \\\"You and your opponent must flip your first action card face up at the same time and compare their timings to determine the order they are resolved.\\\"\",\n        \"76: \\\"The player with the lower timing on their card must resolve their action first. If the timing is the same on both cards, they are resolved at the same time.\\\"\",\n        \"79: \\\"For example, if Red played a Jab and Blue played a Retreat, Red would resolve their Jab first since it has a timing of 1 and Retreat has a timing of 2.\\\"\"\n      ]\n    }\n  ]\n}"
+}

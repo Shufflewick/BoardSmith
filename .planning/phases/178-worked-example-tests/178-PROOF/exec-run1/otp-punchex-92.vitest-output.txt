@@ -1,0 +1,30 @@
+
+ RUN  v2.1.9 /private/tmp/claude-501/-Users-jtsmith-BoardSmith/ec67162e-8441-486e-81a5-9664c77fbf70/scratchpad/178-11/one-two-punch
+
+ ❯ tests/examples/scratch-otp-punchex-92.test.ts (1 test | 1 failed) 5ms
+   × otp-punchex-92 — worked example (RUN 1) > exhausts one ready Guard when punched with three ready Guards 4ms
+     → Cannot read properties of undefined (reading 'sequence')
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/examples/scratch-otp-punchex-92.test.ts > otp-punchex-92 — worked example (RUN 1) > exhausts one ready Guard when punched with three ready Guards
+TypeError: Cannot read properties of undefined (reading 'sequence')
+ ❯ new GameElement ../../../../../../../../Users/jtsmith/BoardSmith/src/engine/element/game-element.ts:208:19
+    206| 
+    207|     // Initialize sequence if this is the root
+    208|     if (this._ctx.sequence === undefined) {
+       |                   ^
+    209|       this._ctx.sequence = 0;
+    210|     }
+ ❯ new Piece ../../../../../../../../Users/jtsmith/BoardSmith/src/engine/element/piece.ts:44:5
+ ❯ new Card ../../../../../../../../Users/jtsmith/BoardSmith/src/engine/element/card.ts:51:5
+ ❯ new Guard src/rules/elements.ts:126:8
+ ❯ tests/examples/scratch-otp-punchex-92.test.ts:8:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  21:15:47
+   Duration  728ms (transform 307ms, setup 17ms, collect 285ms, tests 5ms, environment 0ms, prepare 171ms)
+

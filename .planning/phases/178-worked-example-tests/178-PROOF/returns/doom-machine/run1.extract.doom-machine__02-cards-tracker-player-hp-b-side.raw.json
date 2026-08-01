@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 22494,
+    "num_turns": 2,
+    "stop_reason": "end_turn",
+    "session_id": "9a84d6f3-605b-411f-a760-6b27b173caf9",
+    "total_cost_usd": 0.1421271,
+    "usage": {
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 15537,
+      "cache_read_input_tokens": 72827,
+      "output_tokens": 1803,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 15537,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 884,
+          "cache_read_input_tokens": 43566,
+          "cache_creation_input_tokens": 1232,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 1232
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 4,
+        "outputTokens": 1803,
+        "cacheReadInputTokens": 72827,
+        "cacheCreationInputTokens": 15537,
+        "webSearchRequests": 0,
+        "costUSD": 0.1421271,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "I can't proceed with this dispatch. The contract requires the dispatching prompt to contain the actual extraction payload — the pre-filtered, line-numbered output of `buildExampleExtractionPayload` (quoted prose lines, citation headers, `Example (p.N):` markers, etc.) — not a bare file path. What I received is only:\n\n```\nSlice: rulebook/02-cards-tracker-player-hp-b-side.md\n```\n\nwith no payload text or line numbers attached.\n\nI deliberately did not open the raw rulebook file myself to compensate. The contract is explicit that I must never see the game's source/raw slice content beyond the extraction payload I'm handed — the payload is a positive allow-list filtered by the caller specifically to exclude things I must never see (e.g. any `Derived (p.N):` line), and its line numbers must match \"the slice file's own numbering\" as produced by that filtering step, not raw file line numbers. Reading the raw file directly would violate that boundary and could silently smuggle disallowed content into my extraction.\n\n```\nDISPATCH INCOMPLETE — no extraction payload provided.\n\nThe dispatch prompt contains the required BS-EXAMPLE-EXTRACT-V1 token and a slice path, but not\nthe actual payload text (quoted lines, citation headers, Example/Visual markers with their\n1-based line numbers) that buildExampleExtractionPayload produces. I cannot substitute the raw\nslice file for this — that would bypass the payload's allow-list filtering and Derived-line\nexclusion, both of which the caller is responsible for enforcing before dispatch.\n\nRe-dispatch with the actual payload output inlined in the prompt.\n```",
+    "ttft_ms": 11325,
+    "ttft_stream_ms": 2193,
+    "time_to_request_ms": 416,
+    "type": "result",
+    "duration_ms": 121321,
+    "uuid": "7c70c5c5-4a81-4e59-a759-5b8d970ea16f"
+  },
+  "result": "Slice: rulebook/02-cards-tracker-player-hp-b-side.md"
+}

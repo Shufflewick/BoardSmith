@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 84802,
+    "num_turns": 2,
+    "stop_reason": "end_turn",
+    "session_id": "5870cb1e-cb83-4722-871a-ae736d0b740e",
+    "total_cost_usd": 0.2751357,
+    "usage": {
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 23343,
+      "cache_read_input_tokens": 74419,
+      "output_tokens": 7516,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 23343,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 84,
+          "cache_read_input_tokens": 45158,
+          "cache_creation_input_tokens": 7446,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 7446
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 4,
+        "outputTokens": 7516,
+        "cacheReadInputTokens": 74419,
+        "cacheCreationInputTokens": 23343,
+        "webSearchRequests": 0,
+        "costUSD": 0.2751357,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"testCode\": \"\", \"imports\": [], \"verdictHint\": \"unexecutable\", \"unexecutableReason\": \"unmodeled-component-state\"}",
+    "ttft_ms": 82304,
+    "ttft_stream_ms": 1214,
+    "time_to_request_ms": 36,
+    "type": "result",
+    "duration_ms": 84849,
+    "uuid": "e05c9206-f2a9-459b-823b-6fd5a3b160a3"
+  },
+  "result": "{\"testCode\": \"\", \"imports\": [], \"verdictHint\": \"unexecutable\", \"unexecutableReason\": \"unmodeled-component-state\"}"
+}

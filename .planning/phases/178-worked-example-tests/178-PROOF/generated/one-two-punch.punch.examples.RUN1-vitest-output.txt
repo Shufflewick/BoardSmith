@@ -1,0 +1,51 @@
+
+ RUN  v2.1.9 /private/tmp/claude-501/-Users-jtsmith-BoardSmith/ec67162e-8441-486e-81a5-9664c77fbf70/scratchpad/178-11/one-two-punch
+
+ ❯ tests/examples/punch.examples.test.ts (2 tests | 2 failed) 6ms
+   × punch — worked examples > example: p.1 action timing resolution order > resolves the lower-timing action first when Jab (timing 1) is compared to Retreat (timing 2) 4ms
+     → expected undefined to be 'red' // Object.is equality
+   × punch — worked examples > exhausts one ready Guard when punched with three ready Guards 2ms
+     → Cannot read properties of undefined (reading 'sequence')
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/examples/punch.examples.test.ts > punch — worked examples > example: p.1 action timing resolution order > resolves the lower-timing action first when Jab (timing 1) is compared to Retreat (timing 2)
+AssertionError: expected undefined to be 'red' // Object.is equality
+
+- Expected: 
+"red"
+
++ Received: 
+undefined
+
+ ❯ tests/examples/punch.examples.test.ts:35:29
+     33|       const order = computeResolutionOrder([redPlan, bluePlan]);
+     34| 
+     35|       expect(order[0].seat).toBe("red");
+       |                             ^
+     36|       expect(order[0].actionType).toBe(ACTION_TYPES.JAB);
+     37|       expect(order[1].seat).toBe("blue");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/examples/punch.examples.test.ts > punch — worked examples > exhausts one ready Guard when punched with three ready Guards
+TypeError: Cannot read properties of undefined (reading 'sequence')
+ ❯ new GameElement ../../../../../../../../Users/jtsmith/BoardSmith/src/engine/element/game-element.ts:208:19
+    206| 
+    207|     // Initialize sequence if this is the root
+    208|     if (this._ctx.sequence === undefined) {
+       |                   ^
+    209|       this._ctx.sequence = 0;
+    210|     }
+ ❯ new Piece ../../../../../../../../Users/jtsmith/BoardSmith/src/engine/element/piece.ts:44:5
+ ❯ new Card ../../../../../../../../Users/jtsmith/BoardSmith/src/engine/element/card.ts:51:5
+ ❯ new Guard src/rules/elements.ts:126:8
+ ❯ tests/examples/punch.examples.test.ts:46:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  21:16:33
+   Duration  836ms (transform 259ms, setup 15ms, collect 258ms, tests 6ms, environment 0ms, prepare 234ms)
+

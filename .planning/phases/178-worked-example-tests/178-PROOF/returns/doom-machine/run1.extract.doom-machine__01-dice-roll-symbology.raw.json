@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 30572,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "38c077ef-b134-4c57-9149-a78c79c9a348",
+    "total_cost_usd": 0.1454943,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 14485,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 3320,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 14485,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 3320,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 14485,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 14485
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 3320,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 14485,
+        "webSearchRequests": 0,
+        "costUSD": 0.1454943,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"examples\": [\n    {\n      \"lineNumber\": 6,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\\\"\",\n      \"setup\": \"Three dice are rolled.\",\n      \"expected\": \"The symbol is satisfied when the value of the first die plus the second die equals the value of the third die (the printed instance gives 2 + 4 = 6).\",\n      \"supportingQuoteLines\": [\n        \"\\\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 9,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"3 dice required. They must all be sixes.\\\"\",\n      \"setup\": \"Three dice are rolled.\",\n      \"expected\": \"The symbol is satisfied only if all three dice show a value of six.\",\n      \"supportingQuoteLines\": [\n        \"\\\"3 dice required. They must all be sixes.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 12,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"2 dice required. They must be doubles.\\\"\",\n      \"setup\": \"Two dice are rolled.\",\n      \"expected\": \"The symbol is satisfied if the two dice show matching (doubled) values.\",\n      \"supportingQuoteLines\": [\n        \"\\\"2 dice required. They must be doubles.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 15,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"1 die required. It can be either a 2 or a 3 value.\\\"\",\n      \"setup\": \"One die is rolled.\",\n      \"expected\": \"The symbol is satisfied if the die shows a 2 or a 3.\",\n      \"supportingQuoteLines\": [\n        \"\\\"1 die required. It can be either a 2 or a 3 value.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 18,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"2 dice required. One must be a 3, another greater than 3.\\\"\",\n      \"setup\": \"Two dice are rolled.\",\n      \"expected\": \"The symbol is satisfied if one die shows a 3 and the other die shows a value greater than 3.\",\n      \"supportingQuoteLines\": [\n        \"\\\"2 dice required. One must be a 3, another greater than 3.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 21,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"2 dice required. They must be a 4 and a 5.\\\"\",\n      \"setup\": \"Two dice are rolled.\",\n      \"expected\": \"The symbol is satisfied if the two dice show a 4 and a 5.\",\n      \"supportingQuoteLines\": [\n        \"\\\"2 dice required. They must be a 4 and a 5.\\\"\"\n      ]\n    }\n  ]\n}\n```",
+    "ttft_ms": 24579,
+    "ttft_stream_ms": 2686,
+    "time_to_request_ms": 603,
+    "type": "result",
+    "duration_ms": 35962,
+    "uuid": "1527bf8f-f851-4afc-9d6f-b60647ba23c8"
+  },
+  "result": "{\n  \"examples\": [\n    {\n      \"lineNumber\": 6,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\\\"\",\n      \"setup\": \"Three dice are rolled.\",\n      \"expected\": \"The symbol is satisfied when the value of the first die plus the second die equals the value of the third die (the printed instance gives 2 + 4 = 6).\",\n      \"supportingQuoteLines\": [\n        \"\\\"3 dice required. 1st die + 2nd die must = the value of the third die. (i.e. 2+4=6)\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 9,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"3 dice required. They must all be sixes.\\\"\",\n      \"setup\": \"Three dice are rolled.\",\n      \"expected\": \"The symbol is satisfied only if all three dice show a value of six.\",\n      \"supportingQuoteLines\": [\n        \"\\\"3 dice required. They must all be sixes.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 12,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"2 dice required. They must be doubles.\\\"\",\n      \"setup\": \"Two dice are rolled.\",\n      \"expected\": \"The symbol is satisfied if the two dice show matching (doubled) values.\",\n      \"supportingQuoteLines\": [\n        \"\\\"2 dice required. They must be doubles.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 15,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"1 die required. It can be either a 2 or a 3 value.\\\"\",\n      \"setup\": \"One die is rolled.\",\n      \"expected\": \"The symbol is satisfied if the die shows a 2 or a 3.\",\n      \"supportingQuoteLines\": [\n        \"\\\"1 die required. It can be either a 2 or a 3 value.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 18,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"2 dice required. One must be a 3, another greater than 3.\\\"\",\n      \"setup\": \"Two dice are rolled.\",\n      \"expected\": \"The symbol is satisfied if one die shows a 3 and the other die shows a value greater than 3.\",\n      \"supportingQuoteLines\": [\n        \"\\\"2 dice required. One must be a 3, another greater than 3.\\\"\"\n      ]\n    },\n    {\n      \"lineNumber\": 21,\n      \"pageCitation\": \"p.1 (panel -13-)\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"\\\"2 dice required. They must be a 4 and a 5.\\\"\",\n      \"setup\": \"Two dice are rolled.\",\n      \"expected\": \"The symbol is satisfied if the two dice show a 4 and a 5.\",\n      \"supportingQuoteLines\": [\n        \"\\\"2 dice required. They must be a 4 and a 5.\\\"\"\n      ]\n    }\n  ]\n}"
+}

@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 67827,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "ecbf8c8e-abe9-4eb8-aa9f-c436d75b1e71",
+    "total_cost_usd": 0.19897830000000002,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 15984,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 6286,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 15984,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 6286,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 15984,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 15984
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 6286,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 15984,
+        "webSearchRequests": 0,
+        "costUSD": 0.19897830000000002,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"testCode\": \"it('resolves the lower-timing action card before the higher-timing one when both are revealed', () => {\\n  const redCards = createActionCards('red');\\n  const blueCards = createActionCards('blue');\\n\\n  const redJab = redCards.find((card) => card.type === ACTION_TYPES.JAB);\\n  const blueRetreat = blueCards.find((card) => card.type === ACTION_TYPES.RETREAT);\\n\\n  const order = computeResolutionOrder([blueRetreat, redJab]);\\n\\n  expect(order[0].type).toBe(ACTION_TYPES.JAB);\\n  expect(order[0].owner).toBe('red');\\n  expect(order[1].type).toBe(ACTION_TYPES.RETREAT);\\n  expect(order[1].owner).toBe('blue');\\n});\",\n  \"imports\": [\n    \"import { describe, it, expect } from 'vitest';\",\n    \"import { createActionCards } from '../../src/rules/elements.js';\",\n    \"import { ACTION_TYPES } from '../../src/rules/action-cards.js';\",\n    \"import { computeResolutionOrder } from '../../src/rules/resolution.js';\"\n  ],\n  \"verdictHint\": \"agrees\",\n  \"unexecutableReason\": null\n}\n```",
+    "ttft_ms": 65258,
+    "ttft_stream_ms": 1411,
+    "time_to_request_ms": 42,
+    "type": "result",
+    "duration_ms": 67869,
+    "uuid": "c2cc968b-539f-4ddb-b0b5-233fc5f3f3ad"
+  },
+  "result": "{\n  \"testCode\": \"it('resolves the lower-timing action card before the higher-timing one when both are revealed', () => {\\n  const redCards = createActionCards('red');\\n  const blueCards = createActionCards('blue');\\n\\n  const redJab = redCards.find((card) => card.type === ACTION_TYPES.JAB);\\n  const blueRetreat = blueCards.find((card) => card.type === ACTION_TYPES.RETREAT);\\n\\n  const order = computeResolutionOrder([blueRetreat, redJab]);\\n\\n  expect(order[0].type).toBe(ACTION_TYPES.JAB);\\n  expect(order[0].owner).toBe('red');\\n  expect(order[1].type).toBe(ACTION_TYPES.RETREAT);\\n  expect(order[1].owner).toBe('blue');\\n});\",\n  \"imports\": [\n    \"import { describe, it, expect } from 'vitest';\",\n    \"import { createActionCards } from '../../src/rules/elements.js';\",\n    \"import { ACTION_TYPES } from '../../src/rules/action-cards.js';\",\n    \"import { computeResolutionOrder } from '../../src/rules/resolution.js';\"\n  ],\n  \"verdictHint\": \"agrees\",\n  \"unexecutableReason\": null\n}"
+}

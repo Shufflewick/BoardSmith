@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 23880,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "60967274-7fd3-4f98-9704-218b648a8d8c",
+    "total_cost_usd": 0.1399863,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 16387,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 2192,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 16387,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 2192,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 16387,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 16387
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 2192,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 16387,
+        "webSearchRequests": 0,
+        "costUSD": 0.1399863,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"testCode\": \"it('two dice showing a 4 and a 5 satisfy the require-4-and-5 symbol', () => {\\n  const condition = diceRequired([4, 5]);\\n  const roll = [4, 5];\\n  expect(isSatisfiedBy(condition, roll)).toBe(true);\\n});\",\n  \"imports\": [\n    \"import { diceRequired, isSatisfiedBy } from '../../src/rules/roll-conditions.js';\"\n  ],\n  \"verdictHint\": \"agrees\",\n  \"unexecutableReason\": null\n}\n```",
+    "ttft_ms": 23116,
+    "ttft_stream_ms": 2192,
+    "time_to_request_ms": 133,
+    "type": "result",
+    "duration_ms": 24013,
+    "uuid": "15fe7903-b52e-4edb-9f09-66b390650932"
+  },
+  "result": "{\n  \"testCode\": \"it('two dice showing a 4 and a 5 satisfy the require-4-and-5 symbol', () => {\\n  const condition = diceRequired([4, 5]);\\n  const roll = [4, 5];\\n  expect(isSatisfiedBy(condition, roll)).toBe(true);\\n});\",\n  \"imports\": [\n    \"import { diceRequired, isSatisfiedBy } from '../../src/rules/roll-conditions.js';\"\n  ],\n  \"verdictHint\": \"agrees\",\n  \"unexecutableReason\": null\n}"
+}

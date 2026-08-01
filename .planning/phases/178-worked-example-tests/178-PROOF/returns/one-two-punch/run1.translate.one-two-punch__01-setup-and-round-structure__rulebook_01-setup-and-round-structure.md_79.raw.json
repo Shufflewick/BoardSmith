@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 38249,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "430c30ff-53b5-40dd-8378-54efd772824d",
+    "total_cost_usd": 0.16264829999999997,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 15974,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 3868,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 15974,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 3868,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 15974,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 15974
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 3868,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 15974,
+        "webSearchRequests": 0,
+        "costUSD": 0.16264829999999997,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"testCode\": \"describe(\\\"example: p.1 action timing resolution order\\\", () => {\\n  it(\\\"resolves the lower-timing action first when Jab (timing 1) is compared to Retreat (timing 2)\\\", () => {\\n    const redPlan = { seat: \\\"red\\\", actionType: ACTION_TYPES.JAB, timing: ACTION_TIMING[ACTION_TYPES.JAB] };\\n    const bluePlan = { seat: \\\"blue\\\", actionType: ACTION_TYPES.RETREAT, timing: ACTION_TIMING[ACTION_TYPES.RETREAT] };\\n\\n    const order = computeResolutionOrder([redPlan, bluePlan]);\\n\\n    expect(order[0].seat).toBe(\\\"red\\\");\\n    expect(order[0].actionType).toBe(ACTION_TYPES.JAB);\\n    expect(order[1].seat).toBe(\\\"blue\\\");\\n    expect(order[1].actionType).toBe(ACTION_TYPES.RETREAT);\\n  });\\n});\",\n  \"imports\": [\n    \"import { describe, it, expect } from \\\"vitest\\\";\",\n    \"import { ACTION_TYPES, ACTION_TIMING } from \\\"../../src/rules/action-cards.js\\\";\",\n    \"import { computeResolutionOrder } from \\\"../../src/rules/resolution.js\\\";\"\n  ],\n  \"verdictHint\": \"agrees\"\n}\n```",
+    "ttft_ms": 35394,
+    "ttft_stream_ms": 2192,
+    "time_to_request_ms": 34,
+    "type": "result",
+    "duration_ms": 38290,
+    "uuid": "a9babde0-45d0-4868-aa7a-b9ccb42d97e5"
+  },
+  "result": "{\n  \"testCode\": \"describe(\\\"example: p.1 action timing resolution order\\\", () => {\\n  it(\\\"resolves the lower-timing action first when Jab (timing 1) is compared to Retreat (timing 2)\\\", () => {\\n    const redPlan = { seat: \\\"red\\\", actionType: ACTION_TYPES.JAB, timing: ACTION_TIMING[ACTION_TYPES.JAB] };\\n    const bluePlan = { seat: \\\"blue\\\", actionType: ACTION_TYPES.RETREAT, timing: ACTION_TIMING[ACTION_TYPES.RETREAT] };\\n\\n    const order = computeResolutionOrder([redPlan, bluePlan]);\\n\\n    expect(order[0].seat).toBe(\\\"red\\\");\\n    expect(order[0].actionType).toBe(ACTION_TYPES.JAB);\\n    expect(order[1].seat).toBe(\\\"blue\\\");\\n    expect(order[1].actionType).toBe(ACTION_TYPES.RETREAT);\\n  });\\n});\",\n  \"imports\": [\n    \"import { describe, it, expect } from \\\"vitest\\\";\",\n    \"import { ACTION_TYPES, ACTION_TIMING } from \\\"../../src/rules/action-cards.js\\\";\",\n    \"import { computeResolutionOrder } from \\\"../../src/rules/resolution.js\\\";\"\n  ],\n  \"verdictHint\": \"agrees\"\n}"
+}

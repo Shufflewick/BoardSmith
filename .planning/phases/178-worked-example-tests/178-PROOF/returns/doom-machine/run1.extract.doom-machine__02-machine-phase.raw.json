@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 16507,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "077d28e7-8ead-4512-bc4c-534ecdea9ef6",
+    "total_cost_usd": 0.1221333,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 15179,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 1485,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 15179,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1485,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 15179,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 15179
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 1485,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 15179,
+        "webSearchRequests": 0,
+        "costUSD": 0.1221333,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"examples\":[{\"lineNumber\":10,\"pageCitation\":\"p.2 (panel -8-)\",\"kind\":\"transition\",\"sourceText\":\"The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player.\",\"setup\":\"During the machine phase, the Soul Harvester machine part card's yellow HP die sits on its cycle track one space before a space bearing a damage icon.\",\"action\":\"The die is moved one space down the cycle track, landing on the damage icon space and triggering that icon's ability.\",\"expected\":\"Soul Harvester deals 5 damage to the player; the player must block with shields if able, and any unblocked damage carries over and reduces HP directly.\",\"supportingQuoteLines\":[\"\\\"1) Move a machine part card's yellow die 1 space down its cycle track. If that dice lands on an icon, immediately trigger that icon's corresponding ability.\\\"\",\"\\\"The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player. If they don't have enough shields to prevent some or all of that damage. Unblocked damage carries over and reduces HP directly.\\\"\"]}]}",
+    "ttft_ms": 14409,
+    "ttft_stream_ms": 1531,
+    "time_to_request_ms": 451,
+    "type": "result",
+    "duration_ms": 21905,
+    "uuid": "15867db4-5bc3-48b3-bb66-e796db54956d"
+  },
+  "result": "{\"examples\":[{\"lineNumber\":10,\"pageCitation\":\"p.2 (panel -8-)\",\"kind\":\"transition\",\"sourceText\":\"The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player.\",\"setup\":\"During the machine phase, the Soul Harvester machine part card's yellow HP die sits on its cycle track one space before a space bearing a damage icon.\",\"action\":\"The die is moved one space down the cycle track, landing on the damage icon space and triggering that icon's ability.\",\"expected\":\"Soul Harvester deals 5 damage to the player; the player must block with shields if able, and any unblocked damage carries over and reduces HP directly.\",\"supportingQuoteLines\":[\"\\\"1) Move a machine part card's yellow die 1 space down its cycle track. If that dice lands on an icon, immediately trigger that icon's corresponding ability.\\\"\",\"\\\"The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player. If they don't have enough shields to prevent some or all of that damage. Unblocked damage carries over and reduces HP directly.\\\"\"]}]}"
+}

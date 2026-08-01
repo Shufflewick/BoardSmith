@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 24646,
+    "num_turns": 2,
+    "stop_reason": "end_turn",
+    "session_id": "8deae510-c88a-4683-9c06-ee4d113fc3c7",
+    "total_cost_usd": 0.1618143,
+    "usage": {
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 18285,
+      "cache_read_input_tokens": 74891,
+      "output_tokens": 1975,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 18285,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 74,
+          "cache_read_input_tokens": 45630,
+          "cache_creation_input_tokens": 1916,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 1916
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 4,
+        "outputTokens": 1975,
+        "cacheReadInputTokens": 74891,
+        "cacheCreationInputTokens": 18285,
+        "webSearchRequests": 0,
+        "costUSD": 0.1618143,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\"testCode\":\"\",\"imports\":[],\"verdictHint\":\"unexecutable\",\"unexecutableReason\":\"unmodeled-component-state\"}",
+    "ttft_ms": 22597,
+    "ttft_stream_ms": 2741,
+    "time_to_request_ms": 58,
+    "type": "result",
+    "duration_ms": 25527,
+    "uuid": "2af3fc73-a520-449d-b2db-145f6be4408f"
+  },
+  "result": "{\"testCode\":\"\",\"imports\":[],\"verdictHint\":\"unexecutable\",\"unexecutableReason\":\"unmodeled-component-state\"}"
+}

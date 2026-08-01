@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 28057,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "90edb73b-48cd-4184-af70-9ece549b6855",
+    "total_cost_usd": 0.1424823,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 15233,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 2820,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 15233,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 2820,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 15233,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 15233
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 2820,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 15233,
+        "webSearchRequests": 0,
+        "costUSD": 0.1424823,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"examples\": [\n    {\n      \"lineNumber\": 42,\n      \"pageCitation\": \"p.2, panel -6-\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"a row of three yellow roll-condition tiles illustrating damage conditions — (1) a two-pip die face and a three-pip die face separated by a slash (a single-die \\\"either/or\\\" condition), (2) a two-die \\\"+\\\" combo showing two specific die faces summed, (3) a three-die condition made of three \\\"?\\\" dice joined by operator symbols.\",\n      \"setup\": \"The rulebook shows a row of three yellow roll-condition tiles as printed on machine part cards, illustrating the shapes a damage roll condition can take.\",\n      \"expected\": \"Tile 1 is a single-die either/or condition showing a two-pip die face and a three-pip die face separated by a slash; tile 2 is a two-die \\\"+\\\" combo condition showing two specific die faces summed; tile 3 is a three-die condition made of three \\\"?\\\" dice joined by operator symbols.\",\n      \"supportingQuoteLines\": [\n        \"Diagram description (p.2, panel -6-): a row of three yellow roll-condition tiles illustrating damage conditions — (1) a two-pip die face and a three-pip die face separated by a slash (a single-die \\\"either/or\\\" condition), (2) a two-die \\\"+\\\" combo showing two specific die faces summed, (3) a three-die condition made of three \\\"?\\\" dice joined by operator symbols. The full symbol vocabulary is defined in the Dice Roll Symbology section (p.1, panel -13-).\"\n      ]\n    }\n  ]\n}\n```",
+    "ttft_ms": 24787,
+    "ttft_stream_ms": 1721,
+    "time_to_request_ms": 40,
+    "type": "result",
+    "duration_ms": 28098,
+    "uuid": "2f93d12e-dd09-44f0-982d-e3141406f7c4"
+  },
+  "result": "{\n  \"examples\": [\n    {\n      \"lineNumber\": 42,\n      \"pageCitation\": \"p.2, panel -6-\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"a row of three yellow roll-condition tiles illustrating damage conditions — (1) a two-pip die face and a three-pip die face separated by a slash (a single-die \\\"either/or\\\" condition), (2) a two-die \\\"+\\\" combo showing two specific die faces summed, (3) a three-die condition made of three \\\"?\\\" dice joined by operator symbols.\",\n      \"setup\": \"The rulebook shows a row of three yellow roll-condition tiles as printed on machine part cards, illustrating the shapes a damage roll condition can take.\",\n      \"expected\": \"Tile 1 is a single-die either/or condition showing a two-pip die face and a three-pip die face separated by a slash; tile 2 is a two-die \\\"+\\\" combo condition showing two specific die faces summed; tile 3 is a three-die condition made of three \\\"?\\\" dice joined by operator symbols.\",\n      \"supportingQuoteLines\": [\n        \"Diagram description (p.2, panel -6-): a row of three yellow roll-condition tiles illustrating damage conditions — (1) a two-pip die face and a three-pip die face separated by a slash (a single-die \\\"either/or\\\" condition), (2) a two-die \\\"+\\\" combo showing two specific die faces summed, (3) a three-die condition made of three \\\"?\\\" dice joined by operator symbols. The full symbol vocabulary is defined in the Dice Roll Symbology section (p.1, panel -13-).\"\n      ]\n    }\n  ]\n}"
+}

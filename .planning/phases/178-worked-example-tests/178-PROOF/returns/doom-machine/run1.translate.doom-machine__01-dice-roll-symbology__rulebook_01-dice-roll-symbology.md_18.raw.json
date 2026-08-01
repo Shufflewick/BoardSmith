@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 34538,
+    "num_turns": 5,
+    "stop_reason": "end_turn",
+    "session_id": "c0071d0d-3be3-4a7e-a030-182d6bc42437",
+    "total_cost_usd": 0.2606496,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 25064,
+      "cache_read_input_tokens": 224652,
+      "output_tokens": 2856,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 25064,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 337,
+          "cache_read_input_tokens": 54083,
+          "cache_creation_input_tokens": 242,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 242
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 10,
+        "outputTokens": 2856,
+        "cacheReadInputTokens": 224652,
+        "cacheCreationInputTokens": 25064,
+        "webSearchRequests": 0,
+        "costUSD": 0.2606496,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"testCode\": \"it('is satisfied when one die shows a 3 and the other shows a value greater than 3', () => {\\n  const condition = { kind: 'greater-than', value: 3 };\\n  expect(isSatisfiedBy(condition, [3, 4])).toBe(true);\\n});\",\n  \"imports\": [\n    \"import { isSatisfiedBy } from '../../src/rules/roll-conditions.js';\"\n  ],\n  \"verdictHint\": \"agrees\"\n}\n```",
+    "ttft_ms": 23102,
+    "ttft_stream_ms": 1257,
+    "time_to_request_ms": 61,
+    "type": "result",
+    "duration_ms": 35567,
+    "uuid": "d54e40a9-3f9f-4b22-8154-6a9901a718ac"
+  },
+  "result": "{\n  \"testCode\": \"it('is satisfied when one die shows a 3 and the other shows a value greater than 3', () => {\\n  const condition = { kind: 'greater-than', value: 3 };\\n  expect(isSatisfiedBy(condition, [3, 4])).toBe(true);\\n});\",\n  \"imports\": [\n    \"import { isSatisfiedBy } from '../../src/rules/roll-conditions.js';\"\n  ],\n  \"verdictHint\": \"agrees\"\n}"
+}

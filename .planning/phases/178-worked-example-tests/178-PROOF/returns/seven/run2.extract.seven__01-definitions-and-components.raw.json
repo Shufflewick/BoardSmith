@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 30623,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "7453c66d-4982-49d5-8787-c3852820a668",
+    "total_cost_usd": 0.14285730000000002,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 14798,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 3019,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 14798,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 3019,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 14798,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 14798
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 3019,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 14798,
+        "webSearchRequests": 0,
+        "costUSD": 0.14285730000000002,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"examples\": [\n    {\n      \"lineNumber\": 5,\n      \"pageCitation\": \"p.1, Definitions\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"example: 5, 5, 5\",\n      \"setup\": \"The definition of a Set: \\\"2+ cards with matching numbers.\\\"\",\n      \"expected\": \"A concrete Set of three matching cards, shown as \\\"example: 5, 5, 5\\\" and illustrated by the Visual line as three card images side by side — a green 5, a red 5, and a purple 5.\",\n      \"supportingQuoteLines\": [\n        \"\\\"Set: 2+ cards with matching numbers.\\\"\",\n        \"\\\"example: 5, 5, 5\\\"\",\n        \"Visual (p.1): The Set example is illustrated by three card images side by side: a green 5, a red 5, and a purple 5.\"\n      ]\n    },\n    {\n      \"lineNumber\": 11,\n      \"pageCitation\": \"p.1, Definitions\",\n      \"kind\": \"example-inconsistent\",\n      \"reason\": \"The quoted example line for Run reads \\\"example: 5, 6, 7\\\", but the Visual line describing the same example states the accompanying card images actually show 1, 2, 3 (a red 1, a blue 2, and a red 3) — the printed numeric text and the described card art give two different, contradictory sets of values for the same example.\",\n      \"supportingQuoteLines\": [\n        \"\\\"example: 5, 6, 7\\\"\",\n        \"Visual (p.1): The Run example is illustrated by three card images side by side: a red 1, a blue 2, and a red 3 (the printed example text reads 5, 6, 7 while the accompanying card images show 1, 2, 3).\"\n      ]\n    }\n  ]\n}\n```",
+    "ttft_ms": 26651,
+    "ttft_stream_ms": 1018,
+    "time_to_request_ms": 111,
+    "type": "result",
+    "duration_ms": 31214,
+    "uuid": "7c8c5e82-8e0a-40ee-927d-30b155e872a8"
+  },
+  "result": "{\n  \"examples\": [\n    {\n      \"lineNumber\": 5,\n      \"pageCitation\": \"p.1, Definitions\",\n      \"kind\": \"predicate\",\n      \"sourceText\": \"example: 5, 5, 5\",\n      \"setup\": \"The definition of a Set: \\\"2+ cards with matching numbers.\\\"\",\n      \"expected\": \"A concrete Set of three matching cards, shown as \\\"example: 5, 5, 5\\\" and illustrated by the Visual line as three card images side by side — a green 5, a red 5, and a purple 5.\",\n      \"supportingQuoteLines\": [\n        \"\\\"Set: 2+ cards with matching numbers.\\\"\",\n        \"\\\"example: 5, 5, 5\\\"\",\n        \"Visual (p.1): The Set example is illustrated by three card images side by side: a green 5, a red 5, and a purple 5.\"\n      ]\n    },\n    {\n      \"lineNumber\": 11,\n      \"pageCitation\": \"p.1, Definitions\",\n      \"kind\": \"example-inconsistent\",\n      \"reason\": \"The quoted example line for Run reads \\\"example: 5, 6, 7\\\", but the Visual line describing the same example states the accompanying card images actually show 1, 2, 3 (a red 1, a blue 2, and a red 3) — the printed numeric text and the described card art give two different, contradictory sets of values for the same example.\",\n      \"supportingQuoteLines\": [\n        \"\\\"example: 5, 6, 7\\\"\",\n        \"Visual (p.1): The Run example is illustrated by three card images side by side: a red 1, a blue 2, and a red 3 (the printed example text reads 5, 6, 7 while the accompanying card images show 1, 2, 3).\"\n      ]\n    }\n  ]\n}"
+}

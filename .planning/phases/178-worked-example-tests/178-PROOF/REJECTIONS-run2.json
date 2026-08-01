@@ -1,0 +1,12 @@
+[
+  {
+    "slug": "doom-machine__01-cards-trackers",
+    "error": "Unexpected token 'D', \"DISPATCH R\"... is not valid JSON",
+    "raw": "DISPATCH REJECTED — missing BS-EXAMPLE-EXTRACT-V1 token.\n\nYou composed this dispatch prompt instead of copying the pointer block from the orchestrator that should have dispatched you. Re-read that orchestrator's dispatch section and send the pointer block verbatim, including the token.\n\nA composed prompt cannot be trusted to carry the never-invent-an-id / never-pick-a-side / verbatim-sourceText rules intact — the token is proof this block was copied, not recalled, because it cannot be produced from memory."
+  },
+  {
+    "slug": "doom-machine__03-cards-parts-set-1",
+    "error": "Unexpected token 'T', \"The dispat\"... is not valid JSON",
+    "raw": "The dispatch payload only contains a slice filename reference (`Slice: rulebook/03-cards-parts-set-1.md`) — it does not include the actual extraction payload content that `buildExampleExtractionPayload` produces (the quoted lines, citation headers, line numbers, etc.). The contract requires me to extract examples from \"the payload's own text,\" citing verbatim substrings and the payload's own line numbers. With no payload text present, I have nothing to extract from and no line numbers to cite.\n\nI cannot fabricate slice content or invent line numbers to produce a plausible-looking result — that would violate the contract's core rule against inventing anything. This isn't the missing-token case (the token `BS-EXAMPLE-EXTRACT-V1` is present), so the fixed rejection message doesn't apply verbatim, but the underlying problem is the same class: the dispatch is incomplete and cannot be trusted to extract from.\n\nPlease re-dispatch with the actual extraction payload (the output of `buildExampleExtractionPayload` for `rulebook/03-cards-parts-set-1.md`) included in the prompt, not just the slice path."
+  }
+]

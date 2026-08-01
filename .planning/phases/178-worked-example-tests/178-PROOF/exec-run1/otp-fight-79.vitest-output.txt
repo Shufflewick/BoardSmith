@@ -1,0 +1,33 @@
+
+ RUN  v2.1.9 /private/tmp/claude-501/-Users-jtsmith-BoardSmith/ec67162e-8441-486e-81a5-9664c77fbf70/scratchpad/178-11/one-two-punch
+
+ ❯ tests/examples/scratch-otp-fight-79.test.ts (1 test | 1 failed) 5ms
+   × otp-fight-79 — worked example (RUN 1) > example: p.1 action timing resolution order > resolves the lower-timing action first when Jab (timing 1) is compared to Retreat (timing 2) 4ms
+     → expected undefined to be 'red' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/examples/scratch-otp-fight-79.test.ts > otp-fight-79 — worked example (RUN 1) > example: p.1 action timing resolution order > resolves the lower-timing action first when Jab (timing 1) is compared to Retreat (timing 2)
+AssertionError: expected undefined to be 'red' // Object.is equality
+
+- Expected: 
+"red"
+
++ Received: 
+undefined
+
+ ❯ tests/examples/scratch-otp-fight-79.test.ts:13:29
+     11|       const order = computeResolutionOrder([redPlan, bluePlan]);
+     12| 
+     13|       expect(order[0].seat).toBe("red");
+       |                             ^
+     14|       expect(order[0].actionType).toBe(ACTION_TYPES.JAB);
+     15|       expect(order[1].seat).toBe("blue");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  21:15:46
+   Duration  802ms (transform 59ms, setup 15ms, collect 38ms, tests 5ms, environment 0ms, prepare 438ms)
+

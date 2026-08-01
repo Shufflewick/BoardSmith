@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 91240,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "fd1bc32b-cace-42f1-a4e6-cb44ac25fbc7",
+    "total_cost_usd": 0.21963330000000003,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 16094,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 7619,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 16094,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 7619,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 16094,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 16094
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 7619,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 16094,
+        "webSearchRequests": 0,
+        "costUSD": 0.21963330000000003,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "{\n  \"testCode\": \"it('moves Blue to center and pushes Red back to their own corner when Blue advances', () => {\\n  const blue = new Boxer({ seat: 0 });\\n  const red = new Boxer({ seat: 1 });\\n  blue.area = cornerOf(0);\\n  red.area = 'center';\\n\\n  const advanceCard = createActionCards().find(\\n    (card) => card.type === ACTION_TYPES.ADVANCE\\n  );\\n\\n  resolveMovement(blue, red, advanceCard);\\n\\n  expect(isInCenter(blue)).toBe(true);\\n  expect(isInOwnCorner(red)).toBe(true);\\n});\",\n  \"imports\": [\n    \"import { it, expect } from 'vitest';\",\n    \"import { Boxer } from '../../src/rules/elements.js';\",\n    \"import { ACTION_TYPES, createActionCards } from '../../src/rules/action-cards.js';\",\n    \"import { resolveMovement } from '../../src/rules/movement.js';\",\n    \"import { isInCenter, isInOwnCorner, cornerOf } from '../../src/rules/positions.js';\"\n  ],\n  \"verdictHint\": \"agrees\"\n}",
+    "ttft_ms": 85280,
+    "ttft_stream_ms": 2102,
+    "time_to_request_ms": 26,
+    "type": "result",
+    "duration_ms": 91266,
+    "uuid": "bae0f6b6-6f44-4e17-b3e3-ff5d8bc41027"
+  },
+  "result": "{\n  \"testCode\": \"it('moves Blue to center and pushes Red back to their own corner when Blue advances', () => {\\n  const blue = new Boxer({ seat: 0 });\\n  const red = new Boxer({ seat: 1 });\\n  blue.area = cornerOf(0);\\n  red.area = 'center';\\n\\n  const advanceCard = createActionCards().find(\\n    (card) => card.type === ACTION_TYPES.ADVANCE\\n  );\\n\\n  resolveMovement(blue, red, advanceCard);\\n\\n  expect(isInCenter(blue)).toBe(true);\\n  expect(isInOwnCorner(red)).toBe(true);\\n});\",\n  \"imports\": [\n    \"import { it, expect } from 'vitest';\",\n    \"import { Boxer } from '../../src/rules/elements.js';\",\n    \"import { ACTION_TYPES, createActionCards } from '../../src/rules/action-cards.js';\",\n    \"import { resolveMovement } from '../../src/rules/movement.js';\",\n    \"import { isInCenter, isInOwnCorner, cornerOf } from '../../src/rules/positions.js';\"\n  ],\n  \"verdictHint\": \"agrees\"\n}"
+}

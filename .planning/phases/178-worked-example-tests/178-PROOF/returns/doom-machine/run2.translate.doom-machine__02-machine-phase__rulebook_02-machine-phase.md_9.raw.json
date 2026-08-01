@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 15282,
+    "num_turns": 2,
+    "stop_reason": "end_turn",
+    "session_id": "7c06fc23-4d4e-4196-873b-992df00246d1",
+    "total_cost_usd": 0.1493427,
+    "usage": {
+      "input_tokens": 4,
+      "cache_creation_input_tokens": 17840,
+      "cache_read_input_tokens": 75119,
+      "output_tokens": 1317,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 17840,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 89,
+          "cache_read_input_tokens": 45858,
+          "cache_creation_input_tokens": 1243,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 1243
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 4,
+        "outputTokens": 1317,
+        "cacheReadInputTokens": 75119,
+        "cacheCreationInputTokens": 17840,
+        "webSearchRequests": 0,
+        "costUSD": 0.1493427,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"testCode\": \"\",\n  \"imports\": [],\n  \"verdictHint\": \"unexecutable\",\n  \"unexecutableReason\": \"no-matching-symbol\"\n}\n```",
+    "ttft_ms": 13170,
+    "ttft_stream_ms": 1145,
+    "time_to_request_ms": 27,
+    "type": "result",
+    "duration_ms": 16350,
+    "uuid": "063a6383-4d76-4be2-a16b-f27d011d9956"
+  },
+  "result": "{\n  \"testCode\": \"\",\n  \"imports\": [],\n  \"verdictHint\": \"unexecutable\",\n  \"unexecutableReason\": \"no-matching-symbol\"\n}"
+}

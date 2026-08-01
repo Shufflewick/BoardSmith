@@ -1,0 +1,146 @@
+[
+  {
+    "game": "seven",
+    "slicePath": "rulebook/01-definitions-and-components.md",
+    "lineNumber": 6,
+    "kind": "predicate",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "one-two-punch",
+    "slicePath": "rulebook/01-setup-and-round-structure.md",
+    "lineNumber": 52,
+    "kind": "transition",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "one-two-punch",
+    "slicePath": "rulebook/01-setup-and-round-structure.md",
+    "lineNumber": 79,
+    "kind": "transition",
+    "run1VerdictHint": "agrees",
+    "run1TestResult": "disagrees"
+  },
+  {
+    "game": "one-two-punch",
+    "slicePath": "rulebook/02-action-cards-and-resolution.md",
+    "lineNumber": 37,
+    "kind": "transition",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "one-two-punch",
+    "slicePath": "rulebook/02-action-cards-and-resolution.md",
+    "lineNumber": 66,
+    "kind": "transition",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "one-two-punch",
+    "slicePath": "rulebook/02-action-cards-and-resolution.md",
+    "lineNumber": 87,
+    "kind": "transition",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "one-two-punch",
+    "slicePath": "rulebook/02-action-cards-and-resolution.md",
+    "lineNumber": 92,
+    "kind": "transition",
+    "run1VerdictHint": "agrees",
+    "run1TestResult": "disagrees"
+  },
+  {
+    "game": "one-two-punch",
+    "slicePath": "rulebook/02-action-cards-and-resolution.md",
+    "lineNumber": 113,
+    "kind": "transition",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "one-two-punch",
+    "slicePath": "rulebook/02-action-cards-and-resolution.md",
+    "lineNumber": 114,
+    "kind": "predicate",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "one-two-punch",
+    "slicePath": "rulebook/02-action-cards-and-resolution.md",
+    "lineNumber": 115,
+    "kind": "predicate",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-destroying-a-machine-part.md",
+    "lineNumber": 13,
+    "kind": "predicate",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-dice-roll-symbology.md",
+    "lineNumber": 6,
+    "kind": "predicate",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-dice-roll-symbology.md",
+    "lineNumber": 9,
+    "kind": "predicate",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-dice-roll-symbology.md",
+    "lineNumber": 12,
+    "kind": "predicate",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-dice-roll-symbology.md",
+    "lineNumber": 15,
+    "kind": "predicate",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-dice-roll-symbology.md",
+    "lineNumber": 18,
+    "kind": "predicate",
+    "run1VerdictHint": "agrees",
+    "run1TestResult": "agrees"
+  },
+  {
+    "game": "doom-machine",
+    "slicePath": "rulebook/01-dice-roll-symbology.md",
+    "lineNumber": 21,
+    "kind": "predicate",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  },
+  {
+    "game": "doom-machine",
+    "slicePath": "rulebook/02-machine-phase.md",
+    "lineNumber": 10,
+    "kind": "transition",
+    "run1VerdictHint": "unexecutable",
+    "run1TestResult": "unexecutable"
+  }
+]

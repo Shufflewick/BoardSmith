@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 12510,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "0528a980-146b-4ab7-9a1e-86f1ecaf8b41",
+    "total_cost_usd": 0.10990530000000001,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 14236,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 1047,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 14236,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1047,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 14236,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 14236
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 1047,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 14236,
+        "webSearchRequests": 0,
+        "costUSD": 0.10990530000000001,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "The dispatch payload only contains a slice filename reference (`Slice: rulebook/03-cards-parts-set-1.md`) — it does not include the actual extraction payload content that `buildExampleExtractionPayload` produces (the quoted lines, citation headers, line numbers, etc.). The contract requires me to extract examples from \"the payload's own text,\" citing verbatim substrings and the payload's own line numbers. With no payload text present, I have nothing to extract from and no line numbers to cite.\n\nI cannot fabricate slice content or invent line numbers to produce a plausible-looking result — that would violate the contract's core rule against inventing anything. This isn't the missing-token case (the token `BS-EXAMPLE-EXTRACT-V1` is present), so the fixed rejection message doesn't apply verbatim, but the underlying problem is the same class: the dispatch is incomplete and cannot be trusted to extract from.\n\nPlease re-dispatch with the actual extraction payload (the output of `buildExampleExtractionPayload` for `rulebook/03-cards-parts-set-1.md`) included in the prompt, not just the slice path.",
+    "ttft_ms": 8622,
+    "ttft_stream_ms": 1331,
+    "time_to_request_ms": 30,
+    "type": "result",
+    "duration_ms": 12541,
+    "uuid": "dcee7e85-7196-402f-be0a-0cd58339aa8f"
+  },
+  "result": "The dispatch payload only contains a slice filename reference (`Slice: rulebook/03-cards-parts-set-1.md`) — it does not include the actual extraction payload content that `buildExampleExtractionPayload` produces (the quoted lines, citation headers, line numbers, etc.). The contract requires me to extract examples from \"the payload's own text,\" citing verbatim substrings and the payload's own line numbers. With no payload text present, I have nothing to extract from and no line numbers to cite.\n\nI cannot fabricate slice content or invent line numbers to produce a plausible-looking result — that would violate the contract's core rule against inventing anything. This isn't the missing-token case (the token `BS-EXAMPLE-EXTRACT-V1` is present), so the fixed rejection message doesn't apply verbatim, but the underlying problem is the same class: the dispatch is incomplete and cannot be trusted to extract from.\n\nPlease re-dispatch with the actual extraction payload (the output of `buildExampleExtractionPayload` for `rulebook/03-cards-parts-set-1.md`) included in the prompt, not just the slice path."
+}

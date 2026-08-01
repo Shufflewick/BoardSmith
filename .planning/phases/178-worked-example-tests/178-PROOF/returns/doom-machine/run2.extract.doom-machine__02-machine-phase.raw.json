@@ -1,0 +1,68 @@
+{
+  "raw": {
+    "is_error": false,
+    "duration_api_ms": 21055,
+    "num_turns": 1,
+    "stop_reason": "end_turn",
+    "session_id": "d0b8d26a-16d7-4325-819e-bdb5fd8e15cd",
+    "total_cost_usd": 0.1319253,
+    "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 15116,
+      "cache_read_input_tokens": 29261,
+      "output_tokens": 2163,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 15116,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 2163,
+          "cache_read_input_tokens": 29261,
+          "cache_creation_input_tokens": 15116,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 15116
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-sonnet-5": {
+        "inputTokens": 2,
+        "outputTokens": 2163,
+        "cacheReadInputTokens": 29261,
+        "cacheCreationInputTokens": 15116,
+        "webSearchRequests": 0,
+        "costUSD": 0.1319253,
+        "contextWindow": 1000000,
+        "maxOutputTokens": 64000,
+        "canonicalModel": "claude-sonnet-5",
+        "provider": "firstParty"
+      }
+    },
+    "permission_denials": [],
+    "terminal_reason": "completed",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required",
+    "subtype": "success",
+    "api_error_status": null,
+    "result": "```json\n{\n  \"examples\": [\n    {\n      \"lineNumber\": 9,\n      \"pageCitation\": \"p.2 (panel -8-)\",\n      \"kind\": \"transition\",\n      \"sourceText\": \"\\\"The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player. If they don't have enough shields to prevent some or all of that damage. Unblocked damage carries over and reduces HP directly.\\\"\",\n      \"action\": \"The HP die for Soul Harvester's machine part card cycles one space down its cycle track (per the rule: \\\"Move a machine part card's yellow die 1 space down its cycle track. If that dice lands on an icon, immediately trigger that icon's corresponding ability.\\\").\",\n      \"setup\": \"The HP die for Soul Harvester sits at its current position on the card's cycle track, one space before a damage icon space.\",\n      \"expected\": \"The die lands on the damage icon, immediately triggering that icon's ability, which deals 5 damage to the player; the player's shields prevent some or all of that damage, and any unblocked damage carries over and reduces HP directly.\",\n      \"supportingQuoteLines\": [\n        \"\\\"1) Move a machine part card's yellow die 1 space down its cycle track. If that dice lands on an icon, immediately trigger that icon's corresponding ability.\\\"\",\n        \"\\\"The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player. If they don't have enough shields to prevent some or all of that damage. Unblocked damage carries over and reduces HP directly.\\\"\",\n        \"Diagram description (p.2, panel -8-, the EXAMPLE image): a teal machine part card titled \\\"SOUL HARVESTER\\\" with a skull-and-gears illustration. Down its left side runs a vertical cycle track of square spaces; a yellow die sits on one space with a white downward arrow showing it moving one space to the next space, which bears a green/teal damage icon. To the right of the track are yellow roll-condition tiles: a \\\"? - ? - ?\\\" style three-die condition row, and below it two labeled yellow strips reading \\\"DEAL 5 DMG\\\" and \\\"TAKE 1 DMG\\\" (the card's icon effects). The card's HP/health value and additional small icons appear along the bottom edge.\"\n      ]\n    }\n  ]\n}\n```",
+    "ttft_ms": 15382,
+    "ttft_stream_ms": 1172,
+    "time_to_request_ms": 31,
+    "type": "result",
+    "duration_ms": 21086,
+    "uuid": "f2a1d6db-e95f-45af-8067-e0610f5127f5"
+  },
+  "result": "{\n  \"examples\": [\n    {\n      \"lineNumber\": 9,\n      \"pageCitation\": \"p.2 (panel -8-)\",\n      \"kind\": \"transition\",\n      \"sourceText\": \"\\\"The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player. If they don't have enough shields to prevent some or all of that damage. Unblocked damage carries over and reduces HP directly.\\\"\",\n      \"action\": \"The HP die for Soul Harvester's machine part card cycles one space down its cycle track (per the rule: \\\"Move a machine part card's yellow die 1 space down its cycle track. If that dice lands on an icon, immediately trigger that icon's corresponding ability.\\\").\",\n      \"setup\": \"The HP die for Soul Harvester sits at its current position on the card's cycle track, one space before a damage icon space.\",\n      \"expected\": \"The die lands on the damage icon, immediately triggering that icon's ability, which deals 5 damage to the player; the player's shields prevent some or all of that damage, and any unblocked damage carries over and reduces HP directly.\",\n      \"supportingQuoteLines\": [\n        \"\\\"1) Move a machine part card's yellow die 1 space down its cycle track. If that dice lands on an icon, immediately trigger that icon's corresponding ability.\\\"\",\n        \"\\\"The HP die for Soul Harvester will cycle one space down the track, triggering its [damage icon] ability, which will deal 5 damage to the player. If they don't have enough shields to prevent some or all of that damage. Unblocked damage carries over and reduces HP directly.\\\"\",\n        \"Diagram description (p.2, panel -8-, the EXAMPLE image): a teal machine part card titled \\\"SOUL HARVESTER\\\" with a skull-and-gears illustration. Down its left side runs a vertical cycle track of square spaces; a yellow die sits on one space with a white downward arrow showing it moving one space to the next space, which bears a green/teal damage icon. To the right of the track are yellow roll-condition tiles: a \\\"? - ? - ?\\\" style three-die condition row, and below it two labeled yellow strips reading \\\"DEAL 5 DMG\\\" and \\\"TAKE 1 DMG\\\" (the card's icon effects). The card's HP/health value and additional small icons appear along the bottom edge.\"\n      ]\n    }\n  ]\n}"
+}
