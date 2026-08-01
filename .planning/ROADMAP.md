@@ -458,19 +458,20 @@ smoothed over, per decision 17.
 ### Phase 179: Source-Free Verification Mode
 **Goal**: A project whose source rulebook is unavailable still gets a verification pass — an honest, reduced one, never a failure and never a silent full-scope claim.
 **Depends on**: Phase 172 (source-free checks), Phase 177 (the other source-free check), Phase 171 (PROV-02 scope recording)
-**Requirements**: VERIFY-09
+**Requirements**: VERIFY-09, PROV-02 (reopened in practice — its mechanism was unreachable from the verify pipeline it describes)
 **Success Criteria** (what must be TRUE):
   1. `/bs-verify-game` run against a project whose source rulebook is unavailable completes in source-free mode instead of failing.
   2. The source-free report names exactly which defect classes went unchecked (e.g. no fidelity re-transcription, no worked-example replay against fresh source).
   3. The verification's recorded scope reads code-conformance-only with the unavailable-source reason, per PROV-02.
-**Plans**: 5 plans in 5 waves (linear — worktrees disabled, shared files across every wave)
+**Plans**: 6 plans in 6 waves (linear — worktrees disabled, shared files across every wave)
 
 Plans:
 - [ ] 179-01-PLAN.md — the ONE step->defect-class mapping + computeSourceFreeReport, and decision 7's falsifiable coverage test against verify-game.md's real headings (wave 1)
 - [ ] 179-02-PLAN.md — `verify-source-free-check` read command, CLI registration, exit 0, and the PROV-02 data-flow test through the real provenance renderer (wave 2)
-- [ ] 179-03-PLAN.md — the behavioural change: source-resolution.md's negative case enters `verify/source-free-mode.md`; verify-game.md wiring, installer probe, and the cross-file no-hardcoded-list pin (wave 3)
-- [ ] 179-04-PLAN.md — pre-registration committed ALONE: satisfiability + vacuity audit of all 7 criteria, whole-tree baseline protocol (wave 4)
-- [ ] 179-05-PLAN.md — live proof on a staged source-free reference game incl. one real CHECK-06 dispatch with downgraded quote provenance; 179-PROOF.md, VERIFY-09 disposition, closeout (wave 5)
+- [ ] 179-03-PLAN.md — the durable write: extract `recordVerifiedAgainst` from `chunkCheckCommand`, add `verify-close-record` (idempotent, fence-bounded, scoped to evaluated chunks, exit 0), on-disk tests (wave 3)
+- [ ] 179-04-PLAN.md — the behavioural change: source-resolution.md's negative case enters `verify/source-free-mode.md`; BOTH Closes dispatch `verify-close-record`; installer probe, no-hardcoded-list pin, Close-dispatch pins (wave 4)
+- [ ] 179-05-PLAN.md — pre-registration committed ALONE: satisfiability + vacuity audit of all 7 criteria (SC-1 by name), durable-record expectation, whole-tree baseline protocol (wave 5)
+- [ ] 179-06-PLAN.md — live proof on a staged source-free reference game: one real CHECK-06 dispatch with downgraded quote provenance, the Close's durable block read back from disk; 179-PROOF.md, VERIFY-09 disposition, closeout (wave 6)
 
 ## Progress
 
