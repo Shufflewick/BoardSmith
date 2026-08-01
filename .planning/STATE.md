@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-05-PLAN.md — verifyExampleTranslateCommand (the second dispatch's byte source) + CLI registration + SC-3's one-implementation falsifier. Next: Phase 178 plan 06 (example-test-emit.ts)."
-last_updated: "2026-07-31T19:45:00.000Z"
+stopped_at: "Completed 178-06-PLAN.md — example-test-emit.ts (one idempotent generated test file per chunk) + the measured GENERATED_TEST_SANDBOX_RULES gate. Next: Phase 178 plan 07 (the two subagent contracts)."
+last_updated: "2026-07-31T20:10:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 11
@@ -21,13 +21,61 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **5/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 05 added
-`verifyExampleTranslateCommand` (the second dispatch's byte source), registered
-`verify-example-translate` in `cli.ts`, and pinned SC-3's one-implementation guarantee with a
-falsifying source-scanning test. Next: Phase 178 plan 06 (`example-test-emit.ts`).
+**Current focus:** Phase 178 — Worked-Example Tests — **6/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 06 added
+`example-test-emit.ts` (`verifyExampleEmitCommand`, `boardsmith verify-example-emit`) — the
+build-side write surface that writes ONE idempotent, atomic generated example-test file per
+chunk, gated by a measured five-of-seven sandbox rule subset. Next: Phase 178 plan 07 (the two
+subagent contracts — extraction and translation).
 
 ## Current Position
+
+`178-06-PLAN.md` (2026-07-31) — Phase 178 wave 6 of 11 — added `scanSourceForSandboxViolations`
+(`src/cli/lib/sandbox-scan.ts`) — the single-source-string entry point `scanSandboxViolations`
+now delegates to per file, one lint implementation shared by both — and measured which of the
+seven sandbox rules can legitimately gate MODEL-GENERATED test code by running the new function
+over every `tests/*.test.ts` in `one-two-punch`, `seven`, and `doom-machine` (real, legitimate,
+hand-written tests). `boardsmith/no-filesystem` (37 hits: ordinary fixture-loading `fs`/`path`
+imports) and `boardsmith/no-nondeterministic` (1 hit: a randomized-property test's own
+`Math.random()`) both fired on real legitimate code and were excluded per 178-CONTEXT.md decision
+14 — recorded in `178-06-MEASUREMENT/RESULTS.md`. The surviving five (`no-network`, `no-timers`,
+`no-eval`, `no-element-identity-comparison`, `no-element-array-state`) became
+`GENERATED_TEST_SANDBOX_RULES`, defined in the new `src/cli/commands/example-test-emit.ts`.
+`verifyExampleEmitCommand` (`boardsmith verify-example-emit`) resolves `--chunk` to its cited
+slices (`resolveCitedSlices`, mirroring `verifyExampleReplayCommand`'s own `--chunk` guard),
+reads `readExampleReplayVerdicts` for those slices, and writes `tests/examples/
+<chunkSlug>.examples.test.ts`: `unexecutable`/`example-inconsistent` records become a
+named-reason comment sourced from the ledger's own `reason` (decision 7 — never re-judged, never
+a test); `agrees`/`disagrees` records need real code from `--translated` (the third dispatch's
+structured return, keyed by `workedExampleId` — never model-supplied prose), scanned via
+`scanGeneratedTestCode` against `GENERATED_TEST_SANDBOX_RULES` BEFORE the file is composed
+(validate-everything-then-write — one violation rejects the WHOLE emission). The only write is
+`atomicWriteFile` to that one path; proven never to touch the ledger, and proven
+`recordExampleReplayVerdicts` never writes a test file. `generatedTestFilePath` rejects a chunk
+slug containing a path separator, `..`, or empty string (T-178-13). Idempotence (D-08) and
+per-chunk isolation proven directly: re-emitting chunk A is byte-identical; emitting chunk B never
+touches chunk A's file. A zero-example chunk's exemption is proven to be a REAL, PASSING (never
+`it.skip`) vitest test by spawning the repo's own `vitest` CLI against the emitted file inside a
+project with `node_modules` symlinked to this repo (the real BoardSmithGames layout) — not by
+inspecting the file's text. Registered in `cli.ts` immediately after the CHECK-06 block, verified
+reachable from a REAL BUILT CLI (`node dist/cli.js verify-example-emit --help` exits 0 listing
+`--project`/`--chunk`/`--translated`/`--json`, no `--run-id`/`--force`/`--skip`/`--overwrite`).
+**One auto-fixed bug (Rule 1)**: `atomicWriteFile` doesn't create its parent directory, and
+`tests/examples/` is a new directory this command introduces — added one `fs.mkdir(...,
+{recursive: true})` call before the write. **One documented design finding**: the third
+dispatch's wire shape (`RawExampleEmitEntry: {slicePath, lineNumber, pageCitation, sourceText,
+code}`) was undefined at plan time; designed here, flagged for 178-07 (the extraction/translation
+subagent contracts) to confirm or supersede — a DIFFERENT wire-shape question from wave 5's
+`example-inconsistent` extraction-return shape, which lives on the FIRST dispatch's return.
+**Full `npm test`: 247 files / 4263 tests / 0 failing** (baseline 4242/246; +21 new tests, +1 new
+test file). CHECK-06/TEST-01 requirement checkboxes deliberately left unchecked — this plan
+builds TEST-01's write surface, not its `build/test.md` wiring; the extraction/translation
+subagent contracts (plan 07), `build/test.md`/`verify-game.md` wiring (plans 08-09), and SC-3's
+final proof (plan 11) remain. See
+`.planning/phases/178-worked-example-tests/178-06-SUMMARY.md`. **5 of 11 plans remain in Phase
+178** — `178-07` (the two subagent contracts) is next.
+
+---
 
 `178-05-PLAN.md` (2026-07-31) — Phase 178 wave 5 of 11 — added `verifyExampleTranslateCommand`
 (`src/cli/commands/verify-example-replay.ts`), registered as `boardsmith verify-example-translate`
