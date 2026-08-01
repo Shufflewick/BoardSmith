@@ -35,6 +35,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 177.1: Wire CHECK-04's Closed Design Into The Pipeline** - `/bs-verify-game` Step 7 now dispatches the dual-enumeration design CHECK-04 was actually closed on; proven against recorded input AND a real live dispatch (completed 2026-07-31, 8 plans, all 5 success criteria MET, verification 5/5 PASSED — see Result below). **Post-verification code review found 4 CRITICALS that a green suite and a passing goal-backward verification both missed** — one `--slice-path` path traversal, and three ways a wrong arithmetic `claimedResult` could validate against a substituted operand (all three rooted in keying lookups by model-supplied free text rather than stable identity). Fixed as one structural fail-closed change (`d6e14de8`, `22cd9492`, `8d187132`); suite 4125/4125 green. The first CR-03 attempt failed the pinned `analysis-run1.json` reference test and was replaced — that pin exists to stop a fix silently altering CHECK-04's closure evidence, and it worked.
 - [x] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay (completed 2026-08-01, 11 plans, CHECK-06/TEST-01 CLOSED on 178-11's live cross-game proof — see `178-PROOF.md`)
 - [x] **Phase 179: Source-Free Verification Mode** - `/bs-verify-game` degrades honestly when source is unavailable, naming which defect classes went unchecked (completed 2026-08-01, 6 plans, VERIFY-09 CLOSED on 179-06's live proof — see `179-PROOF.md`)
+- [ ] **Phase 180: Install Gap & Interactive Orchestrator Proof** - `/bs-verify-game` and every `verify/` contract were NEVER INSTALLED; all milestone proofs ran a path that bypasses installation
 
 ## Phase Details
 
@@ -506,6 +507,59 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 177. Derived-Line Re-Derivation | 22/22 | Complete — CHECK-04 CLOSED 2026-07-31 on the re-scoped design (see Result) | 2026-07-31 |
 | 178. Worked-Example Tests | 11/11 | Complete   | 2026-08-01 |
 | 179. Source-Free Verification Mode | 6/6 | Complete | 2026-08-01 |
+
+### Phase 180: Install Gap & Interactive Orchestrator Proof
+**Goal**: The verify pipeline this milestone built is actually installed and actually runs from a real interactive orchestrator session — not only from the repo/CLI path every prior proof used.
+**Depends on**: Phases 173-179 (everything that is currently uninstalled)
+**Requirements**: PROC-01 (re-asserted), VERIFY-01, CHECK-04, CHECK-06, TEST-01, VERIFY-09 (reachability of each, not their logic)
+
+**Why this phase exists** (found 2026-08-01, at the milestone-audit gate, on the FIRST command run
+while scoping the interactive-session proof):
+
+**`/bs-verify-game` is not installed. Neither is a single `verify/` contract.**
+
+- `~/.claude/skills/` contains 6 `bs-` skills. `bs-verify-game` is absent.
+- `~/.claude/skills/bs-shared/verify/` **does not exist** — not one of source-resolution,
+  classification-dispatch, adjudication-gate, staging-dispatch, repair-dispatch, ruling-recheck,
+  enumerate-facts, reconcile-facts, extract-example, translate-example, or source-free-mode.
+- Installed skills date from **Jul 27 11:24** — the milestone-start reinstall PROJECT.md records.
+  `verify-game.md` was created **Jul 28** (`b10f91ff`, plan 173-04), *the day after*. The installer
+  has not been run since.
+- The installer DOES know about it: `install-claude-command.ts:37` maps `bs/verify-game.md` →
+  `bs-verify-game`. 7 manifest entries, 6 installed.
+- Pre-install state captured verbatim before any remediation: `180-EVIDENCE/PRE-INSTALL-STATE.txt`.
+
+**Why seven phases of proofs missed it.** Every proof in this milestone ran `boardsmith` CLI
+commands from the repo and dispatched subagents via `claude -p` with payloads those commands built.
+**That path never loads the installed skill.** The proofs were real — real dispatches, real
+findings, three real bugs caught by executing real output — and every one of them was downstream of
+a skill a designer cannot invoke.
+
+**This is the root cause the milestone's other three reachability failures were symptoms of:**
+CHECK-04 closed on a `.planning/` harness while the pipeline ran the retired design (Phase 177.1);
+Phase 178's SC-3 translation half shared only in an offline script (caught pre-execution); PROV-02
+closed on the build pipeline while verify wrote nothing (Phase 179). Each was found and fixed
+individually. None of them asked whether the *pipeline itself* was reachable.
+
+**Success Criteria** (what must be TRUE):
+  1. `npx boardsmith claude --force` installs `bs-verify-game` and every `bs-shared/verify/`
+     contract; the installed tree is verified against the repo manifest with nothing missing and
+     no stale leftover from the Jul 27 install.
+  2. A regression test fails if a skill entry point or shared contract in the repo has no
+     corresponding installed artifact — so an install gap cannot recur silently. The existing
+     installer leaf probes test *content*; this must test *completeness*.
+  3. `/bs-verify-game` is invoked as a REAL interactive orchestrator session (the skill loaded and
+     followed by a Claude Code session, not proxied via `claude -p`) against a staged reference
+     game, and reaches its Close.
+  4. The same interactive proof covers the source-free path (Phase 179's VERIFY-09) and at least
+     one worked-example dispatch (Phase 178's CHECK-06), since both carry the identical
+     undisclosed-until-now limitation.
+  5. Every divergence between what the skill prose says and what the orchestrator actually does is
+     recorded as a finding — Phase 170's foundational result is that the orchestrator "reliably
+     fails to convey mechanical work" and skips steps it has just read. **A clean run is the
+     surprising outcome here, not the expected one.**
+
+**Plans**: TBD
 
 ## Shipped Milestones
 

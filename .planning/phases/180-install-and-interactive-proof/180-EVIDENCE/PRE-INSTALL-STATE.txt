@@ -1,0 +1,136 @@
+# Pre-install state, captured 2026-08-01 BEFORE any installer run
+
+## ~/.claude/skills/ contents
+total 0
+drwxr-xr-x  77 jtsmith  staff  2464 Jul 27 11:24 .
+drwxr-xr-x  37 jtsmith  staff  1184 Aug  1 08:54 ..
+drwxr-xr-x@  3 jtsmith  staff    96 Jul 27 11:24 bs-build-chunk
+drwxr-xr-x@  3 jtsmith  staff    96 Jul 27 11:24 bs-check-status
+drwxr-xr-x@  3 jtsmith  staff    96 Jul 27 11:24 bs-create-game
+drwxr-xr-x@  3 jtsmith  staff    96 Jul 27 11:24 bs-generate-ai
+drwxr-xr-x@  3 jtsmith  staff    96 Jul 27 11:24 bs-ingest-rules
+drwxr-xr-x@  3 jtsmith  staff    96 Jul 27 11:24 bs-insert-chunk
+drwxr-xr-x@  7 jtsmith  staff   224 Jul 27 11:24 bs-shared
+drwxr-xr-x   3 jtsmith  staff    96 Oct 18  2025 debug
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-add-tests
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ai-integration-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-audit-fix
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-audit-milestone
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-audit-uat
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-autonomous
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-capture
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-cleanup
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-code-review
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-complete-milestone
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-config
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-debug
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-discuss-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-docs-update
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-eval-review
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-execute-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-explore
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-extract-learnings
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-fast
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-forensics
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-graphify
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-health
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-help
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-import
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-inbox
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ingest-docs
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-manager
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-map-codebase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-milestone-summary
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-mvp-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-new-milestone
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-new-project
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ns-context
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ns-ideate
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ns-manage
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ns-project
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ns-review
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ns-workflow
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-pause-work
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-plan-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-plan-review-convergence
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-pr-branch
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-profile-user
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-progress
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-quick
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-resume-work
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-review
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-review-backlog
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-secure-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-settings
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ship
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-sketch
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-spec-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-spike
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-stats
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-surface
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-thread
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ui-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ui-review
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-ultraplan-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-undo
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-update
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-validate-phase
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-verify-work
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-workspace
+drwxr-xr-x@  3 jtsmith  staff    96 Jun 17 14:42 gsd-workstreams
+
+## bs-shared/ contents
+aspects
+build
+ingest
+state-machine.md
+templates
+
+/Users/jtsmith/.claude/skills/bs-shared//aspects:
+dice.md
+hex-grid.md
+index.md
+playing-cards.md
+square-grid.md
+
+/Users/jtsmith/.claude/skills/bs-shared//build:
+ask.md
+audit.md
+build.md
+close.md
+design-ask.md
+design-review.md
+final-acceptance.md
+investigate.md
+playtest.md
+redteam.md
+repair.md
+revise.md
+test.md
+
+/Users/jtsmith/.claude/skills/bs-shared//ingest:
+interview-fallback.md
+scaffold.md
+sketch-derivation.md
+transcription.md
+
+/Users/jtsmith/.claude/skills/bs-shared//templates:
+ASSETS.template.md
+CHUNK.template.md
+DECISIONS.template.md
+DESIGN.template.md
+RULINGS.template.md
+
+## bs-verify-game present?
+ls: /Users/jtsmith/.claude/skills/bs-verify-game/: No such file or directory
+
+## installer manifest entries (repo source of truth)
+30:const SKILL_ENTRY_POINTS: Array<{ source: string; skillName: string }> = [
+31:  { source: join('bs', 'create-game.md'), skillName: 'bs-create-game' },
+32:  { source: join('bs', 'ingest-rules.md'), skillName: 'bs-ingest-rules' },
+33:  { source: join('bs', 'build-chunk.md'), skillName: 'bs-build-chunk' },
+34:  { source: join('bs', 'check-status.md'), skillName: 'bs-check-status' },
+35:  { source: join('bs', 'insert-chunk.md'), skillName: 'bs-insert-chunk' },
+36:  { source: 'generate-ai-instructions.md', skillName: 'bs-generate-ai' },
+37:  { source: join('bs', 'verify-game.md'), skillName: 'bs-verify-game' },
