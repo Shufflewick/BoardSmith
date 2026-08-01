@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 179-03 (wave 3 of 6) — extracted recordVerifiedAgainst from chunkCheckCommand as the one reusable fenced writer (chunk-check's own contract unchanged, all 62 pre-existing tests pass unmodified), and built boardsmith verify-close-record (computeTouchedChunks scoped to drift-check's own evaluated set + optional run-ledger impact slugs, never a directory listing; per-chunk try/catch into errors[], never a gate, exit 0 always). Proven on disk (SHA-256 idempotence, designer-content preservation, fence-refusal, cross-surface scope/reason agreement) and end-to-end via the built CLI against a cp -R copy of seven (17/17 recorded, idempotent, original untouched). VERIFY-09/PROV-02 stay Pending/reopened (requirement closes at 179-06's live proof). Next: 179-04-PLAN.md — wire /bs-verify-game's Close (both source-free and full-scope) to dispatch verify-close-record (wave 4)."
-last_updated: "2026-08-02T00:10:00.000Z"
+stopped_at: "Completed 179-04 (wave 4 of 6) — the behavioural change VERIFY-09 asks for: source-resolution.md's negative case (no candidate source anywhere) now dispatches into the new verify/source-free-mode.md instead of stopping the session; no --source-free flag exists anywhere. source-free-mode.md defines the reduced sequence by reference only (trace-check, drift-check, verify-game.md Steps 7/8 unchanged, then Close), formats its unchecked-defect-class report from verify-source-free-check --json, never hand-authors a second copy of the step-to-defect-class mapping. Both /bs-verify-game Closes now dispatch verify-close-record (179-03's write): Step 9 with --run <run-id>, source-free-mode.md's Close without --run — the first time this pipeline durably records what a verify pass verified against (SC-3/PROV-02). Section-scoped regression pins (extracted Close sections, not whole-file toContain) and a cross-file negation pin (no VERIFY_PIPELINE_STEPS defectClass string may appear in skill prose) added; both falsifiability demonstrations run against the real files on disk and reverted byte-identical. Full suite: 4368/249, 0 failing (baseline 4358/249; +10). VERIFY-09/PROV-02 stay Pending/reopened (requirement closes at 179-06's live proof — this plan wires the dispatch; 179-05/06 prove it live on a staged source-free project). Next: 179-05-PLAN.md — pre-registration of the live-proof expectation, committed alone (wave 5)."
+last_updated: "2026-08-02T01:00:00.000Z"
 last_activity: 2026-08-01
 progress:
   total_phases: 11
   completed_phases: 9
-  total_plans: 90
-  completed_plans: 90
+  total_plans: 91
+  completed_plans: 91
   percent: 82
 ---
 
@@ -28,6 +28,34 @@ three reference games, closing CHECK-06 and TEST-01 (`178-PROOF.md`). Next: Phas
 Verification Mode) — not yet planned.
 
 ## Current Position
+
+`179-04-PLAN.md` (2026-08-01, wave 4 of 6) — the behavioural change: `source-resolution.md`'s
+negative case (no candidate source anywhere) now dispatches into the new
+`verify/source-free-mode.md` instead of stopping the session — no `--source-free` flag exists
+anywhere, entry is a consequence of disk state alone (decision 1). `source-free-mode.md` (96
+lines) defines the reduced sequence by reference only: `trace-check --json` (CHECK-03),
+`drift-check --json` (CHECK-05), `verify-game.md` Step 7 unchanged (CHECK-04), Step 8 unchanged
+(CHECK-06), then Close — never restating those dispatch sequences. Formats
+`uncheckedDefectClasses[]` from `verify-source-free-check --json`; contains no hand-authored
+defect-class list (`VERIFY_PIPELINE_STEPS` in `verify-source-free.ts` stays the one definition).
+Both `/bs-verify-game` Closes now dispatch 179-03's `verify-close-record`: `verify-game.md` Step
+9 with `--run <run-id>` (new bullet, before the commit bullet), `source-free-mode.md`'s own Close
+without `--run` (no staging ledger exists there) — the first time this pipeline durably records
+what a verify pass verified against (SC-3/PROV-02, T-179-19). `install-claude-command.ts`'s
+`SHARED_LEAF_PROBES` gained the new file. Two new `describe` blocks (10 tests) in `verify.test.ts`:
+section-scoped Close-dispatch pins (extract `## Step 9: Close` / source-free-mode.md's `## Close`
+before asserting — a dispatch drifted into the Reference Files list still fails) and a cross-file
+negation pin importing `VERIFY_PIPELINE_STEPS` and scanning every `.md` under
+`src/cli/slash-command/` for a hardcoded `defectClass` string. Both falsifiability demonstrations
+(negation pin, Close-dispatch pin) run against the REAL files on disk — verbatim failures captured,
+`diff`-confirmed byte-identical reverts. Full suite: 4368 tests / 249 files, 0 failing (baseline
+4358/249; +10 new tests, +0 files). No CLI changes needed (confirmed 179-03's own prediction).
+VERIFY-09/PROV-02 stay Pending/reopened in `REQUIREMENTS.md` (only wave 4 of 6 delivered; the
+requirement closes at 179-06's live proof — decision 11(d), "the checks that DID run produced real
+findings," is proven live in 179-05/06, not by this plan's structural pins). Commit `73b689eb`.
+See `.planning/phases/179-source-free-verification-mode/179-04-SUMMARY.md`.
+
+---
 
 `179-03-PLAN.md` (2026-08-01, wave 3 of 6) — extracted `recordVerifiedAgainst(slug, options)` out
 of `chunkCheckCommand` in `chunk-provenance.ts` as the one reusable fenced `## Verified Against`
