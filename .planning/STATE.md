@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-01-PLAN.md — Example (p.N): recognizer, WR-07 resolved (Option B), ingest marker added. Next: Phase 178 plan 02 (example-derivation.ts)."
-last_updated: "2026-07-31T23:55:09.333Z"
+stopped_at: "Completed 178-02-PLAN.md — example-derivation.ts (SC-3 shared module: WorkedExampleSpec, caller-assigned identity, extraction + translation dispatch payloads) built. Next: Phase 178 plan 03."
+last_updated: "2026-07-31T19:15:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 8
-  total_plans: 73
-  completed_plans: 81
-  percent: 73
+  total_plans: 84
+  completed_plans: 82
+  percent: 74
 ---
 
 # Project State
@@ -21,13 +21,46 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **1/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 01 created the
-`Example (p.N):` recognizer at a measured, split scope, resolved WR-07 (Option B — deny-list kept,
-CHECK-06 gets its own payload builder), and added the ingest marker. Next: Phase 178 plan 02 (the
-shared `example-derivation.ts` module).
+**Current focus:** Phase 178 — Worked-Example Tests — **2/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 02 built
+`example-derivation.ts`, the SC-3 shared module (`WorkedExampleSpec`, caller-assigned identity,
+fail-closed collision, both extraction/translation dispatch payload builders) both TEST-01 and
+CHECK-06 must route through. Next: Phase 178 plan 03.
 
 ## Current Position
+
+`178-02-PLAN.md` (2026-07-31) — Phase 178 wave 2 of 11 — built `src/cli/commands/example-derivation.ts`,
+the ONE shared module both TEST-01 (build-side) and CHECK-06 (verify-side) call to derive a
+runnable test from a worked example — ROADMAP success criterion 3. `WorkedExampleSpec` +
+`createWorkedExampleSpec` is the single validation choke point (kind check, non-empty free-prose
+fields, fence-marker rejection reusing `DERIVE_CHECK_LEDGER_BEGIN`/`END` from
+`verify-derive-check.ts`, `sourceText` verbatim-substring check, transition/predicate action-shape
+guard). `workedExampleId` composes identity from `slicePath`+`lineNumber` ONLY — never a
+model-returned field — and `collectWorkedExampleSpecs` throws on a collision naming both colliding
+previews rather than overwriting, the direct inheritance of Phase 177.1's CR-01/CR-02 fix.
+`buildExampleExtractionPayload` is a POSITIVE allow-list (the deliberate structural inverse of
+`quoteLinesOnly`, WR-07 Option B) proven against real verbatim text from all three reference
+games — `seven`'s Run-example contradiction (`Visual (p.1):` line only) survives, both
+`one-two-punch` Punch Examples survive, both `doom-machine` header forms survive; a
+construction-site backstop scans retained lines for an EMBEDDED `Derived (p.N):` reference
+(deliberately unanchored — a line-start-only check is structurally unreachable given the
+allow-list's mutually-exclusive line-start predicates) and throws naming the line. `collectGameApiSurface`
+scans a generated project's `src/rules/index.ts` re-export chain one level deep, verified live
+against `seven/src/rules/scoring.ts` (`legalScoringPatterns`, `numberCardsOf`, the three pattern
+constants, all taking `SevenCard[]`) and `one-two-punch` (confirmed live: `punch.ts`'s
+`resolvePunch`/`exhaustCorneredPuncher` are correctly absent since `index.ts` never re-exports
+them — the one-level limitation manifesting on real corpus, not a hypothetical). Two deviations,
+both caught and fixed within Task 2's own TDD cycle before commit: the backstop's first draft was
+line-start-anchored and thus permanently unreachable (fixed to unanchored/embedded-reference
+scanning); the `one-two-punch` fixture initially omitted the second Punch Example's `Visual` line
+(extended to the real full section, lines 84-94). **Full `npm test`: 245 files / 4180 tests / 0
+failing** (baseline 4153/244; +27 new tests, +1 file). CHECK-06/TEST-01 requirement checkboxes
+deliberately left unchecked — this plan builds only the shared derivation module, not the
+replay/generation pipeline wiring. See
+`.planning/phases/178-worked-example-tests/178-02-SUMMARY.md`. **9 of 11 plans remain in Phase
+178** — `178-03` is next.
+
+---
 
 `178-01-PLAN.md` (2026-07-31) — Phase 178 wave 1 of 11 — created the `Example (p.N):`
 worked-example recognizer at a measured, split scope, resolved WR-07 explicitly, and added the
