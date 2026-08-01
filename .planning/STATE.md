@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 179-04 (wave 4 of 6) — the behavioural change VERIFY-09 asks for: source-resolution.md's negative case (no candidate source anywhere) now dispatches into the new verify/source-free-mode.md instead of stopping the session; no --source-free flag exists anywhere. source-free-mode.md defines the reduced sequence by reference only (trace-check, drift-check, verify-game.md Steps 7/8 unchanged, then Close), formats its unchecked-defect-class report from verify-source-free-check --json, never hand-authors a second copy of the step-to-defect-class mapping. Both /bs-verify-game Closes now dispatch verify-close-record (179-03's write): Step 9 with --run <run-id>, source-free-mode.md's Close without --run — the first time this pipeline durably records what a verify pass verified against (SC-3/PROV-02). Section-scoped regression pins (extracted Close sections, not whole-file toContain) and a cross-file negation pin (no VERIFY_PIPELINE_STEPS defectClass string may appear in skill prose) added; both falsifiability demonstrations run against the real files on disk and reverted byte-identical. Full suite: 4368/249, 0 failing (baseline 4358/249; +10). VERIFY-09/PROV-02 stay Pending/reopened (requirement closes at 179-06's live proof — this plan wires the dispatch; 179-05/06 prove it live on a staged source-free project). Next: 179-05-PLAN.md — pre-registration of the live-proof expectation, committed alone (wave 5)."
-last_updated: "2026-08-02T01:00:00.000Z"
-last_activity: 2026-08-01
+stopped_at: "Completed 179-05 (wave 5 of 6) — pre-registered the live proof's bar, committed ALONE before any staging or dispatch (commit 272d40d4, git show --stat names exactly one path, 359 insertions). 179-PRE-REGISTRATION.md audits all 7 criteria (ROADMAP SC-1/SC-2/SC-3 + decision 11(a)-(d)) for satisfiability and vacuous passage: SC-1 restated by name (a mode that runs nothing would literally satisfy 'completes... instead of failing') to the four checks' captured exit codes, the non-stop at the negative case, and the Close's durable write, bound to a decision-11(d) per-check minimum-findings table (CHECK-03/CHECK-05 >=1 real finding, CHECK-06 >=1 REAL live dispatch with downgraded quote provenance and an unrewritten verdict, CHECK-04 explicitly excluded per its 177/177.1 disposition); SC-3 restated to the ON-DISK Verified Against block read back from a real CHUNK.md, never the CLI's live recomputation. Section 4 names the whole-tree git status --short baseline protocol (178-PROOF.md Section 10's enumerated-subset failure not repeated). Direct read corrected 179-CONTEXT.md's stale claim that both reference games are pre-provenance-project: both now carry a full archived source + Source hash (post-178 provenance-recording commits seven@ecc96a8, one-two-punch@b843502), so the staged seven copy's expected ScopeReason is source-missing, not pre-provenance-project. Doc-only plan, zero staging/dispatch performed. Full suite unchanged: 4368/249, 0 failing. VERIFY-09/PROV-02 stay Pending/reopened (requirement closes at 179-06's live proof). Next: 179-06-PLAN.md — the live proof on the staged seven copy (wave 6, final)."
+last_updated: "2026-08-01T23:45:00.000Z"
+last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 9
@@ -28,6 +28,43 @@ three reference games, closing CHECK-06 and TEST-01 (`178-PROOF.md`). Next: Phas
 Verification Mode) — not yet planned.
 
 ## Current Position
+
+`179-05-PLAN.md` (2026-07-31, wave 5 of 6) — pre-registered the live proof's bar, committed ALONE
+before any staging or dispatch. `179-PRE-REGISTRATION.md` (359 lines, commit `272d40d4`, `git show
+--stat --name-only --format= HEAD` names exactly one path) audits all 7 criteria — ROADMAP
+SC-1/SC-2/SC-3 plus 179-CONTEXT.md decision 11's (a)-(d) — for satisfiability and vacuous passage
+before plan 06 measures anything. **SC-1 audited by name**: as literally written ("completes in
+source-free mode instead of failing") it is satisfied by a mode that runs nothing and exits
+cleanly — a banner. Restated bar: the four source-free checks (`trace-check`, `drift-check`,
+`verify-derive-check`/CHECK-04, `verify-example-replay`/CHECK-06) each ran to their own completion
+with a captured exit code (0 expected), the session did not stop at `source-resolution.md`'s
+negative case, and the Close executed including its durable write (`verify-close-record`'s
+`recorded[]` non-empty) — bound to Section 3's decision-11(d) per-check minimum-findings table so
+"completed" can never be true while every check found nothing. Section 3: CHECK-03/CHECK-05 each
+need >=1 real finding, CHECK-06 needs >=1 REAL LIVE dispatch whose finding shows downgraded
+`QuoteVerifiedProvenance` with the verdict left unrewritten; CHECK-04 explicitly EXCLUDED from any
+minimum-findings bar (177/177.1's determinism gate was retired as miscalibrated — recorded before
+the run so 179-06 doesn't retrofit a bar this milestone already declined to set). **SC-3 restated
+to the ON-DISK artifact**: a real `chunks/<slug>/CHUNK.md`'s fenced `## Verified Against` block,
+read back from disk after the run — never the CLI's live `--json` recomputation of the identical
+value, the exact distinction the plan-checker BLOCKED this phase over. Section 4 names the
+whole-tree `git status --short` baseline protocol (4 literal occurrences) and states explicitly
+that an enumerated-path baseline (178-PROOF.md Section 10's exact failure — "825/825 OK" while two
+tracked files were deleted outside the checked paths) is not acceptable. **Direct-read correction
+to 179-CONTEXT.md's own inherited claim**: the context states both reference games are
+`pre-provenance-project` "as of 2026-07-28"; a direct read of the live `seven`/`one-two-punch`
+`INDEX.md` files today shows both now carry a full `Source:` + `Source hash:` line (git history:
+`seven@ecc96a8`, `one-two-punch@b843502`, both "record source provenance" commits postdating the
+CONTEXT snapshot) — so the staged `seven` copy's expected `ScopeReason` is `source-missing`, not
+`pre-provenance-project`, per `computeVerificationScope`'s documented precedence. Staged game:
+`seven` (17 chunks, all with `CHUNK.md`, none yet carrying `## Verified Against` — confirmed by
+direct grep). Doc-only plan — zero staging, zero dispatch, zero `~/BoardSmithGames` path touched;
+full suite unchanged at 4368 tests / 249 files, 0 failing. VERIFY-09/PROV-02 stay Pending/reopened
+in `REQUIREMENTS.md` (requirement closes at 179-06's live proof — this plan only writes and commits
+the bar plan 06 will be judged against). See
+`.planning/phases/179-source-free-verification-mode/179-05-SUMMARY.md`.
+
+---
 
 `179-04-PLAN.md` (2026-08-01, wave 4 of 6) — the behavioural change: `source-resolution.md`'s
 negative case (no candidate source anywhere) now dispatches into the new
