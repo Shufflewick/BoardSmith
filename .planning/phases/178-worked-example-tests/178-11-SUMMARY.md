@@ -200,10 +200,15 @@ file's real directory depth**
   Task 2/3 scope. Named in `178-PROOF.md` §4 and REQUIREMENTS.md's closure note.
 - **37.5% malformed-response rate on zero-content-line extraction payloads** (3 of 8 dispatches
   across both runs, all on the 4 slices whose payload carries only the handshake token + slice
-  header): `extract-example.md` never explicitly addresses this degenerate case. Recorded verbatim
-  in `178-PROOF/REJECTIONS.md`, never hand-repaired — this plan's explicit instruction ("there is
-  no repair utility on the product side and none is to be introduced here", reusing 177.1-03's
-  recorded decision).
+  header): recorded verbatim in `178-PROOF/REJECTIONS.md`, never hand-repaired — this plan's
+  explicit instruction ("there is no repair utility on the product side and none is to be
+  introduced here", reusing 177.1-03's recorded decision). **CORRECTED by 178-12: this was not a
+  model-reliability limit.** It was a payload-construction defect in `verifyExampleReplayCommand`
+  — a zero-content slice was handed a dispatchable `extractionPayload` with nothing to extract
+  from, and the models' refusals were the CORRECT response under `extract-example.md`'s own
+  never-invent rule. Fixed in 178-12 by never emitting `extractionPayload` for such a slice at
+  all (reported instead as `notDispatchable: 'no-extractable-content'`). See `178-PROOF.md` §11
+  for the full corrected reading of this metric.
 
 ## Issues Encountered
 

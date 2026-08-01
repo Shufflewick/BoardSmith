@@ -559,6 +559,14 @@ the tag.
       scope (previously no agrees/disagrees example needing a real project import could ever
       execute once emitted); `buildExampleTranslationPayload` now states the generated file's real
       two-directory depth so a translator's relative import guess resolves.
+      **CORRECTED 2026-07-31 by 178-12 (gap-closure fix)**: the 37.5% malformed-response rate above
+      was NOT a model-reliability finding — it was a payload-construction defect in
+      `verifyExampleReplayCommand`, which offered a dispatchable `extractionPayload` for a slice
+      with zero extractable content lines, asking a model to extract from nothing; the models'
+      refusals were the correct response under `extract-example.md`'s never-invent rule. Fixed:
+      such a slice is now reported `notDispatchable: 'no-extractable-content'` and never dispatched
+      at all. See `.planning/phases/178-worked-example-tests/178-PROOF.md` §11 and
+      `178-12-SUMMARY.md`.
 
 ### Build Pipeline (TEST)
 

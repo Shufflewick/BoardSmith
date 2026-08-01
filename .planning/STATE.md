@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-11-PLAN.md — the live cross-game proof. Phase 178 (Worked-Example Tests) is COMPLETE, 11/11 plans, CHECK-06/TEST-01 CLOSED. Next: Phase 179 (Source-Free Verification Mode) — not yet planned."
-last_updated: "2026-08-01T21:35:00.000Z"
+stopped_at: "Completed 178-12 (gap-closure fix, post-proof, user-directed) — verifyExampleReplayCommand no longer dispatches a content-free extractionPayload; 178-11's 37.5% malformed-response rate root-caused to this defect and corrected in 178-PROOF.md §11. Phase 178 (Worked-Example Tests) remains COMPLETE, CHECK-06/TEST-01 CLOSED. Next: Phase 179 (Source-Free Verification Mode) — not yet planned."
+last_updated: "2026-08-01T22:20:00.000Z"
 last_activity: 2026-08-01
 progress:
   total_phases: 11
@@ -28,6 +28,29 @@ three reference games, closing CHECK-06 and TEST-01 (`178-PROOF.md`). Next: Phas
 Verification Mode) — not yet planned.
 
 ## Current Position
+
+`178-12` (2026-07-31, gap-closure fix, post-proof, user-directed) — root-caused and fixed 178-11's
+"37.5% malformed-response rate" finding: it was NOT a model-reliability limit. `buildExampleExtractionPayload`
+legitimately returns `lines: []` for a slice with no quote/citation/marker content, but
+`verifyExampleReplayCommand` still reported that content-free `payload` as a dispatchable
+`slices[].extractionPayload` — asking a model to extract from nothing, which the models correctly
+declined to do under `extract-example.md`'s never-invent rule. RED test proved the defect (a
+zero-content slice yielded a dispatchable payload before the fix); fix reports such a slice as the
+named, machine-readable `notDispatchable: 'no-extractable-content'` instead, with no
+`extractionPayload` field emitted at all. `buildExampleExtractionPayload` itself deliberately kept
+returning `lines: []` rather than fail-closing — an explicit, recorded decision: empty content is a
+normal, frequent slice shape, not the contract violation its existing `Derived (p.N):`
+construction-site throw exists to catch; the refusal to dispatch belongs at the caller. Build-side
+paths (`verifyExampleTranslateCommand`, `verifyExampleEmitCommand`) confirmed unreachable with a
+content-free payload by construction — they consume already-extracted specs, never
+`buildExampleExtractionPayload` directly — so no separate fix was needed there. Of the live proof's
+25 slices, the 4 already named as zero-content in `178-PROOF.md` §1 would now report
+`notDispatchable` mechanically instead of being dispatched. `178-PROOF.md` §11 (appended, not
+rewritten) and `178-11-SUMMARY.md`'s limits paragraph both corrected to point at this finding. Full
+suite: 4314 tests / 247 files, 0 failing (baseline 4313/247; +1 RED test). Commit `72b13df9`. See
+`.planning/phases/178-worked-example-tests/178-12-SUMMARY.md`.
+
+---
 
 `178-11-PLAN.md` (2026-08-01) — Phase 178 wave 11 of 11, FINAL — the live proof. Two independent,
 live `claude -p` dispatch passes (model: `claude-sonnet-5`, both runs, all games) ran the full

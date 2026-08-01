@@ -273,3 +273,59 @@ those are different statements and this proof conflated them.
 **Carried to Phase 179 and any future proof run:** baseline the WHOLE tree (`git status --short`
 on the original, or a full-tree hash), not an enumerated subset. A `cp -R` staging discipline is
 only as good as the check that proves the original was untouched.
+
+---
+
+## §11 — CORRECTION (added 2026-07-31, plan 178-12): the 37.5% malformed-response rate was our own defect, not model unreliability
+
+**§1's doom-machine row and §9's limits paragraph both reported a "37.5% malformed-response rate
+across 8 dispatches" for the 4 zero-content-line slices, and characterized it as a live
+reliability finding about the extraction models.** That characterization was wrong. Root-caused
+by 178-12 (Prove Before Fix, verified directly in code and against this document's own raw
+returns):
+
+1. `buildExampleExtractionPayload` (`src/cli/commands/example-derivation.ts`) returns `lines: []`
+   for a slice whose text carries no quote/citation/marker line — an ordinary, frequent, and fully
+   legitimate outcome (most rulebook slices simply have nothing quote-worthy in them). Its
+   `payload` for that case is just the `BS-EXAMPLE-EXTRACT-V1` handshake token plus a `Slice:`
+   header — no content whatsoever.
+2. `verifyExampleReplayCommand` destructured only `{ payload }` from that return, discarded
+   `lines`, and reported that content-free `payload` as a fully dispatchable
+   `slices[].extractionPayload` exactly like any real, content-bearing slice.
+3. `build/test.md` step 4(b) and `verify-game.md` Step 8 (this proof's own dispatch loop) then
+   sent that empty payload to a live model, asking it to extract worked examples from text that
+   was not there.
+4. **The models behaved correctly every time.** All 3 recorded "malformed" returns
+   (`178-PROOF/REJECTIONS-run1.json`, `178-PROOF/REJECTIONS-run2.json`) are the model declining to
+   fabricate content it was never given — exactly the behavior `extract-example.md`'s own
+   never-invent rule requires. One return diagnosed the payload's own emptiness precisely: *"The
+   dispatch payload only contains a slice filename reference — it does not include the actual
+   extraction payload content... I cannot fabricate slice content or invent line numbers to
+   produce a plausible-looking result."* A response that instead produced parseable JSON here
+   would have been the actual failure — a fabrication.
+
+**Corrected reading of the 37.5% figure: it measured our harness dispatching a payload with
+nothing in it, 8 times, and getting an honest refusal back 3 of those 8 times (the other 5 times
+the model apparently still managed to emit a technically-parseable `{examples: []}}` despite
+having nothing to extract from — itself a small mercy, not evidence the payload was fine). It is
+not, and never was, a statement about extraction-model reliability on real content.**
+
+**Fixed in 178-12** (commit `72b13df9`): `verifyExampleReplayCommand` now detects
+`lines.length === 0` before ever constructing a dispatchable payload and reports the slice as
+`notDispatchable: 'no-extractable-content'` instead — a named, machine-readable state, never a
+silent omission, never a dispatch. `buildExampleExtractionPayload` itself was deliberately left
+un-changed for this case (still returns `lines: []`, does not throw) — a zero-content slice is a
+normal outcome, not the kind of contract violation the function's existing `Derived (p.N):`
+construction-site throw exists to prevent; the refusal-to-dispatch belongs at the caller that
+decides whether to hand a payload to a model, not at payload construction. Recorded explicitly,
+per 178-12's instruction not to leave this reasoning unstated.
+
+**Of this proof's 25 live slices, exactly the 4 already named in §1's doom-machine
+zero-content-line row (`01-cards-parts-set-1`, `01-cards-trackers`,
+`02-cards-tracker-player-hp-b-side`, `03-cards-parts-set-1`) would no longer be dispatched under
+the fixed code** — they would each report `notDispatchable: 'no-extractable-content'` and 0
+examples, mechanically, with no model dispatch and therefore no possibility of a malformed
+response. The remaining 21 slices are unaffected; none of them had a zero-content payload.
+
+`178-11-SUMMARY.md`'s "Findings recorded, not fixed" entry for this rate has been updated to point
+here rather than repeating the original (incorrect) attribution.
