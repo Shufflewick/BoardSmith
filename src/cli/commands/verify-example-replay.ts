@@ -9,6 +9,8 @@ import {
   WORKED_EXAMPLE_KINDS,
   workedExampleId,
   buildExampleExtractionPayload,
+  buildExampleTranslationPayload,
+  collectGameApiSurface,
   createWorkedExampleSpec,
   collectWorkedExampleSpecs,
   type WorkedExampleKind,
@@ -664,6 +666,32 @@ interface RawExampleTranslationEntry {
 }
 
 /**
+ * The SINGLE `--slice-path` containment guard for every CHECK-06 command in this module that
+ * accepts a `--slice-path` option (`verifyExampleRecordCommand` and, from plan 178-05,
+ * `verifyExampleTranslateCommand`) — mirrors `verify-derive-record`'s CR-04 fix /
+ * `verify-classify.ts`'s `--live-slice` guard verbatim in shape and message. Resolves `slicePath`
+ * against `projectDir` and throws, naming `rulebook/`, BEFORE any read when the resolved path
+ * escapes `projectDir/rulebook` — a second, differently-shaped copy of this check is exactly the
+ * class of drift 177.1's code review found at this same trust boundary.
+ */
+function resolveSlicePathWithinRulebook(projectDir: string, slicePath: string): string {
+  const rulebookDir = join(projectDir, 'rulebook');
+  const sliceAbsPath = resolve(projectDir, slicePath);
+  const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
+  if (
+    sliceRelToRulebook === '' ||
+    sliceRelToRulebook.startsWith('..') ||
+    isAbsolute(sliceRelToRulebook)
+  ) {
+    throw new Error(
+      `--slice-path "${slicePath}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
+        `Pass a path relative to the project root, of the form "rulebook/<file>.md".`,
+    );
+  }
+  return sliceAbsPath;
+}
+
+/**
  * Mirrors `verify-derive-check.ts`'s module-private `readRequiredJsonFile` (per this plan's
  * `<interfaces>` — reimplemented here, not imported, since that function is not exported).
  */
@@ -758,22 +786,7 @@ export async function verifyExampleRecordCommand(
   }
 
   const slicePath = options.slicePath;
-
-  // Containment guard — mirrors verify-classify.ts's --live-slice guard / verify-derive-record's
-  // CR-04 fix (177.1 code review), validated BEFORE any read.
-  const rulebookDir = join(projectDir, 'rulebook');
-  const sliceAbsPath = resolve(projectDir, slicePath);
-  const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
-  if (
-    sliceRelToRulebook === '' ||
-    sliceRelToRulebook.startsWith('..') ||
-    isAbsolute(sliceRelToRulebook)
-  ) {
-    throw new Error(
-      `--slice-path "${slicePath}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
-        `Pass a path relative to the project root, of the form "rulebook/<file>.md".`,
-    );
-  }
+  const sliceAbsPath = resolveSlicePathWithinRulebook(projectDir, slicePath);
 
   let sliceText: string;
   try {
@@ -888,5 +901,223 @@ export async function verifyExampleRecordCommand(
     ),
   );
   console.log(`  Ledger: ${ledgerPath}`);
+  return result;
+}
+
+// -------------------------------------------------------------------------------------------
+// Plan 178-05 — verifyExampleTranslateCommand — the second dispatch's byte source
+// -------------------------------------------------------------------------------------------
+
+export interface VerifyExampleTranslateOptions {
+  project?: string;
+  slicePath?: string;
+  extraction?: string;
+  json?: boolean;
+}
+
+export interface VerifyExampleTranslatePayloadEntry {
+  /** Caller-assigned (`workedExampleId({ slicePath, lineNumber })`) — never a model-returned field. */
+  exampleId: string;
+  lineNumber: number;
+  kind: WorkedExampleKind;
+  /** Byte-equal to `buildExampleTranslationPayload(spec, api)` — this command's entire purpose. */
+  translationPayload: string;
+}
+
+export interface VerifyExampleTranslateNotTranslatedEntry {
+  lineNumber: number;
+  reason: string;
+}
+
+export interface VerifyExampleTranslateResult {
+  slicePath: string;
+  /** The size of the `GameApiSurface` every payload above was built against (a finding, not test data). */
+  apiSurfaceSymbolCount: number;
+  payloads: VerifyExampleTranslatePayloadEntry[];
+  /** Entries the extractor already marked `example-inconsistent` — never translated, never re-judged. */
+  notTranslated: VerifyExampleTranslateNotTranslatedEntry[];
+}
+
+/**
+ * A raw entry from the extractor's `--extraction` JSON return, as consumed by
+ * `verifyExampleTranslateCommand`. Most entries carry `kind: 'transition' | 'predicate'` and the
+ * full `WorkedExampleSpec` field set (178-CONTEXT.md decision 5). An entry the extractor already
+ * judged inconsistent against its own source (decision 4) instead carries `kind:
+ * 'example-inconsistent'` plus a required `reason` — every other field is optional for that shape,
+ * since this command never builds a spec for it.
+ */
+interface RawExampleTranslateExtractionEntry {
+  slicePath: string;
+  lineNumber: number;
+  pageCitation?: string;
+  kind: string;
+  sourceText?: string;
+  setup?: string;
+  action?: string;
+  expected?: string;
+  supportingQuoteLines?: string[];
+  /** Required when `kind === 'example-inconsistent'`; ignored otherwise. */
+  reason?: string;
+}
+
+/**
+ * `boardsmith verify-example-translate` — the SECOND dispatch's byte source (178-CONTEXT.md
+ * decisions 6 and 9): reads the extractor's already-dispatched `--extraction` return for ONE
+ * `--slice-path`, assigns EVERY surviving entry's identity itself via `workedExampleId({
+ * slicePath: --slice-path, lineNumber: <the returned lineNumber> })` — never a model-supplied
+ * field, the same CR-01/CR-02 continuation `verifyExampleRecordCommand` already holds — builds
+ * each into a `WorkedExampleSpec` through the ONE shared choke point (`createWorkedExampleSpec` /
+ * `collectWorkedExampleSpecs`, `example-derivation.ts`), collects the generated project's real
+ * exported API surface EXACTLY ONCE per invocation (`collectGameApiSurface`), and maps every
+ * surviving spec through `buildExampleTranslationPayload` — never composing that prompt text
+ * itself. A caller that describes `GameApiSurface` in its own prose instead of citing this
+ * command's bytes is re-deriving the exact thing this command exists to make unnecessary.
+ *
+ * An entry the extractor already marked `example-inconsistent` is NOT translated — deciding it is
+ * inconsistent already happened at extraction time, and this command never re-judges it. It is
+ * reported in `notTranslated[]` with its reason instead, and never reaches
+ * `buildExampleTranslationPayload`.
+ *
+ * READ-ONLY: this command writes nothing — no ledger, no test file, no scratch file. Its entire
+ * output is stdout (or the returned result object). Exit discipline mirrors its
+ * `verifyExampleReplayCommand`/`verifyExampleRecordCommand` siblings: a finding (zero payloads, a
+ * non-empty `notTranslated[]`) never sets `process.exitCode` — only a tool failure does (an
+ * unreadable or unparseable `--extraction` file, a containment violation, an id collision, or a
+ * spec that fails `createWorkedExampleSpec`).
+ *
+ * `--slice-path` is validated through the SAME `resolveSlicePathWithinRulebook` guard
+ * `verifyExampleRecordCommand` uses — not a second copy of it.
+ *
+ * No run identifier flag, and no bypass option of any kind, exists anywhere on this command —
+ * CHECK-06's translation half is project-level and source-free by construction, matching every
+ * other command in this module.
+ */
+export async function verifyExampleTranslateCommand(
+  options: VerifyExampleTranslateOptions = {},
+): Promise<VerifyExampleTranslateResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  if (!options.slicePath) {
+    throw new Error('verify-example-translate requires --slice-path <path>.');
+  }
+  if (!options.extraction) {
+    throw new Error('verify-example-translate requires --extraction <file>.');
+  }
+
+  const slicePath = options.slicePath;
+  const sliceAbsPath = resolveSlicePathWithinRulebook(projectDir, slicePath);
+
+  let sliceText: string;
+  try {
+    sliceText = await fs.readFile(sliceAbsPath, 'utf-8');
+  } catch {
+    throw new Error(
+      `verify-example-translate could not read --slice-path "${slicePath}" (looked for it at ` +
+        `${sliceAbsPath}).`,
+    );
+  }
+
+  const extractionRaw = (await readRequiredExampleJsonFile(
+    options.extraction,
+    '--extraction',
+  )) as RawExampleTranslateExtractionEntry[];
+  if (!Array.isArray(extractionRaw)) {
+    throw new Error(`--extraction at "${options.extraction}" must contain a JSON array.`);
+  }
+
+  // Collision guard on the FULL raw return, before any entry is split into
+  // translatable/notTranslated — two entries at the same slicePath+lineNumber collide regardless
+  // of which bucket they would otherwise fall into. Reuses the same helper
+  // `verifyExampleRecordCommand` uses, never a second copy of it.
+  keyRawExampleEntriesByLocation(
+    extractionRaw,
+    slicePath,
+    '--extraction',
+    (e) => e.sourceText ?? e.reason ?? '',
+  );
+
+  const notTranslated: VerifyExampleTranslateNotTranslatedEntry[] = [];
+  const translatable: RawExampleTranslateExtractionEntry[] = [];
+  for (const raw of extractionRaw) {
+    if (raw.kind === 'example-inconsistent') {
+      const reason = (raw.reason ?? '').trim();
+      if (reason.length === 0) {
+        throw new Error(
+          `${slicePath}:${raw.lineNumber} is marked "example-inconsistent" but carries no reason.\n` +
+            `Deciding it is inconsistent already happened at extraction time; this command never ` +
+            `re-judges it, so it cannot proceed without the reason the extractor recorded.`,
+        );
+      }
+      notTranslated.push({ lineNumber: raw.lineNumber, reason });
+      continue;
+    }
+    translatable.push(raw);
+  }
+
+  // Build specs through the ONE shared choke point (example-derivation.ts) — never re-validated
+  // here. `raw.slicePath` is overridden with THIS invocation's own --slice-path: identity is
+  // assigned from the caller, never trusted from the model's own return.
+  const specs: WorkedExampleSpec[] = translatable.map((raw) => {
+    const id = workedExampleId({ slicePath, lineNumber: raw.lineNumber });
+    return createWorkedExampleSpec({
+      id,
+      sliceText,
+      returned: {
+        slicePath,
+        lineNumber: raw.lineNumber,
+        pageCitation: raw.pageCitation ?? '',
+        kind: raw.kind,
+        sourceText: raw.sourceText ?? '',
+        setup: raw.setup ?? '',
+        action: raw.action,
+        expected: raw.expected ?? '',
+        supportingQuoteLines: raw.supportingQuoteLines,
+      },
+    });
+  });
+  const specsById = collectWorkedExampleSpecs(specs);
+
+  // `collectGameApiSurface` called EXACTLY ONCE per invocation (178-CONTEXT.md decision, this
+  // plan's <behavior>) — the same surface object is passed to every `buildExampleTranslationPayload`
+  // call below, never re-collected per example.
+  const api = await collectGameApiSurface(projectDir);
+
+  const payloads: VerifyExampleTranslatePayloadEntry[] = [...specsById.values()]
+    .sort((a, b) => a.lineNumber - b.lineNumber)
+    .map((spec) => ({
+      exampleId: spec.id,
+      lineNumber: spec.lineNumber,
+      kind: spec.kind,
+      translationPayload: buildExampleTranslationPayload(spec, api),
+    }));
+
+  const result: VerifyExampleTranslateResult = {
+    slicePath,
+    apiSurfaceSymbolCount: api.exportedSymbols.length,
+    payloads,
+    notTranslated: notTranslated.sort((a, b) => a.lineNumber - b.lineNumber),
+  };
+
+  // `--json` emits the result and nothing else on stdout. This command writes NOTHING to disk —
+  // no ledger, no test file, no scratch file — its entire output is stdout.
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  console.log(
+    chalk.green(
+      `✓ Example translate — ${slicePath}: ${payloads.length} payload(s), ` +
+        `${result.notTranslated.length} not translated.`,
+    ),
+  );
+  for (const p of payloads) {
+    console.log(`  --- ${p.exampleId} (${p.kind}) ---`);
+    console.log(p.translationPayload);
+  }
+  for (const nt of result.notTranslated) {
+    console.log(`  ⚠ ${slicePath}:${nt.lineNumber} — not translated: ${nt.reason}`);
+  }
+
   return result;
 }

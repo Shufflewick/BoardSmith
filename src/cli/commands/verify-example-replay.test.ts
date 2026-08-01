@@ -13,9 +13,16 @@ import {
   readExampleReplayVerdicts,
   verifyExampleReplayCommand,
   verifyExampleRecordCommand,
+  verifyExampleTranslateCommand,
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
-import { buildExampleExtractionPayload } from './example-derivation.js';
+import {
+  buildExampleExtractionPayload,
+  buildExampleTranslationPayload,
+  collectGameApiSurface,
+  createWorkedExampleSpec,
+  workedExampleId,
+} from './example-derivation.js';
 import { renderIndex } from './ingest-archive.js';
 
 // -------------------------------------------------------------------------------------------
@@ -862,5 +869,217 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
     } finally {
       logSpy.mockRestore();
     }
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// Plan 178-05, Task 1 — verifyExampleTranslateCommand (the second dispatch's byte source)
+// -------------------------------------------------------------------------------------------
+
+describe('verifyExampleTranslateCommand — translate', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-example-translate-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  const SLICE_TEXT =
+    'p.2, Punch Examples:\n' +
+    '"If you are punched while READY, you become EXHAUSTED."\n' +
+    '"If you are punched while EXHAUSTED, you stay EXHAUSTED."\n';
+
+  async function makeProject(files: Record<string, string> = {}): Promise<string> {
+    const project = join(dir, 'project');
+    const withDefaults = {
+      'rulebook/02-punch.md': SLICE_TEXT,
+      'src/rules/index.ts':
+        "export function checkPunch(input: { ready: boolean }): boolean {\n" +
+        '  return input.ready;\n' +
+        '}\n',
+      ...files,
+    };
+    for (const [relPath, text] of Object.entries(withDefaults)) {
+      const full = join(project, relPath);
+      await fs.mkdir(dirname(full), { recursive: true });
+      await fs.writeFile(full, text);
+    }
+    return project;
+  }
+
+  async function writeJson(name: string, value: unknown): Promise<string> {
+    const filePath = join(dir, name);
+    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
+    return filePath;
+  }
+
+  function extractionEntry(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      slicePath: 'rulebook/02-punch.md',
+      lineNumber: 2,
+      pageCitation: 'p.2, Punch Examples',
+      kind: 'transition',
+      sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+      setup: 'Guard is READY.',
+      action: 'Guard is punched.',
+      expected: 'Guard becomes EXHAUSTED.',
+      supportingQuoteLines: ['If you are punched while READY, you become EXHAUSTED.'],
+      ...overrides,
+    };
+  }
+
+  it('rejects a --slice-path that escapes rulebook/, naming rulebook, and emits no payload', async () => {
+    const project = await makeProject();
+    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+
+    await expect(
+      verifyExampleTranslateCommand({
+        project,
+        slicePath: '../../../../etc/passwd',
+        extraction: extractionPath,
+      }),
+    ).rejects.toThrow(/rulebook/);
+  });
+
+  it('each emitted exampleId deep-equals workedExampleId for its own entry, unaffected by changing the model-supplied text', async () => {
+    const project = await makeProject();
+    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+
+    const result = await verifyExampleTranslateCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+    });
+    expect(result.payloads).toHaveLength(1);
+    expect(result.payloads[0].exampleId).toBe(
+      workedExampleId({ slicePath: 'rulebook/02-punch.md', lineNumber: 2 }),
+    );
+
+    // Changing the model-supplied prose (expected outcome) must not change the id.
+    const extractionPath2 = await writeJson('extraction2.json', [
+      extractionEntry({ expected: 'A totally different worded outcome.' }),
+    ]);
+    const result2 = await verifyExampleTranslateCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath2,
+    });
+    expect(result2.payloads[0].exampleId).toBe(result.payloads[0].exampleId);
+  });
+
+  it('each emitted translationPayload is byte-equal to buildExampleTranslationPayload called directly with the same spec and surface', async () => {
+    const project = await makeProject();
+    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+
+    const result = await verifyExampleTranslateCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+    });
+
+    const api = await collectGameApiSurface(project);
+    const spec = createWorkedExampleSpec({
+      id: workedExampleId({ slicePath: 'rulebook/02-punch.md', lineNumber: 2 }),
+      sliceText: SLICE_TEXT,
+      returned: { ...extractionEntry(), kind: 'transition' } as Parameters<
+        typeof createWorkedExampleSpec
+      >[0]['returned'],
+    });
+    expect(result.payloads[0].translationPayload).toBe(buildExampleTranslationPayload(spec, api));
+    expect(result.apiSurfaceSymbolCount).toBe(api.exportedSymbols.length);
+  });
+
+  it('two returned entries sharing lineNumber throw naming both, emitting nothing', async () => {
+    const project = await makeProject();
+    const extractionPath = await writeJson('extraction.json', [
+      extractionEntry({ sourceText: 'If you are punched while READY, you become EXHAUSTED.' }),
+      extractionEntry({
+        sourceText: 'If you are punched while EXHAUSTED, you stay EXHAUSTED.',
+        expected: 'Guard stays EXHAUSTED.',
+      }),
+    ]);
+
+    await expect(
+      verifyExampleTranslateCommand({
+        project,
+        slicePath: 'rulebook/02-punch.md',
+        extraction: extractionPath,
+      }),
+    ).rejects.toThrow(/two entries resolving to the same slicePath\+lineNumber/);
+  });
+
+  it('an example-inconsistent entry appears in notTranslated[] with its reason, builds no payload, and exit stays clean', async () => {
+    const project = await makeProject();
+    const extractionPath = await writeJson('extraction.json', [
+      {
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 3,
+        kind: 'example-inconsistent',
+        reason: 'The printed text and the card art disagree about the resulting state.',
+      },
+    ]);
+
+    const result = await verifyExampleTranslateCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+    });
+    expect(result.payloads).toEqual([]);
+    expect(result.notTranslated).toEqual([
+      {
+        lineNumber: 3,
+        reason: 'The printed text and the card art disagree about the resulting state.',
+      },
+    ]);
+    expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
+  });
+
+  it('a zero-example extraction return produces zero payloads and exit stays clean', async () => {
+    const project = await makeProject();
+    const extractionPath = await writeJson('extraction.json', []);
+
+    const result = await verifyExampleTranslateCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+    });
+    expect(result.payloads).toEqual([]);
+    expect(result.notTranslated).toEqual([]);
+    expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
+  });
+
+  it('writes nothing: the ledger file bytes/mtime are unchanged and no file is created under the project', async () => {
+    const project = await makeProject();
+    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+
+    const ledgerPath = exampleReplayLedgerPath(project);
+    expect(await fs.readFile(ledgerPath, 'utf-8').catch(() => null)).toBeNull();
+
+    const beforeFiles = new Set(
+      (await fs.readdir(project, { recursive: true } as { recursive: true })) as string[],
+    );
+
+    await verifyExampleTranslateCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+    });
+
+    expect(await fs.readFile(ledgerPath, 'utf-8').catch(() => null)).toBeNull();
+    const afterFiles = new Set(
+      (await fs.readdir(project, { recursive: true } as { recursive: true })) as string[],
+    );
+    expect(afterFiles).toEqual(beforeFiles);
+  });
+
+  it('registers no run-id/force/skip/overwrite bypass option anywhere in the module', () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url)),
+      'utf-8',
+    );
+    expect(/run-id|force|--skip|overwrite/.test(source)).toBe(false);
   });
 });
