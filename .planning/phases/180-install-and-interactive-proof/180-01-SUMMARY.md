@@ -112,3 +112,20 @@ No other deviations. CR-04, the annotation-family regex split, and every advisor
 - `src/cli/slash-command/bs/status-tools.test.ts` — FOUND
 - Commit `a3ba7954` — FOUND (`git log --oneline --all | grep a3ba7954`)
 - `npx vitest run` — 249 files, 4378 tests, 0 failing — CONFIRMED
+
+---
+
+## Orchestrator addendum (2026-08-01) — a stale `dist/cli.js` trap
+
+Immediately after this fix landed, the full suite reported failures in
+`cli-conformance-commands.test.ts` and `cli.test.ts` — all at ~5000ms, a timeout signature rather
+than assertion failures. Those tests spawn `node dist/cli.js` as a real subprocess.
+
+**Cause: `dist/cli.js` was stale.** This fix changed `src/`, and nothing in the test or plan
+workflow rebuilds the bundle. `npm run build:cli` then a re-run: **4378/4378 green, 249/249 files.**
+
+Recorded because it is a live trap, not a one-off: any change to a command's source that is also
+exercised through the built CLI needs `npm run build:cli` before the suite means anything. The
+failure mode is a TIMEOUT, not a diff — so it reads as flake and invites a re-run rather than a
+rebuild. Phase 180's own findings are about proofs that ran a different path than the user does;
+this is the same shape one layer down — the tests ran a different artifact than the source.
