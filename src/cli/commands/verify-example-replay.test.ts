@@ -660,6 +660,85 @@ describe('verifyExampleRecordCommand — record', () => {
     );
   });
 
+  // -----------------------------------------------------------------------------------------
+  // CR-03 (178-REVIEW.md) — `lineNumber` is model-controlled input; it must be cross-validated
+  // against buildExampleExtractionPayload's own retained-line set for the slice BEFORE it is
+  // ever used to build a workedExampleId, and must fail closed (never silently collide with, or
+  // overwrite, a different genuine example's ledger entry) on a fabricated/off-by-one value.
+  // -----------------------------------------------------------------------------------------
+
+  it('a fabricated --extraction lineNumber not among the slice\'s retained lines is rejected, naming the slice and value, writing nothing', async () => {
+    const project = await makeProject({
+      'rulebook/02-punch.md': SLICE_TEXT,
+    });
+    // SLICE_TEXT has only 3 lines; 99 was never a retained extraction line.
+    const extractionPath = await writeJson('extraction.json', [
+      extractionEntry({ lineNumber: 99 }),
+    ]);
+    const translationPath = await writeJson('translation.json', [
+      translationEntry({ lineNumber: 99 }),
+    ]);
+
+    await expect(
+      verifyExampleRecordCommand({
+        project,
+        slicePath: 'rulebook/02-punch.md',
+        extraction: extractionPath,
+        translation: translationPath,
+      }),
+    ).rejects.toThrow(/rulebook\/02-punch\.md:99.*never retained/s);
+
+    expect(await readExampleReplayVerdicts(project)).toEqual([]);
+  });
+
+  it('a fabricated lineNumber cannot silently overwrite a genuine, different example already in the ledger', async () => {
+    const project = await makeProject({
+      'rulebook/02-punch.md': SLICE_TEXT,
+    });
+    // First, record a genuine example at line 3.
+    const extractionPath1 = await writeJson('extraction1.json', [
+      extractionEntry({
+        lineNumber: 3,
+        sourceText: 'If you are punched while EXHAUSTED, you stay EXHAUSTED.',
+        expected: 'Guard stays EXHAUSTED.',
+      }),
+    ]);
+    const translationPath1 = await writeJson('translation1.json', [
+      translationEntry({ lineNumber: 3 }),
+    ]);
+    await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath1,
+      translation: translationPath1,
+    });
+    const before = await readExampleReplayVerdicts(project);
+    expect(before).toHaveLength(1);
+    expect(before[0].exampleId).toBe('rulebook/02-punch.md:3');
+
+    // A later dispatch reports a fabricated lineNumber (50 — never a retained line of this
+    // slice) that, absent the CR-03 fix, would still compose a workedExampleId and reach the
+    // upsert path — this must fail closed BEFORE any write, never silently coexist with or
+    // overwrite the genuine entry above.
+    const extractionPath2 = await writeJson('extraction2.json', [
+      extractionEntry({ lineNumber: 50, sourceText: 'A sentence never present in this slice.' }),
+    ]);
+    const translationPath2 = await writeJson('translation2.json', [
+      translationEntry({ lineNumber: 50 }),
+    ]);
+    await expect(
+      verifyExampleRecordCommand({
+        project,
+        slicePath: 'rulebook/02-punch.md',
+        extraction: extractionPath2,
+        translation: translationPath2,
+      }),
+    ).rejects.toThrow(/rulebook\/02-punch\.md:50.*never retained/s);
+
+    const after = await readExampleReplayVerdicts(project);
+    expect(after).toEqual(before);
+  });
+
   it('requires --project/--extraction/--translation via a matching --slice-path, --extraction, --translation error respectively', async () => {
     await expect(verifyExampleRecordCommand({})).rejects.toThrow(/--slice-path/);
     await expect(
@@ -1137,6 +1216,24 @@ describe('verifyExampleTranslateCommand — translate', () => {
         extraction: extractionPath,
       }),
     ).rejects.toThrow(/two entries resolving to the same slicePath\+lineNumber/);
+  });
+
+  // CR-03 (178-REVIEW.md) — same cross-validation as verifyExampleRecordCommand: a fabricated
+  // lineNumber must fail closed BEFORE a payload (and therefore a workedExampleId) is ever built.
+  it('a fabricated --extraction lineNumber not among the slice\'s retained lines is rejected, naming the slice and value, emitting no payload', async () => {
+    const project = await makeProject();
+    // SLICE_TEXT has only 3 lines; 99 was never a retained extraction line.
+    const extractionPath = await writeJson('extraction.json', [
+      extractionEntry({ lineNumber: 99 }),
+    ]);
+
+    await expect(
+      verifyExampleTranslateCommand({
+        project,
+        slicePath: 'rulebook/02-punch.md',
+        extraction: extractionPath,
+      }),
+    ).rejects.toThrow(/rulebook\/02-punch\.md:99.*never retained/s);
   });
 
   it('an example-inconsistent entry appears in notTranslated[] with its reason, builds no payload, and exit stays clean', async () => {

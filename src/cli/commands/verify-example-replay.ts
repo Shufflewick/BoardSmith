@@ -13,6 +13,7 @@ import {
   collectGameApiSurface,
   createWorkedExampleSpec,
   collectWorkedExampleSpecs,
+  assertValidExampleLineNumbers,
   type WorkedExampleKind,
   type WorkedExampleSpec,
 } from './example-derivation.js';
@@ -869,6 +870,16 @@ export async function verifyExampleRecordCommand(
     throw new Error(`--translation at "${options.translation}" must contain a JSON array.`);
   }
 
+  // CR-03 fix: every raw lineNumber is cross-validated against buildExampleExtractionPayload's
+  // own retained-line set for this slice BEFORE it is ever used to build a workedExampleId — a
+  // fabricated or off-by-one lineNumber must fail closed here, never reach the ledger.
+  assertValidExampleLineNumbers({ path: slicePath, text: sliceText }, extractionRaw, '--extraction');
+  assertValidExampleLineNumbers(
+    { path: slicePath, text: sliceText },
+    translationRaw,
+    '--translation',
+  );
+
   // Collision guard on BOTH raw returns, keyed by slicePath+lineNumber — never by prose. Preview
   // falls back to `reason` for an `example-inconsistent` entry, which carries no `sourceText`.
   keyRawExampleEntriesByLocation(
@@ -1137,6 +1148,12 @@ export async function verifyExampleTranslateCommand(
   if (!Array.isArray(extractionRaw)) {
     throw new Error(`--extraction at "${options.extraction}" must contain a JSON array.`);
   }
+
+  // CR-03 fix: every raw lineNumber is cross-validated against buildExampleExtractionPayload's
+  // own retained-line set for this slice BEFORE it is ever used to build a workedExampleId — a
+  // fabricated or off-by-one lineNumber must fail closed here, never reach a payload or the
+  // ledger.
+  assertValidExampleLineNumbers({ path: slicePath, text: sliceText }, extractionRaw, '--extraction');
 
   // Collision guard on the FULL raw return, before any entry is split into
   // translatable/notTranslated — two entries at the same slicePath+lineNumber collide regardless

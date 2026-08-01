@@ -397,6 +397,43 @@ export function buildExampleExtractionPayload(slice: {
   return { slicePath: slice.path, lines: retained, payload };
 }
 
+/**
+ * Fails closed if any raw entry's `lineNumber` is NOT one `buildExampleExtractionPayload`
+ * actually retained for `slice` — the direct fix for CR-03 (178-REVIEW.md): `workedExampleId`'s
+ * `lineNumber` half was documented as "caller-assigned, never a model-supplied field" while every
+ * call site actually passed the model's own raw `lineNumber` through unchecked, reopening 177.1's
+ * identity-collision hazard one field over. This function is the cross-validation that makes the
+ * documented guarantee true: it recomputes the SAME retained-line set the extractor was shown
+ * (`buildExampleExtractionPayload(slice).lines`) and rejects any entry whose `lineNumber` is not
+ * in that set, naming the slice and the offending value, BEFORE the caller ever builds a
+ * `workedExampleId` from it or reaches the ledger. A fabricated or off-by-one `lineNumber` must
+ * never silently collide with — or masquerade as — a different, genuine example's identity.
+ *
+ * `flagLabel` names the CLI flag the offending raw array came from (e.g. `--extraction`) for the
+ * thrown error's message only.
+ */
+export function assertValidExampleLineNumbers(
+  slice: { path: string; text: string },
+  rawEntries: readonly { lineNumber: number }[],
+  flagLabel: string,
+): void {
+  const { lines } = buildExampleExtractionPayload(slice);
+  const validLineNumbers = new Set(lines.map((l) => l.lineNumber));
+  for (const raw of rawEntries) {
+    if (!validLineNumbers.has(raw.lineNumber)) {
+      const sorted = [...validLineNumbers].sort((a, b) => a - b);
+      throw new Error(
+        `${flagLabel} entry at ${slice.path}:${raw.lineNumber} names a lineNumber that ` +
+          `buildExampleExtractionPayload never retained for this slice.\n` +
+          `Valid line numbers for ${slice.path}: ${sorted.join(', ') || '(none)'}.\n` +
+          `lineNumber must be caller-verifiable against the slice's own retained extraction ` +
+          `lines — never trusted from the model's return unchecked. Re-dispatch the subagent; ` +
+          `writing nothing.`,
+      );
+    }
+  }
+}
+
 // -------------------------------------------------------------------------------------------
 // Task 3 — buildExampleTranslationPayload + collectGameApiSurface
 // -------------------------------------------------------------------------------------------
