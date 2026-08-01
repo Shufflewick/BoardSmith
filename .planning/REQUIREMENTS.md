@@ -536,7 +536,7 @@ the tag.
 
 ### Build Pipeline (TEST)
 
-- [ ] **TEST-01**: `build/test.md` generates example-derived tests for any worked example in the
+- [x] **TEST-01**: `build/test.md` generates example-derived tests for any worked example in the
       chunk's cited slices, so new games accumulate them systematically rather than by chance.
 
 ---
@@ -589,5 +589,5 @@ the tag.
 | CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
 | CHECK-04 | Phase 177 (delivery: Phase 177.1) | **Complete** — closed 2026-07-31 on the reframed criterion, see the CHECK-04 entry's closure note AND its Phase 177.1 delivery note directly below it. Dual enumeration + reconciliation replaced the retired per-line blind re-derivation design. Measured across THREE reference games (`seven`, `one-two-punch`, `doom-machine`), ~250 line-classifications over four definitive runs (`177-15`, `177-20`, `177-21`, `177-22`): **zero wrongly-`contradicted` lines, zero fabrications passed grounding, zero annotation leaks into any dispatched payload, every result explainable** — the four criteria that protect a user, clean in every run. The fifth criterion (byte-identical classifications across two runs) was RETIRED as miscalibrated: the design's premise is two INDEPENDENT enumerations, independence implies variance, and `claude -p` exposes no temperature/seed control (61 flags, none for sampling). Residual confirmation variance ~12.5% (4/32, `177-22`), entirely in the safe direction — a line may read `corroborated` on one run and `uncorroborated` on another, never falsely `contradicted`. Treat a non-corroboration as "worth a human glance", never as a verdict. **Phase 177.1 closed a reachability gap, not this closure**: the measured design now has a CLI surface (`verify-derive-check`/`verify-derive-record`) and `/bs-verify-game` Step 7 dispatches it directly. Proven against the harness on recorded input (`177.1-REPLAY-PROOF/`, zero mechanical divergence) and a real live run (`177.1-LIVE-PROOF/PROOF.md`) — the live Sonnet-5 reconciler produced a well-formed `arithmeticSpec` for both a `single` and a `chain` claim, code accepted both as correct, and all three live classifications landed within their pre-registered permitted sets. WR-07 stays open, routed to Phase 178. |
 | CHECK-06 | Phase 178 | Pending |
-| TEST-01 | Phase 178 | Pending |
+| TEST-01 | Phase 178 | Complete |
 | VERIFY-09 | Phase 179 | Pending |

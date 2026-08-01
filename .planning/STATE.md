@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-07-PLAN.md — extract-example.md (BS-EXAMPLE-EXTRACT-V1) + translate-example.md (BS-EXAMPLE-TRANSLATE-V1), the two subagent contracts CHECK-06/TEST-01 dispatches, installed and pinned. Next: Phase 178 plan 08 (build/test.md wiring)."
-last_updated: "2026-07-31T20:35:00.000Z"
+stopped_at: "Completed 178-08-PLAN.md — TEST-01 wired into build/test.md as new numbered item 4 (sequence renumbered 1-8, numbering guard added); closed the wave-7-flagged verify-example-record example-inconsistent seam as a prerequisite. Next: Phase 178 plan 09 (verify-game.md Step 8, CHECK-06)."
+last_updated: "2026-07-31T20:50:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 8
-  total_plans: 85
-  completed_plans: 85
-  percent: 74
+  total_plans: 86
+  completed_plans: 86
+  percent: 75
 ---
 
 # Project State
@@ -21,32 +21,41 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **7/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 07 wrote the
-two subagent contracts CHECK-06/TEST-01 actually dispatch — `extract-example.md`
-(`BS-EXAMPLE-EXTRACT-V1`) and `translate-example.md` (`BS-EXAMPLE-TRANSLATE-V1`) — installed
-under `SHARED_LEAF_PROBES` and pinned by cross-file lexicon tests against the real exported token
-constants. Settled both open wire-shape questions prior waves deferred (confirmed both, no code
-superseded). Next: Phase 178 plan 08 (`build/test.md` wiring — TEST-01's actual pipeline
-integration).
+**Current focus:** Phase 178 — Worked-Example Tests — **8/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 08 wired
+TEST-01 into `build/test.md` as new numbered item 4 (sequence renumbered 1-8, a parsed-index
+numbering guard added) and, as a prerequisite, closed the wave-7-flagged
+`verifyExampleRecordCommand` `example-inconsistent` seam — the `seven` Run-example fixture now
+survives end to end instead of throwing. Next: Phase 178 plan 09 (`verify-game.md` Step 8,
+CHECK-06 — advisory, exit 0, deliberately asymmetric with build/test.md's build-blocking TEST-01).
 
 ## Current Position
 
-`178-07-PLAN.md` (2026-07-31) — Phase 178 wave 7 of 11 — wrote `extract-example.md` (identifies
-worked examples as transition/predicate/example-inconsistent, never sees game source or existing
-tests, never invents an id, `seven`'s Run example the worked `example-inconsistent` illustration)
-and `translate-example.md` (turns one validated `WorkedExampleSpec` + `GameApiSurface` into
-runnable code, kind-branching a `predicate` to a direct exported-symbol call — `seven`'s
-`ScoringPattern.check` over constructed card elements — rather than forcing `game.doAction`; names
-`GENERATED_TEST_SANDBOX_RULES`' five rules explicitly; states the verdict of record comes from
-running the emitted test, never `verdictHint`). Both tokens (`BS-EXAMPLE-EXTRACT-V1`/
-`BS-EXAMPLE-TRANSLATE-V1`) are the real `example-derivation.ts` exports, not the plan's own
-placeholder spelling — a deviation caught and fixed before any commit, pinned by a cross-file
-lexicon test mirroring `ENUMERATE_TOKEN`'s pattern. Both files added to `SHARED_LEAF_PROBES` and
-proven by a real-install leaf probe. Full suite 4263/247 → 4280/247 (17 new tests, 0 failing).
-Flagged forward for 178-08/09: `verifyExampleRecordCommand`'s `--extraction` parsing does not yet
-accept `kind: 'example-inconsistent'` entries (throws on them today) — a real seam whichever plan
-wires the full chain end-to-end will hit on the `seven` Run fixture.
+`178-08-PLAN.md` (2026-07-31) — Phase 178 wave 8 of 11 — closed the seam wave 7 flagged:
+`verifyExampleRecordCommand` threw on any `--extraction` entry carrying `kind:
+'example-inconsistent'` because every entry was fed straight to `createWorkedExampleSpec` (which
+only accepts transition/predicate). Fixed by adding a record-level-only `EXAMPLE_REPLAY_RECORD_KINDS`
+constant (never widening `WORKED_EXAMPLE_KINDS` itself), splitting `example-inconsistent` entries
+off before spec construction, and recording them directly with `contradictionA`/`contradictionB`
+pulled from the extractor's own `supportingQuoteLines[0]`/`[1]` — no `--translation` entry
+required, since these were never dispatched for translation. Three new tests prove the
+`seven`-shaped fixture (quoted "5, 6, 7" vs. Visual line "1, 2, 3") now records end to end. Then
+wired TEST-01 into `build/test.md` as new item 4, "Worked-example tests (TEST-01)", between the
+existing chunk-tests item (3) and the full-regression-suite item (renumbered 4→5, and 5-7→6-8):
+nine ordered sub-steps citing all four real commands (`verify-example-replay`,
+`verify-example-translate`, `verify-example-record`, `verify-example-emit`) and both dispatch
+contracts' real tokens (`BS-EXAMPLE-EXTRACT-V1`/`BS-EXAMPLE-TRANSLATE-V1`), with zero
+`GameApiSurface`/`exportedSymbols` prose narration anywhere in the file. `disagrees` is
+build-blocking, routing to `build` like every other step — stated in the same paragraph as its
+deliberate asymmetry with `/bs-verify-game`'s advisory CHECK-06 (178-09's job).
+`unexecutable`/`example-inconsistent` are never a build failure; a zero-worked-examples chunk
+names its exemption explicitly in the generated test file's own comment. The recorded verdict is
+stated to come from actually running the emitted test, never the translator's own `verdictHint`.
+Pinned with 9 new tests in `build-chunk.test.ts`: a numbering guard (items 1..8, no dup/skip,
+demonstrated against a mutated fixture), the step's position by parsed index (not substring
+search), all four commands + both tokens, the two-dispatch rule, the build-blocking/asymmetry
+paragraph, the zero-example exemption sentence, and the run-the-test-not-`verdictHint` sentence.
+Full suite 4280/247 → 4292/247 (12 new tests, 0 failing).
 
 `178-06-PLAN.md` (2026-07-31) — Phase 178 wave 6 of 11 — added `scanSourceForSandboxViolations`
 (`src/cli/lib/sandbox-scan.ts`) — the single-source-string entry point `scanSandboxViolations`
