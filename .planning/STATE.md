@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-04-PLAN.md — verify-example-record sole write surface + QuoteVerifiedProvenance provenance gating (decision 12) + CLI registration for verify-example-replay/verify-example-record. Next: Phase 178 plan 05 (verify-example-translate)."
-last_updated: "2026-08-01T00:32:00.000Z"
-last_activity: 2026-08-01
+stopped_at: "Completed 178-05-PLAN.md — verifyExampleTranslateCommand (the second dispatch's byte source) + CLI registration + SC-3's one-implementation falsifier. Next: Phase 178 plan 06 (example-test-emit.ts)."
+last_updated: "2026-07-31T19:45:00.000Z"
+last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 8
-  total_plans: 84
-  completed_plans: 84
+  total_plans: 85
+  completed_plans: 85
   percent: 74
 ---
 
@@ -21,14 +21,51 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **4/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 04 added
-`verifyExampleRecordCommand` (CHECK-06's sole ledger write surface), wired
-`QuoteVerifiedProvenance` gating (decision 12) into every recorded verdict, and registered both
-`verify-example-replay`/`verify-example-record` in `cli.ts`, verified reachable from a real built
-CLI. Next: Phase 178 plan 05 (`verify-example-translate`).
+**Current focus:** Phase 178 — Worked-Example Tests — **5/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 05 added
+`verifyExampleTranslateCommand` (the second dispatch's byte source), registered
+`verify-example-translate` in `cli.ts`, and pinned SC-3's one-implementation guarantee with a
+falsifying source-scanning test. Next: Phase 178 plan 06 (`example-test-emit.ts`).
 
 ## Current Position
+
+`178-05-PLAN.md` (2026-07-31) — Phase 178 wave 5 of 11 — added `verifyExampleTranslateCommand`
+(`src/cli/commands/verify-example-replay.ts`), registered as `boardsmith verify-example-translate`
+— a read-only command that reads a slice's extractor `--extraction` return, assigns every
+surviving entry's identity itself via `workedExampleId({slicePath, lineNumber})` (never
+model-supplied), builds each into a `WorkedExampleSpec` through the shared
+`example-derivation.ts` choke point, calls `collectGameApiSurface(projectDir)` exactly once per
+invocation, and maps every surviving spec through `buildExampleTranslationPayload` — the SECOND
+dispatch's byte source `build/test.md` and `verify-game.md` Step 8 will cite instead of
+re-deriving `GameApiSurface` in prose. An entry the extractor already marked
+`example-inconsistent` is routed to `notTranslated[]` with its reason, never re-judged, never
+translated. Extracted the `--slice-path` containment guard (previously inline in
+`verifyExampleRecordCommand`) into a shared `resolveSlicePathWithinRulebook` helper reused by both
+commands — one containment implementation, not two. Registered in `cli.ts` immediately after
+`verify-example-record`, verified reachable from a REAL BUILT CLI (`node dist/cli.js
+verify-example-translate --help` exits 0 listing `--project`/`--slice-path`/`--extraction`/
+`--json`, no `--run-id`; `--project /tmp` alone exits non-zero naming the missing required
+options). Added a `CHECK-06 — one derivation implementation (SC-3)` describe block: asserts
+`buildExampleTranslationPayload`/`buildExampleExtractionPayload`/`collectGameApiSurface` are each
+declared exactly once across `src/` (in `example-derivation.ts`), asserts
+`verify-example-replay.ts` imports rather than re-declares them, and PROVES the detector is real
+by re-running the same counting regex against an in-memory-mutated copy of
+`example-derivation.ts`'s real text (a duplicate declaration appended, never written to disk) and
+observing the match count go from 1 to 2. Both grep gates
+(`run-id\|force\|--skip\|overwrite` and no local `build...Payload`/`collect...ApiSurface`
+declaration) stayed at 0. **One documented finding, no code defects**: the extraction return's
+`example-inconsistent` wire shape was undefined at plan time (no prior plan specified it);
+designed a minimal local interface permitting `kind: 'example-inconsistent'` + `reason`,
+documented as Claude's Discretion per 178-CONTEXT.md and flagged for 178-07 (the extraction
+subagent contract) to confirm. **Full `npm test`: 246 files / 4242 tests / 0 failing** (baseline
+4228/246; +14 new tests, 0 new files — extended the existing
+`verify-example-replay.test.ts`/`cli.test.ts`). CHECK-06's requirement checkbox stays unchecked —
+this plan builds the translation dispatch's CLI surface only; the extraction/translation subagent
+contracts (plan 07) and `verify-game.md` Step 8's dispatch wiring (plan 09) remain. See
+`.planning/phases/178-worked-example-tests/178-05-SUMMARY.md`. **6 of 11 plans remain in Phase
+178** — `178-06` (`example-test-emit.ts`) is next.
+
+---
 
 `178-04-PLAN.md` (2026-08-01) — Phase 178 wave 4 of 11 — added `verifyExampleRecordCommand`
 (`src/cli/commands/verify-example-replay.ts`), the ONLY write surface for CHECK-06's ledger, and
