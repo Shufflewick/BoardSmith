@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 179-02 (wave 2 of 6) — verify-source-free-check CLI registered in cli.ts, rendering computeSourceFreeReport (human + --json, exit 0 unconditionally, no scope-declaring flag), plus the PROV-02 data-flow proof asserting renderVerifiedAgainst's real output against both source-free reasons and the full-scope no-Reason: case. VERIFY-09 stays Pending (only wave 2 of 6 done). Next: 179-03-PLAN.md — wire /bs-verify-game's Close to chunk-check (wave 3)."
-last_updated: "2026-08-01T23:15:00.000Z"
+stopped_at: "Completed 179-03 (wave 3 of 6) — extracted recordVerifiedAgainst from chunkCheckCommand as the one reusable fenced writer (chunk-check's own contract unchanged, all 62 pre-existing tests pass unmodified), and built boardsmith verify-close-record (computeTouchedChunks scoped to drift-check's own evaluated set + optional run-ledger impact slugs, never a directory listing; per-chunk try/catch into errors[], never a gate, exit 0 always). Proven on disk (SHA-256 idempotence, designer-content preservation, fence-refusal, cross-surface scope/reason agreement) and end-to-end via the built CLI against a cp -R copy of seven (17/17 recorded, idempotent, original untouched). VERIFY-09/PROV-02 stay Pending/reopened (requirement closes at 179-06's live proof). Next: 179-04-PLAN.md — wire /bs-verify-game's Close (both source-free and full-scope) to dispatch verify-close-record (wave 4)."
+last_updated: "2026-08-02T00:10:00.000Z"
 last_activity: 2026-08-01
 progress:
   total_phases: 11
@@ -28,6 +28,38 @@ three reference games, closing CHECK-06 and TEST-01 (`178-PROOF.md`). Next: Phas
 Verification Mode) — not yet planned.
 
 ## Current Position
+
+`179-03-PLAN.md` (2026-08-01, wave 3 of 6) — extracted `recordVerifiedAgainst(slug, options)` out
+of `chunkCheckCommand` in `chunk-provenance.ts` as the one reusable fenced `## Verified Against`
+writer (same line-anchored heading match, same fence-bounded splice, same `changed` comparison,
+verbatim), setting no exit code and printing nothing; `chunkCheckCommand` is now a thin caller
+applying its own unchanged repair-then-fail command contract on top. All 62 pre-existing
+`chunk-provenance.test.ts` assertions pass unmodified; 5 new tests pin the writer's own contract
+(idempotency via SHA-256 equality, fence-refusal leaves the file byte-unchanged, designer prose
+survives a repair write). Built `src/cli/commands/verify-close-record.ts`:
+`computeTouchedChunks(projectDir, { runId? })` derives the evaluated set from `driftCheckCommand`'s
+own `chunks[].chunk` — never a `chunks/` directory listing (grep-enforced: 0 occurrences) — unioned
+with a run ledger's `impact`-record slugs only when `--run` is supplied; `verifyCloseRecordCommand`
+calls `recordVerifiedAgainst` once per touched slug, catching each throw into `errors[]` rather
+than aborting, never assigning a non-zero exit code (a Close reports, it does not gate — 0
+`process.exitCode` occurrences). Registered as `boardsmith verify-close-record`
+(`--project`/`--run`/`--json`, no scope-declaring option) in `cli.ts`. 8 new
+`verify-close-record.test.ts` tests assert every claim from DISK (not the returned object alone),
+including a live falsifiability demonstration (compute-but-not-write, temporarily disabling the
+write call) that failed 5/8 tests before being reverted clean. Verified end-to-end through the
+built CLI against a `cp -R` copy of the `seven` reference game: 17/17 chunks recorded, idempotent
+on immediate re-run (`changed: false` for all 17, `errors: []`), original untouched (`git status
+--short` before/after identical). Full suite: 4358 tests / 249 files, 0 failing (baseline 4345/248;
++13 new tests, +1 file). One Rule-3 fix caught by the plan's own acceptance-criteria greps before
+committing: `verify-close-record.ts`'s explanatory comments named the literal forbidden substrings
+(`readdir`, `process.exitCode`) they were documenting the ABSENCE of, which the plan's own
+unfiltered `grep -c` criteria would then match — reworded without the literal substrings, criteria
+satisfied. VERIFY-09/PROV-02 stay Pending/reopened in `REQUIREMENTS.md` (only wave 3 of 6
+delivered; the requirement closes at 179-06's live proof — this plan builds the reachable write
+path, 179-04 dispatches it from skill prose). Commit `a2b8c391`. See
+`.planning/phases/179-source-free-verification-mode/179-03-SUMMARY.md`.
+
+---
 
 `179-02-PLAN.md` (2026-08-01, wave 2 of 6) — added `verifySourceFreeCheckCommand` to
 `src/cli/commands/verify-source-free.ts` (human + `--json` renderer over plan 01's
