@@ -120,3 +120,68 @@ describe('verify-derive-record — retargeted registration', () => {
     }
   });
 });
+
+describe('verify-example-replay — registration (CHECK-06)', () => {
+  it('is registered: --help exits 0 and lists exactly --project, --json, --chunk (plus -h), never --run-id or a bypass flag', async () => {
+    const result = await spawnCli(['verify-example-replay', '--help']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('verify-example-replay');
+
+    for (const flag of ['--project <dir>', '--json', '--chunk <slug>', '-h, --help']) {
+      expect(result.stdout).toContain(flag);
+    }
+    for (const bypassFlag of ['--run-id', '--force', '--skip', '--overwrite']) {
+      expect(result.stdout).not.toContain(bypassFlag);
+    }
+  });
+
+  it('runs end-to-end against a real project and emits parseable, non-empty JSON, exit 0', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-example-replay-'));
+    try {
+      const project = join(dir, 'project');
+      await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+      await fs.writeFile(
+        join(project, 'rulebook', '01-x.md'),
+        'p.1, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
+      );
+
+      const result = await spawnCli(['verify-example-replay', '--project', project, '--json']);
+
+      expect(result.code).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(Array.isArray(parsed.slices)).toBe(true);
+      expect(parsed.slices.length).toBeGreaterThan(0);
+      expect(Array.isArray(parsed.unarchivedSources)).toBe(true);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('verify-example-record — registration (CHECK-06, the ONLY write surface)', () => {
+  it('is registered: --help exits 0 and lists --slice-path, --extraction, --translation as required, never --run-id or a bypass flag', async () => {
+    const result = await spawnCli(['verify-example-record', '--help']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('verify-example-record');
+
+    for (const flag of [
+      '--project <dir>',
+      '--slice-path <path>',
+      '--extraction <file>',
+      '--translation <file>',
+      '--json',
+      '-h, --help',
+    ]) {
+      expect(result.stdout).toContain(flag);
+    }
+    for (const bypassFlag of ['--run-id', '--force', '--skip', '--overwrite']) {
+      expect(result.stdout).not.toContain(bypassFlag);
+    }
+  });
+
+  it('exits non-zero with a message naming the missing required options when none are supplied', async () => {
+    const result = await spawnCli(['verify-example-record', '--project', '/tmp']);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('required option');
+  });
+});

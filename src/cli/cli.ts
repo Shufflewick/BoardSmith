@@ -42,6 +42,10 @@ import {
   verifyDeriveCheckCommand,
   verifyDeriveRecordCommand,
 } from './commands/verify-derive-check.js';
+import {
+  verifyExampleReplayCommand,
+  verifyExampleRecordCommand,
+} from './commands/verify-example-replay.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -459,6 +463,44 @@ program
   )
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyDeriveRecordCommand);
+
+// CHECK-06 (178-CONTEXT.md decision 12): worked-example replay — an extractor turns a rulebook
+// slice's worked examples into structured specs, a translator turns each spec into a runnable
+// test against the real engine, and the CLI records one of four verdicts (agrees / disagrees /
+// example-inconsistent / unexecutable) per example. A `disagrees` verdict is gated on quote
+// provenance (`QuoteVerifiedProvenance`): only when the example's supporting quotes are verified
+// against an archived, hash-verified source is a mismatch reported as a genuine code defect —
+// otherwise it is downgraded to an explicitly lower-confidence finding, never a confident
+// accusation against the code. `verify-example-replay` is advisory on the verify side (always
+// exits 0); the build side's own consumer (`build/test.md`) treats a mismatch as build-blocking.
+// Both commands are project-level and source-free BY CONSTRUCTION — neither registers a run
+// identifier flag or any bypass option of any kind. `verify-example-record` is the ONLY write
+// surface for CHECK-06's ledger.
+program
+  .command('verify-example-replay')
+  .description(
+    'Enumerate every live rulebook slice project-wide, join each to its recorded worked-example ' +
+      'replay verdicts, and hand back the extraction dispatch payload for every slice still ' +
+      'pending (read-only, project-level, source-free, machine-readable, exits 0 unconditionally)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .option('--chunk <slug>', 'Scope the report to exactly one chunk\'s cited slices')
+  .action(verifyExampleReplayCommand);
+
+program
+  .command('verify-example-record')
+  .description(
+    "Read one slice's extractor and translator structured JSON returns, gate every mismatch on " +
+      "quote provenance, and atomically upsert-append every worked-example verdict into the " +
+      "project-level ledger (the ONLY write surface for CHECK-06)",
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--slice-path <path>', 'The rulebook/ slice the worked examples live in')
+  .requiredOption('--extraction <file>', "The extractor's structured JSON return")
+  .requiredOption('--translation <file>', "The translator's structured JSON return")
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyExampleRecordCommand);
 
 // Claude Code integration
 const claudeCmd = program

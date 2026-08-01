@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -11,9 +12,11 @@ import {
   recordExampleReplayVerdicts,
   readExampleReplayVerdicts,
   verifyExampleReplayCommand,
+  verifyExampleRecordCommand,
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
 import { buildExampleExtractionPayload } from './example-derivation.js';
+import { renderIndex } from './ingest-archive.js';
 
 // -------------------------------------------------------------------------------------------
 // Task 1 — verdict set + createExampleReplayRecord (the record choke point)
@@ -464,5 +467,400 @@ describe('verifyExampleReplayCommand — command', () => {
         verdictCounts: { agrees: 1, disagrees: 1, 'example-inconsistent': 0, unexecutable: 0 },
       },
     ]);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// Plan 178-04, Task 1 — verifyExampleRecordCommand — the sole write surface
+// -------------------------------------------------------------------------------------------
+
+describe('verifyExampleRecordCommand — record', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-example-record-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  async function makeProject(files: Record<string, string>): Promise<string> {
+    const project = join(dir, 'project');
+    for (const [relPath, text] of Object.entries(files)) {
+      const full = join(project, relPath);
+      await fs.mkdir(dirname(full), { recursive: true });
+      await fs.writeFile(full, text);
+    }
+    return project;
+  }
+
+  async function writeJson(name: string, value: unknown): Promise<string> {
+    const filePath = join(dir, name);
+    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
+    return filePath;
+  }
+
+  const SLICE_TEXT =
+    'p.2, Punch Examples:\n' +
+    '"If you are punched while READY, you become EXHAUSTED."\n' +
+    '"If you are punched while EXHAUSTED, you stay EXHAUSTED."\n';
+
+  function extractionEntry(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      slicePath: 'rulebook/02-punch.md',
+      lineNumber: 2,
+      pageCitation: 'p.2, Punch Examples',
+      kind: 'transition',
+      sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+      setup: 'Guard is READY.',
+      action: 'Guard is punched.',
+      expected: 'Guard becomes EXHAUSTED.',
+      supportingQuoteLines: ['If you are punched while READY, you become EXHAUSTED.'],
+      ...overrides,
+    };
+  }
+
+  function translationEntry(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      slicePath: 'rulebook/02-punch.md',
+      lineNumber: 2,
+      verdict: 'agrees',
+      reason: 'The generated test executed and matched the expected outcome.',
+      ...overrides,
+    };
+  }
+
+  it('rejects a --slice-path that escapes rulebook/, naming rulebook, and never reads it', async () => {
+    const project = await makeProject({
+      'rulebook/02-punch.md': SLICE_TEXT,
+    });
+    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+    const translationPath = await writeJson('translation.json', [translationEntry()]);
+    const ledgerPath = exampleReplayLedgerPath(project);
+    expect(
+      await fs.readFile(ledgerPath, 'utf-8').catch(() => null),
+    ).toBeNull();
+
+    await expect(
+      verifyExampleRecordCommand({
+        project,
+        slicePath: '../../../../etc/passwd',
+        extraction: extractionPath,
+        translation: translationPath,
+      }),
+    ).rejects.toThrow(/rulebook/);
+
+    expect(await fs.readFile(ledgerPath, 'utf-8').catch(() => null)).toBeNull();
+  });
+
+  it('two extraction entries sharing lineNumber cause the command to throw naming both, writing nothing', async () => {
+    const project = await makeProject({
+      'rulebook/02-punch.md': SLICE_TEXT,
+    });
+    const extractionPath = await writeJson('extraction.json', [
+      extractionEntry({ sourceText: 'If you are punched while READY, you become EXHAUSTED.' }),
+      extractionEntry({
+        sourceText: 'If you are punched while EXHAUSTED, you stay EXHAUSTED.',
+        expected: 'Guard stays EXHAUSTED.',
+      }),
+    ]);
+    const translationPath = await writeJson('translation.json', [translationEntry()]);
+
+    await expect(
+      verifyExampleRecordCommand({
+        project,
+        slicePath: 'rulebook/02-punch.md',
+        extraction: extractionPath,
+        translation: translationPath,
+      }),
+    ).rejects.toThrow(/two entries resolving to the same slicePath\+lineNumber/);
+
+    expect(await readExampleReplayVerdicts(project)).toEqual([]);
+  });
+
+  it('a sourceText absent from the slice is rejected, quoting the offending text, writing nothing', async () => {
+    const project = await makeProject({
+      'rulebook/02-punch.md': SLICE_TEXT,
+    });
+    const extractionPath = await writeJson('extraction.json', [
+      extractionEntry({ sourceText: 'This sentence does not appear in the slice at all.' }),
+    ]);
+    const translationPath = await writeJson('translation.json', [translationEntry()]);
+
+    await expect(
+      verifyExampleRecordCommand({
+        project,
+        slicePath: 'rulebook/02-punch.md',
+        extraction: extractionPath,
+        translation: translationPath,
+      }),
+    ).rejects.toThrow(/This sentence does not appear in the slice at all\./);
+
+    expect(await readExampleReplayVerdicts(project)).toEqual([]);
+  });
+
+  it('records two examples and readExampleReplayVerdicts returns exactly those two, each with the id workedExampleId computes', async () => {
+    const project = await makeProject({
+      'rulebook/02-punch.md': SLICE_TEXT,
+    });
+    const extractionPath = await writeJson('extraction.json', [
+      extractionEntry({
+        lineNumber: 2,
+        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+      }),
+      extractionEntry({
+        lineNumber: 3,
+        sourceText: 'If you are punched while EXHAUSTED, you stay EXHAUSTED.',
+        expected: 'Guard stays EXHAUSTED.',
+      }),
+    ]);
+    const translationPath = await writeJson('translation.json', [
+      translationEntry({ lineNumber: 2 }),
+      translationEntry({ lineNumber: 3 }),
+    ]);
+
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+      translation: translationPath,
+    });
+    expect(result.records).toHaveLength(2);
+
+    const recorded = await readExampleReplayVerdicts(project);
+    expect(recorded).toHaveLength(2);
+    expect(recorded.map((r) => r.exampleId).sort()).toEqual(
+      ['rulebook/02-punch.md:2', 'rulebook/02-punch.md:3'].sort(),
+    );
+  });
+
+  it('requires --project/--extraction/--translation via a matching --slice-path, --extraction, --translation error respectively', async () => {
+    await expect(verifyExampleRecordCommand({})).rejects.toThrow(/--slice-path/);
+    await expect(
+      verifyExampleRecordCommand({ slicePath: 'rulebook/x.md' }),
+    ).rejects.toThrow(/--extraction/);
+    await expect(
+      verifyExampleRecordCommand({ slicePath: 'rulebook/x.md', extraction: '/tmp/x.json' }),
+    ).rejects.toThrow(/--translation/);
+  });
+
+  it('registers no run-id/force/skip/overwrite bypass option anywhere in the module', () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url)),
+      'utf-8',
+    );
+    expect(/run-id|force|--skip|overwrite/.test(source)).toBe(false);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// Plan 178-04, Task 2 — provenance gating (178-CONTEXT.md decision 12)
+// -------------------------------------------------------------------------------------------
+
+describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance gating (decision 12)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-example-provenance-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  const SLICE_TEXT =
+    'p.2, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n';
+
+  function extractionEntry() {
+    return {
+      slicePath: 'rulebook/02-punch.md',
+      lineNumber: 2,
+      pageCitation: 'p.2, Punch Examples',
+      kind: 'transition' as const,
+      sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+      setup: 'Guard is READY.',
+      action: 'Guard is punched.',
+      expected: 'Guard becomes EXHAUSTED.',
+      supportingQuoteLines: ['If you are punched while READY, you become EXHAUSTED.'],
+    };
+  }
+
+  function disagreesTranslationEntry() {
+    return {
+      slicePath: 'rulebook/02-punch.md',
+      lineNumber: 2,
+      verdict: 'disagrees' as const,
+      reason: 'The generated test failed to match the expected outcome.',
+      expected: 'Guard becomes EXHAUSTED.',
+      observed: 'Guard remained READY.',
+    };
+  }
+
+  async function writeJson(name: string, value: unknown): Promise<string> {
+    const filePath = join(dir, name);
+    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
+    return filePath;
+  }
+
+  /** No INDEX.md at all — computeVerificationScope never reaches "full"; provenance is null. */
+  async function makeUnverifiedProject(): Promise<string> {
+    const project = join(dir, 'unverified-project');
+    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, 'rulebook', '02-punch.md'), SLICE_TEXT);
+    return project;
+  }
+
+  /** A genuinely single-source, fully-archived project — provenance covers every slice. */
+  async function makeVerifiedProject(): Promise<string> {
+    const project = join(dir, 'verified-project');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash,
+        transcribed: '2026-07-28',
+      }),
+    );
+    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.writeFile(join(project, 'rules.pdf'), sourceBuf);
+    await fs.writeFile(join(project, 'rulebook', '02-punch.md'), SLICE_TEXT);
+    return project;
+  }
+
+  /**
+   * The doom-machine shape (verify-enumerate.test.ts's own fixture): `rules.pdf` archived,
+   * `cards.pdf` present but unarchived, and the slice named to match `cards.pdf`'s stem so
+   * `QuoteVerifiedProvenance.covers()` reports `false` for it.
+   */
+  async function makeUncoveredSliceProject(): Promise<string> {
+    const project = join(dir, 'uncovered-project');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash,
+        transcribed: '2026-07-28',
+      }),
+    );
+    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.writeFile(join(project, 'rules.pdf'), sourceBuf);
+    await fs.writeFile(join(project, 'cards.pdf'), Buffer.from('fake bytes for cards.pdf\n'));
+    await fs.writeFile(join(rulebookDir, 'CARDS.md'), SLICE_TEXT);
+    return project;
+  }
+
+  it('no archived source at all — every recorded "disagrees" carries quote-unverified, and the report never accuses the code', async () => {
+    const project = await makeUnverifiedProject();
+    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+    const translationPath = await writeJson('translation.json', [disagreesTranslationEntry()]);
+
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+      translation: translationPath,
+    });
+    expect(result.provenance).toBe('quote-unverified');
+    expect(result.records[0].provenance).toBe('quote-unverified');
+    expect(result.records[0].verdict).toBe('disagrees');
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await verifyExampleReplayCommand({ project });
+      const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(printed).toContain('not an accusation against the code');
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('archived source does not cover this slice — the same downgrade applies, and the report names the slice', async () => {
+    const project = await makeUncoveredSliceProject();
+    const extractionPath = await writeJson('extraction.json', [
+      { ...extractionEntry(), slicePath: 'rulebook/CARDS.md' },
+    ]);
+    const translationPath = await writeJson('translation.json', [
+      { ...disagreesTranslationEntry(), slicePath: 'rulebook/CARDS.md' },
+    ]);
+
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/CARDS.md',
+      extraction: extractionPath,
+      translation: translationPath,
+    });
+    expect(result.provenance).toBe('quote-unverified');
+    expect(result.records[0].verdict).toBe('disagrees');
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await verifyExampleReplayCommand({ project });
+      const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(printed).toContain('rulebook/CARDS.md');
+      expect(printed).toContain('not an accusation against the code');
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('a fully-verified project records "disagrees" as quote-verified, and the verdict string stays "disagrees" in both cases', async () => {
+    const project = await makeVerifiedProject();
+    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+    const translationPath = await writeJson('translation.json', [disagreesTranslationEntry()]);
+
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+      translation: translationPath,
+    });
+    expect(result.provenance).toBe('quote-verified');
+    expect(result.records[0].provenance).toBe('quote-verified');
+    // The downgrade never rewrites the verdict itself — it stays "disagrees" in every case.
+    expect(result.records[0].verdict).toBe('disagrees');
+  });
+
+  it('createExampleReplayRecord throws when provenance is omitted', () => {
+    expect(() =>
+      createExampleReplayRecord({
+        exampleId: 'rulebook/02-punch.md:2',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        kind: 'transition',
+        verdict: 'agrees',
+        reason: 'ok',
+        provenance: undefined as unknown as string,
+      }),
+    ).toThrow(/Invalid provenance/);
+  });
+
+  it('non-empty unarchivedSources — each basename appears in the report output', async () => {
+    const project = await makeUncoveredSliceProject();
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const result = await verifyExampleReplayCommand({ project });
+      expect(result.unarchivedSources).toEqual(['cards.pdf']);
+      const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(printed).toContain('cards.pdf');
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 });

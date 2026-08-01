@@ -2,13 +2,17 @@ import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
-import { readLiveSlices } from './verify-derive-check.js';
+import { readLiveSlices, parseSubagentJsonInput } from './verify-derive-check.js';
 import { resolveCitedSlices } from './chunk-provenance.js';
+import { QuoteVerifiedProvenance } from './verify-enumerate.js';
 import {
   WORKED_EXAMPLE_KINDS,
   workedExampleId,
   buildExampleExtractionPayload,
+  createWorkedExampleSpec,
+  collectWorkedExampleSpecs,
   type WorkedExampleKind,
+  type WorkedExampleSpec,
 } from './example-derivation.js';
 
 /**
@@ -280,7 +284,7 @@ export async function replaceExampleReplayVerdicts(
   const ledgerPath = exampleReplayLedgerPath(projectDir);
   const lines = records.map((r) => JSON.stringify(r));
   const content =
-    `# Example Replay Verdicts (CHECK-06) — project-level, no run-id\n\n` +
+    `# Example Replay Verdicts (CHECK-06) — project-level, not scoped to any run\n\n` +
     `${EXAMPLE_REPLAY_LEDGER_BEGIN}\n` +
     lines.join('\n') +
     (lines.length > 0 ? '\n' : '') +
@@ -419,6 +423,14 @@ export interface VerifyExampleReplayResult {
   /** Raw per-verdict integers — NEVER a percentage. */
   counts: Record<ExampleReplayVerdict, number>;
   perGameBreakdown: VerifyExampleReplaySliceBreakdown[];
+  /**
+   * Root-level files that LOOK like rulebook source documents but are neither the project's
+   * primary archived source nor a hash-verified `## Additional Sources` entry
+   * (`QuoteVerifiedProvenance.unarchivedSources`, project-level). Surfaced here rather than
+   * swallowed (178-CONTEXT.md decision 12's "never swallow `unarchivedSources`" requirement) —
+   * empty for the common single-source project.
+   */
+  unarchivedSources: readonly string[];
 }
 
 function emptyExampleReplayVerdictCounts(): Record<ExampleReplayVerdict, number> {
@@ -439,13 +451,20 @@ function emptyExampleReplayVerdictCounts(): Record<ExampleReplayVerdict, number>
  * tool failure (an unreadable project/rulebook, an unresolvable `--chunk`, or a `--chunk` value
  * that escapes the project's `chunks/` directory) throws.
  *
- * No `--run-id`, no bypass/force/skip option of any kind — this command is source-free and
- * run-less by construction, exactly like its `verify-derive-check` sibling.
+ * No run identifier flag, and no bypass option of any kind — this command is source-free and
+ * unscoped by construction, exactly like its `verify-derive-check` sibling.
  */
 export async function verifyExampleReplayCommand(
   options: VerifyExampleReplayOptions = {},
 ): Promise<VerifyExampleReplayResult> {
   const projectDir = resolve(options.project ?? process.cwd());
+
+  // Project-level provenance (178-CONTEXT.md decision 12) — obtained once, purely for reporting
+  // `unarchivedSources` here. The per-record `provenance` value each ExampleReplayRecord already
+  // carries was decided at RECORD TIME by `verifyExampleRecordCommand` (obtain + `.covers()`
+  // against that record's own slicePath) — this command never recomputes or overrides it.
+  const provenanceInstance = await QuoteVerifiedProvenance.obtain(projectDir);
+  const unarchivedSources: readonly string[] = provenanceInstance?.unarchivedSources ?? [];
 
   let liveSlices = await readLiveSlices(projectDir);
 
@@ -516,6 +535,7 @@ export async function verifyExampleReplayCommand(
     verdicts,
     counts,
     perGameBreakdown,
+    unarchivedSources,
   };
 
   // `--json` emits the result and nothing else on stdout.
@@ -548,8 +568,46 @@ export async function verifyExampleReplayCommand(
       if (breakdown.verdictCounts[v] > 0) console.log(`    ${v}: ${breakdown.verdictCounts[v]}`);
     }
   }
-  for (const finding of verdicts) {
-    if (finding.verdict === 'agrees') continue;
+  if (unarchivedSources.length > 0) {
+    console.log(
+      chalk.yellow(
+        `  ⚠ ${unarchivedSources.length} unarchived source document(s) present: ` +
+          `${unarchivedSources.join(', ')} — a "disagrees" finding against a slice these may ` +
+          `cover is downgraded to quote-unverified rather than reported as a confident accusation.`,
+      ),
+    );
+  }
+
+  // 178-CONTEXT.md decision 12: a replay mismatch is grouped into two explicitly-named buckets by
+  // the PER-RECORD provenance `verifyExampleRecordCommand` already decided (never recomputed
+  // here) — the downgrade never rewrites `verdict` itself, only which bucket/label it is reported
+  // under.
+  const disagreesVerified = verdicts.filter(
+    (v) => v.verdict === 'disagrees' && v.provenance === 'quote-verified',
+  );
+  const disagreesUnverified = verdicts.filter(
+    (v) => v.verdict === 'disagrees' && v.provenance === 'quote-unverified',
+  );
+  const otherFindings = verdicts.filter((v) => v.verdict !== 'agrees' && v.verdict !== 'disagrees');
+
+  if (disagreesVerified.length > 0) {
+    console.log(chalk.yellow(`  mismatch, quotes source-verified:`));
+    for (const finding of disagreesVerified) {
+      console.log(`    ⚠ ${finding.slicePath}:${finding.lineNumber} — ${finding.reason}`);
+    }
+  }
+  if (disagreesUnverified.length > 0) {
+    console.log(
+      chalk.yellow(
+        `  mismatch, quotes NOT source-verified — read as a question about the quote, not an ` +
+          `accusation against the code:`,
+      ),
+    );
+    for (const finding of disagreesUnverified) {
+      console.log(`    ⚠ ${finding.slicePath}:${finding.lineNumber} — ${finding.reason}`);
+    }
+  }
+  for (const finding of otherFindings) {
     console.log(
       chalk.yellow(
         `  ⚠ ${finding.verdict} (worth a human glance, never a verdict) — ` +
@@ -559,5 +617,276 @@ export async function verifyExampleReplayCommand(
     console.log(`    Reason: ${finding.reason}`);
   }
 
+  return result;
+}
+
+// -------------------------------------------------------------------------------------------
+// Task 1/2 (178-04) — verifyExampleRecordCommand — the sole write surface, provenance-gated
+// -------------------------------------------------------------------------------------------
+
+export interface VerifyExampleRecordOptions {
+  project?: string;
+  slicePath?: string;
+  extraction?: string;
+  translation?: string;
+  json?: boolean;
+}
+
+export interface VerifyExampleRecordResult {
+  records: ExampleReplayRecord[];
+  ledgerPath: string;
+  /** The single provenance value applied to EVERY record this invocation wrote (decision 12). */
+  provenance: ExampleReplayProvenance;
+}
+
+interface RawExampleExtractionEntry {
+  slicePath: string;
+  lineNumber: number;
+  pageCitation: string;
+  kind: string;
+  sourceText: string;
+  setup: string;
+  action?: string;
+  expected: string;
+  supportingQuoteLines?: string[];
+}
+
+interface RawExampleTranslationEntry {
+  slicePath: string;
+  lineNumber: number;
+  verdict: string;
+  reason: string;
+  expected?: string;
+  observed?: string;
+  contradictionA?: string;
+  contradictionB?: string;
+  testFilePath?: string;
+}
+
+/**
+ * Mirrors `verify-derive-check.ts`'s module-private `readRequiredJsonFile` (per this plan's
+ * `<interfaces>` — reimplemented here, not imported, since that function is not exported).
+ */
+async function readRequiredExampleJsonFile(filePath: string, flagLabel: string): Promise<unknown> {
+  let text: string;
+  try {
+    text = await fs.readFile(filePath, 'utf-8');
+  } catch {
+    throw new Error(`verify-example-record could not read ${flagLabel} at "${filePath}".`);
+  }
+  return parseSubagentJsonInput(text, flagLabel, filePath);
+}
+
+/** A short, non-identifying preview of a colliding entry's text for an error message. */
+function shortEntryPreview(text: string, maxLen = 80): string {
+  const trimmed = (text ?? '').toString().trim();
+  return trimmed.length > maxLen ? `${trimmed.slice(0, maxLen)}…` : trimmed;
+}
+
+/**
+ * Keys a raw returned-array entry by `workedExampleId({ slicePath, lineNumber })` — the caller's
+ * OWN `slicePath` (this invocation's `--slice-path`), never a model-returned field — and throws,
+ * naming BOTH colliding entries via `preview`, rather than silently overwriting. Direct inheritance
+ * of 177.1's CR-01/CR-02 fix: two returned entries must never collapse onto one record just
+ * because they resolve to the same `slicePath`+`lineNumber`.
+ */
+function keyRawExampleEntriesByLocation<T extends { lineNumber: number }>(
+  entries: T[],
+  slicePath: string,
+  flagLabel: string,
+  preview: (entry: T) => string,
+): Map<string, T> {
+  const map = new Map<string, T>();
+  for (const entry of entries) {
+    const id = workedExampleId({ slicePath, lineNumber: entry.lineNumber });
+    const existing = map.get(id);
+    if (existing) {
+      throw new Error(
+        `${flagLabel} contains two entries resolving to the same slicePath+lineNumber ("${id}").\n` +
+          `Existing: ${shortEntryPreview(preview(existing))}\n` +
+          `New:      ${shortEntryPreview(preview(entry))}\n` +
+          `Entries are keyed by slicePath+lineNumber, never by returned prose — remove or merge ` +
+          `the duplicate before recording. Writing nothing.`,
+      );
+    }
+    map.set(id, entry);
+  }
+  return map;
+}
+
+/**
+ * `boardsmith verify-example-record` — the ONLY write surface for CHECK-06's ledger. Reads the
+ * extractor's and translator's already-dispatched structured JSON returns
+ * (`--extraction`/`--translation`), assigns EVERY example's identity itself via
+ * `workedExampleId({ slicePath: --slice-path, lineNumber: <the returned lineNumber> })` — never a
+ * model-supplied field, the direct continuation of 177.1's CR-01/CR-02 fix — and
+ * VALIDATES-EVERYTHING-THEN-WRITES: every `WorkedExampleSpec` and every `ExampleReplayRecord` is
+ * built and checked before the single `recordExampleReplayVerdicts` call at the very end. A
+ * rejection anywhere in that validation throws before any write, leaving the ledger byte-identical
+ * to its pre-call state.
+ *
+ * PROVENANCE GATING (178-CONTEXT.md decision 12, this milestone's hardest-won lesson): resolved
+ * ONCE per invocation — never per example — via `QuoteVerifiedProvenance.obtain(projectDir)` +
+ * `.covers(slicePath)`. `'quote-verified'` only when an archived, hash-verified source exists AND
+ * can honestly be said to cover THIS `--slice-path`; `'quote-unverified'` in every other case
+ * (including no archived source at all). `createExampleReplayRecord` REQUIRES this field on every
+ * record it constructs — a caller cannot omit the gate, and the downgrade NEVER rewrites `verdict`
+ * itself (a `disagrees` stays `disagrees`), only its confidence label at the report layer
+ * (`verifyExampleReplayCommand`'s two named buckets).
+ *
+ * `--slice-path` is validated against `projectDir/rulebook` BEFORE any read — mirrors
+ * `verify-derive-record`'s CR-04 fix / `verify-classify.ts`'s `--live-slice` guard verbatim in
+ * shape and message.
+ *
+ * No run identifier flag, and no bypass option of any kind, exists anywhere on this command —
+ * CHECK-06 is project-level and source-free by construction, the same discipline `verify-derive-
+ * record` holds.
+ */
+export async function verifyExampleRecordCommand(
+  options: VerifyExampleRecordOptions = {},
+): Promise<VerifyExampleRecordResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  if (!options.slicePath) {
+    throw new Error('verify-example-record requires --slice-path <path>.');
+  }
+  if (!options.extraction) {
+    throw new Error('verify-example-record requires --extraction <file>.');
+  }
+  if (!options.translation) {
+    throw new Error('verify-example-record requires --translation <file>.');
+  }
+
+  const slicePath = options.slicePath;
+
+  // Containment guard — mirrors verify-classify.ts's --live-slice guard / verify-derive-record's
+  // CR-04 fix (177.1 code review), validated BEFORE any read.
+  const rulebookDir = join(projectDir, 'rulebook');
+  const sliceAbsPath = resolve(projectDir, slicePath);
+  const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
+  if (
+    sliceRelToRulebook === '' ||
+    sliceRelToRulebook.startsWith('..') ||
+    isAbsolute(sliceRelToRulebook)
+  ) {
+    throw new Error(
+      `--slice-path "${slicePath}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
+        `Pass a path relative to the project root, of the form "rulebook/<file>.md".`,
+    );
+  }
+
+  let sliceText: string;
+  try {
+    sliceText = await fs.readFile(sliceAbsPath, 'utf-8');
+  } catch {
+    throw new Error(
+      `verify-example-record could not read --slice-path "${slicePath}" (looked for it at ` +
+        `${sliceAbsPath}).`,
+    );
+  }
+
+  const extractionRaw = (await readRequiredExampleJsonFile(
+    options.extraction,
+    '--extraction',
+  )) as RawExampleExtractionEntry[];
+  if (!Array.isArray(extractionRaw)) {
+    throw new Error(`--extraction at "${options.extraction}" must contain a JSON array.`);
+  }
+  const translationRaw = (await readRequiredExampleJsonFile(
+    options.translation,
+    '--translation',
+  )) as RawExampleTranslationEntry[];
+  if (!Array.isArray(translationRaw)) {
+    throw new Error(`--translation at "${options.translation}" must contain a JSON array.`);
+  }
+
+  // Collision guard on BOTH raw returns, keyed by slicePath+lineNumber — never by prose.
+  keyRawExampleEntriesByLocation(
+    extractionRaw,
+    slicePath,
+    '--extraction',
+    (e) => e.sourceText ?? '',
+  );
+  const translationByLocation = keyRawExampleEntriesByLocation(
+    translationRaw,
+    slicePath,
+    '--translation',
+    (e) => e.reason ?? '',
+  );
+
+  // Build specs through the ONE shared choke point (example-derivation.ts) — never re-validated
+  // here. `returned.slicePath` is overridden with THIS invocation's own --slice-path: identity is
+  // assigned from the caller, never trusted from the model's own return.
+  const specs: WorkedExampleSpec[] = extractionRaw.map((raw) => {
+    const id = workedExampleId({ slicePath, lineNumber: raw.lineNumber });
+    return createWorkedExampleSpec({
+      id,
+      sliceText,
+      returned: { ...raw, slicePath },
+    });
+  });
+  const specsById = collectWorkedExampleSpecs(specs);
+
+  // Validate-everything-then-write: every extracted example must have a matching translation, and
+  // every translation must correspond to an extracted example — before any write.
+  for (const [id, spec] of specsById) {
+    if (!translationByLocation.has(id)) {
+      throw new Error(
+        `No --translation entry for the worked example at ${spec.slicePath}:${spec.lineNumber} ` +
+          `(id "${id}").\nEvery extracted example must have a matching translation entry before ` +
+          `recording. Writing nothing.`,
+      );
+    }
+  }
+  for (const [id] of translationByLocation) {
+    if (!specsById.has(id)) {
+      throw new Error(
+        `--translation contains an entry for "${id}" with no matching --extraction entry.\n` +
+          `A translation entry must correspond to an extracted worked example. Writing nothing.`,
+      );
+    }
+  }
+
+  // Provenance resolved ONCE per invocation (decision 12), never per example.
+  const provenanceInstance = await QuoteVerifiedProvenance.obtain(projectDir);
+  const provenance: ExampleReplayProvenance =
+    provenanceInstance && provenanceInstance.covers(slicePath) ? 'quote-verified' : 'quote-unverified';
+
+  const records: ExampleReplayRecord[] = [...specsById.values()]
+    .sort((a, b) => a.lineNumber - b.lineNumber)
+    .map((spec) => {
+      const translated = translationByLocation.get(spec.id)!;
+      return createExampleReplayRecord({
+        exampleId: spec.id,
+        slicePath: spec.slicePath,
+        lineNumber: spec.lineNumber,
+        kind: spec.kind,
+        verdict: translated.verdict,
+        reason: translated.reason,
+        expected: translated.expected,
+        observed: translated.observed,
+        contradictionA: translated.contradictionA,
+        contradictionB: translated.contradictionB,
+        supportingQuoteLines: [...spec.supportingQuoteLines],
+        provenance,
+        testFilePath: translated.testFilePath,
+      });
+    });
+
+  // The ONE mutation this function performs — everything above is validation.
+  const { ledgerPath } = await recordExampleReplayVerdicts(projectDir, records);
+
+  const result: VerifyExampleRecordResult = { records, ledgerPath, provenance };
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+  console.log(
+    chalk.green(
+      `✓ Recorded ${records.length} example-replay verdict(s) for ${slicePath} ` +
+        `(provenance: ${provenance}).`,
+    ),
+  );
+  console.log(`  Ledger: ${ledgerPath}`);
   return result;
 }
