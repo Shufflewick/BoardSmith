@@ -266,3 +266,66 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
     }
   });
 });
+
+describe('verify-example-emit — registration (TEST-01, the build-side write surface)', () => {
+  it('is registered: --help exits 0 and lists exactly --project, --chunk (required), --translated, --json (plus -h), never --run-id or a bypass flag', async () => {
+    const result = await spawnCli(['verify-example-emit', '--help']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('verify-example-emit');
+
+    for (const flag of [
+      '--project <dir>',
+      '--chunk <slug>',
+      '--translated <file>',
+      '--json',
+      '-h, --help',
+    ]) {
+      expect(result.stdout).toContain(flag);
+    }
+    for (const bypassFlag of ['--run-id', '--force', '--skip', '--overwrite']) {
+      expect(result.stdout).not.toContain(bypassFlag);
+    }
+  });
+
+  it('exits non-zero naming --chunk as required when it is not supplied', async () => {
+    const result = await spawnCli(['verify-example-emit', '--project', '/tmp']);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('required option');
+    expect(result.stderr).toContain('--chunk');
+  });
+
+  it('runs end-to-end against a real project with zero worked examples, exit 0, and writes a real file', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-example-emit-'));
+    try {
+      const project = join(dir, 'project');
+      await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+      await fs.writeFile(join(project, 'rulebook', '01-x.md'), 'No worked examples here.\n');
+      await fs.mkdir(join(project, 'chunks', 'chunk-a'), { recursive: true });
+      await fs.writeFile(
+        join(project, 'chunks', 'chunk-a', 'CHUNK.md'),
+        '# chunk-a\n\n## Verified Against\n\nCites rulebook/01-x.md.\n',
+      );
+
+      const result = await spawnCli([
+        'verify-example-emit',
+        '--project',
+        project,
+        '--chunk',
+        'chunk-a',
+        '--json',
+      ]);
+
+      expect(result.code).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.chunkExempt).toBe(true);
+      expect(parsed.emittedCount).toBe(0);
+      const bytes = await fs.readFile(
+        join(project, 'tests', 'examples', 'chunk-a.examples.test.ts'),
+        'utf-8',
+      );
+      expect(bytes).toContain('chunk-a');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});

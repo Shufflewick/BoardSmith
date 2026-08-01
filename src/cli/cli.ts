@@ -47,6 +47,7 @@ import {
   verifyExampleRecordCommand,
   verifyExampleTranslateCommand,
 } from './commands/verify-example-replay.js';
+import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -517,6 +518,34 @@ program
   .requiredOption('--extraction <file>', "The extractor's structured JSON return")
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyExampleTranslateCommand);
+
+// TEST-01 (178-CONTEXT.md decision 8): the build-side write surface — one generated example-test
+// file per chunk (`tests/examples/<chunk>.examples.test.ts`), written idempotently and atomically.
+// Reads the CHECK-06 ledger to learn which worked examples a chunk's cited slices carry and each
+// one's verdict; `unexecutable`/`example-inconsistent` records are named-reason comments, never a
+// test (decision 7). Every OTHER record's translated test code — carried on `--translated`, the
+// third dispatch's structured return — is scanned against the measured GENERATED_TEST_SANDBOX_
+// RULES subset (`example-test-emit.ts`, `178-06-MEASUREMENT/RESULTS.md`) before it ever reaches
+// disk; a violation anywhere rejects the WHOLE emission. This command never writes the ledger —
+// `verify-example-record` is the only write surface for that — and `verify-example-record` never
+// writes a test file; the two write surfaces are disjoint by construction.
+program
+  .command('verify-example-emit')
+  .description(
+    "Write the one generated example-test file for --chunk from the CHECK-06 ledger's " +
+      "recorded verdicts plus the third dispatch's translated test code, scanned against the " +
+      'measured generated-test sandbox rule subset before it is ever written (idempotent, ' +
+      'atomic, one file per chunk)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--chunk <slug>', "The chunk whose cited slices' worked examples to emit")
+  .option(
+    '--translated <file>',
+    "The translator's (third dispatch's) structured JSON return — required only when the " +
+      'chunk has at least one example recorded agrees/disagrees',
+  )
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyExampleEmitCommand);
 
 // Claude Code integration
 const claudeCmd = program
