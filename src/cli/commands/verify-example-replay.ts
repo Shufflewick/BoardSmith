@@ -86,13 +86,29 @@ export const EXAMPLE_REPLAY_LEDGER_END = '<!-- boardsmith:example-replay-verdict
 // ExampleReplayRecord
 // -------------------------------------------------------------------------------------------
 
+/**
+ * The set of `kind` values a RECORD may carry — a strict superset of `WORKED_EXAMPLE_KINDS`
+ * (`transition`/`predicate`, which is what a `WorkedExampleSpec` may be). An `example-inconsistent`
+ * extraction entry never becomes a spec (`createWorkedExampleSpec` only accepts
+ * `WORKED_EXAMPLE_KINDS`, deliberately — decision 4 forbids ever picking a side, and a spec implies
+ * a single agreed-on example to build a test from) but IS a legitimate record: the extractor
+ * already decided the example contradicts its own source, and that decision is exactly what this
+ * record exists to preserve. This is the record-level (not spec-level) widening — it never loosens
+ * `WORKED_EXAMPLE_KINDS` itself, so `createWorkedExampleSpec`/`buildExampleTranslationPayload` are
+ * untouched.
+ */
+const EXAMPLE_REPLAY_RECORD_KINDS = Object.freeze([
+  ...WORKED_EXAMPLE_KINDS,
+  'example-inconsistent',
+] as const);
+
 export interface ExampleReplayRecord {
   /** Caller-assigned (`workedExampleId({ slicePath, lineNumber })`) — never a model-returned field. */
   readonly exampleId: string;
   readonly slicePath: string;
   /** 1-based, matching the slice file's own line numbering. */
   readonly lineNumber: number;
-  readonly kind: WorkedExampleKind;
+  readonly kind: WorkedExampleKind | 'example-inconsistent';
   readonly verdict: ExampleReplayVerdict;
   /** The reasoning IS the artifact — required for every verdict, not only `unexecutable`. */
   readonly reason: string;
@@ -159,10 +175,10 @@ export function createExampleReplayRecord(input: {
         `Expected one of: ${EXAMPLE_REPLAY_VERDICTS.join(', ')}.`,
     );
   }
-  if (!(WORKED_EXAMPLE_KINDS as readonly string[]).includes(input.kind)) {
+  if (!(EXAMPLE_REPLAY_RECORD_KINDS as readonly string[]).includes(input.kind)) {
     throw new Error(
       `Invalid kind "${input.kind}" for the example-replay record at ${location}.\n` +
-        `Expected one of: ${WORKED_EXAMPLE_KINDS.join(', ')}.`,
+        `Expected one of: ${EXAMPLE_REPLAY_RECORD_KINDS.join(', ')}.`,
     );
   }
   if (!isExampleReplayProvenance(input.provenance)) {
@@ -240,7 +256,7 @@ export function createExampleReplayRecord(input: {
     exampleId: input.exampleId,
     slicePath: input.slicePath,
     lineNumber: input.lineNumber,
-    kind: input.kind as WorkedExampleKind,
+    kind: input.kind as WorkedExampleKind | 'example-inconsistent',
     verdict: input.verdict,
     reason: input.reason,
     expected,
@@ -641,16 +657,27 @@ export interface VerifyExampleRecordResult {
   provenance: ExampleReplayProvenance;
 }
 
+/**
+ * A raw entry from the extractor's `--extraction` JSON return, as consumed by
+ * `verifyExampleRecordCommand`. Mirrors `RawExampleTranslateExtractionEntry` below in shape
+ * (`extract-example.md`'s own RETURN contract governs both): most entries carry `kind:
+ * 'transition' | 'predicate'` and the full spec field set; an entry the extractor already judged
+ * `example-inconsistent` (decision 4) instead carries only `pageCitation`, `reason`, and
+ * `supportingQuoteLines` — `sourceText`/`setup`/`expected` are therefore optional here, not
+ * required, matching what the contract actually returns for that kind.
+ */
 interface RawExampleExtractionEntry {
   slicePath: string;
   lineNumber: number;
   pageCitation: string;
   kind: string;
-  sourceText: string;
-  setup: string;
+  sourceText?: string;
+  setup?: string;
   action?: string;
-  expected: string;
+  expected?: string;
   supportingQuoteLines?: string[];
+  /** Required when `kind === 'example-inconsistent'`; ignored otherwise. */
+  reason?: string;
 }
 
 interface RawExampleTranslationEntry {
@@ -813,12 +840,13 @@ export async function verifyExampleRecordCommand(
     throw new Error(`--translation at "${options.translation}" must contain a JSON array.`);
   }
 
-  // Collision guard on BOTH raw returns, keyed by slicePath+lineNumber — never by prose.
+  // Collision guard on BOTH raw returns, keyed by slicePath+lineNumber — never by prose. Preview
+  // falls back to `reason` for an `example-inconsistent` entry, which carries no `sourceText`.
   keyRawExampleEntriesByLocation(
     extractionRaw,
     slicePath,
     '--extraction',
-    (e) => e.sourceText ?? '',
+    (e) => e.sourceText ?? e.reason ?? '',
   );
   const translationByLocation = keyRawExampleEntriesByLocation(
     translationRaw,
@@ -827,21 +855,52 @@ export async function verifyExampleRecordCommand(
     (e) => e.reason ?? '',
   );
 
+  // `example-inconsistent` entries (decision 4) never become a `WorkedExampleSpec`
+  // (`createWorkedExampleSpec` only accepts `WORKED_EXAMPLE_KINDS`) and were never dispatched for
+  // translation (`verifyExampleTranslateCommand` routes them to `notTranslated[]` instead) — split
+  // them off BEFORE spec construction so the extractor's own already-decided contradiction is
+  // recorded directly, never re-judged and never routed through the transition/predicate path.
+  const inconsistentEntries = extractionRaw.filter((raw) => raw.kind === 'example-inconsistent');
+  const consistentEntries = extractionRaw.filter((raw) => raw.kind !== 'example-inconsistent');
+
+  for (const raw of inconsistentEntries) {
+    if ((raw.reason ?? '').trim().length === 0) {
+      throw new Error(
+        `${slicePath}:${raw.lineNumber} is marked "example-inconsistent" but carries no reason.\n` +
+          `Deciding it is inconsistent already happened at extraction time; this command never ` +
+          `re-judges it, so it cannot proceed without the reason the extractor recorded. Writing ` +
+          `nothing.`,
+      );
+    }
+  }
+
   // Build specs through the ONE shared choke point (example-derivation.ts) — never re-validated
   // here. `returned.slicePath` is overridden with THIS invocation's own --slice-path: identity is
   // assigned from the caller, never trusted from the model's own return.
-  const specs: WorkedExampleSpec[] = extractionRaw.map((raw) => {
+  const specs: WorkedExampleSpec[] = consistentEntries.map((raw) => {
     const id = workedExampleId({ slicePath, lineNumber: raw.lineNumber });
     return createWorkedExampleSpec({
       id,
       sliceText,
-      returned: { ...raw, slicePath },
+      returned: {
+        slicePath,
+        lineNumber: raw.lineNumber,
+        pageCitation: raw.pageCitation ?? '',
+        kind: raw.kind,
+        sourceText: raw.sourceText ?? '',
+        setup: raw.setup ?? '',
+        action: raw.action,
+        expected: raw.expected ?? '',
+        supportingQuoteLines: raw.supportingQuoteLines,
+      },
     });
   });
   const specsById = collectWorkedExampleSpecs(specs);
 
-  // Validate-everything-then-write: every extracted example must have a matching translation, and
-  // every translation must correspond to an extracted example — before any write.
+  // Validate-everything-then-write: every consistent extracted example must have a matching
+  // translation, and every translation must correspond to an extracted example — before any write.
+  // `example-inconsistent` entries are exempt from this pairing (they were never dispatched for
+  // translation) and are validated separately above.
   for (const [id, spec] of specsById) {
     if (!translationByLocation.has(id)) {
       throw new Error(
@@ -865,26 +924,51 @@ export async function verifyExampleRecordCommand(
   const provenance: ExampleReplayProvenance =
     provenanceInstance && provenanceInstance.covers(slicePath) ? 'quote-verified' : 'quote-unverified';
 
-  const records: ExampleReplayRecord[] = [...specsById.values()]
-    .sort((a, b) => a.lineNumber - b.lineNumber)
-    .map((spec) => {
-      const translated = translationByLocation.get(spec.id)!;
-      return createExampleReplayRecord({
-        exampleId: spec.id,
-        slicePath: spec.slicePath,
-        lineNumber: spec.lineNumber,
-        kind: spec.kind,
-        verdict: translated.verdict,
-        reason: translated.reason,
-        expected: translated.expected,
-        observed: translated.observed,
-        contradictionA: translated.contradictionA,
-        contradictionB: translated.contradictionB,
-        supportingQuoteLines: [...spec.supportingQuoteLines],
-        provenance,
-        testFilePath: translated.testFilePath,
-      });
+  const translatedRecords: ExampleReplayRecord[] = [...specsById.values()].map((spec) => {
+    const translated = translationByLocation.get(spec.id)!;
+    return createExampleReplayRecord({
+      exampleId: spec.id,
+      slicePath: spec.slicePath,
+      lineNumber: spec.lineNumber,
+      kind: spec.kind,
+      verdict: translated.verdict,
+      reason: translated.reason,
+      expected: translated.expected,
+      observed: translated.observed,
+      contradictionA: translated.contradictionA,
+      contradictionB: translated.contradictionB,
+      supportingQuoteLines: [...spec.supportingQuoteLines],
+      provenance,
+      testFilePath: translated.testFilePath,
     });
+  });
+
+  // `example-inconsistent` records go straight from the extractor's own return to the ledger — no
+  // translation dispatch happened for them, and none is needed: the verdict IS
+  // `example-inconsistent`, decided at extraction time. `supportingQuoteLines` already carries BOTH
+  // contradicting excerpts verbatim (`extract-example.md`'s own instruction) — the first two lines
+  // map onto `contradictionA`/`contradictionB`, the two fields `createExampleReplayRecord` requires
+  // non-empty for this verdict; that constructor is still the ONLY place either is validated.
+  const inconsistentRecords: ExampleReplayRecord[] = inconsistentEntries.map((raw) => {
+    const id = workedExampleId({ slicePath, lineNumber: raw.lineNumber });
+    const quotes = raw.supportingQuoteLines ?? [];
+    return createExampleReplayRecord({
+      exampleId: id,
+      slicePath,
+      lineNumber: raw.lineNumber,
+      kind: 'example-inconsistent',
+      verdict: 'example-inconsistent',
+      reason: raw.reason ?? '',
+      contradictionA: quotes[0] ?? '',
+      contradictionB: quotes[1] ?? '',
+      supportingQuoteLines: quotes,
+      provenance,
+    });
+  });
+
+  const records: ExampleReplayRecord[] = [...translatedRecords, ...inconsistentRecords].sort(
+    (a, b) => a.lineNumber - b.lineNumber,
+  );
 
   // The ONE mutation this function performs — everything above is validation.
   const { ledgerPath } = await recordExampleReplayVerdicts(projectDir, records);

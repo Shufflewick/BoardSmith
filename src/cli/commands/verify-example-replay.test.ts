@@ -652,6 +652,116 @@ describe('verifyExampleRecordCommand — record', () => {
     ).rejects.toThrow(/--translation/);
   });
 
+  // -----------------------------------------------------------------------------------------
+  // 178-08 — closing the seam wave 7 flagged: an `example-inconsistent` --extraction entry
+  // must be recorded, never thrown for. `seven`'s Run example (printed "5, 6, 7" vs. card art
+  // "1, 2, 3", INDEX.md:63 gap #4) is the designated adversarial fixture.
+  // -----------------------------------------------------------------------------------------
+
+  const SEVEN_SLICE_TEXT =
+    'p.1, Definitions:\n' +
+    '"Run: 3+ cards in numeric order."\n' +
+    '"example: 5, 6, 7"\n' +
+    '\n' +
+    'Visual (p.1): The Run example is illustrated by three card images side by side: a red 1, ' +
+    'a blue 2, and a red 3 (the printed example text reads 5, 6, 7 while the accompanying card ' +
+    'images show 1, 2, 3).\n';
+
+  function inconsistentEntry(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      slicePath: 'rulebook/01-definitions.md',
+      lineNumber: 3,
+      pageCitation: 'p.1, Definitions',
+      kind: 'example-inconsistent',
+      reason: 'The quoted text reads "5, 6, 7" but the Visual line names card images 1, 2, 3.',
+      supportingQuoteLines: [
+        '"example: 5, 6, 7"',
+        'Visual (p.1): ...the accompanying card images show 1, 2, 3.',
+      ],
+      ...overrides,
+    };
+  }
+
+  it('a seven-shaped example-inconsistent --extraction entry is recorded end to end (the 178-07 seam), never thrown for', async () => {
+    const project = await makeProject({
+      'rulebook/01-definitions.md': SEVEN_SLICE_TEXT,
+    });
+    const extractionPath = await writeJson('extraction.json', [inconsistentEntry()]);
+    // No --translation entry: extract-example.md's example-inconsistent rule means this example
+    // was never dispatched for translation in the first place (verifyExampleTranslateCommand
+    // routes it to notTranslated[] instead) — an empty --translation array is the honest input.
+    const translationPath = await writeJson('translation.json', []);
+
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/01-definitions.md',
+      extraction: extractionPath,
+      translation: translationPath,
+    });
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].verdict).toBe('example-inconsistent');
+    expect(result.records[0].kind).toBe('example-inconsistent');
+    expect(result.records[0].exampleId).toBe('rulebook/01-definitions.md:3');
+    expect(result.records[0].contradictionA).toBe('"example: 5, 6, 7"');
+    expect(result.records[0].contradictionB).toContain('1, 2, 3');
+    expect(result.records[0].reason).toBe(
+      'The quoted text reads "5, 6, 7" but the Visual line names card images 1, 2, 3.',
+    );
+
+    const recorded = await readExampleReplayVerdicts(project);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].verdict).toBe('example-inconsistent');
+  });
+
+  it('an example-inconsistent entry with an empty reason throws, writing nothing', async () => {
+    const project = await makeProject({
+      'rulebook/01-definitions.md': SEVEN_SLICE_TEXT,
+    });
+    const extractionPath = await writeJson('extraction.json', [
+      inconsistentEntry({ reason: '' }),
+    ]);
+    const translationPath = await writeJson('translation.json', []);
+
+    await expect(
+      verifyExampleRecordCommand({
+        project,
+        slicePath: 'rulebook/01-definitions.md',
+        extraction: extractionPath,
+        translation: translationPath,
+      }),
+    ).rejects.toThrow(/example-inconsistent.*no reason/s);
+
+    expect(await readExampleReplayVerdicts(project)).toEqual([]);
+  });
+
+  it('a mixed --extraction array (one transition, one example-inconsistent) records both, keeping the transition example paired with its --translation entry and the inconsistent one standing alone', async () => {
+    const project = await makeProject({
+      'rulebook/01-definitions.md':
+        SEVEN_SLICE_TEXT + '"If you are punched while READY, you become EXHAUSTED."\n',
+    });
+    const extractionPath = await writeJson('extraction.json', [
+      inconsistentEntry({ lineNumber: 3 }),
+      extractionEntry({ slicePath: 'rulebook/01-definitions.md', lineNumber: 6 }),
+    ]);
+    const translationPath = await writeJson('translation.json', [
+      translationEntry({ slicePath: 'rulebook/01-definitions.md', lineNumber: 6 }),
+    ]);
+
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/01-definitions.md',
+      extraction: extractionPath,
+      translation: translationPath,
+    });
+
+    expect(result.records).toHaveLength(2);
+    const byLine = new Map(result.records.map((r) => [r.lineNumber, r]));
+    expect(byLine.get(3)?.verdict).toBe('example-inconsistent');
+    expect(byLine.get(6)?.verdict).toBe('agrees');
+    expect(byLine.get(6)?.kind).toBe('transition');
+  });
+
   it('registers no run-id/force/skip/overwrite bypass option anywhere in the module', () => {
     const source = readFileSync(
       fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url)),
