@@ -369,3 +369,16 @@ Both fixes are additive (new validation before existing writes; two rules newly 
 required re-running this proof's live dispatches, and neither changes any recorded verdict or
 exampleId above. They are recorded here because they change the honest confidence level this
 proof's results should carry, per the same "state the limit plainly" discipline §9 already holds.
+
+## §13 — Suite-stability note (orchestrator, 2026-08-01)
+
+Immediately after the 178-fix pass landed, one `npx vitest run` reported **2 files / 5 tests
+failing**; three consecutive re-runs then reported **4322/4322 green, 247/247 files**. The failing
+run overlapped the fixer's own "fast-forwarded onto main, worktree/temp-branch cleanup completed
+transactionally" step, so the most likely cause is reading the tree mid-transaction rather than a
+genuine flake.
+
+Recorded rather than dismissed, because "it was probably the cleanup" is how a real flake gets
+waved through. The claim being made here is narrow and checkable: **3 consecutive clean full-suite
+runs after the tree settled**, not "the failure was investigated and explained." If a similar
+failure recurs on a settled tree, this note is the prior observation to weigh it against.
