@@ -55,6 +55,20 @@ const DETERMINISM_RULES: Linter.RulesRecord = {
   'boardsmith/no-nondeterministic': 'error',
 };
 
+/**
+ * Identity/state-shape rules — guard against two anti-patterns that corrupt undo/replay and MCTS
+ * exploration without tripping any of the rules above: comparing `GameElement` instances by `===`
+ * (identity is not stable across clone/replay) and persisting a raw element array as game state
+ * (elements are already tracked by the element tree; a second array copy drifts from it). Enforced
+ * project-wide alongside `SECURITY_RULES`/`DETERMINISM_RULES` — CR-01 (178-REVIEW.md) found these
+ * two were named in `GENERATED_TEST_SANDBOX_RULES` (`example-test-emit.ts`) but never actually
+ * enabled here, making that gate's restriction to them a silent no-op rather than a real filter.
+ */
+const IDENTITY_RULES: Linter.RulesRecord = {
+  'boardsmith/no-element-identity-comparison': 'error',
+  'boardsmith/no-element-array-state': 'error',
+};
+
 const FLAT_CONFIG: Linter.Config[] = [
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.vue'],
@@ -71,7 +85,7 @@ const FLAT_CONFIG: Linter.Config[] = [
     plugins: {
       boardsmith: plugin as unknown as NonNullable<Linter.Config['plugins']>[string],
     },
-    rules: { ...SECURITY_RULES, ...DETERMINISM_RULES },
+    rules: { ...SECURITY_RULES, ...DETERMINISM_RULES, ...IDENTITY_RULES },
   },
   {
     // UI runs in the browser, not the executor sandbox: relax the determinism

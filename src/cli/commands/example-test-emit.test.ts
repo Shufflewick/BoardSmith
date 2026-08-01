@@ -94,6 +94,36 @@ describe('scanGeneratedTestCode', () => {
     );
     expect(violations.some((v) => v.ruleId === 'boardsmith/no-nondeterministic')).toBe(false);
   });
+
+  // CR-01 (178-REVIEW.md): GENERATED_TEST_SANDBOX_RULES named these two rules, but
+  // sandbox-scan.ts's FLAT_CONFIG never enabled them, so ESLint never even ran them — restricting
+  // the report to a rule id that was never active is a no-op, not a filter. These two cases prove
+  // both rules actually FIRE through scanGeneratedTestCode now that FLAT_CONFIG enables them.
+  it('reports boardsmith/no-element-identity-comparison (a GENERATED_TEST_SANDBOX_RULES member)', () => {
+    expect(GENERATED_TEST_SANDBOX_RULES).toContain('boardsmith/no-element-identity-comparison');
+    const violations = scanGeneratedTestCode(
+      'class Card extends GameElement {}\n' +
+        'function f(card1: Card, card2: Card) {\n' +
+        '  return card1 === card2;\n' +
+        '}\n',
+      'tests/examples/foo.examples.test.ts',
+    );
+    expect(violations.some((v) => v.ruleId === 'boardsmith/no-element-identity-comparison')).toBe(
+      true,
+    );
+  });
+
+  it('reports boardsmith/no-element-array-state (a GENERATED_TEST_SANDBOX_RULES member)', () => {
+    expect(GENERATED_TEST_SANDBOX_RULES).toContain('boardsmith/no-element-array-state');
+    const violations = scanGeneratedTestCode(
+      'class Card extends GameElement {}\n' +
+        'class GameState {\n' +
+        '  hand: Card[] = [];\n' +
+        '}\n',
+      'tests/examples/foo.examples.test.ts',
+    );
+    expect(violations.some((v) => v.ruleId === 'boardsmith/no-element-array-state')).toBe(true);
+  });
 });
 
 describe('verifyExampleEmitCommand', () => {
