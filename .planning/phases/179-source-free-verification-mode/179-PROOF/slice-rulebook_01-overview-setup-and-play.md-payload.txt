@@ -1,0 +1,25 @@
+BS-EXAMPLE-EXTRACT-V1
+Slice: rulebook/01-overview-setup-and-play.md
+
+3: p.1, About:
+4: "Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up."
+6: p.1, Setup:
+7: "Give each player a "Ways to Score" card."
+8: "Create a mess of face-down cards in the middle of the table and mixes them around."
+9: "Each player should then draw 3 cards from the mess to form their hand."
+11: p.1, Round (Simultaneous):
+12: "Each player draws 2 cards into their hand."
+13: "Each player discards 1 card from their hand face-up off to the side of the table in their own discard pile."
+14: "If you ever lose track of which round you are on, count your discards, you will have 7 discards when the game is over."
+15: "Discards are considered public information."
+16: "If everyone has 10 cards, end the game; otherwise begin the next round."
+18: p.1, Game End:
+19: "After all players have 10 cards, the game ends."
+20: "Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score."
+22: p.1, Match End: Best of 7 Games:
+23: "A match consists of 7 games."
+24: "Play 7 games and keep track of each player's score total."
+25: "Whichever player has the highest total score at the end of the match wins!"
+27: p.1, Match Length:
+28: "A full match of Seven is naturally played in a best of 7 series. That said, if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games."
+40: Visual (p.1): The rules page is a single wide, landscape panel with a saturated yellow background, black bold sans-serif section headings, and black sans-serif body text arranged in four columns. Small card images are embedded inline within the text as illustrations.

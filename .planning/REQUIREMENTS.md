@@ -194,8 +194,31 @@ the tag.
       matches a clean run's exactly, where the original proof measured 9-vs-4). VERIFY-08 is
       RE-CONFIRMED complete against the corrected guarantee, not merely left checked on the disproven
       one — see `173-PROOF.md` §5.)*
-- [ ] **VERIFY-09**: The skill runs against a project whose source rulebook is unavailable, in
+- [x] **VERIFY-09**: The skill runs against a project whose source rulebook is unavailable, in
       source-free mode, reporting which defect class went unchecked.
+      **CLOSED 2026-08-01 by 179-06's live proof** (`.planning/phases/179-source-free-verification-mode/179-PROOF.md`):
+      run for real against a staged `cp -R` copy of `seven` (17 chunks) with `rulebook/source/`
+      and root `rules.pdf` removed. SC-1 (§SC-1, restated bar): all four source-free checks ran
+      to completion (exit 0 each), the session dispatched past `source-resolution.md`'s negative
+      case into `source-free-mode.md` rather than stopping, and the Close's durable write executed
+      (`recorded[]` 17/17, all `changed: true`). SC-2 (§SC-2): exactly 5
+      `uncheckedDefectClasses` entries (Steps 2-6), each with real `defectClass`/
+      `wouldHaveBeenCaughtBy` text, matching the pre-registration exactly. SC-3 (§SC-3): the
+      on-disk `## Verified Against` block, read back from the real `chunks/best-seven-selection/
+      CHUNK.md` after the run, carries `Scope: code-conformance-only` and `Reason:
+      source-missing` — the exact PROV-02 fields, never the CLI's live recomputation. Decision
+      11(d)'s per-check minimums (§ decision 11(d)): CHECK-03 232 findings, CHECK-05 16 findings,
+      CHECK-06 3 real recorded findings from a live `claude -p` dispatch of the entire pending
+      corpus (1 `example-inconsistent`, 2 `unexecutable`), all with `provenance:
+      "quote-unverified"` and verdicts left unrewritten — MET on the underlying degradation
+      mechanism, with an explicit caveat that no `disagrees` verdict arose naturally so the
+      report's two NAMED buckets were never populated (proof's decision-11(d) section). Both
+      `verify-close-record` safety properties proven on the real project: idempotent (second run,
+      17/17 `changed: false`, byte-identical SHA-256s) and fence-scoped (`git diff` on one written
+      chunk shows a pure append after all designer-authored prose). Both reference-game originals
+      proven untouched by whole-tree `git status --short`, before AND after (empty both times).
+      Full detail, including the CHECK-06 disagrees-bucket caveat and every other named limit:
+      `179-PROOF.md`'s "Limits, stated plainly" section.
 
 ### Verification Checks (CHECK)
 
@@ -633,4 +656,4 @@ the tag.
 | CHECK-04 | Phase 177 (delivery: Phase 177.1) | **Complete** — closed 2026-07-31 on the reframed criterion, see the CHECK-04 entry's closure note AND its Phase 177.1 delivery note directly below it. Dual enumeration + reconciliation replaced the retired per-line blind re-derivation design. Measured across THREE reference games (`seven`, `one-two-punch`, `doom-machine`), ~250 line-classifications over four definitive runs (`177-15`, `177-20`, `177-21`, `177-22`): **zero wrongly-`contradicted` lines, zero fabrications passed grounding, zero annotation leaks into any dispatched payload, every result explainable** — the four criteria that protect a user, clean in every run. The fifth criterion (byte-identical classifications across two runs) was RETIRED as miscalibrated: the design's premise is two INDEPENDENT enumerations, independence implies variance, and `claude -p` exposes no temperature/seed control (61 flags, none for sampling). Residual confirmation variance ~12.5% (4/32, `177-22`), entirely in the safe direction — a line may read `corroborated` on one run and `uncorroborated` on another, never falsely `contradicted`. Treat a non-corroboration as "worth a human glance", never as a verdict. **Phase 177.1 closed a reachability gap, not this closure**: the measured design now has a CLI surface (`verify-derive-check`/`verify-derive-record`) and `/bs-verify-game` Step 7 dispatches it directly. Proven against the harness on recorded input (`177.1-REPLAY-PROOF/`, zero mechanical divergence) and a real live run (`177.1-LIVE-PROOF/PROOF.md`) — the live Sonnet-5 reconciler produced a well-formed `arithmeticSpec` for both a `single` and a `chain` claim, code accepted both as correct, and all three live classifications landed within their pre-registered permitted sets. WR-07 stays open, routed to Phase 178. |
 | CHECK-06 | Phase 178 | **Complete** — closed 2026-08-01 by 178-11's live cross-game proof (`178-PROOF.md`); reachability wired (`/bs-verify-game` Step 8, advisory, exit 0) in 178-09 |
 | TEST-01 | Phase 178 | **Complete** — closed 2026-08-01 by 178-11's live cross-game proof (`178-PROOF.md`), SC-3 proven by source inspection |
-| VERIFY-09 | Phase 179 | Pending |
+| VERIFY-09 | Phase 179 | Complete — live proof `179-PROOF.md`, all 3 ROADMAP SCs + decision 11(a)-(d) MET (11(d)'s CHECK-06 sub-bar MET with a stated caveat) |

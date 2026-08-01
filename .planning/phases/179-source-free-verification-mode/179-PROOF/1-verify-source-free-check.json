@@ -1,0 +1,158 @@
+{
+  "sourceFree": true,
+  "scope": "code-conformance-only",
+  "reason": "source-missing",
+  "stepsRun": [
+    {
+      "step": 0,
+      "id": "state-detection-and-lock",
+      "title": "State Detection and Lock (VERIFY-01)",
+      "sourceFreeBehavior": "runs",
+      "unchecked": []
+    },
+    {
+      "step": 1,
+      "id": "source-resolution",
+      "title": "Source Resolution (VERIFY-01)",
+      "sourceFreeBehavior": "runs",
+      "unchecked": []
+    },
+    {
+      "step": 7,
+      "id": "derived-line-re-check",
+      "title": "Derived-Line Re-Check (CHECK-04)",
+      "sourceFreeBehavior": "runs",
+      "unchecked": [],
+      "check": {
+        "command": "verify-derive-check",
+        "checkId": "CHECK-04"
+      }
+    },
+    {
+      "step": 8,
+      "id": "worked-example-replay",
+      "title": "Worked-Example Replay (CHECK-06)",
+      "sourceFreeBehavior": "runs",
+      "unchecked": [],
+      "check": {
+        "command": "verify-example-replay",
+        "checkId": "CHECK-06"
+      }
+    },
+    {
+      "step": 9,
+      "id": "close",
+      "title": "Close (VERIFY-02)",
+      "sourceFreeBehavior": "runs",
+      "unchecked": []
+    }
+  ],
+  "stepsSkipped": [
+    {
+      "step": 2,
+      "id": "staging-run-and-re-transcription",
+      "title": "Staging Run and Re-Transcription (VERIFY-02, VERIFY-07, VERIFY-08)",
+      "sourceFreeBehavior": "skipped",
+      "unchecked": [
+        {
+          "defectClass": "rulebook-fidelity drift between the live rules text and the source rulebook",
+          "wouldHaveBeenCaughtBy": "the staging-dispatch re-transcription pass"
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "id": "classification",
+      "title": "Classification (VERIFY-03, VERIFY-07)",
+      "sourceFreeBehavior": "skipped",
+      "unchecked": [
+        {
+          "defectClass": "wording-change-versus-rules-change discrimination in the live text",
+          "wouldHaveBeenCaughtBy": "the classification-dispatch pairwise comparison"
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "id": "adjudication-gate-and-impact-map",
+      "title": "Adjudication Gate and Impact Map (VERIFY-04, VERIFY-05, VERIFY-06)",
+      "sourceFreeBehavior": "skipped",
+      "unchecked": [
+        {
+          "defectClass": "unadjudicated contradictions and cross-chunk rules-staleness",
+          "wouldHaveBeenCaughtBy": "the adjudication gate and its impact map"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "id": "ruling-re-check",
+      "title": "Ruling Re-Check (CHECK-01)",
+      "sourceFreeBehavior": "skipped",
+      "unchecked": [
+        {
+          "defectClass": "a recorded ruling that no longer matches the current source",
+          "wouldHaveBeenCaughtBy": "the ruling-recheck dispatch against fresh staged text"
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "id": "repair-dispatch",
+      "title": "Repair Dispatch (CHECK-02)",
+      "sourceFreeBehavior": "skipped",
+      "unchecked": [
+        {
+          "defectClass": "a stale chunk left unrepaired through the build-pipeline audit lenses",
+          "wouldHaveBeenCaughtBy": "the repair-dispatch audit-and-repair loop"
+        }
+      ]
+    }
+  ],
+  "uncheckedDefectClasses": [
+    {
+      "defectClass": "rulebook-fidelity drift between the live rules text and the source rulebook",
+      "wouldHaveBeenCaughtBy": "the staging-dispatch re-transcription pass",
+      "stepId": "staging-run-and-re-transcription"
+    },
+    {
+      "defectClass": "wording-change-versus-rules-change discrimination in the live text",
+      "wouldHaveBeenCaughtBy": "the classification-dispatch pairwise comparison",
+      "stepId": "classification"
+    },
+    {
+      "defectClass": "unadjudicated contradictions and cross-chunk rules-staleness",
+      "wouldHaveBeenCaughtBy": "the adjudication gate and its impact map",
+      "stepId": "adjudication-gate-and-impact-map"
+    },
+    {
+      "defectClass": "a recorded ruling that no longer matches the current source",
+      "wouldHaveBeenCaughtBy": "the ruling-recheck dispatch against fresh staged text",
+      "stepId": "ruling-re-check"
+    },
+    {
+      "defectClass": "a stale chunk left unrepaired through the build-pipeline audit lenses",
+      "wouldHaveBeenCaughtBy": "the repair-dispatch audit-and-repair loop",
+      "stepId": "repair-dispatch"
+    }
+  ],
+  "checksRun": [
+    {
+      "command": "trace-check",
+      "checkId": "CHECK-03"
+    },
+    {
+      "command": "drift-check",
+      "checkId": "CHECK-05"
+    },
+    {
+      "command": "verify-derive-check",
+      "checkId": "CHECK-04"
+    },
+    {
+      "command": "verify-example-replay",
+      "checkId": "CHECK-06"
+    }
+  ]
+}
+exit=0

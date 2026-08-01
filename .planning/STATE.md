@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 179-05 (wave 5 of 6) — pre-registered the live proof's bar, committed ALONE before any staging or dispatch (commit 272d40d4, git show --stat names exactly one path, 359 insertions). 179-PRE-REGISTRATION.md audits all 7 criteria (ROADMAP SC-1/SC-2/SC-3 + decision 11(a)-(d)) for satisfiability and vacuous passage: SC-1 restated by name (a mode that runs nothing would literally satisfy 'completes... instead of failing') to the four checks' captured exit codes, the non-stop at the negative case, and the Close's durable write, bound to a decision-11(d) per-check minimum-findings table (CHECK-03/CHECK-05 >=1 real finding, CHECK-06 >=1 REAL live dispatch with downgraded quote provenance and an unrewritten verdict, CHECK-04 explicitly excluded per its 177/177.1 disposition); SC-3 restated to the ON-DISK Verified Against block read back from a real CHUNK.md, never the CLI's live recomputation. Section 4 names the whole-tree git status --short baseline protocol (178-PROOF.md Section 10's enumerated-subset failure not repeated). Direct read corrected 179-CONTEXT.md's stale claim that both reference games are pre-provenance-project: both now carry a full archived source + Source hash (post-178 provenance-recording commits seven@ecc96a8, one-two-punch@b843502), so the staged seven copy's expected ScopeReason is source-missing, not pre-provenance-project. Doc-only plan, zero staging/dispatch performed. Full suite unchanged: 4368/249, 0 failing. VERIFY-09/PROV-02 stay Pending/reopened (requirement closes at 179-06's live proof). Next: 179-06-PLAN.md — the live proof on the staged seven copy (wave 6, final)."
-last_updated: "2026-08-01T23:45:00.000Z"
-last_activity: 2026-07-31
+stopped_at: "Completed 179-06 (wave 6 of 6, FINAL) — the live proof, run for real against a cp -R staged copy of seven (17 chunks) with rulebook/source/ and root rules.pdf removed from the copy only. All four source-free checks ran to completion (exit 0 each): verify-source-free-check (sourceFree true, scope code-conformance-only, reason source-missing, exactly 5 uncheckedDefectClasses), trace-check (232 findings), drift-check (16 findings, 17/17 chunks classified), verify-derive-check/CHECK-04 (pendingCount 3, zero dispatches — completion-only per its 177/177.1 disposition). CHECK-06 dispatched for real: 3 real claude -p extraction/translation calls against the entire project-wide pending corpus (all 3 slices), recording 1 example-inconsistent (seven's designated Run-example contradiction) + 2 unexecutable, all with provenance quote-unverified and verdicts left unrewritten — MET on the underlying degradation mechanism, with an honest caveat that no disagrees verdict arose naturally so the report's two named buckets were never populated. The Close (verify-close-record, no --run) wrote 17/17 recorded[] entries changed:true; the on-disk ## Verified Against block read back from chunks/best-seven-selection/CHUNK.md carries Scope: code-conformance-only / Reason: source-missing, matching 179-05's corrected expectation exactly. Idempotency proven (second Close run: 17/17 changed:false, byte-identical SHA-256s) and fence-scoping proven (git diff shows a pure append after designer prose). Both reference-game originals proven untouched by whole-tree git status --short, before and after (empty both times). Full suite unchanged: 4368/249, 0 failing. VERIFY-09 CLOSED in REQUIREMENTS.md; PROV-02 delivered through the verify pipeline. 179-PROOF.md written (334 lines). Phase 179 is COMPLETE (6/6 plans) — this was the milestone's last open requirement."
+last_updated: "2026-08-01T23:55:00.000Z"
+last_activity: 2026-08-01
 progress:
   total_phases: 11
-  completed_phases: 9
-  total_plans: 91
-  completed_plans: 91
-  percent: 82
+  completed_phases: 10
+  total_plans: 92
+  completed_plans: 92
+  percent: 91
 ---
 
 # Project State
@@ -21,13 +21,61 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **COMPLETE, 11/11 plans**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 11 ran the live
-cross-game proof: real `claude -p` dispatches (two independent runs) against `cp -R` copies of all
-three reference games, closing CHECK-06 and TEST-01 (`178-PROOF.md`). Next: Phase 179 (Source-Free
-Verification Mode) — not yet planned.
+**Current focus:** Phase 179 — Source-Free Verification Mode — **COMPLETE, 6/6 plans**. VERIFY-09
+CLOSED on 179-06's live proof (`179-PROOF.md`) — the milestone's last open requirement. Phase 178
+(Worked-Example Tests) is COMPLETE (11/11 plans, CHECK-06/TEST-01 closed on 178-11's live proof).
+Phase 177.1 (Wire CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 170
+(Ingest Contract Upgrade) remains at 5/10, In Progress — the milestone's only unfinished phase.
 
 ## Current Position
+
+`179-06-PLAN.md` (2026-08-01, wave 6 of 6, FINAL) — the live proof, run for real against a `cp -R`
+staged copy of `seven` (17 chunks) with `rulebook/source/` and root `rules.pdf` removed from the
+copy only (both negative-case conditions confirmed absent before dispatching anything). All four
+source-free checks ran to completion with a captured exit code, all `0`:
+`verify-source-free-check` (`sourceFree: true`, `scope: code-conformance-only`, `reason:
+source-missing`, exactly 5 `uncheckedDefectClasses`, matching 179-05's corrected expectation
+exactly), `trace-check` (232 findings), `drift-check` (16/17 chunks drifted), `verify-derive-check`/
+CHECK-04 (`pendingCount: 3`, zero enumerator/reconciler dispatches — completion-only bar per its
+177/177.1 disposition, recorded explicitly as what was and was not dispatched). **CHECK-06
+dispatched for real**: 3 live `claude -p` extraction/translation calls covering the entire
+project-wide pending corpus (all 3 slices, not a cherry-picked one), recording 1
+`example-inconsistent` (`seven`'s designated adversarial Run-example "5,6,7"-vs-"1,2,3"
+contradiction, both excerpts captured) and 2 `unexecutable` (both genuine — no matching exported
+symbol / unmodeled component state), all three with `provenance: "quote-unverified"` and every
+verdict left unrewritten by the downgrade. **Named caveat**: no `disagrees` verdict arose
+naturally in this corpus, so the report's two literally-named buckets
+(`mismatch, quotes source-verified` / `mismatch, quotes NOT source-verified`) were never
+populated — the underlying per-record provenance-downgrade mechanism is proven directly on the
+`example-inconsistent`/`unexecutable` records instead, and this distinction is stated plainly in
+`179-PROOF.md` rather than elided. The Close (`verify-close-record --project <copy>`, no `--run`)
+wrote `recorded[]` with 17/17 entries `changed: true`; the on-disk `## Verified Against` block read
+back via `cat` from `chunks/best-seven-selection/CHUNK.md` (the alphabetically-first of
+`drift-check`'s own touched set, all 17 chunks) carries `Scope: code-conformance-only` /
+`Reason: source-missing` verbatim — never the CLI's live `--json` recomputation, per SC-3's
+restated bar. Both `verify-close-record` safety properties proven on the real project: a second
+run reports all 17 `recorded[].changed: false` with byte-identical SHA-256s across both runs
+(idempotency), and `git diff` on `chunks/best-seven-selection/CHUNK.md` shows a pure append after
+all designer-authored prose, inside the machine-owned fences only (fence-scoping). Both
+reference-game originals proven untouched by whole-tree `git status --short` — empty output,
+before staging AND after every dispatch/test run; the staged copy's own `git status --short`
+cross-checked against `recorded[]` with zero mismatch (17 `M chunks/*/CHUNK.md` matching
+`recorded[]`'s 17 slugs exactly; the 2 `D` lines are the staging step's own deliberate removal;
+the untracked `rulebook/.example-replay/` dir is CHECK-06's separate ledger write, correctly
+scoped). `179-PROOF.md` (334 lines) judges all 7 pre-registered criteria (SC-1/SC-2/SC-3 +
+decision 11(a)-(d)) against `179-PRE-REGISTRATION.md`'s commit `272d40d4`, every one MET (11(d)'s
+CHECK-06 sub-bar MET with the disagrees-bucket caveat named above), plus a "Limits, stated
+plainly" section covering CHECK-04's shallow dispatch depth, single-game (not population)
+evidence, and the minor `Rulebook edition:` wording divergence from §5. Full suite unchanged:
+4368 tests / 249 files, 0 failing. **VERIFY-09 CLOSED** in `REQUIREMENTS.md` with a
+section-cited closure note; `ROADMAP.md`'s Phase 179 checkbox, Result paragraph, and Progress row
+(6/6, Complete, 2026-08-01) all updated. **Phase 179 is COMPLETE (6/6 plans)** — this was the
+milestone's last open requirement (PROV-02 was reopened by this same phase and is now delivered
+end-to-end through the verify pipeline, not just the build pipeline it was originally closed on).
+See `.planning/phases/179-source-free-verification-mode/179-06-SUMMARY.md` and
+`.planning/phases/179-source-free-verification-mode/179-PROOF.md`.
+
+---
 
 `179-05-PLAN.md` (2026-07-31, wave 5 of 6) — pre-registered the live proof's bar, committed ALONE
 before any staging or dispatch. `179-PRE-REGISTRATION.md` (359 lines, commit `272d40d4`, `git show

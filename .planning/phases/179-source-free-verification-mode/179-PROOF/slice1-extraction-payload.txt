@@ -1,0 +1,20 @@
+BS-EXAMPLE-EXTRACT-V1
+Slice: rulebook/01-definitions-and-components.md
+
+3: p.1, Definitions:
+4: "Hand: The cards each player holds. Each starts with 3 and ends the game with 10."
+5: "Set: 2+ cards with matching numbers."
+6: "example: 5, 5, 5"
+8: Visual (p.1): The Set example is illustrated by three card images side by side: a green 5, a red 5, and a purple 5.
+10: p.1, Definitions:
+11: "Run: 3+ cards in numeric order."
+12: "example: 5, 6, 7"
+14: Visual (p.1): The Run example is illustrated by three card images side by side: a red 1, a blue 2, and a red 3 (the printed example text reads 5, 6, 7 while the accompanying card images show 1, 2, 3).
+16: p.1, Distribution of Cards:
+17: "There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card. In addition, there are 7 bonus point cards."
+19: Visual (p.1): The Distribution of Cards diagram shows four rows of cards numbered 1 through 7, one row per color — red, green, blue, and purple — each row annotated "x 4". Below them is a single black card showing "+1" annotated "x 7".
+25: p.1, Designer:
+26: "JT Smith"
+28: p.1, Play Testers:
+29: "Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof"
+31: Visual (p.1): Card art is minimal and bold: rounded-corner rectangles in flat saturated color (red, green, blue, purple) with a large white number centered, plus small white pip dots in the corners. Bonus cards are black with a white "+1". Aspect ratio of the depicted cards is roughly portrait, approximately 2:3.

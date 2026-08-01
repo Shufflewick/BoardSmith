@@ -1,0 +1,349 @@
+{
+  "chunks": [
+    {
+      "chunk": "best-seven-selection",
+      "hash": "d55773c77fbf67dea665748a88e33eb27607a5da",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/elements.ts",
+        "src/rules/game.ts",
+        "src/rules/actions.ts",
+        "src/rules/flow.ts",
+        "src/ui/components/GameTable.vue",
+        "tests/game.test.ts"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 6
+    },
+    {
+      "chunk": "bonus-point-cards",
+      "hash": "c61a6a7bcbc48bcc5ddfc833dbf6c75ce9764c53",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/scoring.ts",
+        "src/ui/components/GameTable.vue",
+        "DECISIONS.md"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 3
+    },
+    {
+      "chunk": "discard",
+      "hash": "7c6dac286fd5f33ddf442067db98b60f40b78808",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/elements.ts",
+        "src/rules/actions.ts",
+        "src/rules/game.ts",
+        "src/rules/flow.ts",
+        "src/ui/components/CardView.vue",
+        "src/ui/components/DiscardPileView.vue",
+        "src/ui/components/GameTable.vue",
+        "tests/game.test.ts",
+        "tests/discard-pile.test.ts",
+        "tests/a11y.example.test.ts",
+        "DECISIONS.md",
+        "BOARDSMITH-REQUESTS.md"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 13
+    },
+    {
+      "chunk": "final-acceptance",
+      "hash": "83dc07e",
+      "state": "clean",
+      "changedFiles": [],
+      "missingFiles": [],
+      "manifestFileCount": 0
+    },
+    {
+      "chunk": "game-end-trigger",
+      "hash": "e1f52b8",
+      "state": "drifted",
+      "changedFiles": [
+        "src/ui/components/GameTable.vue",
+        "src/rules/flow.ts",
+        "BOARDSMITH-REQUESTS.md",
+        "DECISIONS.md",
+        "chunks/game-end-trigger/CHUNK.md",
+        "tests/a11y.example.test.ts",
+        "tests/game.test.ts"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 7
+    },
+    {
+      "chunk": "game-score-and-winner",
+      "hash": "35c4476",
+      "state": "drifted",
+      "changedFiles": [
+        "src/ui/components/GameTable.vue",
+        "DECISIONS.md",
+        "tests/a11y.example.test.ts"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 5
+    },
+    {
+      "chunk": "match-best-of-7",
+      "hash": "41ab4d9",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/elements.ts",
+        "src/rules/actions.ts"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 5
+    },
+    {
+      "chunk": "scoring-combo-sets-and-runs",
+      "hash": "89c2bff78a8276176bac04325e913c716484e6ab",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/scoring.ts",
+        "tests/scoring.test.ts",
+        "tests/game.test.ts",
+        "tests/a11y.example.test.ts",
+        "DECISIONS.md",
+        "src/rules/index.ts"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 6
+    },
+    {
+      "chunk": "scoring-declaration",
+      "hash": "edda4920b0bccd23834e239dcf5d6500d96c0983",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/scoring.ts",
+        "src/rules/elements.ts",
+        "src/rules/actions.ts",
+        "src/rules/game.ts",
+        "src/rules/flow.ts",
+        "src/ui/components/GameTable.vue",
+        "tests/scoring.test.ts",
+        "tests/game.test.ts"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 8
+    },
+    {
+      "chunk": "scoring-engine-and-parity",
+      "hash": "575a90ebf83522f34fe3c89f0efae2c605163c35",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/scoring.ts",
+        "src/rules/index.ts",
+        "tests/scoring.test.ts",
+        "DECISIONS.md"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 4
+    },
+    {
+      "chunk": "scoring-one-color",
+      "hash": "7ffea623a7687ab446a9c329e68153356779d1fa",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/scoring.ts",
+        "tests/scoring.test.ts",
+        "tests/game.test.ts",
+        "DECISIONS.md"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 4
+    },
+    {
+      "chunk": "scoring-run-of-7",
+      "hash": "11f27361ac8f4546dd26bce6bee60109ed14d760",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/scoring.ts",
+        "tests/scoring.test.ts",
+        "src/rules/index.ts"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 3
+    },
+    {
+      "chunk": "scoring-run-of-7-one-color",
+      "hash": "6aad25f98beb1a83ed160535edede6643e92658e",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/scoring.ts",
+        "tests/scoring.test.ts"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 2
+    },
+    {
+      "chunk": "scoring-set-5-plus-set-2",
+      "hash": "6c6443855428d2982b35d8bbe45afbf4fdbb8407",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/scoring.ts",
+        "tests/scoring.test.ts",
+        "tests/game.test.ts",
+        "DECISIONS.md"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 4
+    },
+    {
+      "chunk": "scoring-set-of-7",
+      "hash": "d5d10bc3572bee4418f72ec39ef10e4c172d3a06",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/scoring.ts",
+        "tests/scoring.test.ts",
+        "DECISIONS.md"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 3
+    },
+    {
+      "chunk": "simultaneous-round-loop",
+      "hash": "dc5fe9d",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/elements.ts",
+        "src/rules/game.ts",
+        "src/rules/flow.ts",
+        "src/rules/actions.ts",
+        "src/ui/components/GameTable.vue",
+        "tests/game.test.ts",
+        "tests/a11y.example.test.ts",
+        "tests/random-sim.test.ts",
+        "DECISIONS.md",
+        "BOARDSMITH-REQUESTS.md"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 10
+    },
+    {
+      "chunk": "table-and-draw",
+      "hash": "95df2a5e760fcbbff30d7e4f6b31a8b9e0859d9a",
+      "state": "drifted",
+      "changedFiles": [
+        "src/rules/elements.ts",
+        "src/rules/game.ts",
+        "src/rules/actions.ts",
+        "src/rules/flow.ts",
+        "src/rules/index.ts",
+        "boardsmith.json",
+        "src/ui/theme.ts",
+        "src/ui/components/CardView.vue",
+        "src/ui/components/GameTable.vue",
+        "src/ui/App.vue",
+        "tests/game.test.ts",
+        "DECISIONS.md"
+      ],
+      "missingFiles": [],
+      "manifestFileCount": 16
+    }
+  ],
+  "findings": [
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "best-seven-selection",
+      "subject": "best-seven-selection",
+      "detail": "changed since d55773c77fbf67dea665748a88e33eb27607a5da: src/rules/elements.ts, src/rules/game.ts, src/rules/actions.ts, src/rules/flow.ts, src/ui/components/GameTable.vue, tests/game.test.ts"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "bonus-point-cards",
+      "subject": "bonus-point-cards",
+      "detail": "changed since c61a6a7bcbc48bcc5ddfc833dbf6c75ce9764c53: src/rules/scoring.ts, src/ui/components/GameTable.vue, DECISIONS.md"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "discard",
+      "subject": "discard",
+      "detail": "changed since 7c6dac286fd5f33ddf442067db98b60f40b78808: src/rules/elements.ts, src/rules/actions.ts, src/rules/game.ts, src/rules/flow.ts, src/ui/components/CardView.vue, src/ui/components/DiscardPileView.vue, src/ui/components/GameTable.vue, tests/game.test.ts, tests/discard-pile.test.ts, tests/a11y.example.test.ts, DECISIONS.md, BOARDSMITH-REQUESTS.md"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "game-end-trigger",
+      "subject": "game-end-trigger",
+      "detail": "changed since e1f52b8: src/ui/components/GameTable.vue, src/rules/flow.ts, BOARDSMITH-REQUESTS.md, DECISIONS.md, chunks/game-end-trigger/CHUNK.md, tests/a11y.example.test.ts, tests/game.test.ts"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "game-score-and-winner",
+      "subject": "game-score-and-winner",
+      "detail": "changed since 35c4476: src/ui/components/GameTable.vue, DECISIONS.md, tests/a11y.example.test.ts"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "match-best-of-7",
+      "subject": "match-best-of-7",
+      "detail": "changed since 41ab4d9: src/rules/elements.ts, src/rules/actions.ts"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "scoring-combo-sets-and-runs",
+      "subject": "scoring-combo-sets-and-runs",
+      "detail": "changed since 89c2bff78a8276176bac04325e913c716484e6ab: src/rules/scoring.ts, tests/scoring.test.ts, tests/game.test.ts, tests/a11y.example.test.ts, DECISIONS.md, src/rules/index.ts"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "scoring-declaration",
+      "subject": "scoring-declaration",
+      "detail": "changed since edda4920b0bccd23834e239dcf5d6500d96c0983: src/rules/scoring.ts, src/rules/elements.ts, src/rules/actions.ts, src/rules/game.ts, src/rules/flow.ts, src/ui/components/GameTable.vue, tests/scoring.test.ts, tests/game.test.ts"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "scoring-engine-and-parity",
+      "detail": "changed since 575a90ebf83522f34fe3c89f0efae2c605163c35: src/rules/scoring.ts, src/rules/index.ts, tests/scoring.test.ts, DECISIONS.md"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "scoring-one-color",
+      "subject": "scoring-one-color",
+      "detail": "changed since 7ffea623a7687ab446a9c329e68153356779d1fa: src/rules/scoring.ts, tests/scoring.test.ts, tests/game.test.ts, DECISIONS.md"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "scoring-run-of-7",
+      "subject": "scoring-run-of-7",
+      "detail": "changed since 11f27361ac8f4546dd26bce6bee60109ed14d760: src/rules/scoring.ts, tests/scoring.test.ts, src/rules/index.ts"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "scoring-run-of-7-one-color",
+      "detail": "changed since 6aad25f98beb1a83ed160535edede6643e92658e: src/rules/scoring.ts, tests/scoring.test.ts"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "scoring-set-5-plus-set-2",
+      "detail": "changed since 6c6443855428d2982b35d8bbe45afbf4fdbb8407: src/rules/scoring.ts, tests/scoring.test.ts, tests/game.test.ts, DECISIONS.md"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "scoring-set-of-7",
+      "subject": "scoring-set-of-7",
+      "detail": "changed since d5d10bc3572bee4418f72ec39ef10e4c172d3a06: src/rules/scoring.ts, tests/scoring.test.ts, DECISIONS.md"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "simultaneous-round-loop",
+      "subject": "simultaneous-round-loop",
+      "detail": "changed since dc5fe9d: src/rules/elements.ts, src/rules/game.ts, src/rules/flow.ts, src/rules/actions.ts, src/ui/components/GameTable.vue, tests/game.test.ts, tests/a11y.example.test.ts, tests/random-sim.test.ts, DECISIONS.md, BOARDSMITH-REQUESTS.md"
+    },
+    {
+      "kind": "chunk-code-drifted",
+      "chunk": "table-and-draw",
+      "subject": "table-and-draw",
+      "detail": "changed since 95df2a5e760fcbbff30d7e4f6b31a8b9e0859d9a: src/rules/elements.ts, src/rules/game.ts, src/rules/actions.ts, src/rules/flow.ts, src/rules/index.ts, boardsmith.json, src/ui/theme.ts, src/ui/components/CardView.vue, src/ui/components/GameTable.vue, src/ui/App.vue, tests/game.test.ts, DECISIONS.md"
+    }
+  ],
+  "counts": {
+    "clean": 1,
+    "drifted": 16,
+    "unknown": 0
+  },
+  "head": "ecc96a86cddbe50158a4117cbf31bfbaee62096a"
+}

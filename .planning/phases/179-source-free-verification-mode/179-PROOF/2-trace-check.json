@@ -1,0 +1,1437 @@
+{
+  "findings": [
+    {
+      "kind": "unassociated-test",
+      "chunk": "",
+      "subject": "tests/card-mark.test.ts",
+      "detail": "no chunk's Build Manifest lists this test file"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "best-seven-selection, scoring-declaration, scoring-one-color, simultaneous-round-loop",
+      "subject": "claim 13 in tests/game.test.ts",
+      "detail": "candidates: best-seven-selection, scoring-declaration, scoring-one-color, simultaneous-round-loop"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "scoring-declaration, simultaneous-round-loop",
+      "subject": "claim 15 in tests/game.test.ts",
+      "detail": "candidates: scoring-declaration, simultaneous-round-loop"
+    },
+    {
+      "kind": "unassociated-test",
+      "chunk": "",
+      "subject": "tests/match.a11y.test.ts",
+      "detail": "no chunk's Build Manifest lists this test file"
+    },
+    {
+      "kind": "unassociated-test",
+      "chunk": "",
+      "subject": "tests/match.test.ts",
+      "detail": "no chunk's Build Manifest lists this test file"
+    },
+    {
+      "kind": "test-unlinked",
+      "chunk": "simultaneous-round-loop",
+      "subject": "tests/random-sim.test.ts",
+      "detail": "tests/random-sim.test.ts imports src/rules/ but cites neither a claim nor a ruling"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 1 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 4 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 5 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 6 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 7 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 8 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 9 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 10 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-declaration, scoring-engine-and-parity, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-combo-sets-and-runs, scoring-declaration, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 11 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-combo-sets-and-runs, scoring-declaration, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-combo-sets-and-runs, scoring-declaration, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7",
+      "subject": "claim 12 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-combo-sets-and-runs, scoring-declaration, scoring-one-color, scoring-run-of-7, scoring-run-of-7-one-color, scoring-set-5-plus-set-2, scoring-set-of-7"
+    },
+    {
+      "kind": "ambiguous-claim-ref",
+      "chunk": "game-score-and-winner, scoring-declaration, scoring-one-color, scoring-run-of-7-one-color, scoring-set-of-7",
+      "subject": "claim 13 in tests/scoring.test.ts",
+      "detail": "candidates: game-score-and-winner, scoring-declaration, scoring-one-color, scoring-run-of-7-one-color, scoring-set-of-7"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "best-seven-selection",
+      "subject": "claim 13",
+      "detail": "Interpretation claim 13 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 20",
+      "detail": "Interpretation claim 20 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 21",
+      "detail": "Interpretation claim 21 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 22",
+      "detail": "Interpretation claim 22 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 23",
+      "detail": "Interpretation claim 23 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 24",
+      "detail": "Interpretation claim 24 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 25",
+      "detail": "Interpretation claim 25 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 26",
+      "detail": "Interpretation claim 26 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 27",
+      "detail": "Interpretation claim 27 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 28",
+      "detail": "Interpretation claim 28 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 29",
+      "detail": "Interpretation claim 29 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 30",
+      "detail": "Interpretation claim 30 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 31",
+      "detail": "Interpretation claim 31 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 32",
+      "detail": "Interpretation claim 32 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 33",
+      "detail": "Interpretation claim 33 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 34",
+      "detail": "Interpretation claim 34 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 35",
+      "detail": "Interpretation claim 35 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 36",
+      "detail": "Interpretation claim 36 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 37",
+      "detail": "Interpretation claim 37 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "discard",
+      "subject": "claim 38",
+      "detail": "Interpretation claim 38 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 13",
+      "detail": "Interpretation claim 13 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 14",
+      "detail": "Interpretation claim 14 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 15",
+      "detail": "Interpretation claim 15 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 16",
+      "detail": "Interpretation claim 16 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 17",
+      "detail": "Interpretation claim 17 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 18",
+      "detail": "Interpretation claim 18 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 19",
+      "detail": "Interpretation claim 19 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 20",
+      "detail": "Interpretation claim 20 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 21",
+      "detail": "Interpretation claim 21 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 22",
+      "detail": "Interpretation claim 22 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-end-trigger",
+      "subject": "claim 23",
+      "detail": "Interpretation claim 23 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 13",
+      "detail": "Interpretation claim 13 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "game-score-and-winner",
+      "subject": "claim 14",
+      "detail": "Interpretation claim 14 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "match-best-of-7",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-combo-sets-and-runs",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-combo-sets-and-runs",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 13",
+      "detail": "Interpretation claim 13 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 14",
+      "detail": "Interpretation claim 14 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-declaration",
+      "subject": "claim 15",
+      "detail": "Interpretation claim 15 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-engine-and-parity",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-one-color",
+      "subject": "claim 13",
+      "detail": "Interpretation claim 13 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 13",
+      "detail": "Interpretation claim 13 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 14",
+      "detail": "Interpretation claim 14 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 15",
+      "detail": "Interpretation claim 15 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-run-of-7-one-color",
+      "subject": "claim 16",
+      "detail": "Interpretation claim 16 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-5-plus-set-2",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 1",
+      "detail": "Interpretation claim 1 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 2",
+      "detail": "Interpretation claim 2 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 3",
+      "detail": "Interpretation claim 3 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 4",
+      "detail": "Interpretation claim 4 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 5",
+      "detail": "Interpretation claim 5 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 6",
+      "detail": "Interpretation claim 6 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 13",
+      "detail": "Interpretation claim 13 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "scoring-set-of-7",
+      "subject": "claim 14",
+      "detail": "Interpretation claim 14 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 7",
+      "detail": "Interpretation claim 7 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 8",
+      "detail": "Interpretation claim 8 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 9",
+      "detail": "Interpretation claim 9 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 10",
+      "detail": "Interpretation claim 10 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 11",
+      "detail": "Interpretation claim 11 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 12",
+      "detail": "Interpretation claim 12 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 13",
+      "detail": "Interpretation claim 13 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 14",
+      "detail": "Interpretation claim 14 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 15",
+      "detail": "Interpretation claim 15 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 16",
+      "detail": "Interpretation claim 16 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 17",
+      "detail": "Interpretation claim 17 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 18",
+      "detail": "Interpretation claim 18 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 19",
+      "detail": "Interpretation claim 19 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 20",
+      "detail": "Interpretation claim 20 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 21",
+      "detail": "Interpretation claim 21 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 22",
+      "detail": "Interpretation claim 22 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 23",
+      "detail": "Interpretation claim 23 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 24",
+      "detail": "Interpretation claim 24 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 25",
+      "detail": "Interpretation claim 25 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 26",
+      "detail": "Interpretation claim 26 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 27",
+      "detail": "Interpretation claim 27 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 28",
+      "detail": "Interpretation claim 28 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 29",
+      "detail": "Interpretation claim 29 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 30",
+      "detail": "Interpretation claim 30 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 31",
+      "detail": "Interpretation claim 31 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 32",
+      "detail": "Interpretation claim 32 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 33",
+      "detail": "Interpretation claim 33 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 34",
+      "detail": "Interpretation claim 34 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 35",
+      "detail": "Interpretation claim 35 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 36",
+      "detail": "Interpretation claim 36 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 37",
+      "detail": "Interpretation claim 37 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 38",
+      "detail": "Interpretation claim 38 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 39",
+      "detail": "Interpretation claim 39 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 40",
+      "detail": "Interpretation claim 40 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 41",
+      "detail": "Interpretation claim 41 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "simultaneous-round-loop",
+      "subject": "claim 42",
+      "detail": "Interpretation claim 42 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "table-and-draw",
+      "subject": "claim 28",
+      "detail": "Interpretation claim 28 has no resolved citing test"
+    },
+    {
+      "kind": "claim-untested",
+      "chunk": "table-and-draw",
+      "subject": "claim 29",
+      "detail": "Interpretation claim 29 has no resolved citing test"
+    },
+    {
+      "kind": "ruling-untested",
+      "chunk": "",
+      "subject": "Ruling 4",
+      "detail": "no test file cites Ruling 4"
+    },
+    {
+      "kind": "ruling-untested",
+      "chunk": "",
+      "subject": "Ruling 7",
+      "detail": "no test file cites Ruling 7"
+    },
+    {
+      "kind": "ruling-untested",
+      "chunk": "",
+      "subject": "Ruling 10",
+      "detail": "no test file cites Ruling 10"
+    }
+  ],
+  "counts": {
+    "claim-untested": 212,
+    "ruling-untested": 3,
+    "test-unlinked": 1,
+    "unassociated-test": 3,
+    "ambiguous-claim-ref": 13,
+    "unresolved-claim-ref": 0,
+    "manifest-file-missing": 0,
+    "chunk-code-drifted": 0,
+    "drift-unknown": 0
+  },
+  "totals": {
+    "chunks": 17,
+    "claims": 212,
+    "rulings": 36,
+    "testFiles": 8,
+    "claimCitations": 13,
+    "rulingCitations": 65
+  },
+  "unparsedSupersessions": [
+    {
+      "ruling": 7,
+      "sentence": "Supersedes the ~2:3 figure recorded in `ASSETS.md` at ingest and in `rulebook/00-visual-survey.md`"
+    },
+    {
+      "ruling": 9,
+      "sentence": "- Citation interpreted or overridden: **Supersedes the RATIONALE of Ruling 3** (whose decision is"
+    },
+    {
+      "ruling": 20,
+      "sentence": "build contradicts must be superseded OUT LOUD, in the ledger, rather than quietly violated."
+    },
+    {
+      "ruling": 22,
+      "sentence": "**Supersedes the \"staged card is harmlessly rewindable\" claims** in `src/rules/actions.ts` and"
+    },
+    {
+      "ruling": 34,
+      "sentence": "content clause \"still no winner, no score\" — the \"no score\" half is superseded now that scoring exists"
+    }
+  ]
+}

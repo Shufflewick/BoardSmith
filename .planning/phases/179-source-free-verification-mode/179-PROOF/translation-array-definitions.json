@@ -1,0 +1,8 @@
+[
+  {
+    "slicePath": "rulebook/01-definitions-and-components.md",
+    "lineNumber": 6,
+    "verdict": "unexecutable",
+    "reason": "unexecutableReason: no-matching-symbol — no symbol in the supplied exportedSymbols expresses a standalone 'Set' predicate (2+ matching-number cards); the project's exported scoring surface only offers whole-hand ScoringPattern.check members (COMBO_SETS_AND_RUNS_PATTERN, SET_OF_7_PATTERN, etc.), none of which is a bare Set-of-2+ test."
+  }
+]

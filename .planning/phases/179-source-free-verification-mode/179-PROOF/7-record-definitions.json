@@ -1,0 +1,43 @@
+{
+  "records": [
+    {
+      "exampleId": "rulebook/01-definitions-and-components.md:6",
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "lineNumber": 6,
+      "kind": "predicate",
+      "verdict": "unexecutable",
+      "reason": "unexecutableReason: no-matching-symbol — no symbol in the supplied exportedSymbols expresses a standalone 'Set' predicate (2+ matching-number cards); the project's exported scoring surface only offers whole-hand ScoringPattern.check members (COMBO_SETS_AND_RUNS_PATTERN, SET_OF_7_PATTERN, etc.), none of which is a bare Set-of-2+ test.",
+      "expected": "",
+      "observed": "",
+      "contradictionA": "",
+      "contradictionB": "",
+      "supportingQuoteLines": [
+        "\"Set: 2+ cards with matching numbers.\"",
+        "\"example: 5, 5, 5\"",
+        "Visual (p.1): The Set example is illustrated by three card images side by side: a green 5, a red 5, and a purple 5."
+      ],
+      "provenance": "quote-unverified",
+      "recordedAt": "2026-08-01T04:49:40.745Z"
+    },
+    {
+      "exampleId": "rulebook/01-definitions-and-components.md:12",
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "lineNumber": 12,
+      "kind": "example-inconsistent",
+      "verdict": "example-inconsistent",
+      "reason": "Line 12's quoted example text for the Run definition reads \"example: 5, 6, 7\", but line 14's Visual description of the same example states the accompanying card images show 1, 2, 3 (red 1, blue 2, red 3) instead — two descriptions of the same worked example give different card values, and there is no basis to prefer one over the other.",
+      "expected": "",
+      "observed": "",
+      "contradictionA": "\"example: 5, 6, 7\"",
+      "contradictionB": "Visual (p.1): The Run example is illustrated by three card images side by side: a red 1, a blue 2, and a red 3 (the printed example text reads 5, 6, 7 while the accompanying card images show 1, 2, 3).",
+      "supportingQuoteLines": [
+        "\"example: 5, 6, 7\"",
+        "Visual (p.1): The Run example is illustrated by three card images side by side: a red 1, a blue 2, and a red 3 (the printed example text reads 5, 6, 7 while the accompanying card images show 1, 2, 3)."
+      ],
+      "provenance": "quote-unverified",
+      "recordedAt": "2026-08-01T04:49:40.746Z"
+    }
+  ],
+  "ledgerPath": "rulebook/.example-replay/EXAMPLE-VERDICTS.md",
+  "provenance": "quote-unverified"
+}

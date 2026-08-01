@@ -1,0 +1,71 @@
+BS-EXAMPLE-TRANSLATE-V1
+Slice: rulebook/02-solo-variant.md:8 (p.2)
+Kind: predicate
+
+Worked example (verbatim source text):
+As a reminder multiples of 7 are 7, 14, 21, 28, 35, 42, and 49.
+
+Setup: In the solo variant, after achieving a higher total score for each match, the second milestone is to attempt a final score that is a multiple of 7 in each game during the match.
+Expected: The multiples of 7 are enumerated as 7, 14, 21, 28, 35, 42, and 49; for a perfect solo match the player would have to achieve a score of 1 of each in no particular order.
+
+This is a PREDICATE example. A direct function call against the project's exported API surface below is a legitimate translation target — it does not need to route through game.doAction(...). Construct the real element/argument values the predicate expects from Setup, call the matching exported symbol, and assert against Expected.
+
+Project exported API surface (src/ only, 54 symbol(s); this listing is mechanical, not curated for this example — not every symbol below is relevant):
+- gameDefinition (const, src/rules/index.ts)
+- CARD_COLORS (const, src/rules/elements.ts)
+- CARD_NUMBERS (const, src/rules/elements.ts)
+- COPIES_PER_NUMBERED_CARD (const, src/rules/elements.ts)
+- BONUS_CARD_COUNT (const, src/rules/elements.ts)
+- NUMBERED_CARD_COUNT (const, src/rules/elements.ts)
+- DECK_SIZE (const, src/rules/elements.ts)
+- STARTING_HAND_SIZE (const, src/rules/elements.ts)
+- CARDS_DRAWN_PER_TURN (const, src/rules/elements.ts)
+- HAND_SIZE_AFTER_DRAWING (const, src/rules/elements.ts)
+- handMinusDiscard (function, src/rules/elements.ts)
+- ROUNDS_PER_GAME (const, src/rules/elements.ts)
+- MAX_HAND_SIZE (const, src/rules/elements.ts)
+- CARDS_DRAWN_PER_PLAYER_PER_GAME (const, src/rules/elements.ts)
+- GAMES_PER_MATCH (const, src/rules/elements.ts)
+- SCORING_HAND_SIZE (const, src/rules/elements.ts)
+- numberCardsInHand (function, src/rules/elements.ts)
+- scoringSelectionSize (function, src/rules/elements.ts)
+- SevenCard (class, src/rules/elements.ts)
+- SevenHand (class, src/rules/elements.ts)
+- PendingDiscard (class, src/rules/elements.ts)
+- DiscardPile (class, src/rules/elements.ts)
+- ScoringSelection (class, src/rules/elements.ts)
+- ScoredCards (class, src/rules/elements.ts)
+- Mess (class, src/rules/elements.ts)
+- ELEMENT_CLASS (const, src/rules/elements.ts)
+- createDrawAction (function, src/rules/actions.ts)
+- createDiscardAction (function, src/rules/actions.ts)
+- createScoringSelectionAction (function, src/rules/actions.ts)
+- createReadyAction (function, src/rules/actions.ts)
+- createScoringDeclarationAction (function, src/rules/actions.ts)
+- registerScoringPattern (function, src/rules/scoring.ts)
+- scoringPatterns (function, src/rules/scoring.ts)
+- numberCardsOf (function, src/rules/scoring.ts)
+- BONUS_CARD_POINT_VALUE (const, src/rules/scoring.ts)
+- bonusPointsOf (function, src/rules/scoring.ts)
+- perGameScore (function, src/rules/scoring.ts)
+- legalScoringPatterns (function, src/rules/scoring.ts)
+- NO_PATTERN_CLAIM (const, src/rules/scoring.ts)
+- PARITY_PATTERN (const, src/rules/scoring.ts)
+- COMBO_SETS_AND_RUNS_PATTERN (const, src/rules/scoring.ts)
+- RUN_OF_SEVEN_PATTERN (const, src/rules/scoring.ts)
+- SET_5_PLUS_SET_2_PATTERN (const, src/rules/scoring.ts)
+- ONE_COLOR_PATTERN (const, src/rules/scoring.ts)
+- SET_OF_7_PATTERN (const, src/rules/scoring.ts)
+- RUN_OF_SEVEN_ONE_COLOR_PATTERN (const, src/rules/scoring.ts)
+- SevenGame (class, src/rules/game.ts)
+- SevenPlayer (class, src/rules/game.ts)
+- createGameFlow (function, src/rules/flow.ts)
+- getSevenObjectives (function, src/rules/ai.ts)
+- getSevenThreatResponseMoves (function, src/rules/ai.ts)
+- getSevenPlayoutPolicy (function, src/rules/ai.ts)
+- getSevenMoveOrdering (function, src/rules/ai.ts)
+- getSevenUctConstant (function, src/rules/ai.ts)
+
+Import paths: every module above is given relative to the project root (e.g. "src/rules/game.ts"). Your `imports` will be hoisted into a generated file that always lives two nested directories below the project root — under the project's own test directory, inside its "examples" subdirectory — one level deeper than a hand-written single-directory test file. Write each import relative to THAT depth: a module at "src/rules/game.ts" imports as "../../src/rules/game.js" from the generated file, never "../src/rules/game.js" (the shallower depth a sibling hand-written test would use). Getting this prefix wrong is the single most common way an otherwise-correct translation fails to even load.
+
+If no viable target exists in the exported surface above for this example, return verdict "unexecutable" with a named reason — never force a mismatched target and never silently drop the example.

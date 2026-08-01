@@ -34,7 +34,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 177: Derived-Line Re-Derivation** - Rule-bearing `Derived` lines get an independent second opinion via dual enumeration + reconciliation; CHECK-04 CLOSED 2026-07-31 after the miscalibrated determinism gate was retired (see Result below)
 - [x] **Phase 177.1: Wire CHECK-04's Closed Design Into The Pipeline** - `/bs-verify-game` Step 7 now dispatches the dual-enumeration design CHECK-04 was actually closed on; proven against recorded input AND a real live dispatch (completed 2026-07-31, 8 plans, all 5 success criteria MET, verification 5/5 PASSED — see Result below). **Post-verification code review found 4 CRITICALS that a green suite and a passing goal-backward verification both missed** — one `--slice-path` path traversal, and three ways a wrong arithmetic `claimedResult` could validate against a substituted operand (all three rooted in keying lookups by model-supplied free text rather than stable identity). Fixed as one structural fail-closed change (`d6e14de8`, `22cd9492`, `8d187132`); suite 4125/4125 green. The first CR-03 attempt failed the pinned `analysis-run1.json` reference test and was replaced — that pin exists to stop a fix silently altering CHECK-04's closure evidence, and it worked.
 - [x] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay (completed 2026-08-01, 11 plans, CHECK-06/TEST-01 CLOSED on 178-11's live cross-game proof — see `178-PROOF.md`)
-- [ ] **Phase 179: Source-Free Verification Mode** - `/bs-verify-game` degrades honestly when source is unavailable, naming which defect classes went unchecked
+- [x] **Phase 179: Source-Free Verification Mode** - `/bs-verify-game` degrades honestly when source is unavailable, naming which defect classes went unchecked (completed 2026-08-01, 6 plans, VERIFY-09 CLOSED on 179-06's live proof — see `179-PROOF.md`)
 
 ## Phase Details
 
@@ -464,6 +464,22 @@ smoothed over, per decision 17.
   2. The source-free report names exactly which defect classes went unchecked (e.g. no fidelity re-transcription, no worked-example replay against fresh source).
   3. The verification's recorded scope reads code-conformance-only with the unavailable-source reason, per PROV-02.
 **Plans**: 6 plans in 6 waves (linear — worktrees disabled, shared files across every wave)
+**Result:** All 3 ROADMAP SCs and decision 11(a)-(d) MET on a live run (`179-PROOF.md`), staged
+against a real `cp -R` copy of `seven` with `rulebook/source/` and root `rules.pdf` removed. SC-1's
+restated bar (completion + non-vacuity, bound to §3) held: all four checks ran to completion, the
+session dispatched past the negative case, and the Close's durable write landed 17/17
+`recorded[]` entries. SC-2's 5-entry `uncheckedDefectClasses` count matched exactly. SC-3's
+on-disk `## Verified Against` block (never the CLI's live recomputation) read back
+`Scope: code-conformance-only` / `Reason: source-missing`, exactly as 179-05 corrected the
+pre-registration to expect. Decision 11(d)'s per-check minimums: CHECK-03 232 findings, CHECK-05
+16 findings, CHECK-06 3 real recorded findings from a live `claude -p` dispatch of the entire
+pending corpus, all with downgraded `quote-unverified` provenance and unrewritten verdicts — MET
+on the underlying mechanism, with the honest caveat that no `disagrees` verdict arose naturally so
+the report's two named buckets were never populated by this run. `verify-close-record`'s
+idempotency and fence-scoping both proven on the real project (not a fixture). Both reference-game
+originals proven untouched by whole-tree `git status --short`, before and after. VERIFY-09 closed;
+PROV-02 delivered end-to-end through the verify pipeline, not just the build pipeline. Full test
+suite unchanged at 4368/249, 0 failing.
 
 Plans:
 - [x] 179-01-PLAN.md — the ONE step->defect-class mapping + computeSourceFreeReport, and decision 7's falsifiable coverage test against verify-game.md's real headings (wave 1)
@@ -471,7 +487,7 @@ Plans:
 - [x] 179-03-PLAN.md — the durable write: extract `recordVerifiedAgainst` from `chunkCheckCommand`, add `verify-close-record` (idempotent, fence-bounded, scoped to evaluated chunks, exit 0), on-disk tests (wave 3)
 - [x] 179-04-PLAN.md — the behavioural change: source-resolution.md's negative case enters `verify/source-free-mode.md`; BOTH Closes dispatch `verify-close-record`; installer probe, no-hardcoded-list pin, Close-dispatch pins (wave 4)
 - [x] 179-05-PLAN.md — pre-registration committed ALONE: satisfiability + vacuity audit of all 7 criteria (SC-1 by name), durable-record expectation, whole-tree baseline protocol (wave 5)
-- [ ] 179-06-PLAN.md — live proof on a staged source-free reference game: one real CHECK-06 dispatch with downgraded quote provenance, the Close's durable block read back from disk; 179-PROOF.md, VERIFY-09 disposition, closeout (wave 6)
+- [x] 179-06-PLAN.md — live proof on a staged source-free reference game: real CHECK-06 dispatches with downgraded quote provenance, the Close's durable block read back from disk; 179-PROOF.md, VERIFY-09 disposition, closeout (wave 6)
 
 ## Progress
 
@@ -489,7 +505,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
 | 177. Derived-Line Re-Derivation | 13/13 | Executed — goal NOT MET (6/16, 37.5%; CHECK-04 stays OPEN, see Result) | - |
 | 178. Worked-Example Tests | 11/11 | Complete   | 2026-08-01 |
-| 179. Source-Free Verification Mode | 5/6 | In Progress | - |
+| 179. Source-Free Verification Mode | 6/6 | Complete | 2026-08-01 |
 
 ## Shipped Milestones
 

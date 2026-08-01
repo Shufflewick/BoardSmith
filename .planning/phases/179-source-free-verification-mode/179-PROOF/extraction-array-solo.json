@@ -1,0 +1,13 @@
+[
+  {
+    "lineNumber": 8,
+    "pageCitation": "p.2",
+    "kind": "predicate",
+    "sourceText": "As a reminder multiples of 7 are 7, 14, 21, 28, 35, 42, and 49.",
+    "setup": "In the solo variant, after achieving a higher total score for each match, the second milestone is to attempt a final score that is a multiple of 7 in each game during the match.",
+    "expected": "The multiples of 7 are enumerated as 7, 14, 21, 28, 35, 42, and 49; for a perfect solo match the player would have to achieve a score of 1 of each in no particular order.",
+    "supportingQuoteLines": [
+      "\"After you've conquered that, attempt to get a multiple of 7 as your final score in each game during the match. As a reminder multiples of 7 are 7, 14, 21, 28, 35, 42, and 49. Therefore for a perfect solo match you would have to achieve a score of 1 of each in no particular order.\""
+    ]
+  }
+]

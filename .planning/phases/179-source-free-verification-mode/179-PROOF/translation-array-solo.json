@@ -1,0 +1,8 @@
+[
+  {
+    "slicePath": "rulebook/02-solo-variant.md",
+    "lineNumber": 8,
+    "verdict": "unexecutable",
+    "reason": "unexecutableReason: unmodeled-component-state — the solo variant's 'final score is a multiple of 7' milestone depends on solo-match state (multi-game solo-mode scoring accumulation) that the exported API surface does not model as a directly callable predicate."
+  }
+]

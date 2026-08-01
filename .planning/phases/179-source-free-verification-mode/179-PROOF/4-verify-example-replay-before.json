@@ -1,0 +1,57 @@
+{
+  "projectDir": "/private/tmp/claude-501/-Users-jtsmith-BoardSmith/ec67162e-8441-486e-81a5-9664c77fbf70/scratchpad/179-06/seven",
+  "slices": [
+    {
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "extractionPayload": "BS-EXAMPLE-EXTRACT-V1\nSlice: rulebook/01-definitions-and-components.md\n\n3: p.1, Definitions:\n4: \"Hand: The cards each player holds. Each starts with 3 and ends the game with 10.\"\n5: \"Set: 2+ cards with matching numbers.\"\n6: \"example: 5, 5, 5\"\n8: Visual (p.1): The Set example is illustrated by three card images side by side: a green 5, a red 5, and a purple 5.\n10: p.1, Definitions:\n11: \"Run: 3+ cards in numeric order.\"\n12: \"example: 5, 6, 7\"\n14: Visual (p.1): The Run example is illustrated by three card images side by side: a red 1, a blue 2, and a red 3 (the printed example text reads 5, 6, 7 while the accompanying card images show 1, 2, 3).\n16: p.1, Distribution of Cards:\n17: \"There are numbers ranging from 1-7 in 4 colors, with 4 copies of each card. In addition, there are 7 bonus point cards.\"\n19: Visual (p.1): The Distribution of Cards diagram shows four rows of cards numbered 1 through 7, one row per color — red, green, blue, and purple — each row annotated \"x 4\". Below them is a single black card showing \"+1\" annotated \"x 7\".\n25: p.1, Designer:\n26: \"JT Smith\"\n28: p.1, Play Testers:\n29: \"Patrick Galagan, Brian Hoffman, Bev Smith, Jamie Vrbsky, Ryan McCombs, Adelheid Zimmerman, Chris Vanslambrouck, Scott Starkey, Frank Dillon, Troy Pichelman, Karen Klutzke, Carl Klutzke, Jack Rose Tree, Randy Ekl, Maxine Ekl, Andrew Stiles, Ray Wehrs, Chris Leder, Sarah Bownds, Marylin Vanderhoof\"\n31: Visual (p.1): Card art is minimal and bold: rounded-corner rectangles in flat saturated color (red, green, blue, purple) with a large white number centered, plus small white pip dots in the corners. Bonus cards are black with a white \"+1\". Aspect ratio of the depicted cards is roughly portrait, approximately 2:3.",
+      "pending": true
+    },
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "extractionPayload": "BS-EXAMPLE-EXTRACT-V1\nSlice: rulebook/01-overview-setup-and-play.md\n\n3: p.1, About:\n4: \"Seven is a rummy-style card game for 1 to 7 players that plays in about 7 minutes, and is recommended for ages 7 and up.\"\n6: p.1, Setup:\n7: \"Give each player a \"Ways to Score\" card.\"\n8: \"Create a mess of face-down cards in the middle of the table and mixes them around.\"\n9: \"Each player should then draw 3 cards from the mess to form their hand.\"\n11: p.1, Round (Simultaneous):\n12: \"Each player draws 2 cards into their hand.\"\n13: \"Each player discards 1 card from their hand face-up off to the side of the table in their own discard pile.\"\n14: \"If you ever lose track of which round you are on, count your discards, you will have 7 discards when the game is over.\"\n15: \"Discards are considered public information.\"\n16: \"If everyone has 10 cards, end the game; otherwise begin the next round.\"\n18: p.1, Game End:\n19: \"After all players have 10 cards, the game ends.\"\n20: \"Each player scores their best hand of 7 cards, and adds any bonus point cards (even beyond the hand of 7) to their score.\"\n22: p.1, Match End: Best of 7 Games:\n23: \"A match consists of 7 games.\"\n24: \"Play 7 games and keep track of each player's score total.\"\n25: \"Whichever player has the highest total score at the end of the match wins!\"\n27: p.1, Match Length:\n28: \"A full match of Seven is naturally played in a best of 7 series. That said, if you would like a shorter or longer match, feel free to play a match as a best of 3 games or a best of 10 games.\"\n40: Visual (p.1): The rules page is a single wide, landscape panel with a saturated yellow background, black bold sans-serif section headings, and black sans-serif body text arranged in four columns. Small card images are embedded inline within the text as illustrations.",
+      "pending": true
+    },
+    {
+      "slicePath": "rulebook/02-solo-variant.md",
+      "extractionPayload": "BS-EXAMPLE-EXTRACT-V1\nSlice: rulebook/02-solo-variant.md\n\n5: p.2, Solo Variant:\n6: \"Playing the single-player variant is the same as playing the regular game, the only difference is that you are scoring against yourself.\"\n7: \"To start, just try to get a higher total score for each match.\"\n8: \"After you've conquered that, attempt to get a multiple of 7 as your final score in each game during the match. As a reminder multiples of 7 are 7, 14, 21, 28, 35, 42, and 49. Therefore for a perfect solo match you would have to achieve a score of 1 of each in no particular order.\"\n9: \"And after you've conquered that, attempt to get one of each of the 7 scoring hands in each game during the match in no particular order.\"\n13: Visual (p.2): Page 2 is a wide landscape panel with a solid purple background, white bold sans-serif heading and white body text in a single left-hand column. The right side is empty except for the word \"SEVEN\" set in white bold italic sans-serif, rotated diagonally (reading upward at roughly 45 degrees). No diagrams or component images appear on this page.",
+      "pending": true
+    }
+  ],
+  "verdicts": [],
+  "counts": {
+    "agrees": 0,
+    "disagrees": 0,
+    "example-inconsistent": 0,
+    "unexecutable": 0
+  },
+  "perGameBreakdown": [
+    {
+      "slicePath": "rulebook/01-definitions-and-components.md",
+      "verdictCounts": {
+        "agrees": 0,
+        "disagrees": 0,
+        "example-inconsistent": 0,
+        "unexecutable": 0
+      }
+    },
+    {
+      "slicePath": "rulebook/01-overview-setup-and-play.md",
+      "verdictCounts": {
+        "agrees": 0,
+        "disagrees": 0,
+        "example-inconsistent": 0,
+        "unexecutable": 0
+      }
+    },
+    {
+      "slicePath": "rulebook/02-solo-variant.md",
+      "verdictCounts": {
+        "agrees": 0,
+        "disagrees": 0,
+        "example-inconsistent": 0,
+        "unexecutable": 0
+      }
+    }
+  ],
+  "unarchivedSources": []
+}

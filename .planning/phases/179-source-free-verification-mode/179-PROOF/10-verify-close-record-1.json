@@ -1,0 +1,75 @@
+{
+  "scope": "code-conformance-only",
+  "reason": "source-missing",
+  "recorded": [
+    {
+      "slug": "best-seven-selection",
+      "changed": true
+    },
+    {
+      "slug": "bonus-point-cards",
+      "changed": true
+    },
+    {
+      "slug": "discard",
+      "changed": true
+    },
+    {
+      "slug": "final-acceptance",
+      "changed": true
+    },
+    {
+      "slug": "game-end-trigger",
+      "changed": true
+    },
+    {
+      "slug": "game-score-and-winner",
+      "changed": true
+    },
+    {
+      "slug": "match-best-of-7",
+      "changed": true
+    },
+    {
+      "slug": "scoring-combo-sets-and-runs",
+      "changed": true
+    },
+    {
+      "slug": "scoring-declaration",
+      "changed": true
+    },
+    {
+      "slug": "scoring-engine-and-parity",
+      "changed": true
+    },
+    {
+      "slug": "scoring-one-color",
+      "changed": true
+    },
+    {
+      "slug": "scoring-run-of-7",
+      "changed": true
+    },
+    {
+      "slug": "scoring-run-of-7-one-color",
+      "changed": true
+    },
+    {
+      "slug": "scoring-set-5-plus-set-2",
+      "changed": true
+    },
+    {
+      "slug": "scoring-set-of-7",
+      "changed": true
+    },
+    {
+      "slug": "simultaneous-round-loop",
+      "changed": true
+    },
+    {
+      "slug": "table-and-draw",
+      "changed": true
+    }
+  ],
+  "errors": []
+}

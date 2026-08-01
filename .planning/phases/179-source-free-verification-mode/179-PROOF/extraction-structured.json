@@ -1,0 +1,27 @@
+{
+  "examples": [
+    {
+      "lineNumber": 6,
+      "pageCitation": "p.1",
+      "kind": "predicate",
+      "sourceText": "\"example: 5, 5, 5\"",
+      "setup": "A Set is defined as 2+ cards with matching numbers. The example shown is three cards, all valued 5.",
+      "expected": "The three cards (5, 5, 5) satisfy the Set definition: they are matching-number cards, and there are more than the minimum of 2.",
+      "supportingQuoteLines": [
+        "\"Set: 2+ cards with matching numbers.\"",
+        "\"example: 5, 5, 5\"",
+        "Visual (p.1): The Set example is illustrated by three card images side by side: a green 5, a red 5, and a purple 5."
+      ]
+    },
+    {
+      "lineNumber": 12,
+      "pageCitation": "p.1",
+      "kind": "example-inconsistent",
+      "reason": "Line 12's quoted example text for the Run definition reads \"example: 5, 6, 7\", but line 14's Visual description of the same example states the accompanying card images show 1, 2, 3 (red 1, blue 2, red 3) instead \u2014 two descriptions of the same worked example give different card values, and there is no basis to prefer one over the other.",
+      "supportingQuoteLines": [
+        "\"example: 5, 6, 7\"",
+        "Visual (p.1): The Run example is illustrated by three card images side by side: a red 1, a blue 2, and a red 3 (the printed example text reads 5, 6, 7 while the accompanying card images show 1, 2, 3)."
+      ]
+    }
+  ]
+}

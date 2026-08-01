@@ -1,0 +1,23 @@
+{
+  "records": [
+    {
+      "exampleId": "rulebook/02-solo-variant.md:8",
+      "slicePath": "rulebook/02-solo-variant.md",
+      "lineNumber": 8,
+      "kind": "predicate",
+      "verdict": "unexecutable",
+      "reason": "unexecutableReason: unmodeled-component-state — the solo variant's 'final score is a multiple of 7' milestone depends on solo-match state (multi-game solo-mode scoring accumulation) that the exported API surface does not model as a directly callable predicate.",
+      "expected": "",
+      "observed": "",
+      "contradictionA": "",
+      "contradictionB": "",
+      "supportingQuoteLines": [
+        "\"After you've conquered that, attempt to get a multiple of 7 as your final score in each game during the match. As a reminder multiples of 7 are 7, 14, 21, 28, 35, 42, and 49. Therefore for a perfect solo match you would have to achieve a score of 1 of each in no particular order.\""
+      ],
+      "provenance": "quote-unverified",
+      "recordedAt": "2026-08-01T04:49:49.393Z"
+    }
+  ],
+  "ledgerPath": "rulebook/.example-replay/EXAMPLE-VERDICTS.md",
+  "provenance": "quote-unverified"
+}
