@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-10-PLAN.md — pre-registered the expected extraction (25 slices, 11 worked examples across all three reference games, corrected up from the inherited ~5-6 estimate) plus the satisfiability audit, committed ALONE before any dispatch. Next: Phase 178 plan 11 (live proof on all three reference games)."
-last_updated: "2026-07-31T21:30:00.000Z"
-last_activity: 2026-07-31
+stopped_at: "Completed 178-11-PLAN.md — the live cross-game proof. Phase 178 (Worked-Example Tests) is COMPLETE, 11/11 plans, CHECK-06/TEST-01 CLOSED. Next: Phase 179 (Source-Free Verification Mode) — not yet planned."
+last_updated: "2026-08-01T21:35:00.000Z"
+last_activity: 2026-08-01
 progress:
   total_phases: 11
-  completed_phases: 8
-  total_plans: 88
-  completed_plans: 88
-  percent: 75
+  completed_phases: 9
+  total_plans: 89
+  completed_plans: 89
+  percent: 82
 ---
 
 # Project State
@@ -21,16 +21,55 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **10/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 10 committed
-`178-PRE-REGISTRATION.md` ALONE (`dc4670fe`, one file, before any dispatch), correcting the
-inherited corpus estimate from ~5-6 worked examples to 11 (found by direct read: `one-two-punch`
-alone has six labeled examples, not two) across 25 live slices, and pre-registering the
-satisfiability audit — 3 of the ROADMAP's own success-criteria wordings rewritten, 2 proposed bars
-rejected outright, before any measurement could fail them. Next: Phase 178 plan 11 (the live proof
-on all three reference games).
+**Current focus:** Phase 178 — Worked-Example Tests — **COMPLETE, 11/11 plans**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 11 ran the live
+cross-game proof: real `claude -p` dispatches (two independent runs) against `cp -R` copies of all
+three reference games, closing CHECK-06 and TEST-01 (`178-PROOF.md`). Next: Phase 179 (Source-Free
+Verification Mode) — not yet planned.
 
 ## Current Position
+
+`178-11-PLAN.md` (2026-08-01) — Phase 178 wave 11 of 11, FINAL — the live proof. Two independent,
+live `claude -p` dispatch passes (model: `claude-sonnet-5`, both runs, all games) ran the full
+extract→translate→emit→execute path against `cp -R` staged copies of all three reference games,
+measured against `178-PRE-REGISTRATION.md`'s permitted sets. `seven`'s designated adversarial
+fixture (the Run example) was caught as `example-inconsistent` with both contradicting excerpts
+("5, 6, 7" / "1, 2, 3") on both runs. Two real generated test files were emitted through the
+shipped `verify-example-emit` command and executed by each project's own `vitest`:
+`doom-machine`'s DICE ROLL SYMBOLOGY test PASSED end-to-end; `one-two-punch`'s `punch` chunk FAILED
+honestly on a real construction-API mismatch (not a mechanism defect). **Two Rule 1/2 auto-fixes
+shipped mid-proof, both committed separately with regression tests**: `verify-example-emit` had no
+mechanism to carry a translated example's own `import` statements into the generated file (an
+`import` inside a `describe()` body is a syntax error) — fixed by hoisting/deduping/validating
+imports at file scope; `buildExampleTranslationPayload` never told a translator the generated
+file's real two-directory depth, so a live dispatch guessed the shallower depth a hand-written test
+would use and the import failed to resolve — fixed by stating the real depth explicitly. Both bugs
+were only discoverable by actually executing emitted output, which is this plan's whole point.
+Stability (decision 15, PASS/FAIL outcome only): the 2 examples directly comparable across both
+runs (FIGHT, ADVANCE transitions) agreed FAIL/FAIL. Beyond that narrow definition, real
+identification/translation-attempt variance was found and reported plainly, never smoothed over
+(one-two-punch's second Punch-Examples illustration: code+FAIL run 1, declined-unexecutable run 2;
+doom-machine's dice-roll-symbology composite block resolved a different specific symbol to its one
+PASS each run; doom-machine's `02-player-actions.md` found 0 examples run 1 vs 1 run 2, both
+against a pre-registration that expected 0; a recurring off-by-one line-citation defect affected 3
+of 11 examples on one run each, content always correct, line number sometimes off by one). SC-3
+proven by a new 4-assertion source-inspection test suite in `example-derivation.test.ts` (never by
+dispatching a model), each assertion naming the concrete edit that would break it — the (d)
+assertion caught its own bug on first run (a literal `export function` regex missing the real
+`async`-declared `collectGameApiSurface`), direct evidence the assertions are load-bearing.
+Originals verified byte-identical before and after every dispatch (825/825 files OK across all
+three games, sha256). Full evidence — raw dispatch returns, generated test files, real vitest
+output, ledgers, malformed-return records — under `.planning/phases/178-worked-example-tests/178-PROOF/`;
+narrative in `178-PROOF.md`. CHECK-06 and TEST-01 both CLOSED in `REQUIREMENTS.md` with dated notes
+citing this proof and its honest n=11 limits. **Full `npm test`: 247 files / 4313 tests / 0
+failing** (baseline 4306/247; +7 new tests: 2 import-hoisting, 1 malformed-import-rejection, 1
+depth-guidance, 4 SC-3 assertions minus 1 folded rewrite — see commit history for the exact split).
+See `.planning/phases/178-worked-example-tests/178-11-SUMMARY.md`.
+
+**Phase 178 is COMPLETE (11/11 plans).** CHECK-06 and TEST-01 both CLOSED. ROADMAP.md's Phase 178
+checkbox is checked; the Progress table row reads 11/11, Complete, 2026-08-01.
+
+---
 
 `178-10-PLAN.md` (2026-07-31) — Phase 178 wave 10 of 11 — committed
 `.planning/phases/178-worked-example-tests/178-PRE-REGISTRATION.md` ALONE (`dc4670fe`, `git show
