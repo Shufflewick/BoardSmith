@@ -500,3 +500,168 @@ describe('module header comment — Task 3 acceptance criterion', () => {
     expect(source).toContain('~/BoardSmithGames/seven/src/rules/scoring.ts');
   });
 });
+
+/**
+ * SC-3 — both pipeline sides derive from one module. Completes, rather than duplicates, plan
+ * 05's `CHECK-06 — one derivation implementation (SC-3)` block: that block proved the two skill
+ * files cite the same CONTRACT files; this test proves, by source inspection alone (never by
+ * dispatching a model), that every COMMAND those skills cite is registered, reaches
+ * `example-derivation.ts` in one hop, and that neither command module keeps its own second copy
+ * of the payload-builder logic — a static, structural code-graph fact 178-11's live proof
+ * measured against (178-PROOF.md), never re-proven by that proof itself.
+ *
+ * Each assertion below states, in its own `it` name/body, the concrete edit that would make it
+ * fail — an assertion that cannot fail is not evidence (178-CONTEXT.md decision 14's standard,
+ * applied to code-structure checks, not just acceptance criteria).
+ */
+describe('SC-3 — both pipeline sides derive from one module', () => {
+  const CLI_PATH = fileURLToPath(new URL('../cli.ts', import.meta.url));
+  const BUILD_TEST_MD_PATH = fileURLToPath(
+    new URL('../slash-command/bs/build/test.md', import.meta.url),
+  );
+  const VERIFY_GAME_MD_PATH = fileURLToPath(new URL('../slash-command/bs/verify-game.md', import.meta.url));
+  const REPLAY_PATH = fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url));
+  const EMIT_PATH = fileURLToPath(new URL('./example-test-emit.ts', import.meta.url));
+  const SRC_DIR = fileURLToPath(new URL('../../', import.meta.url)); // src/
+
+  // Every `.command('...')` registration in cli.ts, mapped to the source file its `.action(...)`
+  // handler is imported from (by import specifier, resolved manually below — cli.ts imports every
+  // command handler by explicit `.js` path, so this mapping is exact, not inferred).
+  const COMMAND_TO_HANDLER_MODULE: Record<string, string> = {
+    'verify-example-replay': './commands/verify-example-replay.js',
+    'verify-example-record': './commands/verify-example-replay.js',
+    'verify-example-translate': './commands/verify-example-replay.js',
+    'verify-example-emit': './commands/example-test-emit.js',
+  };
+
+  async function readAll(path: string): Promise<string> {
+    return readFile(path, 'utf-8');
+  }
+
+  it(
+    '(a) every verify-example-* command cited by build/test.md and verify-game.md is registered ' +
+      "in cli.ts, and each registration's handler module transitively imports example-derivation.ts " +
+      '— fails the moment a skill cites a command that is never registered, or whose handler module ' +
+      'stops importing example-derivation.ts',
+    async () => {
+      const [buildTestMd, verifyGameMd, cliSource, replaySource, emitSource] = await Promise.all([
+        readAll(BUILD_TEST_MD_PATH),
+        readAll(VERIFY_GAME_MD_PATH),
+        readAll(CLI_PATH),
+        readAll(REPLAY_PATH),
+        readAll(EMIT_PATH),
+      ]);
+
+      const citedCommands = new Set(
+        [...buildTestMd.matchAll(/verify-example-[a-z]+/g), ...verifyGameMd.matchAll(/verify-example-[a-z]+/g)].map(
+          (m) => m[0],
+        ),
+      );
+      // Both skills together must cite all four commands this milestone shipped — a citation
+      // going stale (e.g. a skill rewrite silently dropping one) fails here first.
+      expect([...citedCommands].sort()).toEqual(
+        ['verify-example-emit', 'verify-example-record', 'verify-example-replay', 'verify-example-translate'].sort(),
+      );
+
+      const moduleSourceByPath: Record<string, string> = {
+        './commands/verify-example-replay.js': replaySource,
+        './commands/example-test-emit.js': emitSource,
+      };
+
+      for (const command of citedCommands) {
+        // Registered: cli.ts contains `.command('<command>')`.
+        expect(cliSource, `${command} must be registered via .command('${command}') in cli.ts`).toContain(
+          `.command('${command}')`,
+        );
+        // Handler module resolves (mapping above is exact — derived from cli.ts's own imports).
+        const handlerModule = COMMAND_TO_HANDLER_MODULE[command];
+        expect(handlerModule, `no known handler module mapping for ${command}`).toBeDefined();
+        // That handler module transitively imports example-derivation.ts in ONE hop.
+        const handlerSource = moduleSourceByPath[handlerModule];
+        expect(
+          handlerSource,
+          `${command}'s handler module (${handlerModule}) must import from './example-derivation.js'`,
+        ).toContain("from './example-derivation.js'");
+      }
+    },
+  );
+
+  it(
+    "(b) verify-example-replay.ts imports buildExampleExtractionPayload, buildExampleTranslationPayload, " +
+      'AND collectGameApiSurface from example-derivation.js — the extraction half and the ' +
+      'translation half, in one module — fails if either import is removed or re-pointed at a ' +
+      'different module',
+    async () => {
+      const replaySource = await readAll(REPLAY_PATH);
+      const importBlockMatch = replaySource.match(/from '\.\/example-derivation\.js';/);
+      expect(importBlockMatch, 'verify-example-replay.ts must import from example-derivation.js').not.toBeNull();
+      for (const symbol of [
+        'buildExampleExtractionPayload',
+        'buildExampleTranslationPayload',
+        'collectGameApiSurface',
+      ]) {
+        expect(
+          replaySource,
+          `verify-example-replay.ts must import ${symbol} from example-derivation.js`,
+        ).toMatch(new RegExp(`\\b${symbol}\\b[\\s\\S]{0,400}from '\\./example-derivation\\.js'`));
+      }
+    },
+  );
+
+  it(
+    '(c) neither verify-example-replay.ts nor example-test-emit.ts declares its own build.*Payload ' +
+      'or collect.*ApiSurface function — fails the moment either command module grows a second, ' +
+      'locally-declared payload builder instead of importing the shared one',
+    async () => {
+      const [replaySource, emitSource] = await Promise.all([readAll(REPLAY_PATH), readAll(EMIT_PATH)]);
+      const localDeclarationRe = /(?:export\s+)?(?:async\s+)?function\s+(build\w*Payload|collect\w*ApiSurface)\s*\(/;
+      expect(replaySource.match(localDeclarationRe)).toBeNull();
+      expect(emitSource.match(localDeclarationRe)).toBeNull();
+    },
+  );
+
+  it(
+    '(d) each of buildExampleExtractionPayload, buildExampleTranslationPayload, and ' +
+      'collectGameApiSurface has exactly ONE `export function` declaration site under src/, and it ' +
+      'is example-derivation.ts — fails the instant anyone copies the derivation logic into a ' +
+      'second module, even if that second module also imports the original (duplication, not ' +
+      'reuse, is what this assertion catches)',
+    async () => {
+      const { readdir } = await import('node:fs/promises');
+      const { join: pathJoin } = await import('node:path');
+
+      async function walk(dir: string): Promise<string[]> {
+        const entries = await readdir(dir, { withFileTypes: true });
+        const files: string[] = [];
+        for (const entry of entries) {
+          if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+          const full = pathJoin(dir, entry.name);
+          if (entry.isDirectory()) {
+            files.push(...(await walk(full)));
+          } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+            files.push(full);
+          }
+        }
+        return files;
+      }
+
+      const allSrcFiles = await walk(SRC_DIR);
+      const symbols = [
+        'buildExampleExtractionPayload',
+        'buildExampleTranslationPayload',
+        'collectGameApiSurface',
+      ];
+
+      for (const symbol of symbols) {
+        const declRe = new RegExp(`export (?:async )?function ${symbol}\\s*\\(`);
+        const sitesFound: string[] = [];
+        for (const file of allSrcFiles) {
+          const source = await readFile(file, 'utf-8');
+          if (declRe.test(source)) sitesFound.push(file);
+        }
+        expect(sitesFound, `${symbol} must have exactly one export-function declaration site`).toHaveLength(1);
+        expect(sitesFound[0]).toContain('example-derivation.ts');
+      }
+    },
+  );
+});

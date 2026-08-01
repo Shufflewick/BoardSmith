@@ -33,7 +33,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 176: Stale-Chunk Repair** - Ruling re-validation against fresh transcription + the three audit lenses re-run per stale chunk (completed 2026-07-30)
 - [x] **Phase 177: Derived-Line Re-Derivation** - Rule-bearing `Derived` lines get an independent second opinion via dual enumeration + reconciliation; CHECK-04 CLOSED 2026-07-31 after the miscalibrated determinism gate was retired (see Result below)
 - [x] **Phase 177.1: Wire CHECK-04's Closed Design Into The Pipeline** - `/bs-verify-game` Step 7 now dispatches the dual-enumeration design CHECK-04 was actually closed on; proven against recorded input AND a real live dispatch (completed 2026-07-31, 8 plans, all 5 success criteria MET, verification 5/5 PASSED — see Result below). **Post-verification code review found 4 CRITICALS that a green suite and a passing goal-backward verification both missed** — one `--slice-path` path traversal, and three ways a wrong arithmetic `claimedResult` could validate against a substituted operand (all three rooted in keying lookups by model-supplied free text rather than stable identity). Fixed as one structural fail-closed change (`d6e14de8`, `22cd9492`, `8d187132`); suite 4125/4125 green. The first CR-03 attempt failed the pinned `analysis-run1.json` reference test and was replaced — that pin exists to stop a fix silently altering CHECK-04's closure evidence, and it worked.
-- [ ] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay
+- [x] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay (completed 2026-08-01, 11 plans, CHECK-06/TEST-01 CLOSED on 178-11's live cross-game proof — see `178-PROOF.md`)
 - [ ] **Phase 179: Source-Free Verification Mode** - `/bs-verify-game` degrades honestly when source is unavailable, naming which defect classes went unchecked
 
 ## Phase Details
@@ -436,7 +436,24 @@ dated 2026-07-30, routed to Phase 178. See `177.1-LIVE-PROOF/PROOF.md` and
   - [x] 178-08-PLAN.md — build/test.md worked-example step (TEST-01), build-blocking, renumbered sequence
   - [x] 178-09-PLAN.md — verify-game.md Step 8 (CHECK-06), Close renumbered to Step 9
   - [x] 178-10-PLAN.md — Pre-registration: expected extraction + satisfiability audit, committed alone
-  - [ ] 178-11-PLAN.md — Live proof on all three reference games, generated tests executed, closure notes
+  - [x] 178-11-PLAN.md — Live proof on all three reference games, generated tests executed, closure notes
+
+**Result**: CHECK-06/TEST-01 CLOSED 2026-08-01 on 178-11's live proof (`178-PROOF.md`). Real
+`claude -p` dispatches ran twice, independently, against `cp -R` copies of all three reference
+games (25 live slices, n=11 pre-registered worked examples: `seven` 2, `one-two-punch` 6,
+`doom-machine` 3 — corrected from the CONTEXT's inherited ~5-6 estimate at pre-registration time,
+178-10). `seven`'s designated adversarial fixture was caught as `example-inconsistent` with both
+contradicting excerpts, both runs. A real generated test (`doom-machine`) PASSED end-to-end
+through the shipped `verify-example-emit` command and the project's own `vitest`; a second
+(`one-two-punch`) FAILED honestly on a real construction-API mismatch. Two Rule 1/2 auto-fixes
+shipped mid-proof (translated `import` statements had no path into the emitted file at all;
+the translation payload never stated the generated file's real directory depth) — both were
+genuine plumbing bugs no prior plan's tests caught, found only by executing the emitted output.
+SC-3 proven by a 4-assertion source-inspection test, each naming the edit that breaks it. Only 2
+of 11 examples were directly comparable across both independent runs (both agreed FAIL/FAIL);
+identification-level variance (translation-attempt disagreement, composite-block symbol
+selection, and slice-level over/under-identification) was found and reported plainly, never
+smoothed over, per decision 17.
 
 ### Phase 179: Source-Free Verification Mode
 **Goal**: A project whose source rulebook is unavailable still gets a verification pass — an honest, reduced one, never a failure and never a silent full-scope claim.
@@ -463,7 +480,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 175. Impact Map & Repair Gating | 8/8 | Complete   | 2026-07-30 |
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
 | 177. Derived-Line Re-Derivation | 13/13 | Executed — goal NOT MET (6/16, 37.5%; CHECK-04 stays OPEN, see Result) | - |
-| 178. Worked-Example Tests | 10/11 | In Progress|  |
+| 178. Worked-Example Tests | 11/11 | Complete   | 2026-08-01 |
 | 179. Source-Free Verification Mode | 0/TBD | Not started | - |
 
 ## Shipped Milestones

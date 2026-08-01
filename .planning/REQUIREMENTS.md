@@ -535,14 +535,44 @@ the tag.
       the engine and mismatches reported as findings. Wired into `/bs-verify-game` as an advisory,
       exit-0 Step 8 (178-09) dispatching the same shared derivation pipeline (`extract-example.md`/
       `translate-example.md`, `verify-example-replay`/`-translate`/`-record`) TEST-01 uses
-      build-side, deliberately asymmetric per decision 11 (never gates the Close). Live cross-game
-      proof (all three reference games, generated tests actually executed) is 178-11's job — this
-      entry tracks reachability, matching TEST-01's own precedent (178-08).
+      build-side, deliberately asymmetric per decision 11 (never gates the Close).
+      **CLOSED 2026-08-01 by 178-11's live cross-game proof** (`.planning/phases/178-worked-example-tests/178-PROOF.md`):
+      real `claude -p` dispatches ran against `cp -R` copies of all three reference games (25 live
+      slices, matching the pre-registration exactly); `seven`'s designated adversarial fixture
+      (the Run example's "5,6,7" vs "1,2,3" contradiction) was caught as `example-inconsistent`
+      with BOTH excerpts recorded, on both of two independent runs; a real generated test
+      (`doom-machine`'s DICE ROLL SYMBOLOGY block) was emitted through the shipped
+      `verify-example-emit` command and PASSED when executed by the project's own `vitest`; a
+      second real generated test (`one-two-punch`'s `punch` chunk) FAILED honestly (a real
+      construction-API mismatch, not a mechanism defect). **What is honestly NOT proven at n=11**:
+      only 2 of 11 pre-registered examples produced a generated test comparable across both
+      independent runs; both agreed FAIL/FAIL (decision 15's outcome-only stability definition),
+      but this is far too small a sample to claim general reliability. **Findings surfaced about
+      the ingest/extraction contract (decision 17), never smoothed over**: a real plumbing bug
+      (translated `import` statements had no path to the emitted file at all — fixed, see below)
+      was found and fixed mid-proof; a 37.5% malformed-response rate on zero-content-line
+      extraction payloads and a recurring off-by-one line-citation defect (3 of 11 examples, one
+      run each) were found and named for future contract hardening, not fixed (both are Rule 4
+      territory — contract/validation changes outside this plan's scope). **Two Rule 1/Rule 2
+      auto-fixes shipped as part of closing this requirement** (both on `main`, both regression-tested):
+      `verify-example-emit` now hoists/dedupes/validates translated `import` statements to file
+      scope (previously no agrees/disagrees example needing a real project import could ever
+      execute once emitted); `buildExampleTranslationPayload` now states the generated file's real
+      two-directory depth so a translator's relative import guess resolves.
 
 ### Build Pipeline (TEST)
 
 - [x] **TEST-01**: `build/test.md` generates example-derived tests for any worked example in the
       chunk's cited slices, so new games accumulate them systematically rather than by chance.
+      **CLOSED 2026-08-01 by 178-11's live cross-game proof** — same evidence base as CHECK-06's
+      closure note above (`.planning/phases/178-worked-example-tests/178-PROOF.md`): the identical
+      extract→translate→emit→execute path both requirements share (SC-3) was exercised live and
+      proven by source inspection (`example-derivation.test.ts`'s `SC-3 — both pipeline sides
+      derive from one module` suite, 4 assertions, each naming the concrete edit that would break
+      it). Build-side asymmetry (a `disagrees` verdict is build-blocking here, per decision 10 —
+      never advisory the way CHECK-06's verify-side replay is) was preserved by design and is not
+      re-tested by this proof, which ran the shared derivation path once per example rather than
+      simulating a full chunk build.
 
 ---
 
@@ -593,6 +623,6 @@ the tag.
 | CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
 | CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
 | CHECK-04 | Phase 177 (delivery: Phase 177.1) | **Complete** — closed 2026-07-31 on the reframed criterion, see the CHECK-04 entry's closure note AND its Phase 177.1 delivery note directly below it. Dual enumeration + reconciliation replaced the retired per-line blind re-derivation design. Measured across THREE reference games (`seven`, `one-two-punch`, `doom-machine`), ~250 line-classifications over four definitive runs (`177-15`, `177-20`, `177-21`, `177-22`): **zero wrongly-`contradicted` lines, zero fabrications passed grounding, zero annotation leaks into any dispatched payload, every result explainable** — the four criteria that protect a user, clean in every run. The fifth criterion (byte-identical classifications across two runs) was RETIRED as miscalibrated: the design's premise is two INDEPENDENT enumerations, independence implies variance, and `claude -p` exposes no temperature/seed control (61 flags, none for sampling). Residual confirmation variance ~12.5% (4/32, `177-22`), entirely in the safe direction — a line may read `corroborated` on one run and `uncorroborated` on another, never falsely `contradicted`. Treat a non-corroboration as "worth a human glance", never as a verdict. **Phase 177.1 closed a reachability gap, not this closure**: the measured design now has a CLI surface (`verify-derive-check`/`verify-derive-record`) and `/bs-verify-game` Step 7 dispatches it directly. Proven against the harness on recorded input (`177.1-REPLAY-PROOF/`, zero mechanical divergence) and a real live run (`177.1-LIVE-PROOF/PROOF.md`) — the live Sonnet-5 reconciler produced a well-formed `arithmeticSpec` for both a `single` and a `chain` claim, code accepted both as correct, and all three live classifications landed within their pre-registered permitted sets. WR-07 stays open, routed to Phase 178. |
-| CHECK-06 | Phase 178 | Complete — reachability wired (`/bs-verify-game` Step 8, advisory, exit 0); live cross-game proof deferred to 178-11, matching TEST-01's own precedent |
-| TEST-01 | Phase 178 | Complete |
+| CHECK-06 | Phase 178 | **Complete** — closed 2026-08-01 by 178-11's live cross-game proof (`178-PROOF.md`); reachability wired (`/bs-verify-game` Step 8, advisory, exit 0) in 178-09 |
+| TEST-01 | Phase 178 | **Complete** — closed 2026-08-01 by 178-11's live cross-game proof (`178-PROOF.md`), SC-3 proven by source inspection |
 | VERIFY-09 | Phase 179 | Pending |
