@@ -329,3 +329,43 @@ response. The remaining 21 slices are unaffected; none of them had a zero-conten
 
 `178-11-SUMMARY.md`'s "Findings recorded, not fixed" entry for this rate has been updated to point
 here rather than repeating the original (incorrect) attribution.
+
+## §12 — CODE-REVIEW FIX (added 2026-08-01): what this proof's results should be read against
+
+`178-REVIEW.md`'s code review (2026-08-01) found 3 criticals — 2 of them bear directly on how the
+measurements above should be read, and both are now fixed (see `178-REVIEW-FIX.md`).
+
+**CR-03 — this proof's ledger entries were keyed by an unvalidated model-supplied `lineNumber`.**
+`workedExampleId({ slicePath, lineNumber })` is documented throughout this module (and this proof)
+as "caller-assigned... never a model-supplied field" — the direct continuation of 177.1's
+CR-01/CR-02 identity fix. In practice, every call site in `verify-example-replay.ts` passed the
+extractor's/translator's own raw `lineNumber` return straight through, unchecked, into
+`workedExampleId`. That is the EXACT hazard class 177.1's code review found and fixed elsewhere
+(lookups keyed by model-supplied text instead of stable caller identity) — reintroduced, one field
+over, in the very module this milestone built to prevent it. Nothing in this proof's dispatches is
+known to have hit the fabricated/off-by-one-lineNumber failure mode (all recorded exampleIds match
+real, re-verified slice line numbers on inspection), but the guard that would have caught it, had
+it happened, did not exist while this proof ran. Fixed: every raw `lineNumber` is now cross-
+validated against `buildExampleExtractionPayload`'s own retained-line set for the slice before it
+is ever used to build an id, failing closed on a fabricated value.
+
+**CR-01 — 2 of `GENERATED_TEST_SANDBOX_RULES`' 5 stated protections were silent no-ops during this
+proof.** `sandbox-scan.ts`'s `FLAT_CONFIG` never enabled `boardsmith/no-element-identity-
+comparison` or `boardsmith/no-element-array-state`, so `scanGeneratedTestCode`'s restriction to
+those two rule ids (among the five named) was a no-op, not a filter — ESLint never ran them at
+all. §3 above states every generated test in this proof "written, executed by the copy's own
+vitest, never in-process" and passed `scanGeneratedTestCode` before being written; that pass is
+still true, but it should be read as having exercised only 3 of the 5 named sandbox rules
+(`no-network`, `no-timers`, `no-eval`), not all 5 — a translated test that compared `GameElement`
+instances by `===` or persisted an element array as state would have been accepted and written
+silently, undetected by this proof's own gate. No evidence in this proof's recorded translated
+code (`178-PROOF/` translation JSON) shows either anti-pattern actually present — the corpus is
+small (≤2 examples/game) and the reviewer's finding was about the gate's structural absence, not
+an observed violation — but the absence of a finding here is not the same guarantee `§3` implied
+at the time it was written. Fixed: both rules are now enabled in `sandbox-scan.ts`'s `FLAT_CONFIG`,
+so `GENERATED_TEST_SANDBOX_RULES` enforces exactly what it names, going forward.
+
+Both fixes are additive (new validation before existing writes; two rules newly enabled) — neither
+required re-running this proof's live dispatches, and neither changes any recorded verdict or
+exampleId above. They are recorded here because they change the honest confidence level this
+proof's results should carry, per the same "state the limit plainly" discipline §9 already holds.
