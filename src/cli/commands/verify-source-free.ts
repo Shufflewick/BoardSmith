@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+import chalk from 'chalk';
 import {
   computeVerificationScope,
   SCOPE_CODE_ONLY,
@@ -244,4 +246,76 @@ export async function computeSourceFreeReport(projectDir: string): Promise<Sourc
     uncheckedDefectClasses,
     checksRun,
   };
+}
+
+// -------------------------------------------------------------------------------------------
+// verifySourceFreeCheckCommand — the read/report CLI surface (179-02)
+// -------------------------------------------------------------------------------------------
+
+export interface VerifySourceFreeCheckOptions {
+  project?: string;
+  json?: boolean;
+}
+
+/**
+ * `boardsmith verify-source-free-check` — the one read-only CLI surface the skill formats. It
+ * RENDERS `computeSourceFreeReport`'s result; it computes nothing itself and accepts no override
+ * of any field that function returns.
+ *
+ * NO `--source-free`, `--force`, `--assume-full`, `--force-scope`, or equivalent flag exists here,
+ * now or ever (179-CONTEXT.md decision 1 / T-179-06): source-free mode is a CONSEQUENCE of the
+ * project's actual disk state, never a caller's claim. A flag here would let a caller declare
+ * reduced scope on a project that HAS source — verification-skipping that still looks verified.
+ *
+ * ADVISORY, EXIT 0 UNCONDITIONALLY on both a source-free AND a full-scope project — a reduced
+ * pass is a SUCCESSFUL pass, never a failure. Non-zero is reserved for genuine tool failure (an
+ * unreadable `--project` directory), which `computeVerificationScope`'s own read path throws for;
+ * this function never assigns `process.exitCode` itself.
+ *
+ * `--project` is resolved with `resolve()` before any filesystem access (via
+ * `computeSourceFreeReport` -> `computeVerificationScope`), matching every sibling read command
+ * (`verify-derive-check`, `verify-example-replay`) so a relative path is normalised once at the
+ * boundary.
+ */
+export async function verifySourceFreeCheckCommand(
+  options: VerifySourceFreeCheckOptions = {},
+): Promise<SourceFreeReport> {
+  const projectDir = resolve(options.project ?? process.cwd());
+  const report = await computeSourceFreeReport(projectDir);
+
+  // `--json` emits the result and nothing else on stdout.
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+    return report;
+  }
+
+  if (report.sourceFree) {
+    console.log(
+      chalk.yellow(
+        `⚠ Source-free mode — scope: ${report.scope}${
+          report.reason ? ` (${report.reason})` : ''
+        }`,
+      ),
+    );
+    console.log(
+      `  ${report.stepsRun.length} of ${VERIFY_PIPELINE_STEPS.length} pipeline step(s) run; ` +
+        `${report.stepsSkipped.length} skipped for lack of input.`,
+    );
+    console.log(`  ${report.checksRun.length} source-free check(s) still run:`);
+    for (const check of report.checksRun) {
+      console.log(`    - ${check.command} (${check.checkId})`);
+    }
+    console.log(`  ${report.uncheckedDefectClasses.length} defect class(es) go unchecked:`);
+    for (const entry of report.uncheckedDefectClasses) {
+      console.log(`    - ${entry.defectClass} — would have been caught by ${entry.wouldHaveBeenCaughtBy}`);
+    }
+  } else {
+    console.log(chalk.green(`✓ Full scope — every pipeline step runs; nothing is skipped.`));
+    console.log(`  ${report.checksRun.length} source-free check(s) among the steps that ran:`);
+    for (const check of report.checksRun) {
+      console.log(`    - ${check.command} (${check.checkId})`);
+    }
+  }
+
+  return report;
 }

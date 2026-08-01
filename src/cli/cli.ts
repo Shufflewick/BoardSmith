@@ -47,6 +47,7 @@ import {
   verifyExampleRecordCommand,
   verifyExampleTranslateCommand,
 } from './commands/verify-example-replay.js';
+import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
@@ -518,6 +519,29 @@ program
   .requiredOption('--extraction <file>', "The extractor's structured JSON return")
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyExampleTranslateCommand);
+
+// VERIFY-09 (179-CONTEXT.md decision 1/4): source-free mode's one read-only CLI surface, over the
+// step -> defect-class mapping and computation `verify-source-free.ts` owns. This command RENDERS
+// `computeSourceFreeReport`'s pure result; it computes nothing itself.
+//
+// NO `--source-free`, no forcing flag, no `--assume-full`, and no scope-override option is
+// registered here, now or ever: source-free is entered from disk state alone (the same
+// `computeVerificationScope` every sibling provenance path already uses), never declared by a
+// caller. A scope-declaring flag here is exactly how a project that HAS source could claim a
+// reduced pass while still looking verified.
+//
+// Exit code is always 0 absent a genuine tool failure (an unreadable `--project` directory) —
+// a reduced, honestly-degraded pass is a SUCCESSFUL pass, never a failure.
+program
+  .command('verify-source-free-check')
+  .description(
+    "Report a project's verification mode (full or source-free), its reduced scope and reason " +
+      'when reduced, and every designer-facing defect class that goes unchecked as a result ' +
+      '(read-only, source-free by construction, machine-readable, exits 0 unconditionally)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifySourceFreeCheckCommand);
 
 // TEST-01 (178-CONTEXT.md decision 8): the build-side write surface — one generated example-test
 // file per chunk (`tests/examples/<chunk>.examples.test.ts`), written idempotently and atomically.

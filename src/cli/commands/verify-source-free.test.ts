@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -10,7 +10,9 @@ import {
   VERIFY_PIPELINE_STEPS,
   SOURCE_FREE_ADDITIONAL_CHECKS,
   computeSourceFreeReport,
+  verifySourceFreeCheckCommand,
 } from './verify-source-free.js';
+import { computeVerificationScope, renderVerifiedAgainst } from './chunk-provenance.js';
 
 /**
  * Decision 7 (179-CONTEXT.md): "A test must FAIL when a pipeline step exists with no
@@ -288,5 +290,350 @@ describe('computeSourceFreeReport', () => {
       'verify-derive-check',
       'verify-example-replay',
     ]);
+  });
+});
+
+/**
+ * Task 1 (179-02): `verifySourceFreeCheckCommand` — the one read-only CLI surface. It renders
+ * `computeSourceFreeReport`'s result; it computes nothing itself. Exit code stays 0 unconditionally
+ * (a reduced pass is a successful pass), never conditioned on `sourceFree`.
+ */
+describe('verifySourceFreeCheckCommand', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-source-free-check-command-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  async function makeSourceFreeFixture(name: string): Promise<string> {
+    const project = join(dir, name);
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: 'rulebook/source/rules.pdf',
+        sourceHash,
+        transcribed: '2026-08-01',
+      }),
+    );
+    // Archived file deliberately never written -> source-missing -> source-free.
+    return project;
+  }
+
+  async function makeFullScopeFixture(name: string): Promise<string> {
+    const project = join(dir, name);
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes, full scope\n');
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash,
+        transcribed: '2026-08-01',
+      }),
+    );
+    await fs.mkdir(join(project, 'rulebook/source'), { recursive: true });
+    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    return project;
+  }
+
+  it('--json prints one JSON object containing sourceFree: true and a non-empty uncheckedDefectClasses on a source-free fixture', async () => {
+    const project = await makeSourceFreeFixture('game-source-free-json');
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (msg?: unknown) => logs.push(String(msg));
+    try {
+      await verifySourceFreeCheckCommand({ project, json: true });
+    } finally {
+      console.log = originalLog;
+    }
+    expect(logs).toHaveLength(1);
+    const parsed = JSON.parse(logs[0]);
+    expect(parsed.sourceFree).toBe(true);
+    expect(parsed.scope).toBe('code-conformance-only');
+    expect(parsed.reason).toBe('source-missing');
+    expect(Array.isArray(parsed.uncheckedDefectClasses)).toBe(true);
+    expect(parsed.uncheckedDefectClasses.length).toBeGreaterThan(0);
+    expect(Array.isArray(parsed.stepsRun)).toBe(true);
+    expect(Array.isArray(parsed.stepsSkipped)).toBe(true);
+    expect(Array.isArray(parsed.checksRun)).toBe(true);
+  });
+
+  it('does not call process.exit / assign process.exitCode with a non-zero code on a source-free fixture', async () => {
+    const project = await makeSourceFreeFixture('game-source-free-exit');
+    const before = process.exitCode;
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await verifySourceFreeCheckCommand({ project, json: true });
+    } finally {
+      logSpy.mockRestore();
+    }
+    expect(process.exitCode).toBe(before);
+    expect(process.exitCode).not.toBe(1);
+  });
+
+  it('does not call process.exit / assign process.exitCode with a non-zero code on a full-scope fixture', async () => {
+    const project = await makeFullScopeFixture('game-full-exit');
+    const before = process.exitCode;
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await verifySourceFreeCheckCommand({ project, json: true });
+    } finally {
+      logSpy.mockRestore();
+    }
+    expect(process.exitCode).toBe(before);
+    expect(process.exitCode).not.toBe(1);
+  });
+
+  it('human output on a source-free project names the mode, the reason, and each unchecked defect class with its responsible check', async () => {
+    const project = await makeSourceFreeFixture('game-source-free-human');
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (msg?: unknown) => logs.push(String(msg));
+    try {
+      await verifySourceFreeCheckCommand({ project });
+    } finally {
+      console.log = originalLog;
+    }
+    const output = logs.join('\n');
+    expect(output).toContain('Source-free mode');
+    expect(output).toContain('source-missing');
+    const report = await computeSourceFreeReport(project);
+    for (const entry of report.uncheckedDefectClasses) {
+      expect(output).toContain(entry.defectClass);
+      expect(output).toContain(entry.wouldHaveBeenCaughtBy);
+    }
+  });
+
+  it('human output on a full-scope project says plainly the pass is full scope and lists no unchecked classes', async () => {
+    const project = await makeFullScopeFixture('game-full-human');
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (msg?: unknown) => logs.push(String(msg));
+    try {
+      await verifySourceFreeCheckCommand({ project });
+    } finally {
+      console.log = originalLog;
+    }
+    const output = logs.join('\n');
+    expect(output).toContain('Full scope');
+    expect(output).not.toContain('unchecked');
+  });
+
+  it('checksRun is scope-invariant: --json reports the same four checks on both a source-free and a full-scope fixture', async () => {
+    const sourceFreeProject = await makeSourceFreeFixture('game-checks-invariant-sf');
+    const fullProject = await makeFullScopeFixture('game-checks-invariant-full');
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    let sourceFreeResult: Awaited<ReturnType<typeof verifySourceFreeCheckCommand>>;
+    let fullResult: Awaited<ReturnType<typeof verifySourceFreeCheckCommand>>;
+    try {
+      sourceFreeResult = await verifySourceFreeCheckCommand({ project: sourceFreeProject, json: true });
+      fullResult = await verifySourceFreeCheckCommand({ project: fullProject, json: true });
+    } finally {
+      logSpy.mockRestore();
+    }
+    expect(sourceFreeResult.checksRun.map((c) => c.command).sort()).toEqual(
+      fullResult.checksRun.map((c) => c.command).sort(),
+    );
+  });
+});
+
+/**
+ * Task 2 (179-02): PROV-02's provenance claim, asserted through the REAL `renderVerifiedAgainst`
+ * output on a real fixture — not a hand-built expectation of what the durable block should
+ * contain. This is 179-CONTEXT.md decision 8: the reduced scope must be recorded in BOTH the run
+ * report AND the durable provenance block, and the two must never disagree (T-179-05).
+ */
+describe('PROV-02 data flow — source-free project', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-source-free-prov02-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('source-missing fixture: renderVerifiedAgainst emits code-conformance-only AND a Reason: source-missing line; computeSourceFreeReport and computeVerificationScope agree', async () => {
+    const project = join(dir, 'game-source-missing');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: 'rulebook/source/rules.pdf',
+        sourceHash,
+        transcribed: '2026-08-01',
+      }),
+    );
+    // Archived file deliberately never written, and no root candidate either.
+
+    const scope = await computeVerificationScope(project);
+    expect(scope.scope).toBe('code-conformance-only');
+    expect(scope.reason).toBe('source-missing');
+
+    const rendered = renderVerifiedAgainst({
+      scope: scope.scope,
+      reason: scope.reason,
+      edition: scope.edition,
+      sourceHash: scope.sourceHash,
+      boardsmithVersion: '0.0.0-test',
+      skillsTreeHash: 'deadbeef',
+      citedSlices: [],
+      unresolved: [],
+    });
+    expect(rendered).toContain('code-conformance-only');
+    expect(rendered.split('\n').some((line) => line.startsWith('Reason:'))).toBe(true);
+    expect(rendered).toContain('Reason: source-missing');
+
+    const report = await computeSourceFreeReport(project);
+    expect(report.reason).toBe(scope.reason);
+    expect(report.scope).toBe(scope.scope);
+  });
+
+  it('pre-provenance-project fixture (no Source hash: line at all): computeSourceFreeReport reports sourceFree: true and agrees with computeVerificationScope', async () => {
+    const project = join(dir, 'game-pre-provenance');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    // one-two-punch's / seven's real pre-Phase-170 shape: an Edition: line, no Source:, no
+    // Source hash: line at all — reproduced directly, matching chunk-provenance.test.ts's own
+    // fixture rather than forking a second copy of it.
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      [
+        '# Rulebook Index — game',
+        '',
+        'Edition: none stated in the rulebook — © 2020 Alright Games (transcribed from `rules.pdf`, 2 pages)',
+        '',
+        'Term → slice cross-reference. Built from the `citedTerms[]` returned by the transcription pass.',
+        '',
+        '| Term | Slice |',
+        '|---|---|',
+        '| Jab | [01-setup.md](01-setup.md) |',
+        '',
+      ].join('\n'),
+    );
+
+    const scope = await computeVerificationScope(project);
+    expect(scope.scope).toBe('code-conformance-only');
+    expect(scope.reason).toBe('pre-provenance-project');
+
+    const report = await computeSourceFreeReport(project);
+    expect(report.sourceFree).toBe(true);
+    expect(report.scope).toBe(scope.scope);
+    expect(report.reason).toBe(scope.reason);
+
+    const rendered = renderVerifiedAgainst({
+      scope: scope.scope,
+      reason: scope.reason,
+      edition: scope.edition,
+      sourceHash: scope.sourceHash,
+      boardsmithVersion: '0.0.0-test',
+      skillsTreeHash: 'deadbeef',
+      citedSlices: [],
+      unresolved: [],
+    });
+    expect(rendered).toContain('Reason: pre-provenance-project');
+  });
+
+  it('full-scope fixture: renderVerifiedAgainst emits no line beginning Reason:', async () => {
+    const project = join(dir, 'game-full');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes, full scope\n');
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash,
+        transcribed: '2026-08-01',
+      }),
+    );
+    await fs.mkdir(join(project, 'rulebook/source'), { recursive: true });
+    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+
+    const scope = await computeVerificationScope(project);
+    expect(scope.scope).toBe('full');
+    expect(scope.reason).toBeUndefined();
+
+    const rendered = renderVerifiedAgainst({
+      scope: scope.scope,
+      reason: scope.reason,
+      edition: scope.edition,
+      sourceHash: scope.sourceHash,
+      boardsmithVersion: '0.0.0-test',
+      skillsTreeHash: 'deadbeef',
+      citedSlices: [],
+      unresolved: [],
+    });
+    expect(rendered.split('\n').some((line) => line.startsWith('Reason:'))).toBe(false);
+
+    const report = await computeSourceFreeReport(project);
+    expect(report.sourceFree).toBe(false);
+  });
+
+  it("verify-source-free-check --json's scope and reason match the same fixture's renderVerifiedAgainst inputs (one project state, one answer)", async () => {
+    const project = join(dir, 'game-cross-surface');
+    const rulebookDir = join(project, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
+    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: 'rulebook/source/rules.pdf',
+        sourceHash,
+        transcribed: '2026-08-01',
+      }),
+    );
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    let cliResult: Awaited<ReturnType<typeof verifySourceFreeCheckCommand>>;
+    try {
+      cliResult = await verifySourceFreeCheckCommand({ project, json: true });
+    } finally {
+      logSpy.mockRestore();
+    }
+
+    const scope = await computeVerificationScope(project);
+    expect(cliResult.scope).toBe(scope.scope);
+    expect(cliResult.reason).toBe(scope.reason);
+
+    const rendered = renderVerifiedAgainst({
+      scope: scope.scope,
+      reason: scope.reason,
+      edition: scope.edition,
+      sourceHash: scope.sourceHash,
+      boardsmithVersion: '0.0.0-test',
+      skillsTreeHash: 'deadbeef',
+      citedSlices: [],
+      unresolved: [],
+    });
+    expect(rendered).toContain(`Reason: ${cliResult.reason}`);
   });
 });
