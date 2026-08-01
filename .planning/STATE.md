@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-02-PLAN.md — example-derivation.ts (SC-3 shared module: WorkedExampleSpec, caller-assigned identity, extraction + translation dispatch payloads) built. Next: Phase 178 plan 03."
-last_updated: "2026-07-31T19:15:00.000Z"
+stopped_at: "Completed 178-03-PLAN.md — CHECK-06 ledger + verify-example-replay read command built, mirroring the CHECK-04 pairing's four code-reviewed guarantees. Next: Phase 178 plan 04 (verify-example-record write surface + QuoteVerifiedProvenance gating + CLI registration)."
+last_updated: "2026-08-01T00:25:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 8
   total_plans: 84
-  completed_plans: 82
-  percent: 74
+  completed_plans: 83
+  percent: 73
 ---
 
 # Project State
@@ -21,13 +21,41 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **2/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 02 built
-`example-derivation.ts`, the SC-3 shared module (`WorkedExampleSpec`, caller-assigned identity,
-fail-closed collision, both extraction/translation dispatch payload builders) both TEST-01 and
-CHECK-06 must route through. Next: Phase 178 plan 03.
+**Current focus:** Phase 178 — Worked-Example Tests — **3/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 03 built
+`verify-example-replay.ts` — the CHECK-06 ledger (frozen verdict enum, one choke-point
+constructor, atomic upsert-append, revalidating read path) plus its read-only `--json` report
+command, mirroring CHECK-04's code-reviewed `verify-derive-check.ts` pairing in structure. Next:
+Phase 178 plan 04 (the `verify-example-record` write surface + `QuoteVerifiedProvenance` gating +
+CLI registration).
 
 ## Current Position
+
+`178-03-PLAN.md` (2026-07-31) — Phase 178 wave 3 of 11 — built `src/cli/commands/verify-example-replay.ts`:
+`EXAMPLE_REPLAY_VERDICTS` (frozen `agrees`/`disagrees`/`example-inconsistent`/`unexecutable` set),
+`createExampleReplayRecord` (the one choke-point constructor — requires a non-empty `reason` for
+EVERY verdict, both `expected`/`observed` for `disagrees`, both `contradictionA`/`contradictionB`
+for `example-inconsistent`, rejects any free-prose field carrying the ledger's own fence marker,
+and requires `exampleId` to equal `workedExampleId({slicePath, lineNumber})` — caller-assigned
+identity, never model-supplied), the atomic upsert-append ledger triad
+(`exampleReplayLedgerPath`/`replaceExampleReplayVerdicts`/`recordExampleReplayVerdicts`/
+`readExampleReplayVerdicts`, writing through `atomicWriteFile`, re-entering
+`createExampleReplayRecord` on every parsed line per CR-02), and `verifyExampleReplayCommand` — a
+read-only, project-wide, exit-0-unconditional report (`--project`/`--json`/`--chunk`, no
+bypass/force/skip flag of any kind) that hands out its own `buildExampleExtractionPayload` bytes
+for pending slices and reports raw per-verdict counts plus a per-slice breakdown, proven to never
+contain a percentage. `--chunk` resolves via `resolveCitedSlices` (`chunk-provenance.ts`) with a
+path-containment guard mirroring `verify-classify.ts`'s `--live-slice` guard (a Rule-2 addition:
+the plan's own `what_must_be_right` section named this requirement even though the threat-model
+table didn't enumerate `--chunk` as a row). Does not import any of the retired blind-derivation
+module's per-line judgment machinery — grep-gated at 0. **Full `npm test`: 246 files / 4213 tests /
+0 failing** (baseline 4180/245; +33 new tests, +1 file). CHECK-06/TEST-01 requirement checkboxes
+deliberately left unchecked — this plan builds the ledger and read command only, not the write
+surface (plan 04) or the pipeline wiring (CLI registration, `verify-game.md` Step 8). See
+`.planning/phases/178-worked-example-tests/178-03-SUMMARY.md`. **8 of 11 plans remain in Phase
+178** — `178-04` is next.
+
+---
 
 `178-02-PLAN.md` (2026-07-31) — Phase 178 wave 2 of 11 — built `src/cli/commands/example-derivation.ts`,
 the ONE shared module both TEST-01 (build-side) and CHECK-06 (verify-side) call to derive a
