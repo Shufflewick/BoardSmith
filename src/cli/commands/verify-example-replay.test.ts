@@ -424,6 +424,24 @@ describe('verifyExampleReplayCommand — command', () => {
     expect(result.slices[0].extractionPayload).toBe(payload);
   });
 
+  it('a slice with zero extractable content lines is reported notDispatchable and carries no extractionPayload (178-12 RED)', async () => {
+    // Plain prose only — no quoted lines, no citation header, no Example/Visual marker, no
+    // doom-machine header form. `buildExampleExtractionPayload` returns `lines: []` for this
+    // text; the defect this test proves was real: BEFORE the fix, `verifyExampleReplayCommand`
+    // still emitted a dispatchable `extractionPayload` (just the handshake token + slice header,
+    // zero content), so a subagent was asked to "extract" from nothing and correctly refused —
+    // the 37.5% "malformed response rate" 178-11's live proof measured was this defect, not
+    // model unreliability (see 178-PROOF.md §11).
+    const project = await makeProject({
+      'rulebook/01-x.md': 'Just some plain prose with no quotes, headers, or markers at all.\n',
+    });
+
+    const result = await verifyExampleReplayCommand({ project });
+    expect(result.slices).toHaveLength(1);
+    expect(result.slices[0].extractionPayload).toBeUndefined();
+    expect(result.slices[0].notDispatchable).toBe('no-extractable-content');
+  });
+
   it('a slice with a recorded verdict is reported not-pending', async () => {
     const text = 'p.1, Definitions:\n"A worked example lives here."\n';
     const project = await makeProject({ 'rulebook/01-x.md': text });

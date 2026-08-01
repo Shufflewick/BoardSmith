@@ -419,12 +419,32 @@ export interface VerifyExampleReplayOptions {
   chunk?: string;
 }
 
+/**
+ * The single named reason a slice is reported `notDispatchable` (178-12) — frozen to one member
+ * today, declared as a union rather than a bare string so a future second reason has a home
+ * without a shape change at every call site.
+ */
+export type ExampleReplayNotDispatchableReason = 'no-extractable-content';
+
 export interface VerifyExampleReplaySlice {
   slicePath: string;
   /** The exact `buildExampleExtractionPayload(...).payload` bytes for this slice. */
   extractionPayload?: string;
   /** Names the slice `buildExampleExtractionPayload` threw for; never dispatched when set. */
   extractionError?: string;
+  /**
+   * Named, machine-readable reason this slice was NEVER offered an `extractionPayload` at all
+   * (178-12) — distinct from `extractionError`: this is not a thrown defect, it is the normal,
+   * expected state of a slice whose text carries zero lines `isExtractionLine` retains (a
+   * `buildExampleExtractionPayload(...).lines.length === 0` slice). Dispatching such a slice's
+   * near-empty payload (just the handshake token + `Slice:` header, no content) asks a model to
+   * "extract" from nothing; the model's only correct response is to decline, which is exactly the
+   * "malformed response" 178-11's live proof measured and mis-attributed to model unreliability —
+   * see `178-PROOF.md` §11. Report it mechanically here instead of ever constructing that
+   * dispatch. First-class-blindness discipline (this module's own `extractionError` precedent,
+   * `verify-ruling-recheck.ts`'s `undetermined` verdict): NAME the state, never drop it silently.
+   */
+  notDispatchable?: ExampleReplayNotDispatchableReason;
   /** `true` when the ledger has no recorded verdict yet whose `slicePath` matches this slice. */
   pending: boolean;
 }
@@ -525,7 +545,16 @@ export async function verifyExampleReplayCommand(
     .map((s) => {
       const pending = !verdicts.some((v) => v.slicePath === s.path);
       try {
-        const { payload } = buildExampleExtractionPayload({ path: s.path, text: s.text });
+        const { payload, lines } = buildExampleExtractionPayload({ path: s.path, text: s.text });
+        // 178-12: a zero-content slice never gets an `extractionPayload` — see
+        // `notDispatchable`'s own doc comment for why this is reported, not thrown.
+        if (lines.length === 0) {
+          return {
+            slicePath: s.path,
+            notDispatchable: 'no-extractable-content' as const,
+            pending,
+          };
+        }
         return { slicePath: s.path, extractionPayload: payload, pending };
       } catch (err) {
         return { slicePath: s.path, extractionError: (err as Error).message, pending };

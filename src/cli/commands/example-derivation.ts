@@ -349,6 +349,17 @@ const DERIVED_REFERENCE_ANYWHERE_RE = new RegExp(
  * independent of where in the line the reference sits. A `Derived` reference is an ingest-time
  * INFERENCE, never directly-quoted content; letting an extractor read one lets it launder an
  * inference into a "worked example."
+ *
+ * Does NOT throw, and returns `lines: []` unmodified (178-12 decision, explicit and recorded
+ * here), when a slice retains zero lines at all. That is a common, legitimate, non-error slice
+ * shape — most rulebook slices simply carry no quoted prose, citation header, or marker line —
+ * not a contract violation the way a leaked `Derived` reference is. Failing closed HERE, at
+ * construction, would force every caller (there is currently exactly one,
+ * `verifyExampleReplayCommand`) to catch a thrown error just to represent an expected, frequent
+ * outcome — the same shape the Derived-reference throw above deliberately reserves for a genuine
+ * defect. The right layer to refuse DISPATCH of a content-free payload is the CALLER that decides
+ * whether to hand `payload` to a model, not this construction site; see
+ * `VerifyExampleReplaySlice.notDispatchable`'s own doc comment for that guard.
  */
 export function buildExampleExtractionPayload(slice: {
   path: string;
