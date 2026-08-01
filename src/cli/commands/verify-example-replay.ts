@@ -2,7 +2,11 @@ import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
-import { readLiveSlices, parseSubagentJsonInput } from './verify-derive-check.js';
+import {
+  readLiveSlices,
+  parseSubagentJsonInput,
+  type SubagentJsonParseResult,
+} from './verify-derive-check.js';
 import { resolveCitedSlices } from './chunk-provenance.js';
 import { QuoteVerifiedProvenance } from './verify-enumerate.js';
 import {
@@ -694,6 +698,12 @@ export interface VerifyExampleRecordResult {
   ledgerPath: string;
   /** The single provenance value applied to EVERY record this invocation wrote (decision 12). */
   provenance: ExampleReplayProvenance;
+  /**
+   * Every JSON-transport repair `parseSubagentJsonInput` performed across `--extraction`/
+   * `--translation` (180-01 finding 5) — logged, never silent. Empty when both files parsed as
+   * bare JSON.
+   */
+  repairs: string[];
 }
 
 /**
@@ -761,7 +771,10 @@ function resolveSlicePathWithinRulebook(projectDir: string, slicePath: string): 
  * Mirrors `verify-derive-check.ts`'s module-private `readRequiredJsonFile` (per this plan's
  * `<interfaces>` — reimplemented here, not imported, since that function is not exported).
  */
-async function readRequiredExampleJsonFile(filePath: string, flagLabel: string): Promise<unknown> {
+async function readRequiredExampleJsonFile(
+  filePath: string,
+  flagLabel: string,
+): Promise<SubagentJsonParseResult> {
   let text: string;
   try {
     text = await fs.readFile(filePath, 'utf-8');
@@ -864,20 +877,17 @@ export async function verifyExampleRecordCommand(
     );
   }
 
-  const extractionRaw = (await readRequiredExampleJsonFile(
-    options.extraction,
-    '--extraction',
-  )) as RawExampleExtractionEntry[];
+  const extractionParsed = await readRequiredExampleJsonFile(options.extraction, '--extraction');
+  const extractionRaw = extractionParsed.value as RawExampleExtractionEntry[];
   if (!Array.isArray(extractionRaw)) {
     throw new Error(`--extraction at "${options.extraction}" must contain a JSON array.`);
   }
-  const translationRaw = (await readRequiredExampleJsonFile(
-    options.translation,
-    '--translation',
-  )) as RawExampleTranslationEntry[];
+  const translationParsed = await readRequiredExampleJsonFile(options.translation, '--translation');
+  const translationRaw = translationParsed.value as RawExampleTranslationEntry[];
   if (!Array.isArray(translationRaw)) {
     throw new Error(`--translation at "${options.translation}" must contain a JSON array.`);
   }
+  const repairs = [...extractionParsed.repairs, ...translationParsed.repairs];
 
   // CR-03 fix: every raw lineNumber is cross-validated against buildExampleExtractionPayload's
   // own retained-line set for this slice BEFORE it is ever used to build a workedExampleId — a
@@ -1022,7 +1032,7 @@ export async function verifyExampleRecordCommand(
   // The ONE mutation this function performs — everything above is validation.
   const { ledgerPath } = await recordExampleReplayVerdicts(projectDir, records);
 
-  const result: VerifyExampleRecordResult = { records, ledgerPath, provenance };
+  const result: VerifyExampleRecordResult = { records, ledgerPath, provenance, repairs };
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
@@ -1034,6 +1044,9 @@ export async function verifyExampleRecordCommand(
     ),
   );
   console.log(`  Ledger: ${ledgerPath}`);
+  for (const repair of repairs) {
+    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
+  }
   return result;
 }
 
@@ -1069,6 +1082,11 @@ export interface VerifyExampleTranslateResult {
   payloads: VerifyExampleTranslatePayloadEntry[];
   /** Entries the extractor already marked `example-inconsistent` — never translated, never re-judged. */
   notTranslated: VerifyExampleTranslateNotTranslatedEntry[];
+  /**
+   * Every JSON-transport repair `parseSubagentJsonInput` performed on `--extraction` (180-01
+   * finding 5) — logged, never silent. Empty when the file parsed as bare JSON.
+   */
+  repairs: string[];
 }
 
 /**
@@ -1150,13 +1168,12 @@ export async function verifyExampleTranslateCommand(
     );
   }
 
-  const extractionRaw = (await readRequiredExampleJsonFile(
-    options.extraction,
-    '--extraction',
-  )) as RawExampleTranslateExtractionEntry[];
+  const extractionParsed = await readRequiredExampleJsonFile(options.extraction, '--extraction');
+  const extractionRaw = extractionParsed.value as RawExampleTranslateExtractionEntry[];
   if (!Array.isArray(extractionRaw)) {
     throw new Error(`--extraction at "${options.extraction}" must contain a JSON array.`);
   }
+  const repairs = [...extractionParsed.repairs];
 
   // CR-03 fix: every raw lineNumber is cross-validated against buildExampleExtractionPayload's
   // own retained-line set for this slice BEFORE it is ever used to build a workedExampleId — a
@@ -1235,6 +1252,7 @@ export async function verifyExampleTranslateCommand(
     apiSurfaceSymbolCount: api.exportedSymbols.length,
     payloads,
     notTranslated: notTranslated.sort((a, b) => a.lineNumber - b.lineNumber),
+    repairs,
   };
 
   // `--json` emits the result and nothing else on stdout. This command writes NOTHING to disk —
@@ -1256,6 +1274,9 @@ export async function verifyExampleTranslateCommand(
   }
   for (const nt of result.notTranslated) {
     console.log(`  ⚠ ${slicePath}:${nt.lineNumber} — not translated: ${nt.reason}`);
+  }
+  for (const repair of repairs) {
+    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
   }
 
   return result;

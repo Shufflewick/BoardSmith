@@ -2,7 +2,11 @@ import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
-import { readLiveSlices, parseSubagentJsonInput } from './verify-derive-check.js';
+import {
+  readLiveSlices,
+  parseSubagentJsonInput,
+  type SubagentJsonParseResult,
+} from './verify-derive-check.js';
 import { resolveCitedSlices } from './chunk-provenance.js';
 import { scanSourceForSandboxViolations, type SandboxViolation } from '../lib/sandbox-scan.js';
 import { workedExampleId } from './example-derivation.js';
@@ -169,9 +173,15 @@ export interface VerifyExampleEmitResult {
   exemptCount: number;
   /** True when the chunk's cited slices carry zero recorded worked examples at all. */
   chunkExempt: boolean;
+  /**
+   * Every JSON-transport repair `parseSubagentJsonInput` performed on `--translated` (180-01
+   * finding 5) — logged, never silent. Empty when the file parsed as bare JSON, or when no
+   * `--translated` file was read at all (nothing to translate).
+   */
+  repairs: string[];
 }
 
-async function readRequiredTranslatedJsonFile(filePath: string): Promise<unknown> {
+async function readRequiredTranslatedJsonFile(filePath: string): Promise<SubagentJsonParseResult> {
   let text: string;
   try {
     text = await fs.readFile(filePath, 'utf-8');
@@ -359,6 +369,7 @@ export async function verifyExampleEmitCommand(
   const executable = records.filter((r) => r.verdict === 'agrees' || r.verdict === 'disagrees');
 
   const codeByExampleId = new Map<string, RawExampleEmitEntry>();
+  let repairs: string[] = [];
   if (executable.length > 0) {
     if (!options.translated) {
       throw new Error(
@@ -367,7 +378,9 @@ export async function verifyExampleEmitCommand(
           `emit. Writing nothing.`,
       );
     }
-    const raw = await readRequiredTranslatedJsonFile(options.translated);
+    const parsed = await readRequiredTranslatedJsonFile(options.translated);
+    const raw = parsed.value;
+    repairs = parsed.repairs;
     if (!Array.isArray(raw)) {
       throw new Error(`--translated at "${options.translated}" must contain a JSON array.`);
     }
@@ -440,6 +453,7 @@ export async function verifyExampleEmitCommand(
     emittedCount: executable.length,
     exemptCount: exempt.length,
     chunkExempt: records.length === 0,
+    repairs,
   };
 
   if (options.json) {
@@ -453,5 +467,8 @@ export async function verifyExampleEmitCommand(
         `${result.exemptCount} exempt example(s)${result.chunkExempt ? ' (chunk-wide exemption)' : ''}.`,
     ),
   );
+  for (const repair of repairs) {
+    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
+  }
   return result;
 }

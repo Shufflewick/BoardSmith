@@ -1222,27 +1222,123 @@ export function reconcileSlice(input: {
 }
 
 /**
+ * `parseSubagentJsonInput`'s return shape: the parsed value, plus a human-readable log of every
+ * transport-artifact repair it took to get there. `repairs` is EMPTY when `text` parsed as JSON
+ * on the first attempt — a repair is only ever reported when one actually ran, never emitted
+ * speculatively (180-01 finding 5: "reports what it repaired... never a silent fix").
+ */
+export interface SubagentJsonParseResult {
+  value: unknown;
+  repairs: string[];
+}
+
+/**
+ * Matches a markdown code fence wrapping the ENTIRE document — ``` or ```json on its own opening
+ * line, a closing ``` on its own line, nothing outside either fence line but surrounding
+ * whitespace. Deliberately narrow: this only recognizes a fence that wraps the *whole* return,
+ * the transport artifact 180-PROOF.md finding 5 observed live (enumerator B's dispatch). It is
+ * NOT the same guard as CR-04's `DERIVE_CHECK_LEDGER_BEGIN`/`END` fence-marker rejection in
+ * `createDeriveCheckRecord` — that guard polices ledger-corruption inside a already-parsed
+ * record's OWN field values and stays exactly as strict; this one only ever strips a fence
+ * surrounding the raw bytes read off disk, before JSON.parse ever runs.
+ */
+const WRAPPING_MARKDOWN_FENCE_RE = /^\s*```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```\s*$/;
+
+/**
+ * Finds the outermost `{...}`/`[...]` span in `text` by locating the first `{` or `[` and the
+ * LAST occurrence of that bracket's matching close character, and returns just that span when it
+ * is a strict subset of `text` (i.e. there is prose to discard on at least one side). Returns
+ * `null` when there is no bracket to anchor on, or when the span is the entirety of `text.trim()`
+ * (nothing to repair). This is deliberately a byte-span heuristic, not a JSON tokenizer — good
+ * enough to discard a prose PREFIX/SUFFIX around one JSON document (180-PROOF.md finding 7: the
+ * reconciler's "```json is forbidden, returning raw JSON." line ahead of its actual return), not
+ * meant to repair malformed JSON *inside* the span.
+ */
+function stripSurroundingProse(text: string): string | null {
+  const firstBracket = text.search(/[{[]/);
+  if (firstBracket === -1) return null;
+  const openChar = text[firstBracket];
+  const closeChar = openChar === '{' ? '}' : ']';
+  const lastClose = text.lastIndexOf(closeChar);
+  if (lastClose === -1 || lastClose <= firstBracket) return null;
+  const span = text.slice(firstBracket, lastClose + 1);
+  if (span === text.trim()) return null;
+  return span;
+}
+
+/**
  * Parses one subagent-return JSON input file's already-read text, throwing ONE actionable
  * message naming the flag and the file path on failure — never a raw `SyntaxError`. Shared by
- * `verifyDeriveRecordCommand` (Task 3) for all three of its `--enumerator-a`/`--enumerator-b`/
- * `--reconciler` file inputs, so the three call sites cannot drift on error shape.
+ * `verifyDeriveRecordCommand`/`verifyExampleRecordCommand`/`verifyExampleTranslateCommand` for
+ * every `--enumerator-a`/`--enumerator-b`/`--reconciler`/`--extraction`/`--translation` file
+ * input, so no call site can drift on error shape or repair behavior (SC-3: exactly one export
+ * site — `example-derivation.test.ts`'s own duplicate-export guard covers this module too).
+ *
+ * A live dispatch's structured "return" is not always bare JSON on disk (180-01 finding 5): a
+ * model can wrap its object in a ` ```json ` fence, or prefix/suffix it with prose. Before
+ * failing, this function tries — in order, each attempt building on the last, each ONLY reported
+ * in `repairs` when it actually changes the candidate text — (1) parsing `text` as-is, (2)
+ * stripping a whole-document wrapping markdown fence, (3) discarding prose before the first
+ * bracket and after the last matching one. A repair is a logged fact about a transport artifact,
+ * never a silent rewrite: `repairs` always reaches the caller (via `readRequiredJsonFile`/
+ * `readRequiredExampleJsonFile`) and from there into the command's own `--json` output.
  */
-export function parseSubagentJsonInput(text: string, flagLabel: string, filePath: string): unknown {
+export function parseSubagentJsonInput(
+  text: string,
+  flagLabel: string,
+  filePath: string,
+): SubagentJsonParseResult {
+  const repairs: string[] = [];
+
   try {
-    return JSON.parse(text);
+    return { value: JSON.parse(text), repairs };
   } catch {
-    throw new Error(
-      `Failed to parse ${flagLabel} JSON at ${filePath}: the file does not contain valid JSON.\n` +
-        `Re-dispatch the subagent and write its structured return to this file, unmodified.`,
-    );
+    // fall through to repair attempts below
   }
+
+  let candidate = text;
+
+  const fenceMatch = candidate.match(WRAPPING_MARKDOWN_FENCE_RE);
+  if (fenceMatch) {
+    candidate = fenceMatch[1];
+    repairs.push(
+      `${flagLabel}: stripped a markdown code fence wrapping the whole JSON document.`,
+    );
+    try {
+      return { value: JSON.parse(candidate), repairs };
+    } catch {
+      // fall through to prose-stripping below, against the fence-stripped candidate
+    }
+  }
+
+  const stripped = stripSurroundingProse(candidate);
+  if (stripped !== null) {
+    repairs.push(
+      `${flagLabel}: discarded prose surrounding the JSON document (before the first bracket ` +
+        `and/or after the last matching one).`,
+    );
+    try {
+      return { value: JSON.parse(stripped), repairs };
+    } catch {
+      // falls through to the actionable failure below
+    }
+  }
+
+  throw new Error(
+    `Failed to parse ${flagLabel} JSON at ${filePath}: the file does not contain valid JSON, ` +
+      `even after stripping a wrapping markdown code fence and surrounding prose.\n` +
+      `Re-dispatch the subagent and write its structured return to this file, unmodified.`,
+  );
 }
 
 // -------------------------------------------------------------------------------------------
 // verifyDeriveRecordCommand — the write surface, retargeted onto reconcileSlice (177.1-03 Task 3)
 // -------------------------------------------------------------------------------------------
 
-async function readRequiredJsonFile(filePath: string, flagLabel: string): Promise<unknown> {
+async function readRequiredJsonFile(
+  filePath: string,
+  flagLabel: string,
+): Promise<SubagentJsonParseResult> {
   let text: string;
   try {
     text = await fs.readFile(filePath, 'utf-8');
@@ -1271,6 +1367,12 @@ export interface VerifyDeriveRecordResult {
   records: DeriveCheckRecord[];
   ledgerPath: string;
   rejected: GroundingRejection[];
+  /**
+   * Every JSON-transport repair `parseSubagentJsonInput` performed across the three subagent
+   * input files (180-01 finding 5) — a fence-wrapped or prose-wrapped return that still parsed,
+   * logged rather than silently fixed. Empty when all three files parsed as bare JSON.
+   */
+  repairs: string[];
 }
 
 /**
@@ -1341,18 +1443,17 @@ export async function verifyDeriveRecordCommand(
     );
   }
 
-  const enumeratorA = (await readRequiredJsonFile(
-    options.enumeratorA,
-    '--enumerator-a',
-  )) as EnumeratorReturn;
-  const enumeratorB = (await readRequiredJsonFile(
-    options.enumeratorB,
-    '--enumerator-b',
-  )) as EnumeratorReturn;
-  const reconciler = (await readRequiredJsonFile(
-    options.reconciler,
-    '--reconciler',
-  )) as ReconcilerReturn;
+  const enumeratorAParsed = await readRequiredJsonFile(options.enumeratorA, '--enumerator-a');
+  const enumeratorBParsed = await readRequiredJsonFile(options.enumeratorB, '--enumerator-b');
+  const reconcilerParsed = await readRequiredJsonFile(options.reconciler, '--reconciler');
+  const enumeratorA = enumeratorAParsed.value as EnumeratorReturn;
+  const enumeratorB = enumeratorBParsed.value as EnumeratorReturn;
+  const reconciler = reconcilerParsed.value as ReconcilerReturn;
+  const repairs = [
+    ...enumeratorAParsed.repairs,
+    ...enumeratorBParsed.repairs,
+    ...reconcilerParsed.repairs,
+  ];
 
   const provenance = await QuoteVerifiedProvenance.obtain(projectDir);
 
@@ -1385,7 +1486,12 @@ export async function verifyDeriveRecordCommand(
 
   const { ledgerPath } = await recordDeriveCheckVerdicts(projectDir, records);
 
-  const result: VerifyDeriveRecordResult = { records, ledgerPath, rejected: grounding.rejected };
+  const result: VerifyDeriveRecordResult = {
+    records,
+    ledgerPath,
+    rejected: grounding.rejected,
+    repairs,
+  };
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
@@ -1397,5 +1503,8 @@ export async function verifyDeriveRecordCommand(
     ),
   );
   console.log(`  Ledger: ${ledgerPath}`);
+  for (const repair of repairs) {
+    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
+  }
   return result;
 }

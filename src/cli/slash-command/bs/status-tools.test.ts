@@ -288,6 +288,75 @@ describe('decision 19 — item 9 reports rules staleness', () => {
   });
 });
 
+/**
+ * 180-01 finding 2 — the Session Lock released-value classification rule.
+ *
+ * state-machine.md's "## Session Lock" section is the sole authority for this rule (no runtime
+ * code parses SKETCH.md anywhere in this repo — the entire `bs-` skill family is prose consumed
+ * by an agent session, exactly like every other file in this directory). This block does two
+ * things a plain string-presence check cannot: (1) pins the exact worked examples the prose must
+ * keep verbatim, and (2) mirrors the prose's stated algorithm in a real function and proves that
+ * mirrored algorithm actually produces the classification the prose claims for all four required
+ * cases — so a future reword that silently changes the algorithm's behavior (not just its
+ * wording) is caught here, not only when a real session misclassifies a real lock line.
+ */
+describe('Session Lock released-value rule (180-01 finding 2)', () => {
+  /** Mirrors state-machine.md's "## Session Lock" released-value algorithm, steps 1-4. */
+  function classifySessionLockValue(raw: string): 'released' | 'lock' {
+    let value = raw.trim();
+    if (value.startsWith('(') && value.endsWith(')')) {
+      value = value.slice(1, -1);
+    }
+    const boundary = value.search(/[\s—]/);
+    const leadingToken = boundary === -1 ? value : value.slice(0, boundary);
+    return leadingToken === 'none' ? 'released' : 'lock';
+  }
+
+  it('the rule and its four worked examples are stated verbatim in state-machine.md', () => {
+    const stateMachine = read('state-machine.md');
+    expect(stateMachine).toContain('180-01 finding 2');
+    expect(stateMachine).toContain(
+      'A lock VALUE — the text after\n  `Session Lock: ` — classifies as RELEASED',
+    );
+    expect(stateMachine).toContain('LEADING TOKEN');
+    expect(stateMachine).toContain(
+      'An ASCII hyphen (`-`) is NOT a token boundary',
+    );
+    // The four required worked examples, byte-exact.
+    expect(stateMachine).toContain('`Session Lock: none` → leading token `none` → **RELEASED**');
+    expect(stateMachine).toContain(
+      '`Session Lock: (none — final-acceptance closed 2026-07-20; sketch complete except\n' +
+        '    ai-opponent, deferred on BSR-12)`',
+    );
+    expect(stateMachine).toContain(
+      '`Session Lock: "movement @ session-f3a1 — locked at\n    2026-07-31T14:22:00Z"` → leading token `movement` → **LOCK**',
+    );
+    expect(stateMachine).toContain(
+      '`Session Lock: "none-the-wiser @ session-ghost — locked at 2026-07-31T00:00:00Z"`',
+    );
+  });
+
+  it('bare "none" classifies as RELEASED', () => {
+    expect(classifySessionLockValue('none')).toBe('released');
+  });
+
+  it("seven's real cleanly-closed value (verbatim) classifies as RELEASED despite having no parseable lock grammar", () => {
+    const seven =
+      '(none — final-acceptance closed 2026-07-20; sketch complete except ai-opponent, deferred on BSR-12)';
+    expect(classifySessionLockValue(seven)).toBe('released');
+  });
+
+  it('a real lock line in the documented grammar classifies as LOCK', () => {
+    const realLock = '"movement @ session-f3a1 — locked at 2026-07-31T14:22:00Z"';
+    expect(classifySessionLockValue(realLock)).toBe('lock');
+  });
+
+  it('an adversarial none-ish value MUST still classify as a lock, never released', () => {
+    const adversarial = '"none-the-wiser @ session-ghost — locked at 2026-07-31T00:00:00Z"';
+    expect(classifySessionLockValue(adversarial)).toBe('lock');
+  });
+});
+
 describe('SKILLAUTO-08 — ledgers surfaced for close reconciliation', () => {
   it('item 4 (waived verifications) is framed as the waived-chunk ledger close reconciliation reads', () => {
     const checkStatus = read('check-status.md');

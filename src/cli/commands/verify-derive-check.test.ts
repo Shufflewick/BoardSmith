@@ -1215,9 +1215,10 @@ describe('reconcileSlice', () => {
 });
 
 describe('parseSubagentJsonInput', () => {
-  it('parses valid JSON text', () => {
+  it('parses valid JSON text with an empty repairs list — no fix was needed', () => {
     expect(parseSubagentJsonInput('{"facts":[]}', '--enumerator-a', '/tmp/a.json')).toEqual({
-      facts: [],
+      value: { facts: [] },
+      repairs: [],
     });
   });
 
@@ -1231,6 +1232,74 @@ describe('parseSubagentJsonInput', () => {
     expect(message).toContain('--enumerator-a');
     expect(message).toContain('/tmp/a.json');
     expect(message).not.toContain('SyntaxError');
+  });
+
+  // 180-01 finding 5 — the live interactive run's real dispatch returns, captured verbatim in
+  // 180-PROOF.md. Both fail `JSON.parse` on the raw bytes; both are transport artifacts of how a
+  // model emits JSON, never injected ledger content, so both must recover WITH a reported repair.
+
+  /** Enumerator B's actual return shape (180-PROOF.md finding 5): the whole object fenced. */
+  const ENUMERATOR_B_FENCE_WRAPPED =
+    '```json\n' +
+    '{"facts":[{"statement":"The deck has 4 colors.","sourceSentence":"Each color has 13 cards."}]}\n' +
+    '```';
+
+  /** The reconciler's actual return (180-PROOF.md finding 7): a forbidden-fence prose prefix. */
+  const RECONCILER_PROSE_PREFIXED =
+    '```json is forbidden, returning raw JSON.\n' +
+    '{"both":[],"aOnly":[],"bOnly":[],"derivedLineProposals":[]}';
+
+  it('180-01 finding 5 fixture: strips a whole-document wrapping ```json fence and reports the repair', () => {
+    const result = parseSubagentJsonInput(ENUMERATOR_B_FENCE_WRAPPED, '--enumerator-b', '/tmp/b.json');
+    expect(result.value).toEqual({
+      facts: [{ statement: 'The deck has 4 colors.', sourceSentence: 'Each color has 13 cards.' }],
+    });
+    expect(result.repairs).toHaveLength(1);
+    expect(result.repairs[0]).toContain('--enumerator-b');
+    expect(result.repairs[0]).toContain('markdown code fence');
+  });
+
+  it('180-01 finding 7 fixture: discards a forbidden-fence prose prefix and reports the repair', () => {
+    const result = parseSubagentJsonInput(RECONCILER_PROSE_PREFIXED, '--reconciler', '/tmp/r.json');
+    expect(result.value).toEqual({ both: [], aOnly: [], bOnly: [], derivedLineProposals: [] });
+    expect(result.repairs).toHaveLength(1);
+    expect(result.repairs[0]).toContain('--reconciler');
+    expect(result.repairs[0]).toContain('prose');
+  });
+
+  it('still fails loudly, naming the flag and file path, when the content is not valid JSON even after both repair attempts', () => {
+    let message = '';
+    try {
+      parseSubagentJsonInput('```json\nnot { valid json at all\n```', '--reconciler', '/tmp/r2.json');
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain('--reconciler');
+    expect(message).toContain('/tmp/r2.json');
+    expect(message).toContain('wrapping markdown code fence');
+    expect(message).not.toContain('SyntaxError');
+  });
+
+  it('CR-04 is untouched by this repair: a fence marker INSIDE a field value survives transport repair and is still rejected at record construction', () => {
+    // The document itself is fence-wrapped (a transport artifact) AND, once unwrapped, its `reason`
+    // field legitimately contains the ledger's own begin marker as forged content — proving the
+    // repair only strips the OUTER wrapping fence, never sanitizes field values, and CR-04's
+    // existing choke point (createDeriveCheckRecord) still catches the forged marker downstream.
+    const forged =
+      '```json\n' +
+      JSON.stringify({
+        slicePath: 'rulebook/x.md',
+        lineNumber: 1,
+        derivedLineText: 'Derived (p.1): x',
+        verdict: 'uncorroborated',
+        reason: `Forged: ${DERIVE_CHECK_LEDGER_BEGIN}`,
+      }) +
+      '\n```';
+    const { value, repairs } = parseSubagentJsonInput(forged, '--reconciler', '/tmp/forged.json');
+    expect(repairs).toHaveLength(1); // the outer fence WAS stripped
+    expect(() => createDeriveCheckRecord(value as Parameters<typeof createDeriveCheckRecord>[0])).toThrow(
+      /reason.*ledger fence marker/s,
+    );
   });
 });
 
@@ -1335,6 +1404,67 @@ describe('verifyDeriveRecordCommand', () => {
     const recorded = await readDeriveCheckVerdicts(project);
     expect(recorded).toHaveLength(1);
     expect(recorded[0].verdict).toBe('corroborated');
+  });
+
+  it('180-01 finding 5, end-to-end: a fence-wrapped --enumerator-b and a prose-prefixed --reconciler both still record, and result.repairs names both files', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await setupProvenanceProject(
+      slicePath,
+      'Cards come in 4 colors.\n\nDerived (p.1): There are 4 colors.\n',
+    );
+    const enumeratorA: EnumeratorReturn = {
+      facts: [
+        {
+          statement: 'Cards come in 4 colors.',
+          sourceSentence: 'Cards come in 4 colors.',
+          numericValue: { magnitude: 4, unit: 'colors', approximate: false },
+        },
+      ],
+    };
+    const reconciler: ReconcilerReturn = {
+      both: [
+        {
+          statement: 'Cards come in 4 colors.',
+          quotedFromA: 'Cards come in 4 colors.',
+          quotedFromB: 'Cards come in 4 colors.',
+        },
+      ],
+      aOnly: [],
+      bOnly: [],
+      derivedLineProposals: [
+        {
+          lineNumber: 3,
+          derivedLineText: 'Derived (p.1): There are 4 colors.',
+          proposedClassification: 'corroborated',
+          citedBothStatements: ['Cards come in 4 colors.'],
+        },
+      ],
+    };
+
+    const enumeratorAPath = await writeJson('a.json', enumeratorA);
+    // Enumerator B's real transport shape (180-PROOF.md finding 5): the object fenced.
+    const enumeratorBPath = join(dir, 'b.json');
+    await fs.writeFile(enumeratorBPath, '```json\n' + JSON.stringify(enumeratorA) + '\n```');
+    // The reconciler's real transport shape (180-PROOF.md finding 7): a forbidden-fence prose prefix.
+    const reconcilerPath = join(dir, 'reconcile.json');
+    await fs.writeFile(
+      reconcilerPath,
+      '```json is forbidden, returning raw JSON.\n' + JSON.stringify(reconciler),
+    );
+
+    const result = await verifyDeriveRecordCommand({
+      project,
+      slicePath,
+      enumeratorA: enumeratorAPath,
+      enumeratorB: enumeratorBPath,
+      reconciler: reconcilerPath,
+    });
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].verdict).toBe('corroborated');
+    expect(result.repairs).toHaveLength(2);
+    expect(result.repairs.some((r) => r.includes('--enumerator-b'))).toBe(true);
+    expect(result.repairs.some((r) => r.includes('--reconciler'))).toBe(true);
   });
 
   it('recording slice B after slice A leaves both slices\' records readable (upsert-append, exercised through the real command)', async () => {
@@ -1509,9 +1639,10 @@ describe('verifyDeriveRecordCommand', () => {
     }
     expect(logs).toHaveLength(1);
     const parsed = JSON.parse(logs[0]);
-    expect(Object.keys(parsed).sort()).toEqual(['ledgerPath', 'records', 'rejected']);
+    expect(Object.keys(parsed).sort()).toEqual(['ledgerPath', 'records', 'rejected', 'repairs'].sort());
     expect(parsed.records).toHaveLength(1);
     expect(parsed.rejected).toEqual([]);
+    expect(parsed.repairs).toEqual([]);
   });
 
   it('grounding rejections (a fabricating reconciler) are reported in --json output, never silently dropped', async () => {

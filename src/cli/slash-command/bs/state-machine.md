@@ -161,10 +161,48 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
   `build/close.md` "Bookkeeping Sequence", whose final numbered step is exactly this release, and
   this is the terminal write of that sequence. Because a clean close always releases to `none`, a
   later same-day session that resumes a DIFFERENT next chunk finds no live lock at all and does
-  not warn — this is the root fix for the same-day false-alarm defect (SKILLDEF-01). `none` is the
-  released/no-lock value; only a non-`none` lock line is ever classified against the three
-  outcomes below.
-- **Staleness criterion** (evaluated by consistency-check item 4): a lock is **stale** when its
+  not warn — this is the root fix for the same-day false-alarm defect (SKILLDEF-01).
+- **The released-value classification rule (180-01 finding 2).** A lock VALUE — the text after
+  `Session Lock: ` — classifies as RELEASED, never a live lock, under this exact mechanical test,
+  applied in order:
+  1. Trim surrounding whitespace.
+  2. If the trimmed value is wholly wrapped in one pair of parentheses (starts with `(` and ends
+     with `)`), strip that one outer pair before continuing.
+  3. Read the LEADING TOKEN: every character from the start up to (not including) the first
+     whitespace character, the first em dash (`—`), or the end of the string — whichever comes
+     first. An ASCII hyphen (`-`) is NOT a token boundary — chunk slugs routinely contain hyphens
+     (e.g. `player-movement`), so a bare hyphen can never be trusted to end a word.
+  4. The value is RELEASED if and only if that leading token is exactly the four characters
+     `none` (lowercase, case-sensitive — matching this file's case-sensitive `Status:` convention,
+     "Cold-Resume Parse Contract" above). Anything else — including a token that merely CONTAINS
+     `none` as a substring, or a value where the word `none` appears somewhere other than the
+     leading token — is a LOCK, and is classified against the three staleness outcomes below,
+     exactly like any other lock.
+
+  This is a byte-level rule, not a semantic one: it exists so a human-written closing annotation
+  next to the released marker (commentary about WHY or WHEN a project closed) can never be misread
+  as an active lock, while a real lock's `<slug> @ <session-id> — locked at <ISO timestamp>`
+  grammar — whose leading token is always the chunk slug, never `none` — can never be misread as
+  released.
+
+  - Worked example — bare release: `Session Lock: none` → leading token `none` → **RELEASED**.
+  - Worked example — a real shipped project's cleanly-closed value (`~/BoardSmithGames/seven`,
+    verbatim): `Session Lock: (none — final-acceptance closed 2026-07-20; sketch complete except
+    ai-opponent, deferred on BSR-12)` → outer parens stripped → leading token `none` (the em dash
+    ends the token) → **RELEASED**, despite carrying no parseable ISO timestamp and none of the
+    lock grammar below — this parenthetical is commentary, not a lock.
+  - Worked example — a real lock: `Session Lock: "movement @ session-f3a1 — locked at
+    2026-07-31T14:22:00Z"` → leading token `movement` → **LOCK**, classified against the three
+    staleness outcomes below by its timestamp.
+  - Worked adversarial example — a none-ISH value that MUST still classify as a lock:
+    `Session Lock: "none-the-wiser @ session-ghost — locked at 2026-07-31T00:00:00Z"` → leading
+    token `none-the-wiser` (the hyphen is not a boundary, so the whole slug-shaped word is read) —
+    this is NOT the exact string `none`, so it is **LOCK**, never released, even though the
+    substring `none` appears at its start. A rule that stopped at the first hyphen, or merely
+    tested "starts with `none`", would misclassify this as released — this worked example exists
+    specifically to pin against that mistake.
+- **Staleness criterion** (evaluated by consistency-check item 4, and only ever reached for a
+  value the rule above classifies as a LOCK): a lock is **stale** when its
   timestamp is more than 24 hours old — a crashed or abandoned session, not a live one; the
   session reports it and the user confirms clearing it. A lock naming the same chunk the
   entering session is resuming is **not** stale and does not warn — the session refreshes the
