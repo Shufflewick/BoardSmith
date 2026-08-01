@@ -50,6 +50,8 @@ const ALL_VERIFY_FILES = [
   'verify/repair-dispatch.md',
   'verify/enumerate-facts.md',
   'verify/reconcile-facts.md',
+  'verify/extract-example.md',
+  'verify/translate-example.md',
 ];
 
 describe('verify-game.md — entry point shape (VERIFY-01)', () => {
@@ -773,6 +775,149 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     it('the two retired contracts (derive-recheck.md, derive-compare.md) do NOT land under .claude/skills/bs-shared/verify/', () => {
       expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-recheck.md'))).toBe(false);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-compare.md'))).toBe(false);
+    });
+  });
+});
+
+describe('extract-example.md — CHECK-06/TEST-01\'s first judgment contract (178-07)', () => {
+  it('carries the BS-EXAMPLE-EXTRACT-V1 token and a DISPATCH REJECTED block', () => {
+    const doc = read('verify/extract-example.md');
+    expect(doc).toContain('BS-EXAMPLE-EXTRACT-V1');
+    expect(doc).toContain('DISPATCH REJECTED');
+  });
+
+  it('its EXAMPLE_EXTRACTION_TOKEN pin matches the real exported constant (cross-file lexicon pin)', async () => {
+    const { EXAMPLE_EXTRACTION_TOKEN } = await import('../../commands/example-derivation.js');
+    expect(EXAMPLE_EXTRACTION_TOKEN).toBe('BS-EXAMPLE-EXTRACT-V1');
+    const doc = read('verify/extract-example.md');
+    expect(doc).toContain(EXAMPLE_EXTRACTION_TOKEN);
+  });
+
+  it('names all four RETURN-relevant strings: transition, predicate, example-inconsistent, supportingQuoteLines', () => {
+    const doc = read('verify/extract-example.md');
+    expect(doc).toContain('transition');
+    expect(doc).toContain('predicate');
+    expect(doc).toContain('example-inconsistent');
+    expect(doc).toContain('supportingQuoteLines');
+  });
+
+  it('forbids the contract from inventing an id', () => {
+    const doc = flat(read('verify/extract-example.md'));
+    expect(doc).toMatch(/must NEVER invent an `id`/);
+  });
+
+  it('never-sees list names game source code, existing tests, and Derived (p. lines', () => {
+    const doc = flat(read('verify/extract-example.md'));
+    expect(doc).toMatch(/the game's source code.{0,80}no rules file, no test file, nothing under `src\/`/);
+    expect(doc).toMatch(/any existing test file, generated or hand-written/);
+    expect(doc).toMatch(/any `Derived \(p\.N\):` line/);
+  });
+
+  it('states the example-inconsistent rule with the seven Run case, and that zero examples is a legitimate result', () => {
+    const doc = flat(read('verify/extract-example.md'));
+    expect(doc).toMatch(/never pick a side/i);
+    expect(doc).toMatch(/5, 6, 7/);
+    expect(doc).toMatch(/1, 2, 3/);
+    expect(doc).toMatch(/A zero-examples return is a legitimate, expected result/);
+  });
+
+  it('carries a scope-limit sentence', () => {
+    expect(read('verify/extract-example.md')).toContain('## Scope limit');
+  });
+});
+
+describe('translate-example.md — CHECK-06/TEST-01\'s second judgment contract (178-07)', () => {
+  it('carries the BS-EXAMPLE-TRANSLATE-V1 token and a DISPATCH REJECTED block', () => {
+    const doc = read('verify/translate-example.md');
+    expect(doc).toContain('BS-EXAMPLE-TRANSLATE-V1');
+    expect(doc).toContain('DISPATCH REJECTED');
+  });
+
+  it('its EXAMPLE_TRANSLATION_TOKEN pin matches the real exported constant (cross-file lexicon pin)', async () => {
+    const { EXAMPLE_TRANSLATION_TOKEN } = await import('../../commands/example-derivation.js');
+    expect(EXAMPLE_TRANSLATION_TOKEN).toBe('BS-EXAMPLE-TRANSLATE-V1');
+    const doc = read('verify/translate-example.md');
+    expect(doc).toContain(EXAMPLE_TRANSLATION_TOKEN);
+  });
+
+  it('has separately-headed transition and predicate branches; predicate names ScoringPattern, check, and the card-element input shape', () => {
+    const doc = read('verify/translate-example.md');
+    expect(doc).toMatch(/\*\*`transition`:\*\*/);
+    expect(doc).toMatch(/\*\*`predicate`:\*\*/);
+    expect(doc).toContain('ScoringPattern');
+    expect(doc).toContain('.check');
+    expect(doc).toMatch(/constructed card elements, not raw numbers/);
+  });
+
+  it('enumerates at least three named unexecutable reasons and forbids guessing at an absent API', () => {
+    const doc = read('verify/translate-example.md');
+    expect(doc).toContain('no-matching-symbol');
+    expect(doc).toContain('unmodeled-component-state');
+    expect(doc).toContain('image-derived-indeterminate');
+    const flat_ = flat(doc);
+    expect(flat_).toMatch(/Guessing at an API that is not in the supplied surface is forbidden/);
+  });
+
+  it('never-sees list names existing test files', () => {
+    const doc = flat(read('verify/translate-example.md'));
+    expect(doc).toMatch(/any existing test file, generated or hand-written, anywhere in the project/);
+  });
+
+  it('states the verdict comes from running the test, never from verdictHint', () => {
+    const doc = flat(read('verify/translate-example.md'));
+    expect(doc).toMatch(
+      /actual `agrees`\/`disagrees` verdict this pipeline records\s*comes from RUNNING the emitted test/,
+    );
+  });
+
+  it('names GENERATED_TEST_SANDBOX_RULES\' five rules explicitly', async () => {
+    const { GENERATED_TEST_SANDBOX_RULES } = await import('../../commands/example-test-emit.js');
+    const doc = read('verify/translate-example.md');
+    expect(GENERATED_TEST_SANDBOX_RULES.length).toBeGreaterThan(0);
+    for (const rule of GENERATED_TEST_SANDBOX_RULES) {
+      expect(doc).toContain(rule.replace('boardsmith/', ''));
+    }
+  });
+
+  it('carries a scope-limit sentence', () => {
+    expect(read('verify/translate-example.md')).toContain('## Scope limit');
+  });
+});
+
+describe('extract-example.md / translate-example.md — the two tokens are distinct (178-07)', () => {
+  it('neither file contains the other\'s token', () => {
+    const extract = read('verify/extract-example.md');
+    const translate = read('verify/translate-example.md');
+    expect(extract).not.toContain('BS-EXAMPLE-TRANSLATE-V1');
+    expect(translate).not.toContain('BS-EXAMPLE-EXTRACT-V1');
+  });
+
+  describe('installer leaf probes — real install proves both contracts ship (178-07)', () => {
+    let tempDir: string;
+    let origCwd: string;
+    let skillsRoot: string;
+
+    beforeAll(async () => {
+      const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
+      origCwd = process.cwd();
+      tempDir = mkdtempSync(join(tmpdir(), 'bs-install-extract-translate-'));
+      process.chdir(tempDir);
+      await installClaudeCommand({ local: true, force: true, skipLink: true });
+      skillsRoot = join(tempDir, '.claude', 'skills');
+    });
+
+    afterAll(() => {
+      process.chdir(origCwd);
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it('both new contract files land under .claude/skills/bs-shared/verify/, content intact', () => {
+      const extractPath = join(skillsRoot, 'bs-shared', 'verify', 'extract-example.md');
+      const translatePath = join(skillsRoot, 'bs-shared', 'verify', 'translate-example.md');
+      expect(existsSync(extractPath)).toBe(true);
+      expect(existsSync(translatePath)).toBe(true);
+      expect(readFileSync(extractPath, 'utf-8')).toContain('BS-EXAMPLE-EXTRACT-V1');
+      expect(readFileSync(translatePath, 'utf-8')).toContain('BS-EXAMPLE-TRANSLATE-V1');
     });
   });
 });

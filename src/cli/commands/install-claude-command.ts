@@ -77,6 +77,8 @@ const SHARED_LEAF_PROBES = [
   join(SHARED_ROOT, 'verify', 'repair-dispatch.md'),
   join(SHARED_ROOT, 'verify', 'enumerate-facts.md'),
   join(SHARED_ROOT, 'verify', 'reconcile-facts.md'),
+  join(SHARED_ROOT, 'verify', 'extract-example.md'),
+  join(SHARED_ROOT, 'verify', 'translate-example.md'),
 ];
 
 /** Filter applied to every recursive tree copy: never ship test files. */
