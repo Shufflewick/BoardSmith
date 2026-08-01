@@ -35,7 +35,7 @@ no archived source degrades honestly instead of failing.
 - [x] **Phase 177.1: Wire CHECK-04's Closed Design Into The Pipeline** - `/bs-verify-game` Step 7 now dispatches the dual-enumeration design CHECK-04 was actually closed on; proven against recorded input AND a real live dispatch (completed 2026-07-31, 8 plans, all 5 success criteria MET, verification 5/5 PASSED — see Result below). **Post-verification code review found 4 CRITICALS that a green suite and a passing goal-backward verification both missed** — one `--slice-path` path traversal, and three ways a wrong arithmetic `claimedResult` could validate against a substituted operand (all three rooted in keying lookups by model-supplied free text rather than stable identity). Fixed as one structural fail-closed change (`d6e14de8`, `22cd9492`, `8d187132`); suite 4125/4125 green. The first CR-03 attempt failed the pinned `analysis-run1.json` reference test and was replaced — that pin exists to stop a fix silently altering CHECK-04's closure evidence, and it worked.
 - [x] **Phase 178: Worked-Example Tests** - Worked examples as executable tests in both `build/test.md` and verify replay (completed 2026-08-01, 11 plans, CHECK-06/TEST-01 CLOSED on 178-11's live cross-game proof — see `178-PROOF.md`)
 - [x] **Phase 179: Source-Free Verification Mode** - `/bs-verify-game` degrades honestly when source is unavailable, naming which defect classes went unchecked (completed 2026-08-01, 6 plans, VERIFY-09 CLOSED on 179-06's live proof — see `179-PROOF.md`)
-- [ ] **Phase 180: Install Gap & Interactive Orchestrator Proof** - `/bs-verify-game` and every `verify/` contract were NEVER INSTALLED; all milestone proofs ran a path that bypasses installation
+- [x] **Phase 180: Install Gap & Interactive Orchestrator Proof** - `/bs-verify-game` and every `verify/` contract were NEVER INSTALLED; all milestone proofs ran a path that bypasses installation. **Installed, then run for real: 7 divergences found, 177.1's CR-03 fix fired on live data for the first time, and 2 of 3 live dispatches returned unparseable JSON against a skill with no repair step.** Findings 5 and 2 FIXED; 1/3/4/6/7 documented and carried. Full-source Steps 2-6 and Step 8's dispatches remain un-exercised interactively (completed 2026-08-01)
 
 ## Phase Details
 
@@ -559,7 +559,17 @@ individually. None of them asked whether the *pipeline itself* was reachable.
      fails to convey mechanical work" and skips steps it has just read. **A clean run is the
      surprising outcome here, not the expected one.**
 
-**Plans**: TBD
+**Plans**: 1 gap-closure plan (180-01) + the install and interactive proof, run directly.
+
+Plans:
+- [x] Install remediation — `npx boardsmith claude --force`; all 12 `verify/` contracts installed, retired `derive-recheck.md`/`derive-compare.md` correctly absent (SC-1)
+- [x] `180-PROOF.md` — the first real interactive `/bs-verify-game` run: source-free path end-to-end through the Close, 3 live cross-family dispatches, `Scope: code-conformance-only` read back FROM DISK across 17 chunks, original whole-tree clean (SC-2, SC-3, SC-4, SC-5)
+- [x] 180-01 — findings 5 (JSON transport tolerance, with visible `repairs[]`, CR-04 untouched) and 2 (Session Lock released-value rule) FIXED
+
+**Result:** SC-1/2/3/4 MET. SC-5 answered emphatically — **the run was NOT clean**, which is what
+Phase 170's foundational finding predicted and what every prior CLI-path proof was structurally
+unable to show. Open: the full-source interactive path (Steps 2-6), Step 8's extract/translate
+dispatches to a recorded verdict, Step 7's second slice, and findings 1/3/4/6/7.
 
 ## Shipped Milestones
 
