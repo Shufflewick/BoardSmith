@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
@@ -1081,5 +1081,105 @@ describe('verifyExampleTranslateCommand — translate', () => {
       'utf-8',
     );
     expect(/run-id|force|--skip|overwrite/.test(source)).toBe(false);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
+// Plan 178-05, Task 2 — CHECK-06 one derivation implementation (SC-3)
+// -------------------------------------------------------------------------------------------
+
+describe('CHECK-06 — one derivation implementation (SC-3)', () => {
+  // THIS BLOCK IS THE FALSIFIER: it fails the moment a second implementation of either payload
+  // builder, or of collectGameApiSurface, is added anywhere under src/ — reading source text, not
+  // runtime behavior. This milestone has already retired three structurally unfireable backstops
+  // (178-CONTEXT.md decision 14's own stated cost); the third test below demonstrates this one
+  // genuinely fires, against an in-test mutated COPY of the scan input, never a real file.
+  const SHARED_SYMBOLS = [
+    'buildExampleTranslationPayload',
+    'buildExampleExtractionPayload',
+    'collectGameApiSurface',
+  ] as const;
+
+  function declarationRe(name: string): RegExp {
+    return new RegExp(`^export\\s+(?:async\\s+)?function\\s+${name}\\b`, 'gm');
+  }
+
+  async function walkNonTestTsFiles(dir: string): Promise<string[]> {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const files: string[] = [];
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules') continue;
+        files.push(...(await walkNonTestTsFiles(full)));
+      } else if (
+        entry.isFile() &&
+        entry.name.endsWith('.ts') &&
+        !entry.name.endsWith('.test.ts')
+      ) {
+        files.push(full);
+      }
+    }
+    return files;
+  }
+
+  const HERE = dirname(fileURLToPath(import.meta.url));
+  const SRC_ROOT = join(HERE, '..', '..');
+
+  async function collectDeclarationSites(): Promise<Map<string, string[]>> {
+    const allFiles = await walkNonTestTsFiles(SRC_ROOT);
+    const sites = new Map<string, string[]>();
+    for (const name of SHARED_SYMBOLS) sites.set(name, []);
+    for (const file of allFiles) {
+      const text = await fs.readFile(file, 'utf-8');
+      const relPath = relative(SRC_ROOT, file).split('\\').join('/');
+      for (const name of SHARED_SYMBOLS) {
+        if (declarationRe(name).test(text)) {
+          sites.get(name)!.push(relPath);
+        }
+      }
+    }
+    return sites;
+  }
+
+  it('each shared symbol is declared exactly once across src/, in example-derivation.ts', async () => {
+    const sites = await collectDeclarationSites();
+    for (const name of SHARED_SYMBOLS) {
+      expect(sites.get(name)).toEqual(['cli/commands/example-derivation.ts']);
+    }
+  });
+
+  it('verify-example-replay.ts imports all three shared symbols from example-derivation.js, and declares none of them itself', async () => {
+    const source = await fs.readFile(join(HERE, 'verify-example-replay.ts'), 'utf-8');
+    for (const name of SHARED_SYMBOLS) {
+      const importRe = new RegExp(
+        `import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*'\\./example-derivation\\.js'`,
+      );
+      expect(source).toMatch(importRe);
+    }
+    // No local `function build...Payload` / `function collect...ApiSurface` declaration of any
+    // kind (exported or not) may exist in this module — the second implementation this gate
+    // exists to forbid.
+    expect(source).not.toMatch(/\bfunction\s+build\w*Payload\b/);
+    expect(source).not.toMatch(/\bfunction\s+collect\w*ApiSurface\b/);
+  });
+
+  it('is a real detector: scanning a mutated COPY of example-derivation.ts (a duplicate declaration appended) reports 2 matches, never a real file on disk', async () => {
+    const derivationPath = join(SRC_ROOT, 'cli', 'commands', 'example-derivation.ts');
+    const realText = await fs.readFile(derivationPath, 'utf-8');
+    const name = 'buildExampleTranslationPayload';
+
+    const realMatches = [...realText.matchAll(declarationRe(name))];
+    expect(realMatches).toHaveLength(1);
+
+    // Mutate a COPY of the real text — appended in-memory, never written to disk — to simulate a
+    // second implementation appearing anywhere under src/, then re-run the SAME counting logic
+    // the two tests above use.
+    const mutatedText =
+      realText +
+      `\nexport function ${name}(spec: unknown, api: unknown): string {\n  return '';\n}\n`;
+    const mutatedMatches = [...mutatedText.matchAll(declarationRe(name))];
+    expect(mutatedMatches).toHaveLength(2);
+    expect(mutatedMatches.length).not.toBe(realMatches.length);
   });
 });

@@ -185,3 +185,84 @@ describe('verify-example-record — registration (CHECK-06, the ONLY write surfa
     expect(result.stderr).toContain('required option');
   });
 });
+
+describe('verify-example-translate — registration (CHECK-06, the second dispatch\'s byte source)', () => {
+  it('is registered: --help exits 0 and lists exactly --project, --slice-path, --extraction, --json (plus -h), never --run-id or a bypass flag', async () => {
+    const result = await spawnCli(['verify-example-translate', '--help']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('verify-example-translate');
+
+    for (const flag of [
+      '--project <dir>',
+      '--slice-path <path>',
+      '--extraction <file>',
+      '--json',
+      '-h, --help',
+    ]) {
+      expect(result.stdout).toContain(flag);
+    }
+    for (const bypassFlag of ['--run-id', '--force', '--skip', '--overwrite']) {
+      expect(result.stdout).not.toContain(bypassFlag);
+    }
+  });
+
+  it('exits non-zero with a message naming the missing required options when none are supplied', async () => {
+    const result = await spawnCli(['verify-example-translate', '--project', '/tmp']);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('required option');
+  });
+
+  it('runs end-to-end against a real project and emits parseable, non-empty JSON, exit 0', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-example-translate-'));
+    try {
+      const project = join(dir, 'project');
+      await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+      await fs.mkdir(join(project, 'src', 'rules'), { recursive: true });
+      await fs.writeFile(
+        join(project, 'rulebook', '02-punch.md'),
+        'p.2, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
+      );
+      await fs.writeFile(
+        join(project, 'src', 'rules', 'index.ts'),
+        'export function checkPunch(input: { ready: boolean }): boolean {\n' +
+          '  return input.ready;\n' +
+          '}\n',
+      );
+      const extraction = [
+        {
+          slicePath: 'rulebook/02-punch.md',
+          lineNumber: 2,
+          pageCitation: 'p.2, Punch Examples',
+          kind: 'transition',
+          sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+          setup: 'Guard is READY.',
+          action: 'Guard is punched.',
+          expected: 'Guard becomes EXHAUSTED.',
+          supportingQuoteLines: ['If you are punched while READY, you become EXHAUSTED.'],
+        },
+      ];
+      const extractionPath = join(dir, 'extraction.json');
+      await fs.writeFile(extractionPath, JSON.stringify(extraction, null, 2));
+
+      const result = await spawnCli([
+        'verify-example-translate',
+        '--project',
+        project,
+        '--slice-path',
+        'rulebook/02-punch.md',
+        '--extraction',
+        extractionPath,
+        '--json',
+      ]);
+
+      expect(result.code).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(Array.isArray(parsed.payloads)).toBe(true);
+      expect(parsed.payloads.length).toBe(1);
+      expect(parsed.payloads[0].translationPayload).toContain('BS-EXAMPLE-TRANSLATE-V1');
+      expect(Array.isArray(parsed.notTranslated)).toBe(true);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});

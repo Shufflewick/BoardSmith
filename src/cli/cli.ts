@@ -45,6 +45,7 @@ import {
 import {
   verifyExampleReplayCommand,
   verifyExampleRecordCommand,
+  verifyExampleTranslateCommand,
 } from './commands/verify-example-replay.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
@@ -475,7 +476,9 @@ program
 // exits 0); the build side's own consumer (`build/test.md`) treats a mismatch as build-blocking.
 // Both commands are project-level and source-free BY CONSTRUCTION — neither registers a run
 // identifier flag or any bypass option of any kind. `verify-example-record` is the ONLY write
-// surface for CHECK-06's ledger.
+// surface for CHECK-06's ledger. `verify-example-translate` produces the SECOND dispatch's
+// payload from the FIRST dispatch's return; it writes nothing, and it is what skill prose cites
+// instead of describing the game's API surface.
 program
   .command('verify-example-replay')
   .description(
@@ -501,6 +504,19 @@ program
   .requiredOption('--translation <file>', "The translator's structured JSON return")
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyExampleRecordCommand);
+
+program
+  .command('verify-example-translate')
+  .description(
+    "Read one slice's extractor structured JSON return, assign every surviving example's " +
+      'identity itself, and emit its translation dispatch payload built from the generated ' +
+      "project's real exported API surface (read-only, writes nothing, exits 0 unconditionally)",
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--slice-path <path>', 'The rulebook/ slice the worked examples live in')
+  .requiredOption('--extraction <file>', "The extractor's structured JSON return")
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyExampleTranslateCommand);
 
 // Claude Code integration
 const claudeCmd = program
