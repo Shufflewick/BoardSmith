@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { scanSandboxViolations } from './sandbox-scan.js';
+import { scanSandboxViolations, scanSourceForSandboxViolations } from './sandbox-scan.js';
 
 describe('scanSandboxViolations', () => {
   let dir: string;
@@ -130,5 +130,24 @@ describe('scanSandboxViolations', () => {
     expect(files).toContain('src/ui/b.ts');
     expect(files).toContain('src/ui/c.ts');
     expect(files).toContain('src/rules/d.ts');
+  });
+
+  // 178-06 Task 1: scanSourceForSandboxViolations is the per-file body scanSandboxViolations now
+  // delegates to — one lint implementation, two entry points. They must agree on one fixture.
+  it('scanSourceForSandboxViolations agrees with scanSandboxViolations on one fixture file', () => {
+    const rel = 'src/rules/mixed.ts';
+    const code =
+      'import fs from \'node:fs\';\n' +
+      'export function go() {\n' +
+      '  fs.readFileSync("x");\n' +
+      '  return fetch("/x") && Math.random() && eval("1") && setTimeout(() => {}, 1);\n' +
+      '}\n';
+    write(rel, code);
+
+    const viaWholeDir = scanSandboxViolations(dir);
+    const viaSingleFile = scanSourceForSandboxViolations(code, rel);
+
+    expect(viaSingleFile.length).toBeGreaterThan(0);
+    expect(viaSingleFile).toEqual(viaWholeDir);
   });
 });

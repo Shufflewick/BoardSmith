@@ -128,6 +128,54 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
 }
 
 /**
+ * Scan ONE source string's worth of already-extracted code (a whole file's contents, or a
+ * `.vue` SFC's already-extracted `<script>` body) against `FLAT_CONFIG`.
+ *
+ * This is the per-file body `scanSandboxViolations` used to run inline, factored out so a
+ * caller with a single in-memory source string — not yet written to disk, or never destined to
+ * live under `<cwd>/src` at all (e.g. a model-generated test file) — can run the SAME lint
+ * implementation `boardsmith lint`/`boardsmith validate` use, without forking the config or
+ * re-declaring the rule list.
+ *
+ * `relPath` must be project-root-relative (flat-config `files` globs, including the
+ * `src/ui/**` determinism-rule relaxation above, match relative to the project root and never
+ * match an absolute path) — pass the path this code would live at if it were written.
+ *
+ * `ruleIds`, when supplied, further restricts the REPORTED violation set to exactly those rule
+ * ids — the underlying lint pass still runs the full `FLAT_CONFIG` (so the `src/ui/**`
+ * determinism relaxation still applies correctly), and violations for rules outside `ruleIds`
+ * are simply not included in the return. Omit it to get every violation `scanSandboxViolations`
+ * would report for this one file.
+ */
+export function scanSourceForSandboxViolations(
+  code: string,
+  relPath: string,
+  ruleIds?: readonly string[],
+): SandboxViolation[] {
+  const linter = new Linter();
+  const violations: SandboxViolation[] = [];
+
+  const messages = linter.verify(code, FLAT_CONFIG, relPath);
+  for (const m of messages) {
+    // Only report violations of our own sandbox rules. ESLint also emits
+    // messages for parser errors and for unknown rules referenced in inline
+    // `eslint-disable` comments (e.g. `@typescript-eslint/no-unused-vars`);
+    // neither is a sandbox violation. TypeScript is validated separately.
+    if (!m.ruleId?.startsWith('boardsmith/')) continue;
+    if (ruleIds && !ruleIds.includes(m.ruleId)) continue;
+    violations.push({
+      file: relPath,
+      line: m.line,
+      column: m.column,
+      ruleId: m.ruleId,
+      message: m.message,
+    });
+  }
+
+  return violations;
+}
+
+/**
  * Scan every game source file under `<cwd>/src` for forbidden APIs.
  * Returns one violation per offending location.
  */
@@ -135,7 +183,6 @@ export function scanSandboxViolations(cwd: string): SandboxViolation[] {
   const srcDir = join(cwd, 'src');
   if (!existsSync(srcDir)) return [];
 
-  const linter = new Linter();
   const violations: SandboxViolation[] = [];
 
   for (const filePath of collectSourceFiles(srcDir)) {
@@ -146,21 +193,7 @@ export function scanSandboxViolations(cwd: string): SandboxViolation[] {
     // Pass the cwd-relative path: flat-config `files` globs are matched relative
     // to the project root and do not match absolute paths.
     const relPath = relative(cwd, filePath);
-    const messages = linter.verify(code, FLAT_CONFIG, relPath);
-    for (const m of messages) {
-      // Only report violations of our own sandbox rules. ESLint also emits
-      // messages for parser errors and for unknown rules referenced in inline
-      // `eslint-disable` comments (e.g. `@typescript-eslint/no-unused-vars`);
-      // neither is a sandbox violation. TypeScript is validated separately.
-      if (!m.ruleId?.startsWith('boardsmith/')) continue;
-      violations.push({
-        file: relPath,
-        line: m.line,
-        column: m.column,
-        ruleId: m.ruleId,
-        message: m.message,
-      });
-    }
+    violations.push(...scanSourceForSandboxViolations(code, relPath));
   }
 
   return violations;
