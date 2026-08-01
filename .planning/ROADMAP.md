@@ -463,7 +463,14 @@ smoothed over, per decision 17.
   1. `/bs-verify-game` run against a project whose source rulebook is unavailable completes in source-free mode instead of failing.
   2. The source-free report names exactly which defect classes went unchecked (e.g. no fidelity re-transcription, no worked-example replay against fresh source).
   3. The verification's recorded scope reads code-conformance-only with the unavailable-source reason, per PROV-02.
-**Plans**: TBD
+**Plans**: 5 plans in 5 waves (linear — worktrees disabled, shared files across every wave)
+
+Plans:
+- [ ] 179-01-PLAN.md — the ONE step->defect-class mapping + computeSourceFreeReport, and decision 7's falsifiable coverage test against verify-game.md's real headings (wave 1)
+- [ ] 179-02-PLAN.md — `verify-source-free-check` read command, CLI registration, exit 0, and the PROV-02 data-flow test through the real provenance renderer (wave 2)
+- [ ] 179-03-PLAN.md — the behavioural change: source-resolution.md's negative case enters `verify/source-free-mode.md`; verify-game.md wiring, installer probe, and the cross-file no-hardcoded-list pin (wave 3)
+- [ ] 179-04-PLAN.md — pre-registration committed ALONE: satisfiability + vacuity audit of all 7 criteria, whole-tree baseline protocol (wave 4)
+- [ ] 179-05-PLAN.md — live proof on a staged source-free reference game incl. one real CHECK-06 dispatch with downgraded quote provenance; 179-PROOF.md, VERIFY-09 disposition, closeout (wave 5)
 
 ## Progress
 
@@ -481,7 +488,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
 | 177. Derived-Line Re-Derivation | 13/13 | Executed — goal NOT MET (6/16, 37.5%; CHECK-04 stays OPEN, see Result) | - |
 | 178. Worked-Example Tests | 11/11 | Complete   | 2026-08-01 |
-| 179. Source-Free Verification Mode | 0/TBD | Not started | - |
+| 179. Source-Free Verification Mode | 0/5 | Planned | - |
 
 ## Shipped Milestones
 
