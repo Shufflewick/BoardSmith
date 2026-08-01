@@ -8,23 +8,44 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v4.9 BS Skills Re-Verification
+## Previous: v4.9 Shipped
 
-**Goal:** Re-verify a built game against its rules — catching drift introduced by improved models, improved rulebooks, or improved bs skills.
+**Shipped:** 2026-08-01. 12 phases (170–180, incl. 177.1), 25/25 requirements closed on real cited
+evidence, audit passed (`v4.9-MILESTONE-AUDIT.md`). Suite 4378 green; BoardSmith and all three
+reference games (`seven`, `one-two-punch`, `doom-machine`) clean.
 
-**Target features:**
-- `/bs-verify-game` — full re-transcription from archived source, semantic classification of pass-1 vs pass-2 (`cosmetic` / `sharper` / `contradictory` / `source-changed`), impact map onto chunks, then the existing audit lenses + bounded repair loop. `contradictory` always gates to the human; re-playtest only chunks whose code changed during repair.
-- Ruling re-validation — every `RULINGS.md` entry re-checked against the fresh transcription, respecting supersession chains.
-- Source-free conformance mode — claim↔test↔ruling traceability sweep plus code drift since the verified commit, for projects whose source is unavailable.
-- Derived-line re-derivation — rule-bearing inferences (deck arithmetic, round counts) re-derived independently of pass 1.
-- Worked-example replay — rulebook examples as executable tests, in both the verify skill and `build/test.md` so new games accumulate them systematically.
-- Provenance and ingest contract — a `## Verified Against` block (slice hashes, edition, BoardSmith version, skills version, verification scope); archive the source rulebook into the project; split the overloaded `Derived` prefix into `Derived` (rule inference) and `Visual` (diagram/art); standardize the `## Open Rules Gaps` INDEX section.
+BS Skills Re-Verification — `/bs-verify-game` re-verifies a built game against its archived
+rulebook: re-transcription staging, two-dimension classification, a hard adjudication gate,
+impact map + bounded repair, ruling re-validation, derived-line checking, worked-example replay in
+both build and verify, and honest source-free degradation.
 
-**Key context:**
-- Revert point tagged `bs-skills-pre-verify` at `2e92a3ee` before any work. `~/.claude/skills/` is not version controlled — a full revert requires re-running `npx boardsmith claude --force` from the tag.
-- The installed skills were behind repo source (v4.8 Phase 167's autonomy rewrite was never installed); reinstalled at milestone start so the baseline is coherent.
-- Evidence base is the two bs-built reference games, `~/BoardSmithGames/seven` and `~/BoardSmithGames/one-two-punch`. Findings that shape the design: `RULINGS.md` is the reliable index of rule gaps (26 and 20+ entries, each carrying a citation field) while `Named-but-undefined` is not (0 vs 4 markers); tests already carry claim/ruling annotations (140/227 and 214/212), giving a machine-traceable code↔interpretation chain; the `Derived` prefix is overloaded with diagram/art descriptions (8 of 12 in one-two-punch); seven's Ruling 1 supplies the entire scoring table from designer statement because the "Ways to Score" card is absent from the PDF.
-- No migration phase. Existing games verify in whatever mode their artifacts support — both reference games retain `rules.pdf`, so the source-based path still runs on them and the verify skill writes their provenance stamp on first run.
+**The defining lesson was reachability.** Four requirements were closed against evidence produced
+by paths a user never takes, each found only when something forced the question:
+- **CHECK-04** closed on a `.planning/` measurement harness while `/bs-verify-game` still ran the
+  design Phase 177 had *retired* — found by Phase 178's research, fixed by inserting Phase 177.1.
+  CHECK-04 itself was redesigned mid-milestone: per-line blind re-derivation was proven
+  structurally unanswerable, replaced by dual enumeration + reconciliation, and its determinism
+  gate retired as unsatisfiable by construction after four full measurement runs failed it.
+- **Phase 178's SC-3** would have shared its derivation logic only in an offline proof script —
+  caught pre-execution by the plan-checker, which noticed the promised proof test could not have
+  been written truthfully.
+- **PROV-02** closed on the build pipeline while the verify pipeline wrote no provenance at all —
+  found when Phase 179's own context premise was checked against the repo and proved false.
+- **`/bs-verify-game` was never installed** — nor a single `verify/` contract. Installed skills
+  dated Jul 27; the skill was created Jul 28. Every proof in Phases 173–179 ran CLI commands from
+  the repo and dispatched via `claude -p`, a path that never loads the installed skill. Found by
+  Phase 180 on its first command, after the user insisted the interactive proof run before archive.
+
+Phase 180 then ran the skill for real and found **7 divergences invisible to every prior proof** —
+most seriously, a skill with no JSON-repair step meeting a 2-of-3 unparseable-return rate, because
+the `.planning/` harnesses had carried repair the product never had. It also caught 177.1's CR-03
+fix firing on live data for the first time: refusing to guess which of three equal-strength facts a
+claim grounded to, and downgrading rather than trusting — `uncorroborated`, never `contradicted`.
+
+**Also shipped:** a `--force` install that replaces rather than merges, JSON transport tolerance
+with visible `repairs[]` (CR-04's in-field fence rejection untouched), and a Session Lock
+released-value rule that recognizes real shipped `(none — …)` data without misclassifying a live
+lock.
 
 ## Previous: v4.8 Shipped
 
