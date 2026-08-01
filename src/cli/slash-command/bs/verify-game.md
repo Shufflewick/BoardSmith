@@ -69,6 +69,25 @@ enumerator prompt (`BS-ENUMERATE-V1`) must contain ZERO `Derived (p.`, ZERO `Vis
 own transcript check — while the reconciler prompt and return (`BS-RECONCILE-V1`) are EXPECTED to
 contain `Derived` line text, accounted for by this carve-out.
 
+**Context-Economics carve-out for CHECK-06's dispatch prompts (Step 8):** the same two-observable
+discipline applies here, and the observables INVERT relative to CHECK-04's — do not collapse this
+into one blanket rule. The extraction dispatch prompt (`BS-EXAMPLE-EXTRACT-V1`, built by
+`boardsmith verify-example-replay --json` as `slices[].extractionPayload` and dispatched
+unchanged) legitimately carries BOTH quote lines AND `Visual (p.` lines — that is its entire
+payload, because a worked example's supporting evidence is exactly those lines, and `seven`'s Run
+example (text "5, 6, 7" vs. a `Visual (p.1):` line naming 1, 2, 3) is visible as a contradiction
+ONLY through the `Visual (p.` line reaching the extractor. The reviewer's observable for THIS
+prompt is the opposite of CHECK-04's enumerator observable: it must contain ZERO `Derived (p.`
+lines — no exception applies to it, since a worked example is never itself a `Derived` line. The
+translation dispatch prompt (`BS-EXAMPLE-TRANSLATE-V1`, built by
+`boardsmith verify-example-translate --json` as `payloads[].translationPayload`) legitimately
+carries the extracted `WorkedExample` spec's verbatim source text and the game's exported API
+surface (`collectGameApiSurface`, `example-derivation.ts`) — never composed by this orchestrator,
+never restated in this file's own prose. Both prompts are constructed entirely by the two named
+commands and dispatched unchanged, which is what keeps the orchestrator's own transcript rule true
+even while these subagent payloads legitimately carry exactly the strings that rule forbids from
+this transcript.
+
 ## Step 0: State Detection and Lock (VERIFY-01)
 
 On entry, before any other work, run the consistency check described in
@@ -92,7 +111,7 @@ vice versa.
 A lock naming the run being resumed (the same `run-id`) is refreshed and continued — the normal
 resume path. Any other live, non-stale lock warns the user instead of silently proceeding. A lock
 older than 24 hours is reported as stale and the user confirms clearing it before this session
-takes it. A clean close (Step 8, below) releases the line to exactly `none`.
+takes it. A clean close (Step 9, below) releases the line to exactly `none`.
 
 ## Step 1: Source Resolution (VERIFY-01)
 
@@ -193,11 +212,62 @@ later slice never destroys a verdict already recorded for an earlier one. Ground
 arithmetic composition, and classification all happen INSIDE that command, never in this skill.
 
 Report by formatting `boardsmith verify-derive-check --json`'s output —
-**formatted, never computed** by this skill, the same discipline Step 8's Close already holds.
+**formatted, never computed** by this skill, the same discipline Step 9's Close already holds.
 Findings are reported and exit 0 — a non-corroboration is worth a human glance, NEVER a verdict,
 and this check must not be used as a build gate.
 
-## Step 8: Close (VERIFY-02)
+## Step 8: Worked-Example Replay (CHECK-06)
+
+In short: this check is independent of staleness and repair — it does not consume Step 4's
+staleness verdicts and is not scoped to the chunks Step 6 touched. Run
+`boardsmith verify-example-replay --json` PROJECT-WIDE.
+
+For each slice the command reports pending, dispatch that slice's `slices[].extractionPayload`
+UNCHANGED to a subagent carrying
+`${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md`'s `BS-EXAMPLE-EXTRACT-V1` handshake,
+and save the returned structured object to a file.
+
+Obtain the SECOND dispatch's bytes from `boardsmith verify-example-translate --slice-path <p>
+--extraction <that return file> --json`, and dispatch each returned `payloads[].translationPayload`
+UNCHANGED and SEPARATELY to a subagent carrying
+`${CLAUDE_SKILL_DIR}/../bs-shared/verify/translate-example.md`'s `BS-EXAMPLE-TRANSLATE-V1`
+handshake. Two dispatches, never one combined pass — a combined pass would let the model work
+backward from code it can already see, producing agreement with itself rather than a real test of
+the printed example. This skill never composes a translation prompt itself: the game's exported
+API surface is collected mechanically by `verify-example-translate`, and restating it here would
+be the duplication this step exists to avoid. Entries the command reports under `notTranslated[]`
+(an `example-inconsistent` extraction) are passed straight through to the record command, never
+re-judged here.
+
+Record through exactly ONE `boardsmith verify-example-record --slice-path <p> --extraction <f>
+--translation <f>` invocation per SLICE — an atomic upsert-append, never a whole-ledger rewrite.
+Provenance gating, spec validation, and verdict classification all happen INSIDE that command,
+never in this skill.
+
+Execute each translated test with the project's own test runner; the recorded verdict comes from
+actually running it and observing its pass/fail result — never from the translator's own
+`verdictHint`, which is a model's guess, not an observation.
+
+Report by formatting `boardsmith verify-example-replay --json`'s output — **formatted, never
+computed** by this skill, the same discipline Step 7 and Step 9's Close already hold. Report raw
+counts and a per-slice breakdown, never a percentage; at this corpus's size (measured reality: ~5-6
+examples across all three reference games) say plainly when the corpus is too small to distinguish
+the mechanism working from luck rather than manufacture a score. Report the two mismatch buckets
+distinctly, gated on `QuoteVerifiedProvenance` (decision 12): mismatches where the supporting
+quote is source-verified, and mismatches where it is NOT — the latter is a question about the
+quote, never an accusation against the code.
+
+A slice or game with ZERO extractable examples is reported as a real finding about the ingest
+contract — examples were not transcribed — never as a tuning signal and never a reason to loosen
+extraction.
+
+Findings are reported and this check exits 0. It is deliberately asymmetric with
+`build/test.md`'s own worked-example step (TEST-01), which is build-blocking: in build, the chunk
+was just written to satisfy those exact slices, so a mismatch there is precisely the drift that
+step exists to catch; here, on a project-wide sweep independent of staleness, a mismatch is
+reported and this check must NEVER be used as a gate on the Close (Step 9, below).
+
+## Step 9: Close (VERIFY-02)
 
 When `verify-run-status` reports every unit recorded and `verify-classify-status` reports every
 pair classified, the pass closes:
@@ -234,6 +304,12 @@ This skill delegates its heavyweight, step-scoped prose to:
   `build/audit.md`'s three lenses and `build/repair.md`'s bounded loop, reused by reference
 - `${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md` — CHECK-04's enumeration contract:
   the `BS-ENUMERATE-V1` dispatch handshake, the never-sees list, and the no-arithmetic rule
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md` — CHECK-06's extraction contract:
+  the `BS-EXAMPLE-EXTRACT-V1` dispatch handshake and the rule that an example contradicting its
+  own source is never turned into a test — `example-inconsistent` never picks a side
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/translate-example.md` — CHECK-06's translation
+  contract: the `BS-EXAMPLE-TRANSLATE-V1` dispatch handshake and the rule that a spec the game
+  cannot yet express is `unexecutable` only with a named reason, never a failing test
 - `${CLAUDE_SKILL_DIR}/../bs-shared/verify/reconcile-facts.md` — CHECK-04's reconciliation
   contract: the `BS-RECONCILE-V1` dispatch handshake, the verbatim-quote grounding rule, the
   `arithmeticSpec` pointer, and the `absence` proposal

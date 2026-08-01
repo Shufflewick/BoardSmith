@@ -88,17 +88,18 @@ describe('verify-game.md — entry point shape (VERIFY-01)', () => {
     expect(skill).not.toContain("never edits a chunk's design");
   });
 
-  it('has exactly nine numbered steps, each tagged with a VERIFY or CHECK requirement ID', () => {
+  it('has exactly ten numbered steps, each tagged with a VERIFY or CHECK requirement ID', () => {
     // Steps 5 and 6 (Ruling Re-Check / Repair Dispatch) were added by Phase 176 — the count moved
     // from six to eight. Step 7 (Derived-Line Re-Check, CHECK-04) was added by Phase 177 — the
-    // count moved from eight to nine. Pinning the exact number is intentional here (unlike the
-    // disposition enumeration): a NEW step is a structural addition this test exists to catch, not
-    // a free-floating count that drifts on its own.
+    // count moved from eight to nine. Step 8 (Worked-Example Replay, CHECK-06) was added by Phase
+    // 178 — the count moved from nine to ten. Pinning the exact number is intentional here
+    // (unlike the disposition enumeration): a NEW step is a structural addition this test exists
+    // to catch, not a free-floating count that drifts on its own.
     const skill = read('verify-game.md');
     const stepHeadings = skill.match(/^## Step \d+:.*$/gm) ?? [];
-    expect(stepHeadings.length).toBe(9);
+    expect(stepHeadings.length).toBe(10);
     for (const heading of stepHeadings) {
-      expect(heading).toMatch(/VERIFY-0[1-8]|CHECK-0[1-4]/);
+      expect(heading).toMatch(/VERIFY-0[1-8]|CHECK-0[1-6]/);
     }
   });
 
@@ -357,12 +358,13 @@ describe('VERIFY-04/05/06 — Step 4 exists and the Phase 175 boundary statement
     );
   });
 
-  it('has a Step 8 naming Close', () => {
+  it('has a Step 9 naming Close', () => {
     // Renumbered from Step 5 by Phase 176's Step 5 (Ruling Re-Check) and Step 6 (Repair Dispatch)
     // insertions, then from Step 7 to Step 8 by Phase 177's Step 7 (Derived-Line Re-Check)
+    // insertion, then from Step 8 to Step 9 by Phase 178's Step 8 (Worked-Example Replay)
     // insertion.
     const skill = read('verify-game.md');
-    expect(skill).toMatch(/^## Step 8: Close/m);
+    expect(skill).toMatch(/^## Step 9: Close/m);
   });
 
   it('deletes the now-false Phase 175 no-staleness-marker/no-repair-loop boundary claim', () => {
@@ -688,7 +690,7 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     const skill = read('verify-game.md');
     const step7 = skill.slice(
       skill.indexOf('## Step 7: Derived-Line Re-Check'),
-      skill.indexOf('## Step 8: Close'),
+      skill.indexOf('## Step 8: Worked-Example Replay'),
     );
     expect(step7).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md');
     expect(step7).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/reconcile-facts.md');
@@ -698,7 +700,7 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     const skill = read('verify-game.md');
     const step7 = skill.slice(
       skill.indexOf('## Step 7: Derived-Line Re-Check'),
-      skill.indexOf('## Step 8: Close'),
+      skill.indexOf('## Step 8: Worked-Example Replay'),
     );
     expect(step7).toContain('boardsmith verify-derive-check --json');
   });
@@ -707,7 +709,7 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     const skill = read('verify-game.md');
     const step7 = skill.slice(
       skill.indexOf('## Step 7: Derived-Line Re-Check'),
-      skill.indexOf('## Step 8: Close'),
+      skill.indexOf('## Step 9: Close'),
     );
     expect(step7).toContain('claude-opus-5');
     expect(step7).toContain('claude-haiku-4-5-20251001');
@@ -942,7 +944,7 @@ describe('verify-game.md — CHECK-04 routing and Reference Files (177.1-05)', (
     const skill = read('verify-game.md');
     const step7 = skill.slice(
       skill.indexOf('## Step 7: Derived-Line Re-Check'),
-      skill.indexOf('## Step 8: Close'),
+      skill.indexOf('## Step 8: Worked-Example Replay'),
     );
     expect(step7).toContain('claude-opus-5');
     expect(step7).toContain('claude-haiku-4-5-20251001');
@@ -1000,6 +1002,146 @@ describe('verify-game.md — Context-Economics carve-out for CHECK-04 (177.1-05)
   it('never collapses the two-observable check into one blanket grep, per CONTEXT decision 7', () => {
     const skill = flat(read('verify-game.md'));
     expect(skill).toMatch(/never one blanket grep across both/);
+  });
+
+  it('extends the carve-out to CHECK-06\'s two dispatch payloads (178-09), with the extraction observable INVERTED from CHECK-04\'s', () => {
+    const skill = flat(read('verify-game.md'));
+    expect(skill).toContain('Context-Economics carve-out for CHECK-06');
+    expect(skill).toMatch(/observables INVERT relative to CHECK-04's/);
+    expect(skill).toMatch(
+      /extraction dispatch prompt \(`BS-EXAMPLE-EXTRACT-V1`.*?\) legitimately carries BOTH quote lines AND `Visual \(p\.` lines/,
+    );
+    expect(skill).toMatch(
+      /reviewer's observable for THIS\s*prompt is the opposite of CHECK-04's enumerator observable: it must contain ZERO `Derived \(p\.`\s*lines/,
+    );
+    expect(skill).toMatch(/translation dispatch prompt \(`BS-EXAMPLE-TRANSLATE-V1`.*?\) legitimately/);
+  });
+
+  it('states the new carve-out is a second, separate paragraph — the original CHECK-04 carve-out is not edited in place', () => {
+    const skill = read('verify-game.md');
+    const check04Idx = skill.indexOf('Context-Economics carve-out for CHECK-04');
+    const check06Idx = skill.indexOf('Context-Economics carve-out for CHECK-06');
+    expect(check04Idx).toBeGreaterThan(-1);
+    expect(check06Idx).toBeGreaterThan(check04Idx);
+    // Both carve-outs still live before Step 0 — the Hard Rule's own section, never inside a step.
+    expect(check06Idx).toBeLessThan(skill.indexOf('## Step 0:'));
+  });
+});
+
+describe('verify-game.md — CHECK-06 routing and Reference Files (178-09)', () => {
+  it('has a Step 8 naming Worked-Example Replay, and Step 9 is Close directly after it', () => {
+    const skill = read('verify-game.md');
+    expect(skill).toMatch(/^## Step 8: Worked-Example Replay \(CHECK-06\)/m);
+    expect(skill).toMatch(/^## Step 9: Close \(VERIFY-02\)/m);
+    expect(skill.indexOf('## Step 8: Worked-Example Replay')).toBeLessThan(
+      skill.indexOf('## Step 9: Close'),
+    );
+  });
+
+  it('Step 0\'s clean-close cross-reference points at Step 9, not Step 8', () => {
+    const skill = read('verify-game.md');
+    expect(skill).not.toContain('Step 8, below');
+    expect(skill).toContain('Step 9, below');
+  });
+
+  it('Step 8 names both handshake tokens and all three commands, including verify-example-translate as the cited producer of the translation bytes', () => {
+    const skill = read('verify-game.md');
+    const step8 = skill.slice(
+      skill.indexOf('## Step 8: Worked-Example Replay'),
+      skill.indexOf('## Step 9: Close'),
+    );
+    expect(step8).toContain('BS-EXAMPLE-EXTRACT-V1');
+    expect(step8).toContain('BS-EXAMPLE-TRANSLATE-V1');
+    expect(step8).toContain('boardsmith verify-example-replay --json');
+    expect(step8).toContain('boardsmith verify-example-translate');
+    expect(step8).toContain('boardsmith verify-example-record');
+  });
+
+  it('Step 8 states exit 0 and never-gates-the-Close, deliberately asymmetric with build/test.md\'s build-blocking TEST-01', () => {
+    const skill = flat(read('verify-game.md'));
+    expect(skill).toMatch(/this check exits 0/);
+    expect(skill).toMatch(/must NEVER be used as a gate on the Close/);
+    expect(skill).toMatch(/asymmetric with\s*`build\/test\.md`'s own worked-example step \(TEST-01\), which is build-blocking/);
+  });
+
+  it('Step 8 reports the two provenance-gated mismatch buckets distinctly (D-12), never flattened into one', () => {
+    const skill = flat(read('verify-game.md'));
+    expect(skill).toMatch(/gated on `QuoteVerifiedProvenance`/);
+    expect(skill).toMatch(
+      /mismatches where the supporting\s*quote is source-verified, and mismatches where it is NOT/,
+    );
+    expect(skill).toMatch(/a question about the\s*quote, never an accusation against the code/);
+  });
+
+  it('Step 8 contains the zero-examples-is-a-finding sentence and no percentage-bearing reporting instruction', () => {
+    const skill = read('verify-game.md');
+    const step8 = skill.slice(
+      skill.indexOf('## Step 8: Worked-Example Replay'),
+      skill.indexOf('## Step 9: Close'),
+    );
+    expect(step8).toMatch(/ZERO extractable examples is reported as a real finding about the ingest/);
+    // "never a percentage" is an instruction AGAINST reporting one; only a literal digit-percent
+    // pattern (e.g. "42%") would be an actual percentage-bearing instruction.
+    expect(step8).not.toMatch(/\d+%/);
+  });
+
+  it('Step 8 states formatted-never-computed, matching Step 7\'s own discipline', () => {
+    const skill = read('verify-game.md');
+    const step8 = skill.slice(
+      skill.indexOf('## Step 8: Worked-Example Replay'),
+      skill.indexOf('## Step 9: Close'),
+    );
+    expect(step8).toMatch(/formatted, never\s*computed/);
+  });
+
+  it('Step 8 contains no prose description of the game\'s exported API surface outside the verify-example-translate citation', () => {
+    const skill = read('verify-game.md');
+    const step8 = skill.slice(
+      skill.indexOf('## Step 8: Worked-Example Replay'),
+      skill.indexOf('## Step 9: Close'),
+    );
+    expect(step8).not.toContain('GameApiSurface');
+    expect(step8).not.toContain('exportedSymbols');
+  });
+
+  it('lists both new contracts in Reference Files, in the existing one-line bullet style', () => {
+    const skill = read('verify-game.md');
+    const refSection = skill.slice(skill.indexOf('## Reference Files'));
+    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md');
+    expect(refSection).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/verify/translate-example.md');
+  });
+
+  it('step-numbering guard: `## Step N:` headings parse to exactly 0..9 with no duplicates or gaps, Close last', () => {
+    const skill = read('verify-game.md');
+    const nums = [...skill.matchAll(/^## Step (\d+):/gm)].map((m) => Number(m[1]));
+    expect(nums).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const lastHeading = [...skill.matchAll(/^## Step \d+:.*$/gm)].pop()![0];
+    expect(lastHeading).toMatch(/Close/);
+  });
+
+  it('step-numbering guard is a real regression detector: a duplicated Step 8 heading on a mutated copy fails the guard', () => {
+    const skill = read('verify-game.md');
+    const mutated = skill.replace(
+      '## Step 9: Close (VERIFY-02)',
+      '## Step 8: Close (VERIFY-02)',
+    );
+    const nums = [...mutated.matchAll(/^## Step (\d+):/gm)].map((m) => Number(m[1]));
+    expect(nums).not.toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    // Duplicated 8, and 9 is gone entirely — both failure shapes the guard must catch.
+    expect(nums.filter((n) => n === 8).length).toBe(2);
+    expect(nums).not.toContain(9);
+  });
+
+  it('step-numbering guard is a real regression detector: a skipped step number on a mutated copy fails the guard', () => {
+    const skill = read('verify-game.md');
+    const mutated = skill.replace(
+      '## Step 8: Worked-Example Replay (CHECK-06)',
+      '## Step 10: Worked-Example Replay (CHECK-06)',
+    );
+    const nums = [...mutated.matchAll(/^## Step (\d+):/gm)].map((m) => Number(m[1]));
+    expect(nums).not.toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(nums).toContain(10);
+    expect(nums).not.toContain(8);
   });
 });
 
