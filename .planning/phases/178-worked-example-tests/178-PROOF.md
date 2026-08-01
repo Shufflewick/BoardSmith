@@ -236,3 +236,40 @@ n=11" limits statement (§9 below) rather than an inflated claim.
   (outside this plan's Task 2/3 scope; the first would require contract hardening in
   `extract-example.md`, the second would require a validation change in `createWorkedExampleSpec`,
   both Rule 4 architectural-review territory).
+
+---
+
+## §10 — ORCHESTRATOR FINDING (added 2026-08-01, post-proof, by the phase orchestrator)
+
+**The D-18 byte-identical claim was INCOMPLETE as reported, and the gap is in the instrument, not the games.**
+
+This proof reported "825/825 files OK" for the three reference-game originals. Independent
+`git status` on each original afterwards found `~/BoardSmithGames/one-two-punch` was NOT clean:
+
+```
+ D .boardsmith/runtime-bundle.mjs   (12,502 lines)
+ D .boardsmith/runtime-entry.ts
+```
+
+Two TRACKED files had been deleted — build artifacts regenerated/removed as a side effect of
+running the project's own `vitest` during the execute step, which this proof legitimately does.
+
+**Root cause: the sha256 baseline did not cover the whole tree.** It enumerated the paths the
+proof expected to care about (rulebook/, src/, tests/) and therefore could report a perfect
+825/825 while tracked files outside that set were being deleted. The check was scoped to where
+a change was anticipated rather than to where a change was possible — so it could not have
+caught this class of change even in principle. Same defect shape as the six unfireable
+assertions this phase already found and fixed: an instrument that cannot observe its own miss.
+
+**Disposition:** both files restored via `git checkout --`; all three originals confirmed clean
+by `git status --short` (0 changed files each). No source, rulebook, or test content was ever
+altered — the deletions were confined to generated `.boardsmith/` build output.
+
+**Correction to this document's own claim:** D-18 holds for rulebook/src/test content, which is
+what the discipline exists to protect, and the proof's substantive results stand unaffected. But
+"825/825 OK" should be read as "825 of the enumerated paths", not "the tree is byte-identical" —
+those are different statements and this proof conflated them.
+
+**Carried to Phase 179 and any future proof run:** baseline the WHOLE tree (`git status --short`
+on the original, or a full-tree hash), not an enumerated subset. A `cp -R` staging discipline is
+only as good as the check that proves the original was untouched.
