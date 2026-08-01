@@ -507,6 +507,7 @@ describe('installClaudeCommand — empty shared dir is detected as partial, not 
     expect(existsSync(join(skillsRoot, 'bs-shared', 'ingest', 'transcription.md'))).toBe(true);
     expect(existsSync(join(skillsRoot, 'bs-shared', 'aspects', 'index.md'))).toBe(true);
     expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-resolution.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-free-mode.md'))).toBe(true);
   });
 });
 
@@ -542,11 +543,13 @@ describe('installClaudeCommand — partial verify/ shared dir is detected and re
 
   it('a non-force install repopulates an emptied verify/ shared dir', async () => {
     expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-resolution.md'))).toBe(false);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-free-mode.md'))).toBe(false);
 
     await installClaudeCommand({ local: true, force: false, skipLink: true });
 
     expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-resolution.md'))).toBe(true);
     expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'staging-dispatch.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-free-mode.md'))).toBe(true);
   });
 });
 
@@ -575,6 +578,7 @@ describe('installClaudeCommand — uninstall removes bs-verify-game with no orph
   it('uninstall removes bs-verify-game/ and bs-shared/verify/, leaving no orphan', async () => {
     expect(existsSync(join(skillsRoot, 'bs-verify-game', 'SKILL.md'))).toBe(true);
     expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-resolution.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'source-free-mode.md'))).toBe(true);
 
     await uninstallClaudeCommand({ local: true });
 

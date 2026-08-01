@@ -118,11 +118,18 @@ takes it. A clean close (Step 9, below) releases the line to exactly `none`.
 Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/source-resolution.md` for the full gated
 adoption flow and the stop-and-ask rules governing which archived rulebook this pass verifies
 against. In short: an already-archived source proceeds as-is, a single unarchived candidate at
-project root is adopted only after the designer confirms, multiple candidates or no candidate at
-all stop the session, and a hash mismatch against the archive is recorded as a signal and never
-silently overwritten.
+project root is adopted only after the designer confirms, multiple candidates stop the session, and
+a hash mismatch against the archive is recorded as a signal and never silently overwritten. A
+project with no candidate source anywhere — neither an archive nor a root candidate — continues in
+source-free mode via `${CLAUDE_SKILL_DIR}/../bs-shared/verify/source-free-mode.md` rather than
+stopping the session.
 
 ## Step 2: Staging Run and Re-Transcription (VERIFY-02, VERIFY-07, VERIFY-08)
+
+**Steps 2 through 6 do not run in source-free mode** — each consumes a FRESH RE-TRANSCRIPTION of
+the archived source, and with no source there is no fresh transcription for any of them to
+consume, so they have no input. This does not apply here: Step 1 already resolved a source, or
+this pass would already be running `verify/source-free-mode.md` instead.
 
 Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/staging-dispatch.md` for the full run
 allocation, ledger-driven resume, fan-out dispatch, and per-unit recording sequence. In short: a
@@ -278,9 +285,24 @@ pair classified, the pass closes:
 - Report the run's classification verdicts to the designer by formatting
   `verify-classify-status --json`'s output — **formatted, never computed** by this skill; every
   number in the report comes from the command's JSON, not from this skill's own arithmetic.
+- Dispatch `boardsmith verify-close-record --project <project> --run <run-id>`, which durably
+  records each evaluated chunk's `## Verified Against` block — the scope, its reason when reduced,
+  the edition anchor, and the cited-slice hashes. This bullet exists because, until this phase,
+  `## Verified Against` was written only by the BUILD pipeline's `chunk-check` — a verify pass, the
+  one pipeline whose entire job is verification, recorded nothing. Report the command's
+  `recorded[]` and `errors[]` by formatting its `--json`; a non-empty `errors[]` names the chunks
+  that could not be recorded and does NOT fail the pass, matching this skill's standing rule that
+  advisory results never gate a Close. Place this bullet before the commit bullet below, so the
+  write is part of what gets committed.
 - Commit per `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` ("Git Protocol").
 - Release the session lock: rewrite `Session Lock:` in `SKETCH.md` to exactly `none`, the same
   clean-close release the chunk-build lock already uses.
+
+**In source-free mode**, this Close is reached from `verify/source-free-mode.md`'s own Close
+section rather than from Steps 2-6 completing, the recorded scope is `code-conformance-only` with
+the reason from `verify-source-free-check --json`, the same `verify-close-record` dispatch runs
+WITHOUT `--run` (source-free mode allocates no staging run, so there is no ledger to name), and the
+unchecked defect classes are reported formatted from that same command's `uncheckedDefectClasses[]`.
 
 There is no promotion of a staged slice over a live one, at this or any earlier step.
 
@@ -290,6 +312,9 @@ This skill delegates its heavyweight, step-scoped prose to:
 
 - `${CLAUDE_SKILL_DIR}/../bs-shared/verify/source-resolution.md` — decision 1's gated adoption
   flow and the stop-and-ask rules
+- `${CLAUDE_SKILL_DIR}/../bs-shared/verify/source-free-mode.md` — VERIFY-09's reduced sequence for
+  a project with no candidate source anywhere: which steps still run, the formatted unchecked-class
+  report, and the Close that records `code-conformance-only` scope
 - `${CLAUDE_SKILL_DIR}/../bs-shared/verify/staging-dispatch.md` — run init, ledger-driven resume,
   fan-out dispatch into staging, per-unit recording, close
 - `${CLAUDE_SKILL_DIR}/../bs-shared/verify/classification-dispatch.md` — pair enumeration,

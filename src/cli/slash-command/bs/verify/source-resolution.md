@@ -78,9 +78,12 @@ the mismatch and PROCEED with the current archived copy. **Never overwrite the a
 this signal** — the old archive is what the previous verdict was made against, and overwriting it
 destroys the ability to reproduce that verdict.
 
-## Negative case — no candidate anywhere: STOP
+## Negative case — no candidate anywhere: enter source-free mode
 
-`rulebook/source/` is absent and no candidate source file exists at the project root either. STOP
-and say so, naming exactly what was looked for (`rulebook/source/`, then the project root) and
-where. Source-free operation does not exist yet in this pipeline — do not improvise a degraded
-verification mode in its place.
+`rulebook/source/` is absent and no candidate source file exists at the project root either. Name
+exactly what was looked for (`rulebook/source/`, then the project root) and where — that naming is
+what makes the reduced scope this case leads to auditable, not merely asserted.
+
+Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/source-free-mode.md`. The degraded mode this
+case enters is not improvised: it is the one defined in `source-free-mode.md`, and nothing outside
+that file decides which steps run from here.

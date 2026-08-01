@@ -42,6 +42,7 @@ function stripComments(text: string): string {
 const ALL_VERIFY_FILES = [
   'verify-game.md',
   'verify/source-resolution.md',
+  'verify/source-free-mode.md',
   'verify/staging-dispatch.md',
   'verify/classification-dispatch.md',
   'verify/classification-subagent.md',
@@ -1327,5 +1328,139 @@ describe('drift guard — every named boardsmith verify-* command actually exist
     const wouldFail = [...mentioned].some((name) => !withoutDeriveRecord.has(name));
     expect(wouldFail).toBe(true);
     expect(mentioned.has('verify-derive-record')).toBe(true);
+  });
+});
+
+describe('verify/source-free-mode.md — the reduced pass (decisions 1-8) (179-04)', () => {
+  it('source-resolution.md\'s negative case dispatches to source-free-mode.md instead of stopping', () => {
+    const doc = read('verify/source-resolution.md');
+    expect(doc).not.toContain('Source-free operation does not exist yet');
+    expect(doc).not.toContain('do not improvise a degraded verification mode in its place');
+    expect(doc).toContain('verify/source-free-mode.md');
+  });
+
+  it('source-free-mode.md exists and states plainly there is no flag anywhere that enters it', () => {
+    const doc = flat(read('verify/source-free-mode.md'));
+    expect(doc).toMatch(/no flag anywhere in this skill/);
+    expect(doc).toMatch(/reached from exactly ONE place/);
+  });
+
+  it('source-free-mode.md formats the unchecked report from verify-source-free-check, never composing it itself', () => {
+    const doc = read('verify/source-free-mode.md');
+    expect(doc).toContain('boardsmith verify-source-free-check --json');
+    expect(doc).toMatch(/format(?:ted|s)? its `uncheckedDefectClasses/);
+    expect(doc).toMatch(/MUST NOT contain a hand-authored list/);
+  });
+
+  it('verify-game.md Step 1 names the source-free continuation into source-free-mode.md', () => {
+    const skill = read('verify-game.md');
+    const step1 = skill.slice(skill.indexOf('## Step 1:'), skill.indexOf('## Step 2:'));
+    expect(step1).toMatch(/source-free mode/);
+    expect(step1).toContain('verify/source-free-mode.md');
+  });
+
+  it('verify-game.md Step 9\'s Close states the source-free scope-recording rule (code-conformance-only)', () => {
+    const skill = read('verify-game.md');
+    const step9 = skill.slice(skill.indexOf('## Step 9: Close'), skill.indexOf('## Reference Files'));
+    expect(step9).toMatch(/code-conformance-only/);
+    expect(step9).toMatch(/WITHOUT `--run`/);
+  });
+
+  it('the single-definition rule (decision 5): no defectClass string from VERIFY_PIPELINE_STEPS appears in any .md under src/cli/slash-command/', async () => {
+    // Cross-file negation pin, enforced across the code/prose boundary — a second, hand-authored
+    // copy of the step-to-defect-class mapping anywhere in skill prose is exactly the
+    // drift-by-duplication failure this milestone has hit repeatedly.
+    const { VERIFY_PIPELINE_STEPS } = await import('../../commands/verify-source-free.js');
+    const skillDir = join(__dirname, '..');
+    function allMarkdownFiles(dir: string): string[] {
+      const out: string[] = [];
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...allMarkdownFiles(full));
+        else if (entry.name.endsWith('.md')) out.push(full);
+      }
+      return out;
+    }
+    const mdFiles = allMarkdownFiles(skillDir);
+    expect(mdFiles.length).toBeGreaterThan(0);
+    const defectClasses = VERIFY_PIPELINE_STEPS.flatMap((step) =>
+      step.unchecked.map((u) => u.defectClass),
+    );
+    expect(defectClasses.length).toBeGreaterThan(0);
+    for (const file of mdFiles) {
+      const text = readFileSync(file, 'utf-8');
+      for (const defectClass of defectClasses) {
+        expect(text).not.toContain(defectClass);
+      }
+    }
+  });
+
+  it('the negation pin is a real regression detector: pasting a defectClass string into source-free-mode.md fails it', async () => {
+    // Mirrors the pin's own logic (imported, not restated): the CLEAN file must contain none of the
+    // defect-class strings; a copy with one pasted in must fail the identical assertion. This is
+    // the in-suite proof; the SUMMARY records the verbatim failure from doing this against the real
+    // file on disk (temporarily edited, observed, and reverted) per this task's own instruction.
+    const { VERIFY_PIPELINE_STEPS } = await import('../../commands/verify-source-free.js');
+    const defectClass = VERIFY_PIPELINE_STEPS.flatMap((step) =>
+      step.unchecked.map((u) => u.defectClass),
+    )[0];
+    const clean = read('verify/source-free-mode.md');
+    expect(clean).not.toContain(defectClass);
+
+    const mutated = `${clean}\n\n<!-- pasted-in verbatim: ${defectClass} -->\n`;
+    const containsAfterMutation = mutated.includes(defectClass);
+    expect(containsAfterMutation).toBe(true); // this is what would fail the real pin
+  });
+});
+
+describe('the durable Close write — both Closes dispatch it (179-04)', () => {
+  function verifyGameStep9Close(): string {
+    const skill = read('verify-game.md');
+    return skill.slice(skill.indexOf('## Step 9: Close'), skill.indexOf('## Reference Files'));
+  }
+
+  function sourceFreeModeClose(): string {
+    const doc = read('verify/source-free-mode.md');
+    return doc.slice(doc.indexOf('## Close'));
+  }
+
+  it('verify-game.md Step 9\'s Close section (extracted, not the whole file) dispatches verify-close-record with --run, before the commit bullet', () => {
+    const step9 = verifyGameStep9Close();
+    expect(step9).toContain('boardsmith verify-close-record --project <project> --run <run-id>');
+    const dispatchIdx = step9.indexOf('verify-close-record');
+    const commitIdx = step9.indexOf('Commit per');
+    expect(dispatchIdx).toBeGreaterThan(-1);
+    expect(commitIdx).toBeGreaterThan(-1);
+    expect(dispatchIdx).toBeLessThan(commitIdx);
+  });
+
+  it('source-free-mode.md\'s Close section (extracted) dispatches verify-close-record WITHOUT --run', () => {
+    const close = sourceFreeModeClose();
+    expect(close).toContain('boardsmith verify-close-record --project <dir>');
+    expect(close).not.toMatch(/verify-close-record[^\n]*--run/);
+  });
+
+  it('a whole-file toContain would NOT catch the dispatch drifting out of the Close — the section-scoped pin does', () => {
+    // Prove the extraction is load-bearing: build a mutated verify-game.md where the dispatch line
+    // has moved into the Reference Files list (still present in the whole file, absent from the
+    // extracted Close section) and show the section-scoped assertion catches it while a whole-file
+    // toContain would not.
+    const skill = read('verify-game.md');
+    const dispatchLine =
+      '- Dispatch `boardsmith verify-close-record --project <project> --run <run-id>`, which durably\n  records each evaluated chunk\'s `## Verified Against` block — the scope, its reason when reduced,\n  the edition anchor, and the cited-slice hashes. This bullet exists because, until this phase,\n  `## Verified Against` was written only by the BUILD pipeline\'s `chunk-check` — a verify pass, the\n  one pipeline whose entire job is verification, recorded nothing. Report the command\'s\n  `recorded[]` and `errors[]` by formatting its `--json`; a non-empty `errors[]` names the chunks\n  that could not be recorded and does NOT fail the pass, matching this skill\'s standing rule that\n  advisory results never gate a Close. Place this bullet before the commit bullet below, so the\n  write is part of what gets committed.';
+    expect(skill).toContain(dispatchLine);
+    const mutated =
+      skill.replace(dispatchLine, '') +
+      `\n\n(moved out of the Close for this test: ${dispatchLine})\n`;
+
+    // Whole-file check still passes — the substring is still present somewhere in the file.
+    expect(mutated).toContain('verify-close-record --project <project> --run <run-id>');
+
+    // Section-scoped check fails — the extracted Step 9 Close no longer contains the dispatch.
+    const mutatedStep9 = mutated.slice(
+      mutated.indexOf('## Step 9: Close'),
+      mutated.indexOf('## Reference Files'),
+    );
+    expect(mutatedStep9).not.toContain('verify-close-record --project <project> --run <run-id>');
   });
 });
