@@ -559,6 +559,16 @@ export function buildExampleTranslationPayload(
       `mechanical, not curated for this example — not every symbol below is relevant):`,
     ...symbolLines,
     '',
+    'Import paths: every module above is given relative to the project root (e.g. ' +
+      '"src/rules/game.ts"). Your `imports` will be hoisted into a generated file that always ' +
+      'lives two nested directories below the project root — under the project\'s own test ' +
+      'directory, inside its "examples" subdirectory — one level deeper than a hand-written ' +
+      'single-directory test file. Write each import relative to THAT depth: a module at ' +
+      '"src/rules/game.ts" imports as "../../src/rules/game.js" from the generated file, never ' +
+      '"../src/rules/game.js" (the shallower depth a sibling hand-written test would use). ' +
+      'Getting this prefix wrong is the single most common way an otherwise-correct translation ' +
+      'fails to even load.',
+    '',
     'If no viable target exists in the exported surface above for this example, return verdict ' +
       '"unexecutable" with a named reason — never force a mismatched target and never silently ' +
       'drop the example.',

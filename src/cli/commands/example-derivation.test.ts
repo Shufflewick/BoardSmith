@@ -460,6 +460,23 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
     expect(payload).not.toContain('tests/');
   });
 
+  it('states the generated file\'s two-directory depth so a translator can compute a correct relative import prefix (178-11 finding)', () => {
+    // Live proof finding (178-11): a translator dispatch guessed the shallower "../src/..."
+    // prefix a hand-written tests/*.test.ts file would use, but the generated file always lives
+    // one level deeper (tests/examples/*.examples.test.ts) — so the emitted import failed to
+    // resolve at all when actually executed. This asserts the payload now states that depth
+    // explicitly, with a worked example of the correct two-level prefix.
+    const api: GameApiSurface = {
+      projectDir: ONE_TWO_PUNCH_PROJECT_DIR,
+      testDir: join(ONE_TWO_PUNCH_PROJECT_DIR, 'tests'),
+      exportedSymbols: [{ name: 'readyGuards', kind: 'function', module: 'src/rules/guards.ts' }],
+    };
+    const payload = buildExampleTranslationPayload(transitionSpec, api);
+    expect(payload).toContain('two nested directories below the project root');
+    expect(payload).toContain('../../src/rules/game.js');
+    expect(payload).not.toContain('tests/');
+  });
+
   it('dispatches even when the supplied surface has no viable target — unexecutable is the model\'s verdict, never a payload-builder shortcut', () => {
     const emptyApi: GameApiSurface = {
       projectDir: SEVEN_PROJECT_DIR,
