@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-12 (gap-closure fix, post-proof, user-directed) — verifyExampleReplayCommand no longer dispatches a content-free extractionPayload; 178-11's 37.5% malformed-response rate root-caused to this defect and corrected in 178-PROOF.md §11. Phase 178 (Worked-Example Tests) remains COMPLETE, CHECK-06/TEST-01 CLOSED. Next: Phase 179 (Source-Free Verification Mode) — not yet planned."
-last_updated: "2026-08-01T22:20:00.000Z"
+stopped_at: "Completed 179-01 (wave 1 of 6) — VERIFY_PIPELINE_STEPS single step->defect-class mapping + computeSourceFreeReport() built in src/cli/commands/verify-source-free.ts, plus decision 7's falsifiable coverage test, its live failure demonstrated and reverted. VERIFY-09 stays Pending (only wave 1 of 6 done). Next: 179-02-PLAN.md — verify-source-free-check CLI wrapper (wave 2)."
+last_updated: "2026-08-01T23:05:00.000Z"
 last_activity: 2026-08-01
 progress:
   total_phases: 11
   completed_phases: 9
-  total_plans: 89
-  completed_plans: 89
+  total_plans: 90
+  completed_plans: 90
   percent: 82
 ---
 
@@ -28,6 +28,29 @@ three reference games, closing CHECK-06 and TEST-01 (`178-PROOF.md`). Next: Phas
 Verification Mode) — not yet planned.
 
 ## Current Position
+
+`179-01-PLAN.md` (2026-08-01, wave 1 of 6) — built `src/cli/commands/verify-source-free.ts`: the
+ONE frozen `VERIFY_PIPELINE_STEPS` mapping (10 entries, one per `## Step N:` heading in
+`verify-game.md`), `SOURCE_FREE_ADDITIONAL_CHECKS` (trace-check/CHECK-03, drift-check/CHECK-05),
+and a pure `computeSourceFreeReport(projectDir)` that derives `sourceFree`/`scope`/`reason`
+entirely from `computeVerificationScope` (never re-derived, never caller-overridable). Steps 2-6
+(`sourceFreeBehavior: 'skipped'`) each carry >=1 designer-facing `unchecked` entry naming the
+check that would have caught it; Steps 0/1/7/8/9 run unchanged. Decision 7's coverage test
+(`verify-source-free.test.ts`) parses `verify-game.md`'s real headings at test time and was
+demonstrated live: a temporary `## Step 10: Anything` heading with no matching entry produced
+`AssertionError: Step 10 ("Anything") has no VERIFY_PIPELINE_STEPS entry`, then was reverted
+(`diff` confirmed byte-identical); a temporary empty `defectClass` on Step 2 was also demonstrated
+to fail two separate assertions, then reverted. Full suite: 4335 tests / 248 files, 0 failing
+(baseline 4322/247; +13 new tests, +1 file). One Rule-1 bug caught before committing: an early
+`stepsRun`/`stepsSkipped` draft failed to partition `VERIFY_PIPELINE_STEPS` in the full-scope case
+(only ever populated `stepsRun` with the 5 always-runs steps regardless of scope) — fixed to
+branch on `sourceFree` so a full-scope report's `stepsRun` covers all 10 steps. No CLI surface, no
+`boardsmith` command registration, and no skill-prose changes in this plan — those are 179-02,
+179-03, and 179-04's work. VERIFY-09 stays Pending in `REQUIREMENTS.md` (only wave 1 of 6
+delivered; the requirement closes at 179-06's live proof). Commit `e9d24179`. See
+`.planning/phases/179-source-free-verification-mode/179-01-SUMMARY.md`.
+
+---
 
 `178-12` (2026-07-31, gap-closure fix, post-proof, user-directed) — root-caused and fixed 178-11's
 "37.5% malformed-response rate" finding: it was NOT a model-reliability limit. `buildExampleExtractionPayload`

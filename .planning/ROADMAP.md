@@ -466,7 +466,7 @@ smoothed over, per decision 17.
 **Plans**: 6 plans in 6 waves (linear — worktrees disabled, shared files across every wave)
 
 Plans:
-- [ ] 179-01-PLAN.md — the ONE step->defect-class mapping + computeSourceFreeReport, and decision 7's falsifiable coverage test against verify-game.md's real headings (wave 1)
+- [x] 179-01-PLAN.md — the ONE step->defect-class mapping + computeSourceFreeReport, and decision 7's falsifiable coverage test against verify-game.md's real headings (wave 1)
 - [ ] 179-02-PLAN.md — `verify-source-free-check` read command, CLI registration, exit 0, and the PROV-02 data-flow test through the real provenance renderer (wave 2)
 - [ ] 179-03-PLAN.md — the durable write: extract `recordVerifiedAgainst` from `chunkCheckCommand`, add `verify-close-record` (idempotent, fence-bounded, scoped to evaluated chunks, exit 0), on-disk tests (wave 3)
 - [ ] 179-04-PLAN.md — the behavioural change: source-resolution.md's negative case enters `verify/source-free-mode.md`; BOTH Closes dispatch `verify-close-record`; installer probe, no-hardcoded-list pin, Close-dispatch pins (wave 4)
@@ -489,7 +489,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
 | 177. Derived-Line Re-Derivation | 13/13 | Executed — goal NOT MET (6/16, 37.5%; CHECK-04 stays OPEN, see Result) | - |
 | 178. Worked-Example Tests | 11/11 | Complete   | 2026-08-01 |
-| 179. Source-Free Verification Mode | 0/5 | Planned | - |
+| 179. Source-Free Verification Mode | 1/6 | In Progress | - |
 
 ## Shipped Milestones
 
