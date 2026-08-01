@@ -31,11 +31,35 @@ a new capability, not honest degradation); backfilling source into projects that
    **That single behavior is what VERIFY-09 replaces.** The phase is smaller than it looks: the
    detection point already exists and is already correct; only its consequence changes.
 
-2. **PROV-02's machinery already exists.** `src/cli/commands/chunk-provenance.ts` exports
-   `SCOPE_CODE_ONLY = 'code-conformance-only'` (:27) and `computeVerificationScope()` (:107), and
-   the provenance renderer already has a field documented as "Omitted (not rendered) unless
-   `scope` is `code-conformance-only`" (:330). Nothing new is needed to RECORD reduced scope —
-   only to reach that path.
+2. **PROV-02's machinery exists — but `/bs-verify-game` CANNOT REACH IT. (CORRECTED 2026-08-01
+   after the plan-checker BLOCKED on this; the original wording below was WRONG.)**
+   `src/cli/commands/chunk-provenance.ts` exports `SCOPE_CODE_ONLY = 'code-conformance-only'`
+   (:27), `computeVerificationScope()` (:107), and a renderer field documented as "Omitted unless
+   `scope` is `code-conformance-only`" (:330). All real.
+
+   **But the durable `## Verified Against` block is written by exactly ONE function** —
+   `chunkCheckCommand` (`chunk-provenance.ts:432`), registered as `boardsmith chunk-check <slug>`
+   (`cli.ts:198`) — **and every call site is in the BUILD pipeline**: `build/close.md`,
+   `check-status.md`, `state-machine.md`. Verified by grep: `verify-game.md` and every file under
+   `verify/` contain ZERO `chunk-check` dispatches. `source-resolution.md:52-55` even documents
+   the distinction explicitly ("only a later, separate `chunk-check` invocation changes it").
+   `verify-classify.ts:446`'s `computeVerificationScope()` call is READ-ONLY.
+
+   **My original claim — "nothing new is needed to RECORD reduced scope, only to reach that
+   path" — was FALSE. There is no path.** A `/bs-verify-game` run never writes provenance for
+   anything, source-free or not.
+
+   **Wider consequence, surfaced by this phase:** PROV-02 ("a verification that could not re-read
+   source records its scope as code-conformance-only") is CLOSED (Phase 171) on the BUILD path
+   only. The mechanism is unreachable from the pipeline its own text describes. This is the third
+   instance in this milestone of a requirement closed against evidence produced by something other
+   than the path a user takes (cf. Phase 177.1's CHECK-04; Phase 178's SC-3 translation half,
+   caught pre-execution).
+
+   **User decision 2026-08-01: WIRE IT.** `/bs-verify-game`'s Close — and source-free mode's
+   Close — must dispatch `chunk-check` (or an equivalent write) for every chunk the run touched.
+   This is a deliberate behavioural change to a shipped skill: verify runs now write to
+   `CHUNK.md`. SC-3 and PROV-02 are delivered as written rather than downgraded.
 
 3. **Four checks are already source-free BY CONSTRUCTION** (not by flag, per the standing
    milestone discipline): CHECK-03 (`trace-check`) and CHECK-05 (`drift-check`) from Phase 172;
