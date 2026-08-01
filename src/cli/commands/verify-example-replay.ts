@@ -358,13 +358,22 @@ export async function readExampleReplayVerdicts(
   }
   const beginIdx = text.indexOf(EXAMPLE_REPLAY_LEDGER_BEGIN);
   const endIdx = text.indexOf(EXAMPLE_REPLAY_LEDGER_END);
+  const relLedgerPath = relative(projectDir, ledgerPath);
   if (beginIdx === -1 || endIdx === -1) {
     throw new Error(
-      `Malformed example-replay ledger at ${relative(projectDir, ledgerPath)}: missing begin/end ` +
-        `fence.`,
+      `Malformed example-replay ledger at ${relLedgerPath}: missing begin/end fence.`,
     );
   }
-  const relLedgerPath = relative(projectDir, ledgerPath);
+  // WR-02 (178-REVIEW.md): the two markers were located independently; a hand-edited or
+  // corrupted ledger with the end fence BEFORE the begin fence (or a doubled begin marker) would
+  // silently slice a negative-length/nonsensical body instead of hitting the "malformed ledger"
+  // error this function's own doc comment promises for "unbalanced" fences.
+  if (beginIdx > endIdx) {
+    throw new Error(
+      `Malformed example-replay ledger at ${relLedgerPath}: the end fence appears before the ` +
+        `begin fence.`,
+    );
+  }
   const body = text.slice(beginIdx + EXAMPLE_REPLAY_LEDGER_BEGIN.length, endIdx);
   const rawLines = body
     .split('\n')

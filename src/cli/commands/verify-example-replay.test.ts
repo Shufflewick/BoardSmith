@@ -315,6 +315,28 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
     await expect(readExampleReplayVerdicts(dir)).rejects.toThrow(/missing begin\/end fence/);
   });
 
+  // WR-02 (178-REVIEW.md) — beginIdx/endIdx were located independently with no ordering check;
+  // an end-before-begin (or doubled) fence would silently slice an empty/nonsensical body rather
+  // than throw the "malformed ledger" error this function's doc comment promises.
+  it('a ledger with the end fence appearing before the begin fence throws, never silently returns an empty/wrong body', async () => {
+    const good = recordFor('rulebook/01-a.md', 1);
+    await replaceExampleReplayVerdicts(dir, [good]);
+    const ledgerPath = exampleReplayLedgerPath(dir);
+    const original = await fs.readFile(ledgerPath, 'utf-8');
+
+    // Swap the order of the two fence markers, keeping the body between them intact — this is
+    // exactly the "unbalanced fence" shape a hand-edit could produce.
+    const corrupted = original
+      .replace('<!-- boardsmith:example-replay-verdicts:begin -->', '<<<BEGIN-PLACEHOLDER>>>')
+      .replace('<!-- boardsmith:example-replay-verdicts:end -->', '<!-- boardsmith:example-replay-verdicts:begin -->')
+      .replace('<<<BEGIN-PLACEHOLDER>>>', '<!-- boardsmith:example-replay-verdicts:end -->');
+    await fs.writeFile(ledgerPath, corrupted);
+
+    await expect(readExampleReplayVerdicts(dir)).rejects.toThrow(
+      /end fence appears before the begin fence/,
+    );
+  });
+
   it('writes go through atomicWriteFile — no direct fs.writeFile/writeFileSync in the module', () => {
     const source = readFileSync(
       fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url)),
