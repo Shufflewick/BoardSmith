@@ -1,4 +1,4 @@
-# Test — The Verification Sequence + A11y Floor (BUILD-06 / UIQ-03)
+# Test — The Verification Sequence + A11y Floor (BUILD-06 / UIQ-03 / TEST-01)
 
 Referenced by `build-chunk.md` Step 5 (`test`, second of the `{build, test}` session step
 group — see `state-machine.md` "Session Handoff Seams"). This step proves the chunk `build`
@@ -39,11 +39,66 @@ here.
 3. **Chunk unit/integration tests** — the tests written or extended for this chunk's own new
    behavior.
 
-4. **Full accumulated suite (regression)** — the entire generated project's test suite, not just
+4. **Worked-example tests (TEST-01)** — this chunk's cited worked examples become executable
+   tests as part of this same build, generated and immediately run, never left as a one-time
+   seed for hand-written tests to accumulate by hand. Run these sub-steps in order, citing the
+   real commands below — never compose their output by hand and never restate their logic in
+   this file's own prose:
+
+   (a) Run `boardsmith verify-example-replay --project <dir> --chunk <this chunk's slug> --json`
+       to enumerate this chunk's cited rulebook slices and obtain each pending slice's
+       extraction dispatch payload (`extractionPayload`).
+
+   (b) For each pending slice, dispatch that slice's `extractionPayload` UNCHANGED to a subagent
+       carrying `${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md`'s
+       `BS-EXAMPLE-EXTRACT-V1` handshake, and save the returned structured object to a file.
+
+   (c) Run `boardsmith verify-example-translate --project <dir> --slice-path <that slice>
+       --extraction <that return file> --json` to obtain one translation dispatch payload per
+       extracted example. This command is the ONLY source of those bytes: never compose a
+       translation prompt by hand here, and never restate the project's exported API surface in
+       this file's own prose — that surface is collected mechanically inside the command above,
+       never duplicated in this skill's text.
+
+   (d) Dispatch each returned `payloads[].translationPayload` UNCHANGED and SEPARATELY to a
+       second subagent carrying `translate-example.md`'s `BS-EXAMPLE-TRANSLATE-V1` handshake, and
+       save the returns to a file. Two separate dispatches, never one combined pass — a combined
+       pass would let the model work backward from code it can already see, producing agreement
+       with itself rather than a real test of the printed example.
+
+   (e) Record both returns through exactly ONE `boardsmith verify-example-record --project <dir>
+       --slice-path <p> --extraction <f> --translation <f>` invocation per SLICE — an atomic
+       upsert-append, never a whole-ledger rewrite.
+
+   (f) Run `boardsmith verify-example-emit --project <dir> --chunk <slug>` to write this chunk's
+       single generated test file, then RUN that file with the project's own test runner. The
+       recorded verdict comes from actually running the emitted test and observing its pass/fail
+       result — never from the translator's own `verdictHint`, which is a model's guess, not an
+       observation.
+
+   (g) A `disagrees` result is BUILD-BLOCKING and routes this chunk back to `build`, the same way
+       every other step in this ordered sequence does (see "Failures Loop Back to `build`"
+       below) — this is deliberately asymmetric with `/bs-verify-game`'s own worked-example check,
+       which is advisory: in build, the chunk was JUST written to satisfy those exact slices, so a
+       mismatch here is precisely the drift this step exists to catch, not a staleness question a
+       verify pass has to weigh separately.
+
+   (h) An `unexecutable` or `example-inconsistent` result is NOT a build failure. Route an
+       `example-inconsistent` finding to the designer via `## Open Rules Gaps`; record an
+       `unexecutable` finding with its own named reason. Never turn either into a passing test.
+       An entry `verify-example-translate` reports under `notTranslated[]` was never dispatched
+       for translation at all — record it as returned, never re-judge it here.
+
+   (i) A chunk whose cited slices contain zero worked examples SKIPS this step and names the
+       exemption explicitly in the generated test file's own comment — the same
+       "a chunk with zero new actions is exempt; name that exemption explicitly" discipline item
+       6 below already uses for its per-action coverage counter, never a silent omission.
+
+5. **Full accumulated suite (regression)** — the entire generated project's test suite, not just
    this chunk's new tests. A chunk that passes its own tests but breaks an earlier chunk's
    tests is not done; this step is what catches that.
 
-5. **Random-sim playthrough** — a scripted run of `simulateRandomGames` (from `boardsmith/testing`)
+6. **Random-sim playthrough** — a scripted run of `simulateRandomGames` (from `boardsmith/testing`)
    against the accumulated game, proving it doesn't crash or get stuck with this chunk's rules
    in place:
 
@@ -100,7 +155,7 @@ here.
    pure refactor or asset-only chunk) is exempt; name that exemption explicitly in the test file's
    comment rather than silently omitting the assertion.
 
-6. **Asset-reachability gate (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md
+7. **Asset-reachability gate (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md
    `## ui:` tag is `touches` or `major`, run `scanAssetReachability(cwd)` from
    `src/cli/lib/asset-scan.ts` against the generated project. A `ui: none` chunk skips this item
    entirely — it has no UI to check. This is the single source of truth for ASSET-02's bare-`<img>`
@@ -110,7 +165,7 @@ here.
    back to `build` (see "Failures Loop Back to `build`" below) — never silently worked around
    here.
 
-7. **A11y floor (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md `## ui:` tag
+8. **A11y floor (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md `## ui:` tag
    is `touches` or `major`, run all five a11y floor items below as part of this same numbered
    sequence. A `ui: none` chunk skips this item entirely — it has no UI to check.
 

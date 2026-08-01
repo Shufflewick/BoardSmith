@@ -384,6 +384,118 @@ describe('BUILD-06 — test step', () => {
   });
 });
 
+/**
+ * TEST-01 (178-08) — the worked-example step build/test.md's ordered sequence gained between
+ * the existing chunk-tests item and the full-accumulated-suite item. Pins the step's numbered
+ * position by PARSED INDEX (never a raw substring-ordering check — a section could reorder
+ * headings while substring order stayed accidentally correct), all four real command names, both
+ * handshake tokens, the two-dispatch rule, the build-blocking/asymmetry paragraph, the
+ * zero-example exemption sentence, and the "verdict comes from running the test" sentence.
+ * Mirrors the numbering-guard discipline this same phase's threat register (T-178-18) requires:
+ * a future edit that inserts a step without renumbering the rest must fail loudly here.
+ */
+describe('BUILD-06 / TEST-01 — worked-example step (178-08)', () => {
+  const SEQUENCE_HEADING = '## The Ordered Sequence (non-reorderable, stop-on-failure)';
+  const NEXT_HEADING = '## The A11y Floor';
+
+  /**
+   * Extracts ONLY the "## The Ordered Sequence" section's own top-level `^N. ` numbered items —
+   * never the nested "A11y Floor" subsection's separate 1-5 list, which lives in its own
+   * numbering namespace after `NEXT_HEADING`. Scoping by heading boundary keeps the two
+   * namespaces from ever colliding in this parse.
+   */
+  function parseOrderedSequenceNumbers(text: string): number[] {
+    const start = text.indexOf(SEQUENCE_HEADING);
+    const end = text.indexOf(NEXT_HEADING);
+    if (start === -1 || end === -1) {
+      throw new Error('build/test.md is missing one of its expected section headings.');
+    }
+    const section = text.slice(start, end);
+    return [...section.matchAll(/^(\d+)\.\s/gm)].map((m) => Number(m[1]));
+  }
+
+  /** Same scoping as `parseOrderedSequenceNumbers`, but keeps each item's own title text too. */
+  function parseOrderedSequenceItems(text: string): { n: number; title: string }[] {
+    const start = text.indexOf(SEQUENCE_HEADING);
+    const end = text.indexOf(NEXT_HEADING);
+    const section = text.slice(start, end);
+    return [...section.matchAll(/^(\d+)\.\s+\*\*(.+?)\*\*/gm)].map((m) => ({
+      n: Number(m[1]),
+      title: m[2],
+    }));
+  }
+
+  it('the ordered sequence is numbered exactly 1..8, with no duplicate or skipped number', () => {
+    const numbers = parseOrderedSequenceNumbers(read('build/test.md'));
+    expect(numbers).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  it('the numbering-guard parse helper is a real regression detector: a duplicated item number in a mutated copy is caught, not silently accepted', () => {
+    const mutated = read('build/test.md').replace(
+      /^5\. \*\*Full accumulated suite/m,
+      '4. **Full accumulated suite',
+    );
+    const numbers = parseOrderedSequenceNumbers(mutated);
+    expect(numbers).not.toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(numbers.filter((n) => n === 4).length).toBeGreaterThan(1);
+  });
+
+  it('the worked-example step is item 4 — parsed index places it directly after the chunk-tests item and directly before the full-suite item, not a raw substring-ordering check', () => {
+    const items = parseOrderedSequenceItems(read('build/test.md'));
+    const chunkTestsIdx = items.findIndex((i) => /Chunk unit\/integration tests/.test(i.title));
+    const workedExampleIdx = items.findIndex((i) => /Worked-example tests/.test(i.title));
+    const fullSuiteIdx = items.findIndex((i) => /Full accumulated suite/.test(i.title));
+    expect(chunkTestsIdx).toBeGreaterThanOrEqual(0);
+    expect(workedExampleIdx).toBe(chunkTestsIdx + 1);
+    expect(fullSuiteIdx).toBe(workedExampleIdx + 1);
+    expect(items[workedExampleIdx].n).toBe(4);
+  });
+
+  it('names all four real commands, including verify-example-translate as the cited producer of the translation dispatch bytes', () => {
+    const test = read('build/test.md');
+    expect(test).toContain('boardsmith verify-example-replay');
+    expect(test).toContain('boardsmith verify-example-translate');
+    expect(test).toContain('boardsmith verify-example-record');
+    expect(test).toContain('boardsmith verify-example-emit');
+    expect(test).toMatch(/verify-example-translate.{0,260}ONLY source of those bytes/s);
+  });
+
+  it('names both handshake tokens', () => {
+    const test = read('build/test.md');
+    expect(test).toContain('BS-EXAMPLE-EXTRACT-V1');
+    expect(test).toContain('BS-EXAMPLE-TRANSLATE-V1');
+  });
+
+  it('states the two-dispatch rule — two separate dispatches, never one combined pass — with the reason stated inline', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(/[Tt]wo separate dispatches.{0,60}never one combined pass/s);
+    expect(test).toMatch(/work backward from code it can already see/);
+  });
+
+  it('states the build-blocking rule and the verify-side asymmetry reason in the same paragraph', () => {
+    const test = read('build/test.md');
+    const match = test.match(/\(g\)[\s\S]*?(?=\n\n\s*\(h\))/);
+    expect(match).not.toBeNull();
+    const paragraph = match![0];
+    expect(paragraph).toContain('BUILD-BLOCKING');
+    expect(paragraph).toMatch(/asymmetric/);
+  });
+
+  it('names the zero-example exemption, explicit in the generated test file\'s own comment, never a silent omission', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(
+      /zero worked examples SKIPS this step and names the\s+exemption explicitly in the generated test file/,
+    );
+  });
+
+  it('states the recorded verdict comes from running the emitted test, never from the translator\'s verdictHint', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(
+      /verdict comes from actually running the emitted test.{0,140}never from the translator's own `verdictHint`/s,
+    );
+  });
+});
+
 describe('BUILD-07 — audit', () => {
   it('names the three lenses by pinned phrase', () => {
     const audit = read('build/audit.md');
