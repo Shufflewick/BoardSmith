@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-06-PLAN.md — example-test-emit.ts (one idempotent generated test file per chunk) + the measured GENERATED_TEST_SANDBOX_RULES gate. Next: Phase 178 plan 07 (the two subagent contracts)."
-last_updated: "2026-07-31T20:10:00.000Z"
+stopped_at: "Completed 178-07-PLAN.md — extract-example.md (BS-EXAMPLE-EXTRACT-V1) + translate-example.md (BS-EXAMPLE-TRANSLATE-V1), the two subagent contracts CHECK-06/TEST-01 dispatches, installed and pinned. Next: Phase 178 plan 08 (build/test.md wiring)."
+last_updated: "2026-07-31T20:35:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 11
@@ -21,14 +21,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **6/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 06 added
-`example-test-emit.ts` (`verifyExampleEmitCommand`, `boardsmith verify-example-emit`) — the
-build-side write surface that writes ONE idempotent, atomic generated example-test file per
-chunk, gated by a measured five-of-seven sandbox rule subset. Next: Phase 178 plan 07 (the two
-subagent contracts — extraction and translation).
+**Current focus:** Phase 178 — Worked-Example Tests — **7/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 07 wrote the
+two subagent contracts CHECK-06/TEST-01 actually dispatch — `extract-example.md`
+(`BS-EXAMPLE-EXTRACT-V1`) and `translate-example.md` (`BS-EXAMPLE-TRANSLATE-V1`) — installed
+under `SHARED_LEAF_PROBES` and pinned by cross-file lexicon tests against the real exported token
+constants. Settled both open wire-shape questions prior waves deferred (confirmed both, no code
+superseded). Next: Phase 178 plan 08 (`build/test.md` wiring — TEST-01's actual pipeline
+integration).
 
 ## Current Position
+
+`178-07-PLAN.md` (2026-07-31) — Phase 178 wave 7 of 11 — wrote `extract-example.md` (identifies
+worked examples as transition/predicate/example-inconsistent, never sees game source or existing
+tests, never invents an id, `seven`'s Run example the worked `example-inconsistent` illustration)
+and `translate-example.md` (turns one validated `WorkedExampleSpec` + `GameApiSurface` into
+runnable code, kind-branching a `predicate` to a direct exported-symbol call — `seven`'s
+`ScoringPattern.check` over constructed card elements — rather than forcing `game.doAction`; names
+`GENERATED_TEST_SANDBOX_RULES`' five rules explicitly; states the verdict of record comes from
+running the emitted test, never `verdictHint`). Both tokens (`BS-EXAMPLE-EXTRACT-V1`/
+`BS-EXAMPLE-TRANSLATE-V1`) are the real `example-derivation.ts` exports, not the plan's own
+placeholder spelling — a deviation caught and fixed before any commit, pinned by a cross-file
+lexicon test mirroring `ENUMERATE_TOKEN`'s pattern. Both files added to `SHARED_LEAF_PROBES` and
+proven by a real-install leaf probe. Full suite 4263/247 → 4280/247 (17 new tests, 0 failing).
+Flagged forward for 178-08/09: `verifyExampleRecordCommand`'s `--extraction` parsing does not yet
+accept `kind: 'example-inconsistent'` entries (throws on them today) — a real seam whichever plan
+wires the full chain end-to-end will hit on the `seven` Run fixture.
 
 `178-06-PLAN.md` (2026-07-31) — Phase 178 wave 6 of 11 — added `scanSourceForSandboxViolations`
 (`src/cli/lib/sandbox-scan.ts`) — the single-source-string entry point `scanSandboxViolations`
