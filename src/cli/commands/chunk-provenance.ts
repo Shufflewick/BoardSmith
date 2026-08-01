@@ -409,42 +409,62 @@ ${VERIFIED_AGAINST_BEGIN}${renderVerifiedAgainst(record)}${VERIFIED_AGAINST_END}
 }
 
 /**
- * `boardsmith chunk-check <slug>` — writes or repairs `chunks/<slug>/CHUNK.md`'s
- * `## Verified Against` block, and exits non-zero when it had to.
- *
- * Repair-then-fail, not fail-and-tell-you-to-fix: the repair lands on disk in this same call, so
- * an immediate re-run passes. Never throws on this path — `program.parse()` does not await action
- * handlers, so a rejection here would surface as an unhandled-rejection stack trace. The ONE path
- * that does throw is the fence-refusal structural error, because there the file is never touched
- * and the caller needs a loud, actionable failure, not a silent skip.
- *
- * HONEST LIMITATION: this command guarantees the block is correct WHENEVER IT RUNS. Whether a
- * live `close` session actually invokes it is skill text, and carries the same skip risk Phase
- * 170 found in fourteen live runs (171-VALIDATION.md "Known Unvalidated"). The compensating
- * control is plan 05's `chunk-provenance-status`'s `verifiedWithoutProvenance` flag, which
- * surfaces a chunk marked `verified` with no valid block, rather than letting a skipped
- * invocation pass silently.
- *
- * Expected on-disk shape between the fences (`<!-- boardsmith:verified-against:begin -->` ...
- * `<!-- boardsmith:verified-against:end -->`) is exactly what `renderVerifiedAgainstSection()`
- * emits above — see that function for the literal markers.
+ * The result of `recordVerifiedAgainst` — the reusable fenced writer both `chunkCheckCommand` and
+ * a verify Close (`verify-close-record.ts`, 179-03) call. Sets no exit code and prints nothing:
+ * exit codes and output are command-level concerns, and a reusable writer that mutates
+ * `process.exitCode` could never be called from a Close that must exit 0 (179-CONTEXT.md decision
+ * 4/measured_reality #2).
  */
-export async function chunkCheckCommand(
+export interface VerifiedAgainstWriteResult {
+  slug: string;
+  scope: typeof SCOPE_FULL | typeof SCOPE_CODE_ONLY;
+  reason?: ScopeReason;
+  /** True when the fenced body differed from what was already on disk and the file was written. */
+  changed: boolean;
+  citedSlices: string[];
+  unresolved: string[];
+  /**
+   * The same cited slices, paired with the hash recorded for each — `chunkCheckCommand` uses this
+   * (rather than `citedSlices` above) to compose its "cited-slice hashes rewritten" human bullet,
+   * which needs the hash, not just the path. Kept as a distinct field so the plain `citedSlices:
+   * string[]` shape callers already depend on (the `--json` output, pinned by an existing test)
+   * never changes shape.
+   */
+  citedSliceHashes: Array<{ path: string; hash: string }>;
+  /**
+   * `undefined` when the block was freshly created (no prior body to compare bullets against);
+   * present when a repair ran. `chunkCheckCommand` uses this to compose its own human bullets —
+   * see that function's `previousBody === undefined` branch below.
+   */
+  previousBody?: string;
+}
+
+/**
+ * The extracted, reusable fenced writer behind BOTH `boardsmith chunk-check <slug>` (the BUILD
+ * pipeline's repair-then-fail command below) and a verify Close's durable provenance write
+ * (`verify-close-record.ts`, 179-03). Computes `## Verified Against` from disk state exactly as
+ * `chunkCheckCommand` always has — the line-anchored heading match, the fence-bounded splice, the
+ * `changed` comparison against `previousBody` — and writes the file only when `changed` is true.
+ *
+ * Returns, never throws, for the ordinary outcomes (created / repaired / already current). The
+ * TWO existing throws are preserved exactly as they were in `chunkCheckCommand` — no-such-chunk
+ * and fence-refusal — because both mean the file was never touched and the caller needs a loud,
+ * actionable failure, not a silent skip.
+ *
+ * Sets no exit code, prints nothing. See `VerifiedAgainstWriteResult`'s doc comment for why.
+ */
+export async function recordVerifiedAgainst(
   slug: string,
   options: {
     project?: string;
-    json?: boolean;
     /**
      * 175-CONTEXT.md decision 11's stamp value — the drift comparison evidence justifying a
      * "re-verified, no code change" claim (e.g. `<hash>..<head> — 0 manifest files changed`).
-     * When supplied, writes the `Re-verified (no code change):` label; omitted otherwise. The
-     * `--reverified-no-code-change <range>` CLI flag itself is registered by plan 175-04 in
-     * `cli.ts`, to keep that file in one plan's `files_modified` — this option is exposed here
-     * only, ready for that registration to pass through.
+     * When supplied, writes the `Re-verified (no code change):` label; omitted otherwise.
      */
     reverifiedNoCodeChange?: string;
   } = {},
-): Promise<void> {
+): Promise<VerifiedAgainstWriteResult> {
   const projectDir = resolve(options.project ?? process.cwd());
   const chunkPath = join(projectDir, 'chunks', slug, 'CHUNK.md');
   const relChunkPath = join('chunks', slug, 'CHUNK.md');
@@ -545,12 +565,82 @@ export async function chunkCheckCommand(
     await fs.writeFile(chunkPath, updated);
   }
 
-  const result = {
+  return {
     slug,
     scope: record.scope,
     reason: record.reason,
     changed,
     citedSlices: citedSlices.map((c) => c.path),
+    citedSliceHashes: citedSlices,
+    unresolved,
+    ...(previousBody !== undefined ? { previousBody } : {}),
+  };
+}
+
+/**
+ * `boardsmith chunk-check <slug>` — writes or repairs `chunks/<slug>/CHUNK.md`'s
+ * `## Verified Against` block, and exits non-zero when it had to.
+ *
+ * Repair-then-fail, not fail-and-tell-you-to-fix: the repair lands on disk in this same call, so
+ * an immediate re-run passes. Never throws on this path — `program.parse()` does not await action
+ * handlers, so a rejection here would surface as an unhandled-rejection stack trace. The ONE path
+ * that does throw is the fence-refusal structural error, because there the file is never touched
+ * and the caller needs a loud, actionable failure, not a silent skip.
+ *
+ * HONEST LIMITATION: this command guarantees the block is correct WHENEVER IT RUNS. Whether a
+ * live `close` session actually invokes it is skill text, and carries the same skip risk Phase
+ * 170 found in fourteen live runs (171-VALIDATION.md "Known Unvalidated"). The compensating
+ * control is plan 05's `chunk-provenance-status`'s `verifiedWithoutProvenance` flag, which
+ * surfaces a chunk marked `verified` with no valid block, rather than letting a skipped
+ * invocation pass silently.
+ *
+ * Expected on-disk shape between the fences (`<!-- boardsmith:verified-against:begin -->` ...
+ * `<!-- boardsmith:verified-against:end -->`) is exactly what `renderVerifiedAgainstSection()`
+ * emits above — see that function for the literal markers.
+ *
+ * THIN CALLER (179-03 extraction): all computation and the write itself now live in
+ * `recordVerifiedAgainst` above. This function applies ONLY its own command-level contract on
+ * top — the JSON shape, the human bullets, and `process.exitCode = 1` when `changed` — unchanged
+ * from before the extraction, so the build pipeline (`build/close.md`) sees no behavioural change.
+ */
+export async function chunkCheckCommand(
+  slug: string,
+  options: {
+    project?: string;
+    json?: boolean;
+    /**
+     * 175-CONTEXT.md decision 11's stamp value — the drift comparison evidence justifying a
+     * "re-verified, no code change" claim (e.g. `<hash>..<head> — 0 manifest files changed`).
+     * When supplied, writes the `Re-verified (no code change):` label; omitted otherwise. The
+     * `--reverified-no-code-change <range>` CLI flag itself is registered by plan 175-04 in
+     * `cli.ts`, to keep that file in one plan's `files_modified` — this option is exposed here
+     * only, ready for that registration to pass through.
+     */
+    reverifiedNoCodeChange?: string;
+  } = {},
+): Promise<void> {
+  const relChunkPath = join('chunks', slug, 'CHUNK.md');
+
+  const {
+    scope: recordScope,
+    reason: recordReason,
+    changed,
+    citedSlices,
+    citedSliceHashes,
+    unresolved,
+    previousBody,
+  } = await recordVerifiedAgainst(slug, {
+    project: options.project,
+    reverifiedNoCodeChange: options.reverifiedNoCodeChange,
+  });
+  const record = { scope: recordScope, reason: recordReason };
+
+  const result = {
+    slug,
+    scope: record.scope,
+    reason: record.reason,
+    changed,
+    citedSlices,
     unresolved,
   };
 
@@ -577,7 +667,7 @@ export async function chunkCheckCommand(
       if (!previousBody.includes(`${LABEL_SCOPE} ${record.scope}`)) {
         bullets.push(`scope changed → ${record.scope}${record.reason ? ` (${record.reason})` : ''}`);
       }
-      if (citedSlices.some((s) => !previousBody!.includes(`| ${s.path} | ${s.hash} |`))) {
+      if (citedSliceHashes.some((s) => !previousBody!.includes(`| ${s.path} | ${s.hash} |`))) {
         bullets.push('cited-slice hashes rewritten');
       }
       if (unresolved.length && !unresolved.every((u) => previousBody!.includes(u))) {

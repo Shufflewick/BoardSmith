@@ -48,6 +48,7 @@ import {
   verifyExampleTranslateCommand,
 } from './commands/verify-example-replay.js';
 import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
+import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
@@ -542,6 +543,37 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifySourceFreeCheckCommand);
+
+// VERIFY-09/PROV-02 (179-CONTEXT.md decision "WIRE IT"): a verify pass's Close durably records
+// `## Verified Against` provenance for exactly the chunks it evaluated, reusing the ONE fenced
+// writer (`recordVerifiedAgainst`, `chunk-provenance.ts`) `chunk-check` itself calls — never a
+// second write path. The touched set is derived from `drift-check`'s own evaluated set, plus a
+// staging run's ledger impact records when `--run` names one; this command never lists `chunks/`
+// itself, so it can only ever record what a check actually looked at.
+//
+// NO scope-declaring option of any kind is registered here, now or ever: scope comes only from
+// `computeVerificationScope(projectDir)` and disk state, per 171-CONTEXT.md decision 1 — no
+// forcing flag, no `--source-free`, no `--assume-full`, no scope-override option.
+//
+// Exit code is ALWAYS 0 absent a genuine tool failure (an unreadable `--project`, a `--run` naming
+// a run whose ledger does not exist) — deliberately UNLIKE `chunk-check`, which repairs-then-fails.
+// A Close reports; it does not gate. A per-chunk write failure lands in `errors[]`, is printed
+// loudly to stderr, and does not abort the remaining chunks or set a non-zero exit code.
+program
+  .command('verify-close-record')
+  .description(
+    "Durably record a verify pass's `## Verified Against` provenance for exactly the chunks it " +
+      'evaluated, through the same fenced writer chunk-check uses (never a gate — exits 0 even ' +
+      'when an individual chunk fails, reporting the failure loudly instead)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option(
+    '--run <run-id>',
+    "The staging run whose impact-record affected slugs to include (optional — absent in " +
+      'source-free mode, where no run ledger exists)',
+  )
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyCloseRecordCommand);
 
 // TEST-01 (178-CONTEXT.md decision 8): the build-side write surface — one generated example-test
 // file per chunk (`tests/examples/<chunk>.examples.test.ts`), written idempotently and atomically.

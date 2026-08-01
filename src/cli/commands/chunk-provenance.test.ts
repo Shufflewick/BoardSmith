@@ -11,6 +11,7 @@ import {
   SCOPE_CODE_ONLY,
   SCOPE_REASONS,
   chunkCheckCommand,
+  recordVerifiedAgainst,
   VERIFIED_AGAINST_HEADING,
   VERIFIED_AGAINST_BEGIN,
   VERIFIED_AGAINST_END,
@@ -626,6 +627,116 @@ describe('chunk-check', () => {
     expect(withFlag).toContain(
       'Re-verified (no code change): aaa111..bbb222 — 0 manifest files changed',
     );
+  });
+
+  /**
+   * `recordVerifiedAgainst` — the reusable fenced writer extracted out of `chunkCheckCommand`
+   * (179-03). Behavior pinned here is IN ADDITION to every test above, which already exercises
+   * `chunkCheckCommand`'s own command-level contract (unmodified) on top of this same writer.
+   * Reuses `makeCheckProject`/`makeChunk` above rather than adding new fixture helpers, per this
+   * plan's own instruction.
+   */
+  describe('recordVerifiedAgainst — the reusable fenced writer', () => {
+    async function sha256File(path: string): Promise<string> {
+      return createHash('sha256').update(await fs.readFile(path)).digest('hex');
+    }
+
+    it('sets no exit code and prints nothing, unlike chunkCheckCommand', async () => {
+      const { project } = await makeCheckProject();
+      await makeChunk(project, 'jab', JAB_CITES);
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      process.exitCode = undefined;
+
+      const result = await recordVerifiedAgainst('jab', { project });
+
+      expect(process.exitCode).toBeUndefined();
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(errSpy).not.toHaveBeenCalled();
+      expect(result.changed).toBe(true);
+      expect(result.scope).toBe(SCOPE_FULL);
+
+      logSpy.mockRestore();
+      errSpy.mockRestore();
+    });
+
+    it('two consecutive calls with nothing changed: the second returns changed: false and the file SHA-256 is identical', async () => {
+      const { project } = await makeCheckProject();
+      await makeChunk(project, 'jab', JAB_CITES);
+      const chunkPath = join(project, 'chunks', 'jab', 'CHUNK.md');
+
+      const first = await recordVerifiedAgainst('jab', { project });
+      expect(first.changed).toBe(true);
+      const hashAfterFirst = await sha256File(chunkPath);
+
+      const second = await recordVerifiedAgainst('jab', { project });
+      expect(second.changed).toBe(false);
+      const hashAfterSecond = await sha256File(chunkPath);
+
+      expect(hashAfterSecond).toBe(hashAfterFirst);
+    });
+
+    it('a CHUNK.md whose heading exists but whose fences are missing THROWS the named fence-refusal error and leaves the file SHA-256 unchanged', async () => {
+      const { project } = await makeCheckProject();
+      await makeChunk(project, 'jab', JAB_CITES);
+      await recordVerifiedAgainst('jab', { project }); // first run creates the section
+
+      const chunkPath = join(project, 'chunks', 'jab', 'CHUNK.md');
+      const withBlock = await fs.readFile(chunkPath, 'utf-8');
+      const strippedFences = withBlock
+        .replace(VERIFIED_AGAINST_BEGIN, '')
+        .replace(VERIFIED_AGAINST_END, '');
+      await fs.writeFile(chunkPath, strippedFences);
+      const hashBeforeThrow = await sha256File(chunkPath);
+
+      await expect(recordVerifiedAgainst('jab', { project })).rejects.toThrow(
+        /machine-owned fences/i,
+      );
+
+      const hashAfterThrow = await sha256File(chunkPath);
+      expect(hashAfterThrow).toBe(hashBeforeThrow);
+    });
+
+    it('designer prose above and below the section is byte-identical after a write that DID change the block', async () => {
+      const { project } = await makeCheckProject();
+      const chunkPath = await makeChunk(project, 'jab', JAB_CITES);
+      const withProse = `# Designer prose above\n\nSome hand-authored notes.\n\n${await fs.readFile(
+        chunkPath,
+        'utf-8',
+      )}\n<!-- Designer prose below, after everything -->\n`;
+      await fs.writeFile(chunkPath, withProse);
+
+      await recordVerifiedAgainst('jab', { project }); // first write — creates the section
+
+      // Force a second, real repair (changes the cited slice's bytes → rewrites its hash row).
+      await fs.appendFile(join(project, 'rulebook', '01-setup-and-round-structure.md'), '\nMore.\n');
+      const second = await recordVerifiedAgainst('jab', { project });
+      expect(second.changed).toBe(true);
+
+      const after = await fs.readFile(chunkPath, 'utf-8');
+      const headingIdx = after.indexOf(VERIFIED_AGAINST_HEADING);
+      const beginIdx = after.indexOf(VERIFIED_AGAINST_BEGIN);
+      const endIdx = after.indexOf(VERIFIED_AGAINST_END);
+      expect(after.slice(0, headingIdx)).toContain('# Designer prose above');
+      expect(after.slice(0, headingIdx)).toContain('Some hand-authored notes.');
+      expect(after.slice(endIdx + VERIFIED_AGAINST_END.length)).toContain(
+        '<!-- Designer prose below, after everything -->',
+      );
+      void beginIdx;
+    });
+
+    it('chunkCheckCommand still exits 1 on stale, 0/undefined when current, and prints the same human bullets, calling this writer underneath', async () => {
+      const { project } = await makeCheckProject();
+      await makeChunk(project, 'jab', JAB_CITES);
+
+      process.exitCode = undefined;
+      await chunkCheckCommand('jab', { project });
+      expect(process.exitCode).toBe(1);
+
+      process.exitCode = undefined;
+      await chunkCheckCommand('jab', { project });
+      expect(process.exitCode).toBeUndefined();
+    });
   });
 });
 
