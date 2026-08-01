@@ -181,8 +181,26 @@ async function readRequiredTranslatedJsonFile(filePath: string): Promise<unknown
   return parseSubagentJsonInput(text, '--translated', filePath);
 }
 
-function escapeTestTitle(text: string): string {
-  return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+/**
+ * CR-02/WR-03 (178-REVIEW.md) fix: makes a piece of model/caller-controlled text safe to
+ * interpolate onto ONE `//`-prefixed comment line — a newline in the source value would otherwise
+ * close the comment and let everything after it land as live, unscanned TypeScript source in the
+ * generated file. Every field interpolated into a single-line `//` comment below MUST be routed
+ * through this function first.
+ */
+function commentSafeLine(text: string): string {
+  return text.replace(/\r?\n/g, ' ');
+}
+
+/**
+ * CR-02 (178-REVIEW.md) fix: makes a piece of model/caller-controlled text safe to interpolate
+ * inside a single-quoted JS string literal (e.g. a `describe('...')` title) — escapes backslashes
+ * and single quotes so the value cannot break out of the string literal, and strips newlines so it
+ * cannot otherwise smuggle live code onto a new line. Supersedes the never-called
+ * `escapeTestTitle` this replaced (dead code sitting beside the exact gap it was written for).
+ */
+function stringLiteralSafe(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
 
 function indentCode(code: string, prefix: string): string {
@@ -194,10 +212,13 @@ function indentCode(code: string, prefix: string): string {
 
 function renderCitationComment(entry: RawExampleEmitEntry): string[] {
   const lines: string[] = [];
-  lines.push(`  // ${entry.slicePath}:${entry.lineNumber} (${entry.pageCitation})`);
+  lines.push(
+    `  // ${commentSafeLine(entry.slicePath)}:${entry.lineNumber} ` +
+      `(${commentSafeLine(entry.pageCitation)})`,
+  );
   const sourceLines = entry.sourceText.split('\n');
-  lines.push(`  // Source: ${sourceLines[0]}`);
-  for (const extra of sourceLines.slice(1)) lines.push(`  //         ${extra}`);
+  lines.push(`  // Source: ${commentSafeLine(sourceLines[0])}`);
+  for (const extra of sourceLines.slice(1)) lines.push(`  //         ${commentSafeLine(extra)}`);
   return lines;
 }
 
@@ -216,7 +237,7 @@ function renderExampleTestFile(input: {
   const lines: string[] = [];
 
   lines.push('// GENERATED FILE — do not hand-edit. Regenerate with:');
-  lines.push(`//   boardsmith verify-example-emit --chunk ${chunkSlug}`);
+  lines.push(`//   boardsmith verify-example-emit --chunk ${commentSafeLine(chunkSlug)}`);
   lines.push(
     '// One example test file per chunk (178-CONTEXT.md decision 8) — re-running this command ' +
       "for this chunk regenerates ONLY this file, never another chunk's.",
@@ -228,11 +249,11 @@ function renderExampleTestFile(input: {
 
   if (executable.length === 0 && exempt.length === 0) {
     lines.push(
-      `// EXEMPT: chunk "${chunkSlug}" cites ${citedSlicePaths.length} rulebook slice(s) ` +
-        `(${citedSlicePaths.join(', ') || 'none'}) and no worked examples were found in any of ` +
-        `them — this chunk has no worked examples to test.`,
+      `// EXEMPT: chunk "${commentSafeLine(chunkSlug)}" cites ${citedSlicePaths.length} ` +
+        `rulebook slice(s) (${citedSlicePaths.map(commentSafeLine).join(', ') || 'none'}) and no ` +
+        `worked examples were found in any of them — this chunk has no worked examples to test.`,
     );
-    lines.push(`describe('${chunkSlug} — worked examples', () => {`);
+    lines.push(`describe('${stringLiteralSafe(chunkSlug)} — worked examples', () => {`);
     lines.push(
       `  it('names its exemption: no worked examples in this chunk\\'s cited slices', () => {`,
     );
@@ -243,12 +264,12 @@ function renderExampleTestFile(input: {
     return lines.join('\n');
   }
 
-  lines.push(`describe('${chunkSlug} — worked examples', () => {`);
+  lines.push(`describe('${stringLiteralSafe(chunkSlug)} — worked examples', () => {`);
 
   for (const record of exempt) {
     lines.push(
-      `  // ${record.verdict.toUpperCase()} — ${record.slicePath}:${record.lineNumber}: ` +
-        `${record.reason}`,
+      `  // ${record.verdict.toUpperCase()} — ${commentSafeLine(record.slicePath)}:` +
+        `${record.lineNumber}: ${commentSafeLine(record.reason)}`,
     );
     lines.push('');
   }

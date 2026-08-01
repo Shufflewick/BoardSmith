@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
+import { parse as parseTypeScript } from '@typescript-eslint/parser';
 import {
   generatedTestFilePath,
   scanGeneratedTestCode,
@@ -438,6 +439,117 @@ describe('verifyExampleEmitCommand', () => {
     const bytes = await fs.readFile(result.testFilePath, 'utf-8');
     expect(bytes).toContain('EXAMPLE-INCONSISTENT');
     expect(bytes).toContain('INDEX.md gap #4');
+  });
+
+  // -----------------------------------------------------------------------------------------
+  // CR-02 + WR-03 (178-REVIEW.md) — hostile model/agent-controlled text (embedded newline, a
+  // `*/`-shaped sequence, and a quote) must never break out of its syntactic context (a
+  // single-quoted `describe()` title or a `//` comment line) into live, unscanned TypeScript
+  // source. Proven two ways: (1) the emitted file still PARSES as valid TypeScript — not just a
+  // string match — and (2) it is actually executed by a real vitest process and still runs
+  // exactly the tests it should, proving the injected text never became live code.
+  // -----------------------------------------------------------------------------------------
+
+  it('a hostile chunkSlug/reason/pageCitation (newline, quote, "*/") never breaks generated-file syntax, proven by parsing it', async () => {
+    // chunkSlug's only structural constraint is "no path separator, no ..": a quote/backtick is
+    // legal input here (generatedTestFilePath's own guard, verified above, does not reject it).
+    const hostileChunkSlug = "chunk-'hostile'";
+    const project = await mkProject(dir, {
+      chunkSlug: hostileChunkSlug,
+      slicePath: 'rulebook/02-punch.md',
+      sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
+    });
+    const hostileReason =
+      'Looks fine at a glance.\n*/ }); process.exit(1); //\nBut secretly hostile.';
+    await recordExampleReplayVerdicts(project, [
+      createExampleReplayRecord({
+        exampleId: 'rulebook/02-punch.md:2',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        kind: 'predicate',
+        verdict: 'unexecutable',
+        reason: hostileReason,
+        provenance: 'quote-verified',
+      }),
+    ]);
+
+    const result = await verifyExampleEmitCommand({ project, chunk: hostileChunkSlug });
+    expect(result.exemptCount).toBe(1);
+
+    const bytes = await fs.readFile(result.testFilePath, 'utf-8');
+
+    // Must not have injected a raw newline into what's meant to be a single `//` comment line —
+    // string-search alone (the old, insufficient check): every line the hostile reason produced
+    // must itself start with `//`.
+    for (const line of bytes.split('\n')) {
+      if (line.includes('secretly hostile')) {
+        expect(line.trim().startsWith('//')).toBe(true);
+      }
+    }
+
+    // The authoritative check: the emitted file must still PARSE as valid TypeScript. A
+    // pre-CR-02 unescaped interpolation of this reason would inject `*/ }); process.exit(1); //`
+    // as live source, breaking the enclosing describe() block — this throws if that happened.
+    expect(() =>
+      parseTypeScript(bytes, { ecmaVersion: 'latest', sourceType: 'module' }),
+    ).not.toThrow();
+  });
+
+  it('a hostile chunkSlug/pageCitation and an unescaped-newline reason still produce a file vitest actually runs (end-to-end proof)', async () => {
+    const hostileChunkSlug = "chunk-'inject'";
+    const project = await mkProject(dir, {
+      chunkSlug: hostileChunkSlug,
+      slicePath: 'rulebook/02-punch.md',
+      sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
+    });
+    // A real, executable entry so the emitted file carries an actual `it(...)` (an exempt-only
+    // file has none, and vitest treats an empty suite as a failure unrelated to this fix) — its
+    // pageCitation is the hostile WR-03 payload: a newline followed by a `require(...)` call that
+    // would run as live code if `commentSafeLine` did not strip the newline first.
+    await recordExampleReplayVerdicts(project, [
+      createExampleReplayRecord({
+        exampleId: 'rulebook/02-punch.md:2',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        kind: 'transition',
+        verdict: 'agrees',
+        reason: 'The generated test executed and matched the expected outcome.',
+        provenance: 'quote-verified',
+      }),
+    ]);
+    const hostilePageCitation =
+      "p.2\n'); require('node:child_process').execSync('touch /tmp/pwned'); //";
+    const translated = [
+      {
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        pageCitation: hostilePageCitation,
+        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+        code:
+          "it('a READY guard becomes EXHAUSTED when punched', () => {\n  expect(true).toBe(true);\n});",
+      },
+    ];
+    const translatedPath = join(dir, 'translated.json');
+    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
+
+    const result = await verifyExampleEmitCommand({
+      project,
+      chunk: hostileChunkSlug,
+      translated: translatedPath,
+    });
+    expect(result.emittedCount).toBe(1);
+
+    await fs.symlink(join(REPO_ROOT, 'node_modules'), join(project, 'node_modules'), 'dir');
+    const vitestBin = join(REPO_ROOT, 'node_modules', '.bin', 'vitest');
+    // execFileAsync REJECTS on a non-zero exit code — a syntax error (from an unescaped
+    // chunkSlug/pageCitation) or an actually-executed `require(...)` call would make vitest exit
+    // non-zero, failing this `await` and the test with it. The strong proof this exists to give:
+    // the process must complete with exit code 0 and report the real test passing.
+    const { stdout } = await execFileAsync(vitestBin, ['run'], { cwd: project });
+    expect(stdout).toMatch(/1 passed|1 test/i);
+    // And the injected `require('node:child_process').execSync(...)` payload the hostile
+    // pageCitation carried must never actually have run as code.
+    await expect(fs.access('/tmp/pwned')).rejects.toThrow();
   });
 
   it('requires --translated when at least one example needs it, naming the count', async () => {
