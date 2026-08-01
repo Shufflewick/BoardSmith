@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 179-06 (wave 6 of 6, FINAL) — the live proof, run for real against a cp -R staged copy of seven (17 chunks) with rulebook/source/ and root rules.pdf removed from the copy only. All four source-free checks ran to completion (exit 0 each): verify-source-free-check (sourceFree true, scope code-conformance-only, reason source-missing, exactly 5 uncheckedDefectClasses), trace-check (232 findings), drift-check (16 findings, 17/17 chunks classified), verify-derive-check/CHECK-04 (pendingCount 3, zero dispatches — completion-only per its 177/177.1 disposition). CHECK-06 dispatched for real: 3 real claude -p extraction/translation calls against the entire project-wide pending corpus (all 3 slices), recording 1 example-inconsistent (seven's designated Run-example contradiction) + 2 unexecutable, all with provenance quote-unverified and verdicts left unrewritten — MET on the underlying degradation mechanism, with an honest caveat that no disagrees verdict arose naturally so the report's two named buckets were never populated. The Close (verify-close-record, no --run) wrote 17/17 recorded[] entries changed:true; the on-disk ## Verified Against block read back from chunks/best-seven-selection/CHUNK.md carries Scope: code-conformance-only / Reason: source-missing, matching 179-05's corrected expectation exactly. Idempotency proven (second Close run: 17/17 changed:false, byte-identical SHA-256s) and fence-scoping proven (git diff shows a pure append after designer prose). Both reference-game originals proven untouched by whole-tree git status --short, before and after (empty both times). Full suite unchanged: 4368/249, 0 failing. VERIFY-09 CLOSED in REQUIREMENTS.md; PROV-02 delivered through the verify pipeline. 179-PROOF.md written (334 lines). Phase 179 is COMPLETE (6/6 plans) — this was the milestone's last open requirement."
-last_updated: "2026-08-01T23:55:00.000Z"
+stopped_at: "Completed 180-01 (gap-closure fix, post-interactive-proof) — fixed the two 180-PROOF.md findings (from the first real interactive /bs-verify-game run) that can break a real designer's session. Finding 5 (JSON transport): parseSubagentJsonInput (verify-derive-check.ts, the single shared export site for every --enumerator-a/--enumerator-b/--reconciler/--extraction/--translation/--translated file read across verify-derive-check.ts, verify-example-replay.ts, and example-test-emit.ts) now tolerates a markdown fence wrapping the whole subagent return and prose before/after it, logging every repair in a new repairs[] result field, never silently. CR-04's ledger fence-marker rejection is confirmed untouched by a new test proving a forged marker inside a transport-repaired document is still rejected at record construction. Finding 2 (Session Lock): state-machine.md's Session Lock section now states an exact, worked-example-pinned released-value classification rule (strip one optional wrapping paren pair, leading token up to whitespace/em-dash-never-ASCII-hyphen must be exactly 'none') that correctly classifies seven's real (none — final-acceptance closed ...) value as released while still rejecting an adversarial none-the-wiser-shaped value as a live lock — kept in prose, not code, since the entire bs- skill directory has zero runtime .ts parsers. Findings 1/3/4/6/7 left untouched as instructed. Full suite: 4368/249 -> 4378/249, 0 failing. See 180-01-SUMMARY.md."
+last_updated: "2026-08-01T10:15:00.000Z"
 last_activity: 2026-08-01
 progress:
   total_phases: 11
@@ -28,6 +28,31 @@ Phase 177.1 (Wire CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 p
 (Ingest Contract Upgrade) remains at 5/10, In Progress — the milestone's only unfinished phase.
 
 ## Current Position
+
+`180-01-PLAN.md` (2026-08-01, gap-closure fix, post-interactive-proof) — fixed exactly the two
+`180-PROOF.md` findings that can break a real designer's run, leaving findings 1/3/4/6/7
+documented and untouched. **Finding 5 (JSON transport tolerance)**: `parseSubagentJsonInput`
+(`verify-derive-check.ts`) — the single shared export site every `--enumerator-a`/
+`--enumerator-b`/`--reconciler`/`--extraction`/`--translation`/`--translated` file read routes
+through (`verify-derive-check.ts`, `verify-example-replay.ts`, and a fourth call site in
+`example-test-emit.ts` found via the full-suite run, not named in the plan) — now tolerates a
+markdown fence wrapping the whole subagent return and prose before/after it, using the two real
+captured shapes from the live interactive run (enumerator B's fenced object; the reconciler's
+"```json is forbidden..." prose prefix) as test fixtures. Every repair is logged in a new
+`repairs[]` field on each command's result, never applied silently. CR-04's ledger fence-marker
+rejection is confirmed unchanged by a new test proving a forged marker inside a
+transport-repaired document is still rejected at `createDeriveCheckRecord`. **Finding 2 (Session
+Lock released value)**: `state-machine.md`'s Session Lock section now states an exact,
+worked-example-pinned rule — strip one optional wrapping paren pair, then the leading token (up
+to whitespace or an em dash, never an ASCII hyphen) must be exactly `none` — kept in prose, not
+code, since the entire `bs-` skill directory has zero runtime `.ts` parsers. Correctly classifies
+`seven`'s real `(none — final-acceptance closed 2026-07-20; ...)` value as released while still
+classifying an adversarial `none-the-wiser`-shaped value as a live lock; pinned in
+`status-tools.test.ts` with a mirrored classifier exercised against all four required cases.
+Full suite: 4368/249 → 4378/249, 0 failing. See
+`.planning/phases/180-install-and-interactive-proof/180-01-SUMMARY.md`.
+
+---
 
 `179-06-PLAN.md` (2026-08-01, wave 6 of 6, FINAL) — the live proof, run for real against a `cp -R`
 staged copy of `seven` (17 chunks) with `rulebook/source/` and root `rules.pdf` removed from the
