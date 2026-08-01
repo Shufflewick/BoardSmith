@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 179-01 (wave 1 of 6) — VERIFY_PIPELINE_STEPS single step->defect-class mapping + computeSourceFreeReport() built in src/cli/commands/verify-source-free.ts, plus decision 7's falsifiable coverage test, its live failure demonstrated and reverted. VERIFY-09 stays Pending (only wave 1 of 6 done). Next: 179-02-PLAN.md — verify-source-free-check CLI wrapper (wave 2)."
-last_updated: "2026-08-01T23:05:00.000Z"
+stopped_at: "Completed 179-02 (wave 2 of 6) — verify-source-free-check CLI registered in cli.ts, rendering computeSourceFreeReport (human + --json, exit 0 unconditionally, no scope-declaring flag), plus the PROV-02 data-flow proof asserting renderVerifiedAgainst's real output against both source-free reasons and the full-scope no-Reason: case. VERIFY-09 stays Pending (only wave 2 of 6 done). Next: 179-03-PLAN.md — wire /bs-verify-game's Close to chunk-check (wave 3)."
+last_updated: "2026-08-01T23:15:00.000Z"
 last_activity: 2026-08-01
 progress:
   total_phases: 11
@@ -28,6 +28,33 @@ three reference games, closing CHECK-06 and TEST-01 (`178-PROOF.md`). Next: Phas
 Verification Mode) — not yet planned.
 
 ## Current Position
+
+`179-02-PLAN.md` (2026-08-01, wave 2 of 6) — added `verifySourceFreeCheckCommand` to
+`src/cli/commands/verify-source-free.ts` (human + `--json` renderer over plan 01's
+`computeSourceFreeReport`, computes nothing itself, never assigns `process.exitCode`) and
+registered `boardsmith verify-source-free-check` in `src/cli/cli.ts` with `--project`/`--json`
+only — no `--source-free`/`--force`/`--assume-full`/`--force-scope` option, now or ever (decision
+1/T-179-06). Verified through the real built entry point, not just the registration: `npm run
+build:cli` → `node dist/cli.js verify-source-free-check --help`, then live runs against
+`~/BoardSmithGames/seven` (full scope, exit 0) and a staged source-free copy (`cp -R` +
+`rm -rf rulebook/source` on the copy only, per decision 9; exit 0, 5/10 steps run, 5 defect
+classes named). Added `describe('PROV-02 data flow — source-free project')` (4 tests) asserting
+`renderVerifiedAgainst`'s REAL rendered output — not a hand-built string — carries
+`code-conformance-only` plus a `Reason:` line for both `source-missing` and
+`pre-provenance-project` fixtures, no `Reason:` line on full scope, and that
+`computeSourceFreeReport`/`computeVerificationScope`/`verifySourceFreeCheckCommand`'s own `--json`
+return all agree on `scope`/`reason` for the same fixture (T-179-05). One Rule-1 bug caught by the
+full-suite run before committing: the registration comment's literal `--force`/`--assume-full`/
+`--force-scope` substrings collided with an unrelated pre-existing test
+(`verify-impact.test.ts`'s cli.ts registration scan, which greps a fixed byte range for
+`--force` as a bypass sentinel) — reworded without naming the flags literally, both criteria
+satisfied. Full suite: 4345 tests / 248 files, 0 failing (baseline 4335/248; +10 new tests, +0
+files). No skill-prose changes, no `chunk-provenance.ts` write-path changes — those are 179-03/
+179-04's work. VERIFY-09 stays Pending in `REQUIREMENTS.md` (only wave 2 of 6 delivered; the
+requirement closes at 179-06's live proof). Commit `726849ad`. See
+`.planning/phases/179-source-free-verification-mode/179-02-SUMMARY.md`.
+
+---
 
 `179-01-PLAN.md` (2026-08-01, wave 1 of 6) — built `src/cli/commands/verify-source-free.ts`: the
 ONE frozen `VERIFY_PIPELINE_STEPS` mapping (10 entries, one per `## Step N:` heading in
