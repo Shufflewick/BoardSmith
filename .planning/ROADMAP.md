@@ -2,7 +2,7 @@
 
 ## Active Milestone
 
-### 🚧 v4.9 BS Skills Re-Verification (In Progress)
+### 🚧 v4.9 BS Skills Re-Verification (All phases complete — audited, pending archive)
 
 **Milestone Goal:** Re-verify a built game against its rules — catching drift introduced by improved
 models, improved rulebooks, or improved bs skills.
@@ -57,9 +57,9 @@ Plans:
 - [x] 170-05-PLAN.md — ingest harness: deterministic produced-artifact checker + fixtures from the real failed run (PROC-01, PROC-02)
 - [x] 170-06-PLAN.md — ingest harness driver: live headless agent run, operator-invoked, never in CI; failing baseline recorded (PROC-01)
 - [x] 170-07-PLAN.md — `templates/INDEX.template.md` + Step 2.5 archive/hash; INDEX produced by template fill (INGEST-01, INGEST-03, INGEST-04, PROC-02)
-- [ ] 170-08-PLAN.md — dispatch prompt as template + per-slice line-kind receipt; INGEST-02 on live output (INGEST-02, PROC-02)
-- [ ] 170-09-PLAN.md — capture passing-run evidence + PROC-02 adversarial closure across all six requirements (INGEST-01..04, PROC-02)
-- [ ] 170-10-PLAN.md — PROC-01 human gate re-run, gated on the harness passing first (PROC-01)
+- [x] 170-08-PLAN.md — dispatch prompt as template + per-slice line-kind receipt; INGEST-02 on live output. **EXECUTED; its mechanism was then REFUTED** — see `170-MECHANISMS.md` (INGEST-02, PROC-02)
+- [~] 170-09-PLAN.md — ABSORBED INTO 170-10; its passing-run evidence + PROC-02 adversarial closure were delivered there, not separately (INGEST-01..04, PROC-02)
+- [x] 170-10-PLAN.md — PROC-01 human gate re-run + 170-09's absorbed scope. **Real two-run adversarial gate: Run 1 FAILED 3/9 items with a root-caused fix, Run 2 passed 9/9** — see `170-10-SUMMARY.md` (PROC-01, PROC-02)
 
 ### Phase 171: Provenance Recording
 **Goal**: The build pipeline and status reporting both know, honestly, what was verified against what.
@@ -496,14 +496,14 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 170. Ingest Contract Upgrade | 5/10 | In Progress|  |
+| 170. Ingest Contract Upgrade | 9/10 | Complete   | 2026-07-28 |
 | 171. Provenance Recording | 7/7 | Complete   | 2026-07-28 |
 | 172. Source-Free Conformance Checks | 5/5 | Complete   | 2026-07-28 |
 | 173. Verify Pipeline Core | 8/8 | Complete   | 2026-07-29 |
-| 174. Verify Classifier | 8/8 | Reopened — goal NOT MET (decision 19 applied, §8) | - |
+| 174. Verify Classifier | 8/8 | Complete — goal MET under the ROADMAP's literal bar (see Result) | 2026-07-31 |
 | 175. Impact Map & Repair Gating | 8/8 | Complete   | 2026-07-30 |
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
-| 177. Derived-Line Re-Derivation | 13/13 | Executed — goal NOT MET (6/16, 37.5%; CHECK-04 stays OPEN, see Result) | - |
+| 177. Derived-Line Re-Derivation | 22/22 | Complete — CHECK-04 CLOSED 2026-07-31 on the re-scoped design (see Result) | 2026-07-31 |
 | 178. Worked-Example Tests | 11/11 | Complete   | 2026-08-01 |
 | 179. Source-Free Verification Mode | 6/6 | Complete | 2026-08-01 |
 

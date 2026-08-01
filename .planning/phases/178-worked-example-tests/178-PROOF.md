@@ -382,3 +382,36 @@ Recorded rather than dismissed, because "it was probably the cleanup" is how a r
 waved through. The claim being made here is narrow and checkable: **3 consecutive clean full-suite
 runs after the tree settled**, not "the failure was investigated and explained." If a similar
 failure recurs on a settled tree, this note is the prior observation to weigh it against.
+
+## §14 — DISCLOSURE ADDED AT MILESTONE AUDIT (2026-08-01): the dispatch-path limitation this proof did not state
+
+The v4.9 milestone audit found this proof carries the same limitation `177.1-08` hit — and, unlike
+`177.1-08`, **this document never disclosed it.** Correcting that here rather than at archive.
+
+**The limitation.** This proof drove the pipeline via direct `claude -p` proxy dispatches. It never
+ran an actual interactive `/bs-verify-game` or `/bs-build-chunk` orchestrator session. The CLI
+commands, the ledger, the subagent contracts, and the model returns were all real — real bugs were
+found and fixed mid-proof because of it — but the ORCHESTRATOR layer that a designer's live Claude
+Code session would use to read the skill prose and issue those dispatches was proxied, not
+exercised.
+
+`177.1-08` disclosed exactly this, in its own words: "a genuine, honestly-disclosed gap between the
+proof and production dispatch mechanics." This document should have said the same and did not.
+
+**Why it matters more here than the wording suggests.** Phase 170's foundational finding
+(`170-PROOF-RUN.md`) is that the orchestrator *reliably fails to convey mechanical work* — it does
+not execute prose skill text literally, and it skips steps it has just read. That finding is why
+this milestone built deterministic harnesses and grep-enforced pins in the first place. A proof
+that bypasses the orchestrator is therefore weakest at exactly the layer this milestone independently
+established as least trustworthy.
+
+**What this does and does not qualify:**
+- **Does NOT qualify:** the CLI surfaces, the ledger's guarantees, the derivation module, the
+  contracts' handshakes, the generated tests that really ran under vitest, or any of the three real
+  bugs found by executing real output. Those were genuinely exercised.
+- **DOES qualify:** any reading of this proof as evidence that a designer running the skill
+  end-to-end gets these results. That specific claim is NOT established here, for CHECK-06 or
+  TEST-01, and is carried forward as open verification work.
+
+**Carried forward:** an interactive orchestrator-session proof for `build/test.md`'s worked-example
+step and `verify-game.md`'s Step 8. Same open item `177.1-08` carries for CHECK-04's Step 7.
