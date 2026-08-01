@@ -531,8 +531,13 @@ the tag.
         with an explanatory comment rather than silently widened or narrowed (177.1-01).
 - [x] **CHECK-05**: Code drift — each chunk's Build Manifest files are diffed against its verified
       commit hash, and any chunk whose code moved since the human last approved it is reported.
-- [ ] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
-      the engine and mismatches reported as findings.
+- [x] **CHECK-06**: Worked-example replay — worked examples in the cited slices are executed against
+      the engine and mismatches reported as findings. Wired into `/bs-verify-game` as an advisory,
+      exit-0 Step 8 (178-09) dispatching the same shared derivation pipeline (`extract-example.md`/
+      `translate-example.md`, `verify-example-replay`/`-translate`/`-record`) TEST-01 uses
+      build-side, deliberately asymmetric per decision 11 (never gates the Close). Live cross-game
+      proof (all three reference games, generated tests actually executed) is 178-11's job — this
+      entry tracks reachability, matching TEST-01's own precedent (178-08).
 
 ### Build Pipeline (TEST)
 
@@ -588,6 +593,6 @@ the tag.
 | CHECK-01 | Phase 176 | Complete — full 62-ruling corpus re-checked and reported live (`176-PROOF.md` §2-§3), SC-3 (`seven` Ruling 1) proven MET. Verdict-provenance note (`176-PROOF.md` §3b): `still-needed` proven on real data (60/60 dispatched); `resolved-by-source`/`contradicted` proven correct-when-called-for only on 2 CONSTRUCTED lexicon cases (2/2 match) — neither reference game's committed fixture contains real content producing those labels. Same disposition basis Phase 174 used for VERIFY-03's own real-data gap. |
 | CHECK-02 | Phase 176 | Complete — mechanism proven never-capped in code (`selectStaleChunks`); real dispatch on a stated 2-of-12 subset (`176-PROOF.md` §4), decision-17's episode rule proven in BOTH games on already-at-3-round chunks, paired pre/post-repair gate readings (§5). 4th lens (design-review) NOT dispatched in this proof pass — stated limitation, not hidden. Two live bugs found+fixed enabling this proof (`ImpactMapEntry.pairIds` drop, `appendAuditRoundHeading` mis-placement) — see §4. |
 | CHECK-04 | Phase 177 (delivery: Phase 177.1) | **Complete** — closed 2026-07-31 on the reframed criterion, see the CHECK-04 entry's closure note AND its Phase 177.1 delivery note directly below it. Dual enumeration + reconciliation replaced the retired per-line blind re-derivation design. Measured across THREE reference games (`seven`, `one-two-punch`, `doom-machine`), ~250 line-classifications over four definitive runs (`177-15`, `177-20`, `177-21`, `177-22`): **zero wrongly-`contradicted` lines, zero fabrications passed grounding, zero annotation leaks into any dispatched payload, every result explainable** — the four criteria that protect a user, clean in every run. The fifth criterion (byte-identical classifications across two runs) was RETIRED as miscalibrated: the design's premise is two INDEPENDENT enumerations, independence implies variance, and `claude -p` exposes no temperature/seed control (61 flags, none for sampling). Residual confirmation variance ~12.5% (4/32, `177-22`), entirely in the safe direction — a line may read `corroborated` on one run and `uncorroborated` on another, never falsely `contradicted`. Treat a non-corroboration as "worth a human glance", never as a verdict. **Phase 177.1 closed a reachability gap, not this closure**: the measured design now has a CLI surface (`verify-derive-check`/`verify-derive-record`) and `/bs-verify-game` Step 7 dispatches it directly. Proven against the harness on recorded input (`177.1-REPLAY-PROOF/`, zero mechanical divergence) and a real live run (`177.1-LIVE-PROOF/PROOF.md`) — the live Sonnet-5 reconciler produced a well-formed `arithmeticSpec` for both a `single` and a `chain` claim, code accepted both as correct, and all three live classifications landed within their pre-registered permitted sets. WR-07 stays open, routed to Phase 178. |
-| CHECK-06 | Phase 178 | Pending |
+| CHECK-06 | Phase 178 | Complete — reachability wired (`/bs-verify-game` Step 8, advisory, exit 0); live cross-game proof deferred to 178-11, matching TEST-01's own precedent |
 | TEST-01 | Phase 178 | Complete |
 | VERIFY-09 | Phase 179 | Pending |

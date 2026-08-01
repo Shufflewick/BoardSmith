@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-08-PLAN.md — TEST-01 wired into build/test.md as new numbered item 4 (sequence renumbered 1-8, numbering guard added); closed the wave-7-flagged verify-example-record example-inconsistent seam as a prerequisite. Next: Phase 178 plan 09 (verify-game.md Step 8, CHECK-06)."
-last_updated: "2026-07-31T20:50:00.000Z"
+stopped_at: "Completed 178-09-PLAN.md — verify-game.md Step 8 (CHECK-06, advisory, exit 0) wired in, Close renumbered to Step 9, Context-Economics carve-out extended with CHECK-06's inverted-observable paragraph. Next: Phase 178 plan 10 (pre-registration, CONTEXT decision 13)."
+last_updated: "2026-07-31T21:10:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 8
-  total_plans: 86
-  completed_plans: 86
+  total_plans: 87
+  completed_plans: 87
   percent: 75
 ---
 
@@ -21,15 +21,45 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **8/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 08 wired
-TEST-01 into `build/test.md` as new numbered item 4 (sequence renumbered 1-8, a parsed-index
-numbering guard added) and, as a prerequisite, closed the wave-7-flagged
-`verifyExampleRecordCommand` `example-inconsistent` seam — the `seven` Run-example fixture now
-survives end to end instead of throwing. Next: Phase 178 plan 09 (`verify-game.md` Step 8,
-CHECK-06 — advisory, exit 0, deliberately asymmetric with build/test.md's build-blocking TEST-01).
+**Current focus:** Phase 178 — Worked-Example Tests — **9/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 09 wired
+CHECK-06 into `verify-game.md` as a new Step 8 (Worked-Example Replay), advisory and exit-0,
+renumbering Close to Step 9 — the deliberate asymmetric counterpart to plan 08's build-blocking
+TEST-01 step. Both pipeline sides now dispatch the same two contracts
+(`extract-example.md`/`translate-example.md`) and the same three commands. Next: Phase 178 plan
+10 (pre-registration, CONTEXT decision 13).
 
 ## Current Position
+
+`178-09-PLAN.md` (2026-07-31) — Phase 178 wave 9 of 11 — inserted `verify-game.md`'s new
+`## Step 8: Worked-Example Replay (CHECK-06)` between Step 7 (CHECK-04) and the Close, which is
+now `## Step 9: Close (VERIFY-02)`. Step 8 mirrors Step 7's shape (project-wide, independent of
+staleness/repair, dispatch-then-record-then-format) but is deliberately advisory: it runs
+`boardsmith verify-example-replay --json`, dispatches each pending slice's `extractionPayload` to
+a subagent carrying `extract-example.md`'s `BS-EXAMPLE-EXTRACT-V1` handshake, obtains the second
+dispatch's bytes from `boardsmith verify-example-translate --json` (the ONLY source — no
+`GameApiSurface`/`exportedSymbols` narration in the step's own prose) and dispatches each
+`translationPayload` to a second subagent carrying `translate-example.md`'s
+`BS-EXAMPLE-TRANSLATE-V1` handshake, two separate dispatches never one combined pass, records
+through exactly ONE `verify-example-record` invocation per slice, executes each translated test
+with the project's own runner (verdict from the observed pass/fail, never `verdictHint`), reports
+by formatting `verify-example-replay --json`'s output (raw counts, never a percentage, the two
+provenance-gated mismatch buckets — quotes source-verified vs. NOT — reported distinctly per
+decision 12), names a zero-examples slice as a real ingest-contract finding, and closes stating it
+exits 0 and is deliberately asymmetric with `build/test.md`'s build-blocking TEST-01 — it must
+never gate the Close. Updated Step 0's clean-close cross-reference and Step 7's own "Step 8's
+Close" reference to Step 9. Added two Reference Files entries for the two new contracts. Extended
+the Context-Economics carve-out with a SECOND, separate paragraph (never merged into the CHECK-04
+one) naming CHECK-06's inverted observable: the extraction prompt legitimately carries BOTH quote
+lines AND `Visual (p.` lines (the opposite of CHECK-04's enumerator) while still carrying ZERO
+`Derived (p.` lines. Pinned with a new `CHECK-06 routing and Reference Files` describe block (11
+tests, including a step-numbering guard proven against two mutated fixtures — a duplicated
+heading, a skipped heading), 2 tests extending the carve-out block, and fixed 4 pre-existing tests
+whose slice boundaries were hardcoded to the now-retired `'## Step 8: Close'` anchor (would have
+silently swallowed the new Step 8/9 content into what each test believed was Step 7's own text).
+Full suite 4292/247 → 4306/247 (14 new tests, 0 subtracted, 0 failing).
+
+---
 
 `178-08-PLAN.md` (2026-07-31) — Phase 178 wave 8 of 11 — closed the seam wave 7 flagged:
 `verifyExampleRecordCommand` threw on any `--extraction` entry carrying `kind:
