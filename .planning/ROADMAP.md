@@ -435,7 +435,7 @@ dated 2026-07-30, routed to Phase 178. See `177.1-LIVE-PROOF/PROOF.md` and
   - [x] 178-07-PLAN.md — extract-example.md / translate-example.md subagent contracts + installer probes
   - [x] 178-08-PLAN.md — build/test.md worked-example step (TEST-01), build-blocking, renumbered sequence
   - [x] 178-09-PLAN.md — verify-game.md Step 8 (CHECK-06), Close renumbered to Step 9
-  - [ ] 178-10-PLAN.md — Pre-registration: expected extraction + satisfiability audit, committed alone
+  - [x] 178-10-PLAN.md — Pre-registration: expected extraction + satisfiability audit, committed alone
   - [ ] 178-11-PLAN.md — Live proof on all three reference games, generated tests executed, closure notes
 
 ### Phase 179: Source-Free Verification Mode
@@ -463,7 +463,7 @@ Phases execute in numeric order: 170 → 171 → 172 → 173 → 174 → 175 →
 | 175. Impact Map & Repair Gating | 8/8 | Complete   | 2026-07-30 |
 | 176. Stale-Chunk Repair | 6/6 | Complete   | 2026-07-30 |
 | 177. Derived-Line Re-Derivation | 13/13 | Executed — goal NOT MET (6/16, 37.5%; CHECK-04 stays OPEN, see Result) | - |
-| 178. Worked-Example Tests | 9/11 | In Progress|  |
+| 178. Worked-Example Tests | 10/11 | In Progress|  |
 | 179. Source-Free Verification Mode | 0/TBD | Not started | - |
 
 ## Shipped Milestones

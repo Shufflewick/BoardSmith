@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-09-PLAN.md — verify-game.md Step 8 (CHECK-06, advisory, exit 0) wired in, Close renumbered to Step 9, Context-Economics carve-out extended with CHECK-06's inverted-observable paragraph. Next: Phase 178 plan 10 (pre-registration, CONTEXT decision 13)."
-last_updated: "2026-07-31T21:10:00.000Z"
+stopped_at: "Completed 178-10-PLAN.md — pre-registered the expected extraction (25 slices, 11 worked examples across all three reference games, corrected up from the inherited ~5-6 estimate) plus the satisfiability audit, committed ALONE before any dispatch. Next: Phase 178 plan 11 (live proof on all three reference games)."
+last_updated: "2026-07-31T21:30:00.000Z"
 last_activity: 2026-07-31
 progress:
   total_phases: 11
   completed_phases: 8
-  total_plans: 87
-  completed_plans: 87
+  total_plans: 88
+  completed_plans: 88
   percent: 75
 ---
 
@@ -21,15 +21,57 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **9/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 09 wired
-CHECK-06 into `verify-game.md` as a new Step 8 (Worked-Example Replay), advisory and exit-0,
-renumbering Close to Step 9 — the deliberate asymmetric counterpart to plan 08's build-blocking
-TEST-01 step. Both pipeline sides now dispatch the same two contracts
-(`extract-example.md`/`translate-example.md`) and the same three commands. Next: Phase 178 plan
-10 (pre-registration, CONTEXT decision 13).
+**Current focus:** Phase 178 — Worked-Example Tests — **10/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 10 committed
+`178-PRE-REGISTRATION.md` ALONE (`dc4670fe`, one file, before any dispatch), correcting the
+inherited corpus estimate from ~5-6 worked examples to 11 (found by direct read: `one-two-punch`
+alone has six labeled examples, not two) across 25 live slices, and pre-registering the
+satisfiability audit — 3 of the ROADMAP's own success-criteria wordings rewritten, 2 proposed bars
+rejected outright, before any measurement could fail them. Next: Phase 178 plan 11 (the live proof
+on all three reference games).
 
 ## Current Position
+
+`178-10-PLAN.md` (2026-07-31) — Phase 178 wave 10 of 11 — committed
+`.planning/phases/178-worked-example-tests/178-PRE-REGISTRATION.md` ALONE (`dc4670fe`, `git show
+--stat` names exactly one path, 249 insertions), zero `claude -p`/Task dispatches in its
+production. Section 1: a per-slice expected-extraction table covering all 25 live
+`rulebook/*.md` slices across `seven` (3), `one-two-punch` (2), and `doom-machine` (20, including
+`OPEN-QUESTIONS.md` — a live slice by `readLiveSlices`'s own exclusion list of exactly `{INDEX.md,
+00-visual-survey.md}`), built from a zero-dispatch `tsx` script calling the real
+`readLiveSlices`/`buildExampleExtractionPayload` directly plus independent `cat -n` reads of every
+candidate line. **Found and corrected, before any dispatch: the inherited corpus (`178-CONTEXT.md`
+`<measured_reality>` #3, this plan's own `<corpus>` block) undercounted by more than half** — 11
+worked examples exist across the three games, not ~5-6: `seven` 2 (Set, and the Run example
+pre-registered `{example-inconsistent}` ONLY per D-04's adversarial fixture — its Visual line at
+L14, not L13 as the plan stated, names the "5,6,7" vs "1,2,3" contradiction in-source), `one-two-punch`
+6 (not 2 — two NEW citation-labeled `(worked example, italic)` spans in
+`01-setup-and-round-structure.md` plus two more in `02-action-cards-and-resolution.md`, alongside
+the two `Punch Examples` the corpus already knew about), `doom-machine` 3 (not 2 — a NEW citation
+header `DICE ROLL SYMBOLOGY / EXAMPLES:` legend block in `01-dice-roll-symbology.md`, plus the two
+already known, with the SOUL HARVESTER example corrected to note it carries an explicit `EXAMPLE:`
+quoted citation, not diagram-description text alone). Every non-adversarial example got the
+`{agrees, disagrees, unexecutable}` or `{unexecutable, example-inconsistent, agrees, disagrees}`
+permitted set per its `kind`, never a single predicted label. Section 2's satisfiability audit
+(decision 14) checked 6 proposed criteria against "could a correct implementation ever fail this
+for reasons outside its control?": SC-1/SC-2's literal ROADMAP wording both rewritten (an
+`unexecutable`/`example-inconsistent` example makes the literal "every example produces an
+executable test/is executed" claim unsatisfiable by construction — the same defect class that cost
+CHECK-04 four measurement runs); a naive "the Run example is never turned into a test" criterion
+rewritten (it passes vacuously if extraction finds nothing, hiding a real regression) to require
+the `example-inconsistent` verdict WITH both contradicting excerpts present; any N-of-M bar over a
+single game's example count REJECTED per 178-RESEARCH Pitfall 5; a "human-recognizable" bar
+REJECTED as unmeasurable (replaced by this document's own Section 1 table as the fixed target);
+SC-3 (shared derivation logic) KEPT unchanged as a static, non-dispatch-dependent code-structure
+fact. Section 3 defines stability on the generated test's PASS/FAIL outcome across two independent
+extraction+translation runs of the same example, names decision 15 explicitly, and states the
+retired CHECK-04 determinism gate is NOT re-imported. Section 4 records the literal `cp -R`/sha256
+baseline commands (D-18) 178-11 must use. No code changed — this is a docs-only plan. Full suite:
+4306 tests / 247 files, 0 failing, unchanged from the entering baseline (no `src/` file touched).
+See `.planning/phases/178-worked-example-tests/178-10-SUMMARY.md`. **1 of 11 plans remains in
+Phase 178** — `178-11` (the live proof) is next.
+
+---
 
 `178-09-PLAN.md` (2026-07-31) — Phase 178 wave 9 of 11 — inserted `verify-game.md`'s new
 `## Step 8: Worked-Example Replay (CHECK-06)` between Step 7 (CHECK-04) and the Close, which is
