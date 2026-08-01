@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.9
 milestone_name: BS Skills Re-Verification
 status: executing
-stopped_at: "Completed 178-03-PLAN.md — CHECK-06 ledger + verify-example-replay read command built, mirroring the CHECK-04 pairing's four code-reviewed guarantees. Next: Phase 178 plan 04 (verify-example-record write surface + QuoteVerifiedProvenance gating + CLI registration)."
-last_updated: "2026-08-01T00:25:00.000Z"
-last_activity: 2026-07-31
+stopped_at: "Completed 178-04-PLAN.md — verify-example-record sole write surface + QuoteVerifiedProvenance provenance gating (decision 12) + CLI registration for verify-example-replay/verify-example-record. Next: Phase 178 plan 05 (verify-example-translate)."
+last_updated: "2026-08-01T00:32:00.000Z"
+last_activity: 2026-08-01
 progress:
   total_phases: 11
   completed_phases: 8
   total_plans: 84
-  completed_plans: 83
-  percent: 73
+  completed_plans: 84
+  percent: 74
 ---
 
 # Project State
@@ -21,15 +21,54 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 178 — Worked-Example Tests — **3/11 plans done**. Phase 177.1 (Wire
-CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 03 built
-`verify-example-replay.ts` — the CHECK-06 ledger (frozen verdict enum, one choke-point
-constructor, atomic upsert-append, revalidating read path) plus its read-only `--json` report
-command, mirroring CHECK-04's code-reviewed `verify-derive-check.ts` pairing in structure. Next:
-Phase 178 plan 04 (the `verify-example-record` write surface + `QuoteVerifiedProvenance` gating +
-CLI registration).
+**Current focus:** Phase 178 — Worked-Example Tests — **4/11 plans done**. Phase 177.1 (Wire
+CHECK-04's Closed Design Into The Pipeline) is COMPLETE (8/8 plans). Phase 178 plan 04 added
+`verifyExampleRecordCommand` (CHECK-06's sole ledger write surface), wired
+`QuoteVerifiedProvenance` gating (decision 12) into every recorded verdict, and registered both
+`verify-example-replay`/`verify-example-record` in `cli.ts`, verified reachable from a real built
+CLI. Next: Phase 178 plan 05 (`verify-example-translate`).
 
 ## Current Position
+
+`178-04-PLAN.md` (2026-08-01) — Phase 178 wave 4 of 11 — added `verifyExampleRecordCommand`
+(`src/cli/commands/verify-example-replay.ts`), the ONLY write surface for CHECK-06's ledger, and
+registered both `verify-example-replay`/`verify-example-record` in `cli.ts`. `--slice-path` is
+containment-checked against `projectDir/rulebook` before any read (mirrors `verify-derive-record`'s
+CR-04 fix). Reads `--extraction`/`--translation` JSON returns, keys every entry by
+`workedExampleId({slicePath, lineNumber})` — never model-returned prose — throwing on a
+same-location collision or an unmatched extraction/translation pair, and validates every
+`WorkedExampleSpec`/`ExampleReplayRecord` before the single `recordExampleReplayVerdicts` call at
+the end (validate-everything-then-write; a rejection anywhere leaves the ledger byte-identical).
+**Provenance gating (178-CONTEXT.md decision 12, this milestone's hardest-won lesson) is now
+code**: resolved ONCE per invocation via `QuoteVerifiedProvenance.obtain(projectDir)` +
+`.covers(slicePath)` — `'quote-verified'` only when an archived, hash-verified source both exists
+AND covers this slice, `'quote-unverified'` otherwise (including no archived source at all).
+`createExampleReplayRecord` now REQUIRES `provenance` on every record; the downgrade never rewrites
+`verdict` itself. `verifyExampleReplayCommand`'s report groups `disagrees` findings into two named
+buckets ("mismatch, quotes source-verified" / "mismatch, quotes NOT source-verified — read as a
+question about the quote, not an accusation against the code") and surfaces `unarchivedSources`
+rather than swallowing it. Both commands verified reachable from a REAL BUILT CLI (`node
+dist/cli.js verify-example-replay --help` / `verify-example-record --help`, both exit 0 and list
+the exact documented flags; `verify-example-record --project /tmp` exits non-zero naming the
+missing required options) — not merely source-asserted. Both prior grep gates
+(`buildBlindDerivePayload|focusQuoteWindow|blindDeriveHandle` and `fs.writeFile|writeFileSync`)
+stayed at 0. **One deviation**: the plan's literal `grep -c "run-id\|force\|--skip\|overwrite"`
+acceptance gate is checked against the WHOLE file including prose, and wave 3 had already put 2
+matches into that same file's own JSDoc ("no run-id", "bypass/force/skip") documenting the absence
+of those very flags — an unsatisfiable-as-worded criterion per decision 14 (a criterion requiring
+BOTH explicit prose naming absent flags AND zero occurrences of those flag-name substrings cannot
+both hold). Resolved by rephrasing all 4 occurrences (2 pre-existing, 2 newly added) to avoid the
+literal substrings while preserving the same documented guarantee — grep now genuinely returns 0.
+**Full `npm test`: 246 files / 4228 tests / 0 failing** (baseline 4213/246; +15 new tests, 0 new
+files — extended the existing `verify-example-replay.test.ts`/`cli.test.ts`). CHECK-06's
+requirement checkbox deliberately left unchecked — this plan builds the write surface + provenance
+gate + CLI registration only; `verify-game.md` Step 8 pipeline wiring (dispatching the extractor/
+translator subagents that produce the `--extraction`/`--translation` files this command reads)
+remains for a later wave. See
+`.planning/phases/178-worked-example-tests/178-04-SUMMARY.md`. **7 of 11 plans remain in Phase
+178** — `178-05` (verify-example-translate) is next.
+
+---
 
 `178-03-PLAN.md` (2026-07-31) — Phase 178 wave 3 of 11 — built `src/cli/commands/verify-example-replay.ts`:
 `EXAMPLE_REPLAY_VERDICTS` (frozen `agrees`/`disagrees`/`example-inconsistent`/`unexecutable` set),
