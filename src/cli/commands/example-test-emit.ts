@@ -109,6 +109,52 @@ interface RawExampleEmitEntry {
   pageCitation: string;
   sourceText: string;
   code: string;
+  /**
+   * Import statements `code` depends on (the translator's `imports` field,
+   * `translate-example.md`'s own return shape) — kept separate from `code` so they can be
+   * hoisted to the top of the generated file, deduplicated across every example in the chunk,
+   * rather than emitted per-example where they would land inside a `describe()` body and be a
+   * syntax error. Optional for backward compatibility with a hand-built `--translated` entry
+   * that needs no project imports (e.g. `expect(true).toBe(true)`).
+   */
+  imports?: string[];
+}
+
+/**
+ * A single-line `import ... ;` statement — the only shape a hoisted import may take. Rejects
+ * anything else (multi-statement smuggling via `;` mid-line, non-import content disguised as an
+ * "import") BEFORE it ever reaches the top of the generated file, where it would execute with
+ * top-level, unindented, unscanned authority. This is a narrower shape check than
+ * `scanGeneratedTestCode` performs — that scan still runs on every import line too (see below);
+ * this regex exists to fail loudly on garbage before the linter even sees it.
+ */
+const SINGLE_IMPORT_STATEMENT_RE = /^import\s[^\n;]+;\s*$/;
+
+/**
+ * Validates and deduplicates the hoisted import statements for ONE chunk's generated file.
+ * Every string must be a single well-formed `import ... ;` statement (`SINGLE_IMPORT_STATEMENT_RE`)
+ * — a violation REJECTS THE WHOLE EMISSION, naming the offending entry, before anything is
+ * written (the same validate-everything-then-write discipline this module holds everywhere
+ * else). Deduplicated and sorted for a deterministic, byte-identical re-emission.
+ */
+function collectHoistedImports(
+  entries: readonly { imports?: string[]; slicePath: string; lineNumber: number }[],
+): string[] {
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    for (const imp of entry.imports ?? []) {
+      const trimmed = imp.trim();
+      if (!SINGLE_IMPORT_STATEMENT_RE.test(trimmed)) {
+        throw new Error(
+          `Translated import for ${entry.slicePath}:${entry.lineNumber} is not a single ` +
+            `well-formed "import ... ;" statement: ${JSON.stringify(imp)}\n` +
+            `Re-dispatch the translator; writing nothing.`,
+        );
+      }
+      seen.add(trimmed);
+    }
+  }
+  return [...seen].sort();
 }
 
 export interface VerifyExampleEmitResult {
@@ -161,8 +207,12 @@ function renderExampleTestFile(input: {
   exempt: ExampleReplayRecord[];
   executable: ExampleReplayRecord[];
   codeByExampleId: Map<string, RawExampleEmitEntry>;
+  /** Deduplicated, sorted `import ... ;` statements every executable example's `code` may use —
+   * hoisted to file scope (`collectHoistedImports`). Never rendered per-example: an `import`
+   * statement inside a `describe()` body is a syntax error. */
+  hoistedImports: string[];
 }): string {
-  const { chunkSlug, citedSlicePaths, exempt, executable, codeByExampleId } = input;
+  const { chunkSlug, citedSlicePaths, exempt, executable, codeByExampleId, hoistedImports } = input;
   const lines: string[] = [];
 
   lines.push('// GENERATED FILE — do not hand-edit. Regenerate with:');
@@ -173,6 +223,7 @@ function renderExampleTestFile(input: {
   );
   lines.push('');
   lines.push("import { describe, it, expect } from 'vitest';");
+  for (const imp of hoistedImports) lines.push(imp);
   lines.push('');
 
   if (executable.length === 0 && exempt.length === 0) {
@@ -323,20 +374,27 @@ export async function verifyExampleEmitCommand(
     }
   }
 
-  // Validate-everything-then-write: scan EVERY translated code snippet against
-  // GENERATED_TEST_SANDBOX_RULES before composing or writing anything. A single violation
-  // rejects the whole emission.
+  // Hoisted imports (collectHoistedImports validates shape and rejects the whole emission on a
+  // malformed entry — before any scan or write) — computed once, over every executable entry's
+  // own `.imports`, never per-example.
+  const executableEntries = executable.map((record) => codeByExampleId.get(record.exampleId)!);
+  const hoistedImports = collectHoistedImports(executableEntries);
+
+  // Validate-everything-then-write: scan EVERY translated code snippet, AND the hoisted imports
+  // that will sit at top-of-file alongside it, against GENERATED_TEST_SANDBOX_RULES before
+  // composing or writing anything. A single violation rejects the whole emission.
   const testFilePath = generatedTestFilePath(projectDir, chunkSlug);
   const relTestFilePath = relative(projectDir, testFilePath);
   for (const record of executable) {
     const entry = codeByExampleId.get(record.exampleId)!;
-    const violations = scanGeneratedTestCode(entry.code, relTestFilePath);
+    const scanned = [...(entry.imports ?? []), entry.code].join('\n');
+    const violations = scanGeneratedTestCode(scanned, relTestFilePath);
     if (violations.length > 0) {
       const v = violations[0];
       throw new Error(
         `Translated test code for ${record.slicePath}:${record.lineNumber} (id ` +
           `"${record.exampleId}") violates ${v.ruleId} at line ${v.line} of its own translated ` +
-          `snippet: ${v.message}\nRe-dispatch the translator; writing nothing.`,
+          `snippet (imports+code): ${v.message}\nRe-dispatch the translator; writing nothing.`,
       );
     }
   }
@@ -347,6 +405,7 @@ export async function verifyExampleEmitCommand(
     exempt,
     executable,
     codeByExampleId,
+    hoistedImports,
   });
 
   await fs.mkdir(dirname(testFilePath), { recursive: true });

@@ -240,6 +240,112 @@ describe('verifyExampleEmitCommand', () => {
     expect(bytes).toContain('a READY guard becomes EXHAUSTED when punched');
   });
 
+  it('hoists translated imports to file scope, deduplicated across examples, and the emitted file actually executes them (178-11 fix)', async () => {
+    // Regression for a live-proof finding (178-11): `code` alone has nowhere to put an `import`
+    // statement — putting one inside a `describe()` body is a syntax error — so a translated
+    // example that needs a project import could never actually run once emitted. This proves the
+    // hoisted-imports path fixes that: two examples share one duplicate import, plus each has its
+    // own distinct import, and the emitted file is executed by a real vitest process.
+    const project = await mkProject(dir, {
+      chunkSlug: 'chunk-imports',
+      slicePath: 'rulebook/02-punch.md',
+      sliceText:
+        'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n' +
+        'p.2, Punch Examples:\nA second example, also about Guards.\n',
+    });
+    await recordExampleReplayVerdicts(project, [
+      agreesRecord({
+        exampleId: 'rulebook/02-punch.md:2',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+      }),
+      agreesRecord({
+        exampleId: 'rulebook/02-punch.md:4',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 4,
+      }),
+    ]);
+
+    const translated = [
+      {
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        pageCitation: 'p.2, Punch Examples',
+        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+        code: "it('asserts strictly using the shared import', () => {\n  strictEqual(1 + 1, 2);\n});",
+        imports: ["import { strictEqual } from 'node:assert';"],
+      },
+      {
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 4,
+        pageCitation: 'p.2, Punch Examples',
+        sourceText: 'A second example, also about Guards.',
+        code: "it('uses a second, distinct import', () => {\n  strictEqual(basename('/a/b.ts'), 'b.ts');\n});",
+        imports: [
+          "import { strictEqual } from 'node:assert';", // duplicate of example 1's import
+          "import { basename } from 'node:path';",
+        ],
+      },
+    ];
+    const translatedPath = join(dir, 'translated.json');
+    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
+
+    const result = await verifyExampleEmitCommand({
+      project,
+      chunk: 'chunk-imports',
+      translated: translatedPath,
+    });
+    expect(result.emittedCount).toBe(2);
+
+    const bytes = await fs.readFile(result.testFilePath, 'utf-8');
+    // Hoisted once each, deduplicated — not once per example.
+    expect(bytes.match(/import \{ strictEqual \} from 'node:assert';/g)?.length).toBe(1);
+    expect(bytes).toContain("import { basename } from 'node:path';");
+    // Never rendered inside the describe body — an import line never appears indented.
+    expect(bytes).not.toMatch(/^[ \t]+import /m);
+
+    await fs.symlink(join(REPO_ROOT, 'node_modules'), join(project, 'node_modules'), 'dir');
+    const vitestBin = join(REPO_ROOT, 'node_modules', '.bin', 'vitest');
+    const { stdout, stderr } = await execFileAsync(vitestBin, ['run'], { cwd: project }).catch(
+      (err) => err,
+    );
+    const output = `${stdout ?? ''}${stderr ?? ''}`;
+    expect(output).toMatch(/2 passed|2 tests/i);
+  });
+
+  it('rejects a malformed translated import statement, naming the entry; writes nothing', async () => {
+    const project = await mkProject(dir, {
+      chunkSlug: 'chunk-bad-import',
+      slicePath: 'rulebook/02-punch.md',
+      sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
+    });
+    await recordExampleReplayVerdicts(project, [
+      agreesRecord({
+        exampleId: 'rulebook/02-punch.md:2',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+      }),
+    ]);
+    const translated = [
+      {
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        pageCitation: 'p.2, Punch Examples',
+        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+        code: "it('bad', () => { expect(true).toBe(true); });",
+        imports: ["import { x } from 'y'; process.exit(1);"],
+      },
+    ];
+    const translatedPath = join(dir, 'translated.json');
+    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
+
+    await expect(
+      verifyExampleEmitCommand({ project, chunk: 'chunk-bad-import', translated: translatedPath }),
+    ).rejects.toThrow(/not a single well-formed "import ... ;" statement/);
+
+    await expect(fs.access(generatedTestFilePath(project, 'chunk-bad-import'))).rejects.toThrow();
+  });
+
   it('rejects translated code violating GENERATED_TEST_SANDBOX_RULES, naming the rule; writes nothing', async () => {
     const project = await mkProject(dir, {
       chunkSlug: 'chunk-net',
