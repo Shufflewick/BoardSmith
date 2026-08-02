@@ -27,6 +27,10 @@
       "types": "./src/testing/index.ts",
       "import": "./src/testing/index.ts"
     },
+    "./asset-scan": {
+      "types": "./src/cli/lib/asset-scan.ts",
+      "import": "./src/cli/lib/asset-scan.ts"
+    },
     "./eslint-plugin": {
       "types": "./src/eslint-plugin/index.ts",
       "import": "./src/eslint-plugin/index.ts"

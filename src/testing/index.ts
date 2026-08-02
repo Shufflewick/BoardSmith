@@ -122,20 +122,17 @@ export {
 // ActionBuilder — multi-step / dependent-selection builder (TEST-05)
 export { ActionBuilder } from './action-builder.js';
 
-// Asset-reachability build gate (TOOL-02) — additive re-export so games can
-// call the build/test gate without hand-rolling a second scanner.
+// The asset-reachability build gate (TOOL-02) is deliberately NOT re-exported
+// here. It reads the filesystem (`node:fs`/`node:path`), and this barrel is
+// what every game imports for `createTestGame`, so re-exporting it dragged
+// Node's types into the type graph of games that never call it — a game whose
+// tsconfig includes tests/ then failed `boardsmith validate` with
+// "Cannot find module 'node:fs'" unless it added @types/node it had no other
+// reason to want.
 //
-// WR-02: this couples `boardsmith/testing`'s public export surface to
-// `cli/lib`'s internal file layout. `asset-scan.ts` is otherwise dependency-
-// free (only `node:fs`/`node:path`) and was deliberately left in `cli/lib`
-// rather than moved into `src/testing/` because it also has a relative-path
-// importer OUTSIDE this package's type-checked source graph (the
-// `bs-build-chunk` skill's `build/test.md`, which resolves the file by a
-// hardcoded relative path — see 162-CONTEXT.md D18/code_context) — moving it
-// would silently break that importer with no compiler signal. If `cli/lib`
-// ever relocates or renames `asset-scan.ts`, update this import AND
-// `src/cli/slash-command/bs/build/test.md`'s reference together.
-export { scanAssetReachability, type AssetViolation } from '../cli/lib/asset-scan.js';
+// It has its own subpath instead: `import { scanAssetReachability } from
+// 'boardsmith/asset-scan'`. Games that want the gate opt into the Node
+// dependency; games that just want a test harness don't pay for it.
 
 // Animation test-mode + trace (ANIM-01)
 export {

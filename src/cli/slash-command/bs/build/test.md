@@ -158,8 +158,8 @@ here.
    comment rather than silently omitting the assertion.
 
 7. **Asset-reachability gate (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md
-   `## ui:` tag is `touches` or `major`, run `scanAssetReachability(cwd)` from
-   `src/cli/lib/asset-scan.ts` against the generated project. A `ui: none` chunk skips this item
+   `## ui:` tag is `touches` or `major`, run `scanAssetReachability(cwd)`, imported from
+   `boardsmith/asset-scan`, against the generated project. A `ui: none` chunk skips this item
    entirely — it has no UI to check. This is the single source of truth for ASSET-02's bare-`<img>`
    scan — do not reimplement or duplicate this scan in prose; cite it and run the real function,
    the same discipline item 2 above applies to `sandbox-scan.ts`. Any non-empty result (any bare
