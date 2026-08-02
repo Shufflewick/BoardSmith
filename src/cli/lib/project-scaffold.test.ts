@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -367,21 +367,30 @@ describe('generateAssetImageVue — resets loaded on src change (CR-01 regressio
 
 describe('single-vue guarantee — the symlinked-boardsmith duplicate-vue trap', () => {
   // `boardsmith` installs as a SYMLINK to a checkout carrying its own `vue`
-  // devDependency. Without pinning, one compilation ends up with two vue type
-  // packages: the game's `main.ts` resolves `vue` to `<game>/node_modules/vue`,
-  // while BoardSmith's source (reached through the `boardsmith/ui` export)
-  // resolves it to `<boardsmith>/node_modules/vue`. The two nominally distinct
-  // `DefineComponent`/`Component` types then meet in `createApp(App)` and a
-  // freshly-scaffolded project fails `tsc --noEmit` out of the box with
-  // TS2321 + TS2345.
+  // devDependency, so one compilation can end up with TWO vue type packages:
+  // the game's files resolve `vue` to `<game>/node_modules/vue`, while
+  // BoardSmith's source (reached through the `boardsmith/ui` export) resolves it
+  // to `<boardsmith>/node_modules/vue`. Nominally distinct `Ref` /
+  // `DefineComponent` types then meet at any API boundary — passing a template
+  // ref into a BoardSmith composable fails on `[RefSymbol]`, and `createApp(App)`
+  // failed with TS2321 + TS2345.
+  //
+  // The alias below names a LOCATION, never a version, so it does not constrain
+  // which vue a game installs — it is what makes upgrading vue freely SAFE.
+  // Verified against vue 3.5.40 while BoardSmith sat on 3.5.26.
   //
   // The trap hid for a long time because it only bites once the two versions
   // drift far enough apart to stop being structurally identical — a game that
   // installed a vue close to BoardSmith's passed by luck.
 
-  it('pins vue to the project\'s own copy in compilerOptions.paths', () => {
+  it('aliases vue AND @vue/* to the project\'s own copies', () => {
     const parsed = JSON.parse(generateTsConfig());
-    expect(parsed.compilerOptions.paths).toEqual({ vue: ['./node_modules/vue'] });
+    // `@vue/*` matters as much as `vue`: `Ref` comes from @vue/reactivity, so
+    // aliasing only `vue` still left composable boundaries mismatched.
+    expect(parsed.compilerOptions.paths).toEqual({
+      vue: ['./node_modules/vue'],
+      '@vue/*': ['./node_modules/@vue/*'],
+    });
   });
 
   it('dedupes vue in the vite config, so the RUNTIME graph gets one Vue too', () => {
@@ -391,7 +400,7 @@ describe('single-vue guarantee — the symlinked-boardsmith duplicate-vue trap',
     expect(generateViteConfig()).toContain("dedupe: ['vue']");
   });
 
-  it('the paths entry actually collapses two vue copies onto one (the pin is load-bearing)', () => {
+  it('the alias actually collapses two vue copies onto one (it is load-bearing)', () => {
     // The assertion above proves the config CONTAINS the pin; it does not prove
     // the pin changes resolution. This reproduces the real layout — a game copy
     // and a symlinked-library copy of vue — and resolves `vue` from BOTH sides
@@ -449,5 +458,46 @@ describe('single-vue guarantee — the symlinked-boardsmith duplicate-vue trap',
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('no ambient *.vue shim (SFCs are type-checked by vue-tsc)', () => {
+  // BoardSmith's `src/ui/global.d.ts` is ambient AND `boardsmith/ui` resolves to
+  // raw TypeScript source, so anything declared there leaks into the compilation
+  // of every game. A `declare module '*.vue'` shim therefore:
+  //
+  //   1. typed every SFC everywhere as `DefineComponent<object, object, unknown>`,
+  //      erasing prop checking (bogus props compiled clean);
+  //   2. bound each game's SFC types to BOARDSMITH's vue, so a game whose own vue
+  //      had drifted failed with TS2321 + TS2345;
+  //   3. matched ANY `*.vue` specifier — including files that do not exist, which
+  //      is how a game shipped a broken `export ... from './GameBoard.vue'`;
+  //   4. hid real type errors in BoardSmith's own components.
+  //
+  // Re-adding it would silently undo all four. `boardsmith validate` runs
+  // vue-tsc, which needs no shim.
+  const globalDts = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'ui', 'global.d.ts'),
+    'utf-8',
+  );
+  // Strip `//` comments: the file DOCUMENTS the removed shim by name, and that
+  // prose must not read as the declaration itself.
+  const globalDtsCode = globalDts.replace(/^\s*\/\/.*$/gm, '');
+
+  it('global.d.ts declares no *.vue module', () => {
+    expect(globalDtsCode).not.toMatch(/declare\s+module\s+['"]\*\.vue['"]/);
+  });
+
+  it('still declares the non-Vue ambients it legitimately owns', () => {
+    // Guards against "fixing" the rule above by deleting the whole file.
+    expect(globalDtsCode).toMatch(/declare\s+module\s+['"]\*\.mp3['"]/);
+    expect(globalDts).toContain('__BOARDSMITH_DEVTOOLS');
+  });
+
+  it('scaffolds vue-tsc, which is what replaces the shim', () => {
+    const pkg = JSON.parse(
+      generatePackageJson({ name: 'x', displayName: 'X', description: 'x' } as ProjectConfig),
+    );
+    expect(pkg.devDependencies).toHaveProperty('vue-tsc');
   });
 });

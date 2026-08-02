@@ -227,8 +227,12 @@ watch(effectivePieceImage, () => {
 
     <!-- Branch 3: labeled token (player color or neutral ink) -->
     <!-- Token: no shadow — shadow lives on .piece only (carry-forward #2) -->
+    <!-- `v-else-if` on the discriminant, not a bare `v-else`: it narrows
+         PieceVisual to the token arm so `.color`/`.label` type-check, and a
+         future fourth kind renders nothing here instead of silently falling
+         into the token branch. -->
     <div
-      v-else
+      v-else-if="pieceVisual.kind === 'token'"
       class="piece-token"
       :style="{ background: pieceVisual.color }"
     >

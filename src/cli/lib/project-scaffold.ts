@@ -145,6 +145,13 @@ export function generatePackageJson(config: ProjectConfig): string {
       // regardless of package-manager hoisting behavior (Phase 149 Defect 1).
       vite: '^5.4.0',
       typescript: '^5.7.0',
+      // `boardsmith validate` type-checks with vue-tsc, not plain tsc: tsc
+      // cannot read .vue files, and the ambient `declare module '*.vue'` shim
+      // that used to paper over that erased every component's prop types AND
+      // bound them to BoardSmith's copy of vue. vue-tsc compiles SFCs for real
+      // and resolves vue per-file, so this project can upgrade vue whenever it
+      // likes.
+      'vue-tsc': '^2.2.12',
       vitest: '^2.0.0',
       // Vitest v2 does not bundle jsdom; the a11y example opens with
       // `// @vitest-environment jsdom` and needs the package installed.
@@ -184,22 +191,20 @@ export function generateTsConfig(): string {
       // is appended here explicitly (and added as a devDependency). Keep this
       // array in sync when introducing such a dependency.
       types: ['vite/client'],
-      // Force every `vue` import in the compilation onto THIS project's copy.
+      // Resolve `vue` (and its @vue/* internals) from THIS project, whatever
+      // version is installed. NOT a version pin — it names a LOCATION, never a
+      // version, so vue can be upgraded freely; this is what MAKES that safe.
       //
-      // `boardsmith` is installed as a symlink to a checkout with its own
-      // `vue` devDependency, so tsc otherwise pulls in two vue type packages:
-      // the game's `main.ts` resolves `vue` to `<game>/node_modules/vue`, while
-      // BoardSmith's source (reached through the `boardsmith/ui` export) resolves
-      // it to `<boardsmith>/node_modules/vue`. Two nominally distinct
-      // `DefineComponent`/`Component` types then meet in `createApp(App)`, and a
-      // freshly-scaffolded project fails `tsc --noEmit` out of the box with
-      // TS2321 + TS2345 — but ONLY once the two versions drift far enough apart
-      // to stop being structurally identical, which is why this stayed hidden
-      // while games happened to install a vue close to BoardSmith's.
-      //
-      // Pairs with `resolve.dedupe: ['vue']` in the generated vite.config.ts,
-      // which is the same guarantee for the runtime graph.
-      paths: { vue: ['./node_modules/vue'] },
+      // `boardsmith` installs as a symlink to a checkout carrying its own vue,
+      // so without this BoardSmith's copy leaks into the compilation and its
+      // `Ref`/`DefineComponent` are nominally distinct types from yours —
+      // passing a template ref into a BoardSmith composable then fails on
+      // `[RefSymbol]`. `@vue/*` matters as much as `vue`: `Ref` comes from
+      // @vue/reactivity.
+      paths: {
+        vue: ['./node_modules/vue'],
+        '@vue/*': ['./node_modules/@vue/*'],
+      },
       strict: true,
       esModuleInterop: true,
       skipLibCheck: true,
@@ -228,11 +233,15 @@ import vue from '@vitejs/plugin-vue';
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    // \`boardsmith\` is a symlink to a checkout carrying its own copy of vue, so
-    // without this the bundle can contain two Vue runtimes — two separate
-    // reactivity systems and provide/inject registries, which silently breaks
-    // state shared across the game/library boundary. Mirrors the \`paths\`
-    // entry in tsconfig.json, which is the same guarantee for types.
+    // \`boardsmith\` installs as a symlink to a checkout carrying its own copy of
+    // vue, so without this the bundle can contain two Vue runtimes — two
+    // separate reactivity systems and provide/inject registries, which silently
+    // breaks state shared across the game/library boundary.
+    //
+    // A SINGLE-COPY guarantee, not a version pin: it never constrains which vue
+    // you install, so upgrade freely. Types are handled separately —
+    // \`boardsmith validate\` runs vue-tsc, which resolves each file's vue from
+    // that file's own location.
     dedupe: ['vue'],
   },
 });

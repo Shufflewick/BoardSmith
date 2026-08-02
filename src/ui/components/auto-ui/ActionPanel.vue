@@ -139,7 +139,12 @@ const textInputValue = ref<string>('');
 const currentArgs = computed(() => actionController.currentArgs.value);
 
 // Get metadata for available actions
-const actionsWithMetadata = computed(() => {
+// Annotated as ActionMetadata[] on purpose: without it the synthesized
+// fallback entries below form a union with the real metadata, and reading an
+// OPTIONAL field (help, suppressFromDock) off that union fails to compile even
+// though it is valid on both arms. The annotation says what this list is — action
+// metadata, with a minimal entry synthesized for actions that have none.
+const actionsWithMetadata = computed<ActionMetadata[]>(() => {
   if (!props.actionMetadata) {
     return props.availableActions.map(name => ({
       name,
@@ -600,7 +605,10 @@ async function confirmMultiSelect() {
  */
 const isMultiSelectReady = computed(() => {
   if (!currentMultiSelect.value) return false;
-  const min = currentMultiSelect.value.min;
+  // `min` is optional. Comparing against `undefined` yields false for EVERY
+  // count, so a multi-select that declared no minimum could never enable its
+  // Done button. Absent means "no minimum required" — i.e. 0.
+  const min = currentMultiSelect.value.min ?? 0;
   const selectedCount = multiSelectValues.value.length;
   return selectedCount >= min;
 });

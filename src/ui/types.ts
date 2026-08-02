@@ -155,12 +155,30 @@ export interface ActionMetadata {
   name: string;
   prompt?: string;
   selections: Pick[];
+  /**
+   * Help text shown to players on hover/tap. Display-only; never a predicate.
+   * Emitted by the engine (`engine/element/action-metadata.ts`).
+   */
+  help?: string;
+  /**
+   * When true this action's dock button is hidden (LIBX-01). Presentation
+   * only — NOT a security control. Set via `ActionBuilder.suppressFromDock()`
+   * and emitted by the engine; declared here because GameShell and ActionPanel
+   * both read it off this metadata.
+   */
+  suppressFromDock?: boolean;
 }
 
 /**
- * Player information.
+ * Player information, as GameShell passes it to a game's board slot.
+ *
+ * `seat`, not `position`: this mirrors the wire shape
+ * (`PlayerState.players`, client/types.ts) and what GameShell itself reads
+ * (`players.value.find(p => p.seat === ...)`). The field was declared as
+ * `position` here for a long time and nothing caught it, because the ambient
+ * `*.vue` shim meant no game template was ever type-checked against it.
  */
 export interface Player {
-  position: number;
+  seat: number;
   name: string;
 }

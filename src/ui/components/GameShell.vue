@@ -432,11 +432,9 @@ const actionMetadata = computed(() => {
 });
 
 // Per-action disabled reasons from PlayerGameState.disabledActions.
-// Mirrors the actionMetadata computed; cast via `any` because PlayerGameState
-// is typed in session/types but not imported here.
-const disabledActions = computed(() => {
-  return (state.value?.state as any)?.disabledActions as Record<string, string> | undefined;
-});
+// No cast needed: `PlayerState` (client/types.ts) now declares this field, as
+// the wire shape always carried it.
+const disabledActions = computed(() => state.value?.state?.disabledActions);
 
 // Global "Show action help" preference — persisted to localStorage.
 // Initialized from localStorage on mount (default ON when key is absent).
@@ -567,6 +565,25 @@ const displayedState = computed<DisplayedGameState | null>(() => {
 let platformRequestSeq = 0;
 const pendingPlatformRequests = new Map<string, (r: Record<string, unknown>) => void>();
 
+/**
+ * Narrow an untyped host response into a ControllerActionResult.
+ *
+ * `platformRequest` returns `Record<string, unknown>` because the host is
+ * across a postMessage boundary — nothing guarantees its shape. Only `success`
+ * is normalized (it drives control flow, and a missing/garbage value must read
+ * as failure, not as truthy). Everything else is passed through untouched so
+ * `followUp` — which chains the next action, e.g. explore -> take equipment —
+ * survives.
+ */
+function toControllerActionResult(raw: Record<string, unknown>): ControllerActionResult {
+  return { ...raw, success: raw.success === true } as ControllerActionResult;
+}
+
+/** Read an error message off an untyped host response, with a fallback. */
+function hostErrorText(raw: Record<string, unknown>, fallback: string): string {
+  return typeof raw.error === 'string' && raw.error.length > 0 ? raw.error : fallback;
+}
+
 function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
   // Strip Vue reactivity (a reactive proxy / ref is not structured-cloneable) so the
   // natural `someRef.value` arg survives postMessage; a genuine live-element leak
@@ -607,7 +624,7 @@ const actionController = useActionController({
       // next action e.g. explore -> take equipment) comes back to the controller,
       // matching the dev path. Fire-and-forget would drop followUp.
       const result = await platformRequest('action', { actionName, args });
-      return result as ControllerActionResult;
+      return toControllerActionResult(result);
     }
     const result = await action(actionName, args);
     return result as ControllerActionResult;
@@ -839,7 +856,7 @@ async function handleUndo(): Promise<void> {
     const result = await platformRequest('undo', { player: playerSeat.value });
     if (!result.success) {
       console.error('Undo failed:', result.error);
-      toast.error(result.error || 'Undo failed.');
+      toast.error(hostErrorText(result, 'Undo failed.'));
     }
     // State update arrives via the game_state broadcast.
     return;
@@ -854,7 +871,7 @@ async function handleUndo(): Promise<void> {
     const result = await response.json();
     if (!result.success) {
       console.error('Undo failed:', result.error);
-      toast.error(result.error || 'Undo failed.');
+      toast.error(hostErrorText(result, 'Undo failed.'));
     }
     // State update will come via WebSocket
   } catch (error) {
@@ -2582,7 +2599,7 @@ if ((import.meta as any).hot) {
         :player-seat="playerSeat"
         :player-count="playerCount"
         :game-id="gameId"
-        :history-has-messages="historyPanel?.hasMessages.value ?? false"
+        :history-has-messages="historyPanel?.hasMessages ?? false"
         v-model:expanded="debugExpanded"
         @switch-player="handleSwitchPlayer"
         @restart-game="handleRestartGame"

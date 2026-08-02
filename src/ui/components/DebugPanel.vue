@@ -252,6 +252,11 @@ const emit = defineEmits<{
 type PlatformRequest = (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
 const platformRequest = inject<PlatformRequest | null>('platformRequest', null);
 
+/** Is this an object (and not null / an array / a primitive)? */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 async function debugRequest(op: string, payload: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   if (!platformRequest) {
     throw new Error('DebugPanel requires a host bridge (mount it inside GameShell in platform mode).');
@@ -300,6 +305,17 @@ interface FlowContext {
   currentPlayer?: number;
   isMyTurn: boolean;
   currentPhase?: string;
+}
+
+/**
+ * Validate a host `flowContext` payload against its REQUIRED fields, so a
+ * malformed response becomes `null` rather than a half-populated object that
+ * claims to be a FlowContext.
+ */
+function isFlowContext(value: unknown): value is FlowContext {
+  return isRecord(value)
+    && Array.isArray(value.flowAllowedActions)
+    && typeof value.isMyTurn === 'boolean';
 }
 const flowContext = ref<FlowContext | null>(null);
 
@@ -580,8 +596,11 @@ async function fetchActionTraces() {
       throw new Error((data.error as string) || 'Failed to fetch action traces');
     }
 
-    actionTraces.value = data.traces || [];
-    flowContext.value = data.flowContext || null;
+    // `debugRequest` returns an untyped host payload, so check the shape rather
+    // than asserting it: a malformed response degrades to empty/null instead of
+    // putting a non-array or a stray primitive into typed state.
+    actionTraces.value = Array.isArray(data.traces) ? (data.traces as ActionTrace[]) : [];
+    flowContext.value = isFlowContext(data.flowContext) ? data.flowContext : null;
     tracesLastFetched.value = Date.now();
   } catch (e) {
     tracesError.value = e instanceof Error ? e.message : 'Unknown error';

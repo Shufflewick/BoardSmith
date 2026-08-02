@@ -28,12 +28,25 @@ interface BoardsmithActionResolvedDetail {
   error?: string;
 }
 
-// Vue single-file component declarations
-declare module '*.vue' {
-  import type { DefineComponent } from 'vue';
-  const component: DefineComponent<object, object, unknown>;
-  export default component;
-}
+// NO `declare module '*.vue'` here — deliberately, and do not add one back.
+//
+// This file is ambient, and `boardsmith/ui` resolves to raw TypeScript source,
+// so anything declared here leaks into the compilation of EVERY game. A
+// `*.vue` shim therefore typed every SFC in every project as
+// `DefineComponent<object, object, unknown>`, which:
+//
+//   1. erased all prop type-checking everywhere (any bogus prop was accepted);
+//   2. bound each game's own SFC types to BOARDSMITH's copy of vue, because
+//      the shim's `import type { DefineComponent } from 'vue'` resolves from
+//      here. A game's `createApp` (its own vue) then received a component
+//      typed by our vue, and the moment the two versions stopped being
+//      structurally identical that failed with TS2321 "Excessive stack depth"
+//      + TS2345 — pinning every game's vue as the only workaround;
+//   3. hid real type errors inside our own components.
+//
+// SFCs are type-checked by `vue-tsc` instead (see validate.ts), which compiles
+// them for real: props are checked, and each file's `vue` resolves from its own
+// location, so games can upgrade vue freely.
 
 // Asset type declarations
 declare module '*.mp3' {

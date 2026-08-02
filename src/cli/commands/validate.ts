@@ -253,9 +253,22 @@ async function validateMetadata(cwd: string): Promise<ValidationResult> {
   }
 }
 
+/**
+ * Type-check the project with `vue-tsc`, not plain `tsc`.
+ *
+ * `tsc` cannot read `.vue` files at all, which used to be papered over by an
+ * ambient `declare module '*.vue'` shim in BoardSmith. That shim typed every
+ * SFC everywhere as `DefineComponent<object, object, unknown>` — erasing all
+ * prop checking — and bound those types to BOARDSMITH's copy of vue, so a game
+ * whose own vue had drifted failed with TS2321/TS2345 the moment the two
+ * versions stopped being structurally identical.
+ *
+ * `vue-tsc` compiles SFCs for real: props are checked, and each file's `vue`
+ * resolves from its own location, so a game can upgrade vue whenever it likes.
+ */
 async function validateTypeScript(cwd: string): Promise<ValidationResult> {
   return new Promise((resolve) => {
-    const child = spawn('npx', ['tsc', '--noEmit'], {
+    const child = spawn('npx', ['vue-tsc', '--noEmit'], {
       cwd,
       shell: true,
       stdio: 'pipe',
@@ -280,14 +293,14 @@ async function validateTypeScript(cwd: string): Promise<ValidationResult> {
         const shown = allErrors.slice(0, maxShown);
         const remaining = allErrors.length - shown.length;
         if (remaining > 0) {
-          shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`npx tsc --noEmit\` for full output.`);
+          shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`npx vue-tsc --noEmit\` for full output.`);
         }
 
         resolve({
           name: 'TypeScript',
           passed: false,
           message: 'TypeScript compilation failed',
-          details: shown.length > 0 ? shown : ['Run `npx tsc --noEmit` for details'],
+          details: shown.length > 0 ? shown : ['Run `npx vue-tsc --noEmit` for details'],
         });
       }
     });

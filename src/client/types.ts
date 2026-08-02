@@ -20,7 +20,13 @@ import type {
   UpdatePlayerOptionsRequest,
   WebSocketMessage,
 } from '../types/protocol.js';
-import type { AnimationEvent } from '../engine/index.js';
+import type { AnimationEvent, TutorialStepView } from '../engine/index.js';
+// Type-only (erased at runtime, no client -> session coupling in the emitted
+// code). `PlayerState` below is the wire shape of the server's
+// `PlayerGameState`, so borrowing the server's own payload types is what keeps
+// the two from silently drifting apart again — see the fields at the end of
+// PlayerState.
+import type { SerializedFlowDebugInfo, SerializedPendingActionState } from '../session/types.js';
 
 // ============================================
 // Client Configuration
@@ -117,11 +123,19 @@ export interface MatchmakingStatus {
 // Game State Types
 // ============================================
 
+/**
+ * Client-side view of the engine's `FlowState` (engine/flow/types.ts), which
+ * `buildPlayerState` forwards onto the wire as-is. Keep the two in step — this
+ * copy silently lacked `complete` for a long time, and GameShell's game-over
+ * template reads it.
+ */
 export interface FlowState {
   currentPlayer?: number;
   awaitingInput?: boolean;
   availableActions?: string[];
   phase?: string;
+  /** Whether the flow has finished — drives the game-over UI. */
+  complete?: boolean;
 }
 
 export interface PlayerState {
@@ -168,6 +182,38 @@ export interface PlayerState {
    * `useAnimationEvents` as a rewind-detection signal (UNDO-04).
    */
   actionCount?: number;
+
+  // The fields below are sent by the server (`PlayerGameState`, session/types.ts)
+  // and consumed by GameShell, but were never declared here. Nothing caught the
+  // drift because the `*.vue` shim typed every component as
+  // `DefineComponent<object, object, unknown>`, so no template was type-checked;
+  // GameShell had already resorted to an `as any` cast to read disabledActions.
+
+  /**
+   * Active tutorial step projected for this player, or `undefined` when no
+   * tutorial is running for this seat. Mirrors `PlayerGameState.tutorial`.
+   */
+  tutorial?: TutorialStepView;
+
+  /**
+   * Action name → human-readable reason, for actions blocked by the active
+   * tutorial step's gate. `undefined` when no tutorial is running. Mirrors
+   * `PlayerGameState.disabledActions`.
+   */
+  disabledActions?: Record<string, string>;
+
+  /**
+   * Serialized flow-position snapshot for the debug panel (FLOW-01). Mirrors
+   * `PlayerGameState.flowDebugInfo`.
+   */
+  flowDebugInfo?: SerializedFlowDebugInfo;
+
+  /**
+   * This seat's OWN pending multi-step action snapshot (FLOW-03), or
+   * `undefined` when none is in progress. Mirrors
+   * `PlayerGameState.pendingAction` — always the per-seat value, never shared.
+   */
+  pendingAction?: SerializedPendingActionState;
 }
 
 export interface GameState {
