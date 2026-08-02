@@ -689,20 +689,24 @@ export function useFlyingElements(
             // Start hold/fade-out phase
             const holdStartTime = performance.now();
 
-            function animateHold(currentTime: number) {
+            // `hold*` names throughout: this frame callback is nested inside
+            // `animate`, so reusing `currentTime`/`cardIndex` would shadow the
+            // position phase's own values and make the two phases hard to tell
+            // apart at a glance.
+            function animateHold(holdTime: number) {
               if (cancelled) return;
 
-              const holdElapsed = currentTime - holdStartTime;
+              const holdElapsed = holdTime - holdStartTime;
               const holdProgress = Math.min(holdElapsed / holdDuration, 1);
               const opacity = 1 - holdProgress;
 
-              const cardIndex = flyingCards.value.findIndex((c) => c.id === id);
-              if (cardIndex >= 0) {
+              const holdCardIndex = flyingCards.value.findIndex((c) => c.id === id);
+              if (holdCardIndex >= 0) {
                 const updated = [...flyingCards.value];
-                updated[cardIndex] = {
-                  ...updated[cardIndex],
+                updated[holdCardIndex] = {
+                  ...updated[holdCardIndex],
                   style: {
-                    ...updated[cardIndex].style,
+                    ...updated[holdCardIndex].style,
                     opacity,
                   },
                 };

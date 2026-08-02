@@ -341,7 +341,6 @@ type _MissingFromDeriveCheckVerdicts = Exclude<
   DerivedLineClassification,
   (typeof DERIVE_CHECK_VERDICTS)[number]
 >;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _deriveCheckVerdictsExhaustive: _MissingFromDeriveCheckVerdicts extends never
   ? true
   : never = true;

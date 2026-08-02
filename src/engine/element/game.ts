@@ -471,7 +471,6 @@ export class Game<
    * }
    * ```
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static PlayerClass?: any;
 
   /** Container for removed elements */

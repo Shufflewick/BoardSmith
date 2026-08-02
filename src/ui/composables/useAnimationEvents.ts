@@ -359,8 +359,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   /**
    * Register a handler for an event type
    */
-  function registerHandler(eventType: string, handler: AnimationHandler, options: AnimationHandlerOptions): () => void {
-    handlers.set(eventType, { handler, skip: options.skip });
+  function registerHandler(eventType: string, handler: AnimationHandler, handlerOptions: AnimationHandlerOptions): () => void {
+    handlers.set(eventType, { handler, skip: handlerOptions.skip });
 
     // If the queue is waiting for this type, resume processing immediately
     if (waitingForType === eventType && waitResolve) {
