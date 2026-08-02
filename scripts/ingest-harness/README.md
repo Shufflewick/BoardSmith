@@ -10,7 +10,7 @@ INGEST-01..04 stayed green while the real run failed 7 of 9 checklist items. A c
 proves an instruction *exists*; it cannot prove an agent *received or followed* it. This harness
 closes that gap by inspecting the produced project directory itself.
 
-## Why this is NOT wired into `npm test` or CI
+## Why this is NOT wired into `boardsmith test` or CI
 
 Three reasons, all load-bearing:
 
@@ -19,12 +19,12 @@ Three reasons, all load-bearing:
 2. **A real ingest session costs real tokens and minutes.** CI cost per commit is the wrong place
    to pay it.
 3. **The determinism that CI *should* pin already exists elsewhere.** `check.test.mjs` pins the
-   checker's own judgment against static fixtures and does run in `npm test`. What varies is the
+   checker's own judgment against static fixtures and does run in `boardsmith test`. What varies is the
    agent run; what is invariant is the checker. Splitting them is what lets each be tested
    honestly.
 
 The rule this creates: **a skill-text change is not verified by a green contract test. It is
-verified by `npm run harness:ingest` reporting the relevant check green.** Contract tests remain
+verified by `boardsmith harness-ingest` reporting the relevant check green.** Contract tests remain
 useful fast regression pins (they catch a reword that deletes a required string), but they are
 explicitly **not** the acceptance bar for this phase — every one of them was green on 2026-07-27
 while all four INGEST requirements failed against a real run.
@@ -47,15 +47,15 @@ reference game repo, but that repo is **read-only** for the entire run:
 
 ```bash
 # Run all three steps in order (the common case):
-npm run harness:ingest
+npx boardsmith harness-ingest
 
 # Or invoke each step individually:
-node scripts/ingest-harness/run.mjs stage    # fresh throwaway project + current skill text install
-node scripts/ingest-harness/run.mjs drive    # real headless agent session against it
-node scripts/ingest-harness/run.mjs assert   # report the ten checks, exit 0 only if all pass
+npx boardsmith harness-ingest stage    # fresh throwaway project + current skill text install
+npx boardsmith harness-ingest drive    # real headless agent session against it
+npx boardsmith harness-ingest assert   # report the ten checks, exit 0 only if all pass
 
 # Options (see --help for the full list and defaults):
-node scripts/ingest-harness/run.mjs --work-dir /tmp/my-harness-run --model sonnet
+npx boardsmith harness-ingest --work-dir /tmp/my-harness-run --model sonnet
 ```
 
 `stage`, `drive`, and `assert` share state via `{workDir}/.harness-stage-state.json` — `drive` and

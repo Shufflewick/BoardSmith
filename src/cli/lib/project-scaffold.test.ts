@@ -15,6 +15,7 @@ import {
   generateScaffoldFiles,
   generateA11yExampleTestTs,
   generateTsConfig,
+  generateViteConfig,
   type ProjectConfig,
 } from './project-scaffold.js';
 import {
@@ -262,7 +263,7 @@ describe('generatePackageJson — axe-core scaffold devDependency', () => {
 
   it('includes jsdom in devDependencies (CR-02 regression: the a11y example runs in `@vitest-environment jsdom`, which vitest v2 does not bundle)', () => {
     const parsed = JSON.parse(generatePackageJson(config));
-    // Without jsdom installed, `npm test` in a fresh scaffold is red out of the
+    // Without jsdom installed, `boardsmith test` in a fresh scaffold is red out of the
     // box: requesting the jsdom environment fails with `Cannot find package 'jsdom'`.
     expect(parsed.devDependencies).toHaveProperty('jsdom');
   });
@@ -361,5 +362,92 @@ describe('generateAssetImageVue — resets loaded on src change (CR-01 regressio
     // instance flashes the stale/unresolved image at full opacity (DEF-A class).
     expect(out).toMatch(/import\s*\{[^}]*\bwatch\b[^}]*\}\s*from\s*'vue'/);
     expect(out).toMatch(/watch\(\s*\(\)\s*=>\s*props\.src[\s\S]*loaded\.value\s*=\s*false/);
+  });
+});
+
+describe('single-vue guarantee — the symlinked-boardsmith duplicate-vue trap', () => {
+  // `boardsmith` installs as a SYMLINK to a checkout carrying its own `vue`
+  // devDependency. Without pinning, one compilation ends up with two vue type
+  // packages: the game's `main.ts` resolves `vue` to `<game>/node_modules/vue`,
+  // while BoardSmith's source (reached through the `boardsmith/ui` export)
+  // resolves it to `<boardsmith>/node_modules/vue`. The two nominally distinct
+  // `DefineComponent`/`Component` types then meet in `createApp(App)` and a
+  // freshly-scaffolded project fails `tsc --noEmit` out of the box with
+  // TS2321 + TS2345.
+  //
+  // The trap hid for a long time because it only bites once the two versions
+  // drift far enough apart to stop being structurally identical — a game that
+  // installed a vue close to BoardSmith's passed by luck.
+
+  it('pins vue to the project\'s own copy in compilerOptions.paths', () => {
+    const parsed = JSON.parse(generateTsConfig());
+    expect(parsed.compilerOptions.paths).toEqual({ vue: ['./node_modules/vue'] });
+  });
+
+  it('dedupes vue in the vite config, so the RUNTIME graph gets one Vue too', () => {
+    // Types are only half of it: two Vue runtimes mean two reactivity systems
+    // and two provide/inject registries, silently breaking state shared across
+    // the game/library boundary.
+    expect(generateViteConfig()).toContain("dedupe: ['vue']");
+  });
+
+  it('the paths entry actually collapses two vue copies onto one (the pin is load-bearing)', () => {
+    // The assertion above proves the config CONTAINS the pin; it does not prove
+    // the pin changes resolution. This reproduces the real layout — a game copy
+    // and a symlinked-library copy of vue — and resolves `vue` from BOTH sides
+    // with and without the pin. Dropping `paths` from generateTsConfig()
+    // therefore turns this test RED.
+    const dir = mkdtempSync(join(tmpdir(), 'bs-scaffold-vue-pin-'));
+    try {
+      const game = join(dir, 'game');
+      const library = join(dir, 'library');
+
+      // Two distinct vue packages, exactly as npm lays them out.
+      for (const [root, version] of [[game, '3.5.40'], [library, '3.5.26']] as const) {
+        const vueDir = join(root, 'node_modules', 'vue');
+        mkdirSync(vueDir, { recursive: true });
+        writeFileSync(
+          join(vueDir, 'package.json'),
+          JSON.stringify({ name: 'vue', version, types: './index.d.ts' }),
+        );
+        writeFileSync(join(vueDir, 'index.d.ts'), 'export declare const createApp: unknown;\n');
+      }
+
+      // The game's own entry, and a library source file standing in for
+      // BoardSmith's `src/ui/*` reached through the symlinked export.
+      writeFileSync(join(game, 'main.ts'), "import 'vue';\n");
+      mkdirSync(join(library, 'src'), { recursive: true });
+      writeFileSync(join(library, 'src', 'ui.ts'), "import 'vue';\n");
+
+      const resolveVueFrom = (importer: string, paths?: ts.MapLike<string[]>) =>
+        ts.resolveModuleName(
+          'vue',
+          importer,
+          { moduleResolution: ts.ModuleResolutionKind.Bundler, baseUrl: game, paths },
+          ts.sys,
+        ).resolvedModule?.resolvedFileName;
+
+      const withoutPin = [
+        resolveVueFrom(join(game, 'main.ts')),
+        resolveVueFrom(join(library, 'src', 'ui.ts')),
+      ];
+      // The bug: the two sides land on two different vue packages.
+      expect(withoutPin[0]).toBeDefined();
+      expect(withoutPin[1]).toBeDefined();
+      expect(withoutPin[0]).not.toBe(withoutPin[1]);
+
+      // Read the pin from the GENERATOR, not a literal — otherwise this test
+      // would keep passing after `paths` was dropped from generateTsConfig().
+      const pin = JSON.parse(generateTsConfig()).compilerOptions.paths;
+      const withPin = [
+        resolveVueFrom(join(game, 'main.ts'), pin),
+        resolveVueFrom(join(library, 'src', 'ui.ts'), pin),
+      ];
+      // The fix: both sides land on the GAME's copy, so there is one vue.
+      expect(withPin[0]).toBe(withPin[1]);
+      expect(withPin[0]).toContain(join('game', 'node_modules', 'vue'));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

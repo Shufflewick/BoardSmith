@@ -77,7 +77,7 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 - Write at least one integration test per cross-layer boundary the change touches.
 
 # Code Quality Audits
-- Run `npm run audit:dead-code` (Fallow) after significant refactors to catch unused exports, dead files, and circular dependencies.
-- Run `npm run audit:duplication` (jscpd) when touching modules with similar patterns to catch copy-paste drift.
-- Run `npm run audit` for both at once.
+- Run `boardsmith audit --dead-code` (Fallow) after significant refactors to catch unused exports, dead files, and circular dependencies.
+- Run `boardsmith audit --duplication` (jscpd) when touching modules with similar patterns to catch copy-paste drift.
+- Run `boardsmith audit` for both at once.
 - Note: Fallow's "unused class members" findings are mostly false positives for BoardSmith — our public API is consumed by external game projects, not internally. Focus on unused files, exports, and dependencies.

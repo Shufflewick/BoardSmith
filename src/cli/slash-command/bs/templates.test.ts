@@ -399,7 +399,7 @@ describe('SKILLAUTO-01 — SKETCH milestone flag', () => {
  * assertions prove the template carries the required strings; they do NOT prove an agent
  * copies and fills the template rather than composing its own INDEX.md from prose memory —
  * on 2026-07-27 every contract test for this requirement was green while the real run
- * diverged on every one of these strings. The acceptance bar is `npm run harness:ingest`.
+ * diverged on every one of these strings. The acceptance bar is `boardsmith harness-ingest`.
  */
 describe('v4.9 INGEST-01/03/04 — INDEX.template.md', () => {
   const indexTemplate = read('templates/INDEX.template.md');

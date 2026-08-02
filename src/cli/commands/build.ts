@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { BUNDLE_PROTOCOL_VERSION } from '../../engine/protocol-version.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
+import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import type { GameDefinition } from '../../session/index.js';
 
 interface BuildOptions {
@@ -56,16 +57,40 @@ export function deriveManifest(
   };
 }
 
+/**
+ * Build the BoardSmith library's own distributable: the bundled CLI.
+ *
+ * The engine/ui/session sources ship as TypeScript (see the package `exports`
+ * map), so `dist/cli.js` is the only compiled artifact the library produces.
+ */
+async function buildLibrary(repoRoot: string): Promise<void> {
+  console.log(chalk.cyan('\nBuilding BoardSmith CLI...\n'));
+  const spinner = ora(`Bundling ${CLI_ENTRY}...`).start();
+
+  try {
+    await buildCli(repoRoot);
+  } catch (error) {
+    spinner.fail('CLI build failed');
+    console.error(chalk.red('\nBuild error:'), error);
+    process.exit(1);
+  }
+
+  spinner.succeed(`CLI built (${CLI_OUTFILE})`);
+  console.log(chalk.dim('\n  Installed copies of BoardSmith run this bundle.'));
+  console.log(chalk.dim('  Inside this repo the CLI always runs from source, so you rarely need it.\n'));
+}
+
 export async function buildCommand(options: BuildOptions): Promise<void> {
   const cwd = process.cwd();
   const outDir = options.outDir || 'dist';
 
-  // Detect context - build is only for game projects, not the library
+  // `build` means "produce this workspace's distributable artifact". In a game
+  // that is the rules/UI bundle below; in the BoardSmith library itself it is
+  // the CLI bundle that installed copies of the package run.
   const context = getProjectContext(cwd);
   if (context === 'monorepo') {
-    console.error(chalk.red('Error: boardsmith build is for game projects, not the BoardSmith library'));
-    console.error(chalk.dim('To build BoardSmith itself, use the appropriate build tooling.'));
-    process.exit(1);
+    await buildLibrary(cwd);
+    return;
   }
 
   // Validate project

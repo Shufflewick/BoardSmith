@@ -8,6 +8,8 @@ import { testCommand } from './commands/test.js';
 import { validateCommand } from './commands/validate.js';
 import { publishCommand } from './commands/publish.js';
 import { lintCommand } from './commands/lint.js';
+import { auditCommand } from './commands/audit.js';
+import { harnessIngestCommand } from './commands/harness-ingest.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { simulateCommand } from './commands/simulate.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
@@ -88,8 +90,8 @@ program
 
 // Testing
 program
-  .command('test')
-  .description('Run game tests')
+  .command('test [patterns...]')
+  .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own)')
   .option('-w, --watch', 'Watch mode - re-run tests on changes')
   .option('--coverage', 'Generate coverage report')
   .action(testCommand);
@@ -97,7 +99,7 @@ program
 // Building
 program
   .command('build')
-  .description('Build game for production')
+  .description('Build this workspace for distribution (a game bundle, or BoardSmith\'s CLI)')
   .option('-o, --out-dir <dir>', 'Output directory', 'dist')
   .action(buildCommand);
 
@@ -118,8 +120,20 @@ program
 // Linting
 program
   .command('lint')
-  .description('Check for common BoardSmith pitfalls and issues')
+  .description('Run every lint check this workspace configures (ESLint, Stylelint, BoardSmith pitfalls)')
+  .option('--fix', 'Auto-fix what the underlying linters can fix')
+  .option('--eslint', 'Run only ESLint')
+  .option('--css', 'Run only Stylelint')
+  .option('--pitfalls', 'Run only the BoardSmith pitfall checks')
   .action(lintCommand);
+
+// Code-quality audits
+program
+  .command('audit')
+  .description('Run code-quality audits (dead code and duplication)')
+  .option('--dead-code', 'Run only the dead-code audit')
+  .option('--duplication', 'Run only the duplication audit')
+  .action(auditCommand);
 
 // Analysis
 program
@@ -604,7 +618,16 @@ program
   .action(verifyExampleEmitCommand);
 
 // Claude Code integration
-const claudeCmd = program
+const claudeCmd = // Live-agent ingest harness (BoardSmith repo only, operator-invoked)
+program
+  .command('harness-ingest')
+  .description('Drive the live-agent /bs-ingest-rules produced-artifact harness (BoardSmith repo only)')
+  .argument('[args...]', 'Flags forwarded verbatim to the harness (pass --help for its options)')
+  .allowUnknownOption()
+  .helpOption(false)
+  .action(harnessIngestCommand);
+
+program
   .command('claude')
   .description('Install BoardSmith bs- skills for Claude Code')
   .option('--force', 'Overwrite existing skills')

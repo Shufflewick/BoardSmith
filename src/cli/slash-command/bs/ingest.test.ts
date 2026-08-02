@@ -472,7 +472,7 @@ describe('transcription-subagent.md — output directory is a dispatch input (VE
 // NOTE (Plan 07): these assertions prove the instruction EXISTS in skill text; they do not
 // prove an agent RECEIVES or FOLLOWS it. On 2026-07-27 every one of the blocks below (in
 // their pre-Plan-07 form) was green while the real INGEST-01/03/04 run diverged on every
-// specified string. The acceptance bar is `npm run harness:ingest`, not this file — see
+// specified string. The acceptance bar is `boardsmith harness-ingest`, not this file — see
 // scripts/ingest-harness/README.md.
 
 describe('v4.9 PROC-01 — synthesis runs via a pre-commit hook, not an instruction', () => {

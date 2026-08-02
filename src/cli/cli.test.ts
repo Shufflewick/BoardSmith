@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,15 @@ import { tmpdir } from 'node:os';
  * in-process — a `--help` invocation and an unknown-command invocation are both real Commander
  * behaviors this suite needs to observe exactly as a user's shell would.
  */
+
+/**
+ * Every test in a file that spawns the real CLI needs more than vitest's 5s default: a spawn
+ * boots Node, loads tsx, and type-strips the whole command tree, which under full-suite
+ * parallelism can exceed 5s on its own. The default turned that latency into a flaky
+ * assertion about nothing — these tests assert what the CLI REGISTERS, never how fast it
+ * starts. This ceiling is a hang guard, not a performance budget.
+ */
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const execFileAsync = promisify(execFile);
 

@@ -51,7 +51,7 @@ Five adversarial reviewers pressure-tested this document against the code. The c
 4. **Cheap S12 wins:** (a) shippable-peer reframe + (b) single-UI export via removing the static import. Reframe the scaffold away from split-screen.
 5. **Earn-their-way-in, later:** the general layout solver (S2) only if a real game needs it; S2b responsive primitives; S7 phase/scoring renderers; the N-UI registry + switcher (S12c); S9/S10.
 6. **Separate architecture decisions (rules-layer impact):** S11 engine model additions; and the presentation-overlay design (C7).
-7. **Migration & cleanup (S13)** — mandatory exit criterion; every game playable on the new auto-UI, MERC green on the plumbing, old paths deleted, `npm run audit` clean, verified by playing each game.
+7. **Migration & cleanup (S13)** — mandatory exit criterion; every game playable on the new auto-UI, MERC green on the plumbing, old paths deleted, `boardsmith audit` clean, verified by playing each game.
 
 ---
 
@@ -262,7 +262,7 @@ This is not optional polish — it is the definition of "done." Because games li
 - **MERC** — has a fully custom UI and uses zero AutoUI, so it should be a *low-risk* migration: it becomes a single registry entry (`custom`) and must keep full action parity. But it is the canary for any breaking change to the shared plumbing (`useActionController`/`useBoardInteraction`/`gameView`) or GameShell chrome — if a "non-breaking" plumbing change breaks MERC, the peer-not-layer claim (P1) was violated.
 - **Delete the old paths** — remove the legacy AutoUI renderer, the split-screen scaffold template (`project-scaffold.ts:263-348`), and any now-dead `AutoUI` re-exports, once all games are migrated. No deprecation cycle.
 - **Docs** — update `custom-ui-guide.md`, `ui-components.md`, `component-showcase.md`, and the scaffold-generated READMEs to describe the registry + new auto-UI, and remove references to the split-screen pattern.
-- **Exit criterion:** all example games green on the new auto-UI, MERC green on the new plumbing, the scaffold produces a playable game out of the box, the old AutoUI is gone, and `npm run audit` (dead-code + duplication) is clean. *Verify by actually playing each game in the browser, per the project testing rules — not just by passing unit tests.*
+- **Exit criterion:** all example games green on the new auto-UI, MERC green on the new plumbing, the scaffold produces a playable game out of the box, the old AutoUI is gone, and `boardsmith audit` (dead-code + duplication) is clean. *Verify by actually playing each game in the browser, per the project testing rules — not just by passing unit tests.*
 
 **Planning implication:** every earlier phase that touches the shared contract must treat "does this break the vendored games?" as a gating question, and the effort estimate must include the per-game migration cost (N game repos × re-vendor + fix + browser-verify), not just the BoardSmith-side work. This is the single most underestimated cost in the whole plan and the red team should scrutinize it.
 

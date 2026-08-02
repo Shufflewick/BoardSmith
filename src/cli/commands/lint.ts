@@ -2,6 +2,18 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import chalk from 'chalk';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
+import { isBoardsmithWorkspace } from '../lib/project-context.js';
+import { runTool } from '../lib/run-tool.js';
+import { selectChecks } from '../lib/select-checks.js';
+
+export interface LintOptions {
+  /** Auto-fix what the underlying tool can fix. */
+  fix?: boolean;
+  /** Selector flags — when any is set, only the selected checks run. */
+  eslint?: boolean;
+  css?: boolean;
+  pitfalls?: boolean;
+}
 
 interface LintIssue {
   file: string;
@@ -256,17 +268,17 @@ function checkUnusedActions(filePath: string, content: string, allFiles: Map<str
   return issues;
 }
 
-export async function lintCommand(): Promise<void> {
-  const cwd = process.cwd();
-  const configPath = join(cwd, 'boardsmith.json');
-
-  if (!existsSync(configPath)) {
-    console.error(chalk.red('Error: boardsmith.json not found'));
-    console.error(chalk.dim('Make sure you are in a BoardSmith game project directory'));
-    process.exit(1);
-  }
-
-  console.log(chalk.cyan('\nLinting BoardSmith game...\n'));
+/**
+ * BoardSmith's own pitfall checks: pattern rules, element registration, unused
+ * actions, and the AST sandbox guardrails. Game projects only — the rules are
+ * about game code, not library code.
+ *
+ * Returns a process exit code (non-zero when errors were found) rather than
+ * exiting, so `lintCommand` can run every configured check before deciding the
+ * overall verdict.
+ */
+async function runPitfallLint(cwd: string): Promise<number> {
+  console.log(chalk.cyan('\nChecking for BoardSmith pitfalls...\n'));
 
   // Find all TypeScript files
   const srcDir = join(cwd, 'src');
@@ -274,7 +286,7 @@ export async function lintCommand(): Promise<void> {
 
   if (files.length === 0) {
     console.log(chalk.yellow('No TypeScript files found in src/'));
-    return;
+    return 0;
   }
 
   // Load all file contents
@@ -373,8 +385,101 @@ export async function lintCommand(): Promise<void> {
     console.log(`Found ${parts.join(', ')}`);
   }
 
-  // Exit with error code if errors found
-  if (result.errorCount > 0) {
+  return result.errorCount > 0 ? 1 : 0;
+}
+
+/** A lint check that is available in this workspace. */
+interface LintCheck {
+  name: string;
+  run: () => Promise<number>;
+}
+
+/**
+ * Config filenames that mean "this workspace has opted into <tool>". Only
+ * configured tools run, so `boardsmith lint` never fails a game project for
+ * lacking a linter it never set up.
+ */
+const ESLINT_CONFIGS = [
+  'eslint.config.js',
+  'eslint.config.mjs',
+  'eslint.config.cjs',
+  'eslint.config.ts',
+  '.eslintrc.js',
+  '.eslintrc.cjs',
+  '.eslintrc.json',
+];
+
+const STYLELINT_CONFIGS = [
+  '.stylelintrc.cjs',
+  '.stylelintrc.js',
+  '.stylelintrc.json',
+  '.stylelintrc',
+  'stylelint.config.js',
+  'stylelint.config.cjs',
+  'stylelint.config.mjs',
+];
+
+function hasAnyConfig(cwd: string, candidates: string[]): boolean {
+  return candidates.some((name) => existsSync(join(cwd, name)));
+}
+
+/**
+ * Run every lint check this workspace has configured.
+ *
+ * One command covers all of them — ESLint, Stylelint, and BoardSmith's own
+ * pitfall rules — so nobody has to remember which linters a given repo wired
+ * up. Pass a selector flag to run just one; with no selectors, everything
+ * applicable runs and the command fails if any check fails.
+ */
+export async function lintCommand(options: LintOptions): Promise<void> {
+  const cwd = process.cwd();
+
+  if (!isBoardsmithWorkspace(cwd)) {
+    console.error(chalk.red('Error: not a BoardSmith workspace'));
+    console.error(chalk.dim('Run this from a game project (has boardsmith.json) or the BoardSmith repo.'));
     process.exit(1);
   }
+
+  const wants = selectChecks({
+    eslint: options.eslint,
+    css: options.css,
+    pitfalls: options.pitfalls,
+  });
+
+  const checks: LintCheck[] = [];
+
+  if (wants('eslint') && hasAnyConfig(cwd, ESLINT_CONFIGS)) {
+    const args = ['src/'];
+    if (options.fix) args.push('--fix');
+    checks.push({ name: 'ESLint', run: () => runTool('eslint', args, { cwd }) });
+  }
+
+  if (wants('css') && hasAnyConfig(cwd, STYLELINT_CONFIGS)) {
+    const args = ['src/**/*.vue'];
+    if (options.fix) args.push('--fix');
+    checks.push({ name: 'Stylelint', run: () => runTool('stylelint', args, { cwd }) });
+  }
+
+  if (wants('pitfalls') && existsSync(join(cwd, 'boardsmith.json'))) {
+    checks.push({ name: 'BoardSmith pitfalls', run: () => runPitfallLint(cwd) });
+  }
+
+  if (checks.length === 0) {
+    console.log(chalk.yellow('\nNo lint checks apply here.'));
+    console.log(chalk.dim('Add an eslint.config.mjs or .stylelintrc.cjs, or run this in a game project.\n'));
+    return;
+  }
+
+  const failed: string[] = [];
+  for (const check of checks) {
+    const code = await check.run();
+    if (code !== 0) failed.push(check.name);
+  }
+
+  if (failed.length > 0) {
+    console.error(chalk.red(`\nLint failed: ${failed.join(', ')}\n`));
+    process.exit(1);
+  }
+
+  console.log(chalk.green(`\nLint passed (${checks.map((c) => c.name).join(', ')})\n`));
 }

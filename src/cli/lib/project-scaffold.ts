@@ -124,21 +124,16 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
 export function generatePackageJson(config: ProjectConfig): string {
   const deps = getDependencyPaths();
 
+  // No `scripts` block, deliberately. The BoardSmith CLI is the one way to
+  // build, test, lint, and validate a game — `npx boardsmith test`, not
+  // `npm test`. Script aliases would fork that into two commands that drift
+  // apart (a game pinning `vitest` while the CLI moves on, or a stale
+  // `npm run dev` that skips CLI setup), and would make every game's tooling
+  // subtly different from every other game's.
   const pkg = {
     name: config.name,
     version: '0.0.1',
     type: 'module',
-    scripts: {
-      dev: 'npx boardsmith dev',
-      build: 'npx boardsmith build',
-      // `vitest run` (not bare `vitest`) so `npm test` runs once and exits —
-      // matching BoardSmith's own convention and the no-hanging-process rule.
-      // Use `npm run test:watch` for interactive watch mode.
-      test: 'vitest run',
-      'test:watch': 'vitest',
-      lint: 'npx boardsmith lint',
-      validate: 'npx boardsmith validate',
-    },
     dependencies: {
       boardsmith: deps.boardsmith,
       vue: '^3.4.0',
@@ -189,6 +184,22 @@ export function generateTsConfig(): string {
       // is appended here explicitly (and added as a devDependency). Keep this
       // array in sync when introducing such a dependency.
       types: ['vite/client'],
+      // Force every `vue` import in the compilation onto THIS project's copy.
+      //
+      // `boardsmith` is installed as a symlink to a checkout with its own
+      // `vue` devDependency, so tsc otherwise pulls in two vue type packages:
+      // the game's `main.ts` resolves `vue` to `<game>/node_modules/vue`, while
+      // BoardSmith's source (reached through the `boardsmith/ui` export) resolves
+      // it to `<boardsmith>/node_modules/vue`. Two nominally distinct
+      // `DefineComponent`/`Component` types then meet in `createApp(App)`, and a
+      // freshly-scaffolded project fails `tsc --noEmit` out of the box with
+      // TS2321 + TS2345 — but ONLY once the two versions drift far enough apart
+      // to stop being structurally identical, which is why this stayed hidden
+      // while games happened to install a vue close to BoardSmith's.
+      //
+      // Pairs with `resolve.dedupe: ['vue']` in the generated vite.config.ts,
+      // which is the same guarantee for the runtime graph.
+      paths: { vue: ['./node_modules/vue'] },
       strict: true,
       esModuleInterop: true,
       skipLibCheck: true,
@@ -216,6 +227,14 @@ import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
   plugins: [vue()],
+  resolve: {
+    // \`boardsmith\` is a symlink to a checkout carrying its own copy of vue, so
+    // without this the bundle can contain two Vue runtimes — two separate
+    // reactivity systems and provide/inject registries, which silently breaks
+    // state shared across the game/library boundary. Mirrors the \`paths\`
+    // entry in tsconfig.json, which is the same guarantee for types.
+    dedupe: ['vue'],
+  },
 });
 `;
 }

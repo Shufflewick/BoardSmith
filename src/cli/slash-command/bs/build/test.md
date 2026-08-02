@@ -37,7 +37,9 @@ here.
    it and run the real command.
 
 3. **Chunk unit/integration tests** — the tests written or extended for this chunk's own new
-   behavior.
+   behavior. Run them with `boardsmith test <pattern>`, naming this chunk's test files. Generated
+   projects carry no npm scripts on purpose: `boardsmith test` is the one way to run a game's
+   tests, so `npm test` will fail with "Missing script".
 
 4. **Worked-example tests (TEST-01)** — this chunk's cited worked examples become executable
    tests as part of this same build, generated and immediately run, never left as a one-time
@@ -94,9 +96,9 @@ here.
        "a chunk with zero new actions is exempt; name that exemption explicitly" discipline item
        6 below already uses for its per-action coverage counter, never a silent omission.
 
-5. **Full accumulated suite (regression)** — the entire generated project's test suite, not just
-   this chunk's new tests. A chunk that passes its own tests but breaks an earlier chunk's
-   tests is not done; this step is what catches that.
+5. **Full accumulated suite (regression)** — `boardsmith test` with no pattern, running the
+   entire generated project's test suite, not just this chunk's new tests. A chunk that passes
+   its own tests but breaks an earlier chunk's tests is not done; this step is what catches that.
 
 6. **Random-sim playthrough** — a scripted run of `simulateRandomGames` (from `boardsmith/testing`)
    against the accumulated game, proving it doesn't crash or get stuck with this chunk's rules

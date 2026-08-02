@@ -5,24 +5,11 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 
 import type { GameDefinition } from '../../session/index.js';
 
-/**
- * Detect if we're running in the BoardSmith monorepo or a standalone game project.
- * - Monorepo: Has src/engine/ directory (collapsed structure)
- * - Standalone: Has boardsmith.json but no src/engine/
- */
-export function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
-  const hasSrcEngine = existsSync(join(cwd, 'src', 'engine'));
-  const hasBoardsmithJson = existsSync(join(cwd, 'boardsmith.json'));
-
-  // If we're in the monorepo root, it has src/engine
-  if (hasSrcEngine) return 'monorepo';
-
-  // Standalone game project
-  if (hasBoardsmithJson) return 'standalone';
-
-  // Fallback - treat as standalone (will fail with proper error if neither)
-  return 'standalone';
-}
+// Workspace detection lives in lib/ so non-game commands (audit, lint, test)
+// can ask the same question without importing the game runtime's esbuild
+// machinery. Re-exported here because this module's consumers already treat
+// `game-runtime` as the game-loading entry point.
+export { getProjectContext, type ProjectContext } from '../lib/project-context.js';
 
 // Get the CLI's directory to find the monorepo root.
 // HAZARD: this depends on this file's directory depth (and differs between

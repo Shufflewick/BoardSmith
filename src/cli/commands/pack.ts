@@ -3,6 +3,8 @@ import { join, basename, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
+import { getProjectContext } from '../lib/project-context.js';
+import { buildCli, CLI_OUTFILE } from '../lib/build-cli.js';
 
 interface PackOptions {
   outDir?: string;
@@ -19,25 +21,6 @@ interface PackResult {
   name: string;
   tarball: string;
   timestampVersion: string;
-}
-
-/**
- * Detect if we're running in the BoardSmith monorepo or a standalone game project.
- * - Monorepo: Has src/engine/ directory (collapsed structure)
- * - Standalone: Has boardsmith.json but no src/engine/
- */
-function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
-  const hasSrcEngine = existsSync(join(cwd, 'src', 'engine'));
-  const hasBoardsmithJson = existsSync(join(cwd, 'boardsmith.json'));
-
-  // If we're in the monorepo root, it has src/engine
-  if (hasSrcEngine) return 'monorepo';
-
-  // Standalone game project
-  if (hasBoardsmithJson) return 'standalone';
-
-  // Fallback - treat as standalone (will fail with proper error if neither)
-  return 'standalone';
 }
 
 /**
@@ -286,6 +269,19 @@ export async function packCommand(options: PackOptions): Promise<void> {
   validateMonorepoRoot(cwd);
 
   console.log(chalk.cyan('\nBoardSmith Pack\n'));
+
+  // The tarball ships `dist/` — an installed BoardSmith runs the bundled CLI,
+  // never the TypeScript sources. Rebuild it here, explicitly, so a tarball can
+  // never carry a `dist/cli.js` older than the source it was packed from.
+  const cliSpinner = ora('Building CLI bundle...').start();
+  try {
+    await buildCli(cwd);
+    cliSpinner.succeed(`CLI bundle built (${CLI_OUTFILE})`);
+  } catch (error) {
+    cliSpinner.fail('CLI bundle build failed');
+    console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+    process.exit(1);
+  }
 
   // Discover packages
   const spinner = ora('Discovering packages...').start();

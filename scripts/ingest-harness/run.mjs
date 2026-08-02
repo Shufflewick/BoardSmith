@@ -10,7 +10,7 @@
  * (the reference game's git-cleanliness invariant).
  *
  * This is an OPERATOR/AGENT-INVOKED tool, never CI. See README.md for the full determinism
- * rationale. It is deliberately NOT wired into `npm test`, `npm run audit`, or any
+ * rationale. It is deliberately NOT wired into `boardsmith test`, `boardsmith audit`, or any
  * `vitest.config.ts` include pattern — a live agent run is not deterministic and must not be
  * allowed to flake the 3211-test suite.
  *

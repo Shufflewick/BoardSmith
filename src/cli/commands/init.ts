@@ -182,9 +182,17 @@ ${chalk.cyan('Next steps:')}
 
   cd ${name}
   npm install
-  boardsmith dev
+  npx boardsmith dev
 
 ${chalk.dim('This will start the development server and open player tabs in your browser.')}
+
+${chalk.cyan('Everything else runs through the same CLI:')}
+
+  ${chalk.dim('npx boardsmith test')}      ${chalk.dim('- run your game\'s tests')}
+  ${chalk.dim('npx boardsmith lint')}      ${chalk.dim('- check for BoardSmith pitfalls')}
+  ${chalk.dim('npx boardsmith build')}     ${chalk.dim('- build the publishable bundle')}
+  ${chalk.dim('npx boardsmith validate')}  ${chalk.dim('- run pre-publish checks')}
+  ${chalk.dim('npx boardsmith --help')}    ${chalk.dim('- see every command')}
 `);
   } catch (error) {
     spinner.fail(chalk.red('Failed to create project'));

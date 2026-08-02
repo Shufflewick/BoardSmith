@@ -7,7 +7,7 @@
  *   3. Does every `RULINGS.md` ruling have a citing test?
  *
  * Zero rulebook or source access anywhere in this module (172-CONTEXT.md decision 4) — it never
- * runs `npm test`, never imports the engine, never reads `rulebook/`.
+ * runs `boardsmith test`, never imports the engine, never reads `rulebook/`.
  *
  * READ-ONLY. No mutating `fs` call (`writeFile`/`rm`/`mkdir`) appears anywhere in this file's
  * body. Pinned directly by a before/after whole-project byte-hash test, the T-171-19 class
