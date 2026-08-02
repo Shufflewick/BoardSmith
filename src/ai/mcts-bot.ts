@@ -46,6 +46,8 @@ export class MCTSBot<G extends Game = Game> {
   private seed?: string;
   /** Cached UCT exploration constant (computed once per move in playSingle) */
   private cachedUctC: number = Math.sqrt(2);
+  /** Warn at most once per bot about a truncated seeded search (see below). */
+  private warnedSeededTruncation = false;
 
   /** Live game instance used during search (cloned from original) */
   private searchGame: G | null = null;
@@ -297,12 +299,16 @@ export class MCTSBot<G extends Game = Game> {
     // Run MCTS iterations with timeout failsafe
     const startTime = Date.now();
     const timeout = this.config.timeout ?? 2000;
+    // Track truncation so a SEEDED search can tell the caller its result was
+    // not actually reproducible (see warnIfSeededSearchWasTruncated).
+    let completedIterations = 0;
 
     for (let i = 0; i < this.config.iterations; i++) {
       // Check timeout before each iteration
       if (Date.now() - startTime > timeout) {
         break;
       }
+      completedIterations = i + 1;
 
       // SELECT: Walk down tree, applying moves to searchGame, collecting tree moves for RAVE
       const { leaf, treeMoves } = this.selectWithPath(root);
@@ -342,6 +348,8 @@ export class MCTSBot<G extends Game = Game> {
         }
       }
     }
+
+    this.warnIfSeededSearchWasTruncated(completedIterations, timeout);
 
     // Cleanup search state — null the bot's own snapshot fields.
     // The local `root` reference is returned to callers so they can read
@@ -1474,5 +1482,35 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     return 0; // Loss
+  }
+
+  /**
+   * Warn (dev-only, once per bot) when the wall-clock `timeout` cut a SEEDED
+   * search short.
+   *
+   * Passing a `seed` means the caller is asking for a reproducible search — but
+   * `timeout` is wall-clock, so a truncated run silently returns whatever the
+   * machine had time for. The same seed then yields different moves on a
+   * different machine, under different load, or in CI, and the symptom is an
+   * intermittently-failing tactical test with no visible cause. Warning here is
+   * the whole fix for discoverability: the run still succeeds (truncation is a
+   * legitimate responsiveness failsafe in production), it just stops being
+   * silent about having broken the reproducibility the seed implied.
+   *
+   * Unseeded searches are not warned about: they never promised determinism.
+   */
+  private warnIfSeededSearchWasTruncated(completedIterations: number, timeout: number): void {
+    if (this.warnedSeededTruncation) return;
+    if (this.seed === undefined) return;
+    if (completedIterations >= this.config.iterations) return;
+
+    this.warnedSeededTruncation = true;
+    console.warn(
+      `[BoardSmith] MCTS bot (seed "${this.seed}") ran ${completedIterations} of `
+      + `${this.config.iterations} requested iterations before hitting its ${timeout}ms `
+      + 'timeout, so this move is NOT reproducible — the same seed will pick a different '
+      + 'move on a faster/slower machine. Pass `timeout: Infinity` to bound the search by '
+      + 'iterations alone, or lower `iterations` so the search finishes within the timeout.',
+    );
   }
 }

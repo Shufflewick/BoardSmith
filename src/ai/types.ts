@@ -4,15 +4,36 @@ import type { Game, FlowState, ElementRef, GamePhase } from '../engine/index.js'
  * Configuration options for the MCTS bot
  */
 export interface BotConfig {
-  /** Number of MCTS iterations (higher = stronger but slower). Default: 1000 */
+  /**
+   * CEILING on MCTS iterations (higher = stronger but slower). Default: 1000.
+   *
+   * Not a guarantee: `timeout` can cut the search short, in which case fewer
+   * iterations actually run. Pair with `timeout: Infinity` when you need
+   * exactly this many (see `seed`).
+   */
   iterations: number;
   /** Maximum playout depth before evaluating position. Default: 50 */
   playoutDepth: number;
-  /** Random seed for reproducible behavior */
+  /**
+   * Random seed for reproducible behavior.
+   *
+   * A seed alone is NOT enough for reproducibility: `timeout` is wall-clock, so
+   * a seeded search still returns different moves on different machines, or
+   * under different load, whenever it runs long enough to be cut short. For a
+   * genuinely deterministic search (tests, tactical fixtures, benchmarks) set
+   * `timeout: Infinity` as well, so the run is bounded only by `iterations`.
+   */
   seed?: string;
   /** Run async to yield to event loop (prevents UI freezing). Default: true */
   async?: boolean;
-  /** Maximum time in milliseconds before returning best move found. Default: 2000 */
+  /**
+   * Wall-clock ceiling in milliseconds; the search returns the best move found
+   * so far once it is hit. Default: 2000.
+   *
+   * This is a responsiveness failsafe, and it OVERRIDES `iterations` — a slow
+   * game can have most of its requested iterations silently cut. Pass
+   * `Infinity` to disable it and make the search depend only on `iterations`.
+   */
   timeout?: number;
   /** Enable transposition table caching for position evaluations. Default: true */
   useTranspositionTable?: boolean;
