@@ -15,7 +15,6 @@ This folder contains documentation for the BoardSmith game framework.
 | [Game Examples](./game-examples.md) | Analysis of example games with patterns |
 | [Teaching & Tutorials](./teaching-and-tutorials.md) | Tutorial authoring, AI hints, narrated demo, heatmap, action help, and host lockout |
 | [Agent Control](./agent-control.md) | Driving a game headlessly: action-space introspection, move enumeration, undo/checkpoint/replay, determinism & seeding, scriptable dev host (WS), structured errors |
-| [LLM Overview](./llm-overview.md) | Quick-reference for LLMs, including the v4.4 agent-ergonomics surface and determinism guarantee |
 | [Migration Guide](./migration-guide.md) | Breaking changes by version, with before→after upgrade steps |
 | [Nomenclature](./nomenclature.md) | Standard terminology reference |
 
@@ -23,7 +22,7 @@ This folder contains documentation for the BoardSmith game framework.
 
 If you're an AI assistant reading this codebase:
 
-1. **Start with** [`llm-overview.md`](./llm-overview.md) for a comprehensive summary
+1. **Start with** [`core-concepts.md`](./core-concepts.md), then [`agent-control.md`](./agent-control.md) for driving a game headlessly
 2. **Simplest example**: Hex - minimal but complete game
 3. **Complex example**: Cribbage - multi-phase, simultaneous actions
 
