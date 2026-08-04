@@ -114,7 +114,13 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
   // allowed-key set (CLIX-02). Removed/renamed keys get pointed migration
   // messages instead of a generic did-you-mean (CLIX-01).
   for (const { key, suggestion } of findUnknownKeys(config)) {
-    if (key === 'playerCount') {
+    if (key === 'ui') {
+      issues.push(
+        "Unknown key 'ui' — a game's UIs are declared in src/ui/uis.ts (defineGameUIs), "
+        + 'which is the single source of truth for which boards exist and which one ships. '
+        + 'Remove this key from boardsmith.json.',
+      );
+    } else if (key === 'playerCount') {
       issues.push(
         "Unknown key 'playerCount' — player count is now derived from your gameDefinition (compiled rules), remove this key from boardsmith.json.",
       );
@@ -133,24 +139,6 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
     }
   }
 
-  // Optional "ui" field — must be "auto" or a relative path to a .vue file
-  // (e.g. "./ui/components/GameTable.vue"). The path must name a component
-  // file so the scaffold can derive a single static import; a bare directory
-  // path like "./ui/" would produce an invalid import in the generated App.vue.
-  if (config.ui !== undefined) {
-    if (typeof config.ui !== 'string') {
-      issues.push('"ui" must be a string: "auto" or a relative path to a .vue component (e.g. "./ui/components/GameTable.vue")');
-    } else if (config.ui !== 'auto') {
-      const isRelativeVue =
-        config.ui.startsWith('./') &&
-        config.ui.endsWith('.vue') &&
-        // reject "./.vue" / a path with an empty filename segment
-        (config.ui.split('/').pop()?.replace(/\.vue$/, '').length ?? 0) > 0;
-      if (!isRelativeVue) {
-        issues.push('"ui" must be "auto" or a relative path to a .vue component (e.g. "./ui/components/GameTable.vue")');
-      }
-    }
-  }
 
   return issues;
 }
@@ -475,6 +463,8 @@ async function validateRequiredFiles(cwd: string): Promise<ValidationResult> {
     'src/rules/index.ts',
     'src/rules/game.ts',
     'src/ui/App.vue',
+    // The UI registry — without it a game has no board to render.
+    'src/ui/uis.ts',
   ];
 
   const missing: string[] = [];

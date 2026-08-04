@@ -15,6 +15,10 @@
       "types": "./src/ui/index.ts",
       "import": "./src/ui/index.ts"
     },
+    "./ui/auto-ui": {
+      "types": "./src/ui/components/auto-ui/index.ts",
+      "import": "./src/ui/components/auto-ui/index.ts"
+    },
     "./session": {
       "types": "./src/session/index.ts",
       "import": "./src/session/index.ts"

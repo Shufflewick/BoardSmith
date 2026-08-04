@@ -57,13 +57,30 @@ const FIXTURE_PARENT = join(BOARDSMITH_ROOT, '.treeshake-test-fixtures');
  * Recursively collect all .js files under a directory, return concatenated content.
  */
 function readBundleJs(dir: string): string {
+  return readBundleFiles(dir, '.js');
+}
+
+/**
+ * Same, for emitted CSS.
+ *
+ * Asserting on JS alone is NOT sufficient and this is the bug that motivated it:
+ * a Vue SFC's `<style>` block compiles to a side-effectful CSS import, which
+ * Rollup preserves even when it eliminates every byte of the component's
+ * JavaScript. A component can be fully tree-shaken from the JS bundle and still
+ * ship its entire stylesheet. SHIP-02 is only met when BOTH are absent.
+ */
+function readBundleCss(dir: string): string {
+  return readBundleFiles(dir, '.css');
+}
+
+function readBundleFiles(dir: string, ext: string): string {
   let content = '';
   function walk(d: string): void {
     for (const entry of readdirSync(d, { withFileTypes: true })) {
       const full = join(d, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (entry.isFile() && entry.name.endsWith('.js')) {
+      } else if (entry.isFile() && entry.name.endsWith(ext)) {
         content += readFileSync(full, 'utf-8');
       }
     }
@@ -140,6 +157,17 @@ async function buildFixtureUi(fixtureDir: string): Promise<string> {
       alias: [
         // Map boardsmith/ui to the real source — equivalent to having the package
         // installed in node_modules. Tree-shaking is unaffected.
+        //
+        // The auto-ui subpath is a SEPARATE entry, mirroring the `exports` map in
+        // package.json. AutoUI deliberately does not live on the `boardsmith/ui`
+        // barrel: pulling it through the barrel put AutoUI.vue in every game's
+        // module graph, and its side-effectful `<style>` import shipped the auto-UI
+        // stylesheet even where the JS was tree-shaken (SHIP-02). Both aliases are
+        // `$`-anchored, so the subpath never falls through to the barrel.
+        {
+          find: /^boardsmith\/ui\/auto-ui$/,
+          replacement: join(BOARDSMITH_ROOT, 'src/ui/components/auto-ui/index.ts'),
+        },
         {
           find: /^boardsmith\/ui$/,
           replacement: join(BOARDSMITH_ROOT, 'src/ui/index.ts'),
@@ -222,6 +250,69 @@ describe('tree-shaking bundle proof (real Vite/Rollup build)', () => {
       //     survives minification and appears in the bundle even though AutoUI itself
       //     is tree-shaken out. AutoRenderer has no such false-positive risk.
       expect(bundle, 'AutoRenderer must not appear in custom-UI bundle').not.toContain('AutoRenderer');
+
+      // ...and neither may its CSS. The JS assertion above passed for months while
+      // the auto-UI stylesheet shipped in every custom-UI game, because
+      // `boardsmith/ui` re-exported AutoUI from its barrel: the JS was shaken out,
+      // the side-effectful `<style>` import was not. These scoped class names come
+      // from AutoUI.vue and AutoRenderer.vue and can only appear if one of those
+      // SFCs entered the module graph.
+      const css = readBundleCss(distUi);
+      expect(css, 'AutoUI scoped styles must not appear in custom-UI bundle').not.toMatch(/\.auto-ui[\s{[]/);
+      expect(css, 'AutoRenderer scoped styles must not appear in custom-UI bundle').not.toContain('.auto-renderer');
+    },
+  );
+
+  it(
+    'SHIP-02 registry: a devUI() alternate is absent from the bundle in JS, CSS, and chunks',
+    { timeout: 180_000 },
+    async () => {
+      // The guarantee that matters now: a game can keep an old board around for
+      // comparison in `boardsmith dev` and pay NOTHING for it in production.
+      // Elimination must be total — not "the JS got shaken but the stylesheet
+      // shipped", which is exactly how the auto-UI leak survived a green suite.
+      const fixId = `registry-${Date.now()}`;
+      fixtureDir = join(FIXTURE_PARENT, fixId);
+      mkdirSync(fixtureDir, { recursive: true });
+      writeFixtureFiles(fixtureDir, './components/GameTable.vue');
+
+      // A second board with a scoped style whose class name cannot collide.
+      writeFileSync(
+        join(fixtureDir, 'src/ui/components/RetiredBoard.vue'),
+        `<template><div class="retired-board-marker">retired</div></template>
+<style scoped>.retired-board-marker { color: #123456; }</style>
+`,
+        'utf-8',
+      );
+      writeFileSync(
+        join(fixtureDir, 'src/ui/uis.ts'),
+        `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+
+export default defineGameUIs({
+  GameTable: defaultUI(() => import('./components/GameTable.vue')),
+  Retired: devUI(() => import('./components/RetiredBoard.vue')),
+});
+`,
+        'utf-8',
+      );
+
+      const distUi = await buildFixtureUi(fixtureDir);
+      const bundle = readBundleJs(distUi);
+      const css = readBundleCss(distUi);
+
+      expect(bundle, 'devUI component JS must not ship').not.toContain('RetiredBoard');
+      expect(css, 'devUI component CSS must not ship').not.toContain('retired-board-marker');
+      // A lazily-imported dead branch must not emit a chunk either — a chunk no
+      // player ever loads is still bytes in the published package.
+      const chunkNames = readdirSync(distUi, { recursive: true } as never) as unknown as string[];
+      expect(
+        chunkNames.filter((f) => String(f).includes('RetiredBoard')),
+        'devUI component must not emit a code-split chunk',
+      ).toEqual([]);
+
+      // Positive control: the default board DID make it in, so absence above is
+      // a real drop and not an empty build.
+      expect(bundle, 'the defaultUI board must ship').toContain('GameTable');
     },
   );
 
@@ -243,6 +334,11 @@ describe('tree-shaking bundle proof (real Vite/Rollup build)', () => {
       // AutoRenderer must be present when AutoUI is selected: proves the negative
       // case assertion is meaningful (we would catch a leak if it occurred).
       expect(bundle, 'AutoRenderer must appear in auto-UI bundle').toContain('AutoRenderer');
+
+      // Positive control for the CSS assertion too — proves the negative case is a
+      // genuine drop and not a build that emits no CSS at all.
+      const css = readBundleCss(distUi);
+      expect(css, 'AutoRenderer styles must appear in auto-UI bundle').toContain('.auto-renderer');
     },
   );
 });

@@ -113,7 +113,11 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
     complexity: 2,
     thumbnail: './public/thumbnail.png',
     scoreboard: { stats: ['score'] },
-    ui: config.ui ?? 'auto',
+    // No `ui` field, deliberately. A game's UIs are declared in src/ui/uis.ts
+    // (defineGameUIs) — the one place. The manifest used to carry a `"ui"` key
+    // that nothing read after scaffolding, so it rotted: most games dropped it,
+    // one pointed at App.vue itself, and a game comment asserted it was the
+    // source of truth while nothing consumed it. Don't reintroduce it.
   };
   return JSON.stringify(json, null, 2);
 }
@@ -317,6 +321,54 @@ export { App };
 }
 
 /**
+ * Generate src/ui/uis.ts — the game's UI registry.
+ *
+ * This is the ONE place a game says which boards it has and which one ships.
+ * Auto-UI games start with the auto-UI as their default and a custom board
+ * stub kept dev-only; when the author is ready they swap which one is wrapped
+ * in `defaultUI()`. That swap is the whole migration.
+ */
+export function generateUisTs(config: ProjectConfig): string {
+  const custom = config.ui && config.ui !== 'auto' ? config.ui : undefined;
+  if (!custom) {
+    return `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+import AutoUI from 'boardsmith/ui/auto-ui';
+
+/**
+ * Every UI this game has. Exactly one must be defaultUI() — that is what
+ * players get; the compiler rejects zero or two.
+ *
+ * devUI() entries exist only under \`boardsmith dev\`. They are stripped from
+ * production builds entirely: JS, CSS, and assets. Building your own board?
+ * Move defaultUI() onto it and mark Auto as devUI().
+ */
+export default defineGameUIs({
+  Auto: defaultUI(AutoUI),
+  Custom: devUI(() => import('./components/GameTable.vue')),
+});
+`;
+  }
+  const name = custom.split('/').pop()?.replace(/\.vue$/, '') || 'GameUI';
+  return `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+import ${name} from '${custom}';
+
+/**
+ * Every UI this game has. Exactly one must be defaultUI() — that is what
+ * players get; the compiler rejects zero or two.
+ *
+ * The shipped board is imported statically so it can never fail to arrive
+ * separately from the app. devUI() entries are lazy on purpose: the dynamic
+ * import inside a dev-only branch is what lets production strip them entirely,
+ * JS, CSS, and assets.
+ */
+export default defineGameUIs({
+  ${name}: defaultUI(${name}),
+  Auto: devUI(() => import('boardsmith/ui/auto-ui')),
+});
+`;
+}
+
+/**
  * Generate src/ui/App.vue
  *
  * Branches on config.ui:
@@ -324,9 +376,33 @@ export { App };
  *   relative path    → single custom component import (no AutoUI)
  */
 export function generateAppVue(config: ProjectConfig): string {
-  const ui = config.ui ?? 'auto';
+  return `<script setup lang="ts">
+import { GameShell } from 'boardsmith/ui';
+import uis from './uis.js';
+</script>
 
-  const sharedStyles = `<style scoped>
+<template>
+  <!--
+    The board comes from the UI registry (src/ui/uis.ts). There is no board
+    slot: one declaration, one render path, so nothing can disagree about
+    which UI ships.
+  -->
+  <GameShell
+    game-type="${config.name}"
+    display-name="${config.displayName}"
+    :player-count="${config.playerCount.min}"
+    :uis="uis"
+  >
+    <template #player-stats="{ player }">
+      <div class="player-stat">
+        <span class="stat-label">Score:</span>
+        <span class="stat-value">{{ (player as any).score || 0 }}</span>
+      </div>
+    </template>
+  </GameShell>
+</template>
+
+<style scoped>
 .player-stat {
   display: flex;
   justify-content: space-between;
@@ -337,75 +413,6 @@ export function generateAppVue(config: ProjectConfig): string {
 .stat-value { font-weight: bold; color: var(--bsg-accent); }
 </style>
 `;
-
-  if (ui === 'auto') {
-    return `<script setup lang="ts">
-import { GameShell, AutoUI } from 'boardsmith/ui';
-</script>
-
-<template>
-  <GameShell
-    game-type="${config.name}"
-    display-name="${config.displayName}"
-    :player-count="${config.playerCount.min}"
-  >
-    <template #game-board="{ gameView, playerSeat, state }">
-      <AutoUI
-        :game-view="gameView || null"
-        :player-seat="playerSeat"
-        :flow-state="state?.flowState as any"
-      />
-    </template>
-
-    <template #player-stats="{ player }">
-      <div class="player-stat">
-        <span class="stat-label">Score:</span>
-        <span class="stat-value">{{ (player as any).score || 0 }}</span>
-      </div>
-    </template>
-  </GameShell>
-</template>
-
-${sharedStyles}`;
-  }
-
-  // Custom UI path: derive a component name from the filename. Guard against an
-  // empty segment (e.g. a path ending in "/") — `??` would not catch "", which
-  // would emit an invalid `import  from '...'`. `boardsmith validate` rejects
-  // such a path up front; this is the generator-side safety net.
-  const derivedName = ui.split('/').pop()?.replace(/\.vue$/, '');
-  const componentName = derivedName && derivedName.length > 0 ? derivedName : 'GameUI';
-  return `<script setup lang="ts">
-import { GameShell } from 'boardsmith/ui';
-import ${componentName} from '${ui}';
-</script>
-
-<template>
-  <GameShell
-    game-type="${config.name}"
-    display-name="${config.displayName}"
-    :player-count="${config.playerCount.min}"
-  >
-    <template #game-board="{ gameView, playerSeat, isMyTurn, availableActions, actionController }">
-      <${componentName}
-        :game-view="gameView"
-        :player-seat="playerSeat"
-        :is-my-turn="isMyTurn"
-        :available-actions="availableActions"
-        :action-controller="actionController"
-      />
-    </template>
-
-    <template #player-stats="{ player }">
-      <div class="player-stat">
-        <span class="stat-label">Score:</span>
-        <span class="stat-value">{{ (player as any).score || 0 }}</span>
-      </div>
-    </template>
-  </GameShell>
-</template>
-
-${sharedStyles}`;
 }
 
 /**
@@ -717,6 +724,7 @@ export function generateScaffoldFiles(config: ProjectConfig): GeneratedFile[] {
     { path: 'src/main.ts', content: generateMainTs() },
     { path: 'src/rules/index.ts', content: generateRulesIndexTs(config) },
     { path: 'src/ui/index.ts', content: generateUiIndexTs() },
+    { path: 'src/ui/uis.ts', content: generateUisTs(config) },
     { path: 'src/ui/App.vue', content: generateAppVue(config) },
     { path: 'src/ui/components/GameTable.vue', content: generateGameTableVue() },
     { path: 'src/ui/components/AssetImage.vue', content: generateAssetImageVue() },

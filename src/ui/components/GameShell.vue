@@ -2,14 +2,8 @@
 import { ref, computed, watch, onMounted, onUnmounted, provide, toRef, nextTick } from 'vue';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
-// Dev-only auto-UI peek (see DevAutoUI below). Referenced ONLY under the
-// `isDevBuild` (`import.meta.env.DEV`) constant, so a production build constant-
-// folds the branch to `null`, leaving this import unreferenced and tree-shaken —
-// a custom-UI game ships no AutoUI/AutoRenderer (SHIP-02 holds). A static import
-// (not `import()`) is deliberate: a dynamic import would emit a code-split chunk
-// that ships even when the branch is dead.
-import AutoUIDev from './auto-ui/AutoUI.vue';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
+import type { GameUIRegistry } from '../game-uis.js';
 import { selectArchetype } from './auto-ui/archetype-selector.js';
 import {
   announceTurnChange,
@@ -156,13 +150,17 @@ interface GameShellProps {
   /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */
   presentation?: PresentationOverlay;
   /**
-   * Additional named UIs selectable via the `boardsmith dev` UI dropdown, beyond
-   * the primary UI in the #game-board slot. Each renders with the same slot props.
-   * The built-in auto-UI is offered automatically in dev. A game with several
-   * board views (e.g. full board + compact) lists the extras here. Dev-only switch;
-   * a production build still renders the primary slot UI.
+   * The game's UI registry — every board it owns and which one ships. Built by
+   * `defineGameUIs()` in the game's `src/ui/uis.ts`, which is the single place
+   * this is declared (see src/ui/game-uis.ts).
+   *
+   * Required, and the ONLY way to supply a board. There is deliberately no
+   * `#game-board` slot: two ways to name the default UI is two things that can
+   * disagree, and the manifest's old `"ui"` key already proved how that ends.
+   * A production build renders `registry.defaultName`; every other entry exists
+   * only under `boardsmith dev` and is stripped from the bundle entirely.
    */
-  uis?: Array<{ name: string; component: unknown }>;
+  uis: GameUIRegistry;
   /**
    * Origins allowed to send postMessages to this GameShell iframe.
    * When non-empty, any message whose event.origin is NOT in this list is
@@ -195,28 +193,38 @@ const platformMode = ref(typeof window !== 'undefined' && window.parent !== wind
 // debug panel so it appears under `boardsmith dev` but never in a deployed game.
 const isDevBuild = import.meta.env.DEV;
 
-// Dev-only UI switcher. `boardsmith dev` shows a dropdown of every UI this game
-// offers — the primary UI (the #game-board slot), any extra UIs from the `uis`
-// prop, and the built-in auto-UI — and renders the selected one without a
-// permanent split-screen. The AutoUI import is gated behind `isDevBuild`
-// (`import.meta.env.DEV`), so a production build statically drops this branch and
-// a custom-UI game never bundles AutoUI/AutoRenderer (SHIP-02 tree-shaking holds).
-const DevAutoUI = isDevBuild ? AutoUIDev : null;
-const AUTO_UI_NAME = 'Auto UI';
-const primaryUiName = computed(() => props.displayName || 'Custom UI');
-// Ordered list of selectable UI names: primary slot UI, extra `uis`, then auto-UI (dev).
-const devUiNames = computed(() => {
-  const names = [primaryUiName.value, ...(props.uis ?? []).map(u => u.name)];
-  if (isDevBuild) names.push(AUTO_UI_NAME);
-  return names;
-});
+// Dev-only UI switcher. `boardsmith dev` shows a dropdown of every UI the game's
+// registry declares and renders the selected one without a permanent split-screen.
+//
+// The auto-UI is NOT injected here any more. A game that wants it lists it like
+// any other board — `Auto: devUI(() => import('boardsmith/ui/auto-ui'))` — so the
+// registry really is the complete list of a game's UIs rather than the list plus
+// one the shell adds behind its back. That also stops offering an auto-UI peek to
+// games where it means nothing.
+//
+// Elimination note, because this is the part that is easy to get wrong: a devUI
+// entry's component is null in production (see src/ui/game-uis.ts), and its
+// module never enters the graph. An SFC's `<style>` compiles to a SIDE-EFFECTFUL
+// CSS import that outlives JS tree-shaking, so "the JS got shaken out" is never
+// proof a UI is gone — AutoUI's stylesheet shipped in every custom-UI game for
+// months on exactly that assumption, reaching them through the `boardsmith/ui`
+// barrel's re-export rather than through any import anyone was looking at.
+// Elimination is a property of the WHOLE graph. Only the built artifact proves
+// it, which is what treeshake-bundle.test.ts asserts, for CSS as well as JS.
+const registry = computed(() => props.uis);
+const devUiNames = computed(() =>
+  // In production every non-default entry has a null component; listing only
+  // resolvable UIs keeps the switcher honest if it is ever shown outside dev.
+  registry.value.names.filter(
+    (name) => name === registry.value.defaultName || registry.value.entries[name]?.component,
+  ),
+);
 const selectedUiName = ref('');
-// The component to render for the current selection, or null to render the slot.
+/** The board to render: the dev selection when there is one, else the default. */
 const selectedUiComponent = computed(() => {
-  const name = selectedUiName.value;
-  if (!name || name === primaryUiName.value) return null; // render the #game-board slot
-  if (name === AUTO_UI_NAME) return isDevBuild ? DevAutoUI : null;
-  return (props.uis ?? []).find(u => u.name === name)?.component ?? null;
+  const reg = registry.value;
+  const name = selectedUiName.value && isDevBuild ? selectedUiName.value : reg.defaultName;
+  return (reg.entries[name] ?? reg.entries[reg.defaultName])?.component ?? null;
 });
 // Tell the dev host which UIs are available so it can populate the dropdown.
 function postDevUiList(): void {
@@ -1174,7 +1182,7 @@ provide('platformRequest', platformRequest);
 // Presentation overlay — provided reactively for AutoRenderer → renderers chain (D-04)
 provide('presentation', toRef(props, 'presentation'));
 
-// Gate for the game UI (the #game-board slot / dev UI switcher component): it must
+// Gate for the game UI (the registry's board component): it must
 // not mount until GameShell's own DOM — including the `#bs-game-modal` teleport
 // host — is IN THE DOCUMENT. On a fresh page load the whole app tree is built
 // detached and inserted at the end of the root mount, so a game component that
@@ -2076,7 +2084,7 @@ if (isDevBuild) {
       if (rect.width < 1 || rect.height < 1) {
         warned0x0 = true;
         console.error(
-          "Custom board failed to render: the #game-board slot measured 0×0 after game state arrived. " +
+          "Custom board failed to render: the board measured 0×0 after game state arrived. " +
           "This usually means a percentage-width or container-type board is collapsing inside GameShell's " +
           "zoom container ('.game-shell__zoom-container { width: max-content }'). Give your board's root " +
           "element a definite width (not 100%), or pin it to the region with useBoardSize() from " +
@@ -2328,7 +2336,7 @@ if ((import.meta as any).hot) {
             />
           </template>
           <!-- Tutorial annotation overlay: mounts once here so it appears over BOTH
-               the #game-board slot (custom UI) and the dev UI-switcher <component>
+               the registry's board component (default or dev-switcher selection)
                path. Position is absolute inside .boardregion (inset: 0, z-index: 20).
                Sits above the turn prompt (z-5) and below GameOverCard scrim (z-50).
                No props — injects gameState and renders only when tutorial.content
@@ -2425,10 +2433,12 @@ if ((import.meta as any).hot) {
               - actionArgs: Read-only view of current selection args (for UI display)
               - Other props: game state for rendering
             -->
-            <!-- Dev-only UI switcher: render the selected non-primary UI (an
-                 extra `uis` entry or the built-in auto-UI) with the same slot
-                 props. Falls through to the #game-board slot for the primary UI
-                 and always in production (selectedUiComponent is null there). -->
+            <!-- ONE render path for the board: the registry's default UI, or the
+                 dev switcher's selection. There is no #game-board slot — a second
+                 way to name the default UI would be a second thing to disagree
+                 with `src/ui/uis.ts`, and props drifted between the two paths for
+                 real while both existed (the slot never received flow-state or
+                 @retry). Games declare boards in defineGameUIs(); nothing else. -->
             <!-- `shellMounted` gate: the game UI mounts one tick after GameShell's
                  DOM is in the document, so a game's `<Teleport to="#bs-game-modal">`
                  always resolves its target (see the shellMounted declaration). -->
@@ -2453,28 +2463,11 @@ if ((import.meta as any).hot) {
               :flow-state="state?.flowState"
               @retry="handleRetry"
             />
-            <slot
-              v-else
-              name="game-board"
-              :state="displayedState"
-              :game-view="gameView"
-              :players="players"
-              :my-player="myPlayer"
-              :player-seat="playerSeat"
-              :is-my-turn="isMyTurn"
-              :available-actions="availableActions"
-              :action-args="actionArgs"
-              :set-board-prompt="setBoardPrompt"
-              :can-undo="canUndo && !isViewingHistory"
-              :undo="handleUndo"
-              :action-controller="actionController"
-              :is-action-help-visible="isActionHelpVisible"
-              :disabled-actions="disabledActions"
-            >
-              <div class="empty-game-area">
-                <p>Add your game board in the #game-board slot</p>
-              </div>
-            </slot>
+            <!-- Only reachable if the registry's default entry resolved to no
+                 component — a broken uis.ts. Name the fix, don't render blank. -->
+            <div v-else class="empty-game-area">
+              <p>No board to render. Mark one UI with defaultUI() in src/ui/uis.ts.</p>
+            </div>
             </template>
           </div>
         </main>

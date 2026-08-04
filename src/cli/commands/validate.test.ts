@@ -48,7 +48,6 @@ describe('config-schema', () => {
       paths: { rules: 'src/rules' },
       gameId: 'abc123',
       version: '1.0.0',
-      ui: 'auto',
     });
     expect(result).toEqual([]);
   });
@@ -131,10 +130,20 @@ describe('validate.ts checkMetadataIssues', () => {
   it('passes a fully valid config with no unknown keys and no playerCount', () => {
     const issues = checkMetadataIssues({
       ...validConfig(),
-      ui: 'auto',
       gameOptions: [],
     });
     expect(issues).toEqual([]);
+  });
+
+  // The manifest no longer describes UIs — src/ui/uis.ts does. A leftover `ui`
+  // key is a migration signal, so it gets a pointed message rather than a
+  // generic did-you-mean (matching the playerCount/categories precedent).
+  it("rejects a leftover 'ui' key and names src/ui/uis.ts as the replacement", () => {
+    const issues = checkMetadataIssues({ ...validConfig(), ui: 'auto' });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("Unknown key 'ui'");
+    expect(issues[0]).toContain('src/ui/uis.ts');
+    expect(issues[0]).toContain('defineGameUIs');
   });
 
   it('passes a config carrying the editor $schema key (CR-02 regression)', () => {

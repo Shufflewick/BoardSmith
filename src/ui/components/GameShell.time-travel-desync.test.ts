@@ -205,7 +205,7 @@ describe('GameShell displayedState (LIBX-04, 164-04)', () => {
 
 // ── Direct source assertions: confirm GameShell.vue itself carries the fix ───
 
-describe('GameShell.vue source: displayedState wired at all three sites, DebugPanel stays live', () => {
+describe('GameShell.vue source: displayedState wired at every board/sidebar site, DebugPanel stays live', () => {
   const gameShellSource = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'),
     'utf-8'
@@ -215,9 +215,12 @@ describe('GameShell.vue source: displayedState wired at all three sites, DebugPa
     expect(gameShellSource).toContain('const displayedState = computed');
   });
 
-  it('board + sidebar-extra sites read displayedState (count == 3)', () => {
+  // Was 3 while the #game-board slot existed and duplicated the board's props.
+  // The slot is gone (the UI registry is the only board path), so the board is
+  // wired once, not twice: board <component :is> + sidebar-extra.
+  it('board + sidebar-extra sites read displayedState (count == 2)', () => {
     const occurrences = (gameShellSource.match(/:state="displayedState"/g) ?? []).length;
-    expect(occurrences).toBe(3);
+    expect(occurrences).toBe(2);
   });
 
   it('exactly ONE :state="state" site remains — the DebugPanel control surface', () => {

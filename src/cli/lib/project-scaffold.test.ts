@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 import {
   generateAppVue,
+  generateUisTs,
   generateBoardsmithJson,
   generateGameTableVue,
   generateAssetImageVue,
@@ -32,11 +33,29 @@ const config: ProjectConfig = {
   playerCount: { min: 2, max: 4 },
 };
 
-describe('generateAppVue (ui: auto)', () => {
-  it('imports only AutoUI — no GameTable import', () => {
+describe('generateAppVue', () => {
+  it('renders the board from the UI registry, never a #game-board slot', () => {
     const out = generateAppVue(config);
-    expect(out).toContain("import { GameShell, AutoUI } from 'boardsmith/ui'");
+    expect(out).toContain("import { GameShell } from 'boardsmith/ui'");
+    expect(out).toContain("import uis from './uis.js'");
+    expect(out).toContain(':uis="uis"');
+    // The slot is gone on purpose: a second way to name the default UI is a
+    // second thing that can disagree with src/ui/uis.ts.
+    expect(out).not.toContain('#game-board');
+  });
+
+  it('does not import any board component directly — the registry owns that', () => {
+    const out = generateAppVue(config);
+    expect(out).not.toContain('AutoUI');
     expect(out).not.toContain('GameTable');
+  });
+
+  it('is identical whether or not a custom ui path was chosen (only uis.ts differs)', () => {
+    // App.vue is now board-agnostic. Which board ships is decided in uis.ts,
+    // so the scaffold no longer forks App.vue on the init-time answer.
+    expect(generateAppVue({ ...config, ui: './ui/components/GameTable.vue' })).toBe(
+      generateAppVue(config),
+    );
   });
 
   it('has no split-screen markup', () => {
@@ -44,44 +63,53 @@ describe('generateAppVue (ui: auto)', () => {
     expect(out).not.toContain('board-comparison');
     expect(out).not.toContain('board-section');
     expect(out).not.toContain('Auto-Generated UI');
-    expect(out).not.toContain('Custom UI');
-  });
-
-  it('renders AutoUI inside GameShell game-board slot', () => {
-    const out = generateAppVue(config);
-    expect(out).toContain('#game-board');
-    expect(out).toContain('<AutoUI');
   });
 });
 
-describe('generateAppVue (ui: custom path)', () => {
-  it('imports the custom component — no AutoUI import', () => {
-    const out = generateAppVue({ ...config, ui: './ui/components/GameTable.vue' });
+describe('generateUisTs — the single source of truth for a game\'s UIs', () => {
+  it('auto default: auto-UI ships, the custom stub is dev-only', () => {
+    const out = generateUisTs(config);
+    expect(out).toContain("import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui'");
+    expect(out).toContain('Auto: defaultUI(AutoUI)');
+    expect(out).toContain("import AutoUI from 'boardsmith/ui/auto-ui'");
+    expect(out).toContain("Custom: devUI(() => import('./components/GameTable.vue'))");
+  });
+
+  it('custom ui path: the custom board ships and auto-UI drops to dev-only', () => {
+    const out = generateUisTs({ ...config, ui: './ui/components/GameTable.vue' });
+    expect(out).toContain('GameTable: defaultUI(GameTable)');
     expect(out).toContain("import GameTable from './ui/components/GameTable.vue'");
-    expect(out).not.toContain('AutoUI');
+    expect(out).toContain("Auto: devUI(() => import('boardsmith/ui/auto-ui'))");
   });
 
-  it('has no split-screen markup with custom ui', () => {
-    const out = generateAppVue({ ...config, ui: './ui/components/GameTable.vue' });
-    expect(out).not.toContain('board-comparison');
-    expect(out).not.toContain('board-section');
-    expect(out).not.toContain('Auto-Generated UI');
+  // AutoUI must come from the `boardsmith/ui/auto-ui` subpath, never the main
+  // barrel: re-exporting it from `boardsmith/ui` puts AutoUI.vue in EVERY game's
+  // module graph, and an SFC `<style>` is a side-effectful CSS import that
+  // survives JS tree-shaking — which shipped the auto-UI stylesheet to every
+  // custom-UI game (SHIP-02).
+  it('reaches AutoUI through the auto-ui subpath, never the main barrel', () => {
+    for (const out of [generateUisTs(config), generateUisTs({ ...config, ui: './x/Y.vue' })]) {
+      expect(out).toContain("'boardsmith/ui/auto-ui'");
+      expect(out).not.toMatch(/AutoUI[^']*from 'boardsmith\/ui'/);
+    }
   });
 
-  it('falls back to GameUI for a path with no filename segment (no empty import)', () => {
-    // A path ending in "/" yields an empty filename segment; the generator must
-    // not emit `import  from '...'`. (boardsmith validate rejects this up front.)
-    const out = generateAppVue({ ...config, ui: './ui/components/' });
-    expect(out).not.toMatch(/import\s+from/);
-    expect(out).not.toContain('<  ');
-    expect(out).toContain("import GameUI from './ui/components/'");
+  it('marks exactly one UI as defaultUI in every generated variant', () => {
+    for (const out of [generateUisTs(config), generateUisTs({ ...config, ui: './x/Y.vue' })]) {
+      // Match the call site, not the prose in the file's doc comment. The
+      // shipped board is passed as a component (eager), never as a loader.
+      expect(out.match(/defaultUI\([A-Za-z]/g)).toHaveLength(1);
+      expect(out).not.toMatch(/defaultUI\(\(\) =>/);
+    }
   });
 });
 
 describe('generateBoardsmithJson', () => {
-  it('contains the "ui" field set to "auto"', () => {
+  // The manifest no longer describes UIs at all — src/ui/uis.ts does. The old
+  // `"ui"` key was scaffold-emitted but read by nothing after init, so it rotted.
+  it('emits no "ui" key (UIs are declared in src/ui/uis.ts)', () => {
     const parsed = JSON.parse(generateBoardsmithJson(config));
-    expect(parsed.ui).toBe('auto');
+    expect(parsed).not.toHaveProperty('ui');
   });
 
   it('does not emit a playerCount key (PROC-02 regression: gameDefinition is the sole source of player count)', () => {

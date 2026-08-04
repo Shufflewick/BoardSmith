@@ -30,16 +30,23 @@ export {
   type DieAnimationContext,
 } from './components/dice/die3d-state.js';
 
-// Auto-UI components (automatic game UI generation)
-export {
-  AutoUI,
-  AutoRenderer,
-  ActionPanel,
-  type GameElement,
-  type Pick,
-  type ActionMetadata,
-  type Player,
-} from './components/auto-ui/index.js';
+// ActionPanel is shell infrastructure: GameShell mounts it for every game, custom
+// UI or not, so it belongs on the main barrel. Imported from its own module rather
+// than through `./components/auto-ui/index.js` ON PURPOSE — that barrel re-exports
+// AutoUI.vue and AutoRenderer.vue, and a Vue SFC's `<style>` block compiles to a
+// SIDE-EFFECTFUL CSS import that survives JS tree-shaking. Routing through it put
+// the whole auto-UI stylesheet into every custom-UI game's production bundle even
+// though none of its JS shipped. Keep this a direct module path.
+export { default as ActionPanel } from './components/auto-ui/ActionPanel.vue';
+
+// Game UI registry (src/ui/uis.ts) — single source of truth for a game's UIs.
+export { defineGameUIs, defaultUI, devUI } from './game-uis.js';
+export type { GameUIEntry, DefaultGameUIEntry, GameUIRegistry } from './game-uis.js';
+export type { GameElement, Pick, ActionMetadata, Player } from './types.js';
+
+// AutoUI/AutoRenderer are deliberately NOT re-exported here — they live behind the
+// `boardsmith/ui/auto-ui` subpath so a game only pays for them when it asks for
+// them by name (SHIP-02). Auto-UI games: `import { AutoUI } from 'boardsmith/ui/auto-ui'`.
 
 // Renderer registry (public extension API per D-03)
 // Game authors register custom renderers at priority 100+ to upgrade auto-UI in place.
