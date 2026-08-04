@@ -25,7 +25,7 @@ describe('deriveManifest', () => {
     const config = { name: 'fixture', displayName: 'Fixture Game' };
     const gameDefinition = makeGameDefinition(2, 4);
 
-    const manifest = deriveManifest(config, gameDefinition, 1);
+    const manifest = deriveManifest(config, gameDefinition, { protocol: 1, revision: 7 });
 
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
   });
@@ -38,7 +38,7 @@ describe('deriveManifest', () => {
     const config = { name: 'fixture', playerCount: { min: 9, max: 9 } };
     const gameDefinition = makeGameDefinition(2, 4);
 
-    const manifest = deriveManifest(config, gameDefinition, 1);
+    const manifest = deriveManifest(config, gameDefinition, { protocol: 1, revision: 7 });
 
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
     expect(manifest.playerCount).not.toEqual({ min: 9, max: 9 });
@@ -53,22 +53,36 @@ describe('deriveManifest', () => {
     };
     const gameDefinition = makeGameDefinition(1, 8);
 
-    const manifest = deriveManifest(config, gameDefinition, 3);
+    const manifest = deriveManifest(config, gameDefinition, { protocol: 3, revision: 7 });
 
     expect(manifest.name).toBe('fixture');
     expect(manifest.displayName).toBe('Fixture Game');
     expect(manifest.description).toBe('A test game');
     expect(manifest.version).toBe('2.0.0');
     expect(manifest.engineProtocol).toBe(3);
+    expect(manifest.engineRevision).toBe(7);
     expect(typeof manifest.buildTime).toBe('string');
     expect(() => new Date(manifest.buildTime as string).toISOString()).not.toThrow();
+  });
+
+  it('stamps engineRevision even when boardsmith.json tries to set its own', () => {
+    // Both engine stamps are the BUILDING BoardSmith's to declare. If a hand
+    // edited value could ride through the `...config` spread, a game could
+    // claim an older revision than it was built against and defeat the
+    // platform's skew check — so the derived values must overwrite, not merge.
+    const config = { name: 'fixture', engineProtocol: 99, engineRevision: 99 };
+
+    const manifest = deriveManifest(config, makeGameDefinition(2, 2), { protocol: 1, revision: 7 });
+
+    expect(manifest.engineProtocol).toBe(1);
+    expect(manifest.engineRevision).toBe(7);
   });
 
   it('defaults version to 1.0.0 when config omits it', () => {
     const config = { name: 'fixture' };
     const gameDefinition = makeGameDefinition(2, 2);
 
-    const manifest = deriveManifest(config, gameDefinition, 1);
+    const manifest = deriveManifest(config, gameDefinition, { protocol: 1, revision: 7 });
 
     expect(manifest.version).toBe('1.0.0');
   });
@@ -82,7 +96,7 @@ describe('deriveManifest', () => {
       cooperative: false,
     };
 
-    const manifest = deriveManifest(config, makeGameDefinition(2, 4), 1);
+    const manifest = deriveManifest(config, makeGameDefinition(2, 4), { protocol: 1, revision: 7 });
 
     expect(manifest.audience).toBe('casual');
     expect(manifest.tags).toEqual(['abstract', 'classic']);

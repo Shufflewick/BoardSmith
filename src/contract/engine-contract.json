@@ -1,0 +1,16 @@
+{
+  "revision": 1,
+  "bundleProtocol": 1,
+  "surfaceHash": "601ab669855fe0d5",
+  "payloadHash": "39a105d8db41ec25",
+  "history": [
+    {
+      "revision": 1,
+      "date": "2026-08-03",
+      "bundleProtocol": 1,
+      "surfaceHash": "601ab669855fe0d5",
+      "payloadHash": "39a105d8db41ec25",
+      "summary": "Baseline, taken at the state following the UI-registry work: Deck defaults to count-only so draw piles report their size again, AutoUI and Die3D moved off the boardsmith/ui barrel, and the board-side ValidElement became BoardTarget. Also introduces the contract itself — ENGINE_CONTRACT and ENGINE_REVISION are exported from the boardsmith root so the platform can read the vendored engine's revision at runtime."
+    }
+  ]
+}

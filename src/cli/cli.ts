@@ -9,6 +9,7 @@ import { validateCommand } from './commands/validate.js';
 import { publishCommand } from './commands/publish.js';
 import { lintCommand } from './commands/lint.js';
 import { auditCommand } from './commands/audit.js';
+import { contractCommand } from './commands/contract.js';
 import { harnessIngestCommand } from './commands/harness-ingest.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { simulateCommand } from './commands/simulate.js';
@@ -134,6 +135,16 @@ program
   .option('--dead-code', 'Run only the dead-code audit')
   .option('--duplication', 'Run only the duplication audit')
   .action(auditCommand);
+
+// The engine contract — what the platform is promised, and how it learns the
+// promise changed. See docs/engine-contract.md.
+program
+  .command('contract')
+  .description("Check (or record) the engine contract the game platform vendors against")
+  .option('--update', 'Record a new contract revision from the current engine')
+  .option('--summary <text>', 'One sentence describing the change, for the platform team (required with --update)')
+  .option('--breaking', 'Also bump bundleProtocol — invalidates every published bundle')
+  .action(contractCommand);
 
 // Analysis
 program

@@ -4,6 +4,7 @@ import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
 import ora from 'ora';
 import { BUNDLE_PROTOCOL_VERSION } from '../../engine/protocol-version.js';
+import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import type { GameDefinition } from '../../session/index.js';
@@ -27,7 +28,7 @@ interface BuildOptions {
 export function deriveManifest(
   config: Record<string, unknown>,
   gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>,
-  protocolVersion: number,
+  engine: { protocol: number; revision: number },
 ): Record<string, unknown> {
   const { minPlayers, maxPlayers } = gameDefinition;
   // The platform syncs playerCount on every publish (the catalog must never
@@ -47,7 +48,13 @@ export function deriveManifest(
     // Stamp the engine ABI version so the executor can reject a bundle built
     // against an incompatible BoardSmith (INFRA-04). Automatic — authors never
     // set this; it comes from the BoardSmith building the bundle.
-    engineProtocol: protocolVersion,
+    engineProtocol: engine.protocol,
+    // Stamp the engine contract revision too. `engineProtocol` only moves on a
+    // breaking ABI change, so it cannot express the far more common "this game
+    // was built against a newer engine than the platform vendored" — which is
+    // the skew that produces mystery runtime bugs. The platform rejects a
+    // bundle whose revision exceeds its own. Also automatic.
+    engineRevision: engine.revision,
     // Derived — never copied from the raw config spread. Overwrites any
     // stale playerCount that may still be present in boardsmith.json.
     playerCount: {
@@ -182,7 +189,10 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
       }
     }
 
-    const manifest = deriveManifest(config, gameDefinition, BUNDLE_PROTOCOL_VERSION);
+    const manifest = deriveManifest(config, gameDefinition, {
+      protocol: BUNDLE_PROTOCOL_VERSION,
+      revision: ENGINE_REVISION,
+    });
 
     mkdirSync(join(cwd, outDir), { recursive: true });
     writeFileSync(

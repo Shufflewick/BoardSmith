@@ -5,6 +5,12 @@
 // enforced by the executor. See protocol-version.ts.
 export { BUNDLE_PROTOCOL_VERSION } from './protocol-version.js';
 
+// The engine contract: ENGINE_REVISION moves whenever the platform-reachable
+// surface or the player-view payload changes, so the platform can detect an
+// engine it has not vendored yet. See docs/engine-contract.md.
+export { ENGINE_CONTRACT, ENGINE_REVISION } from '../contract/index.js';
+export type { EngineContract, EngineContractRevision } from '../contract/index.js';
+
 // Element system
 export {
   GameElement,
