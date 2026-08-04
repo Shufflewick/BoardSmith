@@ -23,11 +23,22 @@
  * `engine-contract.test.ts` recomputes both on every test run and fails when
  * they drift from the committed contract.
  *
- * KNOWN LIMIT, stated so nobody over-trusts this: `surfaceHash` sees runtime
- * values only. `verbatimModuleSyntax` erases type-only exports, so a change to
- * an exported TYPE (a new optional field on `PlayerStateView`, say) moves
- * neither hash unless it also changes a real payload. Type-level contract
- * changes still need a judgement call and a manual `contract:update`.
+ * KNOWN LIMITS, stated so nobody over-trusts this:
+ *
+ * - `surfaceHash` sees runtime values only. `verbatimModuleSyntax` erases
+ *   type-only exports, so a change to an exported TYPE (a new optional field on
+ *   `PlayerStateView`, say) moves neither hash unless it also changes a real
+ *   payload.
+ * - The package `exports` map is not covered. Remapping `./session` in
+ *   package.json is platform-visible and moves neither hash, because this
+ *   module imports the entrypoint files directly.
+ * - `payloadHash` covers what the fixture exercises. It is broad (board
+ *   serialization, visibility, flow state, available actions, both sequential
+ *   and simultaneous turns) but it is not the whole engine. Engine behaviour
+ *   the fixture never reaches is not fingerprinted.
+ *
+ * When you make a platform-visible change none of the fingerprints can see,
+ * extend the fixture so it can, then record the revision.
  */
 
 import { createHash } from 'node:crypto';
@@ -79,22 +90,100 @@ function sha256(input: string): string {
 }
 
 /**
- * Hash the runtime export names of every platform-reachable entrypoint.
+ * Describe one export for the surface hash.
  *
- * Names only, not values: a function body changing is a semantic change, which
- * is `payloadHash`'s job. Conflating the two would make the surface hash move
- * on every internal edit and stop meaning "the API changed".
+ * Top-level names alone are not the API games call. Rules call METHODS —
+ * `deck.shuffle()`, `game.followUp()`, the whole element and action surface —
+ * so renaming or removing a method while leaving the class exported would keep
+ * a name-only hash still, let the change ship unrecorded, and let the upload
+ * gate compare two equal revisions on a bundle that calls a method the vendored
+ * engine no longer has. That is the exact failure the gate exists to prevent,
+ * so prototype members are part of the surface.
+ *
+ * This is deliberately conservative: it includes members that are private by
+ * convention, so an internal method rename also forces a revision bump. False
+ * positives cost one `contract --update`; false negatives cost a production
+ * bug nobody can trace.
+ */
+function describeExport(name: string, value: unknown): string {
+  if (typeof value !== 'function' || value.prototype === undefined) return name;
+
+  const members = Object.getOwnPropertyNames(value.prototype)
+    .filter((member) => member !== 'constructor')
+    .sort();
+
+  return members.length > 0 ? `${name}{${members.join(',')}}` : name;
+}
+
+/**
+ * Hash the runtime export surface of every platform-reachable entrypoint:
+ * export names plus, for classes and functions, their prototype members.
+ *
+ * Shapes only, never implementations — a changed function body is a semantic
+ * change, which is `payloadHash`'s job. Conflating the two would make this hash
+ * move on every internal edit and stop meaning "the API changed".
  */
 export async function computeSurfaceHash(): Promise<string> {
   const lines: string[] = [];
 
   for (const entry of PLATFORM_ENTRYPOINTS) {
-    const module = await entry.module();
-    const names = Object.keys(module).sort();
-    lines.push(`${entry.specifier}: ${names.join(',')}`);
+    const module = (await entry.module()) as Record<string, unknown>;
+    const described = Object.keys(module)
+      .sort()
+      .map((name) => describeExport(name, module[name]));
+    lines.push(`${entry.specifier}: ${described.join(',')}`);
   }
 
   return sha256(lines.join('\n'));
+}
+
+/**
+ * Fail loudly if the fixture stopped exercising the flow layer.
+ *
+ * This exists because the first version of this fixture silently did not. It
+ * built a board, never started a flow, and produced views whose `flowState` was
+ * `undefined` — so `payloadHash` covered visibility serialization only, while
+ * claiming to cover the engine. Worse, the hash still MOVED whenever the board
+ * changed, so it looked alive. An adversarial review caught it; a green test
+ * suite did not.
+ *
+ * A fingerprint that silently narrows is more dangerous than no fingerprint,
+ * because it converts "unverified" into "verified". So the fixture asserts what
+ * it is supposed to be covering rather than trusting that it still does.
+ */
+function assertCoversFlowLayer(views: unknown[]): void {
+  const missing: string[] = [];
+
+  if (views.length === 0) missing.push('no player views at all');
+
+  const states = views.map(
+    (view) => (view as Record<string, unknown>).flowState as Record<string, unknown> | undefined,
+  );
+
+  if (states.some((state) => state === undefined)) missing.push('flowState');
+
+  // The fixture opens on a SIMULTANEOUS step, where every seat is on the clock
+  // at once. `createPlayerView` has to resolve that from the engine's
+  // `awaitingPlayers` rather than `currentPlayer`, and when it failed to, this
+  // platform shipped a game whose action bar was blank. So the fixture is only
+  // doing its job if BOTH seats come back active with real actions offered.
+  const active = states.filter(
+    (state) => state?.isMyTurn === true && (state.availableActions as string[] | undefined)?.length,
+  );
+  if (active.length !== views.length) {
+    missing.push(
+      `simultaneous-turn resolution (${active.length}/${views.length} seats got isMyTurn + availableActions)`,
+    );
+  }
+
+  if (missing.length === 0) return;
+
+  throw new Error(
+    `The engine-contract fixture is no longer exercising the flow layer (missing: ${missing.join(', ')}).\n`
+    + 'payloadHash would still change and still look healthy while covering board '
+    + 'serialization only — silently narrowing what the contract actually verifies.\n'
+    + 'Fix the fixture in src/contract/fingerprint.ts rather than removing this check.',
+  );
 }
 
 /**
@@ -111,19 +200,74 @@ export async function computeSurfaceHash(): Promise<string> {
  */
 export async function computePayloadHash(): Promise<string> {
   const engine = await import('../engine/index.js');
-  const { Game, Space, Piece, Player, Deck, Hand, createAllPlayerViews } = engine;
+  const { GameRunner } = await import('../runtime/index.js');
+  const {
+    Game, Space, Piece, Player, Deck, Hand, Action,
+    defineFlow, actionStep, simultaneousActionStep, sequence,
+  } = engine as any;
 
-  class FixtureGame extends Game<any, any> {}
+  class FixturePlayer extends Player<any, any> {
+    hasBid = false;
+  }
+
   class FixtureCard extends Piece<any> {
     suit!: string;
     rank!: string;
   }
 
-  const game = new FixtureGame({
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-    seed: 'engine-contract-fixture',
+  class FixtureGame extends Game<any, any> {
+    static PlayerClass = FixturePlayer;
+
+    constructor(options: any) {
+      super(options);
+
+      this.registerAction(
+        Action.create('bid').execute((_args: unknown, ctx: any) => {
+          ctx.player.hasBid = true;
+          return { success: true };
+        }),
+      );
+      this.registerAction(
+        Action.create('draw').execute(() => ({ success: true })),
+      );
+
+      // BOTH turn shapes, because they serialize differently and the platform
+      // reads both. A simultaneous step populates `flowState.awaitingPlayers`
+      // and leaves `currentPlayer` undefined; a sequential step does the
+      // reverse. The awaitingPlayers path is the one that produced the
+      // blank-action-bar bug on this platform — a game's opening simultaneous
+      // step reported zero available actions — so leaving it out of the
+      // fingerprint would omit the single most expensive skew we have had.
+      this.setFlow(
+        defineFlow({
+          root: sequence(
+            simultaneousActionStep({
+              actions: ['bid'],
+              playerDone: (_ctx: unknown, p: any) => p.hasBid,
+            }),
+            actionStep({ actions: ['draw'] }),
+          ),
+        }),
+      );
+    }
+  }
+
+  // Booted through GameRunner rather than by constructing the Game directly,
+  // because GameRunner.start() is what actually initialises the flow — and
+  // because `runner.getAllPlayerViews()` is the exact call the ShufflewickPub
+  // executor makes. Fingerprinting the executor's own code path is the point:
+  // a view shape that only this fixture ever produces would prove nothing.
+  const runner = new GameRunner({
+    GameClass: FixtureGame,
+    gameType: 'engine-contract-fixture',
+    gameOptions: {
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'engine-contract-fixture',
+    },
   }) as any;
+
+  const game = runner.game as any;
 
   // A default Deck — no visibility call at all. This is the fixture's most
   // important element: it is the one whose payload changed when the `Deck`
@@ -156,7 +300,17 @@ export async function computePayloadHash(): Promise<string> {
     }
   }
 
-  return sha256(canonicalize(createAllPlayerViews(game)));
+  // Start the flow so the views carry real flow state. Without this every view
+  // reports `flowState: undefined` and the hash covers only board
+  // serialization — which is exactly how the flow layer stayed invisible in the
+  // first version of this fixture. `assertCoversFlowLayer` below makes that
+  // mistake impossible to repeat silently.
+  runner.start();
+
+  const views = runner.getAllPlayerViews();
+  assertCoversFlowLayer(views);
+
+  return sha256(canonicalize(views));
 }
 
 export interface ComputedFingerprints {

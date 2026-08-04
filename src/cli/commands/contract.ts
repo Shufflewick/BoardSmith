@@ -8,7 +8,7 @@
  * platform can find out.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -28,7 +28,12 @@ const CONTRACT_PATH = resolve(
   '../../contract/engine-contract.json',
 );
 
-function readContract(): EngineContract {
+function readContract(): EngineContract | null {
+  // In an INSTALLED copy the CLI runs from the bundled `dist/cli.js`, so this
+  // path resolves outside the package and the read fails with a raw ENOENT
+  // naming an internal path. The contract is a repo-development concern, so
+  // say that instead of leaking a resolution detail.
+  if (!existsSync(CONTRACT_PATH)) return null;
   return JSON.parse(readFileSync(CONTRACT_PATH, 'utf8')) as EngineContract;
 }
 
@@ -104,6 +109,15 @@ function reportCheck(contract: EngineContract, diff: ReturnType<typeof diffContr
 
 export async function contractCommand(options: ContractOptions): Promise<void> {
   const contract = readContract();
+  if (contract === null) {
+    console.error(chalk.red('\n`boardsmith contract` only works inside the BoardSmith repository.\n'));
+    console.error('It reads and writes src/contract/engine-contract.json, which is a');
+    console.error('development-time file — an installed copy of BoardSmith has nothing to record.');
+    console.error(chalk.dim('\nTo see which engine a project is running, check its own vendored copy:'));
+    console.error(chalk.dim('  node_modules/boardsmith/src/contract/engine-contract.json\n'));
+    process.exitCode = 1;
+    return;
+  }
   const computed = await computeFingerprints();
   const diff = diffContract(contract, computed);
 

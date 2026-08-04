@@ -1,8 +1,8 @@
 {
-  "revision": 1,
+  "revision": 2,
   "bundleProtocol": 1,
-  "surfaceHash": "601ab669855fe0d5",
-  "payloadHash": "39a105d8db41ec25",
+  "surfaceHash": "966f014fca003487",
+  "payloadHash": "4e482261ddc4a6e9",
   "history": [
     {
       "revision": 1,
@@ -11,6 +11,14 @@
       "surfaceHash": "601ab669855fe0d5",
       "payloadHash": "39a105d8db41ec25",
       "summary": "Baseline, taken at the state following the UI-registry work: Deck defaults to count-only so draw piles report their size again, AutoUI and Die3D moved off the boardsmith/ui barrel, and the board-side ValidElement became BoardTarget. Also introduces the contract itself — ENGINE_CONTRACT and ENGINE_REVISION are exported from the boardsmith root so the platform can read the vendored engine's revision at runtime."
+    },
+    {
+      "revision": 2,
+      "date": "2026-08-04",
+      "bundleProtocol": 1,
+      "surfaceHash": "966f014fca003487",
+      "payloadHash": "4e482261ddc4a6e9",
+      "summary": "Contract fingerprints widened after an adversarial review found them narrower than claimed: surfaceHash now includes prototype members (games call methods, and renaming one used to move neither hash), and the payload fixture now boots through GameRunner with a simultaneous opening step so flow state, isMyTurn and availableActions are covered — the blank-action-bar layer, previously invisible."
     }
   ]
 }
