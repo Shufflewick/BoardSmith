@@ -109,7 +109,12 @@ program
   .command('pack')
   .description('Create tarballs of all public packages for local installation')
   .option('-o, --out-dir <dir>', 'Output directory for tarballs', '.boardsmith/tarballs')
-  .option('-t, --target <path>', 'Copy tarballs to target project and update dependencies')
+  .option(
+    '-t, --target <path>',
+    'Copy tarballs to a target project and update its dependencies (repeatable — '
+    + 'all targets receive the same tarball)',
+    (value: string, previous: string[] = []) => [...previous, value],
+  )
   .action(packCommand);
 
 // Validation

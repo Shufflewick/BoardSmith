@@ -8,7 +8,17 @@ import { buildCli, CLI_OUTFILE } from '../lib/build-cli.js';
 
 interface PackOptions {
   outDir?: string;
-  target?: string;
+  /**
+   * Repeatable. Multiple targets are integrated from ONE pack, so every target
+   * receives the byte-identical tarball.
+   *
+   * This matters more than it looks: the tarball version is a timestamp, so
+   * running `pack --target a` then `pack --target b` gives a and b DIFFERENT
+   * engines. ShufflewickPub vendors into both `games/` and `executor/` — one
+   * validates uploads, the other runs them — and a split between those two
+   * lets the platform accept a bundle it cannot run.
+   */
+  target?: string[];
 }
 
 interface PackageInfo {
@@ -111,8 +121,42 @@ function packPackage(
 }
 
 /**
+ * Remove tarballs from a previous vendoring of the same packages.
+ *
+ * Without this, `vendor/` accumulates every engine ever vendored — each one a
+ * couple of megabytes of committed binary — and the directory listing stops
+ * telling you which tarball is live.
+ *
+ * Scoped deliberately: only files matching a package we are packing right now,
+ * and never the one we just wrote.
+ */
+export function pruneStaleTarballs(vendorDir: string, keep: Set<string>, packageNames: string[]): string[] {
+  if (!existsSync(vendorDir)) return [];
+
+  // Match `<name>-<version>.tgz` and require the version to start with a
+  // digit. A bare `startsWith('boardsmith-')` would also match
+  // `boardsmith-extras-1.0.0.tgz` — a DIFFERENT package — and delete it.
+  const patterns = packageNames.map((name) => {
+    const tarballName = name.replace('@', '').replace('/', '-');
+    const escaped = tarballName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^${escaped}-\\d[^/]*\\.tgz$`);
+  });
+  const removed: string[] = [];
+
+  for (const file of readdirSync(vendorDir)) {
+    if (!file.endsWith('.tgz') || keep.has(file)) continue;
+    if (!patterns.some((pattern) => pattern.test(file))) continue;
+    rmSync(join(vendorDir, file));
+    removed.push(file);
+  }
+
+  return removed;
+}
+
+/**
  * Integrate tarballs into a target consumer project.
  * - Copies tarballs to target's vendor/ directory
+ * - Removes tarballs left by a previous vendoring
  * - Updates target's package.json with file: dependencies
  * - Adds npm overrides for all packages to resolve nested deps from vendor/
  * - Runs npm install in target
@@ -149,6 +193,15 @@ async function integrateWithTarget(
     copyFileSync(sourceTarball, destTarball);
   }
   copySpinner.succeed(`Copied ${results.length} tarballs to vendor/`);
+
+  const pruned = pruneStaleTarballs(
+    vendorDir,
+    new Set(results.map((r) => r.tarball)),
+    results.map((r) => r.name),
+  );
+  if (pruned.length > 0) {
+    console.log(chalk.dim(`Removed ${pruned.length} stale tarball(s): ${pruned.join(', ')}`));
+  }
 
   // Read and update target's package.json
   const targetPkgJson = JSON.parse(readFileSync(targetPkgJsonPath, 'utf-8'));
@@ -339,9 +392,12 @@ export async function packCommand(options: PackOptions): Promise<void> {
     console.log(chalk.dim(`  ${result.tarball}`));
   }
 
-  // If target specified, integrate with target project
-  if (options.target) {
-    await integrateWithTarget(options.target, outputPath, results);
+  // If targets specified, integrate the SAME tarballs with each of them.
+  const targets = options.target ?? [];
+  if (targets.length > 0) {
+    for (const target of targets) {
+      await integrateWithTarget(target, outputPath, results);
+    }
   } else {
     console.log(chalk.cyan('\nNext steps:'));
     console.log(chalk.dim('  In your consumer project:'));
