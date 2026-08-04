@@ -55,9 +55,21 @@ export class Deck<G extends Game = any, P extends Player = any> extends Space<G,
     this.$align = 'center';
 
     // Secure by default: a draw pile's contents (faces AND order) are hidden
-    // from all players. Designers can opt into more visibility afterward via
-    // contentsVisible(), contentsCountOnly(), etc.
-    this.setZoneVisibility('hidden');
+    // from all players. The COUNT stays visible, because that is what a draw
+    // pile is on a real table — you cannot read the cards, but you can see how
+    // many are left, and games routinely depend on it (a deck that is nearly
+    // out is public information, and scoring UIs read the count).
+    //
+    // 'count-only', not 'hidden'. Those two modes used to be synonyms here; when
+    // 'hidden' was later given true-concealment semantics (D24/SPACE-03 — no
+    // `childCount` key at all, so a non-owner cannot even distinguish empty from
+    // full) this default was not revisited, which silently removed the card count
+    // from every game that uses a plain Deck. 'hidden' remains the right mode for
+    // a zone whose very size is secret; a draw pile is not that.
+    //
+    // Designers can still opt either way: contentsVisible() to reveal faces, or
+    // setZoneVisibility('hidden') for a pile whose depth must stay secret too.
+    this.contentsCountOnly();
   }
 
   /**

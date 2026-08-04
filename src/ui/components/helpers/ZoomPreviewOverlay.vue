@@ -17,7 +17,12 @@
  */
 import { computed, ref, watchEffect } from 'vue';
 import type { PreviewState } from '../../composables/useZoomPreview.js';
-import { Die3D } from '../dice/index.js';
+// NOT `import { Die3D }` — that reference is live in every game that mounts
+// GameShell, which is what put the ~500 kB three.js chunk into all 14 example
+// games when only 2 have dice. The renderer is looked up instead, and it is
+// present only when the game imported `boardsmith/ui/dice` (which any game
+// drawing dice already does). See dice/die-preview-registry.ts.
+import { getDiePreviewComponent } from '../dice/die-preview-registry.js';
 
 const props = defineProps<{
   /** Preview state from useZoomPreview */
@@ -144,6 +149,23 @@ const isCloneMode = computed(() => props.previewState.clonedElement !== null);
 const isCardDataMode = computed(() => props.previewState.cardData !== null);
 const isDieDataMode = computed(() => props.previewState.dieData !== null);
 
+// null in a bundle with no dice support — the normal state for most games.
+const diePreview = getDiePreviewComponent();
+
+// A die preview with no renderer would silently show an empty box. Say what is
+// wrong and how to fix it, once, in dev only — a player can do nothing with this.
+if (import.meta.env.DEV) {
+  watchEffect(() => {
+    if (props.previewState.dieData && !diePreview) {
+      console.warn(
+        'A die zoom-preview was requested but this bundle has no dice support, so nothing will render. '
+        + "Import Die3D from 'boardsmith/ui/dice' in the component that draws your dice — that import is "
+        + 'what registers the preview renderer (and what opts this game into shipping three.js).',
+      );
+    }
+  });
+}
+
 // Die preview size (larger than default die size)
 const DIE_PREVIEW_SIZE = 150;
 
@@ -202,8 +224,9 @@ const previewCardStyle = computed(() => ({
         </div>
 
         <!-- Die data-based mode: render Die3D component -->
-        <div v-else-if="isDieDataMode && previewState.dieData" class="zoom-preview-die">
-          <Die3D
+        <div v-else-if="isDieDataMode && previewState.dieData && diePreview" class="zoom-preview-die">
+          <component
+            :is="diePreview"
             :sides="previewState.dieData.sides"
             :value="previewState.dieData.value"
             :color="previewState.dieData.color"

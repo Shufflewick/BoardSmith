@@ -8,7 +8,7 @@
  * GameShell.vue, so production builds dead-code-eliminate this entire module.
  */
 
-import type { ValidElement } from '../composables/useBoardInteraction.js';
+import type { BoardTarget } from '../composables/useBoardInteraction.js';
 import type { SerializedFlowDebugInfo, SerializedPendingActionState } from '../../session/types.js';
 
 // ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ export interface DevtoolsParams {
   boardInteraction: {
     currentAction: string | null;
     currentPickIndex: number;
-    validElements: ValidElement[];
+    validElements: BoardTarget[];
   };
   /** Serialized flow-position snapshot (FLOW-01), forwarded from the received broadcast state. */
   flowDebugInfo: SerializedFlowDebugInfo | undefined;

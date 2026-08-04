@@ -168,6 +168,12 @@ async function buildFixtureUi(fixtureDir: string): Promise<string> {
           find: /^boardsmith\/ui\/auto-ui$/,
           replacement: join(BOARDSMITH_ROOT, 'src/ui/components/auto-ui/index.ts'),
         },
+        // Dice are a subpath for the same reason auto-UI is: importing them is
+        // what opts a game into three.js (SHIP-03).
+        {
+          find: /^boardsmith\/ui\/dice$/,
+          replacement: join(BOARDSMITH_ROOT, 'src/ui/components/dice/index.ts'),
+        },
         {
           find: /^boardsmith\/ui$/,
           replacement: join(BOARDSMITH_ROOT, 'src/ui/index.ts'),
@@ -313,6 +319,58 @@ export default defineGameUIs({
       // Positive control: the default board DID make it in, so absence above is
       // a real drop and not an empty build.
       expect(bundle, 'the defaultUI board must ship').toContain('GameTable');
+    },
+  );
+
+  it(
+    'SHIP-03: a game with no dice ships no three.js, and a game with dice does',
+    { timeout: 240_000 },
+    async () => {
+      // GameShell renders ZoomPreviewOverlay for every game, and that overlay can
+      // preview a die. While it imported Die3D directly, the reference was live in
+      // every game's graph and Rollup emitted the ~500 kB three.js chunk into all
+      // 14 example games — 12 of which have no dice. Lazily fetched, so no player
+      // downloaded it, but it shipped in every package. Measured: removing it took
+      // cribbage from 982,316 to 480,005 bytes.
+      const fixId = `nodice-${Date.now()}`;
+      fixtureDir = join(FIXTURE_PARENT, fixId);
+      mkdirSync(fixtureDir, { recursive: true });
+      writeFixtureFiles(fixtureDir, './components/GameTable.vue');
+
+      const distUi = await buildFixtureUi(fixtureDir);
+      const names = (readdirSync(distUi, { recursive: true } as never) as unknown as string[]).map(String);
+      expect(
+        names.filter((f) => f.includes('Die3D')),
+        'a game that never imports boardsmith/ui/dice must emit no Die3D chunk',
+      ).toEqual([]);
+      // THREE's own banner string is the reliable marker: esbuild does not mangle
+      // string literals, and it cannot come from anywhere but three.js itself.
+      expect(readBundleJs(distUi), 'three.js must not ship to a game with no dice')
+        .not.toContain('WebGLRenderer');
+
+      rmSync(fixtureDir, { recursive: true, force: true });
+
+      // Positive control: the same fixture, plus one component importing Die3D.
+      // Absence above must be a real drop, not a build that emits nothing.
+      const diceId = `dice-${Date.now()}`;
+      fixtureDir = join(FIXTURE_PARENT, diceId);
+      mkdirSync(fixtureDir, { recursive: true });
+      writeFixtureFiles(fixtureDir, './components/GameTable.vue');
+      writeFileSync(
+        join(fixtureDir, 'src/ui/components/GameTable.vue'),
+        `<script setup lang="ts">
+import { Die3D } from 'boardsmith/ui/dice';
+</script>
+<template><div><Die3D :sides="6" :value="1" /></div></template>
+`,
+        'utf-8',
+      );
+      const diceDist = await buildFixtureUi(fixtureDir);
+      const diceNames = (readdirSync(diceDist, { recursive: true } as never) as unknown as string[]).map(String);
+      expect(
+        diceNames.filter((f) => f.includes('Die3D')).length,
+        'a game importing boardsmith/ui/dice must still get its Die3D chunk',
+      ).toBeGreaterThan(0);
     },
   );
 

@@ -24,15 +24,42 @@ describe('Deck/Hand secure-by-default visibility (F32)', () => {
     game = new TestGame({ playerCount: 2 });
   });
 
-  it('hides a fresh Deck contents from non-owner in per-player snapshot (SPACE-03/D24: true concealment)', () => {
+  it('hides a fresh Deck\'s card faces but not its size (draw-pile default: count-only)', () => {
     const deck = game.create(Deck, 'draw-pile');
     deck.createMany(3, Card, 'card', (i) => ({ suit: 'H', rank: String(i + 1) }));
 
-    // A deck is a shared draw pile in 'hidden' mode: nobody should see the
-    // contents by default -- and per D24, that means the exact count must
-    // not leak either. No `children` key and no `childCount` key at all.
+    // A draw pile on a real table: you cannot read the cards, but you can see
+    // how many are left. Games depend on that — a card-back stack renders one
+    // back per remaining card, and scoring UIs read "cards remaining".
+    //
+    // This asserted true concealment (no childCount) while 'hidden' and
+    // 'count-only' were synonyms and Deck's default said 'hidden'. When D24
+    // gave 'hidden' real true-concealment semantics, the default was not
+    // revisited, and every game silently lost its deck count. Deck now defaults
+    // to count-only; a pile whose SIZE is also secret opts in via
+    // contentsHidden() (go-fish's pond does exactly that).
     const view = game.toJSONForPlayer(2);
     const deckJson = findByName(view.children, 'draw-pile');
+
+    expect(deckJson).toBeDefined();
+    expect(deckJson.childCount).toBe(3);
+    // Faces stay concealed: placeholders only, carrying no identity.
+    for (const child of deckJson.children ?? []) {
+      expect(child.attributes?.__hidden).toBe(true);
+      expect(child.attributes?.suit).toBeUndefined();
+      expect(child.attributes?.rank).toBeUndefined();
+    }
+  });
+
+  it('a Deck opted into contentsHidden() conceals its size too (SPACE-03/D24: true concealment)', () => {
+    const deck = game.create(Deck, 'secret-bag');
+    deck.createMany(3, Card, 'card', (i) => ({ suit: 'H', rank: String(i + 1) }));
+    // The mode still exists and still means what D24 says: a non-owner cannot
+    // even distinguish empty from full. It is now opt-in rather than the
+    // default, which is what a "bag" wants and a "draw pile" does not.
+    deck.contentsHidden();
+
+    const deckJson = findByName(game.toJSONForPlayer(2).children, 'secret-bag');
 
     expect(deckJson).toBeDefined();
     expect('childCount' in deckJson).toBe(false);

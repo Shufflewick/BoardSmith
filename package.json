@@ -19,6 +19,10 @@
       "types": "./src/ui/components/auto-ui/index.ts",
       "import": "./src/ui/components/auto-ui/index.ts"
     },
+    "./ui/dice": {
+      "types": "./src/ui/components/dice/index.ts",
+      "import": "./src/ui/components/dice/index.ts"
+    },
     "./session": {
       "types": "./src/session/index.ts",
       "import": "./src/session/index.ts"

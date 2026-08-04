@@ -22,8 +22,12 @@ export {
   type ButtonSize,
 } from './components/helpers/index.js';
 
-// 3D Dice components (Three.js with chamfered geometry)
-export { Die3D } from './components/dice/index.js';
+// 3D dice are NOT re-exported here. Importing them is what opts a game into
+// shipping three.js (~500 kB), so it must be an explicit, named request:
+// `import { Die3D } from 'boardsmith/ui/dice'`. On this barrel, the reference
+// stayed live in every game that imports GameShell — which is how all 14 example
+// games ended up carrying the three.js chunk when only 2 roll dice. The
+// animation-context helpers below are three-free and stay.
 export {
   DIE_ANIMATION_CONTEXT_KEY,
   createDieAnimationContext,
@@ -76,6 +80,9 @@ export {
   type BoardInteractionActions,
   type ElementRef,
   type HighlightableChoice,
+  // The board's clickable-target shape. Distinct from `ValidElement` (the action
+  // controller's offered choice) and named so the two can't be confused.
+  type BoardTarget,
 } from './composables/useBoardInteraction.js';
 
 // Drag-and-drop composable for custom UIs

@@ -35,9 +35,19 @@ export interface HighlightableChoice {
 }
 
 /**
- * Valid element for the current action selection
+ * A board element the player can click right now — a highlight target or a drop
+ * target.
+ *
+ * NOT the same thing as `BoardTarget` in useActionControllerTypes.ts, which is
+ * a choice the action controller is offering (`{ id, refs: RefWithRole[], element }`).
+ * Both used to be called `BoardTarget`, which meant `boardsmith/ui` exported one
+ * of them while board code meant the other — a game reading `element.ref` got
+ * "Property 'ref' does not exist… Did you mean 'refs'?" and no way to tell the two
+ * apart by name. They are genuinely different: useBoardActionBridge converts a
+ * controller choice into one of these (see `elementClickRef`), collapsing the
+ * role-tagged refs down to the single ref the board clicks.
  */
-export interface ValidElement {
+export interface BoardTarget {
   id: number;
   ref: ElementRef;
   /** Disabled reason string, present only when element is disabled */
@@ -55,7 +65,7 @@ export interface BoardInteractionState {
   selectedElement: ElementRef | null;
 
   /** Valid elements that can be clicked to complete the current selection */
-  validElements: ValidElement[];
+  validElements: BoardTarget[];
 
   /** Callback to invoke when a valid element is clicked */
   onElementSelect: ((elementId: number) => void) | null;
@@ -67,7 +77,7 @@ export interface BoardInteractionState {
   draggedElement: ElementRef | null;
 
   /** Valid drop targets for the dragged element */
-  dropTargets: ValidElement[];
+  dropTargets: BoardTarget[];
 
   /** Whether drag mode is active */
   isDragging: boolean;
@@ -104,7 +114,7 @@ export interface BoardInteractionActions {
   selectElement: (ref: ElementRef | null) => void;
 
   /** Set valid elements for current selection (called by ActionPanel) */
-  setValidElements: (elements: ValidElement[], onSelect: (elementId: number) => void) => void;
+  setValidElements: (elements: BoardTarget[], onSelect: (elementId: number) => void) => void;
 
   /** Clear all interaction state */
   clear: () => void;
@@ -134,7 +144,7 @@ export interface BoardInteractionActions {
   endDrag: () => void;
 
   /** Set valid drop targets for current drag operation */
-  setDropTargets: (targets: ValidElement[], onDrop: (elementId: number) => void) => void;
+  setDropTargets: (targets: BoardTarget[], onDrop: (elementId: number) => void) => void;
 
   /** Check if an element is a valid drop target */
   isDropTarget: (element: { id?: number; name?: string; notation?: string }) => boolean;

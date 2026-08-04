@@ -38,7 +38,7 @@
  * targetRef / ref fields. This module only ADDS the other shapes.
  */
 import { watch, type Ref, type WatchStopHandle } from 'vue';
-import type { BoardInteraction, ValidElement, ElementRef } from './useBoardInteraction.js';
+import type { BoardInteraction, BoardTarget, ElementRef } from './useBoardInteraction.js';
 import type {
   UseActionControllerReturn,
   PickMetadata,
@@ -49,7 +49,7 @@ import { devWarn } from '../../utils/dev.js';
 
 /** Drop targets plus the callback to run when one is dropped onto. */
 export interface DerivedDropTargets {
-  targets: ValidElement[];
+  targets: BoardTarget[];
   onDrop: (targetId: number) => void;
 }
 
@@ -79,7 +79,7 @@ export function deriveDropTargetsForPick(
 
   // Element / elements pick: the valid elements ARE the drop targets.
   if (pick.type === 'element' || pick.type === 'elements') {
-    const targets: ValidElement[] = [];
+    const targets: BoardTarget[] = [];
     for (const el of controller.getValidElements(pick)) {
       if (el.disabled) continue;
       const highlightRef = (el.refs ?? []).find(r => r.role === 'highlight')?.ref;
@@ -98,7 +98,7 @@ export function deriveDropTargetsForPick(
   // `getChoices` applies filterBy/dependsOn, so destinations are already narrowed
   // by any previously-selected element.
   if (pick.type === 'choice') {
-    const targets: ValidElement[] = [];
+    const targets: BoardTarget[] = [];
     const valueByTargetId = new Map<number, unknown>();
     for (const choice of controller.getChoices(pick) as ChoiceWithRefs[]) {
       if (choice.disabled) continue;
