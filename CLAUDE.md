@@ -39,12 +39,12 @@ Every design decision should guide developers and users toward correct behavior 
 
 # Modules
 
-- **engine** - Core game rules: elements (cards, pieces, dice, grids), commands, flow control, actions, and event-sourced state.
+- **engine** - Core game rules: elements (cards, pieces, dice, grids), flow control, actions, and state-authoritative snapshots/checkpoints (NOT event sourcing — state is restored whole, never replayed).
 - **session** - Game lifecycle management: player handling, action validation, checkpoints, undo, and storage/broadcast adapters.
 - **ui** - Vue 3 components: GameShell, AutoUI, drag-drop, animations (FLIP, flying elements), action panels, and theming.
 - **types** - Shared protocol types for WebSocket messages, lobby state, and action requests.
 - **client** - TypeScript SDK for connecting to game servers with matchmaking and state management.
-- **runtime** - Game execution: serialization, snapshots, replays, and GameRunner for action execution.
+- **runtime** - Game execution: serialization, snapshots, per-action checkpoints, and GameRunner for action execution.
 - **testing** - Test utilities: TestGame, action simulation, random simulation, assertions, and scenario builders.
 - **ai-trainer** - AI training: MCTS bots, parallel training, feature generation, weight evolution, and benchmarking.
 - **ai** - AI bot creation using Monte Carlo Tree Search with configurable difficulty.

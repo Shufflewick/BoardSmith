@@ -2,6 +2,14 @@
 
 This document provides an overview of the BoardSmith package architecture and how the components fit together.
 
+> **The one architectural fact to know first: BoardSmith is state-authoritative,
+> not event-sourced.** The snapshot — the whole element tree, flow position,
+> sequence counter and RNG position — is the source of truth. `actionHistory`
+> and `commandHistory` exist for undo bookkeeping and diagnostics, and are
+> **never replayed to rebuild state**. Undo and time-travel restore a per-action
+> checkpoint directly. See [State Authority](#state-authority) below, and
+> [state-size.md](./state-size.md) for the cost that follows from it.
+
 ## Package Dependency Graph
 
 ```
@@ -20,14 +28,14 @@ This document provides an overview of the BoardSmith package architecture and ho
 │  └────┬────┘  - Element system (Game, Piece, Card, Deck, etc.)              │
 │       │       - Action system (builder pattern, selections)                 │
 │       │       - Flow system (phases, turns, loops)                          │
-│       │       - Command pattern (event sourcing)                            │
+│       │       - Snapshots + per-action checkpoints (state-authoritative)    │
 │       │                                                                     │
 │       ▼                                                                     │
 │  ┌─────────┐                                                                │
 │  │ runtime │  Game execution                                                │
-│  └────┬────┘  - GameRunner (start, performAction, replay)                   │
-│       │       - Action history management                                   │
-│       │       - State snapshots                                             │
+│  └────┬────┘  - GameRunner (start, performAction, fromSnapshot)             │
+│       │       - Action history + checkpoint retention                       │
+│       │       - State snapshots (restored whole, never replayed)            │
 │       │                                                                     │
 │       ├──────────────────┬──────────────────┐                               │
 │       ▼                  ▼                  ▼                               │
@@ -111,14 +119,22 @@ GameConnection.action()  ──► WebSocket ──► Host (deployment platform
     │                                    ActionExecutor.execute()
     │                                           │
     │                                           ▼
-    │                                    Commands emitted
-    │                                    (MoveCommand, etc.)
+    │                                    Element tree mutated in place
+    │                                    (card.putInto(hand), player.score += 1)
+    │                                           │
+    │                                           ▼
+    │                                    Action recorded + checkpoint captured
     │                                           │
     ◄───────────────────────────────────────────┘
     │                                    State broadcast
     ▼
 UI updates via gameView
 ```
+
+The action's `execute` handler mutates the tree directly — there is no
+generated command layer in between, and nothing here is what state is later
+rebuilt from. What gets persisted is the resulting state (see State Authority
+below).
 
 ### 3. State Serialization
 
@@ -139,21 +155,50 @@ Game Instance (runtime)
 
 ## Key Patterns
 
-### Event Sourcing
+### State Authority
 
-All game state changes are captured as commands:
+**The snapshot is the source of truth. `actionHistory` and `commandHistory`
+exist for undo bookkeeping and diagnostics, and are never replayed to rebuild
+state.** BoardSmith is state-authoritative, not event-sourced — if you are
+designing around an authoritative event log, audit trail, spectator replay, or
+incremental reconstruction, the engine does not work that way.
+
+A `GameStateSnapshot` carries the whole state: the serialized element tree, the
+flow position, the element-sequence counter, and the RNG's internal position.
+`GameRunner.fromSnapshot` loads all of it directly and re-runs nothing.
 
 ```typescript
-// Commands are recorded, not state
-actionHistory: [
-  { action: 'draw', player: 0, args: { count: 3 } },
-  { action: 'play', player: 0, args: { card: 42 } },
-  // ...
-]
-
-// State is reconstructed by replaying commands
-GameRunner.replay(actionHistory) → Current State
+// Restore: state in, state out. No replay, no start(), no re-running actions.
+GameRunner.fromSnapshot(snapshot, GameClass) → the game, exactly as it was
 ```
+
+Replay is not merely unused — it is *unsound* here. Selection-step and pending
+mutations (`Piece.putInto` inside a completed pending action) are recorded in
+neither the command history nor the action history, so replaying an action
+history loses them and mis-positions the flow. That crashed real games, and is
+why `fromSnapshot` deliberately does not call `replayCommands`, `start()`, or
+re-run `actionHistory`.
+
+Time-travel — undo, rewind, `getStateAtAction` — is likewise restore, not
+replay. The runner captures a per-action **checkpoint** (a full tree copy plus
+flow position, sequence and RNG state) into `snapshot.actionCheckpoints`, and
+those calls restore the checkpoint at the target action count directly.
+
+```typescript
+snapshot.actionCheckpoints  // { baseIndex, entries[] } — a RETAINED WINDOW,
+                            // not the whole history
+```
+
+The cost follows directly from that: a saved game is the tree **plus one tree
+copy per retained action**, so it grows on every action even though the tree
+does not. Bound it with `checkpoints: { max }` on the game definition; an undo
+reaching past the retained window is refused with a message naming the policy.
+See **[state-size.md](./state-size.md)** — a reader who assumes replay will not
+understand why saved size scales with action count.
+
+`Game#commandHistory` is populated only by the engine's internal `execute()`,
+which drives the ANIMATE event stream. Game rule code never calls it and must
+not treat it as an audit log (see [core-concepts.md](./core-concepts.md)).
 
 ### Visibility Control
 

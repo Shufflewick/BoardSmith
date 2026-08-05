@@ -365,13 +365,13 @@ Terms for player decisions and their execution.
 
 ### Command
 
-**Definition:** A low-level, generic state mutation. Commands are automatically generated when you call element methods like `putInto()` or `shuffle()`.
+**Definition:** An engine-internal record used to drive the ANIMATE event stream. Commands are NOT a general state-mutation layer: element methods like `putInto()` and `shuffle()` mutate the tree directly and record nothing. Only the engine's own `Game#execute()` appends to `commandHistory`.
 
-**In Code:** Internal; `MoveCommand`, `ShuffleCommand`, `SetAttributeCommand`, etc.
-**Related Terms:** Action, Execute, Element
+**In Code:** Internal; `Game#commandHistory`, `Game#execute()`.
+**Related Terms:** Action, Execute, Element, Checkpoint
 **Usage:**
-- "Calling card.putInto(hand) generates a MoveCommand"
-- "Commands enable undo/redo and replay"
+- "Calling card.putInto(hand) mutates the tree directly — no command is recorded"
+- "Undo restores a per-action checkpoint; it does not reverse a command log"
 
 ---
 

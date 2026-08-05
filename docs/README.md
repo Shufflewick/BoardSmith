@@ -14,7 +14,7 @@ This folder contains documentation for the BoardSmith game framework.
 | [AI System](./ai-system.md) | MCTS bot and AI integration |
 | [Game Examples](./game-examples.md) | Analysis of example games with patterns |
 | [Teaching & Tutorials](./teaching-and-tutorials.md) | Tutorial authoring, AI hints, narrated demo, heatmap, action help, and host lockout |
-| [Agent Control](./agent-control.md) | Driving a game headlessly: action-space introspection, move enumeration, undo/checkpoint/replay, determinism & seeding, scriptable dev host (WS), structured errors |
+| [Agent Control](./agent-control.md) | Driving a game headlessly: action-space introspection, move enumeration, undo/checkpoint/time-travel, determinism & seeding, scriptable dev host (WS), structured errors |
 | [Migration Guide](./migration-guide.md) | Breaking changes by version, with before→after upgrade steps |
 | [State Size](./state-size.md) | Why saved state is tree size × action count, the `checkpoints` retention policy, and how to assert your budget in CI |
 | [Nomenclature](./nomenclature.md) | Standard terminology reference |
