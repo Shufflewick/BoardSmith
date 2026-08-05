@@ -212,6 +212,28 @@ export const DEFAULT_COLOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The one answer to "is this child a player?" — for a live element.
+ *
+ * Structural (`$type`), never by class name: a game that declares
+ * `static PlayerClass = MyPlayer` has players whose `constructor.name` is
+ * `MyPlayer`, which is the normal case, not the exotic one. `instanceof Player`
+ * is also avoided because bundling can produce separate copies of the class.
+ */
+function isPlayerElement<P extends Player>(el: GameElement): el is P {
+  return (el as unknown as { $type?: string }).$type === 'player';
+}
+
+/**
+ * The one answer to "is this child a player?" — for a serialized child.
+ *
+ * The JSON counterpart of {@link isPlayerElement}. Note `$type` is serialized
+ * INSIDE `attributes`, not at the top level of the child JSON.
+ */
+function isPlayerJSON(child: { attributes?: Record<string, unknown> }): boolean {
+  return child.attributes?.$type === 'player';
+}
+
+/**
  * Options for creating a new game
  */
 export type GameOptions = {
@@ -1996,7 +2018,7 @@ export class Game<
    */
   get players(): P[] {
     return (this._t.children as GameElement[])
-      .filter((el): el is P => (el as any).$type === 'player')
+      .filter((el): el is P => isPlayerElement<P>(el))
       .sort((a, b) => a.seat - b.seat);
   }
 
@@ -3241,8 +3263,18 @@ export class Game<
     GameClass: new (options: GameOptions) => G,
     classRegistry: Map<string, ElementClass>
   ): G {
-    // Count players from serialized children (players are now part of the element tree)
-    const playerChildren = json.children?.filter(c => c.className === 'Player') ?? [];
+    // Count players from serialized children (players are part of the element
+    // tree). Matched structurally via isPlayerJSON — matching the class name
+    // 'Player' missed every game with a `static PlayerClass`, i.e. essentially
+    // every real game, and yielded playerCount: 0.
+    const playerChildren = json.children?.filter(isPlayerJSON) ?? [];
+    if (playerChildren.length === 0) {
+      throw new Error(
+        `Cannot restore ${GameClass.name}: the serialized state contains no players. ` +
+          `A game snapshot always carries its players as children of the game element, so this JSON is ` +
+          `either not a game snapshot or was truncated before it was stored.`
+      );
+    }
     const playerCount = playerChildren.length;
     const playerNames = playerChildren.map(p => p.name as string);
 
