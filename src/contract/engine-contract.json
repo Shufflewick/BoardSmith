@@ -1,8 +1,8 @@
 {
-  "revision": 4,
+  "revision": 5,
   "bundleProtocol": 1,
-  "surfaceHash": "a88e1e1ac6b840fc",
-  "payloadHash": "b6cc2b20433e3a3e",
+  "surfaceHash": "db988455880ea279",
+  "payloadHash": "bf22b8c168ab229d",
   "history": [
     {
       "revision": 1,
@@ -35,6 +35,14 @@
       "surfaceHash": "a88e1e1ac6b840fc",
       "payloadHash": "b6cc2b20433e3a3e",
       "summary": "Player-facing state changes: the default player palette now has 16 colors instead of 8 (the first 8 are unchanged, so existing games keep their colors) so a game can seat up to the platform's 16-player maximum without shipping its own palette; separately, a typed array (Uint8Array etc.) in game state now serializes as a compact {__typedArray,data} base64 shape and restores as its real type instead of silently inflating ~7x into a plain object, and an ArrayBuffer or DataView in state is now refused at serialization time rather than silently becoming {}."
+    },
+    {
+      "revision": 5,
+      "date": "2026-08-05",
+      "bundleProtocol": 1,
+      "surfaceHash": "db988455880ea279",
+      "payloadHash": "bf22b8c168ab229d",
+      "summary": "Player gains a first-class status field ('active' | 'dormant' | 'eliminated', default 'active') plus an isActive getter — it serializes into the tree and is visible in every seat's player view, so hosts can read seat liveness directly, and TurnOrder.ACTIVE_ONLY now filters on it instead of an undeclared 'eliminated' property. Also: every enterText selection is now length-bounded (DEFAULT_TEXT_MAX_LENGTH = 256 when a game sets no maxLength), and CheckpointPolicy is exported from the boardsmith root and boardsmith/session so a published bundle can name the type for GameDefinition.checkpoints."
     }
   ]
 }
