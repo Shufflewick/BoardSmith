@@ -573,6 +573,72 @@ describe('executeOp', () => {
       expect(JSON.stringify(undoResult.snapshot)).not.toBe(snapshotAfterAction);
     });
 
+    it('refuses an undo below the retained checkpoint window, naming the policy', async () => {
+      // BUG-001: a game that bounds its checkpoint retention trades undo depth
+      // for a saved state that stops growing. The trade has to be VISIBLE --
+      // the refusal names the policy and how to change it, rather than
+      // reporting the same "no checkpoint" as a genuinely broken snapshot.
+      const boundedDef: GameDefinitionLike = { ...simpleGameDef, checkpoints: { max: 3 } };
+
+      let snapshot = (await startGame(boundedDef, simpleGameOptions)).snapshot;
+      for (let i = 0; i < 8; i++) {
+        const result = await executeOp(
+          boundedDef,
+          simpleGameOptions,
+          snapshot,
+          null,
+          { type: 'action', actionName: 'pass', player: 1, args: {} },
+        );
+        expect(result.success).toBe(true);
+        snapshot = result.snapshot;
+      }
+
+      // The policy held across all eight ops -- every one of which rebuilt its
+      // runner from the snapshot, so this also proves the policy survives the
+      // stateless boundary.
+      expect(snapshot.actionCheckpoints!.entries).toHaveLength(3);
+      expect(snapshot.actionCheckpoints!.baseIndex).toBe(6);
+
+      // This game's flow keeps one action-step frame open, so undo targets the
+      // frame start (action 0) -- below the retained window.
+      const undoResult = await executeOp(
+        boundedDef,
+        simpleGameOptions,
+        snapshot,
+        null,
+        { type: 'undo', player: 1 },
+      );
+      expect(undoResult.success).toBe(false);
+      expect(undoResult.error).toContain('older than');
+      expect(undoResult.error).toContain('checkpoints: { max }');
+    });
+
+    it('undoes normally when the target is inside the retained window', async () => {
+      // Falsification for the test above: the same bounded policy must not
+      // refuse an undo it can actually serve.
+      const boundedDef: GameDefinitionLike = { ...simpleGameDef, checkpoints: { max: 50 } };
+
+      let snapshot = (await startGame(boundedDef, simpleGameOptions)).snapshot;
+      for (let i = 0; i < 8; i++) {
+        snapshot = (await executeOp(
+          boundedDef,
+          simpleGameOptions,
+          snapshot,
+          null,
+          { type: 'action', actionName: 'pass', player: 1, args: {} },
+        )).snapshot;
+      }
+
+      const undoResult = await executeOp(
+        boundedDef,
+        simpleGameOptions,
+        snapshot,
+        null,
+        { type: 'undo', player: 1 },
+      );
+      expect(undoResult.success).toBe(true);
+    });
+
     it('fails when there are no actions to undo', async () => {
       const startResult = await startGame(simpleGameDef, simpleGameOptions);
 

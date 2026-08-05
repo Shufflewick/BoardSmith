@@ -16,6 +16,8 @@ export type {
 export {
   createSnapshot,
   createActionCheckpoint,
+  checkpointAt,
+  checkpointCount,
   createPlayerView,
   createAllPlayerViews,
 } from './snapshot.js';
@@ -23,6 +25,8 @@ export {
 export type {
   GameStateSnapshot,
   ActionCheckpoint,
+  ActionCheckpointWindow,
+  CheckpointAbsence,
   PlayerStateView,
 } from './snapshot.js';
 

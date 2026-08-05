@@ -1,7 +1,7 @@
 {
-  "revision": 2,
+  "revision": 3,
   "bundleProtocol": 1,
-  "surfaceHash": "966f014fca003487",
+  "surfaceHash": "a88e1e1ac6b840fc",
   "payloadHash": "4e482261ddc4a6e9",
   "history": [
     {
@@ -19,6 +19,14 @@
       "surfaceHash": "966f014fca003487",
       "payloadHash": "4e482261ddc4a6e9",
       "summary": "Contract fingerprints widened after an adversarial review found them narrower than claimed: surfaceHash now includes prototype members (games call methods, and renaming one used to move neither hash), and the payload fixture now boots through GameRunner with a simultaneous opening step so flow state, isMyTurn and availableActions are covered — the blank-action-bar layer, previously invisible."
+    },
+    {
+      "revision": 3,
+      "date": "2026-08-05",
+      "bundleProtocol": 1,
+      "surfaceHash": "a88e1e1ac6b840fc",
+      "payloadHash": "4e482261ddc4a6e9",
+      "summary": "Checkpoint retention: games can bound per-action undo checkpoints with checkpoints:{max|enabled}; snapshot.actionCheckpoints is now a {baseIndex,entries} window, and a pruned undo target is refused with a message naming the policy"
     }
   ]
 }

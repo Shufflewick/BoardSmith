@@ -47,12 +47,13 @@ export interface GameStateSnapshot {
   /** Original constructor options (for full game restoration including custom options like playerConfigs) */
   gameOptions?: Record<string, unknown>;
 
-  /** Per-action authoritative checkpoints for undo / debug time-travel.
-   *  `actionCheckpoints[k]` is the LATEST per-action state observed while `k`
-   *  actions were recorded — refreshed on every op so trailing pending/selection
-   *  mutations (e.g. `Piece.putInto` inside a completed pending action, recorded
-   *  in neither command nor action history) are captured at the right action-count
-   *  boundary. Undo/rewind restore `actionCheckpoints[k]` directly (via
+  /** Per-action authoritative checkpoints for undo / debug time-travel, as a
+   *  RETAINED WINDOW over action counts (see `ActionCheckpointWindow`).
+   *  The checkpoint for action count `k` is the LATEST per-action state observed
+   *  while `k` actions were recorded — refreshed on every op so trailing
+   *  pending/selection mutations (e.g. `Piece.putInto` inside a completed pending
+   *  action, recorded in neither command nor action history) are captured at the
+   *  right action-count boundary. Undo/rewind restore that entry directly (via
    *  `GameRunner.fromCheckpoint`) instead of replaying history — replay loses those
    *  pending mutations and mis-positions the flow.
    *
@@ -60,12 +61,10 @@ export interface GameStateSnapshot {
    *  state (element tree, flow position, sequence, RNG). The snapshot-wide
    *  invariants (`gameType`, `seed`, `gameOptions`) and the action-history PREFIX
    *  are NOT duplicated per entry — they are rehydrated from the enclosing snapshot
-   *  by `GameRunner.fromCheckpoint`. This is what keeps a persisted snapshot O(N)
-   *  instead of O(N^2): the old design stored a full `createSnapshot` per entry,
-   *  each re-embedding an O(k) `actionHistory` copy and a duplicate `gameOptions`,
-   *  so a single snapshot carried O(N^2) action entries. Maintained by `GameRunner`,
-   *  never nested. */
-  actionCheckpoints?: ActionCheckpoint[];
+   *  by `GameRunner.fromCheckpoint`. That is what makes a single entry cheap; the
+   *  window's `baseIndex` is what bounds HOW MANY are kept. Maintained by
+   *  `GameRunner`, never nested. */
+  actionCheckpoints?: ActionCheckpointWindow;
 
   /**
    * The durable execute()-barrier fence (UNDO-02, 155-02): the action-history
@@ -124,6 +123,67 @@ export interface ActionCheckpoint {
 
   /** Seeded RNG internal state (`game.getRandomState()`) at this checkpoint. */
   randomState?: number;
+}
+
+/**
+ * The RETAINED WINDOW of per-action checkpoints — a contiguous run of action
+ * counts, not the whole history.
+ *
+ * A checkpoint is a full copy of the element tree, so keeping one per action for
+ * the life of a game makes the snapshot `O(actions x treeSize)`: the tree stops
+ * growing, the snapshot never does. That is unbounded by default and bounded by
+ * a game's `checkpoints: { max }` policy (`GameRunnerOptions`) — the window is
+ * how the bound is REPRESENTED, so a pruned snapshot pays nothing at all for the
+ * dropped range rather than carrying a hole per action.
+ *
+ * The window is why `baseIndex` exists instead of a plain array: keeping the
+ * array and deleting old slots would leave sparse holes that serialize as
+ * `null`, quietly making "pruned by policy" indistinguishable from "never
+ * captured" at every restore site — the two need different, actionable errors.
+ * Read entries through {@link checkpointAt}, never by raw index arithmetic.
+ */
+export interface ActionCheckpointWindow {
+  /** The action count `entries[0]` was captured at. */
+  baseIndex: number;
+  /** Checkpoints for action counts `baseIndex` .. `baseIndex + entries.length - 1`. */
+  entries: ActionCheckpoint[];
+}
+
+/** Why a checkpoint lookup found nothing — the two cases need different errors. */
+export type CheckpointAbsence =
+  /** Older than the retained window: dropped by the game's `checkpoints.max`. */
+  | 'pruned'
+  /** Never captured: ahead of the window, or checkpointing is disabled. */
+  | 'uncaptured';
+
+/**
+ * The checkpoint recorded at action count `index`, or the reason there is none.
+ *
+ * The single sanctioned reader of an `ActionCheckpointWindow`. Callers that
+ * surface a failure must distinguish the two absences: "you undid past the
+ * retained window" is a policy outcome the author can change, while "no
+ * checkpoint was ever captured here" is a bug or a disabled-checkpoints game.
+ */
+export function checkpointAt(
+  window: ActionCheckpointWindow | undefined,
+  index: number,
+): { checkpoint: ActionCheckpoint } | { checkpoint: null; absence: CheckpointAbsence } {
+  if (!window || window.entries.length === 0) {
+    return { checkpoint: null, absence: 'uncaptured' };
+  }
+  if (index < window.baseIndex) {
+    return { checkpoint: null, absence: 'pruned' };
+  }
+  const entry = window.entries[index - window.baseIndex];
+  if (!entry) {
+    return { checkpoint: null, absence: 'uncaptured' };
+  }
+  return { checkpoint: entry };
+}
+
+/** How many checkpoints a window retains (0 when absent). */
+export function checkpointCount(window: ActionCheckpointWindow | undefined): number {
+  return window?.entries.length ?? 0;
 }
 
 /**
@@ -225,8 +285,16 @@ export function createSnapshot(
  * Captures ONLY the per-action-varying state (element tree, flow position,
  * sequence counter, RNG position). The snapshot-wide invariants and the
  * action-history prefix are rehydrated from the enclosing snapshot by
- * `GameRunner.fromCheckpoint`, so retaining one of these per action stays O(N)
- * rather than the O(N^2) a full `createSnapshot` per entry would cost.
+ * `GameRunner.fromCheckpoint`, so retaining one of these per action costs one
+ * TREE per action rather than the tree-plus-history a full `createSnapshot` per
+ * entry would cost.
+ *
+ * "One tree per action" is cheap per entry and expensive in aggregate: it is
+ * still a full copy of the game's state for every action ever taken. Read as
+ * "resolved", that phrasing is what let a game reach its host's size ceiling
+ * unannounced. What actually bounds it is the retained WINDOW
+ * (`ActionCheckpointWindow`) and the game's `checkpoints: { max }` policy —
+ * see `docs/state-size.md`.
  */
 export function createActionCheckpoint(game: Game): ActionCheckpoint {
   const flowState = game.getFlowState();

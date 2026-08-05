@@ -226,6 +226,8 @@ export {
   isSerializedReference,
   createSnapshot,
   createActionCheckpoint,
+  checkpointAt,
+  checkpointCount,
   createPlayerView,
   createAllPlayerViews,
   // Dev state transfer (for HMR)
@@ -247,6 +249,8 @@ export type {
   SerializeOptions,
   GameStateSnapshot,
   ActionCheckpoint,
+  ActionCheckpointWindow,
+  CheckpointAbsence,
   PlayerStateView,
   // Dev state types
   DevSnapshot,

@@ -10,7 +10,7 @@
  */
 
 import { canSeatAct, availableActionsForSeat, type FlowState, type Game } from '../engine/index.js';
-import { GameRunner } from '../runtime/index.js';
+import { GameRunner, describeCheckpointAbsence } from '../runtime/index.js';
 import {
   ErrorCode,
   type GameClass,
@@ -136,10 +136,10 @@ export class StateHistory<G extends Game = Game> {
     if (!tempRunner) {
       return {
         success: false,
-        error: `Cannot view state at action index ${actionIndex}: no checkpoint ` +
-          `(have ${snapshot.actionCheckpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
-          `it runs; a session cold-restored from action history alone cannot time-travel across ` +
-          `pending mutations.`,
+        error: `Cannot view state at action index ${actionIndex}: ` +
+          `${describeCheckpointAbsence(snapshot, actionIndex)} The session accumulates per-action ` +
+          `checkpoints as it runs; a session cold-restored from action history alone cannot ` +
+          `time-travel across pending mutations.`,
       };
     }
 
@@ -323,9 +323,10 @@ export class StateHistory<G extends Game = Game> {
       if (!newRunner) {
         return {
           success: false,
-          error: `Cannot undo: no turn-start checkpoint at action index ${turnStartActionIndex} ` +
-            `(have ${snapshot.actionCheckpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
-            `it runs; a session cold-restored from action history alone cannot undo across pending mutations.`,
+          error: `Cannot undo to the start of this turn: ` +
+            `${describeCheckpointAbsence(snapshot, turnStartActionIndex)} The session accumulates ` +
+            `per-action checkpoints as it runs; a session cold-restored from action history alone ` +
+            `cannot undo across pending mutations.`,
           errorCode: ErrorCode.NO_ACTIONS_TO_UNDO,
         };
       }
@@ -409,10 +410,10 @@ export class StateHistory<G extends Game = Game> {
       if (!newRunner) {
         return {
           success: false,
-          error: `Cannot rewind to action index ${targetActionIndex}: no checkpoint ` +
-            `(have ${snapshot.actionCheckpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
-            `it runs; a session cold-restored from action history alone cannot rewind across ` +
-            `pending mutations.`,
+          error: `Cannot rewind to action index ${targetActionIndex}: ` +
+            `${describeCheckpointAbsence(snapshot, targetActionIndex)} The session accumulates ` +
+            `per-action checkpoints as it runs; a session cold-restored from action history alone ` +
+            `cannot rewind across pending mutations.`,
         };
       }
 

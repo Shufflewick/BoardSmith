@@ -144,3 +144,12 @@ export {
   clearAnimationTrace,
   type AnimationTrace,
 } from '../ui/composables/useAnimationTestMode.js';
+
+// State-size measurement (BUG-001) — a game's saved state is its tree
+// multiplied by its action count. These make that assertable in CI instead of
+// discoverable in production. See docs/state-size.md.
+export {
+  measureSnapshotSize,
+  projectSnapshotSize,
+  type SnapshotSizeMeasurement,
+} from './state-size.js';

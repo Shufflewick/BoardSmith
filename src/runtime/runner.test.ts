@@ -16,7 +16,7 @@ import {
   type FlowContext,
 } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/index.js';
-import { GameRunner } from './runner.js';
+import { GameRunner, describeCheckpointAbsence } from './runner.js';
 import { ErrorCode } from '../types/protocol.js';
 import { createHeadlessSession } from '../session/headless-session.js';
 import {
@@ -113,6 +113,34 @@ class Card extends Piece<TestGame> {
 
 class Hand extends Space<TestGame> {}
 class Deck extends Space<TestGame> {}
+
+// A game that can run for hundreds of actions, with a tree big enough that
+// retaining a copy of it per action is measurable -- the shape the retention
+// policy exists for. TestGame's flow ends after 20 actions, which is exactly
+// the length at which this problem is invisible.
+class LongGame extends Game<LongGame, Player> {
+  board!: Space<LongGame>;
+
+  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
+    super(options);
+    this.registerElements([Card, Hand, Deck]);
+    this.board = this.create(Deck, 'board');
+    for (let i = 0; i < 40; i++) {
+      this.board.create(Card, `token-${i}`, { suit: 'S', rank: String(i) });
+    }
+    this.registerActions(
+      Action.create('pass').prompt('Pass').execute(() => ({ success: true })),
+    );
+    this.setFlow(defineFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 400,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+      }),
+    }));
+  }
+}
+
 
 // Minimal game whose entire flow is a single simultaneous-action-step with a
 // validated action, for ENG-03 (failed simultaneous action must not be
@@ -574,7 +602,7 @@ describe('GameRunner', () => {
       expect(runner.game.commandHistory.length).toBeGreaterThan(0);
       expect('commandHistory' in snapshot).toBe(false);
 
-      const checkpoints = snapshot.actionCheckpoints ?? [];
+      const checkpoints = snapshot.actionCheckpoints?.entries ?? [];
       expect(checkpoints.length).toBeGreaterThan(1);
       for (const checkpoint of checkpoints) {
         expect('commandHistory' in checkpoint).toBe(false);
@@ -628,7 +656,7 @@ describe('GameRunner', () => {
       }
 
       const snapshot = runner.getSnapshot();
-      const checkpoints = snapshot.actionCheckpoints ?? [];
+      const checkpoints = snapshot.actionCheckpoints?.entries ?? [];
       expect(checkpoints.length).toBeGreaterThan(1);
 
       // No per-action checkpoint may re-embed any snapshot-wide / O(k) field. This
@@ -683,6 +711,137 @@ describe('GameRunner', () => {
 
       // Out-of-range index yields null (caller surfaces the actionable error).
       expect(GameRunner.fromCheckpoint(snapshot, 999, TestGame)).toBeNull();
+    });
+  });
+  // ==========================================================================
+  // Checkpoint retention (BUG-001)
+  // ==========================================================================
+
+  describe('checkpoint retention policy', () => {
+    /** A runner `actions` actions in, under the given retention policy. */
+    function playedRunner(actions: number, checkpoints?: { max?: number; enabled?: boolean }) {
+      const runner = new GameRunner({
+        GameClass: LongGame,
+        gameType: 'long-game',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'retain' },
+        checkpoints,
+      });
+      runner.start();
+      for (let i = 0; i < actions; i++) {
+        expect(runner.performAction('pass', (i % 2) + 1, {}).success).toBe(true);
+        runner.captureCheckpoint();
+      }
+      return runner;
+    }
+
+    it('retains one checkpoint per action by default — the growth this policy exists to bound', () => {
+      const snapshot = playedRunner(12).getSnapshot();
+      expect(snapshot.actionCheckpoints).toBeDefined();
+      expect(snapshot.actionCheckpoints!.baseIndex).toBe(0);
+      expect(snapshot.actionCheckpoints!.entries).toHaveLength(13); // start + 12 actions
+    });
+
+    it('keeps only the most recent `max`, dropping the oldest first', () => {
+      const snapshot = playedRunner(12, { max: 4 }).getSnapshot();
+      const window = snapshot.actionCheckpoints!;
+      expect(window.entries).toHaveLength(4);
+      // The retained window ENDS at the current action count: the entries are
+      // for actions 9..12, which is the range undo can still reach.
+      expect(window.baseIndex).toBe(9);
+    });
+
+    it('holds the snapshot flat as the game runs long — the actual fix', () => {
+      const short = JSON.stringify(playedRunner(10, { max: 5 }).getSnapshot()).length;
+      const long = JSON.stringify(playedRunner(60, { max: 5 }).getSnapshot()).length;
+      // Not identical: actionHistory still grows by one entry per action. But
+      // the tree-sized term is capped, so 6x the actions must not cost
+      // anything like 6x the bytes.
+      expect(long).toBeLessThan(short * 1.5);
+
+      // Falsification: the same game with no policy DOES grow with the tree.
+      const unbounded = JSON.stringify(playedRunner(60).getSnapshot()).length;
+      expect(unbounded).toBeGreaterThan(short * 4);
+    });
+
+    it('pays nothing for the dropped range — no holes, no nulls', () => {
+      const serialized = JSON.stringify(playedRunner(40, { max: 3 }).getSnapshot());
+      const window = JSON.parse(serialized).actionCheckpoints;
+      expect(window.entries).toHaveLength(3);
+      expect(window.entries.every((e: unknown) => e !== null)).toBe(true);
+    });
+
+    it('restores within the retained window and refuses below it, with an actionable reason', () => {
+      const snapshot = playedRunner(12, { max: 4 }).getSnapshot();
+
+      // Inside the window: a real authoritative restore.
+      const restored = GameRunner.fromCheckpoint(snapshot, 10, LongGame, { checkpoints: { max: 4 } });
+      expect(restored).not.toBeNull();
+      expect(restored!.actionHistory).toHaveLength(10);
+
+      // Below it: refused, and the message says the policy dropped it (not that
+      // something is broken) and how to reach further back.
+      expect(GameRunner.fromCheckpoint(snapshot, 2, LongGame)).toBeNull();
+      const why = describeCheckpointAbsence(snapshot, 2);
+      expect(why).toContain('older than');
+      expect(why).toContain('checkpoints: { max }');
+
+      // Above it: a different absence, with a different fix.
+      const never = describeCheckpointAbsence(snapshot, 999);
+      expect(never).toContain('no checkpoint was captured');
+      expect(never).not.toContain('older than');
+    });
+
+    it('carries the policy through a snapshot round-trip', () => {
+      // The policy is NOT persisted -- it is re-supplied on every restore. A
+      // restore that drops it silently reverts the game to unbounded retention
+      // from that point on, which is the defect reintroduced one call site at
+      // a time.
+      let snapshot = playedRunner(12, { max: 4 }).getSnapshot();
+      for (let round = 0; round < 3; round++) {
+        const runner = GameRunner.fromSnapshot(snapshot, LongGame, { checkpoints: { max: 4 } });
+        expect(runner.performAction('pass', (runner.actionHistory.length % 2) + 1, {}).success).toBe(true);
+        snapshot = runner.getSnapshot();
+        expect(snapshot.actionCheckpoints!.entries).toHaveLength(4);
+      }
+    });
+
+    it('captures nothing at all when disabled, and says so when undo is attempted', () => {
+      const snapshot = playedRunner(8, { enabled: false }).getSnapshot();
+      expect(snapshot.actionCheckpoints!.entries).toHaveLength(0);
+      expect(GameRunner.fromCheckpoint(snapshot, 4, LongGame)).toBeNull();
+      expect(describeCheckpointAbsence(snapshot, 4)).toContain('enabled: false');
+    });
+
+    it('still advances the execute() barrier with checkpointing disabled', () => {
+      // The barrier FENCES undo; it is not part of undo's payload. Losing it
+      // with checkpoints off would silently unfence a game that has none.
+      const runner = playedRunner(4, { enabled: false });
+      expect(runner.executeBarrierIndex).toBeGreaterThanOrEqual(0);
+      expect(() => runner.getSnapshot()).not.toThrow();
+    });
+
+    it('rejects a max below 1 rather than silently retaining nothing', () => {
+      expect(() => new GameRunner({
+        GameClass: TestGame,
+        gameType: 'test-game',
+        gameOptions: { playerCount: 2 },
+        checkpoints: { max: 0 },
+      })).toThrow(/at least 1/);
+    });
+
+    it('rebuilds its window at the current action count when a snapshot carries none', () => {
+      // A snapshot written before the window existed carries no usable window.
+      // Restoring must not leave a hole per preceding action -- those would
+      // serialize as nulls forever and read back as "missing", not "not kept".
+      const runner = playedRunner(6);
+      const snapshot = runner.getSnapshot();
+      delete (snapshot as { actionCheckpoints?: unknown }).actionCheckpoints;
+
+      const restored = GameRunner.fromSnapshot(snapshot, LongGame);
+      const next = restored.getSnapshot();
+      expect(next.actionCheckpoints!.baseIndex).toBe(6);
+      expect(next.actionCheckpoints!.entries).toHaveLength(1);
+      expect(JSON.stringify(next.actionCheckpoints)).not.toContain('null');
     });
   });
 });
