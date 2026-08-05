@@ -1327,7 +1327,14 @@ export class MCTSBot<G extends Game = Game> {
       untriedMoves,
       visits: 0,
       value: 0,
-      currentPlayer: flowState.currentPlayer ?? this.playerIndex,
+      // Not `flowState.currentPlayer` directly: inside a simultaneous step that field never
+      // advances (the engine tracks per-seat progress in `awaitingPlayers` instead), so every
+      // co-decider node was attributed to the bot's own seat. `selectChild`/`backpropagate` then
+      // read the OPPONENT's simultaneous decision as the bot's own, making the search max-max
+      // optimistic -- it assumed the opponent would pick whatever suited the bot, and never
+      // explored the refutation. `getCurrentPlayerFromFlowState` resolves the awaiting seat and
+      // otherwise falls back to this very expression, so sequential steps are unchanged.
+      currentPlayer: this.getCurrentPlayerFromFlowState(flowState),
       proofNumber,
       disproofNumber,
       isProven,
