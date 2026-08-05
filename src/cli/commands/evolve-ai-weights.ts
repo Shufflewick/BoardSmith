@@ -83,7 +83,7 @@ export async function evolveAIWeightsCommand(options: EvolveAIWeightsOptions): P
       spinner.fail('Game rules not found');
       console.error(chalk.red('\nNo compiled rules found. Run one of:'));
       console.error(chalk.dim('  pnpm --filter <rules-package> build'));
-      console.error(chalk.dim('  npx boardsmith build'));
+      console.error(chalk.dim('  boardsmith build'));
       process.exit(1);
     }
 

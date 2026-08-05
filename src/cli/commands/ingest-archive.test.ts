@@ -377,7 +377,7 @@ describe('init — an explicit rulebook decision is required', () => {
       // arguments" would leave a session guessing, which is how this failed for eleven rounds.
       expect(combined).toMatch(/--rulebook <path>/);
       expect(combined).toMatch(/--without-rulebook/);
-      expect(combined).toMatch(/npx boardsmith init undeclared --rulebook/);
+      expect(combined).toMatch(/boardsmith init undeclared --rulebook/);
 
       // And it must not have scaffolded a half-project before refusing.
       await expect(fs.access(join(parent, 'undeclared'))).rejects.toThrow();

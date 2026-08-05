@@ -67,7 +67,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
         '  --without-rulebook  no rulebook exists; the structured interview will supply\n' +
         '                      the rulebook/ content instead\n' +
         '\nExample:\n' +
-        `  npx boardsmith init ${name} --rulebook ~/path/to/rules.pdf\n`,
+        `  boardsmith init ${name} --rulebook ~/path/to/rules.pdf\n`,
     );
     process.exit(1);
   }
@@ -182,17 +182,17 @@ ${chalk.cyan('Next steps:')}
 
   cd ${name}
   npm install
-  npx boardsmith dev
+  boardsmith dev
 
 ${chalk.dim('This will start the development server and open player tabs in your browser.')}
 
 ${chalk.cyan('Everything else runs through the same CLI:')}
 
-  ${chalk.dim('npx boardsmith test')}      ${chalk.dim('- run your game\'s tests')}
-  ${chalk.dim('npx boardsmith lint')}      ${chalk.dim('- check for BoardSmith pitfalls')}
-  ${chalk.dim('npx boardsmith build')}     ${chalk.dim('- build the publishable bundle')}
-  ${chalk.dim('npx boardsmith validate')}  ${chalk.dim('- run pre-publish checks')}
-  ${chalk.dim('npx boardsmith --help')}    ${chalk.dim('- see every command')}
+  ${chalk.dim('boardsmith test')}      ${chalk.dim('- run your game\'s tests')}
+  ${chalk.dim('boardsmith lint')}      ${chalk.dim('- check for BoardSmith pitfalls')}
+  ${chalk.dim('boardsmith build')}     ${chalk.dim('- build the publishable bundle')}
+  ${chalk.dim('boardsmith validate')}  ${chalk.dim('- run pre-publish checks')}
+  ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
 `);
   } catch (error) {
     spinner.fail(chalk.red('Failed to create project'));
