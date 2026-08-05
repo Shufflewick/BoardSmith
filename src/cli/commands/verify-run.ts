@@ -245,18 +245,20 @@ function assertValidRangeId(rangeId: string): void {
 }
 
 /**
- * The single path-computation authority for a run's staging tree (173-CONTEXT.md decision 5):
- * `<projectDir>/rulebook/.verify/<run-id>/slices/`. Dot-prefixed so no walker mistakes a staged
- * slice for a live one; run-scoped so two passes cannot collide.
+ * The single path-computation authority for a run's own root directory (173-CONTEXT.md
+ * decision 5): `<projectDir>/rulebook/.verify/<run-id>/`. Every run-scoped artifact — the staged
+ * slices below, `RUN.md`, and CHECK-01's `RULING-VERDICTS.md` ledger — is rooted here, so no
+ * caller has to reach for a `join(stagingSlicesDir(...), '..')` escape hatch to name a sibling of
+ * `slices/`.
  *
  * Validates `runId` against `RUN_ID_RE` and then `resolve()`s the built path and asserts it is a
  * child of `<projectDir>/rulebook/.verify/` before returning (T-173-11) — belt-and-suspenders
  * over the regex, since a fixed-shape id cannot itself contain a path separator.
  */
-export function stagingSlicesDir(projectDir: string, runId: string): string {
+export function runRootDir(projectDir: string, runId: string): string {
   assertValidRunId(runId);
   const verifyRoot = resolve(projectDir, 'rulebook', '.verify');
-  const dir = resolve(verifyRoot, runId, 'slices');
+  const dir = resolve(verifyRoot, runId);
   const rel = relative(verifyRoot, dir);
   if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
     throw new Error(
@@ -266,8 +268,13 @@ export function stagingSlicesDir(projectDir: string, runId: string): string {
   return dir;
 }
 
-function runRootDir(projectDir: string, runId: string): string {
-  return dirname(stagingSlicesDir(projectDir, runId));
+/**
+ * A run's staging tree: `<projectDir>/rulebook/.verify/<run-id>/slices/`. Dot-prefixed so no
+ * walker mistakes a staged slice for a live one; run-scoped so two passes cannot collide. Derived
+ * from `runRootDir`, which owns the validation and the containment assertion.
+ */
+export function stagingSlicesDir(projectDir: string, runId: string): string {
+  return resolve(runRootDir(projectDir, runId), 'slices');
 }
 
 /**

@@ -39,7 +39,10 @@ import {
   verifyImpactApplyCommand,
   verifyImpactStatusCommand,
 } from './commands/verify-impact.js';
-import { verifyRulingRecheckCommand } from './commands/verify-ruling-recheck.js';
+import {
+  verifyRulingRecheckCommand,
+  verifyRulingRecordCommand,
+} from './commands/verify-ruling-recheck.js';
 import { verifyRepairStatusCommand } from './commands/verify-repair.js';
 import {
   verifyDeriveCheckCommand,
@@ -441,6 +444,33 @@ program
   .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(verifyRulingRecheckCommand);
+
+// `verify-ruling-record` is the ONLY write surface for CHECK-01's ledger, mirroring the
+// check/record pairing every sibling already had (verify-classify-record, verify-derive-record,
+// verify-example-record). Without it a dispatched ruling's verdict could be judged but never
+// recorded, so `verify-ruling-recheck` reported `pending` forever. Deliberately unlike
+// `verify-classify-record`, an unrecognized `--verdict` is NOT softened to a catch-all member:
+// CHECK-01's enum has none, and `undetermined` is a real judgment a subagent must choose, never a
+// coercion target. No bypass option of any kind, per the discipline noted above.
+program
+  .command('verify-ruling-record')
+  .description(
+    "Record one dispatched ruling's re-check verdict, atomically upsert-appended into the run's " +
+      'RULING-VERDICTS ledger (the ONLY write surface for CHECK-01)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--run-id <id>', 'The verify run this verdict was judged against')
+  .requiredOption('--number <n>', 'The RULINGS.md entry number this verdict is for')
+  .requiredOption(
+    '--verdict <v>',
+    'still-needed | resolved-by-source | contradicted | undetermined',
+  )
+  .requiredOption(
+    '--reasoning <text>',
+    "The judgment's reasoning — the artifact this check exists to produce",
+  )
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(verifyRulingRecordCommand);
 
 program
   .command('verify-repair')

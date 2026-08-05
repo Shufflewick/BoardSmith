@@ -1,8 +1,8 @@
 import { promises as fs } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { parseRulings } from './build-manifest.js';
-import { atomicWriteFile, RUN_ID_RE, stagingSlicesDir } from './verify-run.js';
+import { atomicWriteFile, RUN_ID_RE, runRootDir, stagingSlicesDir } from './verify-run.js';
 
 /**
  * `verify-ruling-recheck.ts` — CHECK-01's mechanical half (176-CONTEXT.md decision 2): the CLI
@@ -39,6 +39,18 @@ function isRulingVerdict(value: string): value is RulingVerdict {
 }
 
 // -------------------------------------------------------------------------------------------
+// RULING_VERDICTS_LEDGER_BEGIN / END — the ledger's own fence markers
+// -------------------------------------------------------------------------------------------
+
+/**
+ * Exported as constants, not inlined at the write site, for the same reason CHECK-04/CHECK-06
+ * export theirs: the read path has to locate the very same markers the write path emitted, and
+ * `createRulingVerdictRecord` has to reject a field that would smuggle one into the body.
+ */
+export const RULING_VERDICTS_LEDGER_BEGIN = '<!-- boardsmith:ruling-verdicts:begin -->';
+export const RULING_VERDICTS_LEDGER_END = '<!-- boardsmith:ruling-verdicts:end -->';
+
+// -------------------------------------------------------------------------------------------
 // RulingVerdictRecord — the CLI-validated, subagent-supplied verdict record
 // -------------------------------------------------------------------------------------------
 
@@ -52,9 +64,11 @@ export interface RulingVerdictRecord {
 
 /**
  * Validates and constructs a `RulingVerdictRecord` from a subagent's returned verdict. Throws if
- * the verdict is outside `RULING_VERDICTS` or if `reasoning` is empty — a labeled verdict with no
- * recorded reasoning is not a valid record (decision 4). This is the ONLY place a verdict string
- * is checked against the enum; every recording path in this module routes through it.
+ * the verdict is outside `RULING_VERDICTS`, if `reasoning` is empty — a labeled verdict with no
+ * recorded reasoning is not a valid record (decision 4) — if `number` is not a positive integer,
+ * or if `reasoning` contains one of the ledger's own fence markers. This is the ONLY place a
+ * verdict string is checked against the enum; every recording path in this module AND the read
+ * path (`readRulingVerdicts`) route through it.
  */
 export function createRulingVerdictRecord(input: {
   number: number;
@@ -62,6 +76,12 @@ export function createRulingVerdictRecord(input: {
   reasoning: string;
   supersededBy?: number;
 }): RulingVerdictRecord {
+  if (!Number.isInteger(input.number) || input.number < 1) {
+    throw new Error(
+      `Invalid ruling number "${input.number}".\n` +
+        `Expected a positive whole number naming a RULINGS.md entry.`,
+    );
+  }
   if (!isRulingVerdict(input.verdict)) {
     throw new Error(
       `Invalid verdict "${input.verdict}" for Ruling ${input.number}.\n` +
@@ -74,6 +94,18 @@ export function createRulingVerdictRecord(input: {
         `The reasoning is the artifact this check exists to produce — a verdict label with no ` +
         `reasoning is not a valid record.`,
     );
+  }
+  // A reasoning string carrying the ledger's own end fence would terminate the fenced body early
+  // and silently orphan every record after it. Reject at construction, where the message can name
+  // the offending field, rather than discovering a truncated ledger at read time.
+  for (const marker of [RULING_VERDICTS_LEDGER_BEGIN, RULING_VERDICTS_LEDGER_END]) {
+    if (input.reasoning.includes(marker)) {
+      throw new Error(
+        `Ruling ${input.number}'s reasoning contains the ledger's own fence marker ` +
+          `("${marker}").\n` +
+          `Remove it from the reasoning text — it would corrupt the RULING-VERDICTS ledger.`,
+      );
+    }
   }
   return {
     number: input.number,
@@ -258,8 +290,10 @@ export interface RulingRecheckReportRow {
   number: number;
   verdict: RulingVerdict | 'pending';
   reasoning: string;
-  supersededBy?: number;
 }
+// No `supersededBy` here by construction: a row exists only for an ENUMERATED ruling, and
+// `enumerateRulingsForRecheck` puts a ruling in `enumerated` or in `skipped`, never both. The
+// superseding relationship is reported once, on `skipped`, where it is always populated.
 
 export interface VerifyRulingRecheckResult {
   runId?: string;
@@ -283,14 +317,16 @@ function emptyVerdictCounts(): Record<RulingVerdict, number> {
  * `verdictCounts` computed here so a caller never has to count a measured distribution by hand
  * (PROV-03's compute/format split). Uncapped — never truncated (decision 15).
  *
- * `options.verdicts` carries whatever the judgment subagent has already returned for this run
- * (keyed by ruling number); a ruling with no entry reports `pending`, never a manufactured
- * default verdict.
+ * A row's verdict comes from one of two sources: `options.verdicts`, carrying whatever the
+ * judgment subagent has returned in THIS process (keyed by ruling number), or the run's
+ * `RULING-VERDICTS.md` ledger, carrying what `boardsmith verify-ruling-record` durably recorded in
+ * an earlier one. In-memory wins where both exist. A ruling in neither reports `pending`, never a
+ * manufactured default verdict.
  *
- * This command is READ-ONLY against `RULINGS.md`: it enumerates and reports, it never writes a
- * verdict into the file itself (decision 16 — this phase reports, it does not repair reference
- * content). Recording a subagent's returned verdicts durably is `recordRulingVerdicts`, below,
- * which persists through `atomicWriteFile` — the ONE atomic ledger write path in the repo.
+ * This command is READ-ONLY against every file it touches: it enumerates and reports, and it never
+ * writes a verdict into `RULINGS.md` (decision 16 — this phase reports, it does not repair
+ * reference content) nor into the ledger it reads. Writing a verdict is
+ * `verifyRulingRecordCommand`'s job alone, through `recordRulingVerdicts` → `atomicWriteFile`.
  *
  * Findings exit 0 (never sets `process.exitCode`). Tool failure (missing project, unreadable
  * `RULINGS.md`) throws with a single actionable line naming the directory and `--project` — no
@@ -320,18 +356,25 @@ export async function verifyRulingRecheckCommand(
   const { enumerated, skipped, unparsedSupersession } = enumerateRulingsForRecheck(rulingsText);
   const transcription = await resolveFreshTranscription(projectDir, options.runId);
 
-  const supersededByNumber = new Map(skipped.map((s) => [s.number, s.supersededBy] as const));
+  // The durable half of the verdict source (the defect this command was filed for): verdicts
+  // recorded by `verify-ruling-record` in an earlier process are read back here, so a re-run
+  // reports real recorded work instead of resetting every row to `pending`. An in-memory
+  // `options.verdicts` still wins where both exist — a caller holding a subagent's return this
+  // very session is reporting something strictly fresher than the ledger. Under `scopeLimited`
+  // there is no resolved run to read a ledger from, so rows correctly stay `pending`.
+  const recorded = new Map<number, { verdict: RulingVerdict; reasoning: string }>();
+  if (!transcription.scopeLimited) {
+    for (const r of await readRulingVerdicts(projectDir, transcription.runId)) {
+      recorded.set(r.number, { verdict: r.verdict, reasoning: r.reasoning });
+    }
+  }
+
   const verdictCounts = emptyVerdictCounts();
   const rows: RulingRecheckReportRow[] = enumerated.map((entry) => {
-    const supplied = options.verdicts?.get(entry.number);
+    const supplied = options.verdicts?.get(entry.number) ?? recorded.get(entry.number);
     if (supplied) {
       verdictCounts[supplied.verdict]++;
-      return {
-        number: entry.number,
-        verdict: supplied.verdict,
-        reasoning: supplied.reasoning,
-        supersededBy: supersededByNumber.get(entry.number),
-      };
+      return { number: entry.number, verdict: supplied.verdict, reasoning: supplied.reasoning };
     }
     return { number: entry.number, verdict: 'pending', reasoning: '' };
   });
@@ -364,25 +407,237 @@ export async function verifyRulingRecheckCommand(
 }
 
 /**
- * Persists a batch of subagent-returned verdicts to this run's own
- * `rulebook/.verify/<runId>/RULING-VERDICTS.md` ledger, through `atomicWriteFile` — the ONE
- * atomic ledger write path in the repo (`verify-run.ts`). Never `fs.writeFile`/`writeFileSync`
- * directly, and never a write into `RULINGS.md` itself (decision 16).
+ * This run's own ledger path — `rulebook/.verify/<runId>/RULING-VERDICTS.md`. Run-scoped, unlike
+ * CHECK-04's and CHECK-06's project-level ledgers: a ruling's verdict is a judgment against ONE
+ * run's fresh transcription, so it cannot outlive the run that produced it.
+ */
+export function rulingVerdictsLedgerPath(projectDir: string, runId: string): string {
+  return join(runRootDir(projectDir, runId), 'RULING-VERDICTS.md');
+}
+
+/**
+ * Persists verdicts to this run's ledger through `atomicWriteFile` — the ONE atomic ledger write
+ * path in the repo (`verify-run.ts`). Never `fs.writeFile`/`writeFileSync` directly, and never a
+ * write into `RULINGS.md` itself (decision 16).
+ *
+ * REPLACES the entire ledger body with exactly the `records` supplied — a full rewrite. This is
+ * NOT the callable a recording workflow wants per batch; use `recordRulingVerdicts`, which upserts
+ * through this one. Exported for the legitimate full-rewrite case and for that upsert's own use.
+ */
+export async function replaceRulingVerdicts(
+  projectDir: string,
+  runId: string,
+  records: RulingVerdictRecord[],
+): Promise<{ ledgerPath: string }> {
+  const ledgerPath = rulingVerdictsLedgerPath(projectDir, runId);
+  const lines = records.map((r) => JSON.stringify(r));
+  const content =
+    `# Ruling Verdicts — run ${runId}\n\n` +
+    `${RULING_VERDICTS_LEDGER_BEGIN}\n` +
+    lines.join('\n') +
+    (lines.length > 0 ? '\n' : '') +
+    `${RULING_VERDICTS_LEDGER_END}\n`;
+  await fs.mkdir(dirname(ledgerPath), { recursive: true });
+  await atomicWriteFile(ledgerPath, content);
+  return { ledgerPath: relative(projectDir, ledgerPath) };
+}
+
+/**
+ * Records a batch of verdicts, upserting each by ruling `number`: reads what the ledger already
+ * holds, drops only the records this batch re-states, keeps every other record in its existing
+ * order, and appends the new ones last so the ledger diff stays reviewable. Recording ruling N
+ * never destroys ruling N−1's verdict — the defect this command was filed for.
  */
 export async function recordRulingVerdicts(
   projectDir: string,
   runId: string,
   records: RulingVerdictRecord[],
 ): Promise<{ ledgerPath: string }> {
-  const runRoot = join(stagingSlicesDir(projectDir, runId), '..');
-  const ledgerPath = join(runRoot, 'RULING-VERDICTS.md');
-  const lines = records.map((r) => JSON.stringify(r));
-  const content =
-    `# Ruling Verdicts — run ${runId}\n\n` +
-    `<!-- boardsmith:ruling-verdicts:begin -->\n` +
-    lines.join('\n') +
-    (lines.length > 0 ? '\n' : '') +
-    `<!-- boardsmith:ruling-verdicts:end -->\n`;
-  await atomicWriteFile(ledgerPath, content);
-  return { ledgerPath: relative(projectDir, ledgerPath) };
+  const existing = await readRulingVerdicts(projectDir, runId);
+  const incoming = new Set(records.map((r) => r.number));
+  const merged = [...existing.filter((r) => !incoming.has(r.number)), ...records];
+  return replaceRulingVerdicts(projectDir, runId, merged);
+}
+
+/**
+ * Round-trips exactly what `recordRulingVerdicts`/`replaceRulingVerdicts` wrote. Returns an empty
+ * array (never throws) when no ledger has been written yet — a run whose CHECK-01 has not recorded
+ * anything has nothing recorded, which is not a tool failure.
+ *
+ * RE-ENTERS `createRulingVerdictRecord` on every parsed line: the ledger is a second entry path
+ * into `RulingVerdictRecord`, never a bypass of its validation — no `as RulingVerdictRecord` cast
+ * appears in this module. A hand-edited out-of-enum verdict, an emptied reasoning, or a malformed
+ * JSON line throws one actionable message naming the ledger's relative path and the 1-based record
+ * index, rather than reaching the report unvalidated.
+ */
+export async function readRulingVerdicts(
+  projectDir: string,
+  runId: string,
+): Promise<RulingVerdictRecord[]> {
+  const ledgerPath = rulingVerdictsLedgerPath(projectDir, runId);
+  let text: string;
+  try {
+    text = await fs.readFile(ledgerPath, 'utf-8');
+  } catch {
+    return [];
+  }
+  const relLedgerPath = relative(projectDir, ledgerPath);
+  const beginIdx = text.indexOf(RULING_VERDICTS_LEDGER_BEGIN);
+  const endIdx = text.indexOf(RULING_VERDICTS_LEDGER_END);
+  if (beginIdx === -1 || endIdx === -1) {
+    throw new Error(`Malformed ruling-verdicts ledger at ${relLedgerPath}: missing begin/end fence.`);
+  }
+  if (beginIdx > endIdx) {
+    throw new Error(
+      `Malformed ruling-verdicts ledger at ${relLedgerPath}: the end fence appears before the ` +
+        `begin fence.`,
+    );
+  }
+  const body = text.slice(beginIdx + RULING_VERDICTS_LEDGER_BEGIN.length, endIdx);
+  const rawLines = body
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  return rawLines.map((line, i) => {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(line);
+    } catch {
+      throw new Error(
+        `Malformed ruling-verdicts ledger at ${relLedgerPath} (record ${i + 1}): not valid JSON.\n` +
+          `Delete the file to re-record this run's CHECK-01 verdicts from scratch.`,
+      );
+    }
+    const r = raw as Record<string, unknown>;
+    try {
+      return createRulingVerdictRecord({
+        number: Number(r.number),
+        verdict: String(r.verdict ?? ''),
+        reasoning: String(r.reasoning ?? ''),
+        supersededBy: r.supersededBy !== undefined ? Number(r.supersededBy) : undefined,
+      });
+    } catch (err) {
+      throw new Error(
+        `Malformed ruling-verdicts ledger at ${relLedgerPath} (record ${i + 1}): ` +
+          `${(err as Error).message}\n` +
+          `Delete the file to re-record this run's CHECK-01 verdicts from scratch.`,
+      );
+    }
+  });
+}
+
+// -------------------------------------------------------------------------------------------
+// verifyRulingRecordCommand — the ONLY write surface for CHECK-01's ledger
+// -------------------------------------------------------------------------------------------
+
+export interface VerifyRulingRecordResult {
+  runId: string;
+  number: number;
+  verdict: RulingVerdict;
+  ledgerPath: string;
+  /** Total records in the ledger after this upsert — the caller's proof nothing was destroyed. */
+  recordCount: number;
+}
+
+/**
+ * `boardsmith verify-ruling-record` — records ONE dispatched ruling's re-check verdict, the
+ * missing half of CHECK-01. Every sibling check already had its paired record command
+ * (`verify-classify-record`, `verify-derive-record`, `verify-example-record`); this one's write
+ * path existed but was never registered, so a verdict could be judged and never recorded.
+ *
+ * Validation is delegated entirely to `createRulingVerdictRecord` — the enum and the non-empty
+ * reasoning rule live in exactly one place. Note the deliberate divergence from
+ * `verify-classify-record`, which softens an unrecognized `--label` to `unclassified`: CHECK-01's
+ * enum has no such member, so an out-of-enum `--verdict` must throw rather than be coerced into a
+ * verdict the judge did not return. `undetermined` is a real judgment, not a fallback.
+ *
+ * The `--number` is checked against the run's own enumeration so a typo cannot silently record a
+ * verdict for a ruling nobody dispatched.
+ */
+export async function verifyRulingRecordCommand(
+  options: {
+    project?: string;
+    runId?: string;
+    number?: string | number;
+    verdict?: string;
+    reasoning?: string;
+    json?: boolean;
+  } = {},
+): Promise<VerifyRulingRecordResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  const runId = options.runId;
+  if (runId === undefined || !RUN_ID_RE.test(runId)) {
+    throw new Error(
+      `"--run-id ${runId ?? '<missing>'}" is not a valid verify run id (expected the shape ` +
+        `YYYY-MM-DDTHH-MM-SSZ).\n` +
+        `Pass the run id this verdict was judged against — the one \`boardsmith ` +
+        `verify-ruling-recheck\` reports.`,
+    );
+  }
+
+  const number = Number(options.number);
+  if (!Number.isInteger(number) || number < 1) {
+    throw new Error(
+      `"--number ${options.number ?? '<missing>'}" is not a RULINGS.md entry number.\n` +
+        `Pass the positive whole number of the ruling this verdict is for.`,
+    );
+  }
+
+  const rulingsPath = join(projectDir, 'RULINGS.md');
+  let rulingsText: string;
+  try {
+    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
+  } catch {
+    throw new Error(
+      `No RULINGS.md found in this project directory.\n` +
+        `Pass --project <dir> to target the bs-project this run should read.`,
+    );
+  }
+
+  const { enumerated, skipped } = enumerateRulingsForRecheck(rulingsText);
+  if (!enumerated.some((e) => e.number === number)) {
+    const supersededBy = skipped.find((s) => s.number === number)?.supersededBy;
+    if (supersededBy !== undefined) {
+      throw new Error(
+        `Ruling ${number} is superseded by Ruling ${supersededBy}, so it is not dispatched for ` +
+          `re-check and carries no verdict.\n` +
+          `Record a verdict for Ruling ${supersededBy} instead.`,
+      );
+    }
+    throw new Error(
+      `Ruling ${number} is not an entry in this project's RULINGS.md.\n` +
+        `Valid ruling numbers for re-check: ${enumerated.map((e) => e.number).join(', ')}.\n` +
+        `Run \`boardsmith verify-ruling-recheck --run-id ${runId}\` to see the dispatch list.`,
+    );
+  }
+
+  const record = createRulingVerdictRecord({
+    number,
+    verdict: String(options.verdict ?? ''),
+    reasoning: String(options.reasoning ?? ''),
+  });
+
+  const { ledgerPath } = await recordRulingVerdicts(projectDir, runId, [record]);
+  const recordCount = (await readRulingVerdicts(projectDir, runId)).length;
+
+  const result: VerifyRulingRecordResult = {
+    runId,
+    number: record.number,
+    verdict: record.verdict,
+    ledgerPath,
+    recordCount,
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  console.log(
+    chalk.green(`✓ Ruling ${record.number}: ${record.verdict}`) +
+      chalk.dim(` — recorded in ${ledgerPath} (${recordCount} verdict(s) total)`),
+  );
+  return result;
 }

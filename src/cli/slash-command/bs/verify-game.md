@@ -174,9 +174,17 @@ contract. In short: every `RULINGS.md` entry without a resolved `supersededBy` (
 turn, to a fresh-context subagent carrying the `BS-RULING-RECHECK-V1` handshake token, together
 with that ruling's own full body text (Decision/Citation/Rationale) and the fresh STAGED
 transcription only — never the live `rulebook/` slices. Each subagent returns exactly one of
-`still-needed`, `resolved-by-source`, `contradicted`, or `undetermined`, with mandatory reasoning,
-recorded via `boardsmith verify-ruling-recheck`. This orchestrator never reads a ruling body or a
-slice itself; it dispatches, then records exactly what comes back.
+`still-needed`, `resolved-by-source`, `contradicted`, or `undetermined`, with mandatory reasoning.
+Record each returned verdict, one call per ruling, with
+
+```
+boardsmith verify-ruling-record --run-id <id> --number <n> --verdict <v> --reasoning "<text>"
+```
+
+— the ONLY write surface for this check; `boardsmith verify-ruling-recheck` is read-only and
+reports what has been recorded so far, so a verdict never recorded stays `pending` forever. This
+orchestrator never reads a ruling body or a slice itself; it dispatches, then records exactly what
+comes back.
 
 ## Step 6: Repair Dispatch (CHECK-02)
 

@@ -6,7 +6,7 @@ split as `verify/classification-subagent.md` (`state-machine.md` "Session Handof
 touched by this file; cite it, do not restate it): **the CLI enumerates and records; a
 fresh-context subagent judges.** The orchestrator dispatching this contract never reads a ruling
 body or a slice itself — it dispatches, then records exactly what comes back through
-`boardsmith verify-ruling-recheck` / the verdict-recording path, and nothing else.
+`boardsmith verify-ruling-record`, and nothing else.
 
 This contract lives in its own file for the same reason
 `${CLAUDE_SKILL_DIR}/../bs-shared/verify/classification-subagent.md` does: the part that matters
@@ -169,8 +169,10 @@ Return exactly one object:
 ## Scope limit
 
 This subagent never writes `RULINGS.md`, never edits a ruling, and never fixes reference-game
-content. It reports a verdict plus reasoning; the orchestrator records it through the single
-atomic ledger write path (`atomicWriteFile`, `verify-run.ts`). Whatever downstream consequence a
+content. It reports a verdict plus reasoning; the orchestrator records it with `boardsmith
+verify-ruling-record`, which persists through the single atomic ledger write path
+(`atomicWriteFile`, `verify-run.ts`) into the run's own `RULING-VERDICTS.md`, upsert-appending so
+recording one ruling never destroys another's verdict. Whatever downstream consequence a
 verdict has is computed in code from the verdict you return — a claim about that consequence in
 this return is ignored by the recording step regardless of what it says (`state-machine.md`
 "Rulings Outrank Rulebook" governs the composite source of truth this check reads against; this
