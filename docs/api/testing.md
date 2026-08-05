@@ -349,21 +349,39 @@ Classification is judged purely by each node's `__hidden` flag (never by id),
 which sidesteps the engine's zone-hidden-vs-individually-hidden
 id-anonymization asymmetry.
 
-**`renderAsSeat(GameClass, testGame, seat)` / `assertNoHiddenInfoLeak(...)`**
-go one level deeper than JSON-tree checks: they mount the **real** AutoUI
-renderer stack in `jsdom` and scan the actual rendered DOM for hidden-info
+**`renderAsSeat(testGame, seat, options?)` / `assertNoHiddenInfoLeak(testGame,
+seat, options?)`** go one level deeper than JSON-tree checks: they mount a real
+Vue renderer stack in `jsdom` and scan the actual rendered DOM for hidden-info
 leaks — the class of bug a JSON-tree assertion can miss entirely (e.g. a
-custom renderer that accidentally prints a hidden card's rank into a tooltip
-`title` attribute). Both are `async` because mounting AutoUI is real Vue
-component work, not a synchronous JSON walk.
+renderer that accidentally prints a hidden card's rank into a tooltip `title`
+attribute). Both are `async` because mounting is real Vue component work, not a
+synchronous JSON walk.
 
 ```typescript
 import { assertNoHiddenInfoLeak } from 'boardsmith/testing';
 
 test('opponent card rank/suit never appears in the DOM for seat 2', async () => {
-  await assertNoHiddenInfoLeak(GoFishGame, testGame, 2);
+  await assertNoHiddenInfoLeak(testGame, 2);
 });
 ```
+
+**If your game ships a custom board, pass `component`.** The default renders
+AutoUI, and AutoUI's markup says nothing about markup your game wrote itself —
+so for a custom-UI game a green result without this option is close to
+meaningless, which is exactly the case hidden information matters most:
+
+```typescript
+import GameTable from '../src/ui/components/GameTable.vue';
+
+await assertNoHiddenInfoLeak(testGame, 2, { component: GameTable });
+```
+
+The standard scaffold props (`playerSeat`, `isMyTurn`, `availableActions`,
+`actionController`) are supplied automatically from real game state and
+filtered to the props your component declares, so most boards need nothing
+else. Add `componentProps` for anything beyond that contract. `gameView` is
+always the real per-seat view and cannot be overridden through
+`componentProps` — rendering any other tree would invalidate the scan.
 
 `assertNoHiddenInfoLeak` derives forbidden markers by diffing each element's
 *unfiltered* `toJSON()` against its node in the final `toJSONForPlayer(seat)`
@@ -372,10 +390,10 @@ tree, so it honors a game's `static playerView` hook automatically. Pass an
 (the predicate is scoped **per elementId**, not global):
 
 ```typescript
-await assertNoHiddenInfoLeak(GoFishGame, testGame, 2, {
+await assertNoHiddenInfoLeak(testGame, 2, {
   // e.g. single-character rank/suit values that legitimately collide with
-  // unrelated visible text elsewhere in the DOM (see go-fish's real test).
-  allow: (elementId, key) => key === 'rank' || key === 'suit',
+  // unrelated visible text elsewhere in the DOM.
+  allow: (marker, ctx) => ctx.attribute === 'rank' || ctx.attribute === 'suit',
 });
 ```
 

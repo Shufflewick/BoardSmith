@@ -119,9 +119,12 @@ The visibility lens must cite the real functions, not describe the check in pros
 - `diffPlayerViews(testGame, seatA, seatB)` (`src/testing/view-diff.ts`) — the atomic overload,
   which avoids the WR-02 footgun of diffing two views captured at different game-state instants.
   Returns `{ onlyInA, onlyInB, attributeDiffs, describe() }`.
-- `assertNoHiddenInfoLeak(...)` (`src/testing/dom-leak.ts`) — a DOM-rendered leak assertion,
-  catching UI-smuggled hidden values (e.g. a placeholder `aria-label` that echoes a hidden
-  card's identity) that a pure JSON-view diff would miss.
+- `assertNoHiddenInfoLeak(testGame, seat, options?)` (`src/testing/dom-leak.ts`) — a DOM-rendered
+  leak assertion, catching UI-smuggled hidden values (e.g. a placeholder `aria-label` that echoes
+  a hidden card's identity) that a pure JSON-view diff would miss. **For any chunk whose game has
+  a custom board, pass `{ component: <the game's root UI component> }`** — the default renders
+  AutoUI, so without it the check scans markup the players never see and a green result does not
+  cover the game's own board.
 
 ## Persisting the Round — Write to the Findings Ledger BEFORE Repair Starts
 

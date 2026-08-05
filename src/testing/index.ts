@@ -93,6 +93,7 @@ export {
   type HiddenInfoGameView,
   type HiddenInfoLeakAllowPredicate,
   type AssertNoHiddenInfoLeakOptions,
+  type RenderAsSeatOptions,
 } from './dom-leak.js';
 
 // Debug utilities

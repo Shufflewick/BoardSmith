@@ -22,6 +22,7 @@
  * @module
  */
 
+import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameElement as UIGameElement } from '../ui/components/auto-ui/index.js';
@@ -106,17 +107,52 @@ function loadMount(): Promise<typeof import('@vue/test-utils').mount> {
 }
 
 /**
- * Mount AutoUI headlessly as `seat`, using the real per-seat wire view
+ * What to render for a seat. `component` is the seam that lets this utility
+ * check a game's OWN board instead of AutoUI — see {@link renderAsSeat}.
+ */
+export interface RenderAsSeatOptions {
+  /**
+   * TESTING-ONLY: render this view instead of the real per-seat view.
+   *
+   * Exists ONLY so `assertNoHiddenInfoLeak`'s own tests can prove the matcher
+   * fails on a deliberately-injected leak (a leak-detector with no failing
+   * case is unproven) — real callers should never pass it, since it renders
+   * something other than what a real client would receive.
+   */
+  gameViewOverride?: UIGameElement | null;
+  /**
+   * The game's own root UI component. When omitted, AutoUI is rendered.
+   *
+   * A game with a custom board is exactly the case where a hidden-info leak
+   * matters most, and AutoUI's markup says nothing about markup the game
+   * wrote itself: a card AutoUI never renders can still be painted, face-up,
+   * by a custom renderer. Pass the component a real client mounts (the one
+   * `src/ui/uis.ts` registers) and the scan runs against that instead.
+   */
+  component?: Component;
+  /**
+   * Props merged OVER the standard contract props this function supplies
+   * (`gameView`, `playerSeat`, `isMyTurn`, `availableActions`,
+   * `actionController`). Use it for props specific to your component.
+   *
+   * `gameView` is deliberately re-applied after this merge and cannot be
+   * overridden here: rendering anything but the real per-seat view would make
+   * a green result meaningless. Use `gameViewOverride` if you genuinely need
+   * to (its own doc explains why you almost certainly do not).
+   */
+  componentProps?: Record<string, unknown>;
+}
+
+/**
+ * Mount a game UI headlessly as `seat`, using the real per-seat wire view
  * (`testGame.getPlayerView(seat).state`) unless `gameViewOverride` is given.
  *
- * `gameViewOverride` exists ONLY so `assertNoHiddenInfoLeak`'s own tests can
- * prove the matcher fails on a deliberately-injected leak (a leak-detector
- * with no failing case is unproven) — real callers should never pass it,
- * since it renders something other than what a real client would receive.
+ * Renders AutoUI by default, or `options.component` when supplied — the
+ * latter is how a game checks the surface its players actually look at.
  *
  * @param testGame - The TestGame wrapper
  * @param seat - The seat to render as
- * @param gameViewOverride - TESTING-ONLY: render this view instead of the real per-seat view
+ * @param options - What to render (see {@link RenderAsSeatOptions})
  * @throws If called outside a jsdom test environment (WR-03) — this file's
  *   own `// @vitest-environment jsdom` pragma only applies to tests IN THIS
  *   FILE, not to a caller's test file.
@@ -124,7 +160,7 @@ function loadMount(): Promise<typeof import('@vue/test-utils').mount> {
 export async function renderAsSeat<G extends Game>(
   testGame: TestGame<G>,
   seat: number,
-  gameViewOverride?: UIGameElement | null,
+  options: RenderAsSeatOptions = {},
 ): Promise<VueWrapper<InstanceType<typeof AutoUIComponent>>> {
   if (typeof document === 'undefined') {
     throw new Error(
@@ -133,19 +169,124 @@ export async function renderAsSeat<G extends Game>(
     );
   }
 
-  const [AutoUI, mount] = await Promise.all([loadAutoUI(), loadMount()]);
+  const mount = await loadMount();
+  const component = options.component ?? (await loadAutoUI());
 
   const gameView =
-    gameViewOverride !== undefined
-      ? gameViewOverride
+    options.gameViewOverride !== undefined
+      ? options.gameViewOverride
       : ((testGame.getPlayerView(seat).state as unknown) as UIGameElement);
 
-  return mount(AutoUI, {
-    props: {
-      gameView,
-      playerSeat: seat,
-    },
-  });
+  // AutoUI takes only (gameView, playerSeat); a scaffolded custom board also
+  // takes (isMyTurn, availableActions, actionController). Supplying the whole
+  // contract means the common custom-UI case needs no `componentProps` at all
+  // — but it is then FILTERED to what the component actually declares. An
+  // undeclared prop would otherwise fall through to the root element as a
+  // real DOM attribute, which both spams Vue warnings and adds attacker-free
+  // surface strings this very scan would go on to inspect.
+  const props: Record<string, unknown> = options.component
+    ? {
+        ...retainDeclaredProps(options.component, {
+          ...buildCustomUIContractProps(testGame, seat, gameView),
+          ...options.componentProps,
+        }),
+        // Non-negotiable: the scan is only meaningful against the real
+        // per-seat view, so this wins over any caller-supplied `gameView`.
+        gameView,
+      }
+    : { gameView, playerSeat: seat };
+
+  return mount(component, { props }) as VueWrapper<InstanceType<typeof AutoUIComponent>>;
+}
+
+/**
+ * Drop any entry the component does not declare as a prop, so it cannot fall
+ * through to the rendered root as a DOM attribute. When a component's props
+ * cannot be introspected (no `props` option at all — a render function taking
+ * only attrs), everything is kept: filtering to nothing would render a board
+ * with no state, and a scan of an empty board proves nothing.
+ */
+function retainDeclaredProps(
+  component: Component,
+  candidate: Record<string, unknown>,
+): Record<string, unknown> {
+  const declared = (component as { props?: string[] | Record<string, unknown> }).props;
+  if (declared === undefined) return candidate;
+
+  const names = new Set(Array.isArray(declared) ? declared : Object.keys(declared));
+  if (names.size === 0) return candidate;
+
+  return Object.fromEntries(Object.entries(candidate).filter(([key]) => names.has(key)));
+}
+
+/**
+ * The standard props a scaffolded custom board declares, derived from the real
+ * game state for `seat`. `actionController` is a render-only stand-in: this
+ * utility mounts a component to inspect its MARKUP, never to drive an action
+ * through it, so the controller only has to be shaped correctly enough for a
+ * template to read. It deliberately does not send actions — a leak scan that
+ * mutated the game would not be a scan.
+ */
+function buildCustomUIContractProps<G extends Game>(
+  testGame: TestGame<G>,
+  seat: number,
+  gameView: UIGameElement | null,
+): Record<string, unknown> {
+  const view = testGame.getPlayerView(seat) as {
+    availableActions?: Array<{ name: string } | string>;
+    isMyTurn?: boolean;
+  };
+  const availableActions = (view.availableActions ?? []).map((a) =>
+    typeof a === 'string' ? a : a.name,
+  );
+
+  return {
+    playerSeat: seat,
+    isMyTurn: view.isMyTurn ?? false,
+    availableActions,
+    actionController: inertActionController(availableActions),
+    gameView,
+  };
+}
+
+/**
+ * A ref-SHAPED plain object. Deliberately not Vue's `ref()`: a static runtime
+ * `import { ref } from 'vue'` in this module would make every consumer of the
+ * `boardsmith/testing` barrel resolve Vue — the exact always-on-dependency
+ * failure documented above for `@vue/test-utils`, which broke MERC's entire
+ * suite. A template reading `.value` cannot tell the difference, and this
+ * render is a one-shot snapshot with nothing to stay reactive to.
+ */
+function inertRef<T>(value: T): { value: T } {
+  return { value };
+}
+
+/**
+ * A minimal, inert `useActionController`-shaped object. Every field is a plain
+ * ref-shaped value or a no-op: enough for a template to render against,
+ * incapable of submitting anything. Games needing a real controller can pass
+ * one via `componentProps`.
+ */
+function inertActionController(availableActions: string[]): Record<string, unknown> {
+  const noop = (): void => {};
+  return {
+    availableActions: inertRef(availableActions),
+    currentAction: inertRef(null),
+    currentSelection: inertRef(null),
+    currentChoices: inertRef([]),
+    selectedArgs: inertRef({}),
+    pendingArgs: inertRef({}),
+    isSelecting: inertRef(false),
+    isExecuting: inertRef(false),
+    error: inertRef(null),
+    selectableElementIds: inertRef([]),
+    startAction: noop,
+    cancelAction: noop,
+    selectChoice: noop,
+    selectElement: noop,
+    execute: noop,
+    fill: noop,
+  };
 }
 
 /**
@@ -193,14 +334,9 @@ export type HiddenInfoLeakAllowPredicate = (
   context: { attribute?: string; elementId: number; elementLabel: string },
 ) => boolean;
 
-export interface AssertNoHiddenInfoLeakOptions {
+export interface AssertNoHiddenInfoLeakOptions extends RenderAsSeatOptions {
   /** Caller-supplied allowlist predicate — see {@link HiddenInfoLeakAllowPredicate}. */
   allow?: HiddenInfoLeakAllowPredicate;
-  /**
-   * TESTING-ONLY: render this view instead of `testGame.getPlayerView(seat).state`.
-   * See {@link renderAsSeat}. Real callers should never set this.
-   */
-  gameViewOverride?: UIGameElement | null;
 }
 
 interface ForbiddenMarker {
@@ -493,6 +629,22 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
  * Render `testGame` as `seat` (headlessly, via `renderAsSeat`) and throw if
  * any hidden element's identity leaks into the rendered markup.
  *
+ * By default this renders AutoUI. **If your game ships a custom board, pass
+ * `options.component`** — otherwise a green result says nothing about the
+ * surface your players actually look at, which for a hidden-information game
+ * is the only surface that matters:
+ *
+ * ```ts
+ * import GameTable from '../src/ui/components/GameTable.vue';
+ *
+ * await assertNoHiddenInfoLeak(testGame, 1, { component: GameTable });
+ * ```
+ *
+ * The standard scaffold props (`playerSeat`, `isMyTurn`, `availableActions`,
+ * `actionController`) are supplied automatically from the real game state, so
+ * most games need nothing else; add `options.componentProps` for props your
+ * component declares beyond that contract.
+ *
  * Forbidden markers are auto-derived from the difference between each
  * element's FULL unfiltered `toJSON()` identity and what survives into
  * seat N's FINAL per-seat tree — see {@link deriveForbiddenMarkers}. This
@@ -553,7 +705,11 @@ export async function assertNoHiddenInfoLeak<G extends Game>(
 
   if (activeMarkers.length === 0) return;
 
-  const wrapper = await renderAsSeat(testGame, seat, options.gameViewOverride);
+  const wrapper = await renderAsSeat(testGame, seat, {
+    gameViewOverride: options.gameViewOverride,
+    component: options.component,
+    componentProps: options.componentProps,
+  });
   try {
     const surfaces = collectScopedSurfaceStrings(wrapper);
 
