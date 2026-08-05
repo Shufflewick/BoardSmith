@@ -975,3 +975,48 @@ describe('cross-file consistency — every referenced path resolves on disk', ()
     });
   }
 });
+
+/**
+ * Context floor + ceiling at the ingest→build seam (SKILLAUTO-06).
+ *
+ * Regression: an ingest session wound down at 24% context ("this is a clean resume point,
+ * run /clear then /bs-build-chunk") because `ingest-rules.md` carried no context rule at
+ * all — the ≥50% floor lived only in `state-machine.md` and `build-chunk.md`, neither of
+ * which the ingest orchestrator is required to consult before ending its turn.
+ */
+describe('context floor + ceiling — ingest-rules.md (SKILLAUTO-06)', () => {
+  it('states both numbers: the >=50% wind-down floor and the ~60% ceiling', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toMatch(/50%/);
+    expect(ingestRules).toMatch(/60%/);
+  });
+
+  it('forbids winding down below the floor on a self-assessed hunch', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/Below 50% used, this session never winds down/i);
+    expect(ingestRules).toMatch(/never suggests a `\/clear`/i);
+  });
+
+  it('gives an authoritative harness warning precedence over the floor', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/harness.*signals below the floor, obey it immediately/i);
+  });
+
+  it('cites state-machine.md rather than restating the full rule', () => {
+    const ingestRules = read('ingest-rules.md');
+    expect(ingestRules).toContain('Context floor +\nceiling');
+  });
+
+  it('treats the ingest→build seam as a continuation seam, not a session terminus', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/continuation seam, not a session terminus/i);
+    expect(ingestRules).toMatch(/auto-advance.*into `\/bs-build-chunk`.*in the same session/i);
+    expect(ingestRules).toMatch(/Do not end the turn telling the designer to `\/clear`/i);
+  });
+
+  it('state-machine.md names the ingest→build seam and scopes the floor to every bs- session', () => {
+    const stateMachine = flat(read('state-machine.md'));
+    expect(stateMachine).toMatch(/ingest→build seam is a continuation seam/i);
+    expect(stateMachine).toMatch(/govern \*\*every\*\* `bs-` session/i);
+  });
+});

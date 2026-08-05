@@ -246,11 +246,23 @@ export function applyTheme(
   // (c) Write token overrides — only --bsg-* keys with string values
   if (overrides) {
     const root = html;
+    const rejected: string[] = [];
     for (const [key, value] of Object.entries(overrides)) {
       if (BSG_KEY_RE.test(key) && typeof value === 'string') {
         root.style.setProperty(key, value);
+        continue;
       }
-      // Non-bsg keys are silently ignored (host→iframe injection guard)
+      // Rejected keys are dropped (host→iframe injection guard) but never
+      // dropped quietly — a theme written against the wrong key names would
+      // otherwise be a silent no-op.
+      rejected.push(key);
+    }
+    if (rejected.length > 0) {
+      console.warn(
+        `[boardsmith] applyTheme ignored ${rejected.length} override(s): ${rejected.join(', ')}. ` +
+          `Only --bsg-* custom properties with string values are applied ` +
+          `(e.g. { '--bsg-accent': '#00d9ff' }). See docs/ui-components.md "Theming" for the token list.`,
+      );
     }
   }
 }

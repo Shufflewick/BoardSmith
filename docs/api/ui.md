@@ -218,9 +218,9 @@ const { flyingElements } = useFlyingElements({
 
 ### Theming
 
-- `applyTheme()` - Apply theme to game
-- `getTheme()` - Get current theme
-- `themeCSS()` - Generate theme CSS
+- `applyTheme(overrides?, options?)` - Inject the Slate token stylesheet and write `--bsg-*` overrides. Keys that are not `--bsg-*` custom properties are rejected.
+- `themeCSS` - The Slate token stylesheet as a string constant (not a function)
+- `SEAT_PALETTE` - Seat color values backing `--bsg-seat-1` … `--bsg-seat-6`
 
 ### Player Colors
 
@@ -243,7 +243,6 @@ const { flyingElements } = useFlyingElements({
 - `FlyOnAppearOptions` - Fly-on-appear options
 - `HexOrientation` - Hex orientation type
 - `HexGridOptions` - Hex grid options
-- `ThemeConfig` - Theme configuration
 - `ColorChoice` - Color choice option
 
 ## Examples

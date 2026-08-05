@@ -49,6 +49,20 @@ re-reading a slice file the orchestrator just had a subagent write. This applies
 below; `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` restates it because that is the step where the temptation to
 "double-check by reading the slice" is strongest.
 
+## Context Floor + Ceiling (SKILLAUTO-06)
+
+This session obeys the same two numbers every other `bs-` skill does — see
+`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams" → "Context floor +
+ceiling" for the full rule; do not restate it beyond this summary. **≥50% floor, ~60% ceiling.**
+Below 50% used, this session never winds down, never wraps up, and never suggests a `/clear` —
+"the sketch is done, this feels like a clean resume point" is exactly the premature bail the floor
+forbids. Stopping at 24% or 40% because the work ahead "feels big" is a bug, not prudence. The one
+authoritative override is a real harness context-low warning: if the harness itself signals below
+the floor, obey it immediately, persist, and stop.
+
+Read the harness's actual context-usage percentage against these numbers. Never stop on a vague
+"this is getting long" hunch that ignores the real figure.
+
 ## Step 0: State Detection (INGEST-07)
 
 On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
@@ -275,8 +289,19 @@ Never restate template or state-machine content inline in this file or in the wr
 files beyond what each template already documents — fill the placeholders, don't reinvent the
 structure.
 
-End the session by printing the exact next command to run (`/bs-build-chunk`) and confirming
-everything is saved in the game folder.
+## Step 8: Continue Into the First Chunk
+
+**The ingest→build seam is a continuation seam, not a session terminus** — the same rule
+`state-machine.md` gives the chunk→chunk seam ("Cross-chunk continuation") applies here. Once the
+files are written, confirm in a sentence that everything is saved, then **auto-advance straight
+into `/bs-build-chunk` for the first chunk in the same session**, stopping at that chunk's first
+human gate (its `ask` approval). Do not end the turn telling the designer to `/clear` and re-invoke.
+
+Stop at this seam ONLY if one of the state-machine's three stop conditions actually holds: the
+designer said stop, an automated step is stuck, or context is at/above the ~60% ceiling (or the
+harness surfaced a real context-low warning) — **and never below the ≥50% floor** on a
+self-assessed hunch, per "Context Floor + Ceiling" above. If a stop condition does hold, print the
+exact next command (`/bs-build-chunk`) as the cold-resume path and say what it will pick up.
 
 ## Reference Files
 

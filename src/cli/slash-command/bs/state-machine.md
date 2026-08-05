@@ -365,8 +365,15 @@ always sees what is coming (and can say "stop") before that chunk's first gate; 
 condition *does* fire at this boundary — it is never the default end-of-close signal, and silence
 from the user means auto-advance, not a wait for re-invocation.
 
+**The ingest→build seam is a continuation seam too.** `/bs-ingest-rules` Step 7 writing `SKETCH.md`
+and the first `CHUNK.md` files is the same kind of boundary as `close`→next chunk: durable, and NOT
+a session terminus. The ingest session auto-advances into the first chunk's `/bs-build-chunk` work
+and stops at that chunk's `ask` gate, subject to the identical (a)/(b)/(c) stop conditions and the
+floor+ceiling below. See `ingest-rules.md` "Step 8: Continue Into the First Chunk".
+
 **Context floor + ceiling (SKILLAUTO-06).** Two numbers govern context, and both must hold at
-once: a **≥50% wind-down FLOOR** and the existing **60% "obey-the-harness-warning" CEILING**. The
+once: a **≥50% wind-down FLOOR** and the existing **60% "obey-the-harness-warning" CEILING**. These
+numbers govern **every** `bs-` session — `bs-ingest-rules` as much as `bs-build-chunk`. The
 floor comes first — **the session never winds down before at least 50% of the context window is
 consumed.** Stopping earlier (e.g. at 40% because the work "feels big") is exactly the premature
 bail this floor forbids, regardless of how the work "feels." Below 60%, the session keeps

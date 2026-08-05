@@ -7,12 +7,15 @@
  *   2. themeCSS contains Slate light override
  *   3. themeCSS contains all six --bsg-seat-1..6 declarations; SEAT_PALETTE has length 6
  *   4. applyTheme({'--bsg-accent':'#abc'}) writes the inline value
- *   5. applyTheme ignores non-bsg keys (injection guard)
+ *   5. applyTheme ignores non-bsg keys (injection guard) and warns naming them (never a silent no-op)
  *   6. applyTheme({}, {scheme:'light'}) sets data-theme; scheme:'auto' removes it
  *   7. applyTheme is idempotent — injects exactly one <style id="bsg-tokens"> even when called twice
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { applyTheme, themeCSS, SEAT_PALETTE } from './theme.js';
 
 function cleanup(): void {
@@ -107,6 +110,25 @@ describe('applyTheme — override knob', () => {
     expect(document.documentElement.style.getPropertyValue('--bsg-ok')).toBe('#0f0');
   });
 
+  it('warns (naming the keys) when overrides are rejected — never a silent no-op', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    applyTheme({ primary: '#00d9ff', background: '#1a1a2e', '--bsg-ok': '#0f0' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = warn.mock.calls[0]![0] as string;
+    expect(message).toContain('primary');
+    expect(message).toContain('background');
+    expect(message).not.toContain('--bsg-ok');
+    expect(message).toContain('--bsg-');
+    warn.mockRestore();
+  });
+
+  it('does not warn when every override is a valid --bsg-* key', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    applyTheme({ '--bsg-accent': '#abc' });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('sets data-theme="light" when scheme is forced to light', () => {
     applyTheme(undefined, { scheme: 'light' });
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
@@ -157,5 +179,44 @@ describe('applyTheme — base injection idempotence', () => {
     const style = document.getElementById('bsg-tokens') as HTMLStyleElement | null;
     expect(style).not.toBeNull();
     expect(style!.textContent).toContain('--bsg-bg: #121417');
+  });
+});
+
+/**
+ * Documentation drift guard.
+ *
+ * Regression: docs/ui-components.md "Theming" taught `applyTheme({ primary, background,
+ * text, ... })` against a `ThemeConfig` type that never existed. Every one of those keys
+ * was rejected by BSG_KEY_RE, so a theme copied from the docs was a total no-op. Pin the
+ * documented example to the real contract: every key it teaches must actually apply, and
+ * the phantom type must not come back.
+ */
+describe('docs/ui-components.md "Theming" example matches the real contract', () => {
+  beforeEach(cleanup);
+
+  const docs = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../docs/ui-components.md'),
+    'utf-8',
+  );
+
+  // The prose deliberately names ThemeConfig to say it does NOT exist; what must never
+  // come back is importing it or annotating with it.
+  it('never imports or annotates with a ThemeConfig type (it does not exist in src/)', () => {
+    expect(docs).not.toMatch(/type ThemeConfig|:\s*ThemeConfig|ThemeConfig\s*[=<]/);
+  });
+
+  it('every --bsg-* key in the Theming example is actually applied by applyTheme', () => {
+    const section = docs.slice(docs.indexOf('## Theming'), docs.indexOf('## Animation Events'));
+    const keys = [...section.matchAll(/'(--bsg-[a-z0-9-]+)'/g)].map((m) => m[1]!);
+    expect(keys.length).toBeGreaterThan(0);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    applyTheme(Object.fromEntries(keys.map((k) => [k, '#010203'])));
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+
+    for (const key of keys) {
+      expect(document.documentElement.style.getPropertyValue(key), `${key} must apply`).toBe('#010203');
+    }
   });
 });

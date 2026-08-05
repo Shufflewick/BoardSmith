@@ -1133,24 +1133,53 @@ await snapshot.animate();
 
 ## Theming
 
-Customize the UI appearance with themes.
+`applyTheme()` is the only theming knob. It injects the Slate token stylesheet (once, idempotently)
+and writes your overrides as inline custom properties on `<html>`.
 
 ```typescript
-import { applyTheme, type ThemeConfig } from 'boardsmith/ui';
+import { applyTheme } from 'boardsmith/ui';
 
-const customTheme: ThemeConfig = {
-  primary: '#00d9ff',
-  secondary: '#00ff88',
-  background: '#1a1a2e',
-  surface: '#16213e',
-  text: '#ffffff',
-  textMuted: '#888888',
-  error: '#e74c3c',
-  success: '#00ff88',
-};
-
-applyTheme(customTheme);
+applyTheme({
+  '--bsg-accent': '#00d9ff',
+  '--bsg-accent-2': '#00ff88',
+  '--bsg-accent-ink': '#04211d',
+  '--bsg-bg': '#1a1a2e',
+  '--bsg-surface': '#16213e',
+  '--bsg-ink': '#ffffff',
+  '--bsg-ink-2': '#888888',
+  '--bsg-danger': '#e74c3c',
+  '--bsg-ok': '#00ff88',
+});
 ```
+
+**Keys must be `--bsg-*` custom property names.** The signature is
+`applyTheme(overrides?: Record<string, string>, options?: { scheme?: 'light' | 'dark' | 'auto' })`,
+and every key is filtered through `/^--bsg-[a-z0-9-]+$/` before it is written — this is the
+injection guard that stops an untrusted host page from pushing arbitrary CSS through the
+`init.theme` postMessage. A key like `primary` or `background` is **not** a token name: it is
+dropped (with a console warning naming the rejected keys) and nothing about the theme changes.
+There is no `ThemeConfig` type — the overrides argument is a plain `Record<string, string>`.
+
+Force a color scheme independently of the OS preference:
+
+```typescript
+applyTheme(undefined, { scheme: 'light' });  // sets <html data-theme="light">
+applyTheme(undefined, { scheme: 'auto' });   // clears it; follows prefers-color-scheme
+```
+
+Common tokens (the full set lives in `src/ui/theme.ts`, the single source of truth):
+
+| Token | Role |
+| --- | --- |
+| `--bsg-bg`, `--bsg-bg-2` | Page ground |
+| `--bsg-surface`, `--bsg-surface-2`, `--bsg-surface-3` | Raised panels |
+| `--bsg-ink`, `--bsg-ink-2`, `--bsg-ink-3` | Text: primary, secondary, tertiary |
+| `--bsg-line`, `--bsg-line-2` | Borders and dividers |
+| `--bsg-accent`, `--bsg-accent-2`, `--bsg-accent-ink` | Accent, hover accent, text on accent |
+| `--bsg-danger`, `--bsg-ok`, `--bsg-warn` | Status colors |
+| `--bsg-seat-1` … `--bsg-seat-6` | Per-seat player colors |
+| `--bsg-font`, `--bsg-display`, `--bsg-mono` | Font stacks |
+| `--bsg-r-sm/md/lg/pill`, `--bsg-s1`…`--bsg-s6` | Radii and spacing steps |
 
 ## Animation Events
 
