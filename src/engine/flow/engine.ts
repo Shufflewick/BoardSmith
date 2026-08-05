@@ -1738,9 +1738,21 @@ export class FlowEngine<G extends Game = Game> {
       return { continue: true, awaitingInput: false };
     }
 
-    // If no players need to act, complete immediately -- nobody is left who
-    // could ever satisfy allDone, so there is nothing to usefully await.
+    // If no players need to act, the step is over -- but only when the game has
+    // not declared its own completion condition. A custom `allDone` was
+    // consulted just above and returned false, which makes it authoritative:
+    // completing here anyway would advance the flow into a state the game
+    // explicitly says has not been reached. That is BUG 7's failure -- a seat
+    // is absent from `awaitingPlayers` merely because it cannot currently form
+    // a legal action (a depleted hand), not because it is done, so the next
+    // node reads the half-built state the step was supposed to guard. Staying
+    // awaiting with an empty set is an honest stall the game can resolve (refill
+    // the hand, reach a terminator); force-advancing is not recoverable.
     if (this.awaitingPlayers.length === 0) {
+      if (config.allDone) {
+        this.warnIfDeadlockedSimultaneousStep(config);
+        return { continue: false, awaitingInput: true };
+      }
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
