@@ -62,7 +62,7 @@ export {
   AbilityManager,
 } from './player/index.js';
 
-export type { Ability } from './player/index.js';
+export type { Ability, PlayerStatus } from './player/index.js';
 
 // Scoring system (tracks for dice/roll-and-write games)
 export {

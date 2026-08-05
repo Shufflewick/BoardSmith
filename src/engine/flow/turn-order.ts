@@ -50,11 +50,15 @@ export const TurnOrder = {
   } satisfies TurnOrderConfig,
 
   /**
-   * Only players who haven't been eliminated (checks player.eliminated if it exists)
+   * Only seats whose {@link Player.status} is `'active'`.
+   *
+   * Skips both `'eliminated'` (gone) and `'dormant'` (temporarily out, e.g. a
+   * pre-allocated seat nobody has taken yet). For game-specific conditions —
+   * folded, passed, stunned — use {@link TurnOrder.SKIP_IF} instead.
    */
   ACTIVE_ONLY: {
     direction: 'forward' as const,
-    filter: (player: Player) => !(player as any).eliminated,
+    filter: (player: Player) => player.isActive,
   } satisfies TurnOrderConfig,
 
   /**

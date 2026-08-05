@@ -4,6 +4,25 @@ import type { Game } from '../element/game.js';
 import type { ElementContext, ElementClass, ElementFinder, ElementJSON } from '../element/index.js';
 
 /**
+ * Seat liveness, as the engine understands it.
+ *
+ * This is the ONLY seat-state vocabulary the engine acts on — `TurnOrder.ACTIVE_ONLY`
+ * filters on it, and hosts/AI controllers can read it without knowing a game's rules.
+ * Anything finer-grained (folded, stunned, passed-this-round) is game state and
+ * belongs on your own `Player` subclass; do not overload these three.
+ *
+ * - `'active'` — a live participant. The default for every seat.
+ * - `'dormant'` — temporarily not participating, but expected back: an unfilled
+ *   pre-allocated seat, a character who has not arrived yet, a player on hold.
+ * - `'eliminated'` — out of the game permanently.
+ *
+ * Both non-active states are skipped by {@link TurnOrder.ACTIVE_ONLY}; the
+ * distinction is for the host and the UI, which treat "will return" and "gone"
+ * differently.
+ */
+export type PlayerStatus = 'active' | 'dormant' | 'eliminated';
+
+/**
  * Base Player class representing a participant in the game.
  *
  * **Players are GameElements**: Players live in the game's element tree as direct children
@@ -134,6 +153,31 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
   colorLabel?: string;
 
   /**
+   * Seat liveness — `'active'` (default), `'dormant'`, or `'eliminated'`.
+   *
+   * A first-class field, not a convention: `TurnOrder.ACTIVE_ONLY` filters on it,
+   * it serializes with the rest of the tree, and it is visible to every seat
+   * (who is still in the game is public information in every game that has the
+   * concept). Set it directly from rule code:
+   *
+   * ```typescript
+   * .execute((args, ctx) => {
+   *   ctx.player.status = 'eliminated';
+   * });
+   *
+   * eachPlayer({ ...TurnOrder.ACTIVE_ONLY, do: actionStep({ actions: ['play'] }) })
+   * ```
+   *
+   * Keep game-specific seat conditions (folded, passed, stunned) on your own
+   * `Player` subclass and filter with {@link TurnOrder.SKIP_IF} — this field is
+   * the engine-wide vocabulary, deliberately narrow.
+   *
+   * @see {@link PlayerStatus}
+   * @see {@link isActive}
+   */
+  status: PlayerStatus = 'active';
+
+  /**
    * Whether this player is currently taking their turn.
    * @internal Use {@link isCurrent} and {@link setCurrent} instead.
    */
@@ -158,6 +202,22 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    */
   get isFirstPlayer(): boolean {
     return this.seat === 1;
+  }
+
+  /**
+   * Whether this seat is a live participant (`status === 'active'`).
+   *
+   * The positive form, so rule code reads as a rule rather than as a negated
+   * enum comparison.
+   *
+   * @example
+   * ```typescript
+   * const survivors = game.all(Player, p => p.isActive);
+   * if (survivors.length === 1) game.finish(survivors[0]);
+   * ```
+   */
+  get isActive(): boolean {
+    return this.status === 'active';
   }
 
   /**
