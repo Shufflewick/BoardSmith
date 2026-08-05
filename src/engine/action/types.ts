@@ -330,14 +330,35 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
 /**
  * Enter text
  */
+/**
+ * The `maxLength` `enterText()` applies when a game does not set its own.
+ *
+ * There is no "unbounded" option, on purpose. Player-authored text lands in the
+ * element tree, and the tree is copied into every retained undo checkpoint and
+ * into every per-seat player view — so a text field's real cost is its length
+ * multiplied by the action count AND the seat count (see `docs/state-size.md`).
+ * A field with no ceiling is a state-size hazard that only shows up in
+ * production, at which point the game is too large to act on.
+ *
+ * 256 is deliberately generous — a name, a label, a short note — and small
+ * enough that no realistic number of them can blow a host's state budget on
+ * their own. Games that want prose should raise it knowingly and measure.
+ */
+export const DEFAULT_TEXT_MAX_LENGTH = 256;
+
 export interface TextSelection extends BaseSelection<string> {
   type: 'text';
   /** Pattern to validate against */
   pattern?: RegExp;
   /** Min length */
   minLength?: number;
-  /** Max length */
-  maxLength?: number;
+  /**
+   * Max length. ALWAYS set — `enterText()` applies
+   * {@link DEFAULT_TEXT_MAX_LENGTH} when the game does not, so no text
+   * selection is ever unbounded. Required (not optional) so a reader can rely
+   * on there being a bound to enforce and to surface in the UI.
+   */
+  maxLength: number;
 }
 
 /**

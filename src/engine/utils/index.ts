@@ -27,6 +27,7 @@ export type {
   ActionCheckpoint,
   ActionCheckpointWindow,
   CheckpointAbsence,
+  CheckpointPolicy,
   PlayerStateView,
 } from './snapshot.js';
 

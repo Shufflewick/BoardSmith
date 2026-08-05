@@ -263,12 +263,34 @@ testGame.game.deckSize;   // no JSON parsing, full IDE autocomplete
 function `getPlayerView` delegates to, for callers that only have a raw
 `Game` instance and not a `TestGame`/`GameRunner`.
 
-## Undo, Checkpoint & Replay
+## Undo, Checkpoint & Time-Travel
 
-BoardSmith's game state is event-sourced: every action appends to a
-recorded history, and the current state is always reconstructible by
-replaying that history from the start. Time-travel — undo, rewind, and
-diffing — is built on this, not on ad-hoc snapshots.
+BoardSmith is **state-authoritative**, not event-sourced. The source of
+truth is the current element tree; `actionHistory` is a record of what
+happened, and it is never replayed to rebuild state.
+
+Time-travel is built on **per-action checkpoints**: on every recorded
+action the runner captures a full copy of the tree (plus flow position,
+element-sequence counter, and RNG state) into
+`snapshot.actionCheckpoints`. Undo, rewind, and `getStateAtAction` all
+restore the checkpoint at the target action count *directly*
+(`GameRunner.fromCheckpoint`) — nothing is re-run.
+
+This is deliberate, and it is the reason replay is not an option: a
+selection step's mutations (`Piece.putInto` inside a completed pending
+action, for instance) are recorded in **neither** the command history nor
+the action history. Replaying an action history therefore loses them and
+mis-positions the flow — which crashed real games before checkpoints
+existed. See `GameRunner.fromSnapshot`'s docstring in
+`src/runtime/runner.ts` for the full rationale.
+
+The direct consequence is a cost that surprises people: a saved game is
+the tree **plus one tree copy per retained action**, so it grows on every
+action while the tree itself does not. Bound it with
+`checkpoints: { max }` on the game definition. Read
+[state-size.md](./state-size.md) before shipping anything with a high
+action count — an undo that reaches past the retained window is refused
+with a message naming the policy, rather than approximated.
 
 These five methods live on `GameSession` (`boardsmith/session`) — the
 stateful session wrapper used by the dev server and production hosts, not
@@ -282,10 +304,11 @@ move" feature for a real session).
 import { GameSession, type UndoResult, type ElementDiff } from 'boardsmith/session';
 ```
 
-- **`session.getStateAtAction(actionIndex, playerPosition)`** — reconstruct
-  the perspective-correct state as of a specific point in the action
-  history (replays a temporary game up to that index). Returns
-  `{ success, state?, error? }`.
+- **`session.getStateAtAction(actionIndex, playerPosition)`** — the
+  perspective-correct state as of a specific action count, restored from
+  the checkpoint captured at that boundary (not replayed). Returns
+  `{ success, state?, error? }`; fails with a message distinguishing
+  "pruned by the retention policy" from "never captured".
 - **`session.getStateDiff(fromIndex, toIndex, playerPosition)`** — compute
   which element IDs were added, removed, or changed between two action
   indices. Returns `{ success, diff?: ElementDiff, error? }`.
@@ -310,10 +333,13 @@ const snapshot = testGame.getSnapshot();   // GameStateSnapshot — action histo
 ```
 
 A `GameStateSnapshot` is a self-contained, JSON-serializable record of the
-game type, seed, and full action history (`SerializedAction[]`) — the
-canonical way to persist a game and later reconstruct it exactly, since
-the game state is fully determined by replaying that history against the
-seed (see Determinism below).
+**whole game state** — the serialized element tree, the flow position, the
+element-sequence counter, the RNG's internal position, the game type and
+seed, and the action history. `GameRunner.fromSnapshot` restores all of
+that directly. The action history rides along for diagnostics and for the
+checkpoint machinery; restoring does **not** replay it, and the RNG
+resumes from its captured position rather than being re-derived by
+re-running draws.
 
 ## Determinism & Seeding
 
@@ -321,8 +347,10 @@ Every `Game` owns a seeded RNG (`game.random`, a `SeededRandom` — a
 mulberry32 generator whose internal numeric state can be read and
 restored). Games never call `Math.random()` directly; any in-game
 randomness (shuffles, dice rolls, `choices` selection) goes through
-`game.random()` so a recorded seed + action history fully determines a
-replay.
+`game.random()`, so re-running the same actions against the same seed
+produces an identical game. That is what makes a failing run reproducible
+from a seed — it is not how a saved game is restored (restore is
+state-authoritative; see above).
 
 ```typescript
 const testGame = createTestGame(GoFishGame, {
@@ -344,12 +372,17 @@ game.getRandomState(): number       // read the RNG's internal state (for custom
 game.setRandomState(state): void    // restore it — the next game.random() draw matches exactly
 ```
 
-Because state is fully determined by `(seed, actionHistory)`, a replay is
-just: construct a new game with the same seed, then re-submit the same
-sequence of actions in order. This is exactly what
-`GameSession.getStateAtAction` / `rewindToAction` do internally, and what
-`GameStuckError`'s recorded `flowState` + `TestGame.getActionHistory()`
-give you enough information to reproduce by hand.
+To reproduce a run by hand, construct a new game with the same seed and
+re-submit the same sequence of actions in order. `GameStuckError`'s
+recorded `flowState` plus `TestGame.getActionHistory()` give you enough
+to do it.
+
+This is a **debugging technique, not the restore mechanism.** The engine
+never rebuilds state this way (see "Undo, Checkpoint & Time-Travel"
+above), and it does not reach every state: actions with selection steps
+mutate the tree outside the action history, so a hand-replay of a game
+containing them will diverge. Use it on plain action sequences; use a
+snapshot when you need the state back exactly.
 
 ```typescript
 const seed = testGame.getSnapshot().seed;

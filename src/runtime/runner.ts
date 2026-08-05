@@ -23,46 +23,17 @@ import {
   type PlayerStateView,
   type PendingActionState,
   type ActionDefinition,
+  type CheckpointPolicy,
 } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
 
 /**
- * How many per-action undo checkpoints a game retains.
- *
- * Each checkpoint is a full copy of the element tree, so the default —
- * retain everything — makes a snapshot grow by one tree per action for the
- * life of the game. The tree stops growing; the snapshot does not. A game
- * with a high action count (18xx, campaign/legacy, worker placement with
- * many small actions) will eventually exceed whatever its host allows a
- * saved game to be.
- *
- * Declare a policy on the game definition to bound it:
- *
- * ```ts
- * export const gameDefinition = {
- *   // ...
- *   checkpoints: { max: 20 },
- * };
- * ```
- *
- * `max` must exceed the most actions ONE SEAT takes in a single turn: undo
- * restores the checkpoint at that seat's turn-start action count, and an undo
- * reaching past the retained window is refused (with a message naming the
- * policy) rather than silently replaying or approximating.
+ * Re-exported so `boardsmith/runtime` keeps naming the policy type alongside
+ * `GameRunnerOptions`. Its single definition lives in the engine
+ * (`engine/utils/snapshot.ts`) so a published bundle can name it from the two
+ * modules it is allowed to import — `boardsmith` and `boardsmith/session`.
  */
-export interface CheckpointPolicy {
-  /**
-   * Maximum checkpoints retained; the oldest are dropped first.
-   * Default: unbounded — retain one per action, forever.
-   */
-  max?: number;
-  /**
-   * Capture checkpoints at all. `false` disables undo and debug time-travel
-   * entirely, and is the only way to make a game's snapshot size independent
-   * of its action count. Default: `true`.
-   */
-  enabled?: boolean;
-}
+export type { CheckpointPolicy };
 
 /**
  * Options for creating a game runner

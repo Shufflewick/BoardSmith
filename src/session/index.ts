@@ -35,6 +35,8 @@
 // Types
 // ============================================
 
+export type { CheckpointPolicy } from '../engine/index.js';
+
 export type {
   GameClass,
   GameDefinition,

@@ -62,7 +62,7 @@ export {
   AbilityManager,
 } from './player/index.js';
 
-export type { Ability } from './player/index.js';
+export type { Ability, PlayerStatus } from './player/index.js';
 
 // Scoring system (tracks for dice/roll-and-write games)
 export {
@@ -129,6 +129,9 @@ export {
 
 // Action temp state helper (for choices → execute state persistence)
 export { actionTempState, type ActionTempState } from './action/index.js';
+
+// Default ceiling applied to every `enterText()` selection (see docs/state-size.md)
+export { DEFAULT_TEXT_MAX_LENGTH } from './action/index.js';
 
 export type {
   AnnotatedChoice,
@@ -251,6 +254,7 @@ export type {
   ActionCheckpoint,
   ActionCheckpointWindow,
   CheckpointAbsence,
+  CheckpointPolicy,
   PlayerStateView,
   // Dev state types
   DevSnapshot,

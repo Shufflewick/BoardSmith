@@ -77,7 +77,7 @@ export function toDebugString(game: Game, options: DebugStringOptions = {}): str
     // Common attributes
     if (typeof playerAny.score === 'number') attrs.push(`score=${playerAny.score}`);
     if (typeof playerAny.actionsRemaining === 'number') attrs.push(`actions=${playerAny.actionsRemaining}`);
-    if (playerAny.eliminated) attrs.push('ELIMINATED');
+    if (player.status !== 'active') attrs.push(player.status.toUpperCase());
 
     // Count elements in player spaces
     const handCount = playerAny.hand?.all?.()?.length;

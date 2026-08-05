@@ -459,7 +459,7 @@ describe('FlowEngine', () => {
       game.registerAction(
         Action.create('act').execute((args, ctx) => {
           if (ctx.player.seat === 1) {
-            (ctx.game.getPlayerOrThrow(2) as any).eliminated = true;
+            ctx.game.getPlayerOrThrow(2).status = 'eliminated';
           }
           return { success: true };
         })
@@ -467,7 +467,7 @@ describe('FlowEngine', () => {
 
       const flow = defineFlow({
         root: eachPlayer({
-          filter: (player) => !(player as any).eliminated,
+          filter: (player) => player.isActive,
           do: actionStep({ actions: ['act'] }),
         }),
       });
@@ -1951,16 +1951,12 @@ describe('Turn Order Presets', () => {
     expect(visitedPlayers).toEqual([3, 1, 2]);
   });
 
-  it('should use ACTIVE_ONLY to skip eliminated players', () => {
-    // Create a game class that tracks eliminated status
-    class EliminablePlayer extends Player {
-      eliminated = false;
-    }
-    class EliminableGame extends Game<EliminableGame, EliminablePlayer> {}
-
-    const eliminableGame = new EliminableGame({ playerCount: 3 });
-    // Mark player at position 2 as eliminated (1-indexed)
-    (eliminableGame.getPlayer(2) as any).eliminated = true;
+  it.each([
+    ['eliminated' as const],
+    ['dormant' as const],
+  ])('should use ACTIVE_ONLY to skip %s players', (status) => {
+    const activeOnlyGame = new TestGame({ playerCount: 3 });
+    activeOnlyGame.getPlayerOrThrow(2).status = status;
 
     const visitedPlayers: number[] = [];
 
@@ -1973,11 +1969,29 @@ describe('Turn Order Presets', () => {
       }),
     });
 
-    const engine = new FlowEngine(eliminableGame, flow);
+    const engine = new FlowEngine(activeOnlyGame, flow);
     engine.start();
 
-    // Player 1 is eliminated, should be skipped
+    // Seat 2 is not active, so it is skipped
     expect(visitedPlayers).toEqual([1, 3]);
+  });
+
+  it('defaults every seat to active, so ACTIVE_ONLY visits everyone', () => {
+    const activeOnlyGame = new TestGame({ playerCount: 3 });
+    const visitedPlayers: number[] = [];
+
+    const flow = defineFlow({
+      root: eachPlayer({
+        ...TurnOrder.ACTIVE_ONLY,
+        do: execute((ctx) => {
+          visitedPlayers.push(ctx.player!.seat);
+        }),
+      }),
+    });
+
+    new FlowEngine(activeOnlyGame, flow).start();
+
+    expect(visitedPlayers).toEqual([1, 2, 3]);
   });
 });
 

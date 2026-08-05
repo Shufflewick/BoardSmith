@@ -290,10 +290,49 @@ export function playerActions(config: {
 }
 
 /**
- * Pause for multiple players to act simultaneously
+ * Pause for multiple players to act simultaneously.
  *
  * All specified players can take actions in any order until each has completed.
- * The step completes when all players have finished (determined by playerDone or allDone).
+ *
+ * ## The default `allDone` only counts seats that could act when the step opened
+ *
+ * On entry the step builds an AWAITING SET: every seat with at least one
+ * available action. A seat with none is not added. The default completion rule
+ * is "every AWAITING seat is done" — so a seat whose action is *temporarily*
+ * unavailable was never in the set, is never waited for, and is skipped
+ * silently. The step ends early rather than erroring.
+ *
+ * That is correct for a discard step ("no legal discard" means "nothing to
+ * do"). It is wrong for any design where a seat can have no legal move for a
+ * moment and must still act before the round ends.
+ *
+ * **If seats in your game can temporarily have no legal move, pass an explicit
+ * `allDone`** stating the condition the round really ends on:
+ *
+ * ```typescript
+ * simultaneousActionStep({
+ *   actions: ['submitOrder'],
+ *   allDone: (ctx) => ctx.game.all(Player, p => p.isActive)
+ *     .every(p => p.order !== undefined),
+ * })
+ * ```
+ *
+ * A custom `allDone` is authoritative: the step stays open while it returns
+ * `false` even with no eligible actor (the engine warns in dev, because that
+ * state is indistinguishable from a deadlock).
+ *
+ * It is not a complete fix on its own, though — the awaiting set never grows
+ * within one entry, so a seat outside it still cannot act (`resume` is rejected
+ * with "Player N is not awaiting action"). `allDone` converts a silent wrong
+ * answer into a visible stall. To let the seat actually act, either keep its
+ * action AVAILABLE and enforce "not yet" via `playerDone` (preferred — the
+ * participant list then matches the round's real membership), or re-enter the
+ * step (e.g. inside a `loop`), which rebuilds the list.
+ *
+ * @param config.playerDone - Per-seat completion.
+ * @param config.skipPlayer - Exclude a seat from the step entirely.
+ * @param config.allDone - Round-level completion. Defaults to "every awaiting
+ *   seat is done" — see above before relying on it.
  *
  * @example
  * ```typescript
