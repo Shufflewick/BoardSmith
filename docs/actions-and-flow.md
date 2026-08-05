@@ -854,6 +854,58 @@ simultaneousActionStep({
 })
 ```
 
+**The default `allDone` only sees the seats that had a legal move when the step opened.**
+
+On entry, the step builds an *awaiting set*: every seat with at least one available
+action. Seats with none are not added — and the default completion rule is "every
+**awaiting** seat is done". So a seat whose action happens to be unavailable at that
+instant is not waited for, is not errored on, and is simply skipped. The phase ends
+early and silently.
+
+That is fine for a discard step, where "no legal discard" genuinely means "nothing to
+do". It is wrong for any design where a seat can *temporarily* have no legal move but
+must still act before the round ends — a seat waiting on a resource, a character who
+has not arrived, an action gated on another seat's choice.
+
+**If seats in your game can temporarily have no legal move, supply an explicit
+`allDone`.** Write the condition the round actually ends on, in game terms, rather
+than inheriting "whoever could act, acted":
+
+```typescript
+simultaneousActionStep({
+  name: 'orders',
+  actions: ['submitOrder'],
+  // Every LIVING seat has an order on the table -- true regardless of who
+  // happened to have a legal move when the step opened.
+  allDone: (ctx) => ctx.game.all(Player, p => p.isActive)
+    .every(p => p.order !== undefined),
+})
+```
+
+A custom `allDone` is authoritative: the step stays open while it returns `false`,
+even when no seat can currently act. The engine warns in dev when that happens,
+because the state is indistinguishable from a deadlock.
+
+**Know what an explicit `allDone` does and does not buy you.** The awaiting set is
+built once per step *entry* and never grows within it. So:
+
+- It **does** stop the round ending without a seat that was supposed to act.
+- It **does not** let that seat act in this entry. A `resume` for a seat outside the
+  awaiting set is rejected with `Player N is not awaiting action`.
+
+The honest outcome is therefore a visible stall instead of a silent wrong answer —
+which is the right trade, but it is not a fix on its own. To actually get the seat in:
+
+- **Preferred: keep the action available.** Make `submitOrder` legal for every seat
+  that must act and enforce "not yet" inside the action (or via `playerDone`), so the
+  seat is in the awaiting set from the moment the step opens. This is the pit of
+  success — the participant list then matches the round's real membership.
+- **Otherwise: re-enter the step.** Wrap it in a `loop`, so the next entry rebuilds
+  the participant list around whoever can act by then.
+
+Use `playerDone` for per-seat completion, `skipPlayer` to exclude a seat from the step
+entirely, and `allDone` for the round-level condition.
+
 #### `phase` - Named game phase
 
 ```typescript
