@@ -16,6 +16,7 @@ This folder contains documentation for the BoardSmith game framework.
 | [Teaching & Tutorials](./teaching-and-tutorials.md) | Tutorial authoring, AI hints, narrated demo, heatmap, action help, and host lockout |
 | [Agent Control](./agent-control.md) | Driving a game headlessly: action-space introspection, move enumeration, undo/checkpoint/replay, determinism & seeding, scriptable dev host (WS), structured errors |
 | [Migration Guide](./migration-guide.md) | Breaking changes by version, with before→after upgrade steps |
+| [State Size](./state-size.md) | Why saved state is tree size × action count, the `checkpoints` retention policy, and how to assert your budget in CI |
 | [Nomenclature](./nomenclature.md) | Standard terminology reference |
 
 ## For LLMs
