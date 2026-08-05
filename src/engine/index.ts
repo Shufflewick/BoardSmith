@@ -251,6 +251,7 @@ export type {
   ActionCheckpoint,
   ActionCheckpointWindow,
   CheckpointAbsence,
+  CheckpointPolicy,
   PlayerStateView,
   // Dev state types
   DevSnapshot,

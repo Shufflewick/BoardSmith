@@ -9,7 +9,7 @@
 import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
-import type { CheckpointPolicy } from '../runtime/index.js';
+import type { CheckpointPolicy } from '../engine/index.js';
 import type {
   LobbyState,
   SlotStatus,
