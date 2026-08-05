@@ -21,7 +21,9 @@ export {
 // Game runner (runtime-specific)
 export {
   GameRunner,
+  describeCheckpointAbsence,
   type GameRunnerOptions,
+  type CheckpointPolicy,
   type ActionExecutionResult,
 } from './runner.js';
 

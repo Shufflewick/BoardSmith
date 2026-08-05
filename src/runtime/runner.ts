@@ -3,6 +3,8 @@ import {
   deserializeAction,
   createSnapshot,
   createActionCheckpoint,
+  checkpointAt,
+  checkpointCount,
   createPlayerView,
   createAllPlayerViews,
   ActionExecutor,
@@ -17,11 +19,50 @@ import {
   type SerializeOptions,
   type GameStateSnapshot,
   type ActionCheckpoint,
+  type ActionCheckpointWindow,
   type PlayerStateView,
   type PendingActionState,
   type ActionDefinition,
 } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
+
+/**
+ * How many per-action undo checkpoints a game retains.
+ *
+ * Each checkpoint is a full copy of the element tree, so the default —
+ * retain everything — makes a snapshot grow by one tree per action for the
+ * life of the game. The tree stops growing; the snapshot does not. A game
+ * with a high action count (18xx, campaign/legacy, worker placement with
+ * many small actions) will eventually exceed whatever its host allows a
+ * saved game to be.
+ *
+ * Declare a policy on the game definition to bound it:
+ *
+ * ```ts
+ * export const gameDefinition = {
+ *   // ...
+ *   checkpoints: { max: 20 },
+ * };
+ * ```
+ *
+ * `max` must exceed the most actions ONE SEAT takes in a single turn: undo
+ * restores the checkpoint at that seat's turn-start action count, and an undo
+ * reaching past the retained window is refused (with a message naming the
+ * policy) rather than silently replaying or approximating.
+ */
+export interface CheckpointPolicy {
+  /**
+   * Maximum checkpoints retained; the oldest are dropped first.
+   * Default: unbounded — retain one per action, forever.
+   */
+  max?: number;
+  /**
+   * Capture checkpoints at all. `false` disables undo and debug time-travel
+   * entirely, and is the only way to make a game's snapshot size independent
+   * of its action count. Default: `true`.
+   */
+  enabled?: boolean;
+}
 
 /**
  * Options for creating a game runner
@@ -35,6 +76,8 @@ export interface GameRunnerOptions<G extends Game> {
   gameOptions: GameOptions;
   /** Serialization options */
   serializeOptions?: SerializeOptions;
+  /** Per-action undo checkpoint retention. Default: retain everything. */
+  checkpoints?: CheckpointPolicy;
 }
 
 /**
@@ -74,15 +117,27 @@ export class GameRunner<G extends Game = Game> {
   readonly actionHistory: SerializedAction[] = [];
 
   /**
-   * Per-action authoritative undo checkpoints. `actionCheckpoints[k]` is the
+   * The RETAINED WINDOW of per-action authoritative undo checkpoints: the
    * latest LEAN checkpoint (`ActionCheckpoint`: element tree, flow position,
-   * sequence, RNG only) observed while `k` actions were recorded. Carried across
-   * the stateless snapshot boundary (loaded in `fromSnapshot`, emitted by
+   * sequence, RNG only) observed at each action count from
+   * `checkpointBaseIndex` up to the current action count. Carried across the
+   * stateless snapshot boundary (loaded in `fromSnapshot`, emitted by
    * `getSnapshot`) and restored via `fromCheckpoint`, which rehydrates the
-   * snapshot-wide invariants + action-history prefix from the enclosing snapshot.
-   * See `GameStateSnapshot.actionCheckpoints`.
+   * snapshot-wide invariants + action-history prefix from the enclosing
+   * snapshot. See `GameStateSnapshot.actionCheckpoints`.
    */
   private actionCheckpoints: ActionCheckpoint[] = [];
+
+  /**
+   * The action count `actionCheckpoints[0]` was captured at. Non-zero once a
+   * `checkpoints.max` policy has dropped older entries — the whole point of
+   * tracking it is that a lookup below it is provably PRUNED, not missing, so
+   * the refusal can name the policy instead of guessing at a bug.
+   */
+  private checkpointBaseIndex = 0;
+
+  /** This game's checkpoint retention policy. Default: retain everything. */
+  private readonly checkpointPolicy_: Required<CheckpointPolicy>;
 
   /**
    * The durable execute()-barrier fence (UNDO-02, 155-02): the action-history
@@ -167,6 +222,16 @@ export class GameRunner<G extends Game = Game> {
   constructor(options: GameRunnerOptions<G>) {
     this.gameType = options.gameType;
     this.serializeOptions = options.serializeOptions ?? { useBranchPaths: true };
+    this.checkpointPolicy_ = {
+      max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
+      enabled: options.checkpoints?.enabled ?? true,
+    };
+    if (this.checkpointPolicy_.max < 1) {
+      throw new Error(
+        `checkpoints.max must be at least 1 (got ${this.checkpointPolicy_.max}). ` +
+        `Use checkpoints: { enabled: false } to turn checkpointing off entirely.`,
+      );
+    }
 
     this.game = new options.GameClass(options.gameOptions);
 
@@ -190,24 +255,75 @@ export class GameRunner<G extends Game = Game> {
   }
 
   /**
-   * Refresh the per-action undo checkpoint for the current action count.
+   * Refresh the per-action undo checkpoint for the current action count, and
+   * apply the retention policy.
    *
-   * `actionCheckpoints[k]` holds the latest authoritative state observed while
-   * `k` actions are recorded. We keep `[0..len-1]` frozen and overwrite `[len]`
-   * with the current state, dropping any entries beyond `len`. Calling this after
-   * every state change (each recorded action AND each trailing pending/selection
-   * mutation) makes `[len]` capture the complete turn-boundary state — which undo
-   * restores authoritatively. The stateless path calls it via `getSnapshot`; the
-   * stateful `GameSession` calls it from its broadcast funnel.
+   * The checkpoint at action count `k` holds the latest authoritative state
+   * observed while `k` actions are recorded. Retained entries below the head
+   * stay frozen; the head entry is overwritten with the current state; entries
+   * ahead of it (redo state left by an undo) are dropped. Calling this after
+   * every state change — each recorded action AND each trailing
+   * pending/selection mutation — makes the head capture the complete
+   * turn-boundary state, which undo restores authoritatively. The stateless
+   * path calls it via `getSnapshot`; the stateful `GameSession` calls it from
+   * its broadcast funnel.
+   *
+   * Then the window is trimmed to `checkpoints.max` (default: unbounded),
+   * oldest first — so what remains is the most recent range, which is the
+   * range undo can reach. See `CheckpointPolicy` and `docs/state-size.md`.
    */
   captureCheckpoint(): void {
-    const len = this.actionHistory.length;
-    this.actionCheckpoints = this.actionCheckpoints.slice(0, len);
-    this.actionCheckpoints[len] = createActionCheckpoint(this.game);
-    // UNDO-02: also the chokepoint for detecting an execute()-barrier
-    // advance -- see recordExecuteBarrierAdvance's doc comment for why this
-    // is the correct place (not the individual history-append call sites).
+    // UNDO-02: the chokepoint for detecting an execute()-barrier advance --
+    // see recordExecuteBarrierAdvance's doc comment for why this is the
+    // correct place (not the individual history-append call sites). Recorded
+    // FIRST so it still happens for a game that has checkpointing disabled:
+    // the barrier fences undo, it is not part of undo's payload.
     this.recordExecuteBarrierAdvance();
+    if (!this.checkpointPolicy_.enabled) return;
+
+    const len = this.actionHistory.length;
+    const headOffset = len - this.checkpointBaseIndex;
+    if (headOffset < 0) {
+      // The head is BELOW the retained window -- the history was rewound past
+      // everything retained. Nothing in the window describes this timeline any
+      // more, so restart it here rather than keeping entries that claim action
+      // counts the runner no longer has.
+      this.checkpointBaseIndex = len;
+      this.actionCheckpoints = [createActionCheckpoint(this.game)];
+      return;
+    }
+    // Drop anything AHEAD of the head (redo state left by an undo), then
+    // overwrite the head entry itself with the current state.
+    this.actionCheckpoints = this.actionCheckpoints.slice(0, headOffset);
+    this.actionCheckpoints[headOffset] = createActionCheckpoint(this.game);
+
+    // Then drop from the FRONT down to the retention limit. Oldest-first is
+    // what makes the retained window the most recent actions -- the ones undo
+    // can actually reach.
+    const excess = this.actionCheckpoints.length - this.checkpointPolicy_.max;
+    if (excess > 0) {
+      this.actionCheckpoints = this.actionCheckpoints.slice(excess);
+      this.checkpointBaseIndex += excess;
+    }
+  }
+
+  /**
+   * This runner's resolved checkpoint retention policy.
+   *
+   * Exposed so every host path that builds a REPLACEMENT runner (undo, rewind,
+   * HMR reload, new-game reset) can carry the same policy forward by reading it
+   * off the runner it is replacing, instead of re-threading it from the game
+   * definition at each call site. A path that forgets silently reverts that
+   * game to unbounded retention from that point on -- the whole failure this
+   * policy exists to prevent, reintroduced one call site at a time.
+   */
+  get checkpointPolicy(): Required<CheckpointPolicy> {
+    return this.checkpointPolicy_;
+  }
+
+  /** The retained checkpoint window, in the shape a snapshot carries it. */
+  private checkpointWindow(): ActionCheckpointWindow {
+    return { baseIndex: this.checkpointBaseIndex, entries: [...this.actionCheckpoints] };
   }
 
   /**
@@ -514,20 +630,22 @@ export class GameRunner<G extends Game = Game> {
    * Get a complete snapshot of the game state, including the per-action undo
    * checkpoints.
    *
-   * `actionCheckpoints[k]` holds the latest authoritative state observed while
-   * `k` actions were recorded. We keep `[0..len-1]` frozen and refresh `[len]`
-   * to the current state on every call: that captures any trailing
-   * pending/selection mutations (e.g. `Piece.putInto`, recorded in neither
-   * command nor action history) that ran AFTER the k-th action but before the
-   * (k+1)-th, so undoing a later turn restores the true turn-start state.
-   * Entries beyond `len` are dropped (e.g. after an undo rewinds the history).
+   * The checkpoint at action count `k` holds the latest authoritative state
+   * observed while `k` actions were recorded. Retained entries stay frozen and
+   * the head is refreshed to the current state on every call: that captures any
+   * trailing pending/selection mutations (e.g. `Piece.putInto`, recorded in
+   * neither command nor action history) that ran AFTER the k-th action but
+   * before the (k+1)-th, so undoing a later turn restores the true turn-start
+   * state. Entries ahead of the head are dropped (e.g. after an undo rewinds
+   * the history), and entries older than `checkpoints.max` are dropped from the
+   * front.
    */
   getSnapshot(): GameStateSnapshot {
     this.captureCheckpoint();
     const base = createSnapshot(this.game, this.gameType, this.actionHistory, this.seed);
     return {
       ...base,
-      actionCheckpoints: [...this.actionCheckpoints],
+      actionCheckpoints: this.checkpointWindow(),
       executeBarrierIndex: this.executeBarrierIndex,
     };
   }
@@ -608,7 +726,7 @@ export class GameRunner<G extends Game = Game> {
   static fromSnapshot<G extends Game>(
     snapshot: GameStateSnapshot,
     GameClass: new (options: GameOptions) => G,
-    options?: { animationSeqFloor?: number }
+    options?: { animationSeqFloor?: number; checkpoints?: CheckpointPolicy }
   ): GameRunner<G> {
     // Use full gameOptions from snapshot if available, falling back to basic options
     // This ensures custom options like playerConfigs are preserved
@@ -624,16 +742,34 @@ export class GameRunner<G extends Game = Game> {
       GameClass,
       gameType: snapshot.gameType,
       gameOptions: gameOptions as GameOptions,
+      // The retention policy is NOT carried in the snapshot -- it is declared on
+      // the game definition, so every restore must re-supply it. A restore that
+      // forgets it silently reverts that game to unbounded retention on the very
+      // next op, which is the defect this policy exists to prevent.
+      checkpoints: options?.checkpoints,
     });
 
     // Preserve action history for the undo op (which reads runner.actionHistory).
     // It is intentionally NOT replayed.
     runner.actionHistory.push(...snapshot.actionHistory);
 
-    // Carry the per-action undo checkpoints forward so the next getSnapshot keeps
-    // [0..len-1] intact while refreshing [len]. Older snapshots without the field
-    // start fresh (their checkpoint at the current action count is rebuilt below).
-    runner.actionCheckpoints = snapshot.actionCheckpoints ? [...snapshot.actionCheckpoints] : [];
+    // Carry the retained checkpoint window forward so the next getSnapshot keeps
+    // the retained entries intact while refreshing the head one.
+    //
+    // A snapshot with no window -- or one whose `actionCheckpoints` is not a
+    // window at all, which is what a snapshot written by an engine predating
+    // the window looks like -- starts an EMPTY window at the CURRENT action
+    // count, not at 0. Starting at 0 would make the next capture write into
+    // slot `actionHistory.length` of an empty array, leaving a hole per
+    // preceding action: `null`s that serialize, cost bytes forever, and read
+    // back as "a checkpoint that is missing" rather than "a checkpoint that
+    // was never in this window". Undo for the turn in progress is unavailable
+    // either way (there is no turn-start entry to restore); the window simply
+    // rebuilds from here.
+    const window = snapshot.actionCheckpoints;
+    const usable = window && Array.isArray(window.entries) && typeof window.baseIndex === 'number';
+    runner.checkpointBaseIndex = usable ? window.baseIndex : snapshot.actionHistory.length;
+    runner.actionCheckpoints = usable ? [...window.entries] : [];
 
     // UNDO-02: adopt the durable execute()-barrier from the snapshot. Absent
     // (older snapshot predating this field, or no execute() has run yet):
@@ -713,17 +849,21 @@ export class GameRunner<G extends Game = Game> {
    * so subsequent undos/rewinds from it still resolve authoritatively, and its
    * `actionHistory` is the matching prefix `[0..actionIndex)`.
    *
-   * Returns `null` when no checkpoint exists at `actionIndex` (the caller decides
-   * how to surface that).
+   * Returns `null` when no checkpoint exists at `actionIndex`. Callers that
+   * report the failure should ask `describeCheckpointAbsence` why — an entry
+   * dropped by the game's retention policy and an entry that was never captured
+   * are different problems with different fixes.
    */
   static fromCheckpoint<G extends Game>(
     snapshot: GameStateSnapshot,
     actionIndex: number,
-    GameClass: new (options: GameOptions) => G
+    GameClass: new (options: GameOptions) => G,
+    options?: { checkpoints?: CheckpointPolicy }
   ): GameRunner<G> | null {
-    const checkpoints = snapshot.actionCheckpoints;
-    const checkpoint = checkpoints?.[actionIndex];
-    if (!checkpoint) return null;
+    const window = snapshot.actionCheckpoints;
+    const found = checkpointAt(window, actionIndex);
+    if (!found.checkpoint) return null;
+    const checkpoint = found.checkpoint;
 
     // UNDO-04: derive the animation-event floor from the ENCLOSING LIVE
     // snapshot (not the historical checkpoint) so the restored runner's
@@ -753,11 +893,47 @@ export class GameRunner<G extends Game = Game> {
         sequence: checkpoint.sequence,
         randomState: checkpoint.randomState,
         gameOptions: snapshot.gameOptions,
-        actionCheckpoints: checkpoints!.slice(0, actionIndex + 1),
+        // The retained window, truncated at the restore point: entries AHEAD of
+        // `actionIndex` describe a timeline this runner no longer has. The base
+        // is unchanged -- everything already pruned stays pruned.
+        actionCheckpoints: {
+          baseIndex: window!.baseIndex,
+          entries: window!.entries.slice(0, actionIndex - window!.baseIndex + 1),
+        },
         executeBarrierIndex,
       },
       GameClass,
-      { animationSeqFloor },
+      { animationSeqFloor, checkpoints: options?.checkpoints },
     );
   }
+}
+
+/**
+ * Why a checkpoint restore at `actionIndex` failed, as an actionable sentence.
+ *
+ * `GameRunner.fromCheckpoint` returns `null` for two very different reasons,
+ * and reporting them identically is what made the original problem so hard to
+ * diagnose. `pruned` is a policy the game author chose and can change;
+ * `uncaptured` means the snapshot was not produced by `getSnapshot` at all, or
+ * this game has checkpointing disabled.
+ */
+export function describeCheckpointAbsence(
+  snapshot: GameStateSnapshot,
+  actionIndex: number,
+): string {
+  const window = snapshot.actionCheckpoints;
+  const found = checkpointAt(window, actionIndex);
+  if (found.checkpoint) return '';
+  if (found.absence === 'pruned') {
+    return (
+      `action ${actionIndex} is older than this game's retained undo window ` +
+      `(it keeps ${checkpointCount(window)} checkpoint(s), back to action ${window!.baseIndex}). ` +
+      `Raise or remove \`checkpoints: { max }\` on the game definition to reach further back.`
+    );
+  }
+  return (
+    `no checkpoint was captured at action ${actionIndex} ` +
+    `(the snapshot carries ${checkpointCount(window)}). Either the snapshot was not produced by ` +
+    `GameRunner.getSnapshot, or this game sets \`checkpoints: { enabled: false }\`, which disables undo.`
+  );
 }

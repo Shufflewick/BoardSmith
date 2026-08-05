@@ -9,6 +9,7 @@
 import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
+import type { CheckpointPolicy } from '../runtime/index.js';
 import type {
   LobbyState,
   SlotStatus,
@@ -110,6 +111,25 @@ export interface GameDefinition {
    * must NOT be serialized — mirrors the `_actions` / `ai` pattern.
    */
   tutorial?: TutorialDefinition;
+  /**
+   * How many per-action undo checkpoints this game retains.
+   *
+   * A checkpoint is a full copy of the element tree, and one is kept per
+   * action. Left unset, that is retained for the life of the game: the tree
+   * stops growing, the saved game never does, and every byte of game state is
+   * multiplied by the game's total action count. A game with a high action
+   * count (18xx, campaign/legacy, worker placement with many small actions)
+   * will eventually exceed what its host allows a saved game to be.
+   *
+   * ```ts
+   * checkpoints: { max: 20 }   // keep the 20 most recent; older undos refused
+   * checkpoints: { enabled: false }   // no undo, no time-travel, flat size
+   * ```
+   *
+   * `max` must exceed the most actions one seat takes in a single turn — undo
+   * restores that seat's turn-start checkpoint. See `docs/state-size.md`.
+   */
+  checkpoints?: CheckpointPolicy;
 }
 
 // ============================================

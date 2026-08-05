@@ -22,7 +22,7 @@ import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
 import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '../engine/index.js';
-import { GameRunner } from '../runtime/index.js';
+import { GameRunner, type CheckpointPolicy } from '../runtime/index.js';
 import {
   ErrorCode,
   type GameClass,
@@ -152,6 +152,17 @@ export interface GameSessionOptions<G extends Game = Game> {
    *   can escalate severity (e.g. warning -> error) without recomputing it.
    */
   onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void;
+  /**
+   * Per-action undo checkpoint retention, threaded from
+   * `GameDefinition.checkpoints`. Absent: retain one checkpoint per action for
+   * the life of the game, which makes the saved state grow by a full copy of
+   * the element tree per action.
+   *
+   * Every runner this session builds -- create, restore, and both HMR reload
+   * paths -- must be given the same policy: one that forgets it silently
+   * reverts the game to unbounded retention from that point on.
+   */
+  checkpoints?: CheckpointPolicy;
 }
 
 /**
@@ -530,6 +541,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             GameClass,
             gameType: storedState.gameType,
             gameOptions: newGameOptions,
+            // Carry the retention policy off the runner being replaced -- a
+            // replacement runner that drops it silently reverts this game to
+            // unbounded checkpoint retention.
+            checkpoints: session.#runner.checkpointPolicy,
           });
           newRunner.start();
 
@@ -630,6 +645,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       teachingDisabled,
       debugEnabled,
       onPersistenceError,
+      checkpoints,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -668,6 +684,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       GameClass,
       gameType,
       gameOptions: effectiveGameOptions,
+      checkpoints,
     });
 
     // Build lobby slots from player configs
@@ -842,6 +859,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     botAIConfig?: BotAIConfig,
     tutorial?: TutorialDefinition,
     onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void,
+    /**
+     * The game's `GameDefinition.checkpoints` policy. Re-supplied here for the
+     * same reason `tutorial` is: it is code-declared config, deliberately not
+     * persisted in the stored state, so a restore that omits it silently
+     * reverts the game to unbounded checkpoint retention.
+     */
+    checkpoints?: CheckpointPolicy,
   ): GameSession<G> {
     // Snapshot-authoritative restore (audit F42). Reconstruct game state directly
     // from the persisted snapshot via GameRunner.fromSnapshot — NOT by replaying
@@ -862,7 +886,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       );
     }
 
-    const runner = GameRunner.fromSnapshot<G>(storedState.snapshot, GameClass);
+    const runner = GameRunner.fromSnapshot<G>(storedState.snapshot, GameClass, { checkpoints });
 
     // Re-supply static config that is intentionally excluded from the snapshot
     // (see Game constructor — tutorial is stripped from _constructorOptions so
@@ -1633,6 +1657,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       GameClass: definition.gameClass as GameClass<G>,
       gameType: this.#storedState.gameType,
       gameOptions,
+      checkpoints: definition.checkpoints,
     });
 
     // Replace the runner's game with our restored game
@@ -1716,6 +1741,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         GameClass: definition.gameClass as GameClass<G>,
         gameType: this.#storedState.gameType,
         gameOptions: this.#buildGameOptions(),
+        checkpoints: definition.checkpoints,
       },
       this.#storedState.actionHistory
     );
@@ -1783,6 +1809,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         GameClass: definition.gameClass as GameClass<G>,
         gameType: this.#storedState.gameType,
         gameOptions,
+        checkpoints: definition.checkpoints,
       });
 
       // @ts-expect-error - Accessing readonly for HMR

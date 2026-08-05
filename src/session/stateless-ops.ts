@@ -14,7 +14,13 @@ import { ErrorCode } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
-import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
+import {
+  GameRunner,
+  describeCheckpointAbsence,
+  type GameStateSnapshot,
+  type GameRunnerOptions,
+  type CheckpointPolicy,
+} from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import { describeMoveForHint } from './move-summary.js';
 import { PickHandler } from './pick-handler.js';
@@ -193,6 +199,17 @@ export interface GameDefinitionLike {
    * protocol error (fail-loud: no AI config → no hint available).
    */
   ai?: import('../ai/types.js').AIConfig;
+  /**
+   * Optional per-action undo checkpoint retention policy — threaded into EVERY
+   * runner this module builds (fresh, restored, and checkpoint-restored alike).
+   * It is declared on the game definition rather than carried in the snapshot
+   * precisely because every stateless op rebuilds its runner from scratch: a
+   * policy that lived in the snapshot could be silently lost by any op that
+   * forgot to copy it forward, and the game would revert to retaining one full
+   * element-tree copy per action for the rest of its life. Absent: retain
+   * everything (the default).
+   */
+  checkpoints?: CheckpointPolicy;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +338,7 @@ function handleStart(
     GameClass: def.gameClass as GameRunnerOptions<never>['GameClass'],
     gameType: def.gameType,
     gameOptions: effectiveOptions,
+    checkpoints: def.checkpoints,
   } as GameRunnerOptions<never>);
 
   runner.start();
@@ -534,9 +552,8 @@ function handleUndo(
   const restored = runnerFromCheckpoint(def, snapshot, turnStartActionIndex);
   if (!restored) {
     return errorResult(
-      `Cannot undo: no turn-start checkpoint at action index ${turnStartActionIndex} ` +
-      `(snapshot carries ${snapshot.actionCheckpoints?.length ?? 0} checkpoint(s)). The snapshot must be ` +
-      `produced by GameRunner.getSnapshot so per-action checkpoints are present.`,
+      `Cannot undo to the start of this turn: ` +
+      `${describeCheckpointAbsence(snapshot, turnStartActionIndex)}`,
     );
   }
 
@@ -861,6 +878,7 @@ function runnerFromSnapshot(
   const runner = GameRunner.fromSnapshot(
     snapshot,
     def.gameClass as GameRunnerOptions<never>['GameClass'],
+    { checkpoints: def.checkpoints },
   );
   if (def.tutorial) {
     (runner.game as Game).tutorialDefinition = def.tutorial;
@@ -882,7 +900,9 @@ function runnerFromCheckpoint(
 ): GameRunner | null {
   // Carry checkpoints up to and including the restore point so a later getSnapshot
   // keeps the linear history coherent (mirrors the undo op).
-  const runner = GameRunner.fromCheckpoint(snap, actionIndex, gameClassOf(def));
+  const runner = GameRunner.fromCheckpoint(snap, actionIndex, gameClassOf(def), {
+    checkpoints: def.checkpoints,
+  });
   if (runner && def.tutorial) {
     (runner.game as Game).tutorialDefinition = def.tutorial;
   }
