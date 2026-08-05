@@ -12,6 +12,10 @@ structured interview. This skill exists only so that a designer who thinks "crea
 rather than "ingest rules" can find that entry point. There is deliberately **one**
 implementation of project kickoff; keeping planning logic here would fork it.
 
+Anything you say to the designer — here or after the hand-off — follows
+`${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`: lead with what they need to do, describe the game
+in their terms, and keep this pipeline's ids, paths, and step names out of it.
+
 ## What to do
 
 Immediately hand off to `/bs-ingest-rules` and run it verbatim — do not reimplement, summarize,

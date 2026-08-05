@@ -1336,7 +1336,10 @@ describe('SKILLAUTO-07 — loud completion', () => {
   it('build/close.md emits a lighter chunk-level completion line at each chunk close', () => {
     const close = read('build/close.md');
     expect(close).toMatch(/chunk-level completion line/i);
-    expect(close).toMatch(/chunk '<slug>' complete/i);
+    // The line is designer-facing (reporting.md): it names what the game can now do, and the
+    // slug+status form is called out as the shape it must NOT take.
+    expect(close).toMatch(/<what the game can now do> — done and tested/);
+    expect(close).toMatch(/must not be/i);
   });
 
   it('build/close.md distinguishes the chunk-level line from the game-level banner and does not stop the session', () => {

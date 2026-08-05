@@ -141,7 +141,12 @@ distinct from the loud game-level banner `build/final-acceptance.md` "Game-Compl
 Summary Card" emits only once, at the game's own terminus. This line is one-per-chunk, every
 chunk, plain narration rather than a delimited block:
 
-`chunk '<slug>' complete — verified` (or `— verified (user-waived)` for a waived chunk)
+`<what the game can now do> — done and tested` (or `— done, testing skipped at your request` for a
+waived chunk)
+
+Per `reporting.md`, this line names the chunk by what the designer can now do in the game, never by
+its slug and status — "taking a turn — done and tested" reads to them; `chunk '<slug>' complete —
+verified` reads to the pipeline and is exactly what this line must not be.
 
 This line does not itself stop the session or wait for acknowledgment — it is purely a progress
 marker inside the same auto-advance narration this file's "Then auto-advance" section already
@@ -151,10 +156,11 @@ not change that.
 ## Propose the Next Chunk
 
 Once the delta is approved and written, propose the next chunk in the (possibly newly-updated)
-Ordered Chunk List, naming its `ui:` tag (`none | touches | major`) so the user knows up front
-whether the a11y floor and design-review lens will apply to it. Print the exact next command for
-a non-programmer handoff — e.g. "Run `/bs-build-chunk` again to start the next chunk,
-`auction-basic` (ui: touches)."
+Ordered Chunk List. Say what it will add to the game and whether the designer will see it on
+screen (that is what the `ui:` tag means to them — a `touches`/`major` chunk is one they'll be
+asked to look at; a `none` chunk isn't). Per `reporting.md`, do not print the tag's spelling. Print
+the exact next command for a non-programmer handoff — e.g. "Next up: bidding on properties you
+declined. You'll see this one on screen. Run `/bs-build-chunk` to start it."
 
 **`close` does NOT create the next chunk's `chunks/<slug>/CHUNK.md`.** Proposing the next chunk
 names it and prints the command; it never derives that chunk's CHUNK.md. CHUNK.md creation is

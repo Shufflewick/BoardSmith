@@ -72,9 +72,10 @@ recorded disposition is done and is not redone or clobbered by a resuming sessio
 ## Round-3 User Triage — Plain Language, Never Raw
 
 After round 3, any finding still lacking a disposition is triaged with the user directly. Cite
-`build/redteam.md`'s "Vote-Privacy" discipline by name rather than re-deriving it: never show the
-user a raw finding text, an agent transcript, or a severity score. Present exactly three
-plain-language options in designer register, one per finding:
+`build/redteam.md`'s "Vote-Privacy" discipline by name rather than re-deriving it, and
+`reporting.md` for the register: never show the user a raw finding text, an agent transcript, a
+severity score, or a finding id. Describe the finding as what could go wrong in their game, then
+present exactly three plain-language options, one per finding:
 
 - **Real blocker** — this chunk cannot ship with this finding unresolved; keep working it.
 - **Defer to a later chunk** — the finding is legitimate but out of scope for this chunk; record

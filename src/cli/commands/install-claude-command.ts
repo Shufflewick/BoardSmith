@@ -47,9 +47,9 @@ export const SKILL_NAMES: string[] = SKILL_ENTRY_POINTS.map(({ skillName }) => s
 
 /**
  * Single namespaced root the installer owns for the shared reference tree. Everything the
- * skills read in common (build/, ingest/, templates/, aspects/, state-machine.md) lives UNDER
- * this one `bs-`-prefixed dir — `~/.claude/skills/bs-shared/{build,ingest,templates,aspects,
- * state-machine.md}` — so the installer never owns a generic top-level name like `templates`.
+ * skills read in common (build/, ingest/, templates/, aspects/, state-machine.md, reporting.md)
+ * lives UNDER this one `bs-`-prefixed dir — `~/.claude/skills/bs-shared/{build,ingest,templates,
+ * aspects,state-machine.md,reporting.md}` — so the installer never owns a generic top-level name.
  * This makes the pre-copy clean and the uninstaller collision-proof: a user's unrelated skill
  * named exactly `templates`/`build`/`ingest`/`aspects` at the skills root is never touched.
  */
@@ -59,13 +59,20 @@ const SHARED_ROOT = 'bs-shared';
 const SHARED_DIRS = ['build', 'ingest', 'templates', 'aspects', 'verify'];
 
 /**
+ * Shared single files copied to the ROOT of the `bs-shared/` namespace (not inside any
+ * SHARED_DIRS subdirectory). These are the cross-skill authorities every entry point cites:
+ * `state-machine.md` (what the pipeline does) and `reporting.md` (how it talks to the designer).
+ */
+const SHARED_FILES = ['state-machine.md', 'reporting.md'];
+
+/**
  * A known leaf file inside each shared dir (relative to `targetDir`). A COMPLETE install
  * contains every one of these; probing them — rather than bare-directory existence — is what
  * distinguishes a finished install from an interrupted mid-copy that left an empty/partial
  * shared dir behind (`fs.cp` creates the destination dir before populating it).
  */
 const SHARED_LEAF_PROBES = [
-  join(SHARED_ROOT, 'state-machine.md'),
+  ...SHARED_FILES.map((file) => join(SHARED_ROOT, file)),
   join(SHARED_ROOT, 'build', 'build.md'),
   join(SHARED_ROOT, 'ingest', 'transcription.md'),
   join(SHARED_ROOT, 'templates', 'SKETCH.template.md'),
@@ -171,12 +178,11 @@ async function copySkillTree(
     await fs.cp(srcDir, destDir, { recursive: true, filter: excludeTestFiles });
   }
 
-  // state-machine.md: single file copy into bs-shared/.
+  // Shared root-level authorities: single file copies into bs-shared/.
   await fs.mkdir(join(targetDir, SHARED_ROOT), { recursive: true });
-  await fs.copyFile(
-    join(bsDir, 'state-machine.md'),
-    join(targetDir, SHARED_ROOT, 'state-machine.md')
-  );
+  for (const file of SHARED_FILES) {
+    await fs.copyFile(join(bsDir, file), join(targetDir, SHARED_ROOT, file));
+  }
 
   return true;
 }
@@ -259,7 +265,9 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log(chalk.cyan('  bs-verify-game') + chalk.gray('   - Re-verify an existing game against its archived rulebook source'));
   console.log('');
   console.log(chalk.gray('Each skill reads from a shared reference tree (build/, ingest/,'));
-  console.log(chalk.gray('templates/, aspects/, state-machine.md) installed under bs-shared/.'));
+  console.log(
+    chalk.gray('templates/, aspects/, state-machine.md, reporting.md) installed under bs-shared/.')
+  );
   console.log(chalk.gray('Projects built with an older BoardSmith skill are auto-detected'));
   console.log(chalk.gray('and offered a one-time conversion by bs-ingest-rules.'));
   console.log('');

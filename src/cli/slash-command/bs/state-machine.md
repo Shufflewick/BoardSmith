@@ -2,6 +2,14 @@
 
 Every `bs-` skill (`bs-ingest-rules`, `bs-build-chunk`, `bs-check-status`, `bs-insert-chunk`, `bs-generate-ai`) cites this file rather than restating its rules. If you are authoring or extending a `bs-` skill, link to the relevant section below instead of copying rule text.
 
+## Companion Authority: How Any of This Is Said
+
+This file governs what the pipeline DOES. `reporting.md` governs what the designer READS, and the
+two never mix: every enum value, marker, step name, lock grammar, and requirement tag defined below
+is internal machinery. None of it belongs in a message to the designer — it gets translated into
+what it means for their game (see `reporting.md` "Never in the Body"). A status write and the
+sentence announcing it are separate acts with separate rules.
+
 ## Status Enum (exact)
 
 The chunk status enum, in order, is exactly:

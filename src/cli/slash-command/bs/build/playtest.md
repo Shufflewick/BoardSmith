@@ -57,6 +57,11 @@ same orchestrator that presents this script, in the same session or a resumed on
 
 ## The Numbered Click-By-Click Test Script
 
+This is the designer's main gate, so `reporting.md`'s "lead with the ask" applies literally: the
+message opens by naming the one thing they're being asked to do — play this and tell me if it
+looks right — then what changed since they last played, then the script. What was built, tested,
+audited, and recorded to get here is not part of that message.
+
 Fill CHUNK.template.md's `## Playtest Test Script` section — cite its shape, do not redefine it.
 State the seat count explicitly, then give per-seat numbered steps, each ending in an
 observable, outcome-based "expect:" clause (describe what should be observed, not just what to

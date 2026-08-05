@@ -29,6 +29,12 @@ sub-step 6 (Report).
 
 ## 3. Present
 
+Write this presentation in `reporting.md`'s voice: the designer is being asked to settle a
+disagreement about their own rulebook, so it opens with the question, gives the two readings in
+plain language, and names what changes either way. No pair ids, run ids, file paths, or verdict
+spellings in the body — the "provenance" below is stated as where each reading came from ("what
+the game was built to do" vs. "what a fresh read of the same page says"), not as a field.
+
 For each pending contradiction the JSON names, present:
 
 - the pair id and its provenance,
@@ -115,6 +121,11 @@ here.** They are defined by `REPAIR_GATE_DISPOSITIONS` in `src/cli/commands/veri
 appear in what this step formats. Reproducing a partial list here is how the list goes stale: an
 earlier draft of this paragraph named three of the four and silently omitted one, which is the same
 defect class the `verify-game.md` sweep (plan 176-04) had to fix in three separate places.
+
+Format it in `reporting.md`'s voice — the fraction and the full slug list are the DATA this report
+is built from, not the sentence the designer reads. What they need is which parts of their game are
+affected, named by what they do, and which of those they will have to play again once the fix
+lands. Say the disposition's meaning, never its spelling.
 
 State that the disposition is computed entirely by the command and only formatted here, and that
 performing the repair itself — walking the audit lenses, clearing the marker, flipping the chunk's

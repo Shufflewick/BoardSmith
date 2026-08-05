@@ -124,10 +124,26 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
       expect(existsSync(join(skillsRoot, 'bs-shared', 'aspects'))).toBe(true);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'verify'))).toBe(true);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
+      // reporting.md is the second root-level shared authority (how every skill talks to the
+      // designer). It ships beside state-machine.md, not inside any SHARED_DIRS subdirectory.
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'reporting.md'))).toBe(true);
       // The un-namespaced flat siblings must NOT exist — they were the collision hazard.
       expect(existsSync(join(skillsRoot, 'build'))).toBe(false);
       expect(existsSync(join(skillsRoot, 'templates'))).toBe(false);
       expect(existsSync(join(skillsRoot, 'state-machine.md'))).toBe(false);
+    });
+
+    it('every entry-point SKILL.md cites bs-shared/reporting.md, so the designer-facing voice is never optional', () => {
+      // reporting.md is the one authority over what the designer READS (state-machine.md governs
+      // what the pipeline DOES). A skill that ships without citing it falls back to narrating its
+      // own machinery — internal ids, ledger counts, step names — which is exactly the failure
+      // this file exists to prevent. Cited by every entry point or it is not enforced.
+      for (const name of SKILL_NAMES) {
+        const body = readFileSync(join(skillsRoot, name, 'SKILL.md'), 'utf-8');
+        expect(body, `${name}/SKILL.md must cite bs-shared/reporting.md`).toContain(
+          'bs-shared/reporting.md'
+        );
+      }
     });
 
     it('176-03: verify/ruling-recheck.md and verify/repair-dispatch.md physically ship under bs-shared/verify/', () => {

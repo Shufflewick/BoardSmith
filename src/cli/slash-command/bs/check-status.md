@@ -20,6 +20,18 @@ never takes, refreshes, or clears the lock. Repair of any inconsistency the chec
 `/bs-build-chunk`'s job, not this skill's — this skill reports problems and confirms with the
 user how to proceed; it does not repair them itself.
 
+## How to Talk to the Designer
+
+This skill's whole output is a report, so it is the one place structure is welcome — but it is
+written in `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`'s voice, not the pipeline's. Report the
+nine items in plain words: what's done, what's left, what needs the designer, and the one command
+to run next. Translate every internal spelling rather than printing it (`verified (user-waived)` →
+"you chose to skip testing this one"; `rules-stale` → "needs re-testing, because the rules
+underneath it changed"; `reopen-playtest` → "you'll need to play this one again after the fix").
+Keep requirement tags, run ids, file paths, step names, and command names other than the next
+command out of the body. A count belongs in the report only when it tells the designer something
+about their game.
+
 ## Step 0: Consistency Check on Entry
 
 On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`

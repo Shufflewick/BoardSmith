@@ -128,6 +128,10 @@ If a claim from CHUNK.md's `## Interpretation` was written using engine vocabula
 translate it into designer language for this presentation — the citation carries forward, the
 wording does not.
 
+This ban is one instance of the general rule in `reporting.md`, which applies to every message the
+designer reads, not just this gate — and which extends the forbidden list beyond engine vocabulary
+to internal ids, file paths, step names, ledger counts, and status/verdict spellings.
+
 ## Assets — Never-Blocking Placeholder Request
 
 Request any assets this chunk's build needs, keyed to `ASSETS.md`'s existing component

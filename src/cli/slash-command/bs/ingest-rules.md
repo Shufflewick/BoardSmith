@@ -15,6 +15,14 @@ see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
 Run once per game. Re-running on an existing project is destructive to sketch state and requires
 explicit confirmation (see Step 0 below).
 
+## How to Talk to the Designer
+
+Everything the designer reads — step narration, questions, confirmations, the sketch presentation
+— follows `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`. In short: lead with what they need to
+do, or say plainly that there's nothing; describe the game in their own terms, not this pipeline's;
+keep internal ids, step names, file paths, and ledger counts out of the body; never narrate
+bookkeeping. An ordinary step completion is one to three sentences.
+
 ## Invocation
 
 ```

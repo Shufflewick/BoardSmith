@@ -210,3 +210,8 @@ a replacement for — the ordinary bookkeeping `build/close.md` "Bookkeeping Seq
 every chunk including this one. Field layout and exact wording are at the author's discretion,
 consistent with the skill's voice, so long as the banner is visually loud and the three named
 fields (shipped / test count / deferred) are all present.
+
+That voice is `reporting.md`'s: **Shipped** lists what a player can now do, not chunk slugs;
+**Deferred** lists what the game still doesn't do, in the same terms, so the designer can decide
+what comes next. The test count is the one bare number this card carries. Nothing else about the
+build belongs here.

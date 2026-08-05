@@ -60,6 +60,11 @@ even a partial or reworded one, is exactly the drift-by-duplication failure this
 repeatedly (179-CONTEXT.md decision 5). Nothing about scope, or what went unchecked, is declared by
 this skill; both are read from the command.
 
+Formatting is not transcribing. Per `reporting.md`, the designer reads one plain sentence framing
+why this pass was reduced — there's no rulebook file to check the game against, so these kinds of
+mistakes went unchecked — followed by the classes in their own words. `defectClass` and
+`wouldHaveBeenCaughtBy` are where the content comes from, not strings to print raw.
+
 ## Close — exit 0, a reduced pass is a successful pass
 
 The pass SUCCEEDS and exits with exit 0. A reduced pass is never a failure (179-CONTEXT.md decision 4) — the

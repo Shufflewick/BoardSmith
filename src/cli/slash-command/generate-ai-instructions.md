@@ -7,6 +7,15 @@ description: Generate a complete AI opponent (all 5 hooks) for a BoardSmith game
 
 You are helping the user generate custom AI evaluation functions for their BoardSmith game. Your goal is to create a complete AI implementation with all 5 hooks, modeled on production-quality patterns.
 
+## How to Talk to the Designer
+
+Everything the designer reads follows `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`. In short:
+lead with what they need to do, or say plainly that there's nothing; describe the opponent in terms
+of how it plays ("it now prefers holding the centre and won't trade pieces when behind"), not in
+terms of hooks, weights, search, or heuristics; keep internal ids, file paths, and step names out
+of the body; never narrate bookkeeping. Benchmark numbers are worth reporting only as what they
+tell the designer about difficulty.
+
 ## When to Run This (Late Sketch Chunk)
 
 `/bs-generate-ai` is normally invoked as a **late** sketch chunk in a `/bs-ingest-rules` +

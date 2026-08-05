@@ -35,6 +35,23 @@ staged output into a live location.
 
 No arguments. It runs against the bs-built project in the current directory.
 
+## How to Talk to the Designer
+
+Everything the designer reads — every step's findings, every question, the close-out — follows
+`${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`. This skill is the most jargon-prone in the family,
+because each of its steps produces a ledger, so the rule bites hardest here:
+
+- **Report what it means for their game, not what the check recorded.** "The rulebook doesn't
+  answer 26 of the calls you made — they still stand as your decisions" is the finding. "26/26
+  recorded, 0 pending, still-needed 26" is not.
+- **No ledger tables.** No requirement tags (`CHECK-01`, `VERIFY-04`), run ids, staging paths,
+  handshake tokens, model names, or verdict spellings in the body — translate them.
+- **A pass with nothing for the designer to do says so in one line**, and does not enumerate the
+  checks that found nothing.
+- **Findings that need them get named plainly**, with the one action each implies.
+
+An entire verify pass usually deserves a short paragraph plus the questions it needs answered.
+
 ## Context-Economics Hard Rule
 
 **The orchestrator never opens a slice — staged or live.** This is enforced structurally, not by
@@ -186,6 +203,13 @@ reports what has been recorded so far, so a verdict never recorded stays `pendin
 orchestrator never reads a ruling body or a slice itself; it dispatches, then records exactly what
 comes back.
 
+**Reporting this check.** Per `reporting.md`, tell the designer only what changed for the calls
+they made. A ruling the fresh read still doesn't answer needs no mention beyond a single count in
+plain words — those decisions still stand, and nothing is asked of them. What DOES earn a sentence
+each: a ruling the rulebook now answers (they may want to drop their call and follow the book), and
+a ruling the rulebook now contradicts (a decision to revisit). Never print the four verdict names,
+a per-ruling table, a records-written count, or a ledger path.
+
 ## Step 6: Repair Dispatch (CHECK-02)
 
 Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/repair-dispatch.md` for the full route into
@@ -231,6 +255,11 @@ Report by formatting `boardsmith verify-derive-check --json`'s output —
 Findings are reported and exit 0 — a non-corroboration is worth a human glance, NEVER a verdict,
 and this check must not be used as a build gate.
 
+"Formatted, never computed" governs where the numbers come from; `reporting.md` governs what the
+designer actually reads. Say what a non-corroborated line means for their game — a statement in
+the rulebook notes that the printed rules don't back up, worth their eye — and name the ones that
+matter. If every line corroborated, that is one sentence, not a table.
+
 ## Step 8: Worked-Example Replay (CHECK-06)
 
 In short: this check is independent of staleness and repair — it does not consume Step 4's
@@ -272,6 +301,12 @@ distinctly, gated on `QuoteVerifiedProvenance` (decision 12): mismatches where t
 quote is source-verified, and mismatches where it is NOT — the latter is a question about the
 quote, never an accusation against the code.
 
+Say it in the designer's terms, per `reporting.md`: the rulebook's own worked examples were
+replayed against the game, and here is where the game and the book disagree — naming the example
+by what it shows ("the scoring example on the back page"), never by slice path or id. A mismatch
+whose supporting quote isn't source-verified is presented as a question about the transcription,
+not as a bug in their game.
+
 A slice or game with ZERO extractable examples is reported as a real finding about the ingest
 contract — examples were not transcribed — never as a tuning signal and never a reason to loosen
 extraction.
@@ -293,6 +328,9 @@ pair classified, the pass closes:
 - Report the run's classification verdicts to the designer by formatting
   `verify-classify-status --json`'s output — **formatted, never computed** by this skill; every
   number in the report comes from the command's JSON, not from this skill's own arithmetic.
+  Per `reporting.md`, that report is prose about their rulebook, not the command's field names:
+  which rules read differently on a fresh pass, which parts of the game that touches, and what
+  they need to play again. A pass where nothing moved is one sentence.
 - Dispatch `boardsmith verify-close-record --project <project> --run <run-id>`, which durably
   records each evaluated chunk's `## Verified Against` block — the scope, its reason when reduced,
   the edition anchor, and the cited-slice hashes. This bullet exists because, until this phase,

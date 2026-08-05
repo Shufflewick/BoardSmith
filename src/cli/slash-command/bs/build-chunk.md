@@ -16,6 +16,14 @@ that.
 Run to start or resume a chunk. One entry point, routed by state — there is deliberately no
 separate verify command; verification is a step state inside the chunk.
 
+## How to Talk to the Designer
+
+Everything the designer reads — step narration, questions, gate presentations, close-out lines —
+follows `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`. In short: lead with what they need to do,
+or say plainly that there's nothing; describe what changed in the game they can see, not in this
+pipeline; keep internal ids, step names, file paths, ledger counts, and verdict spellings out of
+the body; never narrate bookkeeping. An ordinary step completion is one to three sentences.
+
 ## Context-Economics Hard Rule
 
 **The orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself.**

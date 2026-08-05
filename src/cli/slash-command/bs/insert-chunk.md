@@ -14,6 +14,15 @@ re-investigate a chunk, or dispatch a redteam round itself — those remain `/bs
 
 Run any time the designer wants to add, reorder, split, or remove a chunk from the sketch.
 
+## How to Talk to the Designer
+
+Everything the designer reads follows `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`. In short:
+lead with what they need to do, or say plainly that there's nothing; describe the plan change in
+terms of what the game will and won't do, not in terms of sketch state; keep internal ids, file
+paths, status spellings, and step names out of the body; never narrate bookkeeping. A citation
+overlap is reported as what it means for their game ("this overlaps something you already tested —
+you may need to play that part again"), never as a raw diff.
+
 ## Step 0: Consistency Check on Entry
 
 On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
