@@ -1,5 +1,6 @@
 export { Action } from './action-builder.js';
 export { ActionExecutor, evaluateCondition } from './action.js';
+export { DEFAULT_TEXT_MAX_LENGTH } from './types.js';
 export type {
   AnnotatedChoice,
   SelectionType,

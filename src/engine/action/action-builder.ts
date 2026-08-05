@@ -18,6 +18,7 @@ import type {
   ConditionConfig,
   OnSelectContext,
 } from './types.js';
+import { DEFAULT_TEXT_MAX_LENGTH } from './types.js';
 
 /**
  * The args record for an action with no selections yet. Using an empty key set
@@ -521,12 +522,24 @@ export class Action<
   /**
    * Add a text input selection for free-form string input.
    *
+   * **Every text selection is length-bounded.** Player-authored text goes into
+   * the element tree, which is copied into every retained undo checkpoint AND
+   * every per-seat player view — so an unbounded field is multiplied by the
+   * game's action count and its seat count (see `docs/state-size.md`). If you
+   * do not set `maxLength`, {@link DEFAULT_TEXT_MAX_LENGTH} is applied; set
+   * your own, lower, bound whenever you know the real one.
+   *
+   * **Bounding length is not sanitization.** The engine validates length and
+   * `pattern`/`validate`; it does not escape anything. Text a player types is
+   * rendered in other players' clients, so for anything but free prose supply
+   * a `pattern` (or `validate`) that admits only what your game means to allow.
+   *
    * @param name - Argument name that will be passed to the execute handler
    * @param options - Configuration for the text input
    * @param options.prompt - User-facing prompt text
    * @param options.pattern - Regex pattern the input must match
    * @param options.minLength - Minimum required string length
-   * @param options.maxLength - Maximum allowed string length
+   * @param options.maxLength - Maximum allowed string length. Default: {@link DEFAULT_TEXT_MAX_LENGTH}
    * @param options.optional - If true, player can skip this selection
    * @param options.validate - Custom validation function
    * @returns The builder for chaining
@@ -566,7 +579,7 @@ export class Action<
       prompt: options.prompt,
       pattern: options.pattern,
       minLength: options.minLength,
-      maxLength: options.maxLength,
+      maxLength: options.maxLength ?? DEFAULT_TEXT_MAX_LENGTH,
       optional: options.optional,
       validate: options.validate,
       onSelect: options.onSelect,

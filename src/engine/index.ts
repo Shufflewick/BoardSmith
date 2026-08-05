@@ -130,6 +130,9 @@ export {
 // Action temp state helper (for choices → execute state persistence)
 export { actionTempState, type ActionTempState } from './action/index.js';
 
+// Default ceiling applied to every `enterText()` selection (see docs/state-size.md)
+export { DEFAULT_TEXT_MAX_LENGTH } from './action/index.js';
+
 export type {
   AnnotatedChoice,
   SelectionType,

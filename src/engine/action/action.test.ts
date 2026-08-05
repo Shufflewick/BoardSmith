@@ -7,6 +7,7 @@ import {
   Action,
   ActionExecutor,
   actionTempState,
+  DEFAULT_TEXT_MAX_LENGTH,
 } from '../index.js';
 import type { ActionContext, ActionDefinition } from '../index.js';
 
@@ -304,6 +305,40 @@ describe('Action Executor', () => {
       expect(tooShort.valid).toBe(false);
       expect(tooLong.valid).toBe(false);
       expect(justRight.valid).toBe(true);
+    });
+
+    it('bounds every text selection, even when the game sets no maxLength', () => {
+      const action = Action.create('test')
+        .enterText('name')
+        .execute(() => {});
+
+      // The bound is on the SELECTION, not only in the validator -- so the
+      // client's input gets a maxlength attribute too (action-metadata.ts).
+      expect((action.selections[0] as { maxLength?: number }).maxLength).toBe(DEFAULT_TEXT_MAX_LENGTH);
+
+      const overBudget = executor.validateSelection(
+        action.selections[0],
+        'x'.repeat(DEFAULT_TEXT_MAX_LENGTH + 1),
+        game.getPlayer(1)!,
+        {}
+      );
+      const atBudget = executor.validateSelection(
+        action.selections[0],
+        'x'.repeat(DEFAULT_TEXT_MAX_LENGTH),
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(overBudget.valid).toBe(false);
+      expect(atBudget.valid).toBe(true);
+    });
+
+    it('lets a game set a maxLength tighter than the default', () => {
+      const action = Action.create('test')
+        .enterText('name', { maxLength: 5 })
+        .execute(() => {});
+
+      expect((action.selections[0] as { maxLength?: number }).maxLength).toBe(5);
     });
 
     it('should validate number min/max', () => {
