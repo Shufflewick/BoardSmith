@@ -80,7 +80,7 @@ a concrete after-state.
 **`predicate`:** Translate the example as a DIRECT call on an exported symbol from the supplied
 surface — **it is NOT required to be an `Action`, and forcing it through `game.doAction(...)` when
 no such action exists is a guess, not a translation.** State this concretely with `seven`'s real
-shape, verified live against `~/BoardSmithGames/seven/src/rules/scoring.ts`: `seven` does not
+shape, verified live against that game's `src/rules/scoring.ts`: it does not
 export free `isSet`/`isRun` functions. The predicate lives as a `check` member on an exported
 `ScoringPattern` constant (e.g. `RUN_OF_SEVEN_PATTERN.check`, `COMBO_SETS_AND_RUNS_PATTERN.check`),
 and `check` takes **constructed card elements, not raw numbers** — `check(numberCards:

@@ -186,8 +186,8 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
   released.
 
   - Worked example — bare release: `Session Lock: none` → leading token `none` → **RELEASED**.
-  - Worked example — a real shipped project's cleanly-closed value (`~/BoardSmithGames/seven`,
-    verbatim): `Session Lock: (none — final-acceptance closed 2026-07-20; sketch complete except
+  - Worked example — a real shipped project's cleanly-closed value (verbatim, from a game
+    built with this pipeline): `Session Lock: (none — final-acceptance closed 2026-07-20; sketch complete except
     ai-opponent, deferred on BSR-12)` → outer parens stripped → leading token `none` (the em dash
     ends the token) → **RELEASED**, despite carrying no parseable ISO timestamp and none of the
     lock grammar below — this parenthetical is commentary, not a lock.

@@ -45,8 +45,8 @@ import { DERIVED_LINE_RE } from './derived-line-pattern.js';
  *    ONLY in a `Visual (p.1):` line — stripping Visual lines would make the `example-inconsistent`
  *    path (178-CONTEXT.md decision 4) structurally undetectable.
  *
- * `collectGameApiSurface` verified (2026-07-31, plan 178-02 Task 3) against the real
- * `~/BoardSmithGames/seven/src/rules/scoring.ts`: `seven` does NOT export free `isSet`/`isRun`
+ * `collectGameApiSurface` verified (2026-07-31, plan 178-02 Task 3) against a real shipped
+ * project's `src/rules/scoring.ts`: that game does NOT export free `isSet`/`isRun`
  * functions. It exposes `ScoringPattern.check` members on three exported pattern constants —
  * `RUN_OF_SEVEN_PATTERN`, `COMBO_SETS_AND_RUNS_PATTERN`, `SET_5_PLUS_SET_2_PATTERN` — plus
  * `legalScoringPatterns(scoredCards)` and `numberCardsOf(cards)`, both of which take `SevenCard[]`

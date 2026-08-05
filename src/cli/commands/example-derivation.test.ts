@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { homedir } from 'node:os';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   WORKED_EXAMPLE_KINDS,
@@ -16,6 +16,7 @@ import {
 } from './example-derivation.js';
 import { DERIVE_CHECK_LEDGER_BEGIN } from './verify-derive-check.js';
 import { readFile } from 'node:fs/promises';
+import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -359,35 +360,127 @@ describe('buildExampleExtractionPayload — extraction (Task 2)', () => {
 // Task 3 — collectGameApiSurface + buildExampleTranslationPayload (translation)
 // -------------------------------------------------------------------------------------------
 
-const SEVEN_PROJECT_DIR = join(homedir(), 'BoardSmithGames', 'seven');
-const ONE_TWO_PUNCH_PROJECT_DIR = join(homedir(), 'BoardSmithGames', 'one-two-punch');
+/**
+ * A self-contained generated-game project, written to a temp dir. Reproduces the exact re-export
+ * shapes this function has to handle — a direct declaration in `index.ts`, a `export *` re-export,
+ * a NAMED re-export, and a module that `index.ts` never re-exports at all — plus a `tests/` tree
+ * holding a symbol that must never appear in the surface.
+ *
+ * Built here rather than read from `~/BoardSmithGames/<game>`: this repo does not own those
+ * projects, so a test asserting on their exported symbols measures whether a sibling repo has been
+ * refactored today, not whether this parser works. The shapes below were modeled on real generated
+ * games, which is the part worth keeping.
+ */
+async function writeFixtureProject(root: string): Promise<string> {
+  const rules = join(root, 'src', 'rules');
+  await fs.mkdir(rules, { recursive: true });
+  await fs.mkdir(join(root, 'tests'), { recursive: true });
+
+  await fs.writeFile(
+    join(rules, 'index.ts'),
+    [
+      "export * from './guards.js';",
+      "export { numberCardsOf, RANKS } from './cards.js';",
+      // `punch.ts` is deliberately NOT re-exported — the one-level limit's negative case.
+      'export function legalScoringPatterns(): string[] {',
+      '  return [];',
+      '}',
+      '',
+    ].join('\n'),
+  );
+
+  await fs.writeFile(
+    join(rules, 'guards.ts'),
+    [
+      'export function readyGuards(): boolean {',
+      '  return true;',
+      '}',
+      'export function computeResolutionOrder(): number[] {',
+      '  return [];',
+      '}',
+      '',
+    ].join('\n'),
+  );
+
+  await fs.writeFile(
+    join(rules, 'cards.ts'),
+    [
+      'export function numberCardsOf(): number[] {',
+      '  return [];',
+      '}',
+      "export const RANKS = ['a', 'b'];",
+      'export function neverReExported(): void {}',
+      '',
+    ].join('\n'),
+  );
+
+  await fs.writeFile(
+    join(rules, 'punch.ts'),
+    [
+      'export function resolvePunch(): void {}',
+      'export function exhaustCorneredPuncher(): void {}',
+      '',
+    ].join('\n'),
+  );
+
+  await fs.writeFile(
+    join(root, 'tests', 'game.test.ts'),
+    'export function aSymbolDefinedOnlyInTests(): void {}\n',
+  );
+
+  return root;
+}
 
 describe('collectGameApiSurface — translation (Task 3)', () => {
-  it('against the real seven project, returns a surface including legalScoringPatterns and numberCardsOf by name', async () => {
-    const surface = await collectGameApiSurface(SEVEN_PROJECT_DIR);
+  let projectDir: string;
+
+  beforeEach(async () => {
+    projectDir = await writeFixtureProject(
+      await fs.mkdtemp(join(tmpdir(), 'bs-example-derivation-api-')),
+    );
+  });
+
+  afterEach(async () => {
+    await fs.rm(projectDir, { recursive: true, force: true });
+  });
+
+  it('returns a surface naming both directly-declared and re-exported symbols, with their kinds', async () => {
+    const surface = await collectGameApiSurface(projectDir);
     const names = surface.exportedSymbols.map((s) => s.name);
-    expect(names).toContain('legalScoringPatterns');
-    expect(names).toContain('numberCardsOf');
-    const legal = surface.exportedSymbols.find((s) => s.name === 'legalScoringPatterns');
-    expect(legal?.kind).toBe('function');
+
+    expect(names).toContain('legalScoringPatterns'); // declared in index.ts
+    expect(names).toContain('numberCardsOf'); // named re-export
+    expect(names).toContain('readyGuards'); // export * re-export
+
+    expect(surface.exportedSymbols.find((s) => s.name === 'legalScoringPatterns')?.kind).toBe(
+      'function',
+    );
+    expect(surface.exportedSymbols.find((s) => s.name === 'RANKS')?.kind).toBe('const');
   });
 
   it('never reads a path under testDir — every returned symbol module resolves under src/', async () => {
-    const surface = await collectGameApiSurface(SEVEN_PROJECT_DIR);
-    expect(surface.testDir).toBe(join(SEVEN_PROJECT_DIR, 'tests'));
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect(surface.testDir).toBe(join(projectDir, 'tests'));
     expect(surface.exportedSymbols.length).toBeGreaterThan(0);
     for (const symbol of surface.exportedSymbols) {
       expect(symbol.module.startsWith('src/')).toBe(true);
     }
+    // The decisive negative: a symbol that exists ONLY under tests/ is never surfaced.
+    expect(surface.exportedSymbols.map((s) => s.name)).not.toContain(
+      'aSymbolDefinedOnlyInTests',
+    );
   });
 
-  it('one-level-only re-export limit: one-two-punch symbols re-exported via export * (readyGuards, computeResolutionOrder) are found; punch.ts symbols that index.ts never re-exports (resolvePunch, exhaustCorneredPuncher) are correctly absent', async () => {
-    const surface = await collectGameApiSurface(ONE_TWO_PUNCH_PROJECT_DIR);
+  it('one-level-only re-export limit: a module index.ts never re-exports contributes no symbols', async () => {
+    const surface = await collectGameApiSurface(projectDir);
     const names = surface.exportedSymbols.map((s) => s.name);
-    expect(names).toContain('readyGuards');
-    expect(names).toContain('computeResolutionOrder');
+
+    // punch.ts is reachable on disk but absent from index.ts's re-export chain.
     expect(names).not.toContain('resolvePunch');
     expect(names).not.toContain('exhaustCorneredPuncher');
+    // A NAMED re-export pulls only the names it lists, not the module's other exports.
+    expect(names).not.toContain('neverReExported');
   });
 
   it('throws a descriptive error when the project has no src/rules/index.ts', async () => {
@@ -396,6 +489,14 @@ describe('collectGameApiSurface — translation (Task 3)', () => {
     );
   });
 });
+
+/**
+ * An inert stand-in project root for the surface literals below. These tests supply their own
+ * `exportedSymbols`, so the path is never read — it only has to be a path. Deliberately not a
+ * `~/BoardSmithGames/<game>` location: nothing in this repo's tests should name a project this
+ * repo does not own.
+ */
+const SYNTHETIC_PROJECT_DIR = join('/tmp', 'bs-synthetic-project');
 
 describe('buildExampleTranslationPayload — translation (Task 3)', () => {
   const predicateSpec: WorkedExampleSpec = createWorkedExampleSpec({
@@ -430,8 +531,8 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
 
   it('the predicate payload contains "predicate" and at least one symbol name from the supplied surface', () => {
     const api: GameApiSurface = {
-      projectDir: SEVEN_PROJECT_DIR,
-      testDir: join(SEVEN_PROJECT_DIR, 'tests'),
+      projectDir: SYNTHETIC_PROJECT_DIR,
+      testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
       exportedSymbols: [{ name: 'legalScoringPatterns', kind: 'function', module: 'src/rules/scoring.ts' }],
     };
     const payload = buildExampleTranslationPayload(predicateSpec, api);
@@ -442,8 +543,8 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
 
   it('the transition payload names the action-execution target shape', () => {
     const api: GameApiSurface = {
-      projectDir: ONE_TWO_PUNCH_PROJECT_DIR,
-      testDir: join(ONE_TWO_PUNCH_PROJECT_DIR, 'tests'),
+      projectDir: SYNTHETIC_PROJECT_DIR,
+      testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
       exportedSymbols: [{ name: 'readyGuards', kind: 'function', module: 'src/rules/guards.ts' }],
     };
     const payload = buildExampleTranslationPayload(transitionSpec, api);
@@ -452,12 +553,18 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
   });
 
   it('the payload contains ZERO substrings read from the project testDir — implemented structurally: every symbol module resolves under src/, never testDir', async () => {
-    const api = await collectGameApiSurface(SEVEN_PROJECT_DIR);
+    // Uses a real collected surface (not a hand-written literal), so the assertion is about what
+    // `collectGameApiSurface` actually produces — built from this file's own fixture project.
+    const fixtureDir = await writeFixtureProject(
+      await fs.mkdtemp(join(tmpdir(), 'bs-example-derivation-payload-')),
+    );
+    const api = await collectGameApiSurface(fixtureDir);
     const payload = buildExampleTranslationPayload(predicateSpec, api);
     for (const symbol of api.exportedSymbols) {
       expect(symbol.module.startsWith('src/')).toBe(true);
     }
     expect(payload).not.toContain('tests/');
+    await fs.rm(fixtureDir, { recursive: true, force: true });
   });
 
   it('states the generated file\'s two-directory depth so a translator can compute a correct relative import prefix (178-11 finding)', () => {
@@ -467,8 +574,8 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
     // resolve at all when actually executed. This asserts the payload now states that depth
     // explicitly, with a worked example of the correct two-level prefix.
     const api: GameApiSurface = {
-      projectDir: ONE_TWO_PUNCH_PROJECT_DIR,
-      testDir: join(ONE_TWO_PUNCH_PROJECT_DIR, 'tests'),
+      projectDir: SYNTHETIC_PROJECT_DIR,
+      testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
       exportedSymbols: [{ name: 'readyGuards', kind: 'function', module: 'src/rules/guards.ts' }],
     };
     const payload = buildExampleTranslationPayload(transitionSpec, api);
@@ -479,8 +586,8 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
 
   it('dispatches even when the supplied surface has no viable target — unexecutable is the model\'s verdict, never a payload-builder shortcut', () => {
     const emptyApi: GameApiSurface = {
-      projectDir: SEVEN_PROJECT_DIR,
-      testDir: join(SEVEN_PROJECT_DIR, 'tests'),
+      projectDir: SYNTHETIC_PROJECT_DIR,
+      testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
       exportedSymbols: [],
     };
     const payload = buildExampleTranslationPayload(predicateSpec, emptyApi);
@@ -490,14 +597,17 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
 });
 
 describe('module header comment — Task 3 acceptance criterion', () => {
-  it('names the three seven pattern constants and SevenCard[], and states it was verified against the real scoring.ts', async () => {
+  it('names the three pattern constants and SevenCard[], and states it was verified against a real shipped scoring.ts', async () => {
     const modulePath = fileURLToPath(new URL('./example-derivation.ts', import.meta.url));
     const source = await readFile(modulePath, 'utf-8');
     expect(source).toContain('RUN_OF_SEVEN_PATTERN');
     expect(source).toContain('COMBO_SETS_AND_RUNS_PATTERN');
     expect(source).toContain('SET_5_PLUS_SET_2_PATTERN');
     expect(source).toContain('SevenCard[]');
-    expect(source).toContain('~/BoardSmithGames/seven/src/rules/scoring.ts');
+    expect(source).toContain("src/rules/scoring.ts");
+    // Deliberately does NOT assert a `~/BoardSmithGames/...` path: nothing in this repo should
+    // name, or depend on the layout of, a project this repo does not own.
+    expect(source).not.toContain('BoardSmithGames');
   });
 });
 

@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   RULES_STALENESS_HEADING,
@@ -743,16 +743,25 @@ describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypas
  */
 
 /**
- * A hand-built 26-entry corpus mirroring the real `~/BoardSmithGames/one-two-punch/RULINGS.md`
- * shape exactly (three fields, no supersede verb) — used when the sibling game repo is not
- * reachable in this environment. Tests below prefer the REAL file when present.
+ * How many entries `rulingsCorpus()` builds. Every expectation below is DERIVED from this — never
+ * a second hardcoded literal — so changing the corpus size cannot leave a stale expectation
+ * behind.
  */
-function syntheticRulingsCorpus(): string {
+const CORPUS_ENTRY_COUNT = 26;
+
+/**
+ * A self-contained corpus mirroring a real shipped `RULINGS.md` shape exactly (three fields, no
+ * supersede verb). Built here rather than read from a sibling game repo: a test that reaches into
+ * `~/BoardSmithGames/...` depends on content this repo does not own and cannot hold still — the
+ * earlier version of these tests read `one-two-punch`'s live file and went red the moment that
+ * game recorded its 27th ruling, which said nothing about this repo's code.
+ */
+function rulingsCorpus(entryCount: number = CORPUS_ENTRY_COUNT): string {
   const header =
     '# Rulings\n\n' +
     '<!-- This is an append-only ledger of designer decisions. -->\n\n';
   const blocks: string[] = [];
-  for (let i = 1; i <= 26; i++) {
+  for (let i = 1; i <= entryCount; i++) {
     blocks.push(
       `### Ruling ${i}\n` +
         `- Decision: **Synthetic decision ${i}.**\n` +
@@ -764,17 +773,10 @@ function syntheticRulingsCorpus(): string {
   return header + blocks.join('\n');
 }
 
-async function realOrSyntheticRulingsCorpus(): Promise<{ text: string; real: boolean }> {
-  const realPath = join(homedir(), 'BoardSmithGames', 'one-two-punch', 'RULINGS.md');
-  try {
-    const text = await fs.readFile(realPath, 'utf-8');
-    return { text, real: true };
-  } catch {
-    return { text: syntheticRulingsCorpus(), real: false };
-  }
-}
+/** The number `appendRuling`/`nextRulingNumber` must produce for a corpus of `entryCount`. */
+const nextNumberFor = (entryCount: number = CORPUS_ENTRY_COUNT): number => entryCount + 1;
 
-describe('contradictory — nextRulingNumber / appendRuling — over a real 26-entry RULINGS.md (or a hand-built 26-entry stand-in, named per test)', () => {
+describe('contradictory — nextRulingNumber / appendRuling — over a self-contained multi-entry RULINGS.md corpus', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -785,12 +787,14 @@ describe('contradictory — nextRulingNumber / appendRuling — over a real 26-e
     await fs.rm(dir, { recursive: true, force: true });
   });
 
-  it('contradictory: nextRulingNumber returns 27 on a 26-entry corpus (real one-two-punch RULINGS.md when reachable, else a hand-built 26-entry stand-in)', async () => {
-    const { text } = await realOrSyntheticRulingsCorpus();
-    expect(nextRulingNumber(text)).toBe(27);
+  it('contradictory: nextRulingNumber returns one past the corpus\'s last entry', async () => {
+    const text = rulingsCorpus();
+    expect(nextRulingNumber(text)).toBe(nextNumberFor());
   });
 
   it('contradictory: renderRuling emits exactly the three real field labels, never a supersession field', () => {
+    // A pure renderer test: it builds no corpus, so its number is its own input echoed back —
+    // deliberately a plain literal on both sides, not `nextNumberFor()`.
     const block = renderRuling({
       number: 27,
       decision: 'A test decision.',
@@ -808,7 +812,7 @@ describe('contradictory — nextRulingNumber / appendRuling — over a real 26-e
   });
 
   it('contradictory: appendRuling is append-only — the new file content startsWith the original byte-for-byte', async () => {
-    const { text } = await realOrSyntheticRulingsCorpus();
+    const text = rulingsCorpus();
     await fs.writeFile(join(dir, 'RULINGS.md'), text);
 
     const result = await appendRuling(dir, {
@@ -816,14 +820,14 @@ describe('contradictory — nextRulingNumber / appendRuling — over a real 26-e
       citation: 'rulebook/test.md, p.1 — "test citation".',
       rationale: 'A test rationale.',
     });
-    expect(result.number).toBe(27);
+    expect(result.number).toBe(nextNumberFor());
 
     const newText = await fs.readFile(join(dir, 'RULINGS.md'), 'utf-8');
     expect(newText.startsWith(text)).toBe(true);
   });
 
   it('contradictory: the appended block matches the corpus\'s own three-field ### Ruling N shape', async () => {
-    const { text } = await realOrSyntheticRulingsCorpus();
+    const text = rulingsCorpus();
     await fs.writeFile(join(dir, 'RULINGS.md'), text);
 
     await appendRuling(dir, {
@@ -834,12 +838,12 @@ describe('contradictory — nextRulingNumber / appendRuling — over a real 26-e
 
     const newText = await fs.readFile(join(dir, 'RULINGS.md'), 'utf-8');
     expect(newText).toMatch(
-      /^### Ruling 27\n- Decision: .+\n- Citation interpreted or overridden: .+\n- Rationale: .+$/m,
+      new RegExp(`^### Ruling ${nextNumberFor()}\\n- Decision: .+\\n- Citation interpreted or overridden: .+\\n- Rationale: .+$`, 'm'),
     );
   });
 
   it('contradictory: the appended entry contains both real quotedPass1 and quotedPass2 verbatim, and does NOT match /supersede[sd]?/i', async () => {
-    const { text } = await realOrSyntheticRulingsCorpus();
+    const text = rulingsCorpus();
     await fs.writeFile(join(dir, 'RULINGS.md'), text);
     const record = await readRealContradictoryClassification();
 
@@ -850,7 +854,7 @@ describe('contradictory — nextRulingNumber / appendRuling — over a real 26-e
     });
 
     const newText = await fs.readFile(join(dir, 'RULINGS.md'), 'utf-8');
-    const appendedBlock = newText.slice(newText.indexOf('### Ruling 27'));
+    const appendedBlock = newText.slice(newText.indexOf(`### Ruling ${nextNumberFor()}`));
     expect(appendedBlock).toContain(record.quotedPass1);
     expect(appendedBlock).toContain(record.quotedPass2);
     expect(appendedBlock).not.toMatch(/supersede[sd]?/i);
@@ -881,7 +885,7 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     pairId: string;
   }> {
     const { project, runId, pairId } = await singleContradictoryPairProject(adjDir);
-    const { text } = await realOrSyntheticRulingsCorpus();
+    const text = rulingsCorpus();
     await fs.writeFile(join(project, 'RULINGS.md'), text);
     return { project, runId, pairId };
   }
@@ -940,10 +944,10 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
       json: true,
     });
     expect(result.outcome).toBe('resolved');
-    expect(result.rulingNumber).toBe(27);
+    expect(result.rulingNumber).toBe(nextNumberFor());
 
     const rulingsText = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
-    expect(rulingsText).toContain('### Ruling 27');
+    expect(rulingsText).toContain(`### Ruling ${nextNumberFor()}`);
 
     const gateResult = await verifyImpactGateCommand({ project, runId, json: true });
     const entry = gateResult.contradictions.find((c) => c.pairId === pairId);
@@ -979,7 +983,7 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     expect(second.rulingNumber).toBe(first.rulingNumber);
 
     const rulingsText = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
-    const occurrences = rulingsText.match(/^### Ruling 27$/gm) ?? [];
+    const occurrences = rulingsText.match(new RegExp(`^### Ruling ${nextNumberFor()}$`, 'gm')) ?? [];
     expect(occurrences).toHaveLength(1);
 
     // A second ledger line IS appended (last-write-wins per pairId), even though RULINGS.md
