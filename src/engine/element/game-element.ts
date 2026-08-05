@@ -13,6 +13,12 @@ import type { Game } from './game.js';
 import type { VisibilityState } from '../command/visibility.js';
 import { DEFAULT_VISIBILITY, canPlayerSee, copyVisibilityState, resolveVisibility } from '../command/visibility.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
+import {
+  decodeTypedArray,
+  encodeTypedArray,
+  isEncodableTypedArray,
+  isSerializedTypedArray,
+} from './typed-array-codec.js';
 
 /**
  * Check if a value is an ElementClass (a GameElement subclass constructor).
@@ -1072,6 +1078,27 @@ export class GameElement<G extends Game = any, P extends Player = any> {
         };
       }
 
+      // Typed arrays: the natural way to pack bulk data (a terrain map, a
+      // fog-of-war mask) into state. Object.entries() yields one entry per
+      // element, so a naive "plain object" pass would both inflate the payload
+      // ~7x AND restore a plain object with none of the typed-array methods.
+      // Encode compactly and rebuild the exact type on restore.
+      if (isEncodableTypedArray(value)) {
+        return encodeTypedArray(value as ArrayBufferView, path);
+      }
+
+      // ArrayBuffer / DataView are raw memory, not values: Object.entries() is
+      // empty for them, so a plain-object pass would silently serialize them to
+      // {} and lose every byte. Refuse loudly and name the representation that
+      // does round-trip.
+      if (value instanceof ArrayBuffer || value instanceof DataView) {
+        const kind = value instanceof ArrayBuffer ? 'ArrayBuffer' : 'DataView';
+        throw new Error(
+          `Cannot serialize ${this.constructor.name}: ${kind} at property '${path}' has no serializable form. ` +
+            `Store a typed array over the buffer instead (e.g. new Uint8Array(buffer)), which round-trips with its type intact.`
+        );
+      }
+
       // Plain object
       const result: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
@@ -1152,6 +1179,18 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     if (typeof value === 'object' && value !== null && '__set' in value) {
       const items = (value as { __set: unknown[] }).__set;
       return new Set(items.map((item) => this.deserializeValue(item, game)));
+    }
+
+    // Rebuild the exact typed-array type serializeValue recorded.
+    if (typeof value === 'object' && value !== null && isSerializedTypedArray(value)) {
+      return decodeTypedArray(value);
+    }
+
+    // A live typed array (a restore that never went through JSON, e.g. an
+    // in-process snapshot) is already the right value — returning it here keeps
+    // the plain-object branch below from flattening it to {"0":n,…}.
+    if (ArrayBuffer.isView(value)) {
+      return value;
     }
 
     // Handle arrays

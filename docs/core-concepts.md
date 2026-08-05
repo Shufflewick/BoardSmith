@@ -286,7 +286,9 @@ const myColor = player.color;  // '#e74c3c'
 const playerColor = gameView.players[playerSeat - 1].color;
 ```
 
-The engine assigns colors from `DEFAULT_COLOR_PALETTE` based on seat order. To customize:
+The engine assigns colors from `DEFAULT_COLOR_PALETTE` based on seat order. It holds 16
+entries — the maximum seat count any BoardSmith host supports — so a game never has to
+supply its own palette just to reach a higher player count. To customize:
 
 ```typescript
 export const gameDefinition = {

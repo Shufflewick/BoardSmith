@@ -53,6 +53,30 @@ actions, anything async and multi-round — reaches that cap on ordinary play.
   137 bytes where `[3, …]` is 23. Across 8 seats and 325 actions, that single
   stylistic choice is ~579 KB of saved state.
 
+## Packed bulk data: use a typed array
+
+For genuinely bulk data — a terrain map, a fog-of-war mask, a visited-sector
+bitmap — store a **typed array** (`Uint8Array` and friends). The engine encodes
+it as base64, which is 4 characters per 3 bytes, and restores it as its exact
+type:
+
+```ts
+class MyGame extends Game {
+  terrain = new Uint8Array(4096);   // ~5.5 KB serialized
+}
+```
+
+The same 4096 values as a `number[]` cost 2–4× that, and as a named-key object
+far more again. A 256-sector visited bitmap is 32 bytes of `Uint8Array`, or 44
+base64 characters in the snapshot.
+
+Two things the engine will not let you do silently:
+
+- A **bare `ArrayBuffer` or `DataView`** in state throws at serialization time.
+  Neither has a serializable form; store a typed array over the buffer instead.
+- A typed array is encoded **little-endian regardless of host**, so a snapshot
+  written by the executor, the dev host and the browser is byte-identical.
+
 ## Bounding it: `checkpoints`
 
 Declare a retention policy on the game definition:

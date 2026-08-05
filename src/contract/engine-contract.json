@@ -1,8 +1,8 @@
 {
-  "revision": 3,
+  "revision": 4,
   "bundleProtocol": 1,
   "surfaceHash": "a88e1e1ac6b840fc",
-  "payloadHash": "4e482261ddc4a6e9",
+  "payloadHash": "b6cc2b20433e3a3e",
   "history": [
     {
       "revision": 1,
@@ -27,6 +27,14 @@
       "surfaceHash": "a88e1e1ac6b840fc",
       "payloadHash": "4e482261ddc4a6e9",
       "summary": "Checkpoint retention: games can bound per-action undo checkpoints with checkpoints:{max|enabled}; snapshot.actionCheckpoints is now a {baseIndex,entries} window, and a pruned undo target is refused with a message naming the policy"
+    },
+    {
+      "revision": 4,
+      "date": "2026-08-05",
+      "bundleProtocol": 1,
+      "surfaceHash": "a88e1e1ac6b840fc",
+      "payloadHash": "b6cc2b20433e3a3e",
+      "summary": "Player-facing state changes: the default player palette now has 16 colors instead of 8 (the first 8 are unchanged, so existing games keep their colors) so a game can seat up to the platform's 16-player maximum without shipping its own palette; separately, a typed array (Uint8Array etc.) in game state now serializes as a compact {__typedArray,data} base64 shape and restores as its real type instead of silently inflating ~7x into a plain object, and an ArrayBuffer or DataView in state is now refused at serialization time rather than silently becoming {}."
     }
   ]
 }
