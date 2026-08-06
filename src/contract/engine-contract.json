@@ -1,8 +1,8 @@
 {
-  "revision": 9,
+  "revision": 10,
   "bundleProtocol": 1,
   "surfaceHash": "0c412c9ef9bdcc11",
-  "payloadHash": "bf22b8c168ab229d",
+  "payloadHash": "19a9c87d8050374e",
   "history": [
     {
       "revision": 1,
@@ -75,6 +75,14 @@
       "surfaceHash": "0c412c9ef9bdcc11",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Added Game.messageTo(audience, text, data): a per-seat game-log channel for hidden-information games, withheld server-side in toJSONForPlayer and createPlayerView so an unaddressed seat never receives the message. game.messages gains an optional 'to' audience field (absent = public). Also removed GameShell's showHistory prop: a game can no longer suppress the log."
+    },
+    {
+      "revision": 10,
+      "date": "2026-08-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "0c412c9ef9bdcc11",
+      "payloadHash": "19a9c87d8050374e",
+      "summary": "Game.toJSON() no longer duplicates phase/messages/settings into the generic attributes bag; they are top-level fields only. Fixes a messageTo leak where attributes.messages shipped every seat's private log unredacted."
     }
   ]
 }

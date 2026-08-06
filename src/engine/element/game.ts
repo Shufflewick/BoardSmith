@@ -437,6 +437,36 @@ function redactHiddenElementAttrs(attrs: Record<string, unknown>): Record<string
 }
 
 /**
+ * Game-level fields that `Game.toJSON()` HOISTS to the top level of the payload.
+ *
+ * They are ordinary own enumerable properties of `Game`, so `GameElement.toJSON()`'s
+ * generic attribute loop would ALSO emit each of them inside `attributes` — a second
+ * copy that no redaction pass ever touches. For `messages` that was an outright
+ * hidden-information leak (SEC-04): `toJSONForPlayer` rebuilds the top-level
+ * `messages` array for the addressed seat, while `attributes.messages` shipped the
+ * full unfiltered log to every seat and to the spectator, defeating `messageTo`
+ * inside its own payload. For `phase`/`settings` it was pure duplicated weight in
+ * every broadcast and every retained checkpoint.
+ *
+ * `Game.toJSON()` therefore deletes these keys from the attribute bag after calling
+ * `super.toJSON()`, and re-adds them as first-class top-level fields.
+ *
+ * NOTE: deliberately NOT `unserializableAttributes`. That list means "never emitted
+ * AND never loaded AND never ref-resolved", and it is read by
+ * `GameElement.resolveElementReferences` as well as by `toJSON`. These fields ARE
+ * serialized (top-level) and ARE loaded (`loadSerializedState` adopts them by
+ * reference) and DO need ref-resolution — `settings` carries `persistentMap` payloads
+ * and element/player refs, `messages` carries `data` payloads. Listing them as
+ * unserializable de-aliases nothing and silently re-opens CR-02 (a restored game
+ * sharing its `settings`/`messages` with the snapshot it restored from) and the
+ * F-01 MCTS undo-soundness fix that depends on it.
+ *
+ * The restore paths skip these same keys in their attribute loops — see
+ * `loadSerializedState` and `restoreDevState`, which both import this constant.
+ */
+export const GAME_TOP_LEVEL_FIELDS = ['phase', 'messages', 'settings'] as const;
+
+/**
  * Base Game class. The root of the element tree and container for all game state.
  *
  * Extend this class to create your game. The Game class serves as:
@@ -2862,8 +2892,17 @@ export class Game<
     // checkpoints, and undo could never roll back `game.message()` output or
     // `actionTempState()`/`persistentMap()` state. `serializeValue` deep-copies
     // and also tags element/player references so they survive cold storage.
+    // Strip the hoisted fields from the generic attribute bag before re-adding
+    // them as top-level fields. See GAME_TOP_LEVEL_FIELDS — without this the
+    // payload carries two copies of each, and only the top-level `messages`
+    // copy is ever redacted by `toJSONForPlayer`.
+    const base = super.toJSON();
+    for (const key of GAME_TOP_LEVEL_FIELDS) {
+      delete base.attributes[key];
+    }
+
     return {
-      ...super.toJSON(),
+      ...base,
       phase: this.phase,
       isFinished: this.isFinished(),
       messages: this.serializeValue(this.messages, 'messages') as Array<{
@@ -3399,7 +3438,7 @@ export class Game<
     const unserializable = new Set(
       (this.constructor as typeof GameElement).unserializableAttributes
     );
-    const handledKeys = new Set(['phase', 'messages', 'settings']);
+    const handledKeys = new Set<string>(GAME_TOP_LEVEL_FIELDS);
     for (const [key, value] of Object.entries(json.attributes)) {
       if (!unserializable.has(key) && !key.startsWith('_') && !handledKeys.has(key)) {
         (this as unknown as Record<string, unknown>)[key] = value;

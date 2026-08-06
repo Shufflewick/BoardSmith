@@ -23,6 +23,7 @@
  * - Derived state - recalculated from stored properties
  */
 
+import { GAME_TOP_LEVEL_FIELDS } from '../element/game.js';
 import type { Game, GameOptions } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
 import type { ElementJSON, ElementClass, ElementContext } from '../element/types.js';
@@ -160,7 +161,7 @@ export function restoreDevState<G extends Game>(
   const unserializable = new Set(
     (game.constructor as unknown as { unserializableAttributes: string[] }).unserializableAttributes
   );
-  const handledKeys = new Set(['phase', 'messages', 'settings']);
+  const handledKeys = new Set<string>(GAME_TOP_LEVEL_FIELDS);
   for (const [key, value] of Object.entries(snapshot.elements.attributes)) {
     if (!unserializable.has(key) && !key.startsWith('_') && !handledKeys.has(key)) {
       (game as unknown as Record<string, unknown>)[key] = value;

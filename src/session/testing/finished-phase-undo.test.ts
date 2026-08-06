@@ -21,9 +21,9 @@ describe('UNDO-02: undo refused once the game is finished (stateless)', () => {
 
     const end = await session.send(1, { type: 'action', actionName: 'endGame', player: 1, args: {} });
     expect(end.success).toBe(true);
-    expect((end.snapshot as { state?: { attributes?: { phase?: string } } } | null)?.state?.attributes?.phase).toBe(
-      'finished',
-    );
+    // `phase` is a TOP-LEVEL field of the serialized state, not an entry in the
+    // generic attribute bag — see GAME_TOP_LEVEL_FIELDS in engine/element/game.ts.
+    expect((end.snapshot as { state?: { phase?: string } } | null)?.state?.phase).toBe('finished');
 
     const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
 
