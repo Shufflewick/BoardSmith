@@ -1,6 +1,6 @@
 # Playtest — The Human-Verification Gate (BUILD-09)
 
-Referenced by `build-chunk.md` Step 8 (`playtest`, first of the `{playtest, revise, close}`
+Referenced by `build-chunk.md` Step 9 (`playtest`, first of the `{playtest, revise, close}`
 session step group — see `state-machine.md` "Session Handoff Seams"). For a **milestone chunk
 with visible UI**, this is the human-verification boundary: the point where the chunk's actual,
 running behavior is confirmed by a human playing it, not just described. This step has **no

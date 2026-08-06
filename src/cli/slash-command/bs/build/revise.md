@@ -1,6 +1,6 @@
 # Revise — 4-Category Triage Loop, Append-Only (BUILD-10)
 
-Referenced by `build-chunk.md` Step 9 (`revise`, second of the `{playtest, revise, close}`
+Referenced by `build-chunk.md` Step 10 (`revise`, second of the `{playtest, revise, close}`
 session step group — see `state-machine.md` "Session Handoff Seams"). Revise processes
 each feedback item the user reported during `playtest`: every item gets exactly one of four
 dispositions. Revise has no subagent of its own — like `playtest`, the orchestrator triages the

@@ -49,10 +49,12 @@ const SKETCH_LEVEL_MARKER = 'Status: proposed (sketch-level — no CHUNK.md yet)
 const UI_TAG_REGEX = /none *\| *touches *\| *major/;
 
 /**
- * The 10-step full-ceremony pipeline, byte-identical to state-machine.md "Step Names (exact,
- * full ceremony)".
+ * The 11-step full-ceremony pipeline, byte-identical to state-machine.md "Step Names (exact,
+ * full ceremony)". `spec` sits between `ask` and `build`: it writes this chunk's tests from the
+ * approved interpretation and observes them failing BEFORE any implementation exists (TDD-01).
  */
-const FULL_CEREMONY_STEPS = 'investigate, redteam, ask, build, test, audit, repair, playtest, revise, close';
+const FULL_CEREMONY_STEPS =
+  'investigate, redteam, ask, spec, build, test, audit, repair, playtest, revise, close';
 
 /**
  * The 3-step light-path pipeline, byte-identical to state-machine.md "Step Names (exact,
@@ -96,6 +98,7 @@ const REFERENCED_PATHS = [
   'build/investigate.md',
   'build/redteam.md',
   'build/ask.md',
+  'build/spec.md',
   'build/build.md',
   'build/test.md',
   'build/audit.md',
@@ -329,6 +332,122 @@ describe('BUILD-12 — light path', () => {
     const buildChunk = read('build-chunk.md');
     expect(buildChunk).toMatch(/unreachable/i);
     expect(buildChunk).toMatch(/proposed.*built/);
+  });
+});
+
+describe('TDD-01 — spec step (tests first, observed failing)', () => {
+  it('the full-ceremony step list places `spec` between `ask` and `build`', () => {
+    // Guards the ORDER, not just the presence of the word — a step list that appended `spec`
+    // after `build` would satisfy a bare toContain('spec') and invert the whole point.
+    expect(FULL_CEREMONY_STEPS).toContain('ask, spec, build, test');
+    for (const file of ['build-chunk.md', 'state-machine.md', 'templates/CHUNK.template.md']) {
+      expect(read(file)).toContain(FULL_CEREMONY_STEPS);
+    }
+  });
+
+  it('build-chunk.md dispatches the `spec` step to build/spec.md', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toContain('| spec | `${CLAUDE_SKILL_DIR}/../bs-shared/build/spec.md` |');
+  });
+
+  it('requires one test per numbered ## Interpretation claim, with the claim number named', () => {
+    const spec = read('build/spec.md');
+    expect(spec).toContain('## Interpretation');
+    expect(spec).toMatch(/one test per numbered claim/i);
+    expect(spec).toMatch(/claim with no test is an uncovered claim/i);
+  });
+
+  it('requires the tests to be RUN and OBSERVED failing, not merely written', () => {
+    const spec = read('build/spec.md');
+    expect(spec).toContain('boardsmith test');
+    // Whitespace-flexible only: these files hard-wrap at 100 cols and bold the key verb.
+    expect(spec).toMatch(/\*\*observing\*\*\s+them\s+fail\s+is/i);
+    expect(spec).toMatch(/must be observed failing before this step checks off/i);
+    // A passing test at spec time is a STOP, never a bonus — the two diagnoses must both survive.
+    expect(spec).toMatch(/PASSES at spec time is a stop condition/i);
+    expect(spec).toMatch(/behavior already exists/i);
+    expect(spec).toMatch(/vacuous/i);
+  });
+
+  it('allows signature-only stubs whose body is exactly one throw, never a return value', () => {
+    const spec = read('build/spec.md');
+    expect(spec).toMatch(/signature-only stubs/i);
+    expect(spec).toContain("throw new Error('not implemented");
+    // The anti-false-green rule: a stub that returns can accidentally satisfy an assertion.
+    expect(spec).toMatch(/[Nn]ever a `return 0`/);
+  });
+
+  it('forbids writing implementation at the spec step', () => {
+    const spec = read('build/spec.md');
+    expect(spec).toMatch(/\*\*Never writes implementation\.\*\*/);
+  });
+
+  it('persists RED evidence in the ## Spec Manifest table', () => {
+    const spec = read('build/spec.md');
+    expect(spec).toContain('## Spec Manifest');
+    expect(spec).toContain('| Test File | Claims Covered | RED Observed |');
+    expect(spec).toMatch(/RED Observed.{0,40}pending.{0,10}to.{0,10}`yes`/s);
+
+    const template = read('templates/CHUNK.template.md');
+    expect(template).toContain('## Spec Manifest');
+    expect(template).toContain('| Test File | Claims Covered | RED Observed |');
+    // The parse contract must list it, or a cold resume won't know to require it.
+    expect(template).toContain('"## Spec Manifest", "## Build Manifest"');
+    // The checklist itself must carry the step.
+    expect(template).toContain('- [ ] ask\n- [ ] spec\n- [ ] build\n- [ ] test');
+  });
+
+  it('names chunk-<slug>/step-spec as the RED anchor, distinct from step-build', () => {
+    const spec = read('build/spec.md');
+    expect(spec).toContain('chunk-<slug>/step-spec');
+    expect(spec).toMatch(/RED\s+anchor/);
+    expect(read('state-machine.md')).toContain('chunk-<slug>/step-spec');
+  });
+
+  it('leaves worked-example test generation to the test step, not spec', () => {
+    // Guards against the two steps both claiming TEST-01 and double-generating.
+    expect(read('build/spec.md')).toMatch(/[Nn]ever generates the worked-example tests/);
+  });
+});
+
+describe('TDD-01 — red-before-green enforcement across spec/build/test', () => {
+  it('build.md forbids editing a spec test to make it pass', () => {
+    const build = read('build/build.md');
+    expect(build).toMatch(/\*\*Never edit a spec test to make it pass\.\*\*/);
+    // Adding NEW tests must stay explicitly allowed, or build sessions over-correct.
+    expect(build).toMatch(/[Aa]dding NEW tests here is fine/);
+  });
+
+  it('test.md item 3 requires the spec tests green and cross-checks them against the RED commit', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(/red-to-green check/i);
+    expect(test).toMatch(/NOT authored here/);
+    expect(test).toContain('git diff chunk-<slug>/step-spec');
+    expect(test).toContain('## Spec Manifest');
+  });
+
+  it('build-chunk.md never dispatches build for a chunk whose spec item is unchecked', () => {
+    const buildChunk = read('build-chunk.md');
+    expect(buildChunk).toMatch(/`build` is never dispatched for a chunk\s*\n?whose `spec` item is unchecked/);
+  });
+
+  it('the light path is bounded to chunks with no new game behavior', () => {
+    // The light path skips `spec`, so the tag must be bounded or TDD has a silent bypass.
+    for (const file of ['state-machine.md', 'build-chunk.md']) {
+      expect(read(file)).toMatch(/no new game behavior/i);
+    }
+  });
+
+  it('session step group 2 is {spec, build, test} everywhere it is named', () => {
+    for (const file of ['state-machine.md', 'build-chunk.md', 'build/build.md', 'build/test.md',
+      'build/repair.md', 'build/ask.md', 'build/spec.md']) {
+      expect(read(file)).toContain('{spec, build, test}');
+    }
+    // The old 2-step group name must be gone, or a session resumes into the wrong group.
+    for (const file of ['state-machine.md', 'build-chunk.md', 'build/build.md', 'build/test.md',
+      'build/repair.md', 'build/ask.md']) {
+      expect(read(file)).not.toContain('{build, test}');
+    }
   });
 });
 
