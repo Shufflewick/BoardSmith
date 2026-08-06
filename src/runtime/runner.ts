@@ -758,7 +758,14 @@ export class GameRunner<G extends Game = Game> {
     // move the live animation-event id sequence backwards. Do not thread a
     // floor through any other caller of `fromSnapshot` -- see game.ts's
     // `loadSerializedState` doc comment / RESEARCH.md §C.
-    runner.game.loadSerializedState(snapshot.state, options);
+    // The message log is NOT in `snapshot.state` (it is a snapshot sibling —
+    // see `GameStateSnapshot.messageLog`), so it must be handed over explicitly.
+    // `loadSerializedState` assigns it unconditionally, so a snapshot without a
+    // log restores an empty one rather than leaving whatever this instance held.
+    runner.game.loadSerializedState(snapshot.state, {
+      ...options,
+      messageLog: snapshot.messageLog ?? [],
+    });
 
     // Restore the element sequence counter to its authoritative snapshot value.
     // The fromJSON tree rebuild in loadSerializedState advances _ctx.sequence, so
@@ -853,11 +860,28 @@ export class GameRunner<G extends Game = Game> {
     // `actionIndex` is still real and must still be fenced.
     const executeBarrierIndex = Math.min(snapshot.executeBarrierIndex ?? 0, actionIndex);
 
+    // The log lives once on the enclosing snapshot; this checkpoint carries only
+    // the length it had at this action-count boundary. Slicing to that watermark
+    // is what makes undo still drop the lines the undone action wrote — the
+    // behaviour that used to fall out for free when every checkpoint carried its
+    // own copy of the log (CR-02's "undoToTurnStart rolls back game.message()").
+    // Same shape as the `animationSeqFloor` and `executeBarrierIndex` clamps
+    // above: derived here, at the single sanctioned checkpoint-restore site, so
+    // no undo/rewind caller has to remember it.
+    //
+    // A checkpoint predating the watermark has no recorded boundary, so the
+    // honest restore is the whole log rather than a guess.
+    const fullLog = snapshot.messageLog ?? [];
+    const messageLog = checkpoint.messageCount === undefined
+      ? fullLog
+      : fullLog.slice(0, checkpoint.messageCount);
+
     return GameRunner.fromSnapshot<G>(
       {
         version: snapshot.version,
         gameType: snapshot.gameType,
         state: checkpoint.state,
+        messageLog,
         flowState: checkpoint.flowState,
         actionHistory: snapshot.actionHistory.slice(0, actionIndex),
         seed: snapshot.seed,

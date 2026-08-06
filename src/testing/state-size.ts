@@ -28,8 +28,10 @@
  *
  * The two costs that dominate in practice, and that neither shows up until
  * measured:
- *   - `game.messages` lives inside the serialized tree, so an uncapped message
- *     log is multiplied by the checkpoint count like everything else.
+ *   - The message log. It is stored ONCE per snapshot (`messageLogBytes`), so it
+ *     is no longer multiplied by the checkpoint count — but it is the one term
+ *     that never stops growing, so on a long narration-heavy game it can still
+ *     dominate everything else put together.
  *   - Named-key objects cost roughly 6x positional arrays
  *     (`{beastLore: 3, ...}` = 137 bytes vs `[3, ...]` = 23).
  *
@@ -57,6 +59,25 @@ export interface SnapshotSizeMeasurement {
   /** `snapshot.actionHistory` — grows with the game, but per action, not per tree. */
   actionHistoryBytes: number;
   /**
+   * `snapshot.messageLog` — the message log, stored once per snapshot.
+   *
+   * Broken out because it is the term most likely to dominate a narration-heavy
+   * game while looking like nothing in the tree measurement: it is NOT part of
+   * `treeBytes`, so a game whose tree measures 4 KB can still be megabytes.
+   * Attribute it explicitly rather than inferring it from the remainder.
+   */
+  messageLogBytes: number;
+  /**
+   * How many actions the measured game had actually taken
+   * (`snapshot.actionHistory.length`).
+   *
+   * The denominator for every per-action rate in `projectSnapshotSize`. Using
+   * `checkpointCount` instead is wrong under a `checkpoints: { max }` policy,
+   * where the retained count is capped far below the action count — it inflated
+   * the per-action rates by exactly the ratio between them.
+   */
+  observedActionCount: number;
+  /**
    * Average cost of ONE retained checkpoint, in bytes: the per-action
    * multiplier. `0` when nothing is retained (checkpointing disabled).
    */
@@ -73,6 +94,8 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
     checkpointBytes,
     checkpointCount: count,
     actionHistoryBytes: jsonByteLength(snapshot.actionHistory),
+    messageLogBytes: jsonByteLength(snapshot.messageLog),
+    observedActionCount: snapshot.actionHistory.length,
     bytesPerCheckpoint: count === 0 ? 0 : Math.round(checkpointBytes / count),
   };
 }
@@ -86,10 +109,16 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
  * measuring during development has historically missed the problem.
  *
  * Assumes the tree stays roughly the size it is now (true for most games:
- * pieces move rather than multiply) and that retention is unbounded. Under a
- * `checkpoints: { max }` policy the retained count is capped, so the projection
- * is capped with it — the result is then flat in `actionCount`, which is the
- * whole point of setting one.
+ * pieces move rather than multiply). Under a `checkpoints: { max }` policy the
+ * retained count is capped, so the CHECKPOINT term is capped with it — that is
+ * the whole point of setting one.
+ *
+ * The result is NOT flat in `actionCount` even then. Two terms still grow
+ * linearly: the action history, and the message log. Capping checkpoints
+ * removed the log's multiplier, not the log's growth — a game that narrates
+ * every action accumulates that text forever, and on a long enough game it
+ * becomes the dominant term on its own. That is a real remaining limit, not a
+ * modelling artifact, so this projection reports it rather than flattening it.
  */
 export function projectSnapshotSize(
   measurement: SnapshotSizeMeasurement,
@@ -98,7 +127,20 @@ export function projectSnapshotSize(
 ): number {
   const perCheckpoint = measurement.bytesPerCheckpoint || measurement.treeBytes;
   const retained = Math.min(actionCount + 1, options?.maxCheckpoints ?? Number.POSITIVE_INFINITY);
-  const fixed = measurement.totalBytes - measurement.checkpointBytes - measurement.actionHistoryBytes;
-  const perAction = measurement.actionHistoryBytes / Math.max(1, measurement.checkpointCount);
-  return Math.round(fixed + retained * perCheckpoint + actionCount * perAction);
+  const fixed =
+    measurement.totalBytes -
+    measurement.checkpointBytes -
+    measurement.actionHistoryBytes -
+    measurement.messageLogBytes;
+
+  // Per-action rates divide by the actions actually TAKEN, not by the retained
+  // checkpoint count — under a `max` policy those differ by orders of magnitude
+  // and dividing by the wrong one silently inflates the projection.
+  const observed = Math.max(1, measurement.observedActionCount);
+  const historyPerAction = measurement.actionHistoryBytes / observed;
+  const logPerAction = measurement.messageLogBytes / observed;
+
+  return Math.round(
+    fixed + retained * perCheckpoint + actionCount * (historyPerAction + logPerAction),
+  );
 }

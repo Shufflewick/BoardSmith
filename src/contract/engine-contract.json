@@ -1,8 +1,8 @@
 {
-  "revision": 10,
+  "revision": 11,
   "bundleProtocol": 1,
-  "surfaceHash": "0c412c9ef9bdcc11",
-  "payloadHash": "19a9c87d8050374e",
+  "surfaceHash": "595c287a2855fb30",
+  "payloadHash": "7d7e5e0a4de161cb",
   "history": [
     {
       "revision": 1,
@@ -83,6 +83,14 @@
       "surfaceHash": "0c412c9ef9bdcc11",
       "payloadHash": "19a9c87d8050374e",
       "summary": "Game.toJSON() no longer duplicates phase/messages/settings into the generic attributes bag; they are top-level fields only. Fixes a messageTo leak where attributes.messages shipped every seat's private log unredacted."
+    },
+    {
+      "revision": 11,
+      "date": "2026-08-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "595c287a2855fb30",
+      "payloadHash": "7d7e5e0a4de161cb",
+      "summary": "The message log moved out of the serialized game tree into GameStateSnapshot.messageLog, stored once per snapshot with an ActionCheckpoint.messageCount watermark for undo. Persisted state is now flat in checkpoints.max instead of multiplying the log by it."
     }
   ]
 }

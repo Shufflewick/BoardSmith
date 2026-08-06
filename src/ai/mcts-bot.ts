@@ -1226,7 +1226,14 @@ export class MCTSBot<G extends Game = Game> {
 
     // Adopt the authoritative element tree (clears + rebuilds children, re-points
     // the game's own serialized refs, resolves element references).
-    game.loadSerializedState(snapshot.state);
+    //
+    // The message log rides beside the tree, not in it. The search game gets it
+    // so a game whose rules read `game.messages` evaluates the same way inside
+    // the search as it does outside — a silently empty log there would make the
+    // bot reason over a different world than the one it is playing in. On a
+    // `forSeat` clone `createSnapshot` has already filtered it to that seat's
+    // audience, so the sandbox cannot see private lines the seat may not.
+    game.loadSerializedState(snapshot.state, { messageLog: snapshot.messageLog ?? [] });
 
     // Restore the element id sequence so newly created elements don't drift.
     if (snapshot.sequence !== undefined) {

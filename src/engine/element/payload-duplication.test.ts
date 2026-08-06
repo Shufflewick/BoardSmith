@@ -23,7 +23,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space } from '../index.js';
-import { GAME_TOP_LEVEL_FIELDS } from './game.js';
+import { GAME_SELF_SERIALIZED_FIELDS } from './game.js';
+import { createPlayerView, createSnapshot } from '../utils/snapshot.js';
 
 class LeakGame extends Game<LeakGame, Player> {
   board!: Space<LeakGame>;
@@ -54,13 +55,13 @@ describe('SEC-04: no top-level game field is duplicated into `attributes`', () =
     );
 
     // If this fails, a field was hoisted to the top level of `Game.toJSON()`
-    // without being added to GAME_TOP_LEVEL_FIELDS. It is now shipping twice,
+    // without being added to GAME_SELF_SERIALIZED_FIELDS. It is now shipping twice,
     // and the second copy bypasses every redaction pass. Add it to that
     // constant rather than deleting it here.
     expect(duplicated).toEqual([]);
   });
 
-  it('keeps each hoisted field present exactly once, at the top level', () => {
+  it('keeps every self-serialized field out of the attribute bag', () => {
     const game = newGame();
     game.message('public line');
 
@@ -68,40 +69,71 @@ describe('SEC-04: no top-level game field is duplicated into `attributes`', () =
       attributes: Record<string, unknown>;
     };
 
-    for (const field of GAME_TOP_LEVEL_FIELDS) {
-      expect(json[field], `${field} must be hoisted to the top level`).toBeDefined();
-      expect(json.attributes[field], `${field} must not also be in attributes`).toBeUndefined();
+    for (const field of GAME_SELF_SERIALIZED_FIELDS) {
+      expect(json.attributes[field], `${field} must not be in attributes`).toBeUndefined();
     }
+
+    // `phase`/`settings` are hoisted to the top level; `messages` is not in the
+    // tree at all (it is a snapshot sibling). Assert that split explicitly, so
+    // moving a field between the two is a decision someone has to make here.
+    expect(json.phase).toBeDefined();
+    expect(json.settings).toBeDefined();
+    expect(json.messages).toBeUndefined();
   });
 });
 
 describe('SEC-04: whole-payload leak assertions for messageTo', () => {
-  it('withholds a private line from the WHOLE payload of an unaddressed seat', () => {
+  /** A game with one private line per seat plus one public line. */
+  function narratedGame(): LeakGame {
     const game = newGame();
     game.messageTo(1, 'SECRET-FOR-SEAT-1');
     game.messageTo(2, 'SECRET-FOR-SEAT-2');
     game.message('PUBLIC-LINE');
+    return game;
+  }
 
-    // Stringify-and-search, deliberately: a field-level assertion passed
-    // throughout the lifetime of the bug this test exists for.
-    const seat2 = JSON.stringify(game.toJSONForPlayer(2));
+  it('keeps the element tree free of the log entirely', () => {
+    // The tree is copied into every retained checkpoint and shipped to every
+    // seat. The log belongs to neither. Stringify-and-search, deliberately: a
+    // field-level assertion passed throughout the lifetime of the bug this
+    // test exists for.
+    const tree = JSON.stringify(narratedGame().toJSON());
+
+    expect(tree).not.toContain('SECRET-FOR-SEAT-1');
+    expect(tree).not.toContain('SECRET-FOR-SEAT-2');
+    expect(tree).not.toContain('PUBLIC-LINE');
+  });
+
+  it('withholds a private line from the WHOLE redacted snapshot of an unaddressed seat', () => {
+    // `createSnapshot({forSeat})` is the MCTS search sandbox's clone — a payload
+    // built precisely so a bot cannot reason over information its seat lacks.
+    const seat2 = JSON.stringify(createSnapshot(narratedGame(), 'LeakGame', [], undefined, {
+      forSeat: 2,
+    }));
 
     expect(seat2).not.toContain('SECRET-FOR-SEAT-1');
     expect(seat2).toContain('SECRET-FOR-SEAT-2');
     expect(seat2).toContain('PUBLIC-LINE');
   });
 
-  it('withholds every private line from the WHOLE spectator payload', () => {
-    const game = newGame();
-    game.messageTo(1, 'SECRET-FOR-SEAT-1');
-    game.messageTo(2, 'SECRET-FOR-SEAT-2');
-    game.message('PUBLIC-LINE');
-
-    const spectator = JSON.stringify(game.toJSONForPlayer(null));
+  it('withholds every private line from the WHOLE spectator snapshot', () => {
+    const spectator = JSON.stringify(createSnapshot(narratedGame(), 'LeakGame', [], undefined, {
+      forSeat: null,
+    }));
 
     expect(spectator).not.toContain('SECRET-FOR-SEAT-1');
     expect(spectator).not.toContain('SECRET-FOR-SEAT-2');
     expect(spectator).toContain('PUBLIC-LINE');
+  });
+
+  it('withholds a private line from the WHOLE broadcast player view', () => {
+    // The other independent route to a client: buildPlayerState feeds the
+    // shell's log from here.
+    const view = JSON.stringify(createPlayerView(narratedGame(), 2));
+
+    expect(view).not.toContain('SECRET-FOR-SEAT-1');
+    expect(view).toContain('SECRET-FOR-SEAT-2');
+    expect(view).toContain('PUBLIC-LINE');
   });
 
   it('does not leak the AUDIENCE either — an unaddressed seat learns of no withheld line', () => {
@@ -109,13 +141,23 @@ describe('SEC-04: whole-payload leak assertions for messageTo', () => {
     game.messageTo(1, 'SECRET-FOR-SEAT-1');
     game.message('PUBLIC-LINE');
 
-    const seat2 = JSON.parse(JSON.stringify(game.toJSONForPlayer(2))) as {
-      messages: Array<{ text: string }>;
-    };
+    const log = createSnapshot(game, 'LeakGame', [], undefined, { forSeat: 2 }).messageLog;
 
     // The leaked copy carried `to: [1]` alongside the text, so a reader learned
     // both the secret AND that it was meant for someone else. Seat 2 should see
     // exactly one line and have no evidence a second one exists.
-    expect(seat2.messages.map((m) => m.text)).toEqual(['PUBLIC-LINE']);
+    expect(log?.map((m) => m.text)).toEqual(['PUBLIC-LINE']);
+  });
+
+  it('persists the UNFILTERED log — a saved snapshot must not lose other seats history', () => {
+    // The mirror image of the leak: filtering what gets PERSISTED would destroy
+    // history on the next restore. Only the `forSeat` clone is filtered.
+    const snapshot = createSnapshot(narratedGame(), 'LeakGame');
+
+    expect(snapshot.messageLog?.map((m) => m.text)).toEqual([
+      'SECRET-FOR-SEAT-1',
+      'SECRET-FOR-SEAT-2',
+      'PUBLIC-LINE',
+    ]);
   });
 });

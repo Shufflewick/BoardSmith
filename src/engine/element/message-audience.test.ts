@@ -21,7 +21,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space } from '../index.js';
-import { createPlayerView } from '../utils/snapshot.js';
+import { createPlayerView, createSnapshot } from '../utils/snapshot.js';
 
 class LogGame extends Game<LogGame, Player> {
   board!: Space<LogGame>;
@@ -36,11 +36,32 @@ function newGame(playerCount = 3): LogGame {
   return game;
 }
 
-/** Raw message texts in the payload a given seat actually receives. */
-const payloadMessages = (game: LogGame, seat: number | null): string[] =>
-  ((game.toJSONForPlayer(seat) as { messages?: Array<{ text: string }> }).messages ?? []).map(
-    (m) => m.text,
-  );
+/**
+ * Raw message texts in the SNAPSHOT payload a given seat actually receives.
+ *
+ * The log is not part of `toJSONForPlayer` — it is a snapshot sibling
+ * (`GameStateSnapshot.messageLog`), audience-filtered by `createSnapshot`'s
+ * `forSeat` path. This helper reads that, so it tracks the surface that really
+ * ships rather than a field that used to exist.
+ *
+ * It THROWS rather than defaulting when the field is missing, deliberately. The
+ * predecessor of this helper read `toJSONForPlayer(seat).messages` and coalesced
+ * a missing field to `[]` — so when the log later moved off that payload, every
+ * "seat X must not see this" assertion would have passed against an array that
+ * was empty for the wrong reason. A leak guard that cannot tell "correctly
+ * withheld" from "I am reading nothing at all" is not a guard.
+ */
+const payloadMessages = (game: LogGame, seat: number | null): string[] => {
+  const snapshot = createSnapshot(game, 'LogGame', [], undefined, { forSeat: seat });
+  if (snapshot.messageLog === undefined) {
+    throw new Error(
+      'createSnapshot produced no messageLog. The audience gate has moved off this ' +
+        'payload — repoint these assertions at wherever the log now ships, do not ' +
+        'let them read an absent field as an empty one.',
+    );
+  }
+  return snapshot.messageLog.map((m) => m.text);
+};
 
 describe('messageTo: what each seat receives', () => {
   it('gives a public message() to every seat and to the spectator', () => {
@@ -129,16 +150,36 @@ describe('messageTo: the log itself stays whole', () => {
     expect(game.messages[0].to).toBeUndefined();
   });
 
-  it('survives a toJSON round-trip with its audience intact', () => {
+  it('survives a snapshot round-trip with its audience intact', () => {
     const game = newGame();
     game.messageTo(1, 'Private');
 
+    // The log travels beside the tree now, so a faithful round-trip has to carry
+    // both. An UNFILTERED snapshot is the only correct thing to persist — see
+    // GameStateSnapshot.messageLog.
+    const snapshot = JSON.parse(JSON.stringify(createSnapshot(game, 'LogGame'))) as ReturnType<
+      typeof createSnapshot
+    >;
     const restored = newGame();
-    restored.loadSerializedState(JSON.parse(JSON.stringify(game.toJSON())));
+    restored.loadSerializedState(snapshot.state, { messageLog: snapshot.messageLog });
 
     expect(restored.messages[0].to).toEqual([1]);
     expect(payloadMessages(restored as LogGame, 0)).toEqual([]);
     expect(payloadMessages(restored as LogGame, 1)).toEqual(['Private']);
+  });
+
+  it('restores an EMPTY log, never a stale one, when a tree arrives without it', () => {
+    // Restoring a tree into an instance that already holds messages must not
+    // graft the old history onto the new state. Empty is honest; stale is
+    // history corruption that reads as a working log.
+    const game = newGame();
+    game.message('From the first game');
+
+    const other = newGame();
+    other.message('Left over from before');
+    other.loadSerializedState(JSON.parse(JSON.stringify(game.toJSON())));
+
+    expect(other.messages).toEqual([]);
   });
 });
 
