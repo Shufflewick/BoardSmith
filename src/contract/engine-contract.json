@@ -1,7 +1,7 @@
 {
-  "revision": 6,
+  "revision": 7,
   "bundleProtocol": 1,
-  "surfaceHash": "aa0e6cb3e2aac241",
+  "surfaceHash": "dfee85770a7d895d",
   "payloadHash": "bf22b8c168ab229d",
   "history": [
     {
@@ -51,6 +51,14 @@
       "surfaceHash": "aa0e6cb3e2aac241",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Action builder gains .validate(fn): a submit-time, whole-submission gate returning true | false | a message string, enforced on both the one-shot and incremental execute paths."
+    },
+    {
+      "revision": 7,
+      "date": "2026-08-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "dfee85770a7d895d",
+      "payloadHash": "bf22b8c168ab229d",
+      "summary": "Engine exports turnSequence() and orderSeatsByTurn(): recover the running order eachPlayer already resolved, and arrange seats for display without dropping or duplicating any."
     }
   ]
 }

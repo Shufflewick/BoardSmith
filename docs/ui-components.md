@@ -63,6 +63,51 @@ import GameTable from './components/GameTable.vue';
 </script>
 ```
 
+#### Players-panel order
+
+The players panel lists seats **in the order the flow will actually take them**,
+not in seat order. Nothing to declare: `eachPlayer` resolves its running order
+once per round — applying `direction`, `startingPlayer`, and `filter` — and the
+shell reads that back. A rotating dealer, a reversed round, or a round that
+skips folded players all read correctly out of the box.
+
+The list is **not** rotated to put the acting player on top. The panel is the one
+stable reference surface in the UI: players track opponents by position ("the one
+on two cards is second"), and screen-reader users navigate it by index. Moving
+every row on every turn costs more than the single wrap it saves when reading
+"who's next", so the acting seat is marked in place instead. Rows move only when
+the running order itself changes — typically once a round, if the game rotates a
+starting player.
+
+Control it with `playerOrder`:
+
+| Value | Behaviour |
+|---|---|
+| `'turn'` *(default)* | The flow's running order; falls back to seat order when there isn't one. |
+| `'seat'` | Plain seat order. The opt-out. |
+| `number[]` | An explicit seat order the game supplies. |
+
+```vue
+<!-- A co-op whose turn order is each role's printed rank, chosen at setup:
+     no eachPlayer frame describes that, so declare it. -->
+<GameShell :player-order="playersByRoleRank" ... />
+```
+
+Seats you leave out of an explicit array keep their seat-ordered place after the
+ones you name — **no seat is ever dropped from the panel**, including one the
+round's `filter` excluded. A player sitting the round out still has a name, a
+score, and a presence indicator to show.
+
+There is no running order during a simultaneous step (no one is "next"), before
+the flow starts, or in a game with a hand-rolled turn structure. All three fall
+back to seat order rather than inventing a sequence.
+
+The engine helpers behind this are exported if a custom UI wants the same
+ordering: `turnSequence(flowState)` and `orderSeatsByTurn(allSeats, sequence)`.
+Note that `Game.nextPlayer()` is **not** one of them — it is a hardcoded seat
+successor, and it disagrees with the real turn order in exactly the games that
+need this.
+
 #### Slot Props
 
 The `#game-board` slot receives:

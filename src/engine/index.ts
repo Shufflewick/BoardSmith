@@ -191,6 +191,8 @@ export {
   dueSeats,
   canSeatAct,
   availableActionsForSeat,
+  turnSequence,
+  orderSeatsByTurn,
 } from './flow/index.js';
 
 export type {

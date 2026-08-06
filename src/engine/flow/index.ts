@@ -27,7 +27,7 @@ export { TurnOrder } from './turn-order.js';
 export type { TurnOrderConfig } from './turn-order.js';
 
 // Canonical "who can act now?" predicates
-export { dueSeats, canSeatAct, availableActionsForSeat } from './seat-activity.js';
+export { dueSeats, canSeatAct, availableActionsForSeat, turnSequence, orderSeatsByTurn } from './seat-activity.js';
 export type { SeatActivityState } from './seat-activity.js';
 
 // Types

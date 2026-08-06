@@ -12,6 +12,7 @@ import {
   deriveWinnerState,
   announceOpponentTurn,
 } from '../composables/liveRegionAnnouncer.js';
+import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
 import { MeepleClient, MeepleClientError, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
 
@@ -172,6 +173,26 @@ interface GameShellProps {
    * Example: ['https://shufflewick.pub', 'http://localhost:5173']
    */
   trustedOrigins?: string[];
+  /**
+   * How the players panel orders seats. Default `'turn'`.
+   *
+   * - `'turn'` — the order the flow will actually take. Recovered from the
+   *   running order `eachPlayer` already resolved (`turnSequence`), so a
+   *   rotating dealer, a reversed round, or a filtered round all read correctly
+   *   with nothing to declare. Falls back to seat order whenever the flow has
+   *   no order to report (a simultaneous step, a hand-rolled turn structure).
+   * - `'seat'` — plain seat order. The opt-out.
+   * - `number[]` — an explicit seat order the game supplies, for turn orders the
+   *   flow cannot express (e.g. iterating players sorted by a role's printed
+   *   rank). Seats you omit keep their seat-ordered place after the ones you
+   *   name; no seat is ever dropped from the panel.
+   *
+   * The list is NOT rotated to put the acting player first: the panel is the
+   * one stable reference surface in the UI, and moving every row on every turn
+   * costs more (spatial memory, screen-reader position) than the one wrap it
+   * saves when reading "who's next". The acting seat is marked in place.
+   */
+  playerOrder?: 'turn' | 'seat' | number[];
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
@@ -182,6 +203,7 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   showHistory: true,
   platformActionPanelEscapeHatch: false,
   providesOwnGameOverUI: false,
+  playerOrder: 'turn',
 });
 
 // Platform mode: embedded inside a host platform's iframe (e.g., ShufflewickPub
@@ -743,6 +765,32 @@ const gameMessages = computed(() => {
 const players = computed(() => state.value?.state.players || []);
 const myPlayer = computed(() => players.value.find(p => p.seat === playerSeat.value));
 
+/**
+ * The players panel's list, ordered per the `playerOrder` prop (default: the
+ * order the flow will actually take).
+ *
+ * Deliberately separate from `players` above: that array stays in seat order for
+ * every slot and consumer that has always received it, so turning this on
+ * reorders the panel and nothing else. `orderSeatsByTurn` guarantees the result
+ * is total and duplicate-free — a `filter`ed round omits seats from its running
+ * order, and a player who is sitting this round out still has a name, a score,
+ * and a connection state to show.
+ */
+const panelPlayers = computed(() => {
+  const all = players.value;
+  if (props.playerOrder === 'seat' || all.length < 2) return all;
+
+  const sequence = Array.isArray(props.playerOrder)
+    ? props.playerOrder
+    : turnSequence(state.value?.flowState as SeatActivityState | null);
+  if (sequence.length === 0) return all;
+
+  const bySeat = new Map(all.map((p) => [p.seat, p]));
+  return orderSeatsByTurn([...bySeat.keys()], sequence)
+    .map((seat) => bySeat.get(seat))
+    .filter((p): p is (typeof all)[number] => p !== undefined);
+});
+
 // #game-over slot prop (D10): the winning Player objects, derived the same
 // way GameOverCard derives them internally — kept here so a game's custom
 // slot content doesn't need to re-implement the seat -> Player lookup.
@@ -758,10 +806,13 @@ const opponentPlayers = computed(() => players.value.filter(p => p.seat !== play
 // reactive in `lobbyInfo` for the life of the session. AI slots and modes with no
 // lobby (e.g. --ai) leave `connected` undefined so PlayersPanel renders no indicator
 // rather than fabricating presence we don't actually know.
+// Built on `panelPlayers`, so the panel's ordering and its presence indicators
+// are the same list — deriving this from seat-ordered `players` instead would
+// silently un-order the sidebar panel the moment a lobby exists.
 const playersWithConnection = computed(() => {
   const slots = lobbyInfo.value?.slots;
-  if (!slots) return players.value;
-  return players.value.map((p) => {
+  if (!slots) return panelPlayers.value;
+  return panelPlayers.value.map((p) => {
     const slot = slots.find((s) => s.seat === p.seat);
     const connected = slot && slot.aiLevel == null ? slot.connected : undefined;
     return connected === undefined ? p : { ...p, connected };
@@ -2217,7 +2268,7 @@ if ((import.meta as any).hot) {
           <div class="mobile-strip">
             <PlayersPanel
               class="mobile-strip__players"
-              :players="players"
+              :players="panelPlayers"
               :player-seat="playerSeat"
               :current-player-seat="state?.state.currentPlayer"
               :awaiting-player-seats="awaitingPlayerSeats"
