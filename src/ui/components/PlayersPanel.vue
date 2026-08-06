@@ -11,7 +11,7 @@
  * A11Y-08: under prefers-reduced-motion the breathe becomes a static
  *   high-contrast border instead of disappearing.
  */
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import PlayerToken from './PlayerToken.vue';
 
 export interface Player {
@@ -26,7 +26,7 @@ export interface Player {
   connected?: boolean;
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** Array of players in the game */
   players: Player[];
   /** Current player's seat (the viewer) */
@@ -37,11 +37,42 @@ const props = defineProps<{
   awaitingPlayerSeats?: number[];
   /** Compact one-line seat-strip mode for phones (IA-06) */
   seatStrip?: boolean;
-}>();
+  /**
+   * Render the shell's turn-status sentence ("Your move" / "{name} is playing")
+   * on the active seat's card. Default true.
+   *
+   * Set false when the game's own `#player-stats` content already states turn
+   * state for the seat — the sentence is then a second, redundant line on the
+   * tallest card in the list, and per-seat vertical cost is the binding
+   * constraint in a game with many players.
+   */
+  showTurnStatus?: boolean;
+}>(), {
+  // Vue CASTS an absent Boolean prop to `false`, not `undefined` — so an
+  // opt-OUT flag silently defaults to opted-out unless the default is stated
+  // here. Every consumer that omits the prop must get the sentence.
+  showTurnStatus: true,
+});
+
+/**
+ * Bumped whenever the set of active seats changes — i.e. on every turn change.
+ *
+ * Keying the pulse overlay on this remounts it, which restarts its CSS
+ * animation; a class toggled on a timer would have to be cleared by hand and
+ * would drift out of step with a fast rotation. The tick is the change signal
+ * itself, so the cue cannot outlive the turn it belongs to.
+ */
+const turnTick = ref(0);
+watch(
+  () => [props.currentPlayerSeat ?? -1, ...(props.awaitingPlayerSeats ?? [])].join(','),
+  () => { turnTick.value++; },
+);
 
 // Token identity (color + shape + letter) is rendered by the shared PlayerToken
-// component — seat index → shape keeps players distinct even when they share an
-// initial (see collision-note in the Slate mockup).
+// component — SEAT → shape keeps players distinct even when they share an
+// initial (see collision-note in the Slate mockup). Pass `player.seat`, never
+// the v-for index: this list is ordered by turn order, so an index-derived
+// shape would disagree with every seat-ordered consumer of the same token.
 
 function isPlayerActive(seat: number): boolean {
   if (seat === props.currentPlayerSeat) return true;
@@ -67,14 +98,16 @@ const activePlayer = computed(() =>
   props.players.find(p => isPlayerActive(p.seat)) ?? null
 );
 
-/** Index of the active player (for seat-strip token shape). */
-const activePlayerIndex = computed(() =>
-  props.players.findIndex(p => isPlayerActive(p.seat))
-);
-
 defineSlots<{
-  /** Custom stats for each player */
+  /** Custom stats for each player — rendered at the end of the info column. */
   'player-stats'(props: { player: Player }): any;
+  /**
+   * Custom content directly BENEATH the identity token, in the card's narrow
+   * first column (a character portrait, a rank pip — anything that reads as
+   * part of the seat's identity rather than its stats). Keeps per-seat height
+   * down: content here sits beside the name row instead of stacking under it.
+   */
+  'player-token-extra'(props: { player: Player }): any;
 }>();
 </script>
 
@@ -84,7 +117,7 @@ defineSlots<{
     <!-- All player tokens inline -->
     <div class="strip-tokens" aria-hidden="true">
       <span
-        v-for="(player, idx) in players"
+        v-for="player in players"
         :key="player.seat"
         class="pt"
         :class="{ 'strip-active': isPlayerActive(player.seat) }"
@@ -92,7 +125,7 @@ defineSlots<{
       >
         <PlayerToken
           :name="player.name"
-          :index="idx"
+          :seat="player.seat"
           :color="player.color"
           :size="isPlayerActive(player.seat) ? 34 : 28"
         />
@@ -107,16 +140,29 @@ defineSlots<{
   <!-- ── Standard mode: full per-player cards ──────────────────────────────── -->
   <div v-else class="players-panel" role="list" aria-label="Players">
     <div
-      v-for="(player, idx) in players"
+      v-for="player in players"
       :key="player.seat"
       class="player-card"
       :class="{ current: isPlayerActive(player.seat) }"
       role="listitem"
       :aria-current="isPlayerActive(player.seat) ? 'true' : undefined"
     >
+      <!-- Turn-change attention pulse: a one-shot ring, remounted by turnTick so
+           it replays on each turn change. Animated on transform+opacity only
+           (see the PERF note on .turn-indicator-dot) and one-shot rather than a
+           loop — a permanently animating border on a tall list is noise, and a
+           seat that acts for a long time would never stop pulsing. -->
+      <span
+        v-if="isPlayerActive(player.seat)"
+        :key="`pulse-${player.seat}-${turnTick}`"
+        class="turn-pulse"
+        aria-hidden="true"
+      ></span>
+
       <!-- Player identity token: color + shape + letter (IA-06) -->
       <div class="player-token-wrap">
-        <PlayerToken :name="player.name" :index="idx" :color="player.color" :size="38" />
+        <PlayerToken :name="player.name" :seat="player.seat" :color="player.color" :size="38" />
+        <slot name="player-token-extra" :player="player"></slot>
       </div>
 
       <!-- Player info: name row + turn-status sentence + stats slot -->
@@ -136,8 +182,9 @@ defineSlots<{
             :aria-label="player.connected ? `${player.name} connected` : `${player.name} disconnected`"
           ></span>
         </div>
-        <!-- Turn-status sentence: active player only (IA-02 reconciliation) -->
-        <div v-if="isPlayerActive(player.seat)" class="turn-status">
+        <!-- Turn-status sentence: active player only (IA-02 reconciliation),
+             and only when the game hasn't said its own slot content covers it. -->
+        <div v-if="showTurnStatus && isPlayerActive(player.seat)" class="turn-status">
           {{ turnStatus(player) }}
         </div>
         <slot name="player-stats" :player="player"></slot>
@@ -158,6 +205,7 @@ defineSlots<{
 }
 
 .player-card {
+  position: relative;
   display: grid;
   grid-template-columns: 38px 1fr;
   gap: 11px;
@@ -173,9 +221,16 @@ defineSlots<{
   border-color: color-mix(in srgb, var(--bsg-accent) 35%, transparent);
 }
 
+/* The card's narrow first column. Height is content-driven, not pinned to the
+   token: #player-token-extra content (a portrait, a rank pip) stacks under the
+   token here rather than being forced into the info column, where it would add
+   its full height below the name row on every seat. */
 .player-token-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
   width: 38px;
-  height: 38px;
   flex: none;
 }
 
@@ -260,6 +315,32 @@ defineSlots<{
   50% { transform: scale(1); opacity: 1; }
 }
 
+/* Turn-change attention pulse (B12): the panel's only turn cue used to be a
+   static few-percent background shift on one card, which players miss in a tall
+   7-seat column. This is a single expanding ring on the card that just became
+   active — enough motion to catch the eye at the edge of vision, gone before it
+   becomes noise.
+
+   Same PERF constraint as .turn-indicator-dot: transform + opacity ONLY, the
+   two properties the compositor runs off the main thread. Do not animate the
+   card's own border/background here — that is a paint property on a full-width
+   element, and this list can be seven of them. */
+.turn-pulse {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 2px solid var(--bsg-accent);
+  pointer-events: none;
+  opacity: 0;
+  animation: turn-attention 900ms var(--bsg-ease, ease-out) 1 both;
+}
+
+@keyframes turn-attention {
+  0%   { opacity: 0;    transform: scale(1); }
+  18%  { opacity: 0.95; transform: scale(1); }
+  100% { opacity: 0;    transform: scale(1.04); }
+}
+
 /* A11Y-08: reduced-motion — stop breathe animation AND provide a static
    high-contrast border so the active-player turn cue remains visible
    (does not simply vanish under reduced-motion preference). The ring's
@@ -271,6 +352,12 @@ defineSlots<{
   }
   .player-card.current {
     border: 2px solid var(--bsg-accent);
+  }
+  /* The pulse is pure attention-motion with no state of its own, so under
+     reduced motion it is simply removed — the static high-contrast border above
+     is the standing cue for which seat is active, and it does not vanish. */
+  .turn-pulse {
+    display: none;
   }
 }
 

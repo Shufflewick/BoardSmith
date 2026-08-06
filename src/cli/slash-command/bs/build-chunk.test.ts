@@ -127,8 +127,8 @@ const NODE_MODULES_BOARDSMITH = 'node_modules/boardsmith';
 /** SKILLDEF-03: the LIBX-01 rename of the retired `suppressActionPanel` fenced escape hatch. */
 const ESCAPE_HATCH_PROP = 'platformActionPanelEscapeHatch';
 
-/** SKILLDEF-03: the only sanctioned per-action dock-hiding mechanism. */
-const SUPPRESS_FROM_DOCK = 'suppressFromDock';
+/** SKILLDEF-03: the only sanctioned per-Action Panel-hiding mechanism. */
+const SUPPRESS_FROM_ACTION_PANEL = 'suppressFromActionPanel';
 
 /** SKILLDEF-03: the retired name that must appear nowhere in build.md. */
 const RETIRED_SUPPRESS_ACTION_PANEL = 'suppressActionPanel';
@@ -1051,9 +1051,9 @@ describe('SKILLDEF-03 — fenced escape hatch', () => {
     expect(build).toMatch(/without EXPLICIT client direction|without the client/i);
   });
 
-  it('build.md names .suppressFromDock() as the only sanctioned per-action dock-hiding mechanism', () => {
+  it('build.md names .suppressFromActionPanel() as the only sanctioned per-Action Panel-hiding mechanism', () => {
     const build = read('build/build.md');
-    expect(build).toContain(SUPPRESS_FROM_DOCK);
+    expect(build).toContain(SUPPRESS_FROM_ACTION_PANEL);
     expect(build).toMatch(/ONLY sanctioned/i);
   });
 
@@ -1462,8 +1462,14 @@ describe('PROC-02 — Part D survives the autonomy rewrite', () => {
     expect(build).toMatch(new RegExp(NODE_MODULES_BOARDSMITH.replace(/\//g, '\\/')));
     expect(build).toMatch(/READ-ONLY and is NEVER patched or edited/);
     expect(build).toMatch(/A shortfall in the library is a library gap, and a library gap is FILED, never patched/);
-    expect(build).toMatch(/Never fence the whole panel without the client/);
+    expect(build).toMatch(/Never set `platformActionPanelEscapeHatch`[\s\S]{0,120}without EXPLICIT client direction/);
     expect(build).toMatch(new RegExp(ESCAPE_HATCH_PROP));
+    // The parity doctrine the section now leads with: a custom board control is
+    // IN ADDITION to the Action Panel, never instead of it. Without this, an
+    // agent reads the panel's copy of a board control as clutter to remove.
+    expect(build).toMatch(/The Action Panel is always on, and it always agrees with the board/);
+    expect(build).toMatch(/IN ADDITION to the panel, never instead of it/);
+    expect(build).toMatch(/Never CSS-hide the panel/);
   });
 
   it('reuse-not-rebuild survives (build/test.md hand-rolled sim + build/build.md Extends, Never Restructures)', () => {

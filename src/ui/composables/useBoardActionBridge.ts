@@ -15,7 +15,7 @@
  * `#action-panel` slot, or the platform-only `platformActionPanelEscapeHatch`
  * prop is in play (that prop is a platform escape hatch, not an ordinary
  * author-facing option — see GameShell's prop doc; games should suppress an
- * individual action's dock button via `.suppressFromDock()` on the action
+ * individual action's Action Panel button via `.suppressFromActionPanel()` on the action
  * definition instead). The ActionPanel is now purely presentational; the
  * board substrate is fed from here.
  *

@@ -268,25 +268,25 @@ describe('buildPickMetadata: function-valued multiSelect (AI-01 / C.2)', () => {
 });
 
 // ============================================================================
-// LIBX-01 / D28: per-action suppressFromDock rides the actionMetadata channel
+// LIBX-01 / D28: per-action suppressFromActionPanel rides the actionMetadata channel
 // exactly like `manual` (163-... mirrors the manual precedent).
 // ============================================================================
 
-class DockSuppressionGame extends Game<DockSuppressionGame, Player> {
-  board!: Space<DockSuppressionGame>;
+class ActionPanelSuppressionGame extends Game<ActionPanelSuppressionGame, Player> {
+  board!: Space<ActionPanelSuppressionGame>;
 
   constructor(options: GameOptions) {
     super(options);
-    this.board = this.create(Space<DockSuppressionGame>, 'board');
+    this.board = this.create(Space<ActionPanelSuppressionGame>, 'board');
 
     this.registerAction(
-      Action.create<DockSuppressionGame>('hiddenAction')
-        .suppressFromDock()
+      Action.create<ActionPanelSuppressionGame>('hiddenAction')
+        .suppressFromActionPanel()
         .execute(() => ({ success: true })),
     );
 
     this.registerAction(
-      Action.create<DockSuppressionGame>('visibleAction')
+      Action.create<ActionPanelSuppressionGame>('visibleAction')
         .execute(() => ({ success: true })),
     );
 
@@ -303,40 +303,40 @@ class DockSuppressionGame extends Game<DockSuppressionGame, Player> {
   }
 }
 
-describe('buildActionMetadata: suppressFromDock (LIBX-01, mirrors `manual`)', () => {
-  it('emits suppressFromDock:true for an action built with .suppressFromDock()', () => {
-    const game = new DockSuppressionGame({
+describe('buildActionMetadata: suppressFromActionPanel (LIBX-01, mirrors `manual`)', () => {
+  it('emits suppressFromActionPanel:true for an action built with .suppressFromActionPanel()', () => {
+    const game = new ActionPanelSuppressionGame({
       playerCount: 2,
       playerNames: ['Alice', 'Bob'],
-      seed: 'dock-suppression-test',
+      seed: 'action-panel-suppression-test',
     });
     game.startFlow();
     const player = game.getPlayer(1)!;
 
     const metadata = buildActionMetadata(game, player, ['hiddenAction', 'visibleAction']);
 
-    expect(metadata.hiddenAction.suppressFromDock).toBe(true);
+    expect(metadata.hiddenAction.suppressFromActionPanel).toBe(true);
   });
 
-  it('omits suppressFromDock entirely for an action that did not call .suppressFromDock()', () => {
-    const game = new DockSuppressionGame({
+  it('omits suppressFromActionPanel entirely for an action that did not call .suppressFromActionPanel()', () => {
+    const game = new ActionPanelSuppressionGame({
       playerCount: 2,
       playerNames: ['Alice', 'Bob'],
-      seed: 'dock-suppression-test',
+      seed: 'action-panel-suppression-test',
     });
     game.startFlow();
     const player = game.getPlayer(1)!;
 
     const metadata = buildActionMetadata(game, player, ['hiddenAction', 'visibleAction']);
 
-    expect('suppressFromDock' in metadata.visibleAction).toBe(false);
+    expect('suppressFromActionPanel' in metadata.visibleAction).toBe(false);
   });
 
   it('does not remove the suppressed action from the action list (metadata-only, not availability)', () => {
-    const game = new DockSuppressionGame({
+    const game = new ActionPanelSuppressionGame({
       playerCount: 2,
       playerNames: ['Alice', 'Bob'],
-      seed: 'dock-suppression-test',
+      seed: 'action-panel-suppression-test',
     });
     game.startFlow();
     const player = game.getPlayer(1)!;

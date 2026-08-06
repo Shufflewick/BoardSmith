@@ -16,25 +16,25 @@
  * around it. A manual `setZoom` (the slider) takes control and this auto-refit
  * stops; `fitZoom()` (the header/menu "Fit" button) re-fits once and re-arms it.
  *
- * The dock's height is deliberately NOT part of that persistent re-fit. It is
- * reserved during startup (so the dock landing is accounted for in the initial
+ * The Action Panel's height is deliberately NOT part of that persistent re-fit. It is
+ * reserved during startup (so the Action Panel landing is accounted for in the initial
  * fit) and then frozen. The action panel's height changes constantly during
  * play — every selection step re-wraps it — and re-fitting on that resized the
  * board under the player's cursor on every click: the board visibly shook when
  * a piece was selected and again when it moved. Nothing is lost by ignoring it:
- * the dock is out of flow (GameShell's `.actionbar` is `position: absolute`) so
- * it never moves the board by itself, and the board region keeps `--dock-h` of
- * scroll room, so anything a grown dock covers stays scrollable into view.
+ * the Action Panel is out of flow (GameShell's `.actionbar` is `position: absolute`) so
+ * it never moves the board by itself, and the board region keeps `--action-panel-h` of
+ * scroll room, so anything a grown Action Panel covers stays scrollable into view.
  *
  * Measurement notes:
  * - The board element carries CSS `zoom`, so its getBoundingClientRect() is
  *   scaled. Natural size = rect / the *applied* zoom read from computed style
  *   (not the ref, which may not have flushed to the DOM yet).
  * - Available space is the region's client box minus its padding and the
- *   floating action dock's height, so a fitted board sits fully above the dock.
- * - Re-fits triggered by the region observer / dock watch are rAF-coalesced
+ *   floating Action Panel's height, so a fitted board sits fully above the Action Panel.
+ * - Re-fits triggered by the region observer / Action Panel watch are rAF-coalesced
  *   into a single `measureAndFit()` per frame, so a cascade of layout changes
- *   (e.g. the dock's own ResizeObserver plus a window resize) never thrashes.
+ *   (e.g. the Action Panel's own ResizeObserver plus a window resize) never thrashes.
  */
 import { ref, watch, onUnmounted, type Ref } from 'vue';
 
@@ -62,11 +62,11 @@ export function useAutoZoom(options: {
   boardEl: Ref<HTMLElement | null>;
   /** The scrollable board region (`.boardregion`) the board must fit inside. */
   regionEl: Ref<HTMLElement | null>;
-  /** Measured height of the floating action dock, reserved so a fitted board
+  /** Measured height of the floating Action Panel, reserved so a fitted board
    *  is fully visible above it rather than sliding underneath. */
-  dockHeight: Ref<number>;
+  actionPanelHeight: Ref<number>;
 }) {
-  const { boardEl, regionEl, dockHeight } = options;
+  const { boardEl, regionEl, actionPanelHeight } = options;
 
   const zoomLevel = ref(1.0);
 
@@ -74,11 +74,11 @@ export function useAutoZoom(options: {
    *  persistent available-space re-fit is a no-op — `fitZoom()` clears it. */
   let userControlled = false;
 
-  /** The dock height the fit reserves. Null while startup is still following
-   *  the live dock; set to the dock's height at the moment startup ends, after
-   *  which mid-game dock growth/shrink can no longer change the board's size
+  /** The Action Panel height the fit reserves. Null while startup is still following
+   *  the live Action Panel; set to the Action Panel's height at the moment startup ends, after
+   *  which mid-game Action Panel growth/shrink can no longer change the board's size
    *  (see the module docblock). Cleared when a new board mounts. */
-  let reservedDockHeight: number | null = null;
+  let reservedActionPanelHeight: number | null = null;
 
   /** Measure and apply the fitted zoom. Returns true when both boxes were
    *  measurable (a fit was computed), false when layout isn't ready yet. */
@@ -99,7 +99,7 @@ export function useAutoZoom(options: {
       height: region.clientHeight
         - (parseFloat(regionStyle.paddingTop) || 0)
         - (parseFloat(regionStyle.paddingBottom) || 0)
-        - (reservedDockHeight ?? dockHeight.value),
+        - (reservedActionPanelHeight ?? actionPanelHeight.value),
     };
 
     const fit = computeFitZoom(natural, avail);
@@ -116,10 +116,10 @@ export function useAutoZoom(options: {
 
   function endStartup() {
     startupDone = true;
-    // Freeze the dock allowance at whatever the dock measures right now, so a
+    // Freeze the Action Panel allowance at whatever the Action Panel measures right now, so a
     // later region-driven re-fit reserves the same space this fit did rather
     // than silently adopting a mid-game panel height.
-    reservedDockHeight = dockHeight.value;
+    reservedActionPanelHeight = actionPanelHeight.value;
     if (settleTimer !== null) clearTimeout(settleTimer);
     settleTimer = null;
     boardObserver?.disconnect();
@@ -140,8 +140,8 @@ export function useAutoZoom(options: {
   watch(boardEl, (el) => {
     endStartup();
     startupDone = false;
-    // A new board gets a fresh startup, which follows the live dock again.
-    reservedDockHeight = null;
+    // A new board gets a fresh startup, which follows the live Action Panel again.
+    reservedActionPanelHeight = null;
     if (el && typeof ResizeObserver !== 'undefined') {
       boardObserver = new ResizeObserver(onBoardResize);
       boardObserver.observe(el); // observe() always fires an initial callback
@@ -149,7 +149,7 @@ export function useAutoZoom(options: {
   }, { immediate: true, flush: 'post' });
 
   // --- Persistent re-fit on available-space changes (component lifetime) --
-  // Only reads region/dock geometry and writes the board's zoom — never
+  // Only reads region/Action Panel geometry and writes the board's zoom — never
   // observes the board itself here, so this cannot feed back into its own
   // trigger (the board-content-growth exclusion above holds by construction).
   let pendingFrame: number | null = null;
@@ -188,14 +188,14 @@ export function useAutoZoom(options: {
     scheduleRefit();
   }, { immediate: true, flush: 'post' });
 
-  // The dock's own ResizeObserver already writes fresh dockHeight
+  // The Action Panel's own ResizeObserver already writes fresh actionPanelHeight
   // (GameShell.vue) — just react to the ref, don't re-measure it here.
   //
   // STARTUP ONLY. The frozen allowance in measureAndFit is what actually holds
   // the board's size still after startup; this guard additionally skips the
-  // pointless rAF + layout measurement that a mid-game dock resize would
+  // pointless rAF + layout measurement that a mid-game Action Panel resize would
   // otherwise schedule — and the panel re-wraps on every single selection step.
-  watch(dockHeight, () => {
+  watch(actionPanelHeight, () => {
     if (startupDone) return;
     scheduleRefit();
   }, { flush: 'post' });

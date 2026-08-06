@@ -141,7 +141,7 @@ const currentArgs = computed(() => actionController.currentArgs.value);
 // Get metadata for available actions
 // Annotated as ActionMetadata[] on purpose: without it the synthesized
 // fallback entries below form a union with the real metadata, and reading an
-// OPTIONAL field (help, suppressFromDock) off that union fails to compile even
+// OPTIONAL field (help, suppressFromActionPanel) off that union fails to compile even
 // though it is valid on both arms. The annotation says what this list is — action
 // metadata, with a minimal entry synthesized for actions that have none.
 const actionsWithMetadata = computed<ActionMetadata[]>(() => {
@@ -169,21 +169,21 @@ const actionsWithMetadata = computed<ActionMetadata[]>(() => {
 // Actions to display in the UI
 // endTurn is always shown so users can manually end their turn
 // Auto-execute only happens when endTurn is the only available action
-// LIBX-01: actions declared with .suppressFromDock() are filtered out of the
-// rendered dock here ONLY -- they remain in actionsWithMetadata / the board
+// LIBX-01: actions declared with .suppressFromActionPanel() are filtered out of the
+// rendered Action Panel here ONLY -- they remain in actionsWithMetadata / the board
 // substrate (useBoardActionBridge) and stay fully executable there.
 //
-// ...UNLESS suppressing them would leave the dock empty. `.suppressFromDock()`
+// ...UNLESS suppressing them would leave the Action Panel empty. `.suppressFromActionPanel()`
 // means "this button is redundant with the board affordance", and a button is
 // only redundant while something else is offered. When every available action
-// is suppressed, the dock is the player's only remaining control: emptying it
+// is suppressed, the Action Panel is the player's only remaining control: emptying it
 // leaves a prompt with nothing to press, and for an action with NO selections
 // that state is terminal — no pick can start, so the mid-pick keyboard/SR
 // safety net (A11Y C-2) never engages either. Falling back to the full list
 // keeps the API's purpose (remove clutter) and drops its trap (remove the last
 // way to act).
 const visibleActions = computed(() => {
-  const unsuppressed = actionsWithMetadata.value.filter(a => !a.suppressFromDock);
+  const unsuppressed = actionsWithMetadata.value.filter(a => !a.suppressFromActionPanel);
   return unsuppressed.length > 0 ? unsuppressed : actionsWithMetadata.value;
 });
 
@@ -825,7 +825,7 @@ function clearBoardSelection() {
     <div v-if="!currentAction" class="action-buttons" :key="availableActions.join(',')">
       <!-- Each action wrapped in .action-btn-group: positioning context for "?" affordance.
            .action-buttons { display: contents } propagates the parent flex context so
-           .action-btn-group (inline-flex) becomes a direct dock flex item — no layout change. -->
+           .action-btn-group (inline-flex) becomes a direct action bar flex item — no layout change. -->
       <div
         v-for="action in visibleActions"
         :key="action.name"
@@ -1147,7 +1147,7 @@ function clearBoardSelection() {
         </div>
 
         <!-- A11Y-02: notation-anchored choices (board squares). Rendered INLINE as
-             flow buttons — direct siblings of the prompt in the dock's flex flow — so
+             flow buttons — direct siblings of the prompt in the action bar's flex flow — so
              the action reads as one wrapping sentence (e.g. "Move · b6 · Select
              destination · a5 · c5"), in parity with primary choice buttons. They remain
              keyboard/SR-operable: each is a real <button> whose activation resolves
@@ -1195,7 +1195,7 @@ function clearBoardSelection() {
 
 <style scoped>
 .action-panel {
-  /* Flattened into the dock's flex flow: ActionPanel's own box disappears so its
+  /* Flattened into the action bar's flex flow: ActionPanel's own box disappears so its
      children (action title, cancel, prompt, option buttons) flow INLINE alongside the
      ⋯ menu + token, wrapping like one sentence (no header row before the buttons).
      The wrapper chain below is also display:contents to reach the leaf items. */
@@ -1203,13 +1203,13 @@ function clearBoardSelection() {
 }
 
 .action-buttons {
-  /* Flattened into the dock flow so available-action buttons wrap inline with the
+  /* Flattened into the action bar's flow so available-action buttons wrap inline with the
      ⋯ menu + token (see .action-panel). */
   display: contents;
 }
 
 /* Action button group — wraps each action + its "?" affordance.
-   inline-flex becomes a direct dock flex item (because .action-buttons has
+   inline-flex becomes a direct action bar flex item (because .action-buttons has
    display:contents, propagating the parent flex context). The "?" is absolutely
    positioned so it does NOT affect the group's intrinsic width (RESEARCH Pitfall 5).
    No width or flex-grow set — action-btn retains its own sizing rules. */
@@ -1260,7 +1260,7 @@ function clearBoardSelection() {
 }
 
 /* Action configuration - horizontal flow layout */
-/* Flattened into the dock flow (see .action-panel) so the action title, cancel,
+/* Flattened into the action bar's flow (see .action-panel) so the action title, cancel,
    prompt, and option buttons all wrap inline together. */
 .action-config {
   display: contents;
@@ -1376,7 +1376,7 @@ function clearBoardSelection() {
 
 /* Selection input - flows inline */
 .selection-input {
-  /* Flattened into the dock flow so the prompt + option buttons wrap inline with the
+  /* Flattened into the action bar's flow so the prompt + option buttons wrap inline with the
      ⋯ menu / token / title (see .action-panel). */
   display: contents;
 }
@@ -1388,9 +1388,9 @@ function clearBoardSelection() {
 }
 
 .choice-buttons {
-  /* Flattened into the dock flow so every option button is a direct sibling of the
+  /* Flattened into the action bar's flow so every option button is a direct sibling of the
      ⋯ menu / token / prompt and they all wrap inline together. The 5-row cap + scroll
-     now lives on the dock itself (GameShell .actionbar). */
+     now lives on the action bar itself (GameShell .actionbar). */
   display: contents;
 }
 
@@ -1449,7 +1449,7 @@ function clearBoardSelection() {
 }
 
 /* A11Y-02: notation-anchored choices now flow inline as flow buttons (see template).
-   No wrapper block / centered label — they are direct dock flex items that wrap with
+   No wrapper block / centered label — they are direct action bar flex items that wrap with
    the prompt. The accent border distinguishes them as board-anchored options. */
 .anchored-choice-btn {
   border-color: var(--bsg-accent);

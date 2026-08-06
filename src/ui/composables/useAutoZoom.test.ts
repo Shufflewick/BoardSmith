@@ -7,11 +7,11 @@
  *         axes, clamped to [ZOOM_MIN, ZOOM_MAX], and null for unmeasurable boxes.
  *   AZ-2: measureAndFit applies the fitted zoom from real element measurements
  *         (board rect ÷ applied zoom vs region client box minus padding and
- *         dock height).
+ *         Action Panel height).
  *   AZ-3: startup fitting keeps following board resizes while content settles
  *         in (including waiting out an initial 0×0 board), then the STARTUP
  *         board observer stops once the size has been stable for SETTLE_MS —
- *         later board CONTENT growth (with no dock/region change) never moves
+ *         later board CONTENT growth (with no Action Panel/region change) never moves
  *         the zoom.
  *   AZ-4: setZoom (the slider) clamps, applies, cancels any in-flight startup
  *         fitting, and takes manual control (auto-refit stops until fitZoom).
@@ -19,7 +19,7 @@
  *   ZOOM-01: after the startup fit settles, a region resize re-fits the board
  *         (the persistent region observer), unless the user has taken manual
  *         control via setZoom.
- *   ZOOM-02: the dock height is reserved during startup but frozen afterwards —
+ *   ZOOM-02: the Action Panel height is reserved during startup but frozen afterwards —
  *         a mid-game action-panel resize must NOT move the board. Re-fitting on
  *         it made the board shake on every piece click and every move.
  */
@@ -109,7 +109,7 @@ function flushRaf() {
 function mountAutoZoom(opts: {
   boardEl: Ref<HTMLElement | null>;
   regionEl: Ref<HTMLElement | null>;
-  dockHeight: Ref<number>;
+  actionPanelHeight: Ref<number>;
 }) {
   let api!: ReturnType<typeof useAutoZoom>;
   const wrapper = mount(defineComponent({
@@ -157,8 +157,8 @@ describe('useAutoZoom', () => {
     const boardEl = ref<HTMLElement | null>(board.el);
     const region = fakeRegion(800, 700);
     const regionEl = ref<HTMLElement | null>(region.el);
-    const dockHeight = ref(100);
-    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+    const actionPanelHeight = ref(100);
+    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
     await nextTick(); // flush: 'post' watcher wires the observer
 
     // width: 800/400 = 2, height: (700-100)/300 = 2 → fit 2.0
@@ -173,8 +173,8 @@ describe('useAutoZoom', () => {
     const boardEl = ref<HTMLElement | null>(board.el);
     const region = fakeRegion(600, 450);
     const regionEl = ref<HTMLElement | null>(region.el);
-    const dockHeight = ref(0);
-    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+    const actionPanelHeight = ref(0);
+    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
     await nextTick();
 
     expect(api.zoomLevel.value).toBe(1.5);
@@ -187,8 +187,8 @@ describe('useAutoZoom', () => {
     const boardEl = ref<HTMLElement | null>(board.el);
     const region = fakeRegion(800, 600);
     const regionEl = ref<HTMLElement | null>(region.el);
-    const dockHeight = ref(0);
-    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+    const actionPanelHeight = ref(0);
+    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
     await nextTick();
     // Flush the mount-time region-wiring catch-up frame now (it fires within
     // a frame of mount in practice) so it can't be mistaken later for a
@@ -216,7 +216,7 @@ describe('useAutoZoom', () => {
     expect(observer.disconnected).toBe(true);
 
     // Mid-game CONTENT growth (board is no longer observed) never moves the
-    // zoom by itself — no dock/region change accompanies it.
+    // zoom by itself — no Action Panel/region change accompanies it.
     board.setSize(800, 900);
     observer.fire(); // no-op: disconnected
     flushRaf();
@@ -229,8 +229,8 @@ describe('useAutoZoom', () => {
     const boardEl = ref<HTMLElement | null>(board.el);
     const region = fakeRegion(800, 600);
     const regionEl = ref<HTMLElement | null>(region.el);
-    const dockHeight = ref(0);
-    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+    const actionPanelHeight = ref(0);
+    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
     await nextTick();
     const observer = observerFor(board.el)!;
 
@@ -256,8 +256,8 @@ describe('useAutoZoom', () => {
     const boardEl = ref<HTMLElement | null>(board.el);
     const region = fakeRegion(800, 700);
     const regionEl = ref<HTMLElement | null>(region.el);
-    const dockHeight = ref(100);
-    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+    const actionPanelHeight = ref(100);
+    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
     await nextTick();
 
     api.setZoom(0.6);
@@ -267,22 +267,22 @@ describe('useAutoZoom', () => {
   });
 
   describe('re-fit on available-space change (ZOOM-01)', () => {
-    it('reserves the dock when it lands DURING startup (ZOOM-02)', async () => {
+    it('reserves the Action Panel when it lands DURING startup (ZOOM-02)', async () => {
       const board = fakeBoard(400, 300);
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700);
       const regionEl = ref<HTMLElement | null>(region.el);
-      const dockHeight = ref(100);
-      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      const actionPanelHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
       await nextTick();
       flushRaf();
 
       // width: 800/400 = 2, height: (700-100)/300 = 2 → fit 2.0
       expect(api.zoomLevel.value).toBe(2.0);
 
-      // The dock lands before the startup fit has settled: avail height now
+      // The Action Panel lands before the startup fit has settled: avail height now
       // 700-400=300 → fit min(800/400, 300/300) = min(2, 1) = 1.0.
-      dockHeight.value = 400;
+      actionPanelHeight.value = 400;
       await nextTick();
       flushRaf();
 
@@ -290,13 +290,13 @@ describe('useAutoZoom', () => {
       wrapper.unmount();
     });
 
-    it('does NOT re-fit when the dock resizes after startup has settled (ZOOM-02)', async () => {
+    it('does NOT re-fit when the Action Panel resizes after startup has settled (ZOOM-02)', async () => {
       const board = fakeBoard(400, 300);
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700);
       const regionEl = ref<HTMLElement | null>(region.el);
-      const dockHeight = ref(100);
-      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      const actionPanelHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
       await nextTick();
       flushRaf();
       expect(api.zoomLevel.value).toBe(2.0);
@@ -306,14 +306,14 @@ describe('useAutoZoom', () => {
       // Mid-game the action panel re-wraps on every selection step. Under the
       // old behavior this recomputed the fit to 1.0 and the board visibly
       // resized under the player's cursor — the reported "board shakes".
-      dockHeight.value = 400;
+      actionPanelHeight.value = 400;
       await nextTick();
       flushRaf();
 
       expect(api.zoomLevel.value).toBe(2.0);
 
       // Shrinking back does not move it either.
-      dockHeight.value = 60;
+      actionPanelHeight.value = 60;
       await nextTick();
       flushRaf();
 
@@ -321,23 +321,23 @@ describe('useAutoZoom', () => {
       wrapper.unmount();
     });
 
-    it('a post-startup region re-fit reserves the STARTUP dock height, not the current one (ZOOM-02)', async () => {
+    it('a post-startup region re-fit reserves the STARTUP Action Panel height, not the current one (ZOOM-02)', async () => {
       const board = fakeBoard(400, 300);
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700);
       const regionEl = ref<HTMLElement | null>(region.el);
-      const dockHeight = ref(100);
-      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      const actionPanelHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
       await nextTick();
       flushRaf();
       vi.advanceTimersByTime(SETTLE_MS);
 
       // The panel grows mid-game (ignored), then the window resizes (honored).
-      dockHeight.value = 400;
+      actionPanelHeight.value = 400;
       await nextTick();
       flushRaf();
 
-      // Region height halves. The re-fit must still reserve the frozen dock
+      // Region height halves. The re-fit must still reserve the frozen Action Panel
       // height of 100, not the current 400: avail 800 × (1000-100)=900 →
       // min(800/400, 900/300) = min(2, 3) = 2.0.
       region.setSize(800, 1000);
@@ -353,8 +353,8 @@ describe('useAutoZoom', () => {
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700);
       const regionEl = ref<HTMLElement | null>(region.el);
-      const dockHeight = ref(100);
-      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      const actionPanelHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
       await nextTick();
       flushRaf();
       expect(api.zoomLevel.value).toBe(2.0);
@@ -374,13 +374,13 @@ describe('useAutoZoom', () => {
   });
 
   describe('adversarial: user zoom + content-growth guard (ZOOM-01)', () => {
-    it('a manual setZoom is NOT overridden by a subsequent dock or region change', async () => {
+    it('a manual setZoom is NOT overridden by a subsequent Action Panel or region change', async () => {
       const board = fakeBoard(400, 300);
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700);
       const regionEl = ref<HTMLElement | null>(region.el);
-      const dockHeight = ref(100);
-      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      const actionPanelHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
       await nextTick();
       flushRaf();
       vi.advanceTimersByTime(SETTLE_MS);
@@ -389,8 +389,8 @@ describe('useAutoZoom', () => {
       expect(api.zoomLevel.value).toBe(0.8);
 
       // Attempt to defeat the guard with the EXACT change that re-fits an
-      // un-controlled player (both dock and region).
-      dockHeight.value = 400;
+      // un-controlled player (both Action Panel and region).
+      actionPanelHeight.value = 400;
       region.setSize(400, 700);
       observerFor(region.el)?.fire();
       await nextTick();
@@ -405,27 +405,27 @@ describe('useAutoZoom', () => {
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700);
       const regionEl = ref<HTMLElement | null>(region.el);
-      const dockHeight = ref(100);
-      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      const actionPanelHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
       await nextTick();
       flushRaf();
       vi.advanceTimersByTime(SETTLE_MS);
 
       api.setZoom(0.8);
-      dockHeight.value = 400; // defeated by the guard, per the previous test
+      actionPanelHeight.value = 400; // defeated by the guard, per the previous test
       region.setSize(400, 700);
       observerFor(region.el)?.fire();
       await nextTick();
       flushRaf();
       expect(api.zoomLevel.value).toBe(0.8);
 
-      // Pressing Fit re-fits to the CURRENT space (400×700 region, dock 400 →
+      // Pressing Fit re-fits to the CURRENT space (400×700 region, Action Panel 400 →
       // avail 400×300) and clears the guard.
       api.fitZoom();
       expect(api.zoomLevel.value).toBe(1.0); // min(400/400, 300/300) = 1.0
 
       // A later region change now DOES re-fit (guard re-armed). fitZoom froze
-      // the dock allowance at the then-current 400, so avail is
+      // the Action Panel allowance at the then-current 400, so avail is
       // 800 × (1100-400)=700 → min(800/400, 700/300) = min(2, 2.33) = 2.0.
       region.setSize(800, 1100);
       observerFor(region.el)?.fire();
@@ -435,20 +435,20 @@ describe('useAutoZoom', () => {
       wrapper.unmount();
     });
 
-    it('board CONTENT growth alone (no dock/region change) does not move the zoom', async () => {
+    it('board CONTENT growth alone (no Action Panel/region change) does not move the zoom', async () => {
       const board = fakeBoard(400, 300);
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700);
       const regionEl = ref<HTMLElement | null>(region.el);
-      const dockHeight = ref(100);
-      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      const actionPanelHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
       await nextTick();
       flushRaf();
       vi.advanceTimersByTime(SETTLE_MS);
       expect(api.zoomLevel.value).toBe(2.0);
 
       // Board grows mid-game; the board is no longer observed post-startup,
-      // and neither the region observer nor the dock watch fires for it.
+      // and neither the region observer nor the Action Panel watch fires for it.
       board.setSize(800, 900);
       await nextTick();
       flushRaf();
@@ -462,8 +462,8 @@ describe('useAutoZoom', () => {
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700);
       const regionEl = ref<HTMLElement | null>(region.el);
-      const dockHeight = ref(100);
-      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      const actionPanelHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
       await nextTick();
       flushRaf();
       vi.advanceTimersByTime(SETTLE_MS);
@@ -476,7 +476,7 @@ describe('useAutoZoom', () => {
       expect(regionObserver.disconnected).toBe(true);
 
       // Post-unmount layout churn must not resurrect a re-fit.
-      dockHeight.value = 400;
+      actionPanelHeight.value = 400;
       region.setSize(200, 200);
       regionObserver.fire(); // no-op: disconnected
       await nextTick();
@@ -490,8 +490,8 @@ describe('useAutoZoom', () => {
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700);
       const regionEl = ref<HTMLElement | null>(region.el);
-      const dockHeight = ref(100);
-      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, dockHeight });
+      const actionPanelHeight = ref(100);
+      const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, actionPanelHeight });
       await nextTick();
       flushRaf();
       vi.advanceTimersByTime(SETTLE_MS);

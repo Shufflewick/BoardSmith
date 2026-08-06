@@ -73,7 +73,7 @@ export function buildActionMetadata(
       prompt: actionDef.prompt,
       help: actionDef.help,
       ...(actionDef.manual ? { manual: true } : {}),
-      ...(actionDef.suppressFromDock ? { suppressFromDock: true } : {}),
+      ...(actionDef.suppressFromActionPanel ? { suppressFromActionPanel: true } : {}),
       selections: pickMetas,
     };
   }

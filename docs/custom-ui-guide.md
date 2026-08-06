@@ -11,6 +11,49 @@ BoardSmith UIs receive game state as a serialized element tree (`gameView`) and 
 3. **validElements** - Which elements can be selected for the current action
 4. **boardInteraction** - Highlight/select elements on the board
 
+## Before you start: your board does not replace the Action Panel
+
+Read this first, because it decides the shape of everything you build.
+
+> **The Action Panel is on at all times, and it offers exactly what your board
+> offers. Your board control is *in addition to* the panel, never instead of
+> it.**
+
+The most common instinct when a custom board starts looking good is to get rid
+of the panel underneath it — it appears to be a duplicate of the controls you
+just drew. It isn't, and it must stay:
+
+- The panel is the **keyboard and screen-reader path**. A `<div>` on your board
+  with a click handler is not; it is a mouse affordance with no guaranteed
+  focus order, name, or role.
+- It is the path that still works when a board control is scrolled off-screen,
+  mid-animation, too small to hit on a phone, or simply not built yet — which
+  is every control, early in a chunked build.
+- Your board control makes the *same* action nicer to take. It carries none of
+  the panel's guarantees, so it cannot stand in for it.
+
+So expect — and keep — this arrangement: your compass, card fan, or drag-drop
+grid on the board, **and** the panel listing those same choices beneath it. It
+is not clutter, it is the floor.
+
+The parity runs both ways: whatever the panel offers, the board must offer, and
+whatever the board offers, the panel must offer. If the two ever show different
+things, that is a wiring bug in your UI, not an argument for hiding one of them.
+Drive both from the same state — the `actionController` and `boardInteraction`
+described in this guide — and they cannot drift. If you find yourself keeping a
+second, board-local copy of "what is selectable right now", that copy is the
+bug.
+
+There is exactly one sanctioned reduction: `.suppressFromActionPanel()` on an
+action drops its redundant **start button** while the panel keeps rendering
+everything else, including that action's full choice list once it is under way.
+Nothing suppresses a live choice list, and `platformActionPanelEscapeHatch`
+belongs to the host platform, not to a game. See
+[Actions & Flow](./actions-and-flow.md#the-action-panel-is-always-on-and-it-always-agrees-with-the-board).
+
+Hiding the panel in CSS is worse than either option: the controls stay operable
+and in the tab order, but nobody can see them.
+
 ## Step 1: Understanding gameView Structure
 
 The `gameView` is a tree of serialized game elements. Each element has:
@@ -718,7 +761,7 @@ watch(
 GameShell renders a sanctioned overlay layer, `#bs-game-modal`, that exactly
 fills the board region. Teleport a blocking modal there (an end-of-round
 summary, a scoring recap) and it covers the board but never GameShell's
-header or action dock:
+header or Action Panel:
 
 ```vue
 <template>

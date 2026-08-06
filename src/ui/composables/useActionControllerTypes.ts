@@ -110,12 +110,12 @@ export interface ActionMetadata {
    */
   manual?: boolean;
   /**
-   * When true this action's dock button is hidden (LIBX-01). Presentation only —
+   * When true this action's Action Panel button is hidden (LIBX-01). Presentation only —
    * NOT a security control; the action stays fully executable from the board
-   * substrate. Set via `ActionBuilder.suppressFromDock()` and emitted by the
+   * substrate. Set via `ActionBuilder.suppressFromActionPanel()` and emitted by the
    * engine (`engine/element/action-metadata.ts`).
    */
-  suppressFromDock?: boolean;
+  suppressFromActionPanel?: boolean;
   selections: PickMetadata[];
 }
 

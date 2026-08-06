@@ -424,11 +424,11 @@ export interface ActionMetadata {
    */
   manual?: boolean;
   /**
-   * When true, the dock button for this action is hidden from the auto-UI
+   * When true, the Action Panel button for this action is hidden from the auto-UI
    * ActionPanel. The action stays fully executable via the board / custom UI —
-   * see ActionBuilder.suppressFromDock(). Not a security control.
+   * see ActionBuilder.suppressFromActionPanel(). Not a security control.
    */
-  suppressFromDock?: boolean;
+  suppressFromActionPanel?: boolean;
   selections: PickMetadata[];
 }
 

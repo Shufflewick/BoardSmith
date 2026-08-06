@@ -214,7 +214,7 @@ onUnmounted(() => {
   <!--
     Teleport to body: escapes .actionbar overflow clipping (same pattern as
     HeatmapOverlay, TutorialOverlay, ControlsMenu).
-    z-index 60 keeps it above all dock content (z-15 heatmap, z-20 tutorial).
+    z-index 60 keeps it above all action bar content (z-15 heatmap, z-20 tutorial).
   -->
   <Teleport to="body">
     <Transition name="action-help-popover">

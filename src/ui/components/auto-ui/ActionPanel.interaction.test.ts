@@ -223,7 +223,7 @@ describe('ActionPanel interaction tests', () => {
 
   // ── Test C3: clicking an anchored destination button submits that choice ──
   it('C3: clicking an anchored destination button resolves THAT choice and submits the action', async () => {
-    // Regression for the dock destination-click bug: the anchored-choice button used
+    // Regression for the Action Panel destination-click bug: the anchored-choice button used
     // to call boardInteraction.triggerElementSelect on `refs.find(first notation)`,
     // which for a checkers destination is the SOURCE square — shared by every
     // destination from the same piece, so it could never disambiguate the target and

@@ -161,12 +161,12 @@ export interface ActionMetadata {
    */
   help?: string;
   /**
-   * When true this action's dock button is hidden (LIBX-01). Presentation
-   * only — NOT a security control. Set via `ActionBuilder.suppressFromDock()`
+   * When true this action's Action Panel button is hidden (LIBX-01). Presentation
+   * only — NOT a security control. Set via `ActionBuilder.suppressFromActionPanel()`
    * and emitted by the engine; declared here because GameShell and ActionPanel
    * both read it off this metadata.
    */
-  suppressFromDock?: boolean;
+  suppressFromActionPanel?: boolean;
 }
 
 /**

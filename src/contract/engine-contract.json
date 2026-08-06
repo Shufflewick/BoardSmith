@@ -1,7 +1,7 @@
 {
-  "revision": 7,
+  "revision": 8,
   "bundleProtocol": 1,
-  "surfaceHash": "dfee85770a7d895d",
+  "surfaceHash": "62514e31d9da2b2a",
   "payloadHash": "bf22b8c168ab229d",
   "history": [
     {
@@ -59,6 +59,14 @@
       "surfaceHash": "dfee85770a7d895d",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Engine exports turnSequence() and orderSeatsByTurn(): recover the running order eachPlayer already resolved, and arrange seats for display without dropping or duplicating any."
+    },
+    {
+      "revision": 8,
+      "date": "2026-08-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "62514e31d9da2b2a",
+      "payloadHash": "bf22b8c168ab229d",
+      "summary": "Renamed ActionBuilder.suppressFromDock() to .suppressFromActionPanel() and its actionMetadata field to match: 'Action Panel' is now the single name for the control surface (the 'dock' synonym is retired everywhere, including the --dock-h CSS custom property, now --action-panel-h)."
     }
   ]
 }

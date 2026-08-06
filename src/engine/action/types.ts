@@ -524,11 +524,11 @@ export interface ActionDefinition {
    */
   manual?: boolean;
   /**
-   * Hide this action's dock button in the auto-UI ActionPanel. The action stays
+   * Hide this action's Action Panel button in the auto-UI ActionPanel. The action stays
    * fully executable via the board / custom UI (useBoardInteraction) — only the
-   * dock button is hidden. Not a security control. Set via `.suppressFromDock()`.
+   * Action Panel button is hidden. Not a security control. Set via `.suppressFromActionPanel()`.
    */
-  suppressFromDock?: boolean;
+  suppressFromActionPanel?: boolean;
   /**
    * Help text shown to players on hover/tap. Display-only; never used as a predicate.
    * Set via the `.help(text)` builder method. Propagates into ActionMetadata for both

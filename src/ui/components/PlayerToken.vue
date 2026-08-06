@@ -3,9 +3,18 @@
  * PlayerToken — the canonical player identity glyph: color + SHAPE + letter.
  *
  * Single source of truth for the token used in the players panel, the rail,
- * and the action-bar turn indicator (IA-06). Seat index → shape keeps players
+ * and the action-bar turn indicator (IA-06). Seat → shape keeps players
  * visually distinct even when two share an initial. Sizes via the `size` prop
  * (px); the letter scales with it.
+ *
+ * The shape is derived from the player's SEAT — a stable identity that no
+ * consumer can reorder — never from a render position. Deriving it from a
+ * v-for index made a player's shape a function of whichever array happened to
+ * be rendering: the players panel iterates turn order while the action panel's
+ * turn indicator looks up seat order, so the same player was drawn as two
+ * different shapes at once, and a player's shape changed mid-game whenever the
+ * running order rotated. Shape is meant to be the identity that survives
+ * colour-blindness and colourless games; it cannot also be positional.
  *
  * Glyph ink (LIBX-03/D30) is luminance-adaptive: black on light seat colors,
  * white on dark, via `contrastInk`. The `text-shadow` halo is derived
@@ -30,8 +39,12 @@ const props = withDefaults(
   defineProps<{
     /** Player display name — drives the centered letter. */
     name: string;
-    /** Player index in the players array — drives the shape. */
-    index: number;
+    /**
+     * The player's SEAT — drives the shape. Must be a stable per-player
+     * identity, never a position in whichever array is being rendered: a seat's
+     * shape has to be invariant under reordering (see the component docstring).
+     */
+    seat: number;
     /** Player color (CSS color). Falls back to the accent token. */
     color?: string;
     /** Token size in px (square). Letter scales from this. */
@@ -41,7 +54,7 @@ const props = withDefaults(
 );
 
 function shape(): string {
-  return SHAPES[props.index % SHAPES.length];
+  return SHAPES[props.seat % SHAPES.length];
 }
 
 function initial(): string {

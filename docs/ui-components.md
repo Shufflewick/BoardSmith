@@ -54,6 +54,13 @@ The main wrapper component that provides the complete game UI structure: header,
         Use ability
       </button>
     </template>
+
+    <!-- Content directly BENEATH the seat's identity token, in the card's narrow
+         first column — for things that read as part of who the player is (a
+         character portrait, a rank pip) rather than as stats. -->
+    <template #player-token-extra="{ player }">
+      <img class="portrait" :src="portraitFor(player)" alt="" />
+    </template>
   </GameShell>
 </template>
 
@@ -101,6 +108,37 @@ score, and a presence indicator to show.
 There is no running order during a simultaneous step (no one is "next"), before
 the flow starts, or in a game with a hand-rolled turn structure. All three fall
 back to seat order rather than inventing a sequence.
+
+Reordering the panel never changes a player's identity token. The token's shape
+comes from the **seat**, so it is the same glyph in the panel, the seat strip,
+and the action bar's turn indicator, and it does not change when the running
+order rotates. Shape is the identity that survives colour-blindness and
+colourless games; it is never positional.
+
+#### Keeping seat cards short
+
+Each seat card is a two-column grid: the identity token, then a name row, the
+turn-status sentence, and your `#player-stats` content. A game with rich
+per-seat content (portrait, role, rank, an action counter) can run out of
+vertical room well before the panel's seat limit, so there are two levers:
+
+- **`#player-token-extra`** puts content under the token, in the narrow first
+  column, instead of stacking it below the name row where it costs every card
+  its full height.
+- **`:show-turn-status="false"`** drops the shell's "Your move" / "{name} is
+  playing" sentence. Use it only when your own slot content already states turn
+  state for that seat — every other turn cue stays either way: the indicator
+  dot, the active-card highlight, the turn-change pulse, and `aria-current`.
+
+#### Turn-change cue
+
+When the turn passes, the newly-active card plays a one-shot ring pulse. It
+marks the *transition* — a static highlight alone is easy to miss in a tall
+column of near-identical cards, which is exactly when a player misses their own
+turn starting. It does not loop: a permanently animating border becomes noise,
+and a seat that acts for a long time would never stop. Under
+`prefers-reduced-motion: reduce` the pulse is removed and the standing
+high-contrast border carries the cue instead.
 
 The engine helpers behind this are exported if a custom UI wants the same
 ordering: `turnSequence(flowState)` and `orderSeatsByTurn(allSeats, sequence)`.

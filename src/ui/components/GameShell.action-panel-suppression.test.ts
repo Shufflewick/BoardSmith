@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 /**
- * LIBX-01 dock suppression: `.suppressFromDock()` hides a REDUNDANT dock button,
+ * LIBX-01 Action Panel suppression: `.suppressFromActionPanel()` hides a REDUNDANT Action Panel button,
  * and never the last one.
  *
  * History, because the contract inverted here and the reason matters. LIBX-01
- * originally let per-action suppression empty the dock, and GameShell responded
+ * originally let per-action suppression empty the Action Panel, and GameShell responded
  * by unmounting ActionPanel and rendering a bare turn strip instead. A review
  * (WR-01) spotted that unmounting mid-pick drops the anchored-choices operable
  * button list — the keyboard/SR safety net (A11Y C-2) — for exactly the kind of
@@ -12,7 +12,7 @@
  *
  * That guard only covers actions that HAVE a pick. An action with NO selections
  * can never start one, so a game whose sole available action was a suppressed
- * no-selection confirm emptied the dock, showed a prompt with nothing to press,
+ * no-selection confirm emptied the Action Panel, showed a prompt with nothing to press,
  * and could never reach the guard — a state the player cannot leave. Reported
  * from a real port.
  *
@@ -30,34 +30,34 @@ import { defineComponent, computed } from 'vue';
 import { mount } from '@vue/test-utils';
 
 interface ActionMetaEntry {
-  suppressFromDock?: boolean;
+  suppressFromActionPanel?: boolean;
 }
 
 // ── Level 1: the suppression filter itself ──────────────────────────────────
 // Mirrors ActionPanel.vue's `visibleActions` computed exactly.
 function visibleActions<T extends ActionMetaEntry>(actions: T[]): T[] {
-  const unsuppressed = actions.filter(a => !a.suppressFromDock);
+  const unsuppressed = actions.filter(a => !a.suppressFromActionPanel);
   return unsuppressed.length > 0 ? unsuppressed : actions;
 }
 
-describe('suppressFromDock filter (ActionPanel.visibleActions)', () => {
+describe('suppressFromActionPanel filter (ActionPanel.visibleActions)', () => {
   it('hides a suppressed action while another action is offered', () => {
     const actions = [
-      { name: 'drag', suppressFromDock: true },
+      { name: 'drag', suppressFromActionPanel: true },
       { name: 'pass' },
     ];
     expect(visibleActions(actions).map(a => a.name)).toEqual(['pass']);
   });
 
-  it('shows a suppressed action when it is the ONLY one — the dock is never emptied', () => {
-    const actions = [{ name: 'confirm', suppressFromDock: true }];
+  it('shows a suppressed action when it is the ONLY one — the Action Panel is never emptied', () => {
+    const actions = [{ name: 'confirm', suppressFromActionPanel: true }];
     expect(visibleActions(actions).map(a => a.name)).toEqual(['confirm']);
   });
 
   it('shows ALL of them when every available action is suppressed', () => {
     const actions = [
-      { name: 'dragA', suppressFromDock: true },
-      { name: 'dragB', suppressFromDock: true },
+      { name: 'dragA', suppressFromActionPanel: true },
+      { name: 'dragB', suppressFromActionPanel: true },
     ];
     expect(visibleActions(actions).map(a => a.name)).toEqual(['dragA', 'dragB']);
   });
@@ -66,19 +66,19 @@ describe('suppressFromDock filter (ActionPanel.visibleActions)', () => {
     // No selections means no pick can ever start, so the mid-pick keyboard/SR
     // affordance can never appear either. If this list is empty the player is
     // shown a prompt and given nothing at all — with no way out.
-    const actions = [{ name: 'endScoring', suppressFromDock: true }];
+    const actions = [{ name: 'endScoring', suppressFromActionPanel: true }];
     expect(visibleActions(actions).length).toBeGreaterThan(0);
   });
 
-  it('leaves an ordinary unsuppressed dock untouched', () => {
+  it('leaves an ordinary unsuppressed Action Panel untouched', () => {
     const actions = [{ name: 'move' }, { name: 'pass' }];
     expect(visibleActions(actions).map(a => a.name)).toEqual(['move', 'pass']);
   });
 });
 
 // ── Level 2: the shell gate ─────────────────────────────────────────────────
-const DockHarness = defineComponent({
-  name: 'DockHarness',
+const ActionPanelHarness = defineComponent({
+  name: 'ActionPanelHarness',
   props: {
     platformActionPanelEscapeHatch: { type: Boolean, default: false },
     availableActionNames: { type: Array as () => string[], default: () => [] },
@@ -94,7 +94,7 @@ const DockHarness = defineComponent({
       const meta = props.actionMetadata;
       const names = props.availableActionNames;
       if (!meta || names.length === 0) return false;
-      return names.every((n) => meta[n]?.suppressFromDock === true);
+      return names.every((n) => meta[n]?.suppressFromActionPanel === true);
     });
     return { allSuppressed };
   },
@@ -110,14 +110,14 @@ const DockHarness = defineComponent({
   `,
 });
 
-describe('GameShell dock suppression gate (LIBX-01)', () => {
+describe('GameShell Action Panel suppression gate (LIBX-01)', () => {
   it('all-suppressed: ActionPanel STAYS MOUNTED (it now has buttons to show)', () => {
-    const wrapper = mount(DockHarness, {
+    const wrapper = mount(ActionPanelHarness, {
       props: {
         availableActionNames: ['hiddenA', 'hiddenB'],
         actionMetadata: {
-          hiddenA: { suppressFromDock: true },
-          hiddenB: { suppressFromDock: true },
+          hiddenA: { suppressFromActionPanel: true },
+          hiddenB: { suppressFromActionPanel: true },
         },
       },
     });
@@ -128,10 +128,10 @@ describe('GameShell dock suppression gate (LIBX-01)', () => {
   });
 
   it('some-un-suppressed: ActionPanel mounts (unchanged)', () => {
-    const wrapper = mount(DockHarness, {
+    const wrapper = mount(ActionPanelHarness, {
       props: {
         availableActionNames: ['hiddenA', 'visibleB'],
-        actionMetadata: { hiddenA: { suppressFromDock: true }, visibleB: {} },
+        actionMetadata: { hiddenA: { suppressFromActionPanel: true }, visibleB: {} },
       },
     });
 
@@ -140,7 +140,7 @@ describe('GameShell dock suppression gate (LIBX-01)', () => {
   });
 
   it('platformActionPanelEscapeHatch is now the ONLY thing that removes the panel', () => {
-    const wrapper = mount(DockHarness, {
+    const wrapper = mount(ActionPanelHarness, {
       props: {
         platformActionPanelEscapeHatch: true,
         availableActionNames: ['visibleA'],
@@ -153,7 +153,7 @@ describe('GameShell dock suppression gate (LIBX-01)', () => {
   });
 
   it('no metadata / empty availableActions → default unsuppressed rendering', () => {
-    const wrapper = mount(DockHarness, {
+    const wrapper = mount(ActionPanelHarness, {
       props: { availableActionNames: [], actionMetadata: undefined },
     });
 
@@ -163,11 +163,11 @@ describe('GameShell dock suppression gate (LIBX-01)', () => {
 
   it('a turn indicator is always present, in every suppression combination (T-164-01-02)', () => {
     for (const props of [
-      { availableActionNames: ['a'], actionMetadata: { a: { suppressFromDock: true } } },
-      { availableActionNames: ['a', 'b'], actionMetadata: { a: { suppressFromDock: true }, b: {} } },
+      { availableActionNames: ['a'], actionMetadata: { a: { suppressFromActionPanel: true } } },
+      { availableActionNames: ['a', 'b'], actionMetadata: { a: { suppressFromActionPanel: true }, b: {} } },
       { platformActionPanelEscapeHatch: true, availableActionNames: ['a'], actionMetadata: { a: {} } },
     ]) {
-      const wrapper = mount(DockHarness, { props });
+      const wrapper = mount(ActionPanelHarness, { props });
       const hasIndicator =
         wrapper.find('.turn').exists() || wrapper.find('.action-panel-stub').exists();
       expect(hasIndicator).toBe(true);
@@ -189,14 +189,14 @@ describe('source: the guarantee lives in the filter, not in a shell guard', () =
     'utf-8'
   );
 
-  it('ActionPanel falls back to the full list rather than rendering an empty dock', () => {
+  it('ActionPanel falls back to the full list rather than rendering an empty Action Panel', () => {
     expect(actionPanelSource).toMatch(
       /unsuppressed\.length > 0 \? unsuppressed : actionsWithMetadata\.value/
     );
   });
 
   it('GameShell no longer gates the panel on suppression at all', () => {
-    expect(gameShellSource).not.toContain('allDockActionsSuppressed');
+    expect(gameShellSource).not.toContain('allActionPanelActionsSuppressed');
     // The mid-pick escape hatch existed only to soften that gate; with the gate
     // gone it would be dead weight implying a hazard that no longer exists.
     expect(gameShellSource).not.toContain('hasInProgressPick');

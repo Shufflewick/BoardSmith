@@ -134,9 +134,9 @@ interface GameShellProps {
   /** Player positions that should be AI by default (1-indexed). E.g., [2] makes player 2 AI */
   defaultAIPlayers?: number[];
   /**
-   * Platform-only escape hatch that suppresses the entire action dock
+   * Platform-only escape hatch that suppresses the entire Action Panel
    * (D-02 escape hatch, LIBX-01). Do NOT use from a game's own
-   * scaffold/bridge — use per-action `.suppressFromDock()` on the action
+   * scaffold/bridge — use per-action `.suppressFromActionPanel()` on the action
    * definition instead. Referenced by the platform client and Phase 166
    * SKILLDEF-03. Default: false.
    */
@@ -193,6 +193,17 @@ interface GameShellProps {
    * saves when reading "who's next". The acting seat is marked in place.
    */
   playerOrder?: 'turn' | 'seat' | number[];
+  /**
+   * Whether the players panel renders the shell's turn-status sentence ("Your
+   * move" / "{name} is playing") on the active seat's card. Default `true`.
+   *
+   * Set `false` only when your `#player-stats` content already states turn
+   * state for that seat — otherwise the card carries the same fact twice, and
+   * per-seat height is the scarce resource in a panel with many players. The
+   * turn cue itself does not depend on this: the indicator dot, the active-card
+   * highlight, the turn-change pulse, and `aria-current` all remain.
+   */
+  showTurnStatus?: boolean;
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
@@ -204,6 +215,7 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   platformActionPanelEscapeHatch: false,
   providesOwnGameOverUI: false,
   playerOrder: 'turn',
+  showTurnStatus: true,
 });
 
 // Platform mode: embedded inside a host platform's iframe (e.g., ShufflewickPub
@@ -323,33 +335,33 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
   if (!mql.matches) mobileExpanded.value = false;
 }
 
-// Floating action dock height, measured so the board reserves matching scroll room
-// at the bottom — anything the dock floats over can then be scrolled into view.
-const dockHeight = ref<number>(68);
-let dockResizeObserver: ResizeObserver | null = null;
+// Floating Action Panel height, measured so the board reserves matching scroll room
+// at the bottom — anything the Action Panel floats over can then be scrolled into view.
+const actionPanelHeight = ref<number>(68);
+let actionPanelResizeObserver: ResizeObserver | null = null;
 const actionbarEl = ref<HTMLElement | null>(null);
 
-// ZOOM-01 / F-14: (re)attach the dock-height ResizeObserver to the actionbar
+// ZOOM-01 / F-14: (re)attach the Action-Panel-height ResizeObserver to the actionbar
 // whenever it appears — the actionbar is v-if'd on the game screen, so a
 // lobby-first mount or a game→lobby→game remount would otherwise leave the RO
-// on a detached element (or never attach it), freezing dockHeight at its
-// default and letting the board sit under the dock. Idempotent: disconnects any
+// on a detached element (or never attach it), freezing actionPanelHeight at its
+// default and letting the board sit under the Action Panel. Idempotent: disconnects any
 // prior observer first.
-function attachDockObserver(el: HTMLElement | null): void {
-  dockResizeObserver?.disconnect();
-  dockResizeObserver = null;
+function attachActionPanelObserver(el: HTMLElement | null): void {
+  actionPanelResizeObserver?.disconnect();
+  actionPanelResizeObserver = null;
   if (!el || typeof ResizeObserver === 'undefined') return;
-  dockResizeObserver = new ResizeObserver((entries) => {
+  actionPanelResizeObserver = new ResizeObserver((entries) => {
     const entry = entries[0];
     // BORDER-box height (full on-screen footprint incl. padding) + a small
-    // buffer so revealed content clears the dock edge; contentRect excludes
-    // padding and would leave the board's bottom slightly under the dock.
+    // buffer so revealed content clears the Action Panel edge; contentRect excludes
+    // padding and would leave the board's bottom slightly under the Action Panel.
     const h = entry?.borderBoxSize?.[0]?.blockSize ?? entry?.target.getBoundingClientRect().height;
-    if (h != null) dockHeight.value = Math.round(h) + 8;
+    if (h != null) actionPanelHeight.value = Math.round(h) + 8;
   });
-  dockResizeObserver.observe(el);
+  actionPanelResizeObserver.observe(el);
 }
-watch(actionbarEl, (el) => attachDockObserver(el));
+watch(actionbarEl, (el) => attachActionPanelObserver(el));
 
 // Startup zoom fit: when a game (re)mounts, the board is zoomed once to fill
 // the board region (clamped to the 0.5–2.0 slider range) and then left alone —
@@ -361,7 +373,7 @@ const zoomContainerEl = ref<HTMLElement | null>(null);
 const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
   boardEl: zoomContainerEl,
   regionEl: boardregionEl,
-  dockHeight,
+  actionPanelHeight,
 });
 
 // Connection health (IA-01): driven by postMessage heartbeat in platform mode.
@@ -490,15 +502,15 @@ const availableActions = computed(() => {
 });
 
 // LIBX-01 / A11Y C-2: GameShell no longer unmounts ActionPanel when every
-// available action is `.suppressFromDock()`. It used to, with a mid-pick escape
+// available action is `.suppressFromActionPanel()`. It used to, with a mid-pick escape
 // hatch to keep the keyboard/SR safety net alive for the action the net exists
 // to protect. That guard only covered actions that HAVE a pick in progress: an
 // action with no selections can never start one, so a game whose sole
-// available action was a suppressed no-selection confirm emptied the dock with
+// available action was a suppressed no-selection confirm emptied the Action Panel with
 // nothing left to press and no way to reach the net — a state the player cannot
 // leave. The fix belongs at the mechanism, not the guard: ActionPanel's own
 // suppression filter now falls back to the full list rather than emptying the
-// dock (see its `visibleActions`), so "all suppressed" is no longer a state
+// Action Panel (see its `visibleActions`), so "all suppressed" is no longer a state
 // this component has to defend against. The only thing that removes the panel
 // is the explicit platform escape hatch below.
 
@@ -859,14 +871,16 @@ const awaitingPlayerNames = computed(() => {
 // suppressed during a simultaneous step — a single PlayerToken cannot
 // represent "multiple seats deciding independently" without itself being
 // the misleading single-identity status this fix removes.
+// The token's shape comes from the SEAT, not this array's position: the players
+// panel renders the same players in turn order, and a position-derived shape
+// would draw the acting player as one shape here and another there.
 const activePlayer = computed(() => {
   if (isSimultaneous.value) return null;
   const seat = state.value?.state?.currentPlayer;
   if (seat === undefined) return null;
-  const index = players.value.findIndex(p => p.seat === seat);
-  if (index < 0) return null;
-  const p = players.value[index] as { name?: string; color?: string };
-  return { name: p.name ?? `Player ${seat + 1}`, index, color: p.color };
+  const p = players.value.find(pl => pl.seat === seat) as { name?: string; color?: string } | undefined;
+  if (!p) return null;
+  return { name: p.name ?? `Player ${seat + 1}`, seat, color: p.color };
 });
 
 const currentPlayerColor = computed((): string | undefined => {
@@ -1231,7 +1245,7 @@ provide('presentation', toRef(props, 'presentation'));
 // against the document and finds nothing. Vue then mounts the Teleport with a
 // null target, and the component's FIRST re-render throws mid-patch ("Cannot read
 // properties of null"), aborting the flush queue and wedging the entire UI (dead
-// action dock, stale board). Deferring the game UI by one tick (mounted hooks run
+// Action Panel, stale board). Deferring the game UI by one tick (mounted hooks run
 // after the tree is inserted) guarantees the host exists in the document first,
 // so the documented plain-Teleport pattern always works.
 const shellMounted = ref(false);
@@ -1254,14 +1268,14 @@ onMounted(async () => {
   updateCompact(compactQuery);
   compactQuery.addEventListener('change', updateCompact);
 
-  // Track the floating dock's height so the board reserves matching scroll room
+  // Track the floating Action Panel's height so the board reserves matching scroll room
   // at the bottom — covered board content can then always be scrolled into view.
   // ZOOM-01 / F-14: the actionbar only exists under v-if="currentScreen==='game'",
   // so on a lobby-first (or remounted) mount it is ABSENT here and a one-shot
-  // attach would leave dockHeight frozen at its default (board sits under the
-  // dock). `attachDockObserver` is (re)driven by the watch below whenever the
+  // attach would leave actionPanelHeight frozen at its default (board sits under the
+  // Action Panel). `attachActionPanelObserver` is (re)driven by the watch below whenever the
   // actionbar element appears/disappears, so every mount path rewires it.
-  attachDockObserver(actionbarEl.value);
+  attachActionPanelObserver(actionbarEl.value);
 
   if (platformMode.value) return;
 
@@ -1276,7 +1290,7 @@ onMounted(async () => {
 // Cleanup on unmount
 onUnmounted(() => {
   compactQuery?.removeEventListener('change', updateCompact);
-  dockResizeObserver?.disconnect();
+  actionPanelResizeObserver?.disconnect();
   if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
   disconnectFromLobby();
   if (platformMessageHandler) {
@@ -2296,7 +2310,20 @@ if ((import.meta as any).hot) {
               :current-player-seat="state?.state.currentPlayer"
               :awaiting-player-seats="awaitingPlayerSeats"
               :seat-strip="!isCompact && sidebarRail"
+              :show-turn-status="props.showTurnStatus"
             >
+              <!-- Beneath the identity token, in the card's narrow first column —
+                   for content that reads as part of the seat's identity (a
+                   portrait, a rank pip) and would otherwise have to stack under
+                   the name row and make every card taller. -->
+              <template #player-token-extra="{ player }">
+                <slot
+                  name="player-token-extra"
+                  :player="player"
+                  :game-view="gameView"
+                  :player-seat="playerSeat"
+                ></slot>
+              </template>
               <template #player-stats="{ player }">
                 <!-- Expose interaction state so a game's player-stats can be actionable
                      (e.g. tap your own special ability to use it), not just informational.
@@ -2332,9 +2359,9 @@ if ((import.meta as any).hot) {
         </aside>
 
         <!-- Board region: hero; ~zero chrome padding; container-query-sized.
-             --dock-h carries the floating dock's measured height so the board has
+             --action-panel-h carries the floating Action Panel's measured height so the board has
              matching scroll room at the bottom (covered content stays reachable). -->
-        <main class="boardregion" id="main" role="main" ref="boardregionEl" tabindex="-1" :style="{ '--dock-h': dockHeight + 'px' }">
+        <main class="boardregion" id="main" role="main" ref="boardregionEl" tabindex="-1" :style="{ '--action-panel-h': actionPanelHeight + 'px' }">
           <!-- Connection health dot: platform mode only, and only surfaced when there's
                something to say (stale/connecting). A healthy connection shows nothing —
                a persistent green dot over the board just reads as a mystery speck (IA-01).
@@ -2525,9 +2552,9 @@ if ((import.meta as any).hot) {
         ></div>
       </div>
 
-      <!-- Floating action dock: absolutely positioned over the BOTTOM of the game
+      <!-- Floating Action Panel: absolutely positioned over the BOTTOM of the game
            area (full width) so showing/growing it NEVER reflows or moves the board.
-           Its options list caps at 5 rows and scrolls; the board reserves the dock's
+           Its options list caps at 5 rows and scrolls; the board reserves the Action Panel's
            measured height as scroll room so anything it floats over stays reachable. -->
       <div class="actionbar" role="region" aria-label="Actions" ref="actionbarEl">
         <!-- ⋯ controls menu: always available at the far-left of the bar (the sole
@@ -2556,25 +2583,25 @@ if ((import.meta as any).hot) {
           @menu-item-click="handleMenuItemClick"
           @teaching-action="handleTeachingAction"
         />
-        <!-- Dock: only render when player is actionable (IA-04) -->
+        <!-- Action Panel: only render when player is actionable (IA-04) -->
         <template v-if="isMyTurn || awaitingPlayerNames.length">
-          <!-- Active-player identity token: always shown at the head of the dock so
+          <!-- Active-player identity token: always shown at the head of the Action Panel so
                the action bar carries WHO is acting (IA-02), regardless of whether the
                ActionPanel or the fallback prompt strip renders the WHAT. -->
           <PlayerToken
             v-if="activePlayer"
             class="turn-token"
             :name="activePlayer.name"
-            :index="activePlayer.index"
+            :seat="activePlayer.seat"
             :color="activePlayer.color"
             :size="30"
           />
           <!-- Turn strip: the fallback prompt surface, shown ONLY when the platform
                takes the panel away entirely (the D-02 escape hatch). The prompt
                survives even when no panel renders (IA-03, never a silent board /
-               no turn indicator). Per-action `.suppressFromDock()` no longer
+               no turn indicator). Per-action `.suppressFromActionPanel()` no longer
                reaches this branch: it can hide redundant buttons but never the
-               last one, so it can never leave the dock empty (LIBX-01, see
+               last one, so it can never leave the Action Panel empty (LIBX-01, see
                ActionPanel's `visibleActions`). -->
           <span v-if="props.platformActionPanelEscapeHatch" class="turn">
             <span class="pr">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
@@ -2753,7 +2780,7 @@ if ((import.meta as any).hot) {
 }
 
 /* Game Screen: flex column, full viewport height. Positioning context for the
-   floating action dock (.actionbar), which is absolutely positioned within it. */
+   floating Action Panel (.actionbar), which is absolutely positioned within it. */
 .game-shell__game {
   display: flex;
   flex-direction: column;
@@ -2902,9 +2929,9 @@ if ((import.meta as any).hot) {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Floating action dock: absolutely anchored to the bottom, FULL WIDTH (spans under
+/* Floating Action Panel: absolutely anchored to the bottom, FULL WIDTH (spans under
    the sidebar too). Out of flow, so it never reflows/moves the board — it floats over
-   the board's bottom; the board reserves the dock's measured height (--dock-h) as
+   the board's bottom; the board reserves the Action Panel's measured height (--action-panel-h) as
    scroll room so covered content stays reachable. Everything inside wraps naturally
    (flex-wrap) — no reserved columns; the options list caps at 5 rows and scrolls. */
 .actionbar {
@@ -2933,7 +2960,7 @@ if ((import.meta as any).hot) {
   overflow-y: auto;
 }
 
-/* ⋯ controls menu — first item in the inline dock flow. */
+/* ⋯ controls menu — first item in the inline action bar flow. */
 .actionbar-controls {
   margin-right: 4px;
 }
@@ -3067,7 +3094,7 @@ if ((import.meta as any).hot) {
     border-bottom: 1px solid var(--bsg-line);
     box-shadow: var(--bsg-shadow);
   }
-  /* Phones use the SAME 5-row dock cap as desktop (no override) — the base
+  /* Phones use the SAME 5-row Action Panel row cap as desktop (no override) — the base
      .actionbar max-height applies. */
 }
 
@@ -3102,7 +3129,7 @@ if ((import.meta as any).hot) {
 /* ── AI demo playback control bar ─────────────────────────────────────────── */
 .bsg-demo-controls {
   position: fixed;
-  bottom: 88px; /* clears the floating action dock */
+  bottom: 88px; /* clears the floating Action Panel */
   left: 50%;
   transform: translateX(-50%);
   z-index: 21; /* above the board + narration overlay (z-20), below modals */
@@ -3178,10 +3205,10 @@ if ((import.meta as any).hot) {
      which only shifts the paint and left the board un-scrollable / drifting sideways. */
   zoom: var(--zoom-level);
 
-  /* Scroll room equal to the floating dock's height, so the board's bottom — which
-     the dock floats over — can always be scrolled up into view. Measured live by a
-     ResizeObserver (--dock-h) so it tracks the dock as it grows/shrinks. */
-  margin-bottom: var(--dock-h, 0px);
+  /* Scroll room equal to the floating Action Panel's height, so the board's bottom — which
+     the Action Panel floats over — can always be scrolled up into view. Measured live by a
+     ResizeObserver (--action-panel-h) so it tracks the Action Panel as it grows/shrinks. */
+  margin-bottom: var(--action-panel-h, 0px);
 
   /* CONTAINMENT: Prevents position:fixed from escaping to viewport.
      Any fixed-position elements inside will behave like absolute positioning
@@ -3199,8 +3226,8 @@ if ((import.meta as any).hot) {
   inset: 0;
   /* Same stacking level as the GameOverCard scrim: above the board content and
      the tutorial/hint/heatmap overlays, but NOT above the floating .actionbar
-     dock (also z-index 30, a later sibling that therefore stays on top). A game
-     modal covers the board area only — never the dock/header chrome. */
+     Action Panel (also z-index 30, a later sibling that therefore stays on top). A game
+     modal covers the board area only — never the Action Panel/header chrome. */
   z-index: 30;
   contain: layout;
   /* Transparent to pointer events when no modal is open; a teleported modal

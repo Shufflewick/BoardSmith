@@ -214,29 +214,45 @@ export class Action<
   }
 
   /**
-   * Hide this action's **redundant** dock button in the auto-UI ActionPanel. The
+   * Hide this action's **redundant start button** in the Action Panel. The
    * action remains fully executable via the board / custom UI
-   * (useBoardInteraction) — this only suppresses the rendered dock button, it
-   * does not disable or unregister the action. Not a security control.
+   * (useBoardInteraction) — this only suppresses the rendered button, it does
+   * not disable or unregister the action. Not a security control.
    *
-   * Use for actions the game exposes exclusively through a custom board
-   * interaction (e.g. drag-drop, click-to-select), where the board affordance is
-   * inherent and a second button in the dock is clutter.
+   * Use for actions the game also exposes through a custom board interaction
+   * (e.g. drag-drop, click-to-select), where the board affordance is inherent
+   * and a second start button is clutter.
    *
-   * **Suppression never empties the dock.** If every currently-available action
-   * is suppressed, they are all shown anyway — the dock is then the player's
-   * only remaining control, and a prompt with nothing to press is not a state a
-   * player can leave. (For an action with no selections it is terminal: no pick
-   * can start, so ActionPanel's mid-pick keyboard/SR affordance never appears
-   * either.) So the guarantee is "hidden while something else is offered", not
-   * "hidden always" — design the board affordance as the primary path, not as
-   * the only one.
+   * ## This is NOT a way to turn the Action Panel off
    *
-   * If you genuinely want no panel at all, that is the platform's
-   * `platformActionPanelEscapeHatch`, not this.
+   * The Action Panel is on at all times, and it offers exactly what the board
+   * offers. A custom board control is *in addition to* the panel, never instead
+   * of it: the panel is the keyboard path, the screen-reader path, and the path
+   * that still works when a board control is off-screen, mid-animation, or not
+   * built yet. Two surfaces showing different things means the panel's user is
+   * playing a different game — see docs/actions-and-flow.md.
+   *
+   * Two consequences, both deliberate:
+   *
+   * - **Start button only.** Once the action is under way, the panel renders
+   *   its prompt and its FULL choice list, exactly as it would without this
+   *   flag. There is no setting that suppresses a live choice list. A board
+   *   that draws the same choices is the intended arrangement, not a duplicate.
+   * - **Suppression never empties the panel.** If every currently-available
+   *   action is suppressed, they are all shown anyway — the panel is then the
+   *   player's only remaining control, and a prompt with nothing to press is
+   *   not a state a player can leave. (For an action with no selections it is
+   *   terminal: no pick can start, so the mid-pick keyboard/SR affordance never
+   *   appears either.) The guarantee is "hidden while something else is
+   *   offered", not "hidden always".
+   *
+   * Design the board affordance as the primary path, not the only one.
+   *
+   * `platformActionPanelEscapeHatch` is not the game-side version of this: it
+   * belongs to the host platform, which substitutes its own equivalent surface.
    */
-  suppressFromDock(): this {
-    this.definition.suppressFromDock = true;
+  suppressFromActionPanel(): this {
+    this.definition.suppressFromActionPanel = true;
     return this;
   }
 

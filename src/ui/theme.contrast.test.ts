@@ -167,7 +167,7 @@ describe('Both-theme WCAG contrast — key surfaces', () => {
         ).toBeGreaterThanOrEqual(4.5);
       });
 
-      it('action dock primary button (--bsg-accent / --bsg-accent-ink) ≥ 3:1 contrast', () => {
+      it('Action Panel primary button (--bsg-accent / --bsg-accent-ink) ≥ 3:1 contrast', () => {
         const ratio = contrastRatio(tokens.accent, tokens.accentInk);
         expect(
           ratio,
@@ -237,7 +237,7 @@ describe('Both-theme WCAG contrast — key surfaces', () => {
 describe('Atomic-pairing source guard — key-surface components', () => {
   const KEY_SURFACES = [
     {
-      label: 'ActionPanel.vue (action dock)',
+      label: 'ActionPanel.vue (Action Panel)',
       file: resolve(__dir, 'components/auto-ui/ActionPanel.vue'),
     },
     {

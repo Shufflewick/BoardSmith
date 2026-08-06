@@ -15,8 +15,8 @@
  *   2. (IA-03) When all current choices are board-anchored, .turn survives
  *      but action buttons are suppressed (buttons-only gate).
  *   3. (IA-04) When not actionable (not my turn, no awaiting), the entire
- *      dock is absent.
- *   4. (IA-04) ResizeObserver on the actionbar element sets --bsg-dock-h on
+ *      Action Panel is absent.
+ *   4. (IA-04) ResizeObserver on the actionbar element sets --bsg-action-panel-h on
  *      the document root when the actionbar block size changes.
  */
 
@@ -30,8 +30,8 @@ import type { PropType } from 'vue';
 // .actionbar template conditions exactly.
 //
 // Template logic implemented here must be kept in sync with GameShell.vue:
-//   outer dock v-if:  isMyTurn || awaitingCount > 0
-//   .turn:            always shown inside dock (no extra gate)
+//   outer Action Panel v-if:  isMyTurn || awaitingCount > 0
+//   .turn:            always shown inside Action Panel (no extra gate)
 //   action buttons:   v-if !suppressActionPanel && !allAnchored
 // ---------------------------------------------------------------------------
 const ActionbarHarness = defineComponent({
@@ -65,24 +65,24 @@ const ActionbarHarness = defineComponent({
 
 // ---------------------------------------------------------------------------
 // ResizeObserver harness — minimal component with the exact ResizeObserver
-// pattern from GameShell.vue: observe actionbarRef, set --bsg-dock-h on root.
+// pattern from GameShell.vue: observe actionbarRef, set --bsg-action-panel-h on root.
 // ---------------------------------------------------------------------------
 const ResizeObserverHarness = defineComponent({
   name: 'ResizeObserverHarness',
   setup() {
     const actionbarRef = ref<HTMLElement | null>(null);
-    let dockObserver: ResizeObserver | null = null;
+    let actionPanelObserver: ResizeObserver | null = null;
 
     // Mirrors the GameShell.vue onMounted pattern exactly
     const initObserver = () => {
-      dockObserver = new ResizeObserver((entries) => {
+      actionPanelObserver = new ResizeObserver((entries) => {
         const h = entries[0]?.borderBoxSize?.[0]?.blockSize ?? 0;
-        document.documentElement.style.setProperty('--bsg-dock-h', `${h}px`);
+        document.documentElement.style.setProperty('--bsg-action-panel-h', `${h}px`);
       });
-      if (actionbarRef.value) dockObserver.observe(actionbarRef.value);
+      if (actionbarRef.value) actionPanelObserver.observe(actionbarRef.value);
     };
 
-    const disconnectObserver = () => dockObserver?.disconnect();
+    const disconnectObserver = () => actionPanelObserver?.disconnect();
 
     return { actionbarRef, initObserver, disconnectObserver };
   },
@@ -156,9 +156,9 @@ describe('GameShell actionbar — IA-02/IA-03/IA-04 template conditions', () => 
     expect(wrapper.find('.action-panel-slot').exists()).toBe(true);
   });
 
-  // --- IA-04: dock entirely absent when not actionable ---------------------
+  // --- IA-04: Action Panel entirely absent when not actionable ---------------------
 
-  it('hides the entire dock when not my turn and no awaiting players', () => {
+  it('hides the entire Action Panel when not my turn and no awaiting players', () => {
     const wrapper = mount(ActionbarHarness, {
       props: { isMyTurn: false, awaitingCount: 0 },
     });
@@ -167,7 +167,7 @@ describe('GameShell actionbar — IA-02/IA-03/IA-04 template conditions', () => 
     expect(wrapper.find('.action-panel-slot').exists()).toBe(false);
   });
 
-  it('shows dock as soon as isMyTurn becomes true (reactivity)', async () => {
+  it('shows Action Panel as soon as isMyTurn becomes true (reactivity)', async () => {
     const wrapper = mount(ActionbarHarness, {
       props: { isMyTurn: false, pickPrompt: 'Pick' },
     });
@@ -181,9 +181,9 @@ describe('GameShell actionbar — IA-02/IA-03/IA-04 template conditions', () => 
 });
 
 // ---------------------------------------------------------------------------
-// Suite 2: ResizeObserver sets --bsg-dock-h (IA-04)
+// Suite 2: ResizeObserver sets --bsg-action-panel-h (IA-04)
 // ---------------------------------------------------------------------------
-describe('GameShell actionbar — IA-04 ResizeObserver dock-height', () => {
+describe('GameShell actionbar — IA-04 ResizeObserver Action-Panel-height', () => {
   let originalResizeObserver: typeof ResizeObserver | undefined;
   let observerCallback: ResizeObserverCallback | null = null;
   let observedElement: Element | null = null;
@@ -192,7 +192,7 @@ describe('GameShell actionbar — IA-04 ResizeObserver dock-height', () => {
     originalResizeObserver = (globalThis as any).ResizeObserver;
     observerCallback = null;
     observedElement = null;
-    document.documentElement.style.removeProperty('--bsg-dock-h');
+    document.documentElement.style.removeProperty('--bsg-action-panel-h');
 
     // Fake ResizeObserver that captures the callback and the observed element
     (globalThis as any).ResizeObserver = class FakeResizeObserver {
@@ -213,10 +213,10 @@ describe('GameShell actionbar — IA-04 ResizeObserver dock-height', () => {
 
   afterEach(() => {
     (globalThis as any).ResizeObserver = originalResizeObserver;
-    document.documentElement.style.removeProperty('--bsg-dock-h');
+    document.documentElement.style.removeProperty('--bsg-action-panel-h');
   });
 
-  it('sets --bsg-dock-h when ResizeObserver fires with a blockSize', () => {
+  it('sets --bsg-action-panel-h when ResizeObserver fires with a blockSize', () => {
     const wrapper = mount(ResizeObserverHarness);
 
     // Initialise the observer (mirrors GameShell onMounted)
@@ -236,7 +236,7 @@ describe('GameShell actionbar — IA-04 ResizeObserver dock-height', () => {
       },
     ], {} as ResizeObserver);
 
-    expect(document.documentElement.style.getPropertyValue('--bsg-dock-h')).toBe('56px');
+    expect(document.documentElement.style.getPropertyValue('--bsg-action-panel-h')).toBe('56px');
   });
 
   it('falls back to 0px when borderBoxSize is empty', () => {
@@ -253,7 +253,7 @@ describe('GameShell actionbar — IA-04 ResizeObserver dock-height', () => {
       },
     ], {} as ResizeObserver);
 
-    expect(document.documentElement.style.getPropertyValue('--bsg-dock-h')).toBe('0px');
+    expect(document.documentElement.style.getPropertyValue('--bsg-action-panel-h')).toBe('0px');
   });
 
   it('disconnects on unmount, clearing the observer', () => {

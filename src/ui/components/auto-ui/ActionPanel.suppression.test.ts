@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
- * LIBX-01: ActionPanel's dock render filters out actions whose metadata
- * carries `suppressFromDock: true`. The suppressed action must still be
+ * LIBX-01: ActionPanel's Action Panel render filters out actions whose metadata
+ * carries `suppressFromActionPanel: true`. The suppressed action must still be
  * passed in via props (the panel only filters the RENDERED buttons -- it
  * does not mutate availability; the board substrate is fed independently
  * via useBoardActionBridge, so a suppressed action stays board-clickable).
@@ -46,8 +46,8 @@ function makeMinimalController() {
   };
 }
 
-describe('ActionPanel dock suppression (LIBX-01)', () => {
-  it('hides the dock button for a suppressFromDock action while a sibling un-suppressed action still renders', () => {
+describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
+  it('hides the Action Panel button for a suppressFromActionPanel action while a sibling un-suppressed action still renders', () => {
     const controller = makeMinimalController();
 
     const wrapper = mount(ActionPanel, {
@@ -62,7 +62,7 @@ describe('ActionPanel dock suppression (LIBX-01)', () => {
           hiddenAction: {
             name: 'hiddenAction',
             prompt: 'Hidden Action',
-            suppressFromDock: true,
+            suppressFromActionPanel: true,
             selections: [],
           },
           visibleAction: {
@@ -98,7 +98,7 @@ describe('ActionPanel dock suppression (LIBX-01)', () => {
           hiddenAction: {
             name: 'hiddenAction',
             prompt: 'Hidden Action',
-            suppressFromDock: true,
+            suppressFromActionPanel: true,
             selections: [],
           },
         },
@@ -120,9 +120,9 @@ describe('ActionPanel dock suppression (LIBX-01)', () => {
     // render-only filter, not an availability mutation.
     const receivedProps = wrapper.props() as {
       availableActions: string[];
-      actionMetadata: Record<string, { suppressFromDock?: boolean }>;
+      actionMetadata: Record<string, { suppressFromActionPanel?: boolean }>;
     };
     expect(receivedProps.availableActions).toEqual(['hiddenAction']);
-    expect(receivedProps.actionMetadata.hiddenAction.suppressFromDock).toBe(true);
+    expect(receivedProps.actionMetadata.hiddenAction.suppressFromActionPanel).toBe(true);
   });
 });

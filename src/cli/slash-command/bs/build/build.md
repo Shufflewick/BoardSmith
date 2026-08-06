@@ -132,15 +132,29 @@ by convention every chunk's author has to remember. A bare asset `<img>` is not 
 discouraged — it is a `test`-step failure (see `build/test.md`'s asset-reachability gate), so the
 prohibition is enforced, not just advised.
 
-### Never fence the whole panel without the client
+### The Action Panel is always on, and it always agrees with the board
+
+The Action Panel is on at all times, and it offers exactly what the board offers. A custom board
+control is IN ADDITION to the panel, never instead of it. The panel is the keyboard and
+screen-reader path and the path that still works when a board control is off-screen, mid-animation,
+or not built yet — which, in a chunked build, is most controls most of the time.
+
+Expect the arrangement this produces: the custom board control AND the panel offering the same
+choices beneath it. That is the floor, not a duplicate to clean up. A chunk that reports the panel's
+copy of a board control as a defect has misread this rule; the finding to raise instead is the two
+surfaces DISAGREEING, which is a wiring bug in the game UI.
 
 Never set `platformActionPanelEscapeHatch` (the LIBX-01 rename of the now-retired whole-panel
 escape hatch) without EXPLICIT client direction. It fences off the entire built-in action
 panel, and switching it off without the client is exactly the never-suppress-built-in-UI violation
-named in "## Boundaries" above. If a specific action legitimately needs to be hidden from the
-dock — a game-design call, not a workaround — the ONLY sanctioned mechanism is the per-action
-`.suppressFromDock()` metadata field, applied to that one action; it is never a way to suppress the
-panel wholesale.
+named in "## Boundaries" above. Never CSS-hide the panel either: that leaves operable controls in
+the tab order with nothing visible, which is strictly worse.
+
+If a specific action legitimately needs its redundant START BUTTON hidden from the Action Panel —
+a game-design call, not a workaround — the ONLY sanctioned mechanism is the per-action
+`.suppressFromActionPanel()` metadata field, applied to that one action. Its reach stops at the
+button: the panel still renders that action's full choice list once the action is under way, and
+nothing suppresses a live choice list. It is never a way to suppress the panel wholesale.
 
 ## Downstream Shape (cite, never restate)
 

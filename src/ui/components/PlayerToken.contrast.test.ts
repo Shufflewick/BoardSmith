@@ -23,7 +23,7 @@ import { _clearShownWarnings } from '../../utils/dev.js';
 describe('PlayerToken contrast ink', () => {
   it('renders black ink and no text-shadow for a light seat color', () => {
     const wrapper = mount(PlayerToken, {
-      props: { name: 'Alice', index: 0, color: '#ecf0f1' },
+      props: { name: 'Alice', seat: 0, color: '#ecf0f1' },
     });
     const ini = wrapper.find('.ini');
     const style = ini.attributes('style') ?? '';
@@ -33,7 +33,7 @@ describe('PlayerToken contrast ink', () => {
 
   it('renders white ink and a dark-halo text-shadow for a dark seat color', () => {
     const wrapper = mount(PlayerToken, {
-      props: { name: 'Bob', index: 1, color: '#2c3e50' },
+      props: { name: 'Bob', seat: 1, color: '#2c3e50' },
     });
     const ini = wrapper.find('.ini');
     const style = ini.attributes('style') ?? '';
@@ -42,12 +42,12 @@ describe('PlayerToken contrast ink', () => {
   });
 
   it('renders without throwing when color is absent', () => {
-    expect(() => mount(PlayerToken, { props: { name: 'Carol', index: 2 } })).not.toThrow();
+    expect(() => mount(PlayerToken, { props: { name: 'Carol', seat: 2 } })).not.toThrow();
   });
 
   it('renders without throwing for a CSS named color (createColorOption() allows any CSS color, 164-CR-02)', () => {
     const wrapper = mount(PlayerToken, {
-      props: { name: 'Dave', index: 3, color: 'crimson' },
+      props: { name: 'Dave', seat: 3, color: 'crimson' },
     });
     const style = wrapper.find('.ini').attributes('style') ?? '';
     // crimson is dark -> white ink, matching contrastInk('crimson').
@@ -56,7 +56,7 @@ describe('PlayerToken contrast ink', () => {
 
   it('renders without throwing for an hsl() color (164-CR-02)', () => {
     expect(() =>
-      mount(PlayerToken, { props: { name: 'Eve', index: 4, color: 'hsl(200, 60%, 50%)' } })
+      mount(PlayerToken, { props: { name: 'Eve', seat: 4, color: 'hsl(200, 60%, 50%)' } })
     ).not.toThrow();
   });
 
@@ -65,7 +65,7 @@ describe('PlayerToken contrast ink', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const wrapper = mount(PlayerToken, {
-        props: { name: 'Frank', index: 5, color: 'not-a-real-color' },
+        props: { name: 'Frank', seat: 5, color: 'not-a-real-color' },
       });
       expect(() => wrapper.find('.ini').attributes('style')).not.toThrow();
       const style = wrapper.find('.ini').attributes('style') ?? '';

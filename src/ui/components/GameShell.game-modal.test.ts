@@ -27,7 +27,7 @@
  * document.querySelector and finds nothing; Vue mounts the Teleport with a
  * null target, and the game component's FIRST re-render then throws mid-patch
  * ("Cannot read properties of null"), aborting the flush queue and wedging
- * every other pending component update (dead action dock, stale board, no
+ * every other pending component update (dead Action Panel, stale board, no
  * round summary). The gate defers the game UI by one tick — mounted hooks run
  * after the tree is in the document — so the target always resolves.
  *
@@ -65,11 +65,11 @@ function makeBoard(active: import('vue').Ref<boolean>, renderCount: import('vue'
 }
 
 /** Shell harness mirroring GameShell.vue: modal host div, then the board
- *  (gated or not), then a sibling "dock" that must keep updating. */
+ *  (gated or not), then a sibling "action panel" that must keep updating. */
 function makeShell(opts: {
   gated: boolean;
   board: ReturnType<typeof makeBoard>;
-  dockValue: import('vue').Ref<number>;
+  actionPanelValue: import('vue').Ref<number>;
 }) {
   return defineComponent({
     name: 'FakeShell',
@@ -84,7 +84,7 @@ function makeShell(opts: {
           h('div', { class: 'game-shell__zoom-container' }, [
             shellMounted.value ? h(opts.board) : null,
           ]),
-          h('div', { class: 'dock' }, `dock:${opts.dockValue.value}`),
+          h('div', { class: 'action-panel-probe' }, `action-panel:${opts.actionPanelValue.value}`),
         ]);
     },
   });
@@ -93,9 +93,9 @@ function makeShell(opts: {
 function mountShell(gated: boolean, warnings: string[]) {
   const active = ref(false);
   const renderCount = ref(0);
-  const dockValue = ref(0);
+  const actionPanelValue = ref(0);
   const board = makeBoard(active, renderCount);
-  const Shell = makeShell({ gated, board, dockValue });
+  const Shell = makeShell({ gated, board, actionPanelValue });
 
   document.body.innerHTML = '<div id="app"></div>';
   const app = createApp(Shell);
@@ -104,7 +104,7 @@ function mountShell(gated: boolean, warnings: string[]) {
   };
   app.mount('#app');
 
-  return { active, renderCount, dockValue };
+  return { active, renderCount, actionPanelValue };
 }
 
 describe('GameShell #bs-game-modal mount gate', () => {
@@ -130,7 +130,7 @@ describe('GameShell #bs-game-modal mount gate', () => {
 
   it('GM-2: with the gate, the teleported modal renders into #bs-game-modal and updates keep flowing', async () => {
     const warnings: string[] = [];
-    const { active, renderCount, dockValue } = mountShell(true, warnings);
+    const { active, renderCount, actionPanelValue } = mountShell(true, warnings);
     await nextTick(); // shellMounted flips true → board mounts with host in document
     await nextTick();
 
@@ -141,19 +141,19 @@ describe('GameShell #bs-game-modal mount gate', () => {
     // Round boundary: summary shows INSIDE the modal host, siblings keep updating.
     active.value = true;
     renderCount.value = 1;
-    dockValue.value = 1;
+    actionPanelValue.value = 1;
     await nextTick();
     expect(document.querySelector('#bs-game-modal .round-summary')).toBeTruthy();
     expect(document.querySelector('.cards')!.textContent).toBe('render:1');
-    expect(document.querySelector('.dock')!.textContent).toBe('dock:1');
+    expect(document.querySelector('.action-panel-probe')!.textContent).toBe('action-panel:1');
 
     // Dismiss and keep playing: everything still updates.
     active.value = false;
     renderCount.value = 2;
-    dockValue.value = 2;
+    actionPanelValue.value = 2;
     await nextTick();
     expect(document.querySelector('.round-summary')).toBeNull();
     expect(document.querySelector('.cards')!.textContent).toBe('render:2');
-    expect(document.querySelector('.dock')!.textContent).toBe('dock:2');
+    expect(document.querySelector('.action-panel-probe')!.textContent).toBe('action-panel:2');
   });
 });
