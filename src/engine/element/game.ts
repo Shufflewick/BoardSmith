@@ -478,6 +478,61 @@ export interface MessageEntry {
 export const GAME_SELF_SERIALIZED_FIELDS = ['phase', 'messages', 'settings'] as const;
 
 /**
+ * Who may see each engine-owned field that reaches a serialized game ROOT.
+ *
+ * The root is visible to every seat, so the element-visibility pass never
+ * touches its own attributes. Anything the ENGINE puts on `Game` (or inherits
+ * onto it from `GameElement`/`Space`) therefore ships to every seat and to the
+ * spectator by default, with nothing in the redaction path standing between it
+ * and the wire. Two leaks came from exactly that, a week apart:
+ *
+ *   SEC-04  `messages`         — every seat received every private `messageTo` line.
+ *   SEC-05  `tutorialProgress` — every seat received every other seat's progress.
+ *
+ * Neither was an author mistake; both were engine fields added without anyone
+ * stating an audience. This map is where that decision is now recorded, and
+ * `payload-duplication.test.ts` fails until a new field appears in it — so
+ * "what may see this?" has to be answered when the field is added, not after it
+ * has been shipping to everyone for a release.
+ *
+ *   'public'          — ships to everyone; identical for every seat. Choosing
+ *                       this asserts the value holds NO per-seat data.
+ *   'seat-scoped'     — ships, but `toJSONForPlayer` narrows it to the receiving
+ *                       seat. Requires a companion assertion proving the
+ *                       narrowing (see the SEC-05 block for the worked example);
+ *                       the generic guard cannot synthesise per-seat data for an
+ *                       arbitrary field.
+ *   'self-serialized' — `Game` emits it outside the generic attribute bag, so
+ *                       its audience is settled at that boundary instead. Must
+ *                       also appear in {@link GAME_SELF_SERIALIZED_FIELDS}.
+ */
+export const GAME_ROOT_FIELD_AUDIENCE: Record<string, 'public' | 'seat-scoped' | 'self-serialized'> = {
+  // --- inherited from GameElement / Space -------------------------------
+  // Layout and identity fields. Undefined on a game root in practice, and
+  // public wherever they are set: they describe where a thing is drawn, not
+  // what anyone knows.
+  name: 'public',
+  player: 'public',
+  row: 'public',
+  column: 'public',
+  $image: 'public',
+  $images: 'public',
+  $direction: 'public',
+  $gap: 'public',
+  $overlap: 'public',
+  $fan: 'public',
+  $fanAngle: 'public',
+  $align: 'public',
+  sealed: 'public',
+
+  // --- Game's own -------------------------------------------------------
+  phase: 'self-serialized',
+  settings: 'self-serialized',
+  messages: 'self-serialized',
+  tutorialProgress: 'seat-scoped',
+};
+
+/**
  * Base Game class. The root of the element tree and container for all game state.
  *
  * Extend this class to create your game. The Game class serves as:

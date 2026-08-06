@@ -23,7 +23,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space } from '../index.js';
-import { GAME_SELF_SERIALIZED_FIELDS } from './game.js';
+import { GAME_ROOT_FIELD_AUDIENCE, GAME_SELF_SERIALIZED_FIELDS } from './game.js';
 import { createPlayerView, createSnapshot } from '../utils/snapshot.js';
 
 class LeakGame extends Game<LeakGame, Player> {
@@ -224,5 +224,126 @@ describe('SEC-05: tutorialProgress is scoped to the receiving seat', () => {
       status: 'exited',
     });
     expect(restored.tutorialProgress.has(1)).toBe(false);
+  });
+});
+
+/**
+ * SEC-06: every engine-owned field on the game ROOT must state its audience.
+ *
+ * This is the guard the two previous leaks needed and neither had. SEC-04's
+ * invariant catches DUPLICATION, and `tutorialProgress` was never duplicated;
+ * the SEC-05 assertions are about `tutorialProgress` specifically, and would not
+ * have noticed `messages`. Both defects share a cause neither guard names: an
+ * engine field landed on an always-visible node without anyone deciding who may
+ * see it.
+ *
+ * So this test asserts the DECISION exists, not any particular field's value. A
+ * new field on `Game` — or on `GameElement`/`Space`, which every element
+ * inherits — fails the suite until it is classified in
+ * `GAME_ROOT_FIELD_AUDIENCE`. That is deliberately a build break rather than a
+ * lint warning: the cost of answering "who may see this?" is thirty seconds,
+ * and the cost of not answering it has twice been a silent leak.
+ */
+describe('SEC-06: the game root declares an audience for every engine field', () => {
+  /** Own serializable properties of a BARE game — engine fields only, no author state. */
+  function engineRootFields(): string[] {
+    const game = new Game({ playerCount: 3, seed: 'sec-06' });
+    const unserializable = new Set(
+      (game.constructor as unknown as { unserializableAttributes: string[] }).unserializableAttributes,
+    );
+    return Object.keys(game).filter((k) => !unserializable.has(k) && !k.startsWith('_'));
+  }
+
+  it('classifies every engine-owned root field', () => {
+    const unclassified = engineRootFields().filter((f) => !(f in GAME_ROOT_FIELD_AUDIENCE));
+
+    // A new engine field reached the game root without an audience. Decide who
+    // may see it and add it to GAME_ROOT_FIELD_AUDIENCE:
+    //   'public'          — no per-seat data in it
+    //   'seat-scoped'     — narrow it in toJSONForPlayer, and add an assertion
+    //   'self-serialized' — Game emits it outside the attribute bag
+    // Do not add it as 'public' to make this pass without checking; the root is
+    // visible to every seat and to the spectator, and nothing downstream will
+    // catch it for you.
+    expect(unclassified).toEqual([]);
+  });
+
+  it('does not classify fields that no longer exist', () => {
+    // Keeps the map honest: a stale entry is a decision about nothing, and
+    // makes the list read as more considered than it is.
+    const live = new Set(engineRootFields());
+    const stale = Object.keys(GAME_ROOT_FIELD_AUDIENCE).filter((f) => !live.has(f));
+
+    expect(stale).toEqual([]);
+  });
+
+  it('keeps every `self-serialized` field out of the attribute bag', () => {
+    const game = newGame();
+    const attrs = (game.toJSON() as unknown as { attributes: Record<string, unknown> }).attributes;
+
+    for (const [field, audience] of Object.entries(GAME_ROOT_FIELD_AUDIENCE)) {
+      if (audience !== 'self-serialized') continue;
+      expect(attrs[field], `${field} is 'self-serialized' but rode in attributes`).toBeUndefined();
+      expect(
+        (GAME_SELF_SERIALIZED_FIELDS as readonly string[]).includes(field),
+        `${field} is 'self-serialized' but is not in GAME_SELF_SERIALIZED_FIELDS, ` +
+          'so nothing strips it from the attribute bag',
+      ).toBe(true);
+    }
+  });
+
+  it('serves every `public` field identically to every seat', () => {
+    // 'public' claims the value holds no per-seat data. This catches the
+    // inverse mistake — a field narrowed per seat but still declared public,
+    // whose consumers would silently disagree about what the game state is.
+    const game = newGame();
+    game.tutorialProgress.set(1, { stepId: 'a-step', status: 'running' });
+
+    const attrsFor = (seat: number) =>
+      (game.toJSONForPlayer(seat) as unknown as { attributes: Record<string, unknown> }).attributes;
+    const [one, two] = [attrsFor(1), attrsFor(2)];
+
+    for (const [field, audience] of Object.entries(GAME_ROOT_FIELD_AUDIENCE)) {
+      if (audience !== 'public') continue;
+      expect(one[field], `${field} is 'public' but differs between seats`).toEqual(two[field]);
+    }
+  });
+
+  it('actually narrows every `seat-scoped` field', () => {
+    // Generic where it can be: a seat-scoped field must not be byte-identical
+    // across two seats whose underlying data differs. Seeding that data is
+    // necessarily field-specific, so each field needs a case here.
+    const seeds: Record<string, (g: LeakGame) => void> = {
+      tutorialProgress: (g) => {
+        g.tutorialProgress.set(1, { stepId: 'seat-one-step', status: 'running' });
+        g.tutorialProgress.set(2, { stepId: 'seat-two-step', status: 'completed' });
+      },
+    };
+
+    for (const [field, audience] of Object.entries(GAME_ROOT_FIELD_AUDIENCE)) {
+      if (audience !== 'seat-scoped') continue;
+
+      const seed = seeds[field];
+      expect(
+        seed,
+        `${field} is 'seat-scoped' but has no case here proving it narrows. ` +
+          'Add one that seeds differing per-seat data — a scoping claim nothing ' +
+          'checks is how SEC-04 and SEC-05 both shipped.',
+      ).toBeDefined();
+
+      const game = newGame();
+      seed!(game);
+      const valueFor = (seat: number | null) =>
+        JSON.stringify(
+          (game.toJSONForPlayer(seat) as unknown as { attributes: Record<string, unknown> })
+            .attributes[field],
+        );
+
+      expect(valueFor(1), `${field} is identical for seats 1 and 2 — it is not narrowed`).not.toEqual(
+        valueFor(2),
+      );
+      // And the spectator, being nobody, gets nobody's slice.
+      expect(valueFor(null)).not.toEqual(valueFor(1));
+    }
   });
 });
