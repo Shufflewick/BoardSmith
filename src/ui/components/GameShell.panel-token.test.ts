@@ -173,10 +173,12 @@ describe('GameShell.vue wires the token to panelToken', () => {
       .not.toMatch(/activePlayer/);
   });
 
-  it('applies the is-you class and styles it apart from the active token', () => {
+  it('marks the you-token and gives it a distinct treatment', () => {
     expect(source).toMatch(/'is-you': panelToken\.kind === 'you'/);
+    // The treatment is PlayerToken's own emphasis ring, not a ring drawn here:
+    // only the token knows which of its eight silhouettes it rendered (B15).
     expect(source, 'the you-token needs its own treatment or it reads as "your turn"')
-      .toMatch(/\.turn-token\.is-you\s*\{/);
+      .toMatch(/:emphasis="panelToken\.kind === 'you'"/);
   });
 
   it('keeps activePlayer itself suppressed during a simultaneous step (D27)', () => {

@@ -2641,6 +2641,7 @@ if ((import.meta as any).hot) {
             :name="panelToken.name"
             :seat="panelToken.seat"
             :color="panelToken.color"
+            :emphasis="panelToken.kind === 'you'"
             :size="30"
           />
           <!-- Turn strip: the fallback prompt surface, shown ONLY when the platform
@@ -3017,17 +3018,12 @@ if ((import.meta as any).hot) {
   margin-right: 4px;
 }
 
-/* The 'you' token (simultaneous step): the viewer's own identity, NOT a
-   whose-turn claim. Held apart from the active-turn token by a slim outline
-   ring and slightly reduced weight, so the same glyph cannot be read as "it is
-   your turn" in a state where no single seat is on turn. Deliberately quiet —
-   it is an anchor, not a call to act; the prompt beside it is what asks. */
-.turn-token.is-you {
-  outline: 2px solid color-mix(in srgb, var(--bsg-accent) 45%, transparent);
-  outline-offset: 2px;
-  border-radius: 50%;
-  opacity: 0.85;
-}
+/* The 'you' token's ring is drawn by PlayerToken itself (`emphasis`), in the
+   token's OWN silhouette. Do not re-add a ring here: this rule cannot know
+   which of the eight shapes was drawn, and the `border-radius: 50%` outline
+   that used to live here matched one seat in eight — a circle around a
+   hexagon, which reads as unexplained decoration and works against shape being
+   the stable identity channel (the only one, in a colourless game). */
 
 /* Turn strip: prompt sentence (fallback when ActionPanel is not rendering) */
 .turn {
