@@ -20,15 +20,14 @@ export {
   Button,
   type ButtonVariant,
   type ButtonSize,
-  // The one way to disable a control: with a reason a player can read.
-  // Custom UIs use these so a dimmed board control explains itself exactly
-  // like the Action Panel's buttons do.
-  disabledAttrs,
-  isDisabled,
-  runIfEnabled,
-  type DisabledReason,
-  type DisabledAttrs,
+  DisabledReasonTooltip,
 } from './components/helpers/index.js';
+
+// The one way to disable a control: with a reason the player can read. Custom
+// UIs bind `v-disabled-reason` so a dimmed board control dims, explains itself,
+// and goes inert exactly like the Action Panel's buttons do.
+export { vDisabledReason, isDisabled } from './directives/vDisabledReason.js';
+export type { DisabledReason } from './directives/vDisabledReason.js';
 
 // 3D dice are NOT re-exported here. Importing them is what opts a game into
 // shipping three.js (~500 kB), so it must be an explicit, named request:

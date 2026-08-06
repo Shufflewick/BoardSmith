@@ -7,8 +7,9 @@
  *
  * Disabling requires a reason. There is no boolean `disabled` prop: the reason
  * IS the disabled state, so a player can never meet a dead button with no
- * explanation. See `disabled-reason.ts` for the contract and for why the
- * dimmed state is `aria-disabled` rather than the native attribute.
+ * explanation. The `v-disabled-reason` directive dims the button, shows the
+ * reason on hover/focus/tap, and makes activation inert — see
+ * `directives/vDisabledReason.ts`.
  *
  * @example
  * <Button variant="primary" @click="handleAction">Execute</Button>
@@ -20,8 +21,7 @@
  * >Undo</Button>
  */
 
-import { computed } from 'vue';
-import { disabledAttrs, runIfEnabled, type DisabledReason } from './disabled-reason.js';
+import { vDisabledReason, isDisabled, type DisabledReason } from '../../directives/vDisabledReason.js';
 
 export type ButtonVariant =
   | 'primary'
@@ -61,17 +61,18 @@ const emit = defineEmits<{
   (e: 'click', event: MouseEvent): void;
 }>();
 
-const stateAttrs = computed(() => disabledAttrs(props.disabledReason));
-
+// The directive already swallows the click on a disabled button; this second
+// check costs nothing and keeps the component correct on its own terms.
 function handleClick(event: MouseEvent) {
-  runIfEnabled(props.disabledReason, () => emit('click', event));
+  if (isDisabled(props.disabledReason)) return;
+  emit('click', event);
 }
 </script>
 
 <template>
   <button
     :class="['btn', `btn--${variant}`, `btn--${size}`]"
-    v-bind="stateAttrs"
+    v-disabled-reason="disabledReason"
     :type="type"
     @click="handleClick"
   >

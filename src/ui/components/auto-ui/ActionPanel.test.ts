@@ -27,6 +27,7 @@ import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
+import { DISABLED_TOOLTIP_ID } from '../../composables/useDisabledReasonTooltip.js';
 
 // ---------------------------------------------------------------------------
 // useToast mock — hoisted so the factory runs before module imports
@@ -487,8 +488,11 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
 
     const btn = wrapper.find('[data-bs-action="build"]');
     expect(btn.attributes('aria-disabled')).toBe('true');
-    expect(btn.attributes('title')).toBe('You need 3 wood; you have 1.');
-    // Never the native attribute: that would make the reason unreachable.
+    expect(btn.attributes('data-bs-disabled-reason')).toBe('You need 3 wood; you have 1.');
+    // Points at the shared tooltip, so a screen reader reads the reason on focus.
+    expect(btn.attributes('aria-describedby')).toBe(DISABLED_TOOLTIP_ID);
+    // Never the native attribute: that would drop the button out of the tab
+    // order and take the reason with it.
     expect(btn.attributes('disabled')).toBeUndefined();
     wrapper.unmount();
   });
@@ -529,7 +533,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
 
     const btn = wrapper.find('[data-bs-action="build"]');
     expect(btn.attributes('aria-disabled')).toBeUndefined();
-    expect(btn.attributes('title')).toBeUndefined();
+    expect(btn.attributes('data-bs-disabled-reason')).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -548,11 +552,11 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
 
     const btn = wrapper.find('[data-bs-action="build"]');
     expect(btn.attributes('aria-disabled')).toBe('true');
-    expect(btn.attributes('title')).toBeTruthy();
+    expect(btn.attributes('data-bs-disabled-reason')).toBeTruthy();
 
     const undo = wrapper.find('.undo-btn');
     expect(undo.attributes('aria-disabled')).toBe('true');
-    expect(undo.attributes('title')).toBeTruthy();
+    expect(undo.attributes('data-bs-disabled-reason')).toBeTruthy();
     wrapper.unmount();
   });
 
@@ -569,7 +573,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
       },
     });
 
-    expect(wrapper.find('[data-bs-action="build"]').attributes('title'))
+    expect(wrapper.find('[data-bs-action="build"]').attributes('data-bs-disabled-reason'))
       .toBe('You need 3 wood; you have 1.');
     wrapper.unmount();
   });
@@ -593,7 +597,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     const buttons = wrapper.findAll('.choice-btn');
     const gold = buttons.find(b => b.text() === 'Gold')!;
     expect(gold.attributes('aria-disabled')).toBe('true');
-    expect(gold.attributes('title')).toBe('Gold is reserved for the leader.');
+    expect(gold.attributes('data-bs-disabled-reason')).toBe('Gold is reserved for the leader.');
 
     await gold.trigger('click');
     await Promise.resolve();
@@ -634,7 +638,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     // The already-selected option stays operable — deselecting is always allowed.
     expect(selected.attributes('aria-disabled')).toBeUndefined();
     expect(blocked.attributes('aria-disabled')).toBe('true');
-    expect(blocked.attributes('title')).toBeTruthy();
+    expect(blocked.attributes('data-bs-disabled-reason')).toBeTruthy();
     wrapper.unmount();
   });
 
@@ -661,7 +665,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
 
     const done = wrapper.find('.done-button');
     expect(done.attributes('aria-disabled')).toBe('true');
-    expect(done.attributes('title')).toContain('2');
+    expect(done.attributes('data-bs-disabled-reason')).toContain('2');
     wrapper.unmount();
   });
 });

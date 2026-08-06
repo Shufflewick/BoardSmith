@@ -396,34 +396,50 @@ The `display` property is the human-readable label for rendering in your UI (but
 
 The `disabled` property is present only on items that are disabled (absent on selectable items). When present, it contains a reason string explaining why the item cannot be selected. **Show it.** A dimmed control that will not say why is the fastest way to make a player think the game is broken, and the reason is already in your hand.
 
-The shared helpers render it the same way the Action Panel does:
+Bind `v-disabled-reason` and you get the Action Panel's exact behaviour:
 
 ```vue
 <script setup lang="ts">
-import { disabledAttrs, runIfEnabled } from 'boardsmith/ui';
+import { vDisabledReason } from 'boardsmith/ui';
 </script>
 
 <template>
   <button
     v-for="choice in actionController.getChoices(currentPick)"
     :key="String(choice.value)"
-    v-bind="disabledAttrs(choice.disabled)"
-    @click="runIfEnabled(choice.disabled, () => actionController.fill(currentPick.name, choice.value))"
+    v-disabled-reason="choice.disabled"
+    @click="actionController.fill(currentPick.name, choice.value)"
   >
     {{ choice.display }}
   </button>
 </template>
 ```
 
-`disabledAttrs()` returns `aria-disabled` + `title` (never the native `disabled`
-attribute — that would drop the control out of the tab order and, in several
-browsers, out of hover hit-testing, making the reason unreachable exactly when
-it is needed). `runIfEnabled()` swallows the click. Style the dimmed state on
-`[aria-disabled='true']`.
+That one binding does three things, which is the point — there is no way to get
+one without the others:
 
-The same pair works for a whole action's button: `disabledActions[name]` is a
+- **Dims** the control with `aria-disabled="true"`. Never the native `disabled`
+  attribute: that drops the control out of the tab order, so a keyboard or
+  screen-reader user could never reach the reason. Style the dimmed state on
+  `[aria-disabled='true']`.
+- **Explains** it, in the shared tooltip, on hover, on focus, *and on tap*. Tap
+  matters — the native `title` attribute does nothing at all on touch, so on a
+  phone the reason simply would not exist.
+- **Makes activation inert.** The click and the Enter/Space keydown are
+  swallowed in the capture phase, ahead of your own `@click` — you do not have
+  to remember a guard, and forgetting one is not a bug you can write.
+
+In `<script setup>`, importing it as `vDisabledReason` is all the registration
+it needs. Elsewhere: `app.directive('disabled-reason', vDisabledReason)`.
+
+The same binding works for a whole action's button: `disabledActions[name]` is a
 `#game-board` slot prop carrying the reason from the action's `.disabled()`
 rule or the tutorial gate.
+
+You are not required to use it — a board can render its dimmed state however it
+likes — but if you roll your own, carry the reason across yourself. The engine
+hands you a sentence written for the player; dropping it on the floor is the
+one thing to avoid.
 
 **Note:** If you do accidentally pass a choice object to `fill()`, BoardSmith will auto-unwrap it in development mode and show a warning. However, passing `choice.value` directly is clearer and recommended.
 

@@ -32,6 +32,7 @@ import PlayerToken from './PlayerToken.vue';
 import WaitingRoom from './WaitingRoom.vue';
 import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
+import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import GameOverCard from './GameOverCard.vue';
 import TutorialOverlay from './helpers/TutorialOverlay.vue';
 import HintOverlay from './helpers/HintOverlay.vue';
@@ -2727,6 +2728,11 @@ if ((import.meta as any).hot) {
 
     <!-- Zoom preview overlay (Alt+hover to enlarge cards) -->
     <ZoomPreviewOverlay :preview-state="previewState" />
+
+    <!-- The single tooltip every dimmed control borrows to explain itself.
+         Mounted once here rather than per-button: at most one shows at a time,
+         and a teleported node per compass point / card / option is waste. -->
+    <DisabledReasonTooltip />
 
     <!-- Toast notifications -->
     <Toast />

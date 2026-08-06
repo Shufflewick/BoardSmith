@@ -28,12 +28,7 @@ import type {
 import DoneButton from './DoneButton.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
-import {
-  disabledAttrs,
-  isDisabled,
-  runIfEnabled,
-  type DisabledReason,
-} from '../helpers/disabled-reason.js';
+import { vDisabledReason, isDisabled, type DisabledReason } from '../../directives/vDisabledReason.js';
 
 // Inject the action controller from GameShell (REQUIRED)
 // ActionPanel is now a thin UI layer over the controller
@@ -816,10 +811,10 @@ function clearBoardSelection() {
 }
 
 // ── Disabled reasons ─────────────────────────────────────────────────────────
-// Every button this panel can grey out must say WHY, on hover and to a screen
-// reader. Each site below resolves to a single DisabledReason that drives both
-// the attributes (disabledAttrs) and the click guard (runIfEnabled), so the
-// look and the behavior cannot drift apart.
+// Every control this panel can grey out must say WHY — on hover, on focus, and
+// on tap. Each site below resolves to a single DisabledReason handed to
+// `v-disabled-reason`, which owns the dimming, the tooltip, and the inert
+// activation together, so the look and the behavior cannot drift apart.
 
 /**
  * Why nothing can be pressed while an action is in flight, or `false` when
@@ -869,20 +864,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   return `Pick ${short} more to continue (at least ${min} required).`;
 });
 
-/**
- * Click handler for a multi-select checkbox.
- *
- * Bound to `click` rather than `change` on purpose: `aria-disabled` does not
- * stop a checkbox from toggling, and only a click handler can `preventDefault`
- * before the box flips. A blocked click leaves the DOM exactly as it was.
- */
-function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selectionName: string, value: unknown, display?: string) {
-  if (isDisabled(reason)) {
-    event.preventDefault();
-    return;
-  }
-  void toggleMultiSelectValue(selectionName, value, display);
-}
 
 </script>
 
@@ -906,14 +887,15 @@ function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selection
         :key="action.name"
         class="action-btn-group"
       >
-        <!-- A disabled action button stays focusable and hoverable (aria-disabled,
-             not the native attribute) so the player can actually READ the reason
-             it carries in its title. runIfEnabled blocks the click. -->
+        <!-- v-disabled-reason dims the button, shows the reason on hover/focus/tap,
+             and swallows the activation. It uses aria-disabled rather than the
+             native attribute so the control stays focusable — a natively-disabled
+             button cannot be reached by keyboard, taking the reason with it. -->
         <button
           class="action-btn"
           :data-bs-action="action.name"
-          v-bind="disabledAttrs(actionDisabledReason(action.name))"
-          @click="runIfEnabled(actionDisabledReason(action.name), () => startAction(action.name))"
+          v-disabled-reason="actionDisabledReason(action.name)"
+          @click="startAction(action.name)"
         >
           {{ action.prompt || formatActionName(action.name) }}
         </button>
@@ -931,8 +913,8 @@ function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selection
       <button
         v-if="canUndo"
         class="action-btn undo-btn"
-        v-bind="disabledAttrs(submissionInFlightReason)"
-        @click="runIfEnabled(submissionInFlightReason, () => emit('undo'))"
+        v-disabled-reason="submissionInFlightReason"
+        @click="emit('undo')"
       >
         Undo
       </button>
@@ -990,8 +972,8 @@ function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selection
               v-for="element in filteredValidElements"
               :key="element.id"
               class="choice-btn element-btn"
-              v-bind="disabledAttrs(element.disabled)"
-              @click="runIfEnabled(element.disabled, () => selectElement(element.id))"
+              v-disabled-reason="element.disabled"
+              @click="selectElement(element.id)"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
             >
@@ -1014,23 +996,25 @@ function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selection
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
           </div>
           <div class="choice-buttons multi-select-choices">
-            <!-- The reason (own, or the max-selections cap) lands on the LABEL so it is
-                 readable by hovering anywhere on the option, and on the checkbox so a
-                 screen reader announces it on the control itself. -->
+            <!-- The directive goes on the LABEL: it is the whole visible option, so
+                 hovering anywhere on it reveals the reason, and its capture-phase
+                 click guard also covers the checkbox nested inside it. The input
+                 additionally carries aria-disabled, because THAT is the control a
+                 screen reader announces. -->
             <label
               v-for="element in filteredValidElements"
               :key="element.id"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(element.id) }"
-              v-bind="disabledAttrs(multiSelectDisabledReason(element.disabled, element.id))"
+              v-disabled-reason="multiSelectDisabledReason(element.disabled, element.id)"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
             >
               <input
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(element.id)"
-                v-bind="disabledAttrs(multiSelectDisabledReason(element.disabled, element.id))"
-                @click="onMultiSelectClick($event, multiSelectDisabledReason(element.disabled, element.id), currentPick!.name, element.id, element.display)"
+                :aria-disabled="isDisabled(multiSelectDisabledReason(element.disabled, element.id)) || undefined"
+                @click="toggleMultiSelectValue(currentPick.name, element.id, element.display)"
               />
               <span class="checkbox-label">{{ element.display || element.id }}</span>
             </label>
@@ -1056,8 +1040,8 @@ function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selection
               v-for="element in filteredValidElements"
               :key="element.id"
               class="choice-btn element-btn"
-              v-bind="disabledAttrs(element.disabled)"
-              @click="runIfEnabled(element.disabled, () => selectElement(element.id))"
+              v-disabled-reason="element.disabled"
+              @click="selectElement(element.id)"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
             >
@@ -1080,21 +1064,22 @@ function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selection
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
           </div>
           <div class="choice-buttons multi-select-choices">
-            <!-- Reason on both label and control — see the elements variant above. -->
+            <!-- Directive on the label, aria-disabled on the control — see the
+                 elements variant above for why they are split. -->
             <label
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(choice.value) }"
-              v-bind="disabledAttrs(multiSelectDisabledReason(choice.disabled, choice.value))"
+              v-disabled-reason="multiSelectDisabledReason(choice.disabled, choice.value)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
               <input
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(choice.value)"
-                v-bind="disabledAttrs(multiSelectDisabledReason(choice.disabled, choice.value))"
-                @click="onMultiSelectClick($event, multiSelectDisabledReason(choice.disabled, choice.value), currentPick!.name, choice.value, choice.display)"
+                :aria-disabled="isDisabled(multiSelectDisabledReason(choice.disabled, choice.value)) || undefined"
+                @click="toggleMultiSelectValue(currentPick.name, choice.value, choice.display)"
               />
               <span class="checkbox-label">{{ choice.display }}</span>
             </label>
@@ -1120,8 +1105,8 @@ function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selection
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="choice-btn filtered-choice-btn"
-              v-bind="disabledAttrs(choice.disabled)"
-              @click="runIfEnabled(choice.disabled, () => executeChoice(currentPick!.name, choice))"
+              v-disabled-reason="choice.disabled"
+              @click="executeChoice(currentPick.name, choice)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
@@ -1156,8 +1141,8 @@ function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selection
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="choice-btn"
-              v-bind="disabledAttrs(choice.disabled)"
-              @click="runIfEnabled(choice.disabled, () => setSelectionValue(currentPick!.name, choice.value, choice.display))"
+              v-disabled-reason="choice.disabled"
+              @click="setSelectionValue(currentPick.name, choice.value, choice.display)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
@@ -1239,9 +1224,9 @@ function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selection
             v-for="choice in anchoredChoices"
             :key="String(choice.value)"
             class="choice-btn anchored-choice-btn"
-            v-bind="disabledAttrs(choice.disabled)"
+            v-disabled-reason="choice.disabled"
             :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"
-            @click="runIfEnabled(choice.disabled, () => executeChoice(currentPick!.name, choice))"
+            @click="executeChoice(currentPick.name, choice)"
             @mouseenter="handleChoiceHover(choice)"
             @mouseleave="handleChoiceLeave"
           >

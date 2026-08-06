@@ -8,11 +8,10 @@
  * - Text input submission
  *
  * Disabling requires a reason (`disabledReason`), which the player reads on
- * hover/focus — "Select at least 2 cards." rather than a dead grey button.
- * See `../helpers/disabled-reason.ts` for the contract.
+ * hover, focus, or tap — "Pick 2 more to continue." rather than a dead grey
+ * button. See `../../directives/vDisabledReason.ts` for the contract.
  */
-import { computed } from 'vue';
-import { disabledAttrs, runIfEnabled, type DisabledReason } from '../helpers/disabled-reason.js';
+import { vDisabledReason, type DisabledReason } from '../../directives/vDisabledReason.js';
 
 const props = defineProps<{
   /** Why the button cannot be pressed yet, or `false`/omitted when it can. */
@@ -24,14 +23,13 @@ const emit = defineEmits<{
   (e: 'click'): void;
 }>();
 
-const stateAttrs = computed(() => disabledAttrs(props.disabledReason));
 </script>
 
 <template>
   <button
     class="done-button"
-    v-bind="stateAttrs"
-    @click="runIfEnabled(props.disabledReason, () => emit('click'))"
+    v-disabled-reason="props.disabledReason"
+    @click="emit('click')"
   >
     {{ label || 'Done' }}
   </button>

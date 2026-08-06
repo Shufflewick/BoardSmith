@@ -22,6 +22,7 @@
  */
 
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
+import { computePopoverPosition, type PopoverPosition } from './popover-position.js';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ const props = defineProps<{
   actionName: string;
   /** From ActionMetadata.help (Plan 01). Display-only; never a predicate. */
   helpText?: string;
-  /** From disabledActions[name]. Rendered under "Note:" label. */
+  /** From disabledActions[name]. Rendered under the "Why it's disabled:" label. */
   disabledReason?: string;
   /** The action prompt/display name — aria-label "Help for {triggerLabel}". */
   triggerLabel: string;
@@ -44,14 +45,6 @@ const popoverRef = ref<HTMLDivElement | null>(null);
 
 // ── Position ──────────────────────────────────────────────────────────────────
 
-interface PopoverPosition {
-  top: number;
-  left: number;
-  caretSide: 'top' | 'bottom';
-  /** Horizontal center of caret relative to the popover left edge (px). */
-  caretLeft: number;
-}
-
 /**
  * Conservative fallback height used when offsetHeight is unavailable (e.g. jsdom).
  * 220 px covers a dual-section popover (help text + divider + disabled reason).
@@ -62,49 +55,18 @@ const POPOVER_MAX_WIDTH = 240;
 const position = ref<PopoverPosition>({ top: 0, left: 0, caretSide: 'top', caretLeft: POPOVER_MAX_WIDTH / 2 });
 
 /**
- * Compute fixed position for popover anchored below (or above) the trigger button.
- * Mirrors HeatmapOverlay / TutorialOverlay getBoundingClientRect pattern.
- * Stale position on scroll/resize is acceptable per RESEARCH.md Pitfall 4.
+ * Placement delegates to the shared `computePopoverPosition` — the same maths
+ * the disabled-reason tooltip uses, so the two anchored popovers flip and clamp
+ * identically. Stale position on scroll is accepted (RESEARCH.md Pitfall 4).
  *
- * @param actualHeight - The rendered height of the popover element in px. Used for
- *   flip detection and above-placement offset so the popover sits fully above the
- *   trigger when flipped (WR-01). Pass POPOVER_FALLBACK_HEIGHT when the DOM element
- *   is not yet available.
+ * @param actualHeight - The RENDERED height, so a tall dual-section popover
+ *   flips at the right moment (WR-01). Pass POPOVER_FALLBACK_HEIGHT before the
+ *   element exists.
  */
 function computePosition(actualHeight: number): PopoverPosition {
   const el = triggerRef.value;
   if (!el) return { top: 0, left: 0, caretSide: 'top', caretLeft: POPOVER_MAX_WIDTH / 2 };
-
-  const rect = el.getBoundingClientRect();
-  // FLIP_THRESHOLD: min clearance between popover bottom edge and viewport bottom before flip triggers.
-  // Spec: --bsg-s4 = 16px (UI-SPEC §Spacing, "Min space above/below popover before flip threshold").
-  const FLIP_THRESHOLD = 16;
-  // EDGE_MARGIN: horizontal clearance between popover right edge and viewport right edge.
-  // Spec: --bsg-s2 = 8px (correct at 8; named constant to distinguish from FLIP_THRESHOLD).
-  const EDGE_MARGIN = 8;
-
-  let top = rect.bottom + 4;
-  let left = rect.left;
-  let caretSide: 'top' | 'bottom' = 'top';
-
-  // Flip above if the popover's bottom edge would fall within FLIP_THRESHOLD px of viewport bottom.
-  // Uses actualHeight so a tall dual-section popover flips at the correct trigger position (WR-01).
-  if (top + actualHeight > window.innerHeight - FLIP_THRESHOLD) {
-    top = rect.top - actualHeight - 4;
-    caretSide = 'bottom';
-  }
-
-  // Right-edge constraint: shift left if popover would overflow the viewport right edge.
-  if (left + POPOVER_MAX_WIDTH > window.innerWidth - EDGE_MARGIN) {
-    left = window.innerWidth - POPOVER_MAX_WIDTH - EDGE_MARGIN;
-  }
-
-  // WR-02: Track the trigger's horizontal center relative to the (possibly clamped) popover
-  // left edge so the caret still points at the "?" button after right-edge shifting.
-  const triggerMidX = rect.left + rect.width / 2;
-  const caretLeft = Math.min(POPOVER_MAX_WIDTH - 12, Math.max(12, triggerMidX - left));
-
-  return { top, left, caretSide, caretLeft };
+  return computePopoverPosition(el.getBoundingClientRect(), actualHeight, POPOVER_MAX_WIDTH);
 }
 
 const popoverStyle = computed(() => ({
