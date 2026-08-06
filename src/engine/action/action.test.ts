@@ -863,6 +863,165 @@ describe('Action Executor', () => {
     });
   });
 
+  // ── Action-level .validate(): the whole-submission gate ────────────────────
+  // The capability BUG-007 found documented but missing. It must (a) see fully
+  // resolved args, (b) carry its own message, (c) run on EVERY path into
+  // execute, and (d) never be mistaken for the per-selection validate.
+  describe('.validate() — action-level gate', () => {
+    it('refuses the submission with the returned string as the message', () => {
+      const action = Action.create<TestGame>('play')
+        .chooseFrom('count', { choices: [1, 2, 3] })
+        .validate((args) => (args.count < 2 ? 'Must play at least 2 cards' : true))
+        .execute(() => {});
+
+      const bad = executor.validateAction(action, game.getPlayer(1)!, { count: 1 });
+      expect(bad.valid).toBe(false);
+      expect(bad.errors).toEqual(['Must play at least 2 cards']);
+
+      const good = executor.validateAction(action, game.getPlayer(1)!, { count: 3 });
+      expect(good.valid).toBe(true);
+    });
+
+    it('refuses generically on false, and names the action', () => {
+      const action = Action.create<TestGame>('play')
+        .validate(() => false)
+        .execute(() => {});
+
+      const result = executor.validateAction(action, game.getPlayer(1)!, {});
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain("'play'");
+    });
+
+    it('sees every selection resolved, and the acting player, at submit time', () => {
+      let seen: Record<string, unknown> | null = null;
+      let seenPlayer: Player | null = null;
+      const action = Action.create<TestGame>('play')
+        .chooseFrom('a', { choices: ['x', 'y'] })
+        .chooseFrom('b', { choices: [1, 2] })
+        .validate((args, ctx) => {
+          seen = { ...args };
+          seenPlayer = ctx.player;
+          return true;
+        })
+        .execute(() => {});
+
+      executor.validateAction(action, game.getPlayer(2)!, { a: 'y', b: 2 });
+
+      expect(seen).toEqual({ a: 'y', b: 2 });
+      expect(seenPlayer).toBe(game.getPlayer(2)!);
+    });
+
+    it('does NOT run while a selection is still invalid — the real problem is reported alone', () => {
+      let ran = false;
+      const action = Action.create<TestGame>('play')
+        .chooseFrom('needed', { choices: ['a', 'b'] })
+        .validate(() => {
+          ran = true;
+          return true;
+        })
+        .execute(() => {});
+
+      const result = executor.validateAction(action, game.getPlayer(1)!, {});
+
+      expect(ran).toBe(false);
+      expect(result.errors).toEqual(['Missing required selection: needed']);
+    });
+
+    it('blocks execute() from running at all — nothing is mutated by a refused action', () => {
+      let executed = false;
+      const action = Action.create<TestGame>('play')
+        .validate(() => 'nope')
+        .execute(() => {
+          executed = true;
+        });
+
+      const result = executor.executeAction(action, game.getPlayer(1)!, {});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('nope');
+      expect(executed).toBe(false);
+    });
+
+    it('also blocks the INCREMENTAL path (executePendingAction), not just performAction', () => {
+      let executed = false;
+      const action = Action.create<TestGame>('play')
+        .chooseFrom('count', { choices: [1, 2, 3] })
+        .validate((args) => (args.count < 2 ? 'Must play at least 2 cards' : true))
+        .execute(() => {
+          executed = true;
+        });
+
+      const player = game.getPlayer(1)!;
+      const pendingState = executor.createPendingActionState('play', 1);
+      // The player clicks their way to a submission the gate must refuse.
+      const step = executor.processSelectionStep(action, player, pendingState, 'count', 1);
+      expect(step.success).toBe(true); // the per-selection rules are all satisfied
+
+      const result = executor.executePendingAction(action, player, pendingState);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Must play at least 2 cards');
+      expect(executed).toBe(false);
+    });
+
+    it('does not affect availability — the action is still OFFERED, then refused on submit', () => {
+      const action = Action.create<TestGame>('play')
+        .chooseFrom('count', { choices: [1, 2, 3] })
+        .validate(() => 'never allowed')
+        .execute(() => {});
+
+      // `.validate()` is a submit-time gate; `.condition()` is what decides
+      // whether an action appears. Conflating them would make an action vanish
+      // instead of explaining itself.
+      expect(executor.isActionAvailable(action, game.getPlayer(1)!)).toBe(true);
+    });
+  });
+
+  // A `{ valid, message }` object — the shape BUG-007 found in the docs — is
+  // truthy but not `true`. Under a bare `result !== true` test it inverts:
+  // the PASSING case gets rejected, blaming the player's choice. Both validate
+  // hooks must say what actually went wrong instead.
+  describe('validate return-shape guard', () => {
+    it('reports the contract when an action validate returns { valid: true }', () => {
+      const action = Action.create<TestGame>('play')
+        .validate(() => ({ valid: true }) as unknown as boolean)
+        .execute(() => {});
+
+      const result = executor.validateAction(action, game.getPlayer(1)!, {});
+
+      expect(result.valid).toBe(false); // refused, never silently allowed
+      expect(result.errors[0]).toContain("validate for action 'play'");
+      expect(result.errors[0]).toContain('an object with keys: valid');
+      expect(result.errors[0]).toContain('Return true to allow');
+    });
+
+    it('reports the contract when a SELECTION validate returns { valid: false, message }', () => {
+      const action = Action.create<TestGame>('play')
+        .chooseFrom('cards', {
+          choices: ['a', 'b'],
+          validate: () => ({ valid: false, message: 'Must play at least 2 cards' }) as unknown as boolean,
+        })
+        .execute(() => {});
+
+      const result = executor.validateAction(action, game.getPlayer(1)!, { cards: 'a' });
+
+      expect(result.valid).toBe(false);
+      // NOT the old generic "Invalid cards", which named the wrong thing.
+      expect(result.errors[0]).toContain("validate for selection 'cards' of action 'play'");
+      expect(result.errors[0]).toContain('an object with keys: valid, message');
+    });
+
+    it('reports a missing return value rather than treating it as a rejection', () => {
+      const action = Action.create<TestGame>('play')
+        .validate((() => {}) as unknown as () => boolean)
+        .execute(() => {});
+
+      const result = executor.validateAction(action, game.getPlayer(1)!, {});
+
+      expect(result.errors[0]).toContain('undefined (no return value?)');
+    });
+  });
+
   describe('executeAction', () => {
     it('should execute action and return success', () => {
       let executed = false;

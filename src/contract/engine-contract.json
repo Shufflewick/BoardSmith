@@ -1,7 +1,7 @@
 {
-  "revision": 5,
+  "revision": 6,
   "bundleProtocol": 1,
-  "surfaceHash": "db988455880ea279",
+  "surfaceHash": "aa0e6cb3e2aac241",
   "payloadHash": "bf22b8c168ab229d",
   "history": [
     {
@@ -43,6 +43,14 @@
       "surfaceHash": "db988455880ea279",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Player gains a first-class status field ('active' | 'dormant' | 'eliminated', default 'active') plus an isActive getter — it serializes into the tree and is visible in every seat's player view, so hosts can read seat liveness directly, and TurnOrder.ACTIVE_ONLY now filters on it instead of an undeclared 'eliminated' property. Also: every enterText selection is now length-bounded (DEFAULT_TEXT_MAX_LENGTH = 256 when a game sets no maxLength), and CheckpointPolicy is exported from the boardsmith root and boardsmith/session so a published bundle can name the type for GameDefinition.checkpoints."
+    },
+    {
+      "revision": 6,
+      "date": "2026-08-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "aa0e6cb3e2aac241",
+      "payloadHash": "bf22b8c168ab229d",
+      "summary": "Action builder gains .validate(fn): a submit-time, whole-submission gate returning true | false | a message string, enforced on both the one-shot and incremental execute paths."
     }
   ]
 }

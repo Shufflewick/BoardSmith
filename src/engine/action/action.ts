@@ -73,6 +73,52 @@ export function evaluateCondition(
 }
 
 /**
+ * Turn a `validate` callback's return value into "no error" or an error string.
+ *
+ * Both validate hooks — the per-selection one and the action-level one — share
+ * ONE contract: `true` passes, `false` fails generically, a string fails with
+ * that message. Nothing else is legal, and the reason is the trap this function
+ * exists to kill: an object like `{ valid: true }` is truthy but not `true`, so
+ * a bare `result !== true` test rejects the very case the author meant to
+ * allow — the passing case fails, quietly, blaming the player's choice.
+ *
+ * So an unrecognized return is treated as a programming error and SAID so: the
+ * action is still refused (never silently allowed), and the message states the
+ * real contract instead of blaming the player's input.
+ *
+ * @param result - Whatever the callback returned
+ * @param what - Human-readable identification of the callback, for the message
+ * @param genericFailure - Message to use for a bare `false`
+ * @returns The error string, or `null` when the value passes
+ */
+function interpretValidateResult(
+  result: unknown,
+  what: string,
+  genericFailure: string,
+): string | null {
+  if (result === true) return null;
+  if (result === false) return genericFailure;
+  if (typeof result === 'string') return result;
+  return (
+    `${what} returned ${describeValidateReturn(result)}, which is not a valid result. ` +
+    `Return true to allow, false to reject, or a string to reject with that message ` +
+    `shown to the player. (There is no { valid, message } form — a returned object ` +
+    `cannot be distinguished from a mistake, so it is refused rather than guessed at.)`
+  );
+}
+
+/** Compact, safe rendering of an unexpected validate return for the message. */
+function describeValidateReturn(result: unknown): string {
+  if (result === null) return 'null';
+  if (result === undefined) return 'undefined (no return value?)';
+  if (typeof result === 'object') {
+    const keys = Object.keys(result as object);
+    return `an object${keys.length ? ` with keys: ${keys.join(', ')}` : ''}`;
+  }
+  return `a ${typeof result}`;
+}
+
+/**
  * Handles validation, argument resolution, and execution of player actions.
  *
  * ActionExecutor is an internal class used by the game session to process
@@ -1021,15 +1067,39 @@ export class ActionExecutor {
     if (selection.validate && errors.length === 0) {
       // Cast value since we've already validated the type above
       const result = (selection.validate as (v: unknown, a: Record<string, unknown>, c: ActionContext) => boolean | string)(value, args, context);
-      if (result !== true) {
-        errors.push(typeof result === 'string' ? result : `Invalid ${selection.name}`);
-      }
+      const error = interpretValidateResult(
+        result,
+        `validate for selection '${selection.name}'` +
+          (actionName ? ` of action '${actionName}'` : ''),
+        `Invalid ${selection.name}`,
+      );
+      if (error) errors.push(error);
     }
 
     return {
       valid: errors.length === 0,
       errors,
     };
+  }
+
+  /**
+   * Run the action-level `validate` gate, if the action declares one.
+   *
+   * Shared by BOTH paths into `execute` — the one-shot `executeAction` (via
+   * `validateAction`) and the incremental `executePendingAction` the interactive
+   * UI drives. A gate that holds on only one of them is worse than no gate: it
+   * would pass every test written against `performAction` and let the same
+   * submission through the moment a player clicked their way to it instead.
+   *
+   * @returns The refusal message, or `null` when the action may proceed
+   */
+  private checkActionValidate(action: ActionDefinition, context: ActionContext): string | null {
+    if (!action.validate) return null;
+    return interpretValidateResult(
+      action.validate(context.args, context),
+      `validate for action '${action.name}'`,
+      `Action '${action.name}' is not allowed with these choices`,
+    );
   }
 
   /**
@@ -1071,6 +1141,16 @@ export class ActionExecutor {
 
       const result = this.validateSelection(selection, value, player, args, action.name);
       allErrors.push(...result.errors);
+    }
+
+    // Whole-action gate, LAST: every selection is present and individually
+    // valid by now, so `args` is complete and a cross-selection rule can be
+    // stated once, in one place, with its own message. Skipped when a selection
+    // already failed — reporting "you must play 2 cards" on top of "missing
+    // required selection: cards" only obscures the real problem.
+    if (allErrors.length === 0) {
+      const error = this.checkActionValidate(action, context);
+      if (error) allErrors.push(error);
     }
 
     return {
@@ -1893,6 +1973,18 @@ export class ActionExecutor {
       player,
       args: resolvedArgs,
     };
+
+    // The action-level gate applies here too — this is the interactive path
+    // (choice by choice), and the whole point of the gate is that it sees the
+    // COMPLETE submission, which is exactly what has just been assembled.
+    const validateError = this.checkActionValidate(action, context);
+    if (validateError) {
+      // The action never runs, so nothing it would have mutated has happened;
+      // but selections that already fired onSelect must be compensated, the
+      // same as any other abort before execute.
+      this.fireOnCancelCallbacks(action, pendingState);
+      return { success: false, error: validateError };
+    }
 
     try {
       const result = action.execute(resolvedArgs, context);

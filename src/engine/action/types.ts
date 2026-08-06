@@ -44,7 +44,25 @@ export interface BaseSelection<T = unknown> {
   prompt?: string | ((context: ActionContext) => string);
   /** Make this selection optional. If a string, shows that text instead of "Skip". */
   optional?: boolean | string;
-  /** Validation function */
+  /**
+   * Per-value gate for THIS selection, checked when the value is submitted.
+   * Receives the value, the args collected so far (earlier selections are
+   * present; later ones are not), and the action context.
+   *
+   * Contract — the same three returns as the action-level
+   * {@link ActionDefinition.validate}:
+   * - `true` → accepted
+   * - `false` → rejected, with a generic `Invalid <name>` message
+   * - a string → rejected, and the string IS the player-facing message
+   *
+   * Any other return value (notably a `{ valid, message }` object) is a
+   * programming error and is reported as one — it is never silently treated as
+   * a rejection.
+   *
+   * For a rule that spans SELECTIONS, use the action-level `.validate()`
+   * instead: hanging a whole-submission rule on one field breaks the moment the
+   * selection order changes or that selection is optional and skipped.
+   */
   validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
   /** Called after this step is resolved. Receives the resolved value and a restricted context. */
   onSelect?: (value: T, context: OnSelectContext) => void;
@@ -464,6 +482,29 @@ export interface ActionDefinition {
    * @see ConditionConfig for details and examples
    */
   condition?: ConditionConfig;
+  /**
+   * Whole-action gate, checked at SUBMIT time with every selection already
+   * resolved — the place for a rule that spans selections ("play at least two
+   * cards", "the total must not exceed your action points") and needs to say
+   * WHY it refused.
+   *
+   * Contract — identical to the per-selection `validate` (see
+   * {@link BaseSelection.validate}), deliberately, so the two can never be
+   * confused for one another:
+   * - `true` → the action may proceed
+   * - `false` → refused, with a generic message
+   * - a string → refused, and the string IS the player-facing message
+   *
+   * Any other return value (notably a `{ valid, message }` object) is a
+   * programming error: the action is refused and the engine explains the real
+   * contract rather than guessing at intent.
+   *
+   * Runs AFTER `condition` and after every selection validates, and ONLY at
+   * submit time — it never affects whether the action is offered (that is
+   * `condition`'s job, which is also evaluated with EMPTY args at availability
+   * time). Set via `.validate(fn)`.
+   */
+  validate?: (args: Record<string, unknown>, context: ActionContext) => boolean | string;
   /** The effect to execute */
   execute: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void;
   /**

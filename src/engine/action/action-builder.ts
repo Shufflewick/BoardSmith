@@ -141,6 +141,51 @@ export class Action<
   }
 
   /**
+   * Gate the whole action at submit time, with every selection resolved.
+   *
+   * This is the place for a rule that spans selections and needs to explain
+   * itself. Use it instead of:
+   * - `.condition()`, which decides whether the action is OFFERED and is also
+   *   evaluated with EMPTY args for that purpose — a predicate that reads
+   *   `ctx.args` there must special-case the empty record or the action becomes
+   *   permanently (un)available, and a failing condition cannot carry a custom
+   *   message.
+   * - a per-selection `validate`, which can only see the args collected so far,
+   *   does not run when an optional selection is skipped, and has nowhere to
+   *   live on an action with no selections.
+   * - a `{ success: false }` return from `.execute()`, which is too late: the
+   *   action has already been dispatched and the handler may have mutated state.
+   *
+   * Return `true` to allow, `false` to refuse generically, or a string to refuse
+   * WITH that message shown to the player. (Same contract as a selection's
+   * `validate` — one rule for both, on purpose.)
+   *
+   * @param fn - Predicate over the fully-resolved args
+   * @returns The builder for chaining
+   *
+   * @example
+   * ```typescript
+   * Action.create<MyGame>('play')
+   *   .chooseElements('cards', { elementClass: Card, min: 1 })
+   *   .validate((args, ctx) => {
+   *     if (args.cards.length < 2) return 'Play at least 2 cards.';
+   *     const cost = args.cards.length;
+   *     if (cost > ctx.player.actionPoints) {
+   *       return `That costs ${cost} AP; you have ${ctx.player.actionPoints}.`;
+   *     }
+   *     return true;
+   *   })
+   *   .execute(({ cards }, ctx) => { ... });
+   * ```
+   */
+  validate(fn: (args: A, context: ActionContext<G>) => boolean | string): this {
+    // Same erasure as `.execute()`: ActionDefinition is non-generic, and the
+    // runtime always passes the args/game this chain declared.
+    this.definition.validate = fn as ActionDefinition['validate'];
+    return this;
+  }
+
+  /**
    * Mark this action as non-undoable.
    * Use for actions that reveal hidden info, involve randomness, or shouldn't be undone.
    * When executed, undo is disabled for the rest of the turn.

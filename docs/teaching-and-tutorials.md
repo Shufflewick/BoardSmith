@@ -56,7 +56,7 @@ export interface TutorialStep {
 - **`gate`** — the learner may only perform actions that pass this gate (details below).
 - **`content`** — annotation overlays shown during this step. Absent means no annotation.
 - **`advanceWhen`** — a labeled predicate record; when all predicates return `true` the tutorial automatically advances. Evaluated by the same `evaluateConditionWithTrace` evaluator used by action `ObjectCondition`, giving consistent debug traces.
-- **`suppressAutoFill`** — when `true`, prevents the engine's auto-fill of single-enabled selections for this step. Use when the teaching goal is for the learner to explicitly click a piece or choice; auto-fill would skip the teaching beat before the learner interacts. When `suppressAutoFillFor` is also set, suppression is scoped to that one named selection.
+- **`suppressAutoFill`** — when `true`, prevents the engine's auto-fill of single-enabled selections for this step. (Auto-fill itself is normal play behaviour, not a tutorial mechanism — see [Single-Choice Auto-Fill](./actions-and-flow.md#single-choice-auto-fill) for what it does outside a tutorial.) Use when the teaching goal is for the learner to explicitly click a piece or choice; auto-fill would skip the teaching beat before the learner interacts. When `suppressAutoFillFor` is also set, suppression is scoped to that one named selection.
 
 ### Action gating
 

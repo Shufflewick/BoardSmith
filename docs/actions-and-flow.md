@@ -18,6 +18,10 @@ Pass your concrete game class to `Action.create<MyGame>(...)`. The builder then
   casts, and a typo'd key (`args.crad`) is a compile error instead of silently
   returning `undefined`.
 
+`ctx.player` is the **base `Player`** type, not your player subclass — reading
+your own fields off it needs a cast (`ctx.player as MyPlayer`). Only `ctx.game`
+and `args` are threaded.
+
 ```typescript
 import { Action, type ActionDefinition } from 'boardsmith';
 
@@ -423,20 +427,94 @@ Each key is a human-readable label that appears in debug output when the conditi
 
 ### Validation
 
-Validate the complete action before execution:
+There are three places to refuse something, and they answer different questions.
+Picking the wrong one is the usual source of "my rule fires at the wrong time":
+
+| You want to... | Use | Sees |
+|---|---|---|
+| decide whether the action is **offered at all** | `.condition()` | game + player, **no args** |
+| reject **one value** as it is chosen | a selection's `validate` | that value + args so far |
+| reject **the whole submission** before it runs | `.validate()` | every arg, fully resolved |
+
+#### `.validate()` — the whole-submission gate
+
+Runs at submit time with every selection resolved, after `.condition()` and after
+each selection's own validation. Return `true` to allow, `false` to refuse
+generically, or **a string to refuse with that message shown to the player**:
 
 ```typescript
-Action.create('play')
-  .chooseFrom('cards', { choices: getPlayableCards, multi: true })
+Action.create<MyGame>('play')
+  .chooseElements('cards', { elements: (ctx) => ctx.game.hand.all(Card) })
   .validate((args, ctx) => {
-    const cards = args.cards as Card[];
-    if (cards.length < 2) {
-      return { valid: false, message: 'Must play at least 2 cards' };
+    // args.cards is Card[] — threaded through the chain, no cast.
+    // ctx.player is the base Player type; cast for your own player fields.
+    const player = ctx.player as MyPlayer;
+    if (args.cards.length < 2) return 'Must play at least 2 cards';
+    if (args.cards.length > player.actionPoints) {
+      return `That costs ${args.cards.length} AP; you have ${player.actionPoints}.`;
     }
-    return { valid: true };
+    return true;
   })
-  .execute(...)
+  .execute(({ cards }) => { /* ... */ })
 ```
+
+This is the right home for a rule that spans selections, and the only mechanism
+that both sees the complete submission and carries its own message. It applies on
+every path into `execute` — a one-shot `sendAction` and a player clicking through
+the selections one at a time both pass through it.
+
+It does **not** affect availability: an action gated only by `.validate()` is
+still offered, then refused with your message. That is deliberate — "you can't
+do that *because*" is more useful than an action that silently disappears.
+
+#### Selection `validate` — one value at a time
+
+Every selection method takes a `validate` option with the **same three returns**
+(`true` / `false` / a message string):
+
+```typescript
+.enterNumber('bid', {
+  min: 1,
+  max: 10,
+  validate: (value, args, ctx) =>
+    value <= (ctx.player as MyPlayer).gold || 'You cannot bid more than you hold',
+})
+```
+
+It receives `(value, args, context)`, where `args` holds only the selections
+collected **before** this one. Two consequences worth knowing: it does not run
+when an optional selection is skipped, and an action with no selections has
+nowhere to put it. For anything that depends on more than its own value, reach
+for the action-level `.validate()` instead — hanging a whole-submission rule on
+one field breaks the moment you reorder the selections.
+
+> **There is no `{ valid, message }` return.** Both hooks take `true`, `false`,
+> or a string. Returning an object is refused with an explicit message telling
+> you so — an object is truthy but is not `true`, so guessing at its meaning
+> would silently reject exactly the submissions you meant to allow.
+
+#### `.condition()` is about availability, not arguments
+
+`.condition()` decides whether the action appears. It is evaluated **twice**:
+once at availability time with `ctx.args` as an **empty object**, and again at
+submit time with the real args. A predicate that reads `ctx.args` must therefore
+handle the empty record, or the action becomes permanently available or
+permanently hidden:
+
+```typescript
+// TRAP: at availability time args is {}, so this is always false —
+// the action never appears at all.
+.condition({ 'can afford': (ctx) => ctx.player.gold >= (ctx.args.cost as number) })
+```
+
+A failing condition also produces the fixed message `Action is not available`;
+it cannot explain itself. If you need a reason, use `.validate()`.
+
+#### Why not just refuse inside `execute`?
+
+Returning `{ success: false, error }` from `execute` is too late: the action has
+already been dispatched, and any state your handler touched before the check has
+already changed. Refuse in `.validate()`, where nothing has happened yet.
 
 ### Execute Function
 
@@ -477,13 +555,59 @@ casts are required:
 > ```
 > Also, always use `ctx.game` instead of a closure reference to the game variable in execute functions to avoid stale references during hot-reload.
 
+### Single-Choice Auto-Fill
+
+**A selection with exactly one enabled choice is filled for the player, who never
+sees it.** If that was the last thing the action needed, the action then executes.
+Design your actions knowing this: a compass with seven impassable directions
+never appears — the move just happens.
+
+The rules, in full:
+
+- Applies to a **non-optional** selection with exactly **one enabled** choice.
+  Optional selections are never auto-filled (skipping is a real decision), and
+  disabled choices don't count toward the one.
+- Auto-fill cascades: filling one selection may leave the next with a single
+  choice, which is filled in turn.
+- When everything is filled, auto-execute dispatches the action.
+- Both defaults are on, and both are properties of the controller every UI shares
+  (`useActionController`), so a custom board and the action panel behave alike.
+
+Two ways to keep the beat:
+
+```typescript
+// The player must take the action deliberately, even when it needs no choices
+// at all (e.g. drawing a card — the reveal should be theirs to trigger).
+Action.create('draw').manual().execute(...)
+```
+
+`.manual()` suppresses auto-fill for that action, so the player's own tap is what
+dispatches it. Tutorials can suppress auto-fill per step instead, when the point
+is for the learner to perform the click — see
+[Teaching & Tutorials](./teaching-and-tutorials.md) for `suppressAutoFill`.
+
+Note that auto-fill is a **human-UI** behaviour. An AI seat plays a sole legal
+move regardless.
+
 ### Action Options
 
 ```typescript
 Action.create('move')
-  .prompt('Move your piece')
+  .prompt('Move your piece')        // Player-facing prompt
+  .help('Moves one space, orthogonally.')  // Help popover text
   .notUndoable()                    // Cannot undo this action
-  .skipIf((ctx) => /* condition */) // Skip if condition is true
+  .manual()                         // Never auto-execute for the player
+  .suppressFromDock()               // Hide the dock button; still playable from the board
+```
+
+To skip a whole step of the flow, use the flow node's `skipIf` — it belongs to
+`actionStep`, not to the action:
+
+```typescript
+actionStep({
+  actions: ['discard'],
+  skipIf: (ctx) => ctx.game.deck.count(Card) === 0,
+})
 ```
 
 ---
