@@ -201,7 +201,7 @@ function executeSetCurrentPlayer(game: Game, command: SetCurrentPlayerCommand): 
 }
 
 function executeMessage(game: Game, command: MessageCommand): CommandResult {
-  game.addMessageInternal(command.text, command.data);
+  game.addMessageInternal(command.text, command.data, command.to);
   return { success: true };
 }
 

@@ -129,8 +129,6 @@ interface GameShellProps {
   playerCount?: number;
   /** Enable debug panel (default: true in dev) */
   debugMode?: boolean;
-  /** Show game history sidebar (default: true) */
-  showHistory?: boolean;
   /** Player positions that should be AI by default (1-indexed). E.g., [2] makes player 2 AI */
   defaultAIPlayers?: number[];
   /**
@@ -211,7 +209,6 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   apiUrl: (typeof window !== 'undefined' && (window as any).__BOARDSMITH_API_URL__) || 'http://localhost:8787',
   playerCount: 2,
   debugMode: true,
-  showHistory: true,
   platformActionPanelEscapeHatch: false,
   providesOwnGameOverUI: false,
   playerOrder: 'turn',
@@ -2348,9 +2345,17 @@ if ((import.meta as any).hot) {
             ></slot>
 
             <!-- Game History in the side-scroll: shown when expanded on desktop, and
-                 always on mobile (inside the overlay). The desktop rail uses the sheet. -->
+                 always on mobile (inside the overlay).
+
+                 A game cannot turn this off. The log is the shell's record of what
+                 happened, and the only gate on it is the PLAYER's own sidebar-rail
+                 collapse — reversible, by the person who chose it. There is
+                 deliberately no prop here: a game rendering its own narration
+                 elsewhere adds a surface, it does not remove this one, and a game
+                 that publishes nothing to `game.messages` gets an honestly empty
+                 log rather than no log at all. -->
             <GameHistory
-              v-if="showHistory && (isCompact || !sidebarRail)"
+              v-if="isCompact || !sidebarRail"
               ref="historyPanel"
               :messages="gameMessages"
               class="sidebar-history"

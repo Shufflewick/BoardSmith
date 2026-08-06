@@ -139,6 +139,12 @@ export interface MessageCommand extends BaseCommand {
   text: string;
   /** Data for placeholder substitution */
   data?: Record<string, unknown>;
+  /**
+   * Seats allowed to receive this message (`messageTo`). Absent means public.
+   * Must survive replay: dropping it here would silently re-broadcast a private
+   * message to the whole table on the next restore.
+   */
+  to?: number[];
 }
 
 /**

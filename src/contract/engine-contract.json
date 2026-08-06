@@ -1,7 +1,7 @@
 {
-  "revision": 8,
+  "revision": 9,
   "bundleProtocol": 1,
-  "surfaceHash": "62514e31d9da2b2a",
+  "surfaceHash": "0c412c9ef9bdcc11",
   "payloadHash": "bf22b8c168ab229d",
   "history": [
     {
@@ -67,6 +67,14 @@
       "surfaceHash": "62514e31d9da2b2a",
       "payloadHash": "bf22b8c168ab229d",
       "summary": "Renamed ActionBuilder.suppressFromDock() to .suppressFromActionPanel() and its actionMetadata field to match: 'Action Panel' is now the single name for the control surface (the 'dock' synonym is retired everywhere, including the --dock-h CSS custom property, now --action-panel-h)."
+    },
+    {
+      "revision": 9,
+      "date": "2026-08-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "0c412c9ef9bdcc11",
+      "payloadHash": "bf22b8c168ab229d",
+      "summary": "Added Game.messageTo(audience, text, data): a per-seat game-log channel for hidden-information games, withheld server-side in toJSONForPlayer and createPlayerView so an unaddressed seat never receives the message. game.messages gains an optional 'to' audience field (absent = public). Also removed GameShell's showHistory prop: a game can no longer suppress the log."
     }
   ]
 }

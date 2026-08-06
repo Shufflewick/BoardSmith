@@ -535,8 +535,18 @@ export class Game<
   /** Seeded random number generator */
   random: SeededRandom;
 
-  /** Message log */
-  messages: Array<{ text: string; data?: Record<string, unknown> }> = [];
+  /**
+   * Message log.
+   *
+   * `to` is the message's AUDIENCE — the seats allowed to receive it. Absent
+   * means everyone, which is what `message()` writes and what nearly every game
+   * should be writing. Only `messageTo()` sets it. The audience is enforced
+   * server-side, in `toJSONForPlayer` and `getFormattedMessages`, so an
+   * unaddressed seat never receives the bytes; this array itself is the
+   * unfiltered truth and must stay that way (checkpoints and undo restore from
+   * it, so a filtered copy here would silently destroy other seats' history).
+   */
+  messages: Array<{ text: string; data?: Record<string, unknown>; to?: number[] }> = [];
 
   /** Game settings */
   settings: Record<string, unknown> = {};
@@ -2651,29 +2661,119 @@ export class Game<
   }
 
   /**
-   * Internal method to add a message (called by command executor)
+   * Add a message that ONLY the given seats may receive.
+   *
+   * **Almost no game should use this.** `message()` is the log: a shared record
+   * of what happened, which every player and spectator can read, and which is
+   * what makes a game reviewable and its history meaningful. Reach for
+   * `messageTo()` only when the game's rules make a fact genuinely private —
+   * an RPG where a character perceives something the others do not, a hidden
+   * -role game where a night action must not name its actor. If you are using
+   * it to reduce clutter, or because a line "isn't relevant" to other seats,
+   * use `message()`: irrelevant is not the same as secret, and a log that
+   * omits public events is a log players cannot trust.
+   *
+   * The audience is enforced on the SERVER. An unaddressed seat never receives
+   * the message in its state payload at all — this is not a UI filter, and
+   * there is no client-side copy to inspect. Spectators (no seat) see only
+   * unaddressed messages.
+   *
+   * The shell's log itself is always rendered and cannot be turned off; this
+   * controls what goes INTO a given seat's copy of it.
+   *
+   * @param audience - Seat(s) allowed to see this message: a Player, a seat
+   *                   number, or an array of either. An empty array addresses
+   *                   no one and is refused.
+   * @param text - Message text, optionally with `{{key}}` placeholders
+   * @param data - Optional data for template substitution, same as `message()`
+   *
+   * @example
+   * ```typescript
+   * // Only this character hears it.
+   * this.messageTo(ctx.player, 'You hear footsteps to the north.');
+   *
+   * // Two seats share a private exchange.
+   * this.messageTo([thief, victim], '{{thief}} lifts your purse', { thief });
+   *
+   * // WRONG — this is public information, and every seat should have it.
+   * this.messageTo(ctx.player, '{{p}} drew a card', { p: ctx.player });
+   * ```
    */
-  addMessageInternal(text: string, data?: Record<string, unknown>): void {
-    this.messages.push({ text, data });
+  messageTo(
+    audience: P | number | Array<P | number>,
+    text: string,
+    data?: Record<string, unknown>,
+  ): void {
+    const list = Array.isArray(audience) ? audience : [audience];
+    const seats = list.map((a) => (typeof a === 'number' ? a : a.seat));
+
+    // Fail loud rather than write a message nobody can ever read. An empty
+    // audience is always a bug at the call site (a filter that matched nothing,
+    // an undefined player), and silently dropping it would lose game history
+    // with no signal anywhere.
+    if (seats.length === 0) {
+      throw new Error(
+        `messageTo() was given an empty audience for "${text}" — no seat would ever ` +
+          `receive it. Pass at least one player/seat, or use message() if it is public.`,
+      );
+    }
+    for (const seat of seats) {
+      if (!Number.isInteger(seat) || seat < 0) {
+        throw new Error(
+          `messageTo() received an invalid seat (${JSON.stringify(seat)}) for "${text}". ` +
+            `Pass a Player or a non-negative seat number.`,
+        );
+      }
+    }
+
+    this.addMessageInternal(text, data, seats);
   }
 
   /**
-   * Get formatted messages (with template substitution)
+   * Internal method to add a message (called by command executor)
    */
-  getFormattedMessages(): string[] {
-    return this.messages.map(({ text, data }) => {
-      if (!data) return text;
-      let processed = text;
-      for (const [key, value] of Object.entries(data)) {
-        const replacement = value instanceof GameElement
-          ? value.toString()
-          : value instanceof Player
-            ? (value.name ?? `Player ${value.seat}`)
-            : String(value);
-        processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), replacement);
-      }
-      return processed;
-    });
+  addMessageInternal(text: string, data?: Record<string, unknown>, to?: number[]): void {
+    this.messages.push(to ? { text, data, to } : { text, data });
+  }
+
+  /**
+   * Whether `seat` is allowed to receive `message`. A message with no audience
+   * is public. `null`/undefined seat is a spectator, who sees only public ones.
+   */
+  private canSeeMessage(
+    message: { to?: number[] },
+    seat: number | null | undefined,
+  ): boolean {
+    if (!message.to) return true;
+    if (seat === null || seat === undefined) return false;
+    return message.to.includes(seat);
+  }
+
+  /**
+   * Get formatted messages (with template substitution).
+   *
+   * @param seat - The seat receiving these messages. Messages addressed to
+   *   other seats via `messageTo()` are withheld. Omitting it (or passing
+   *   null) is the SPECTATOR view: public messages only. There is deliberately
+   *   no "all messages" mode here — the unfiltered log is `this.messages`, and
+   *   a caller that wants it should be explicit about reading the truth.
+   */
+  getFormattedMessages(seat?: number | null): string[] {
+    return this.messages
+      .filter((m) => this.canSeeMessage(m, seat))
+      .map(({ text, data }) => {
+        if (!data) return text;
+        let processed = text;
+        for (const [key, value] of Object.entries(data)) {
+          const replacement = value instanceof GameElement
+            ? value.toString()
+            : value instanceof Player
+              ? (value.name ?? `Player ${value.seat}`)
+              : String(value);
+          processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), replacement);
+        }
+        return processed;
+      });
   }
 
   // ============================================
@@ -2748,7 +2848,7 @@ export class Game<
   override toJSON(): ElementJSON & {
     phase: GamePhase;
     isFinished: boolean;
-    messages: Array<{ text: string; data?: Record<string, unknown> }>;
+    messages: Array<{ text: string; data?: Record<string, unknown>; to?: number[] }>;
     settings: Record<string, unknown>;
     animationEvents?: AnimationEvent[];
     animationEventSeq?: number;
@@ -2769,6 +2869,7 @@ export class Game<
       messages: this.serializeValue(this.messages, 'messages') as Array<{
         text: string;
         data?: Record<string, unknown>;
+        to?: number[];
       }>,
       settings: this.serializeValue(this.settings, 'settings') as Record<string, unknown>,
       // The seq must survive a snapshot round-trip on its OWN, independent of
@@ -3084,7 +3185,23 @@ export class Game<
     // it only strips CHILD elements. `filterElement`'s return is typed to the
     // base `ElementJSON`, so re-assert the enriched shape the root always carries
     // (this is what makes the redacted view a valid, restorable game state).
-    return filteredState as ReturnType<Game['toJSON']>;
+    const view = filteredState as ReturnType<Game['toJSON']>;
+
+    // Withhold messages this seat is not addressed in (`messageTo`). This is
+    // the leak-critical step: `messages` rides in from `toJSON()` on the game
+    // ROOT, which is visible to everyone, so it is NOT touched by the element
+    // visibility pass above. Without this, every client receives every private
+    // message in its state tree and the audience would be nothing but a UI
+    // filter over data the wrong player already holds.
+    //
+    // Only rebuild when something is actually withheld, so the overwhelmingly
+    // common all-public case keeps `toJSON()`'s array identity and costs nothing.
+    if (Array.isArray(view.messages) && view.messages.some((m) => m.to)) {
+      const visible = view.messages.filter((m) => this.canSeeMessage(m, playerSeat));
+      return { ...view, messages: visible };
+    }
+
+    return view;
   }
 
   /**

@@ -1290,6 +1290,57 @@ export function createHexFlow(game: HexGame): FlowDefinition {
 }
 ```
 
+## The Game Log
+
+`game.message()` writes to the log the shell renders in the sidebar. It is a
+shared record: every player and every spectator receives it.
+
+```typescript
+game.message('{{player}} played {{card}}', { player: ctx.player, card });
+```
+
+**The log is always on.** There is no prop, slot, or flag a game can set to
+remove it — it is what makes a game reviewable, and the copy/clear controls in
+the ⋯ menu depend on it being mounted. The only thing that ever hides it is the
+player collapsing their own sidebar, which they can undo. A game that renders
+its own narration somewhere on the board is *adding* a surface, not replacing
+this one.
+
+### `messageTo()` — for hidden information, and almost nothing else
+
+When the rules make a fact genuinely private, address the message to the seats
+allowed to have it:
+
+```typescript
+// Only this character perceives it.
+game.messageTo(ctx.player, 'You hear footsteps to the north.');
+
+// A private exchange between two seats.
+game.messageTo([thief, victim], '{{thief}} lifts your purse', { thief });
+```
+
+**Most games should never call this.** It exists for the narrow case where the
+game's rules require concealment — an RPG where a character sees what others
+cannot, a hidden-role game whose night action must not name its actor. It is not
+a decluttering tool. "Not relevant to that player" is not the same as "that
+player must not know", and a log that quietly omits public events is one players
+cannot trust or review.
+
+The audience is enforced **on the server**. An unaddressed seat never receives
+the message in its state payload at all — this is not a UI filter, and there is
+no client-side copy to inspect. Both payload paths (`toJSONForPlayer` and
+`createPlayerView`) withhold it, so a private line is absent from the wrong
+player's browser rather than hidden in it. Spectators, having no seat, see only
+public messages.
+
+`game.messages` itself stays complete and unfiltered — checkpoints and undo
+restore from it, so every seat's history survives a rewind.
+
+An empty audience throws rather than writing a message nobody could ever read:
+that is always a bug at the call site (a filter that matched nothing, an
+undefined player), and silently dropping it would lose game history with no
+signal anywhere.
+
 ## Registering Actions
 
 Actions must be registered in your Game constructor:

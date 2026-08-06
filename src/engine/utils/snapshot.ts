@@ -404,7 +404,9 @@ export function createPlayerView(
       isMyTurn,
       availableActions,
     } : undefined,
-    messages: game.getFormattedMessages().map(text => ({ text })),
+    // Seat-scoped: `messageTo()` messages addressed to other seats are withheld
+    // here, not hidden in the UI — this is the payload the client receives.
+    messages: game.getFormattedMessages(playerPosition).map(text => ({ text })),
     phase: game.phase,
     complete: flowState?.complete ?? false,
     winners: flowState?.complete ? game.getWinners().map(p => p.seat) : undefined,
