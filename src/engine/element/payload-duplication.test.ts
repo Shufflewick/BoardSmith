@@ -161,3 +161,68 @@ describe('SEC-04: whole-payload leak assertions for messageTo', () => {
     ]);
   });
 });
+
+/**
+ * SEC-05: `tutorialProgress` is per-seat state, and the seat is the audience.
+ *
+ * It is an engine-owned `Map<seat, TutorialProgress>` living on the game ROOT,
+ * which every seat can see — so like the message log before SEC-04, the element
+ * visibility pass never touched it and every seat received every other seat's
+ * entry. Unlike the log it was never duplicated, so neither of that fix's
+ * guards covered it: same class of hole, different field.
+ *
+ * Nothing on the client reads it (the client gets the `PlayerGameState.tutorial`
+ * projection instead), so this is a leak with no consumer on the other side.
+ */
+describe('SEC-05: tutorialProgress is scoped to the receiving seat', () => {
+  function taughtGame(): LeakGame {
+    const game = newGame();
+    game.tutorialProgress.set(1, { stepId: 'STEP-OF-SEAT-1', status: 'running' });
+    game.tutorialProgress.set(2, { stepId: 'STEP-OF-SEAT-2', status: 'exited' });
+    return game;
+  }
+
+  it('gives a seat its own entry and nobody else\'s', () => {
+    const seat1 = JSON.stringify(taughtGame().toJSONForPlayer(1));
+
+    expect(seat1).toContain('STEP-OF-SEAT-1');
+    expect(seat1).not.toContain('STEP-OF-SEAT-2');
+  });
+
+  it('does not tell one seat that another QUIT the tutorial', () => {
+    // `status: 'exited'` is the sharpest of the three: it is a fact about a
+    // person giving up on the tutorial, and it has no bearing on the rules.
+    const seat1 = JSON.stringify(taughtGame().toJSONForPlayer(1));
+    expect(seat1).not.toContain('exited');
+  });
+
+  it('gives the spectator nobody\'s progress at all', () => {
+    const spectator = JSON.stringify(taughtGame().toJSONForPlayer(null));
+
+    expect(spectator).not.toContain('STEP-OF-SEAT-1');
+    expect(spectator).not.toContain('STEP-OF-SEAT-2');
+  });
+
+  it('keeps the AUTHORITATIVE tree complete — restore must not lose a seat\'s progress', () => {
+    // The mirror-image failure: scoping what gets PERSISTED would reset other
+    // seats' tutorials on the next restore.
+    const full = JSON.stringify(taughtGame().toJSON());
+
+    expect(full).toContain('STEP-OF-SEAT-1');
+    expect(full).toContain('STEP-OF-SEAT-2');
+  });
+
+  it('leaves the per-seat view restorable and self-consistent', () => {
+    // A seat's own entry survives, so the tutorial gate evaluates the same way
+    // against a restored clone of this view as against the live game.
+    const view = taughtGame().toJSONForPlayer(2);
+    const restored = newGame();
+    restored.loadSerializedState(JSON.parse(JSON.stringify(view)));
+
+    expect(restored.tutorialProgress.get(2)).toEqual({
+      stepId: 'STEP-OF-SEAT-2',
+      status: 'exited',
+    });
+    expect(restored.tutorialProgress.has(1)).toBe(false);
+  });
+});

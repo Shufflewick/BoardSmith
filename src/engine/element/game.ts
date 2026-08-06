@@ -3276,7 +3276,36 @@ export class Game<
     // for player views. Do not reintroduce a `messages` field on this payload;
     // a per-seat tree is not the log's home, and the leak SEC-04 fixed came
     // from exactly that arrangement.
-    return filteredState as ReturnType<Game['toJSON']>;
+    const view = filteredState as ReturnType<Game['toJSON']>;
+
+    // SEC-05: scope `tutorialProgress` to the receiving seat.
+    //
+    // It is an engine-owned `Map<seat, TutorialProgress>` and an ordinary own
+    // property, so it rides in the generic attribute bag on the game ROOT —
+    // which is visible to everyone, and therefore untouched by the element
+    // visibility pass above. Unscoped, every seat and the spectator learned
+    // which tutorial step each OTHER seat is on and whether they completed or
+    // quit the tutorial. That is nobody else's business: it is a fact about a
+    // person learning the game, not a fact about the game.
+    //
+    // A seat keeps its OWN entry so the redacted view stays self-consistent —
+    // `isTutorialGateActive`/`getTutorialDisabledActions` evaluate the same way
+    // against a restored per-seat clone as against the live game. The spectator
+    // is nobody, so it gets nothing.
+    //
+    // Rebuilt by re-serializing a filtered Map from the live source rather than
+    // by editing the tagged `{__map: [...]}` encoding in place — the redaction
+    // must not have to know how `serializeValue` spells a Map.
+    if (view.attributes.tutorialProgress !== undefined) {
+      const own = playerSeat === null ? undefined : this.tutorialProgress.get(playerSeat);
+      const scoped = own === undefined ? new Map() : new Map([[playerSeat, own]]);
+      view.attributes = {
+        ...view.attributes,
+        tutorialProgress: this.serializeValue(scoped, 'tutorialProgress'),
+      };
+    }
+
+    return view;
   }
 
   /**
