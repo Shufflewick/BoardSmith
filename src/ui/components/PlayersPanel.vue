@@ -229,25 +229,44 @@ defineSlots<{
 }
 
 .turn-indicator-dot {
+  position: relative;
   width: 9px;
   height: 9px;
   border-radius: 50%;
   background: var(--bsg-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bsg-accent) 22%, transparent);
-  animation: breathe 2.1s ease-in-out infinite;
   flex-shrink: 0;
 }
 
+/* PERF: the pulsing ring is a pseudo-element animated on transform + opacity
+   ONLY — the two properties the compositor can run off the main thread. The ring
+   itself (box-shadow) is painted once and never animated.
+
+   Animating box-shadow directly here, as this did, is a paint property: it
+   invalidated style and repainted on every frame of an infinite animation, so a
+   completely idle board burned ~700 ms of main-thread time and ~1,800 style
+   recalcs per 15 s (~4.6% busy) for one 9px dot. Keep any future change to this
+   cue on transform/opacity. */
+.turn-indicator-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsg-accent) 22%, transparent);
+  animation: breathe 2.1s ease-in-out infinite;
+}
+
 @keyframes breathe {
-  0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsg-accent) 22%, transparent); }
+  0%, 100% { transform: scale(0.55); opacity: 0; }
+  50% { transform: scale(1); opacity: 1; }
 }
 
 /* A11Y-08: reduced-motion — stop breathe animation AND provide a static
    high-contrast border so the active-player turn cue remains visible
-   (does not simply vanish under reduced-motion preference). */
+   (does not simply vanish under reduced-motion preference). The ring's
+   unanimated resting state is the full-size, fully-opaque ring, so the cue
+   stays visible rather than vanishing. */
 @media (prefers-reduced-motion: reduce) {
-  .turn-indicator-dot {
+  .turn-indicator-dot::after {
     animation: none;
   }
   .player-card.current {

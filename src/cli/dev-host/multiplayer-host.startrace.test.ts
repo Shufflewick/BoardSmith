@@ -111,16 +111,40 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
     expect(state.isComplete).toBe(false); // 5-round loop; round 1 alone doesn't finish it
   });
 
-  it('NEGATIVE CONTROL: a plain disconnect AFTER a normal start does NOT get reconciled (existing pause-on-away-turn path, unchanged)', async () => {
-    const { host } = makeRaceHost(null); // no gate — normal, un-raced start
+  it('BUG-12: a plain disconnect AFTER a normal start is AI-covered too — the away-seat rule is the same wherever the disconnect lands', async () => {
+    const { host, lastLobby } = makeRaceHost(null); // no gate — normal, un-raced start
     await host.handleMessage('A', { type: 'hello' }); // auto-seats A -> seat 1, starts normally
+    // B is here only so the post-disconnect lobby broadcast has a recipient to
+    // observe (broadcastLobby sends to CONNECTED clients — A is gone by then).
+    await host.handleMessage('B', { type: 'join', seat: 2, name: 'B' });
 
-    // A plain disconnect landing AFTER startGame has already committed must
-    // NOT be reconciled — this documents that only the in-await interleave
-    // triggers D15's fix, not every disconnect.
+    // A disconnect landing AFTER startGame has committed gets the SAME cover as
+    // one landing inside the await: nothing is driving seat 1 either way, and a
+    // seat nothing drives stalls the flow the moment it comes due. (Before
+    // BUG-12 this was deliberately left uncovered — "pause on away" — which is
+    // what stranded `boardsmith dev` behind its own stale auto-opened tab.)
     host.disconnect('A');
 
-    expect((host as any).aiSeats.some((s: { seat: number }) => s.seat === 1)).toBe(false); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect((host as any).aiSeats.some((s: { seat: number }) => s.seat === 1)).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    // Cover is loop-driver-only: the seat is still RESERVED for A's reconnect.
+    const seat1 = lastLobby()?.seats.find((s) => s.seat === 1);
+    expect(seat1?.clientId).toBe('A');
+    expect(seat1?.connected).toBe(false);
+  });
+
+  it('NEGATIVE CONTROL: the FOLLOWER disconnecting is NOT AI-covered — follow-mode persists across reloads and keeps AI paused', async () => {
+    const { host } = makeRaceHost(null);
+    await host.handleMessage('A', { type: 'hello' }); // A -> seat 1
+    await host.handleMessage('B', { type: 'join', seat: 2, name: 'B' }); // B -> seat 2 (human)
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+
+    // A page reload / HMR drops the follower's socket. Follow-mode deliberately
+    // survives it, and a follower covers EVERY seat — so handing any seat to a
+    // bot here would steal the move the follower is coming back for.
+    host.disconnect('A');
+
+    expect((host as any).aiSeats).toHaveLength(0); // eslint-disable-line @typescript-eslint/no-explicit-any
   });
 
   it('reclaim: a reconnecting human takes back the AI-covered seat — the bot yields, proven by the human successfully acting on the very NEXT round (not just static state)', async () => {
@@ -206,23 +230,22 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
     expect(lastOfType('B', 'game_state')).toBeTruthy();
   });
 
-  it('a MID-GAME disconnect (not during startGame\'s await) still follows the existing pause-on-away path, NOT the D15 reconciliation', async () => {
+  it('BUG-12: a MID-GAME disconnect on the away player\'s OWN due turn does not stall the game — the bot plays it and the flow advances', async () => {
     const { host, to } = makeRaceHost(null); // normal, un-raced start
     await host.handleMessage('A', { type: 'hello' }); // A -> seat 1, game starts normally
     await host.handleMessage('B', { type: 'join', seat: 2, name: 'B' }); // B -> seat 2, human
 
-    // Seat 1 (round 1) is due; A disconnects mid-game — NOT during startGame's
-    // own await (the game already fully committed and is idling on A's input).
+    // Seat 1 (round 1) is due; A disconnects mid-game — the exact stranded-seat
+    // case: the game is idling on input from a client that is gone. Pre-fix
+    // nothing drove seat 1 ever again and the game sat here forever, silently.
     host.disconnect('A');
+    await Promise.resolve(); // let disconnect()'s fire-and-forget AI pump settle
+    await new Promise((r) => setTimeout(r, 0));
 
-    // The existing pause-on-away-turn behavior is unchanged: seat 1 stays
-    // reserved to A and is NOT AI-covered — the D15 reconciliation only runs
-    // once, inside `startGame`, immediately after ITS OWN await, not on every
-    // disconnect() call.
-    expect((host as any).aiSeats.some((s: { seat: number }) => s.seat === 1)).toBe(false); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect((host as any).aiSeats.some((s: { seat: number }) => s.seat === 1)).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
 
-    // Seat 1 must act first (round 1) — B acting out of turn fails, confirming
-    // the game is genuinely paused rather than silently reassigned to B or the bot.
+    // The flow really advanced: seat 1's round-1 turn was consumed by the bot,
+    // so B — who could NOT act while seat 1 was due — can act now.
     await host.handleMessage('B', {
       type: 'server_request',
       requestId: 'b-mid',
@@ -231,6 +254,10 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bResp = to('B').find((m) => m.type === 'server_response' && (m as any).requestId === 'b-mid') as any;
-    expect(bResp?.result?.success).toBe(false);
+    expect(bResp?.result?.success).toBe(true);
+
+    // And the cover is reclaimable: A's reconnect yields the seat back.
+    await host.handleMessage('A', { type: 'hello' });
+    expect((host as any).aiSeats.some((s: { seat: number }) => s.seat === 1)).toBe(false); // eslint-disable-line @typescript-eslint/no-explicit-any
   });
 });

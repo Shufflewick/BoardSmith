@@ -257,6 +257,18 @@ function _enumerateRecursive(
 /**
  * Get enabled choices for a selection by calling game.getSelectionChoices.
  * Inlines the bot's former getChoicesForSelection wrapper.
+ *
+ * A choice whose `value` is `undefined` is DROPPED, loudly. Such a choice is not
+ * a usable move: `{...args, [name]: undefined}` serializes to args with the key
+ * missing entirely, so the bot emits a move that looks complete, passes every
+ * check here, and is then rejected by `performAction` with "Missing required
+ * selection: <name>" — an AI seat that stops driving the flow for a reason
+ * nothing upstream can see. The usual source is a `choices`/`filter` closure
+ * reading state that is REDACTED in the bot's search sandbox (e.g. deriving
+ * choices from an opponent's hidden hand), which yields `undefined` fields.
+ * Dropping the choice leaves a required selection with none, so the action
+ * simply produces no moves — the honest answer — and the warning names the
+ * action and selection so the game author can make the choices public-info.
  */
 function _getChoices(
   game: Game,
@@ -271,5 +283,17 @@ function _getChoices(
     player as any,
     currentArgs,
   );
-  return annotated.filter(c => c.disabled === false).map(c => c.value);
+  const enabled = annotated.filter(c => c.disabled === false).map(c => c.value);
+  const usable = enabled.filter(v => v !== undefined);
+  if (usable.length !== enabled.length) {
+    devWarn(
+      `undefined-choice-value:${actionName}:${selection.name}`,
+      `Selection "${selection.name}" of action "${actionName}" offered ` +
+        `${enabled.length - usable.length} choice(s) with an undefined value; they were ` +
+        `dropped because they cannot form a valid move. This usually means the selection's ` +
+        `choices are derived from state the caller cannot see (hidden/redacted information, ` +
+        `such as an opponent's hand) — derive them from public information instead.`,
+    );
+  }
+  return usable;
 }

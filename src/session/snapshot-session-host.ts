@@ -624,7 +624,24 @@ export class SnapshotSessionHost {
           break;
         }
         const res = await this.adapters.executeOp(this.snapshot, null, { type: 'aiTurn', seats: this.adapters.aiSeats });
-        if (!res.success || !res.aiMoved) break;
+        // A FAILED AI turn is not the same as "no AI turn was due". Breaking on
+        // both without a word is how an AI seat silently stops driving the flow:
+        // every seat waits on a bot that will never move again, with nothing in
+        // the console on either side to say why. Fail loud — the bot produced a
+        // move the engine rejected, which is a bug in the game's action
+        // definition, its AI hooks, or move enumeration, and the developer needs
+        // to see it the moment it happens.
+        if (!res.success) {
+          console.error(
+            `[SnapshotSessionHost] AI turn REJECTED for seat(s) ` +
+              `${this.adapters.aiSeats.map((s) => s.seat).join(', ')}: ${res.error ?? 'unknown error'}` +
+              `${res.errorCode ? ` (${res.errorCode})` : ''}. The AI cannot act, so the game will ` +
+              `not advance past this step. Check the action's selections and the bot's move ` +
+              `enumeration for this seat.`,
+          );
+          break;
+        }
+        if (!res.aiMoved) break;
         moves++;
         await this.apply(res);
         if (this.isComplete) break;

@@ -234,3 +234,66 @@ describe('enumerateLegalMoves: function-valued multiSelect', () => {
     }
   });
 });
+
+// ============================================================================
+// A required selection whose choices resolve to `undefined` must not produce a
+// "move". This is the 1-2 Punch stall: the second selection's `choices` closure
+// derived its options from the OPPONENT'S HAND, which is redacted inside the
+// MCTS search sandbox, so every option came back `undefined`. Enumeration
+// happily built `{ownDiscard: el, namedType: undefined}`, serialization dropped
+// the undefined key, and the engine then rejected the "complete" move with
+// "Missing required selection: namedType" — an AI seat that stopped driving the
+// flow for a reason nothing upstream could see.
+// ============================================================================
+
+class UndefinedChoiceGame extends Game<UndefinedChoiceGame, Player> {
+  board!: Space<UndefinedChoiceGame>;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.board = this.create(Space<UndefinedChoiceGame>, 'board');
+    this.board.create(Piece<UndefinedChoiceGame>, 'token-a');
+    this.board.create(Piece<UndefinedChoiceGame>, 'token-b');
+
+    this.registerAction(
+      Action.create<UndefinedChoiceGame>('pick')
+        .chooseElement('target', { prompt: 'Choose a token', elementClass: Piece })
+        // Stands in for a choices closure reading redacted state: it offers an
+        // option, but the option's VALUE is undefined.
+        .chooseFrom('label', { prompt: 'Name it', choices: () => [undefined as unknown as string] })
+        .execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          maxIterations: 10,
+          do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
+        }),
+      }),
+    );
+  }
+}
+
+describe('enumerateLegalMoves: choices with an undefined value', () => {
+  it('yields NO moves for a required selection whose only choice value is undefined — never a move missing that arg', () => {
+    const game = new UndefinedChoiceGame({
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'undefined-choice-test',
+    });
+    game.startFlow();
+
+    const moves = enumerateLegalMoves(game, 1);
+
+    // The honest answer is "this seat has no legal move for this action" — NOT
+    // two structurally-invalid moves that die at performAction.
+    expect(moves).toHaveLength(0);
+    // Belt and braces: no move may ever carry the key with an undefined value,
+    // nor omit it while claiming to be a complete move for this action.
+    for (const move of moves) {
+      expect(Object.prototype.hasOwnProperty.call(move.args, 'label')).toBe(true);
+      expect(move.args.label).not.toBeUndefined();
+    }
+  });
+});

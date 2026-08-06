@@ -176,8 +176,13 @@ export class MultiplayerHost {
   private readonly clientSeat = new Map<string, number>();
   private readonly connected = new Set<string>();
   private session: DevSession | null = null;
-  /** Live AI-seat list passed to the session; mutated as humans take/leave seats. */
-  private aiSeats: Array<{ seat: number; level?: string }> = [];
+  /**
+   * Live AI-seat list passed to the session; mutated as humans take/leave seats.
+   * `readonly` on purpose: the session's AI pump holds THIS array reference for
+   * the life of the session, so every later `addAiSeat`/`removeAiSeat` must be an
+   * in-place mutation. Reassigning would silently detach the pump from the list.
+   */
+  private readonly aiSeats: Array<{ seat: number; level?: string }> = [];
   /** The client (if any) that follows the active seat — it controls whichever
    *  seat is currently awaiting input, and AI is paused while it is set. */
   private followerClientId: string | null = null;
@@ -287,8 +292,29 @@ export class MultiplayerHost {
     if (seat !== undefined) {
       const info = this.seats.get(seat);
       if (info) info.connected = false;
-      // Keep the seat reserved for reconnect (a page reload mustn't lose it); the
-      // game pauses on an away player's turn until they return or explicitly leave.
+      // Keep the seat RESERVED for reconnect (a page reload mustn't lose it), but
+      // hand the loop-driver duty to the bot meanwhile (BUG-12): an away seat that
+      // nothing drives stalls the whole game the moment the flow needs it — the
+      // stale auto-opened tab that stranded `boardsmith dev` in its default
+      // configuration. This is a driver-only cover, not a conversion: `hello`'s
+      // reconnect branch calls `removeAiSeat` so the bot yields the instant the
+      // client returns, exactly as the D15 post-start reconciliation already does.
+      // Two seats are deliberately NOT covered:
+      //   - the follower's own seat, and every seat while follow-mode is active
+      //     (follow-mode persists across reloads/HMR by design and pauses AI for
+      //     every seat it covers — resuming a bot mid-reload would steal the
+      //     follower's move).
+      if (this.followerClientId === null) {
+        this.addAiSeat(seat);
+        if (this.phase === 'playing') {
+          void this.session?.host.runAITurns().catch((err: unknown) => {
+            console.error(
+              `[boardsmith dev] AI cover for away seat ${seat} failed: ` +
+                `${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+        }
+      }
     }
     // Follow-mode PERSISTS across a disconnect: page reloads / HMR are constant in
     // dev, and dropping follow on every reload makes it unusable. It is restored on
@@ -660,13 +686,24 @@ export class MultiplayerHost {
     return due ?? own ?? 1;
   }
 
+  /**
+   * The ONE definition of "a human is actually playing this seat". A seat whose
+   * holder has disconnected is NOT covered: the reservation survives for their
+   * reconnect, but nobody is driving the seat right now, so anything that asks
+   * "does this seat need an AI / is this player a bot?" must read false here.
+   * Every caller — `rebuildAiSeats`, `startGame`'s `playerIsAI`/`playerConfigs`
+   * — routes through this predicate so the two can never drift apart.
+   */
+  private heldByConnectedHuman(seat: number): boolean {
+    const info = this.seats.get(seat);
+    return Boolean(info?.clientId && info.connected);
+  }
+
   /** Rebuild the shared AI-seat list in place from currently open seats. */
   private rebuildAiSeats(): void {
     this.aiSeats.length = 0;
     for (let seat = 1; seat <= this.opts.playerCount; seat++) {
-      const info = this.seats.get(seat);
-      const heldByConnectedHuman = info?.clientId && info.connected;
-      if (!heldByConnectedHuman) this.aiSeats.push({ seat, level: this.opts.aiLevel });
+      if (!this.heldByConnectedHuman(seat)) this.aiSeats.push({ seat, level: this.opts.aiLevel });
     }
   }
 
@@ -685,16 +722,20 @@ export class MultiplayerHost {
     // game. Safe on the first start (no session yet).
     this.session?.dispose();
     const { playerCount } = this.opts;
+    // BUG-12: "covered by a human" is `heldByConnectedHuman` — the SAME rule
+    // `rebuildAiSeats` uses — never the weaker "has ever been claimed"
+    // (`s.clientId` alone). A seat whose holder has gone away (the auto-opened
+    // tab that was reloaded, a closed browser) would otherwise be counted as
+    // human here: excluded from `aiSeats` AND reported as human in
+    // `playerIsAI`/`playerConfigs` below, so neither a bot nor a client drives
+    // it and the first step needing that seat waits forever with nothing logged.
     const humanSeats = new Set(
-      [...this.seats.values()].filter((s) => s.clientId).map((s) => s.seat),
+      [...this.seats.values()].filter((s) => this.heldByConnectedHuman(s.seat)).map((s) => s.seat),
     );
-    // Seed the live AI-seat list from the current open seats. Mutated later as
-    // humans take over seats (removeAiSeat) or give them up (addAiSeat); the
-    // session's AI pump reads this same array reference.
-    this.aiSeats = [];
-    for (let seat = 1; seat <= playerCount; seat++) {
-      if (!humanSeats.has(seat)) this.aiSeats.push({ seat, level: this.opts.aiLevel });
-    }
+    // Seed the live AI-seat list from the current open seats — in place, since
+    // the session's AI pump holds this array reference. Mutated later as humans
+    // take over seats (removeAiSeat) or give them up (addAiSeat).
+    this.rebuildAiSeats();
 
     // The start gameOptions are derived from lobby state (mirrors DevHost.buildSession):
     // a fresh seed, each seat's chosen/default color, and which seats are AI.

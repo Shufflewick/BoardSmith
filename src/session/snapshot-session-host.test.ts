@@ -364,6 +364,65 @@ describe('SnapshotSessionHost', () => {
   // ── 4. AI pump ─────────────────────────────────────────────────────────────
 
   describe('AI pump', () => {
+    it('a REJECTED AI turn stops the pump LOUDLY — never a silent break that strands every seat', async () => {
+      // The 1-2 Punch stall: the bot returned a move the engine rejected, the
+      // pump did `if (!res.success || !res.aiMoved) break` with no output, and
+      // the game sat forever on a seat nothing would ever drive — no error on
+      // the client, none on the server. Failing must be observable.
+      const baseResult: OpResult = {
+        success: true,
+        snapshot: { stubbed: true },
+        pendingState: null,
+        flowState: { awaitingInput: true, currentPlayer: 1 },
+        playerViews: [null, null],
+        isComplete: false,
+        winners: [],
+        aiMoved: false,
+      };
+
+      let aiCallCount = 0;
+      const adapters: SnapshotSessionAdapters = {
+        playerCount: 2,
+        executeOp: async (_snap, _pend, op) => {
+          if (op.type === 'start') return { ...baseResult, snapshot: { turn: 0 } };
+          if (op.type === 'aiTurn') {
+            aiCallCount++;
+            return {
+              success: false,
+              error: 'Missing required selection: namedType',
+              snapshot: null,
+              pendingState: null,
+              flowState: null,
+              playerViews: [],
+              isComplete: false,
+              winners: [],
+            };
+          }
+          return { ...baseResult };
+        },
+        broadcast: () => {},
+        aiSeats: [{ seat: 2 }],
+      };
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const host = new SnapshotSessionHost(adapters);
+      // `start()` pumps the AI itself, so the spy has to be in place first —
+      // the rejection this test is about happens on that very first pump.
+      await host.start();
+      await host.runAITurns();
+      // Capture before restoring — mockRestore() also clears the call history.
+      const calls = errorSpy.mock.calls.map((c) => String(c[0]));
+      errorSpy.mockRestore();
+
+      // The pump still stops (no infinite retry of a move that cannot work)...
+      expect(aiCallCount).toBe(1);
+      // ...but says why, naming the seat and the engine's own reason so the
+      // developer can find the action definition at fault.
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toContain('Missing required selection: namedType');
+      expect(calls[0]).toMatch(/seat\(s\) 2/);
+    });
+
     it('runAITurns loops while aiMoved:true then stops, applying each move', async () => {
       // Use a stub executeOp that answers start normally, then returns aiMoved:true
       // once and aiMoved:false on the next call.
