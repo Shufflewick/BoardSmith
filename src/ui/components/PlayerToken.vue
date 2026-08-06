@@ -49,16 +49,6 @@ const props = withDefaults(
     color?: string;
     /** Token size in px (square). Letter scales from this. */
     size?: number;
-    /**
-     * Draw an emphasis ring around the token, in the token's OWN silhouette.
-     *
-     * What the ring MEANS is the caller's to say (the action bar uses it for
-     * "this is you"); this prop only says "stand this one out". It lives here
-     * rather than in the caller's CSS because only this component knows which
-     * silhouette it drew — a ring drawn from outside has to guess, and a
-     * hardcoded `border-radius: 50%` matches exactly one seat in eight.
-     */
-    emphasis?: boolean;
   }>(),
   { size: 38 },
 );
@@ -112,7 +102,7 @@ const ink = computed(() => {
 <template>
   <span
     class="tok"
-    :class="[shape(), { 'is-emphasized': emphasis }]"
+    :class="shape()"
     :style="{
       width: `${size}px`,
       height: `${size}px`,
@@ -121,9 +111,6 @@ const ink = computed(() => {
     }"
     aria-hidden="true"
   >
-    <!-- Emphasis ring: the SAME silhouette, drawn larger and behind the glyph,
-         so the band that shows around the edge is the token's own outline. -->
-    <span v-if="emphasis" class="halo"></span>
     <span class="shape"></span>
     <span
       class="ini"
@@ -144,31 +131,6 @@ const ink = computed(() => {
   inset: 0;
   background: var(--tc, var(--bsg-accent));
   box-shadow: 0 2px 4px rgba(0, 0, 0, .35);
-  clip-path: var(--tok-clip);
-}
-
-/* Emphasis ring. Same `--tok-clip` as the glyph, drawn one band larger and
-   underneath it, so what shows around the edge is the token's own outline —
-   a hexagon gets a hexagonal ring, a plus gets a plus-shaped one.
-   `clip-path` cannot be stroked, hence a filled shape behind rather than a
-   border; the opaque `.shape` on top is what turns it into a ring.
-
-   Deriving both from one variable is the point: a ring drawn from a separate
-   rule (the old caller-side `border-radius: 50%`) matched one seat in eight and
-   silently went wrong for the rest, and would drift again the moment the shape
-   set changed. The glyph itself is NOT dimmed — emphasis that de-emphasises the
-   thing it points at is self-defeating; the ring alone carries it. */
-.tok .halo {
-  position: absolute;
-  inset: calc(-1 * var(--tok-ring, 3px));
-  background: color-mix(in srgb, var(--bsg-accent) 70%, transparent);
-  clip-path: var(--tok-clip);
-}
-
-/* Reserve the ring's width so an emphasized token does not grow into its
-   neighbours (the halo is drawn outside the token's own box). */
-.tok.is-emphasized {
-  margin: var(--tok-ring, 3px);
 }
 .tok .ini {
   position: relative;
@@ -179,18 +141,13 @@ const ink = computed(() => {
   font-family: var(--bsg-font);
 }
 
-/* Letter-friendly shape set (every one centers a glyph).
-   ONE definition per shape, as a variable: the glyph and the emphasis ring both
-   read `--tok-clip`, so they cannot disagree about what shape this token is.
-   Percentages are relative to each element's own box, so the larger halo box
-   yields the same silhouette, scaled — no second set of coordinates to keep in
-   step. Adding a shape here is all that a new shape needs. */
-.sh-circle    { --tok-clip: circle(50%); }
-.sh-square    { --tok-clip: inset(3% round 26%); }
-.sh-hexagon   { --tok-clip: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
-.sh-octagon   { --tok-clip: polygon(31% 3%, 69% 3%, 97% 31%, 97% 69%, 69% 97%, 31% 97%, 3% 69%, 3% 31%); }
-.sh-diamond   { --tok-clip: polygon(50% 1%, 99% 50%, 50% 99%, 1% 50%); }
-.sh-pentagon  { --tok-clip: polygon(50% 2%, 98% 39%, 80% 98%, 20% 98%, 2% 39%); }
-.sh-shield    { --tok-clip: polygon(50% 1%, 95% 15%, 90% 63%, 50% 99%, 10% 63%, 5% 15%); }
-.sh-plus      { --tok-clip: polygon(36% 2%, 64% 2%, 64% 36%, 98% 36%, 98% 64%, 64% 64%, 64% 98%, 36% 98%, 36% 64%, 2% 64%, 2% 36%, 36% 36%); }
+/* Letter-friendly shape set (every one centers a glyph) */
+.sh-circle .shape    { clip-path: circle(50%); }
+.sh-square .shape    { clip-path: inset(3% round 26%); }
+.sh-hexagon .shape   { clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
+.sh-octagon .shape   { clip-path: polygon(31% 3%, 69% 3%, 97% 31%, 97% 69%, 69% 97%, 31% 97%, 3% 69%, 3% 31%); }
+.sh-diamond .shape   { clip-path: polygon(50% 1%, 99% 50%, 50% 99%, 1% 50%); }
+.sh-pentagon .shape  { clip-path: polygon(50% 2%, 98% 39%, 80% 98%, 20% 98%, 2% 39%); }
+.sh-shield .shape    { clip-path: polygon(50% 1%, 95% 15%, 90% 63%, 50% 99%, 10% 63%, 5% 15%); }
+.sh-plus .shape      { clip-path: polygon(36% 2%, 64% 2%, 64% 36%, 98% 36%, 98% 64%, 64% 64%, 64% 98%, 36% 98%, 36% 64%, 2% 64%, 2% 36%, 36% 36%); }
 </style>

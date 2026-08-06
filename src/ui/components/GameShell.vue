@@ -898,8 +898,15 @@ const activePlayer = computed(() => {
  *   as a bug, because the shape is otherwise a constant identity anchor.
  *
  * D27 removed a false claim about the table; it was never a reason to withhold
- * the viewer's own identity from them. The two are styled differently so the
- * 'you' token cannot be misread as "it is your turn".
+ * the viewer's own identity from them.
+ *
+ * Both render IDENTICALLY — `kind` selects WHICH seat the token names, never how
+ * it is drawn. A ring/outline/opacity marking the 'you' case was tried and
+ * removed: on an identity glyph a decoration reads as an unexplained
+ * decoration, not as meaning, and it competes with shape, which is the stable
+ * identity channel (the only one in a colourless game). The bar never shows two
+ * tokens at once, so there is nothing to tell apart on screen; the prompt
+ * beside it already says what is being asked.
  */
 const panelToken = computed(() => {
   if (isSimultaneous.value) {
@@ -2630,18 +2637,16 @@ if ((import.meta as any).hot) {
                carries WHO (IA-02) regardless of whether the ActionPanel or the fallback
                prompt strip renders the WHAT.
 
-               Turn-based: whose turn it is. Simultaneous: the VIEWER's own seat, marked
-               `is-you` — see `panelToken` for why those are different claims. Never
-               absent while the bar is up: an identity anchor that comes and goes between
-               phases reads as broken. -->
+               Turn-based: whose turn it is. Simultaneous: the VIEWER's own seat — see
+               `panelToken` for why those are different claims, and why they are drawn
+               the same. Never absent while the bar is up: an identity anchor that comes
+               and goes between phases reads as broken. -->
           <PlayerToken
             v-if="panelToken"
             class="turn-token"
-            :class="{ 'is-you': panelToken.kind === 'you' }"
             :name="panelToken.name"
             :seat="panelToken.seat"
             :color="panelToken.color"
-            :emphasis="panelToken.kind === 'you'"
             :size="30"
           />
           <!-- Turn strip: the fallback prompt surface, shown ONLY when the platform
@@ -3018,12 +3023,12 @@ if ((import.meta as any).hot) {
   margin-right: 4px;
 }
 
-/* The 'you' token's ring is drawn by PlayerToken itself (`emphasis`), in the
-   token's OWN silhouette. Do not re-add a ring here: this rule cannot know
-   which of the eight shapes was drawn, and the `border-radius: 50%` outline
-   that used to live here matched one seat in eight — a circle around a
-   hexagon, which reads as unexplained decoration and works against shape being
-   the stable identity channel (the only one, in a colourless game). */
+/* The token in a simultaneous step gets NO decoration of its own — it is drawn
+   exactly as the whose-turn token is. Do not add a ring, outline, or opacity
+   here: a treatment on the identity glyph reads as an unexplained decoration
+   rather than as meaning, and it competes with shape, which is the stable
+   identity channel and the only one in a colourless game. Which seat the token
+   names is `panelToken`'s job; how it looks never varies. */
 
 /* Turn strip: prompt sentence (fallback when ActionPanel is not rendering) */
 .turn {

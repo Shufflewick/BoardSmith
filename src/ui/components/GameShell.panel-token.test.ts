@@ -72,7 +72,6 @@ const TokenHarness = defineComponent({
     <PlayerToken
       v-if="panelToken"
       class="turn-token"
-      :class="{ 'is-you': panelToken.kind === 'you' }"
       :name="panelToken.name"
       :seat="panelToken.seat"
       :color="panelToken.color"
@@ -89,7 +88,6 @@ describe('action bar identity token', () => {
     expect(wrapper.find('.turn-token').exists()).toBe(true);
     // Seat 2's glyph, not the viewer's (seat 1) — this is a claim about the table.
     expect(shapeOf(wrapper)).toBe('sh-hexagon');
-    expect(wrapper.find('.turn-token').classes()).not.toContain('is-you');
   });
 
   it('shows the VIEWER during a simultaneous step, instead of nothing', () => {
@@ -107,11 +105,18 @@ describe('action bar identity token', () => {
     expect(shapeOf(wrapper)).toBe('sh-square'); // seat 1 — the viewer
   });
 
-  it('marks the simultaneous token as "you", so it is not a whose-turn claim', () => {
-    const wrapper = mount(TokenHarness, {
+  it('draws the you-token identically to the whose-turn token', () => {
+    // Same seat, once as the active player and once as the viewer mid-simultaneous:
+    // the rendered markup must be indistinguishable. A decoration marking the
+    // 'you' case reads as unexplained decoration on an identity glyph, and
+    // competes with shape — the only identity channel a colourless game has.
+    const asActive = mount(TokenHarness, { props: { playerSeat: 1, currentPlayer: 1 } });
+    const asYou = mount(TokenHarness, {
       props: { playerSeat: 1, awaitingPlayers: [{ playerIndex: 1, completed: false }] },
     });
-    expect(wrapper.find('.turn-token').classes()).toContain('is-you');
+    expect(asYou.find('.turn-token').classes().sort())
+      .toEqual(asActive.find('.turn-token').classes().sort());
+    expect(asYou.find('.turn-token').html()).toBe(asActive.find('.turn-token').html());
   });
 
   it('never shows another seat as the viewer during a simultaneous step', () => {
@@ -173,12 +178,17 @@ describe('GameShell.vue wires the token to panelToken', () => {
       .not.toMatch(/activePlayer/);
   });
 
-  it('marks the you-token and gives it a distinct treatment', () => {
-    expect(source).toMatch(/'is-you': panelToken\.kind === 'you'/);
-    // The treatment is PlayerToken's own emphasis ring, not a ring drawn here:
-    // only the token knows which of its eight silhouettes it rendered (B15).
-    expect(source, 'the you-token needs its own treatment or it reads as "your turn"')
-      .toMatch(/:emphasis="panelToken\.kind === 'you'"/);
+  it('draws the you-token exactly like the whose-turn token', () => {
+    // B15: a ring/outline/opacity on the 'you' case was tried and removed. On an
+    // identity glyph a decoration reads as unexplained decoration rather than as
+    // meaning, and it competes with shape — the stable identity channel, and the
+    // only one in a colourless game. `kind` selects WHICH seat, never how it looks.
+    const block = source.slice(source.indexOf('<PlayerToken'), source.indexOf('<PlayerToken') + 400);
+    expect(block, 'the token must carry no kind-dependent class').not.toMatch(/is-you/);
+    expect(block, 'the token must carry no kind-dependent styling prop').not.toMatch(/emphasis/);
+
+    // ...and nothing may style it back in from the stylesheet either.
+    expect(source.match(/\.turn-token\.[a-z-]+\s*\{[^}]*\}/s)?.[0] ?? '').toBe('');
   });
 
   it('keeps activePlayer itself suppressed during a simultaneous step (D27)', () => {
