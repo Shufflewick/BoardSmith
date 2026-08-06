@@ -335,7 +335,7 @@ describe('BL-01: GameSession.restore() re-supplies tutorialDefinition', () => {
 
     // After restore, gating must still be active:
     // 'pass' is out-of-step and must have a disabled reason
-    const disabledActions = restored.runner.game.getTutorialDisabledActions(1);
+    const disabledActions = restored.runner.game.getDisabledActions(1);
     expect('pass' in disabledActions).toBe(true);
     expect(disabledActions['pass']).toBeTruthy();
 
@@ -371,7 +371,7 @@ describe('BL-01: GameSession.restore() re-supplies tutorialDefinition', () => {
     // advance() must succeed (tutorialDefinition is present on the runner)
     expect(() => restored.advanceTutorial(1)).not.toThrow();
     // After advancing from step-1, gating should now be 'pass' (step-2)
-    const disabledAfter = restored.runner.game.getTutorialDisabledActions(1);
+    const disabledAfter = restored.runner.game.getDisabledActions(1);
     expect('move' in disabledAfter).toBe(true);
     expect('pass' in disabledAfter).toBe(false);
   });
@@ -400,7 +400,7 @@ describe('BL-01: GameSession.restore() re-supplies tutorialDefinition', () => {
     const restored = GameSession.restore<TutorialRestoreGame>(loaded!, TutorialRestoreGame);
 
     // tutorialDefinition is absent — gating is completely gone
-    const disabledActions = restored.runner.game.getTutorialDisabledActions(1);
+    const disabledActions = restored.runner.game.getDisabledActions(1);
     expect(disabledActions).toEqual({});
   });
 });

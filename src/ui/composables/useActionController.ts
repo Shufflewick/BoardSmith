@@ -146,6 +146,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     actionMetadata,
     isMyTurn,
     completed,
+    disabledActions,
     gameView,
     playerSeat,
     autoFill: autoFillOption = true,
@@ -206,6 +207,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // every custom UI routed through useBoardActionBridge inherit the same
   // refusal — no separate per-consumer gate to fall out of sync.
   const isCommitted = (): boolean => !!completed?.value;
+
+  // Disabled-action gate (issue #4): a disabled action stays in
+  // `availableActions` so the panel can draw it greyed out with its reason,
+  // which means the availability check above cannot catch it. Checked at the
+  // SHARED chokepoints below (start() / execute()) so the auto ActionPanel, a
+  // custom UI calling start() directly, and the board bridge all refuse the
+  // same actions for the same stated reason — instead of firing an action the
+  // server is about to reject and showing the player an error toast.
+  const disabledReasonFor = (actionName: string): string | undefined =>
+    disabledActions?.value?.[actionName];
 
   // === State ===
   const currentAction = ref<string | null>(null);
@@ -1085,6 +1096,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { success: false, error: 'You have already submitted your action for this step' };
     }
 
+    const executeDisabledReason = disabledReasonFor(actionName);
+    if (executeDisabledReason) {
+      return { success: false, error: executeDisabledReason };
+    }
+
     if (!availableActions.value?.includes(actionName)) {
       return { success: false, error: `Action "${actionName}" is not available` };
     }
@@ -1351,6 +1367,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       const error = 'Cannot start an action while viewing historical state.';
       setError(error);
       return { success: false, error };
+    }
+
+    const startDisabledReason = disabledReasonFor(actionName);
+    if (startDisabledReason) {
+      setError(startDisabledReason);
+      return { success: false, error: startDisabledReason };
     }
 
     if (!availableActions.value?.includes(actionName)) {

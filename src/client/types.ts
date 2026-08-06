@@ -196,8 +196,9 @@ export interface PlayerState {
   tutorial?: TutorialStepView;
 
   /**
-   * Action name → human-readable reason, for actions blocked by the active
-   * tutorial step's gate. `undefined` when no tutorial is running. Mirrors
+   * Action name → human-readable reason, for every action that is offered but
+   * disabled — from the action's own `.disabled(ctx)` rule or the active
+   * tutorial step's gate. `undefined` when nothing is disabled. Mirrors
    * `PlayerGameState.disabledActions`.
    */
   disabledActions?: Record<string, string>;

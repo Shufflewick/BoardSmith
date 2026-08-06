@@ -90,6 +90,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      disabledActions: ref(undefined),
       isViewingHistory: ref(false),
     });
 
@@ -114,6 +115,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      disabledActions: ref(undefined),
       isViewingHistory: ref(false),
     });
 
@@ -137,6 +139,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ move: { name: 'move', selections: [cellPick] } }),
       availableActions: ref(['move']),
+      disabledActions: ref(undefined),
       isViewingHistory: ref(false),
     });
 
@@ -168,6 +171,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ move: { name: 'move', selections: [destPick] } }),
       availableActions: ref(['move']),
+      disabledActions: ref(undefined),
       isViewingHistory: ref(false),
     });
 
@@ -193,6 +197,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ move: { name: 'move', selections: [destPick] } }),
       availableActions: ref(['move']),
+      disabledActions: ref(undefined),
       isViewingHistory: ref(false),
     });
 
@@ -219,6 +224,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      disabledActions: ref(undefined),
       isViewingHistory: ref(false),
     });
 
@@ -247,6 +253,7 @@ describe('useBoardActionBridge', () => {
       // no selections — so it should auto-execute (commit the turn).
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
       availableActions: ref(['endTurn']),
+      disabledActions: ref(undefined),
       isViewingHistory: ref(false),
     });
 
@@ -280,6 +287,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
       availableActions: ref(['endTurn']),
+      disabledActions: ref(undefined),
       isViewingHistory: ref(false),
     });
 
@@ -323,6 +331,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
         availableActions: ref(['endTurn']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -343,6 +352,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
         availableActions: ref(['endTurn']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -367,6 +377,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
         availableActions: ref(['endTurn']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -395,6 +406,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
         availableActions: ref(['draw']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -417,6 +429,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
         availableActions: ref(['draw']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -440,6 +453,7 @@ describe('useBoardActionBridge', () => {
       autoEndTurn: ref(true),
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
       availableActions: ref(['endTurn']),
+      disabledActions: ref(undefined),
       isViewingHistory: ref(false),
     });
 
@@ -480,6 +494,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
         availableActions: ref(['endTurn']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -506,6 +521,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
         availableActions: ref(['endTurn']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -538,6 +554,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
         availableActions: ref(['draw']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -568,6 +585,7 @@ describe('useBoardActionBridge', () => {
           play: { name: 'play', selections: [{ name: 'card', type: 'chooseElement' }], manual: true },
         }),
         availableActions: ref(['play']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -622,6 +640,7 @@ describe('useBoardActionBridge', () => {
       const controller = useActionController({
         sendAction,
         availableActions: ref(['commit']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
         actionMetadata: ref({}), // no metadata for `commit` -> synthesized 0-selection meta
         isMyTurn: ref(true), // stays true — the bug is that nothing ever re-checks this either
@@ -636,6 +655,7 @@ describe('useBoardActionBridge', () => {
         autoEndTurn: ref(true),
         actionMetadata: ref({}),
         availableActions: ref(['commit']),
+        disabledActions: ref(undefined),
         isViewingHistory: ref(false),
       });
 
@@ -652,5 +672,111 @@ describe('useBoardActionBridge', () => {
 
       expect(sendAction).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #4 — the board substrate refuses a disabled action
+// ---------------------------------------------------------------------------
+
+/**
+ * A disabled action stays in `availableActions` so the Action Panel can draw it
+ * greyed out with its reason. Without these guards the board would happily fire
+ * it anyway — auto-starting it, auto-executing it, or dispatching it from an
+ * element click — and the player would get a server rejection instead of the
+ * explanation the whole feature exists to give them.
+ */
+describe('useBoardActionBridge — disabled actions', () => {
+  it('does NOT auto-execute a sole no-selection action that is disabled', async () => {
+    const board = createBoardInteraction();
+    const { controller, execute } = makeController({ pick: null, action: null });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
+      availableActions: ref(['endTurn']),
+      disabledActions: ref({ endTurn: 'You must resolve the storm first.' }),
+      isViewingHistory: ref(false),
+    });
+
+    await nextTick();
+    await nextTick();
+
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('does NOT auto-start a sole selection action that is disabled', async () => {
+    const board = createBoardInteraction();
+    const { controller, start } = makeController({ pick: cellPick, action: null });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
+      availableActions: ref(['placeStone']),
+      disabledActions: ref({ placeStone: 'The board is full.' }),
+      isViewingHistory: ref(false),
+    });
+
+    await nextTick();
+    await nextTick();
+
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('still auto-starts the sole action when a DIFFERENT action is the disabled one', async () => {
+    const board = createBoardInteraction();
+    const { controller, start } = makeController({ pick: cellPick, action: null });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
+      availableActions: ref(['placeStone']),
+      disabledActions: ref({ someOtherAction: 'Not now.' }),
+      isViewingHistory: ref(false),
+    });
+
+    await nextTick();
+    await nextTick();
+
+    expect(start).toHaveBeenCalledWith('placeStone', undefined);
+  });
+
+  it('does NOT dispatch a disabled action from a board element click', async () => {
+    const board = createBoardInteraction();
+    const validElements: ValidElement[] = [
+      { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
+    ];
+    const { controller, start } = makeController({ pick: null, action: null, validElements });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      // Auto mode off, so the only route to `start` is the element click below.
+      autoEndTurn: ref(false),
+      actionMetadata: ref({
+        placeStone: {
+          name: 'placeStone',
+          selections: [{ ...cellPick, validElements }],
+        },
+      }),
+      availableActions: ref(['placeStone']),
+      disabledActions: ref({ placeStone: 'The board is full.' }),
+      isViewingHistory: ref(false),
+    });
+
+    board.triggerElementSelect({ id: 5, name: 'A1' });
+    await nextTick();
+
+    expect(start).not.toHaveBeenCalled();
   });
 });

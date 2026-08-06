@@ -185,11 +185,11 @@ describe('ActionHelpPopover', () => {
       const tooltip = wrapper.find('[role="tooltip"]');
       expect(tooltip.text()).toContain('Place a structure on an empty tile.');
       expect(wrapper.find('.help-divider').exists()).toBe(false);
-      expect(tooltip.text()).not.toContain('Note:');
+      expect(tooltip.text()).not.toContain("Why it's disabled:");
       wrapper.unmount();
     });
 
-    it('with disabledReason only: shows "Note:" + reason, no divider', async () => {
+    it('with disabledReason only: shows "Why it\'s disabled:" + reason, no divider', async () => {
       const wrapper = mountPopover({
         actionName: 'build',
         triggerLabel: 'Build',
@@ -199,7 +199,7 @@ describe('ActionHelpPopover', () => {
       await nextTick();
 
       const tooltip = wrapper.find('[role="tooltip"]');
-      expect(tooltip.text()).toContain('Note:');
+      expect(tooltip.text()).toContain("Why it's disabled:");
       expect(tooltip.text()).toContain('You need at least 3 wood.');
       expect(wrapper.find('.help-divider').exists()).toBe(false);
       wrapper.unmount();
@@ -217,7 +217,7 @@ describe('ActionHelpPopover', () => {
 
       const tooltip = wrapper.find('[role="tooltip"]');
       expect(tooltip.text()).toContain('Cast a powerful arcane bolt.');
-      expect(tooltip.text()).toContain('Note:');
+      expect(tooltip.text()).toContain("Why it's disabled:");
       expect(tooltip.text()).toContain('Not enough mana.');
       expect(wrapper.find('.help-divider').exists()).toBe(true);
       wrapper.unmount();
@@ -428,11 +428,11 @@ describe('ActionHelpPopover', () => {
 
       // Both must contain identical help text and disabled reason
       expect(textA).toContain('Click a square to move.');
-      expect(textA).toContain('Note:');
+      expect(textA).toContain("Why it's disabled:");
       expect(textA).toContain('No valid moves.');
 
       expect(textB).toContain('Click a square to move.');
-      expect(textB).toContain('Note:');
+      expect(textB).toContain("Why it's disabled:");
       expect(textB).toContain('No valid moves.');
 
       // And they must be equal

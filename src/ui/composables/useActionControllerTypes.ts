@@ -243,6 +243,19 @@ export interface UseActionControllerOptions {
    * seat's own commit).
    */
   completed?: Ref<boolean | undefined> | ComputedRef<boolean | undefined>;
+  /**
+   * Action name → why it is disabled, from `PlayerGameState.disabledActions`
+   * (the action's `.disabled()` rule, or the active tutorial step's gate).
+   *
+   * The SHARED chokepoint for disabled actions, on the same principle as
+   * `completed` above: `start()` and `execute()` both refuse with the reason,
+   * so the auto ActionPanel, a custom board UI calling
+   * `actionController.start()` directly, and the drag-drop bridge all inherit
+   * one refusal. A disabled action deliberately stays in `availableActions` so
+   * the panel can render it greyed out WITH the reason — which means the
+   * availability check alone would let it through.
+   */
+  disabledActions?: Ref<Record<string, string> | undefined> | ComputedRef<Record<string, string> | undefined>;
   /** Game view (for enriching validElements with full element data) */
   gameView?: Ref<GameElement | null | undefined>;
   /** Player seat (needed for fetching choices/repeating features) */

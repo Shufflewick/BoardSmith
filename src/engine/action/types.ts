@@ -483,6 +483,30 @@ export interface ActionDefinition {
    */
   condition?: ConditionConfig;
   /**
+   * Offer the action, but greyed out, WITH the reason why.
+   *
+   * Return a reason string to disable the action's button, or `false` to leave
+   * it enabled. The reason is not optional: the only way to disable an action
+   * is to say why, so a player can never meet a dead button with no
+   * explanation. Same `string | false` contract as a selection's `disabled`
+   * (see {@link ChoiceSelection.disabled}) — one rule for both, on purpose.
+   *
+   * Choose between this and `condition`:
+   * - `condition` — the action is IRRELEVANT here. It vanishes from the panel
+   *   ("play a card" during someone else's turn).
+   * - `disabled` — the action is relevant but currently blocked, and the player
+   *   would otherwise wonder why ("Build" while you are two wood short).
+   *
+   * Enforced server-side in `Game#performAction`, not merely in the projection:
+   * a disabled action is refused with its reason even if a client submits it
+   * anyway.
+   *
+   * Runs at availability time with EMPTY args (`ctx.args` is `{}`), like
+   * `condition` — a rule that needs the resolved selections belongs in
+   * `validate`. Set via `.disabled(fn)`.
+   */
+  disabled?: (context: ActionContext) => string | false;
+  /**
    * Whole-action gate, checked at SUBMIT time with every selection already
    * resolved — the place for a rule that spans selections ("play at least two
    * cards", "the total must not exceed your action points") and needs to say

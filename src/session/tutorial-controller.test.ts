@@ -213,8 +213,8 @@ describe('TutorialController — lifecycle', () => {
     // Exited tutorials have no active step; gate is lifted
     const progress = runner.game.tutorialProgress.get(1);
     expect(progress?.status).toBe('exited');
-    // getTutorialDisabledActions should return empty when exited
-    const disabled = runner.game.getTutorialDisabledActions(1);
+    // getDisabledActions should return empty when exited
+    const disabled = runner.game.getDisabledActions(1);
     expect(disabled).toEqual({});
   });
 });

@@ -1621,8 +1621,9 @@ if (actionController.currentAction.value === 'move') {
   // Show move-specific UI
 }
 
-// Show loading state during execution
-<button :disabled="actionController.isExecuting.value">
+// Show loading state during execution. Disabling always carries a reason —
+// see v-disabled-reason in the Custom UI Guide.
+<button v-disabled-reason="actionController.isExecuting.value && 'Finishing your last move.'">
   {{ actionController.isExecuting.value ? 'Working...' : 'Execute' }}
 </button>
 
@@ -1705,7 +1706,9 @@ Show feedback while actions are processing:
     <button
       v-for="action in availableActions"
       :key="action"
-      :disabled="actionController.isExecuting"
+      v-disabled-reason="
+        disabledActions?.[action] || (actionController.isExecuting && 'Finishing your last move.')
+      "
       @click="executeAction(action)"
     >
       {{ actionController.isExecuting ? 'Working...' : action }}

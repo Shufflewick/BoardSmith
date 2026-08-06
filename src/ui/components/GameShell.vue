@@ -32,6 +32,7 @@ import PlayerToken from './PlayerToken.vue';
 import WaitingRoom from './WaitingRoom.vue';
 import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
+import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import GameOverCard from './GameOverCard.vue';
 import TutorialOverlay from './helpers/TutorialOverlay.vue';
 import HintOverlay from './helpers/HintOverlay.vue';
@@ -666,6 +667,10 @@ const actionController = useActionController({
   // refuse a re-submit once this seat has committed this simultaneous step —
   // see useActionController's `completed` option doc for the full rationale.
   completed: myCompleted,
+  // Disabled-action gate (issue #4): same shared-chokepoint principle — a
+  // disabled action stays available so the panel can explain it, so start()/
+  // execute() are where it gets refused, for every UI at once.
+  disabledActions,
   gameView,
   playerSeat,
   // Use autoEndTurn ref for both autoFill and autoExecute
@@ -1011,6 +1016,9 @@ useBoardActionBridge({
   autoEndTurn,
   actionMetadata,
   availableActions,
+  // Same source the Action Panel greys its buttons from, so the board and the
+  // panel refuse exactly the same actions.
+  disabledActions,
   isViewingHistory,
 });
 
@@ -2720,6 +2728,11 @@ if ((import.meta as any).hot) {
 
     <!-- Zoom preview overlay (Alt+hover to enlarge cards) -->
     <ZoomPreviewOverlay :preview-state="previewState" />
+
+    <!-- The single tooltip every dimmed control borrows to explain itself.
+         Mounted once here rather than per-button: at most one shows at a time,
+         and a teleported node per compass point / card / option is waste. -->
+    <DisabledReasonTooltip />
 
     <!-- Toast notifications -->
     <Toast />

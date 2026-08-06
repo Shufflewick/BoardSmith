@@ -306,6 +306,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      disabledActions: ref(undefined),
       isViewingHistory,
     } as any);
 
@@ -328,6 +329,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
       autoEndTurn: ref(true),
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
       availableActions: ref(['endTurn']),
+      disabledActions: ref(undefined),
       isViewingHistory,
     } as any);
 
@@ -353,6 +355,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      disabledActions: ref(undefined),
       isViewingHistory,
     } as any);
 
@@ -382,6 +385,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
       autoEndTurn: ref(true),
       actionMetadata: ref({ move: { name: 'move', selections: [destPick] } }),
       availableActions: ref(['move']),
+      disabledActions: ref(undefined),
       isViewingHistory,
     } as any);
 
@@ -406,6 +410,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      disabledActions: ref(undefined),
       isViewingHistory,
     } as any);
 
@@ -431,6 +436,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
       autoEndTurn: ref(true),
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
+      disabledActions: ref(undefined),
       isViewingHistory,
     } as any);
 

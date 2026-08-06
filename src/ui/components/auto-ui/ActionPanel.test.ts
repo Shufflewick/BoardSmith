@@ -27,6 +27,7 @@ import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
+import { DISABLED_TOOLTIP_ID } from '../../composables/useDisabledReasonTooltip.js';
 
 // ---------------------------------------------------------------------------
 // useToast mock — hoisted so the factory runs before module imports
@@ -461,6 +462,210 @@ describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () =>
     });
     const groups = wrapper.findAll('.action-btn-group');
     expect(groups).toHaveLength(2);
+    wrapper.unmount();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #4 — a disabled Action Panel button must say WHY
+// ---------------------------------------------------------------------------
+
+/**
+ * These cover the contract from the player's side: a greyed-out button carries
+ * the reason where a mouse and a screen reader can both reach it, and pressing
+ * it does nothing. `aria-disabled` (rather than the native `disabled`
+ * attribute) is load-bearing — a natively-disabled button is unfocusable and,
+ * in several engines, untouchable by hover, so its tooltip would be
+ * unreachable exactly when the player needs it.
+ */
+describe('ActionPanel — disabled action buttons carry their reason', () => {
+  it('marks an action disabled with the server-supplied reason, on hover and for SR', () => {
+    const wrapper = mountWithHelp({
+      actions: ['build'],
+      actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } },
+      disabledActions: { build: 'You need 3 wood; you have 1.' },
+    });
+
+    const btn = wrapper.find('[data-bs-action="build"]');
+    expect(btn.attributes('aria-disabled')).toBe('true');
+    expect(btn.attributes('data-bs-disabled-reason')).toBe('You need 3 wood; you have 1.');
+    // Points at the shared tooltip, so a screen reader reads the reason on focus.
+    expect(btn.attributes('aria-describedby')).toBe(DISABLED_TOOLTIP_ID);
+    // Never the native attribute: that would drop the button out of the tab
+    // order and take the reason with it.
+    expect(btn.attributes('disabled')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('does not start a disabled action when its button is clicked', async () => {
+    const startSpy = vi.fn(async () => {});
+    const controller = makeTestController({ start: startSpy });
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      props: {
+        availableActions: ['build'],
+        actionMetadata: {
+          build: {
+            name: 'build',
+            prompt: 'Build',
+            selections: [{ name: 'site', type: 'choice', prompt: 'Where?' }],
+          },
+        },
+        playerSeat: 1,
+        isMyTurn: true,
+        disabledActions: { build: 'You need 3 wood; you have 1.' },
+      },
+    });
+
+    await wrapper.find('[data-bs-action="build"]').trigger('click');
+    await Promise.resolve();
+
+    expect(startSpy).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('leaves an action with no disabled reason fully enabled', () => {
+    const wrapper = mountWithHelp({
+      actions: ['build'],
+      actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } },
+      disabledActions: { move: 'Some other action is blocked.' },
+    });
+
+    const btn = wrapper.find('[data-bs-action="build"]');
+    expect(btn.attributes('aria-disabled')).toBeUndefined();
+    expect(btn.attributes('data-bs-disabled-reason')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('explains the in-flight state on every action button while a submission is executing', () => {
+    const controller = makeTestController({ isExecuting: ref(true) });
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      props: {
+        availableActions: ['build'],
+        actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } },
+        playerSeat: 1,
+        isMyTurn: true,
+        canUndo: true,
+      },
+    });
+
+    const btn = wrapper.find('[data-bs-action="build"]');
+    expect(btn.attributes('aria-disabled')).toBe('true');
+    expect(btn.attributes('data-bs-disabled-reason')).toBeTruthy();
+
+    const undo = wrapper.find('.undo-btn');
+    expect(undo.attributes('aria-disabled')).toBe('true');
+    expect(undo.attributes('data-bs-disabled-reason')).toBeTruthy();
+    wrapper.unmount();
+  });
+
+  it('prefers the action-specific reason over the generic in-flight one', () => {
+    const controller = makeTestController({ isExecuting: ref(true) });
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      props: {
+        availableActions: ['build'],
+        actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } },
+        playerSeat: 1,
+        isMyTurn: true,
+        disabledActions: { build: 'You need 3 wood; you have 1.' },
+      },
+    });
+
+    expect(wrapper.find('[data-bs-action="build"]').attributes('data-bs-disabled-reason'))
+      .toBe('You need 3 wood; you have 1.');
+    wrapper.unmount();
+  });
+
+  it('gives a disabled choice button its reason and swallows the click', async () => {
+    const fillSpy = vi.fn(async () => ({ valid: true }));
+    const controller = makeTestController({
+      currentAction: ref('paint'),
+      currentPick: ref({ name: 'color', type: 'choice', prompt: 'Pick a color' }),
+      currentChoices: ref([
+        { value: 'red', display: 'Red' },
+        { value: 'gold', display: 'Gold', disabled: 'Gold is reserved for the leader.' },
+      ]),
+      fill: fillSpy,
+    });
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      props: { availableActions: ['paint'], playerSeat: 1, isMyTurn: true },
+    });
+
+    const buttons = wrapper.findAll('.choice-btn');
+    const gold = buttons.find(b => b.text() === 'Gold')!;
+    expect(gold.attributes('aria-disabled')).toBe('true');
+    expect(gold.attributes('data-bs-disabled-reason')).toBe('Gold is reserved for the leader.');
+
+    await gold.trigger('click');
+    await Promise.resolve();
+    expect(fillSpy).not.toHaveBeenCalled();
+
+    // The enabled sibling still works — the guard is per-choice, not blanket.
+    await buttons.find(b => b.text() === 'Red')!.trigger('click');
+    await Promise.resolve();
+    expect(fillSpy).toHaveBeenCalledWith('color', 'red');
+    wrapper.unmount();
+  });
+
+  it('explains the multi-select cap on the options it blocks, and not on the ones it does not', () => {
+    const controller = makeTestController({
+      currentAction: ref('discard'),
+      currentPick: ref({
+        name: 'cards',
+        type: 'choice',
+        prompt: 'Discard cards',
+        multiSelect: { min: 1, max: 1 },
+      }),
+      currentChoices: ref([
+        { value: 'a', display: 'Card A' },
+        { value: 'b', display: 'Card B' },
+      ]),
+      multiSelectDraft: ref({ selectionName: 'cards', values: ['a'] }),
+      isMultiSelectSelected: (_name: string, value: unknown) => value === 'a',
+    });
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      props: { availableActions: ['discard'], playerSeat: 1, isMyTurn: true },
+    });
+
+    const options = wrapper.findAll('.multi-select-choice');
+    const selected = options.find(o => o.text() === 'Card A')!;
+    const blocked = options.find(o => o.text() === 'Card B')!;
+
+    // The already-selected option stays operable — deselecting is always allowed.
+    expect(selected.attributes('aria-disabled')).toBeUndefined();
+    expect(blocked.attributes('aria-disabled')).toBe('true');
+    expect(blocked.attributes('data-bs-disabled-reason')).toBeTruthy();
+    wrapper.unmount();
+  });
+
+  it('tells the player how many more to pick before Done becomes pressable', () => {
+    const controller = makeTestController({
+      currentAction: ref('discard'),
+      currentPick: ref({
+        name: 'cards',
+        type: 'choice',
+        prompt: 'Discard cards',
+        multiSelect: { min: 2, max: 3 },
+      }),
+      currentChoices: ref([
+        { value: 'a', display: 'Card A' },
+        { value: 'b', display: 'Card B' },
+        { value: 'c', display: 'Card C' },
+      ]),
+      multiSelectDraft: ref({ selectionName: 'cards', values: [] }),
+    });
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      props: { availableActions: ['discard'], playerSeat: 1, isMyTurn: true },
+    });
+
+    const done = wrapper.find('.done-button');
+    expect(done.attributes('aria-disabled')).toBe('true');
+    expect(done.attributes('data-bs-disabled-reason')).toContain('2');
     wrapper.unmount();
   });
 });

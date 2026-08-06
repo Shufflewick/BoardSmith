@@ -279,7 +279,7 @@ expect(result.stepsVisited).toContain('step-1-id');
 expect(result.stepsVisited).toContain('step-2-id');
 ```
 
-`simulateTutorial` runs the scripted scenario through the engine's own `autoAdvanceTutorial` pump and `getTutorialDisabledActions` gate — no second evaluator. Three drift dimensions are detected:
+`simulateTutorial` runs the scripted scenario through the engine's own `autoAdvanceTutorial` pump and `getDisabledActions` gate — no second evaluator. Three drift dimensions are detected:
 
 1. **Gate drift** — a scripted action excluded by the active step's gate throws with the step id and gate reason.
 2. **Predicate drift** — a move with `expectStep` set throws `"Tutorial drift (predicate): ..."` if `advanceWhen` did not advance to that step.

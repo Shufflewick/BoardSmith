@@ -3,7 +3,7 @@
  *
  * Provides `simulateTutorial` — a driver that runs a scripted scenario through a
  * `TestGame`, asserting gate-legality, predicate firing, and non-completion using
- * the SAME engine machinery (`autoAdvanceTutorial`, `getTutorialDisabledActions`,
+ * the SAME engine machinery (`autoAdvanceTutorial`, `getDisabledActions`,
  * `getActiveStep`) that the server uses at runtime. There is no second evaluator.
  *
  * @module
@@ -128,7 +128,7 @@ export interface SimulateTutorialResult {
  * invariants at each step.
  *
  * This function is the CI-verifiable authoring entry point (TUT-04). It reuses
- * the engine's `autoAdvanceTutorial` pump and `getTutorialDisabledActions` gate
+ * the engine's `autoAdvanceTutorial` pump and `getDisabledActions` gate
  * check — no second evaluator.
  *
  * **Three drift dimensions detected:**
@@ -197,7 +197,7 @@ export function simulateTutorial<G extends Game>(
 
   // 3. Set initial progress for all seats referenced in the scenario so gate-drift
   //    detection works correctly for non-primary seats (WR-02). Without this,
-  //    getTutorialDisabledActions() returns {} for uninitialized seats, causing the
+  //    getDisabledActions() returns {} for uninitialized seats, causing the
   //    gate-legality check to silently pass even when a gate should block the action.
   const scenarioSeats = new Set<number>([seat, ...scenario.map(m => m.seat).filter((s): s is number => s !== undefined)]);
   for (const s of scenarioSeats) {
@@ -235,8 +235,8 @@ export function simulateTutorial<G extends Game>(
     const moveSeat = move.seat ?? seat;
 
     // Step A: gate-legality check.
-    // assert the scripted action is NOT a key of getTutorialDisabledActions(moveSeat).
-    const disabledActions = testGame.game.getTutorialDisabledActions(moveSeat);
+    // assert the scripted action is NOT a key of getDisabledActions(moveSeat).
+    const disabledActions = testGame.game.getDisabledActions(moveSeat);
     if (move.action in disabledActions) {
       const activeStep = getActiveStep(testGame.game, moveSeat);
       throw new Error(

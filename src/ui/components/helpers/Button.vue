@@ -5,11 +5,23 @@
  * Provides consistent button styling across the application with
  * multiple variants and sizes.
  *
+ * Disabling requires a reason. There is no boolean `disabled` prop: the reason
+ * IS the disabled state, so a player can never meet a dead button with no
+ * explanation. The `v-disabled-reason` directive dims the button, shows the
+ * reason on hover/focus/tap, and makes activation inert — see
+ * `directives/vDisabledReason.ts`.
+ *
  * @example
  * <Button variant="primary" @click="handleAction">Execute</Button>
  * <Button variant="secondary" size="small" @click="handleChoice">Pick</Button>
- * <Button variant="danger" :disabled="!canUndo" @click="undo">Undo</Button>
+ * <Button
+ *   variant="danger"
+ *   :disabled-reason="canUndo ? false : 'Nothing to undo yet.'"
+ *   @click="undo"
+ * >Undo</Button>
  */
+
+import { vDisabledReason, isDisabled, type DisabledReason } from '../../directives/vDisabledReason.js';
 
 export type ButtonVariant =
   | 'primary'
@@ -26,15 +38,21 @@ const props = withDefaults(
     variant?: ButtonVariant;
     /** Button size */
     size?: ButtonSize;
-    /** Whether the button is disabled */
-    disabled?: boolean;
+    /**
+     * Why this button is disabled, or `false` when it is not.
+     *
+     * The reason is shown on hover/focus and announced by screen readers.
+     * Supplying one is the ONLY way to disable the button — there is no
+     * boolean form, on purpose.
+     */
+    disabledReason?: DisabledReason;
     /** HTML button type */
     type?: 'button' | 'submit' | 'reset';
   }>(),
   {
     variant: 'primary',
     size: 'default',
-    disabled: false,
+    disabledReason: false,
     type: 'button',
   }
 );
@@ -43,17 +61,18 @@ const emit = defineEmits<{
   (e: 'click', event: MouseEvent): void;
 }>();
 
+// The directive already swallows the click on a disabled button; this second
+// check costs nothing and keeps the component correct on its own terms.
 function handleClick(event: MouseEvent) {
-  if (!props.disabled) {
-    emit('click', event);
-  }
+  if (isDisabled(props.disabledReason)) return;
+  emit('click', event);
 }
 </script>
 
 <template>
   <button
     :class="['btn', `btn--${variant}`, `btn--${size}`]"
-    :disabled="disabled"
+    v-disabled-reason="disabledReason"
     :type="type"
     @click="handleClick"
   >
@@ -76,7 +95,7 @@ function handleClick(event: MouseEvent) {
   font-family: inherit;
 }
 
-.btn:disabled {
+.btn[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -105,7 +124,7 @@ function handleClick(event: MouseEvent) {
   color: var(--bsg-accent-ink);
 }
 
-.btn--primary:hover:not(:disabled) {
+.btn--primary:hover:not([aria-disabled='true']) {
   transform: translateY(-2px);
   box-shadow: var(--bsg-shadow-sm);
 }
@@ -117,7 +136,7 @@ function handleClick(event: MouseEvent) {
   color: var(--bsg-ink);
 }
 
-.btn--secondary:hover:not(:disabled) {
+.btn--secondary:hover:not([aria-disabled='true']) {
   border-color: var(--bsg-accent);
   background: var(--bsg-selectable);
 }
@@ -129,7 +148,7 @@ function handleClick(event: MouseEvent) {
   color: var(--bsg-bg);
 }
 
-.btn--danger:hover:not(:disabled) {
+.btn--danger:hover:not([aria-disabled='true']) {
   background: color-mix(in srgb, var(--bsg-danger) 85%, black);
   box-shadow: var(--bsg-shadow-sm);
 }
@@ -142,7 +161,7 @@ function handleClick(event: MouseEvent) {
   padding: 4px 8px;
 }
 
-.btn--ghost:hover:not(:disabled) {
+.btn--ghost:hover:not([aria-disabled='true']) {
   color: var(--bsg-ink);
 }
 
@@ -156,7 +175,7 @@ function handleClick(event: MouseEvent) {
   color: var(--bsg-ink-3);
 }
 
-.btn--icon:hover:not(:disabled) {
+.btn--icon:hover:not([aria-disabled='true']) {
   background: var(--bsg-selectable);
   border-color: color-mix(in srgb, var(--bsg-accent) 30%, transparent);
   color: var(--bsg-accent-2);

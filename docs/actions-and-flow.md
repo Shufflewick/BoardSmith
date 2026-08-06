@@ -600,6 +600,57 @@ Action.create('move')
   .suppressFromActionPanel()        // Hide the redundant Action Panel button (see below)
 ```
 
+#### `.disabled()` — offer the action, greyed out, and say why
+
+```typescript
+Action.create<Settlement>('build')
+  .disabled((ctx) => {
+    const wood = ctx.player.resources.wood;
+    return wood < 3 ? `You need 3 wood to build; you have ${wood}.` : false;
+  })
+  .execute(...)
+```
+
+Return a **reason string** to disable the button, or `false` to leave it
+enabled. The reason is not optional, and there is no boolean form: a greyed-out
+button that will not say why is the single most reliable way to make a player
+think the game is broken. The reason is shown on hover and on focus, and read by
+screen readers.
+
+Choose between this and `.condition()` by asking whether the player should be
+thinking about the action at all:
+
+| | The player sees | Use when |
+|---|---|---|
+| `.condition()` | Nothing — the action is gone | The action is **irrelevant** here (playing a card during someone else's turn) |
+| `.disabled()` | A greyed button that explains itself | The action is **relevant but blocked**, and its absence would be confusing (Build, while two wood short) |
+
+Three things worth knowing:
+
+- **It is enforced, not decorative.** `performAction` refuses a disabled action
+  with the same reason, so a stale tab, a custom UI, or a bot gets the same
+  answer the button gave.
+- **It runs at availability time, with empty args** — like `.condition()`. A
+  rule that needs the resolved selections belongs in `.validate()`, which runs
+  at submit time and returns the same `string`-or-not shape.
+- **A disabled action stays in `availableActions`** on purpose. That is what
+  lets the panel draw it. The reason travels beside it in
+  `PlayerGameState.disabledActions`, which is also where tutorial-gate reasons
+  arrive — one channel, so a custom UI has one thing to read.
+
+The same `string | false` contract disables individual choices inside an
+action — `chooseFrom({ disabled })`, `chooseElement({ disabled })` — so a
+reason is mandatory at every level, from the action's button down to a single
+card in a hand.
+
+The reason is not a `title` tooltip. It renders in a shared popover on hover, on
+focus, and **on tap** — the native `title` this replaced showed nothing at all on
+touch, so on a phone the reason did not exist. Custom UIs get the map as a
+`disabledActions` slot prop on `#game-board` and bind the same
+`v-disabled-reason` directive the panel uses, so board and panel dim, explain,
+and go inert identically. See the
+[Custom UI Guide](./custom-ui-guide.md#understanding-getchoices-return-values).
+
 To skip a whole step of the flow, use the flow node's `skipIf` — it belongs to
 `actionStep`, not to the action:
 

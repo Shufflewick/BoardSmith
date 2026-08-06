@@ -2682,4 +2682,81 @@ describe('useActionController', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // Issue #4 — the shared disabled-action gate
+  // ---------------------------------------------------------------------------
+
+  /**
+   * A disabled action deliberately stays in `availableActions` so the Action
+   * Panel can draw it greyed out WITH its reason. That means the availability
+   * check cannot catch it, and every UI that calls the controller directly (a
+   * custom board's own button, the drag-drop bridge) would otherwise fire an
+   * action the server is about to reject. Refusing here — once — covers them all.
+   */
+  describe('disabledActions gate', () => {
+    it('refuses execute() with the reason, without sending anything to the server', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        disabledActions: ref({ endTurn: 'You must resolve the storm first.' }),
+      });
+
+      const result = await controller.execute('endTurn');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('You must resolve the storm first.');
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('refuses start() with the reason and surfaces it as the controller error', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        disabledActions: ref({ movePiece: 'That piece is pinned.' }),
+      });
+
+      const result = await controller.start('movePiece');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('That piece is pinned.');
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.lastError.value).toBe('That piece is pinned.');
+    });
+
+    it('leaves actions that are not listed completely alone', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        disabledActions: ref({ playCard: 'No cards in hand.' }),
+      });
+
+      const result = await controller.execute('endTurn');
+
+      expect(result.success).toBe(true);
+      expect(sendAction).toHaveBeenCalled();
+    });
+
+    it('reopens the action the moment the reason goes away', async () => {
+      const disabledActions = ref<Record<string, string> | undefined>({ endTurn: 'Not yet.' });
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        disabledActions,
+      });
+
+      expect((await controller.execute('endTurn')).success).toBe(false);
+
+      disabledActions.value = {};
+      expect((await controller.execute('endTurn')).success).toBe(true);
+    });
+  });
+
 });

@@ -1,7 +1,7 @@
 {
-  "revision": 11,
+  "revision": 12,
   "bundleProtocol": 1,
-  "surfaceHash": "595c287a2855fb30",
+  "surfaceHash": "0e99b42ef64c4229",
   "payloadHash": "7d7e5e0a4de161cb",
   "history": [
     {
@@ -91,6 +91,14 @@
       "surfaceHash": "595c287a2855fb30",
       "payloadHash": "7d7e5e0a4de161cb",
       "summary": "The message log moved out of the serialized game tree into GameStateSnapshot.messageLog, stored once per snapshot with an ActionCheckpoint.messageCount watermark for undo. Persisted state is now flat in checkpoints.max instead of multiplying the log by it."
+    },
+    {
+      "revision": 12,
+      "date": "2026-08-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "0e99b42ef64c4229",
+      "payloadHash": "7d7e5e0a4de161cb",
+      "summary": "Actions gain .disabled(ctx) => string|false; Game.getTutorialDisabledActions renamed to getDisabledActions and now merges action-level disabled reasons with tutorial gate reasons; disabledActions is projected outside tutorials."
     }
   ]
 }

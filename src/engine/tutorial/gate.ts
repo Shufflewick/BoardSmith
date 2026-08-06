@@ -169,7 +169,7 @@ export function getGateReasonForValue(
  * Return a `Record<actionName, reason>` for available actions that the active
  * tutorial step excludes.
  *
- * Used by `Game.getTutorialDisabledActions(seat)` to surface a reason for each
+ * Used by `Game.getDisabledActions(seat)` to surface a reason for each
  * out-of-step action to the client — satisfying the "must surface a reason,
  * not silently drop" requirement (success criterion #3).
  *

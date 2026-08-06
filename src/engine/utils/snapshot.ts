@@ -314,11 +314,12 @@ export interface PlayerStateView {
   tutorial?: TutorialStepView;
 
   /**
-   * Action-level gate reasons for this seat.
+   * Why each disabled action is disabled, for this seat.
    *
-   * Maps action name → human-readable reason string for actions blocked by the
-   * active tutorial step's gate. `undefined` when no tutorial is running.
-   * Mirrors `PlayerGameState.disabledActions` (parity hard-rule).
+   * Maps action name → human-readable reason, from the action's own
+   * `.disabled(ctx)` rule or the active tutorial step's gate. `undefined` when
+   * nothing is disabled. Mirrors `PlayerGameState.disabledActions` (parity
+   * hard-rule).
    */
   disabledActions?: Record<string, string>;
 }
@@ -446,8 +447,12 @@ export function createPlayerView(
   const tutorial = playerPosition > 0
     ? getActiveTutorialStepView(game, playerPosition)
     : undefined;
-  const disabledActions = tutorial !== undefined
-    ? game.getTutorialDisabledActions(playerPosition)
+  // Disabled-action reasons are NOT tutorial-only: an action's own `.disabled()`
+  // rule applies in ordinary play, so this is projected for every seated player
+  // (spectators have no actions to disable). getDisabledActions returns `{}`
+  // when nothing is disabled, which the spread below omits from the wire.
+  const disabledActions = playerPosition > 0
+    ? game.getDisabledActions(playerPosition)
     : undefined;
 
   return {

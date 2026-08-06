@@ -265,7 +265,7 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
    * gate-legality check inside `simulateTutorial` detects that `move` is a
    * tutorial-disabled action on the `intro` step and throws immediately.
    *
-   * This exercises `getTutorialDisabledActions` and proves that a tutorial
+   * This exercises `getDisabledActions` and proves that a tutorial
    * definition change that locks the learner out of the taught action is
    * caught by the CI test.
    */
