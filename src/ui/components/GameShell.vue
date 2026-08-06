@@ -880,6 +880,42 @@ const activePlayer = computed(() => {
   return { name: p.name ?? `Player ${seat + 1}`, seat, color: p.color };
 });
 
+/**
+ * The identity token the action bar shows, and what it CLAIMS (B14).
+ *
+ * Two different statements, which is why this is not just `activePlayer`:
+ *
+ * - `'active'` — "this is whose turn it is". A claim about the TABLE. D27 is
+ *   why it must never render during a simultaneous step: several seats are
+ *   deciding independently, so no single seat is "the" active one, and drawing
+ *   one would assert something false.
+ * - `'you'` — "this is you". A claim about the VIEWER only, which is never
+ *   ambiguous no matter how many seats are deciding. The bar is already
+ *   viewer-scoped in that state (availableActions resolves to this seat's own
+ *   `awaitingPlayers` entry, and re-submission gates on this seat's own
+ *   `completed`), so it was showing your actions with nothing saying who you
+ *   are — and the same bar carrying a token in one phase and not the next read
+ *   as a bug, because the shape is otherwise a constant identity anchor.
+ *
+ * D27 removed a false claim about the table; it was never a reason to withhold
+ * the viewer's own identity from them. The two are styled differently so the
+ * 'you' token cannot be misread as "it is your turn".
+ */
+const panelToken = computed(() => {
+  if (isSimultaneous.value) {
+    const me = myPlayer.value as { name?: string; color?: string; seat?: number } | undefined;
+    if (!me || me.seat === undefined) return null;
+    return {
+      kind: 'you' as const,
+      name: me.name ?? `Player ${me.seat + 1}`,
+      seat: me.seat,
+      color: me.color,
+    };
+  }
+  const active = activePlayer.value;
+  return active ? { kind: 'active' as const, ...active } : null;
+});
+
 const currentPlayerColor = computed((): string | undefined => {
   const currentPos = state.value?.state?.currentPlayer;
   if (currentPos === undefined) return undefined;
@@ -2590,15 +2626,21 @@ if ((import.meta as any).hot) {
         />
         <!-- Action Panel: only render when player is actionable (IA-04) -->
         <template v-if="isMyTurn || awaitingPlayerNames.length">
-          <!-- Active-player identity token: always shown at the head of the Action Panel so
-               the action bar carries WHO is acting (IA-02), regardless of whether the
-               ActionPanel or the fallback prompt strip renders the WHAT. -->
+          <!-- Identity token at the head of the Action Panel, so the action bar always
+               carries WHO (IA-02) regardless of whether the ActionPanel or the fallback
+               prompt strip renders the WHAT.
+
+               Turn-based: whose turn it is. Simultaneous: the VIEWER's own seat, marked
+               `is-you` — see `panelToken` for why those are different claims. Never
+               absent while the bar is up: an identity anchor that comes and goes between
+               phases reads as broken. -->
           <PlayerToken
-            v-if="activePlayer"
+            v-if="panelToken"
             class="turn-token"
-            :name="activePlayer.name"
-            :seat="activePlayer.seat"
-            :color="activePlayer.color"
+            :class="{ 'is-you': panelToken.kind === 'you' }"
+            :name="panelToken.name"
+            :seat="panelToken.seat"
+            :color="panelToken.color"
             :size="30"
           />
           <!-- Turn strip: the fallback prompt surface, shown ONLY when the platform
@@ -2973,6 +3015,18 @@ if ((import.meta as any).hot) {
 /* Active-player identity token — flows inline right after the ⋯ menu. */
 .turn-token {
   margin-right: 4px;
+}
+
+/* The 'you' token (simultaneous step): the viewer's own identity, NOT a
+   whose-turn claim. Held apart from the active-turn token by a slim outline
+   ring and slightly reduced weight, so the same glyph cannot be read as "it is
+   your turn" in a state where no single seat is on turn. Deliberately quiet —
+   it is an anchor, not a call to act; the prompt beside it is what asks. */
+.turn-token.is-you {
+  outline: 2px solid color-mix(in srgb, var(--bsg-accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 50%;
+  opacity: 0.85;
 }
 
 /* Turn strip: prompt sentence (fallback when ActionPanel is not rendering) */
