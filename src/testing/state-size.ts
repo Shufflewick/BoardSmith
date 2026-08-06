@@ -123,7 +123,24 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
 export function projectSnapshotSize(
   measurement: SnapshotSizeMeasurement,
   actionCount: number,
-  options?: { maxCheckpoints?: number },
+  options?: {
+    maxCheckpoints?: number;
+    /**
+     * How big the message log will be, in bytes, at `actionCount` actions.
+     *
+     * Defaults to growing at the measured rate,
+     * `messageLogBytes / observedActionCount x actionCount`. That inference is
+     * only meaningful when the measured game PLAYED the actions that wrote its
+     * log. A fixture that constructs an end-state directly — seeding a whole
+     * season of narration and then taking a handful of actions — has a measured
+     * rate inflated by exactly the ratio between the two, and projecting on it
+     * overstates the total by an order of magnitude.
+     *
+     * Pass the real figure in that case. `measurement.messageLogBytes` is the
+     * right value when the fixture's log is already at its final size.
+     */
+    messageLogBytes?: number;
+  },
 ): number {
   const perCheckpoint = measurement.bytesPerCheckpoint || measurement.treeBytes;
   const retained = Math.min(actionCount + 1, options?.maxCheckpoints ?? Number.POSITIVE_INFINITY);
@@ -138,9 +155,8 @@ export function projectSnapshotSize(
   // and dividing by the wrong one silently inflates the projection.
   const observed = Math.max(1, measurement.observedActionCount);
   const historyPerAction = measurement.actionHistoryBytes / observed;
-  const logPerAction = measurement.messageLogBytes / observed;
+  const logBytes =
+    options?.messageLogBytes ?? (measurement.messageLogBytes / observed) * actionCount;
 
-  return Math.round(
-    fixed + retained * perCheckpoint + actionCount * (historyPerAction + logPerAction),
-  );
+  return Math.round(fixed + retained * perCheckpoint + actionCount * historyPerAction + logBytes);
 }
