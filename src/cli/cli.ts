@@ -58,6 +58,7 @@ import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
+import { doctorCommand } from './commands/doctor.js';
 
 const program = new Command();
 
@@ -251,6 +252,19 @@ program
 // Unlike chunk-check above, these never write a file and never repair anything — there is
 // nothing to repair, only findings to report — so they never exit non-zero for a finding.
 // Non-zero is reserved for a TOOL failure (not a bs- project, not a git repo, etc.).
+// `doctor` is the layout's migration path (issue #6): every design artifact belongs under
+// `design/`, every throwaway script under `.boardsmith/scratch/`. Report-by-default so a bare run
+// is safe to script, non-zero when anything is out of place so a skill notices without parsing
+// output, and idempotent so every bs- skill can open with it.
+program
+  .command('doctor')
+  .description("Check a game project's layout (design/ artifacts, stray scratch files) and optionally repair it")
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--fix', 'Move misplaced files into place instead of only reporting them')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .option('--quiet', 'Suppress the human-readable report')
+  .action(doctorCommand);
+
 program
   .command('trace-check')
   .description('Report traceability gaps between Interpretation claims, rulings, and tests (read-only)')

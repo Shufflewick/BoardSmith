@@ -1,3 +1,10 @@
+import {
+  chunkMdPath,
+  designChunksDir,
+  designDir,
+  designRulebookDir,
+  relChunkMdPath,
+} from '../lib/project-paths.js';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -106,7 +113,7 @@ async function exists(path: string): Promise<boolean> {
  */
 export async function computeVerificationScope(projectDir: string): Promise<VerificationScope> {
   const dir = resolve(projectDir);
-  const rulebookDir = join(dir, 'rulebook');
+  const rulebookDir = designRulebookDir(dir);
 
   if (!(await exists(rulebookDir))) {
     return { scope: SCOPE_CODE_ONLY, reason: 'no-rulebook-project' };
@@ -139,7 +146,10 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
   const sourceMatch = /^Source:\s*(.*)$/m.exec(index);
   const sourcePath = sourceMatch ? sourceMatch[1].trim() : undefined;
 
-  const archivedFullPath = sourcePath ? join(dir, sourcePath) : undefined;
+  // `Source:` in INDEX.md is written the way every citation is written — relative to `design/`
+  // (`rulebook/source/rules.pdf`), not to the project root. Resolving it anywhere else silently
+  // reports `source-missing` on a project whose source is right there.
+  const archivedFullPath = sourcePath ? join(designDir(dir), sourcePath) : undefined;
   let archivedBuf: Buffer | undefined;
   if (archivedFullPath) {
     try {
@@ -188,7 +198,7 @@ async function verifyAdditionalSources(
   const verified: Array<{ sourcePath: string; sourceHash: string }> = [];
   for (const record of records) {
     try {
-      const buf = await fs.readFile(join(dir, record.path));
+      const buf = await fs.readFile(join(designDir(dir), record.path));
       if (sha256(buf) === record.sourceHash) {
         verified.push({ sourcePath: record.path, sourceHash: record.sourceHash });
       }
@@ -466,8 +476,8 @@ export async function recordVerifiedAgainst(
   } = {},
 ): Promise<VerifiedAgainstWriteResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const chunkPath = join(projectDir, 'chunks', slug, 'CHUNK.md');
-  const relChunkPath = join('chunks', slug, 'CHUNK.md');
+  const chunkPath = chunkMdPath(projectDir, slug);
+  const relChunkPath = relChunkMdPath(slug);
 
   let chunkText: string;
   try {
@@ -481,7 +491,7 @@ export async function recordVerifiedAgainst(
 
   const scope = await computeVerificationScope(projectDir);
 
-  const rulebookDir = join(projectDir, 'rulebook');
+  const rulebookDir = designRulebookDir(projectDir);
   let sliceFilenames: string[] = [];
   try {
     sliceFilenames = (await fs.readdir(rulebookDir)).filter(
@@ -512,7 +522,7 @@ export async function recordVerifiedAgainst(
   const { resolved, unresolved } = resolveCitedSlices(citableText, sliceFilenames);
   const citedSlices: Array<{ path: string; hash: string }> = [];
   for (const rel of resolved) {
-    const bytes = await fs.readFile(join(projectDir, rel));
+    const bytes = await fs.readFile(join(designDir(projectDir), rel));
     citedSlices.push({ path: rel, hash: sha256(bytes) });
   }
 
@@ -619,7 +629,7 @@ export async function chunkCheckCommand(
     reverifiedNoCodeChange?: string;
   } = {},
 ): Promise<void> {
-  const relChunkPath = join('chunks', slug, 'CHUNK.md');
+  const relChunkPath = relChunkMdPath(slug);
 
   const {
     scope: recordScope,
@@ -914,7 +924,7 @@ export async function chunkProvenanceStatusCommand(
   options: { project?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<ChunkProvenanceStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const chunksDir = join(projectDir, 'chunks');
+  const chunksDir = designChunksDir(projectDir);
 
   let entries: Array<{ name: string; isDirectory(): boolean }>;
   try {

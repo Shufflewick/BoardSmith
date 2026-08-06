@@ -546,6 +546,25 @@ describe('resolveManifestPath', () => {
     expect(resolveManifestPath(project, '..')).toBe('escapes');
   });
 
+  it('resolves a manifest row naming a design ledger into design/, not the project root', () => {
+    // Real manifests list `DECISIONS.md` beside `src/rules/game.ts`. Ledgers live in `design/`
+    // (issue #6), so resolving one against the project root reports every such row as deleted.
+    expect(resolveManifestPath(project, 'DECISIONS.md')).toBe('/tmp/proj/design/DECISIONS.md');
+    expect(resolveManifestPath(project, 'RULINGS.md')).toBe('/tmp/proj/design/RULINGS.md');
+    expect(resolveManifestPath(project, 'chunks/jab/CHUNK.md')).toBe(
+      '/tmp/proj/design/chunks/jab/CHUNK.md',
+    );
+    expect(resolveManifestPath(project, 'rulebook/01-x.md')).toBe(
+      '/tmp/proj/design/rulebook/01-x.md',
+    );
+    // Source paths are unaffected — they are project-relative.
+    expect(resolveManifestPath(project, 'src/rules/game.ts')).toBe('/tmp/proj/src/rules/game.ts');
+  });
+
+  it('rejects a traversal out of design/ just as it does one out of the project root', () => {
+    expect(resolveManifestPath(project, 'rulebook/../../../etc/passwd')).toBe('escapes');
+  });
+
   it('rejects an absolute path outside the project', () => {
     expect(resolveManifestPath(project, '/etc/passwd')).toBe('escapes');
   });

@@ -23,6 +23,22 @@ paths, status spellings, and step names out of the body; never narrate bookkeepi
 overlap is reported as what it means for their game ("this overlaps something you already tested —
 you may need to play that part again"), never as a raw diff.
 
+## Step 0a: Layout Check on Entry
+
+Before anything else, run:
+
+```bash
+npx boardsmith doctor
+```
+
+Every design artifact this skill reads — `SKETCH.md`, `chunks/<slug>/CHUNK.md`, `ASSETS.md`,
+`RULINGS.md`, `rulebook/` — lives under the project's `design/` directory, and every path named in
+this file is written relative to it (see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
+"Project Layout"): prepend `design/` whenever you actually Read one. `doctor` exits non-zero when
+an artifact is still loose in the project root, which is the layout every game built before
+`design/` existed has. On a non-zero exit run `npx boardsmith doctor --fix` — it moves everything
+into place with `git mv` and deletes nothing — then continue. Never hand-move these files.
+
 ## Step 0: Consistency Check on Entry
 
 On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`

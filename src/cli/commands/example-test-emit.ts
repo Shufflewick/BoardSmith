@@ -1,3 +1,6 @@
+import {
+  designChunksDir,
+} from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -330,7 +333,7 @@ export async function verifyExampleEmitCommand(
 
   // Path containment guard for `--chunk` reads — mirrors `verifyExampleReplayCommand`'s own
   // `--chunk` guard verbatim in shape and message.
-  const chunksDir = join(projectDir, 'chunks');
+  const chunksDir = designChunksDir(projectDir);
   const chunkAbs = resolve(chunksDir, chunkSlug);
   const chunkRel = relative(chunksDir, chunkAbs);
   if (chunkRel === '' || chunkRel.startsWith('..') || isAbsolute(chunkRel)) {

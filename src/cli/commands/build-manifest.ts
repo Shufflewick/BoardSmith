@@ -14,6 +14,7 @@
  * convention as `chunk-provenance.ts` exporting `resolveCitedSlices` for reuse.
  */
 
+import { resolveDesignRelative } from '../lib/project-paths.js';
 import { relative, resolve as pathResolve, sep } from 'node:path';
 
 /** The locked finding-kind enum from 172-CONTEXT.md decision 7. Never a hand-written union. */
@@ -122,12 +123,18 @@ const PATH_TOKEN = /[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g;
  * is the phase's single authority, and a security guard is the last thing that should exist in two
  * copies free to drift apart.
  *
+ * A manifest row may name a design artifact rather than source — real chunks list `DECISIONS.md`
+ * or `RULINGS.md` beside `src/rules/game.ts`. Those are written the way every path inside a design
+ * doc is written, relative to `design/`, so they resolve through `resolveDesignRelative`; source
+ * paths (`src/…`, `tests/…`) still resolve against the project root. Without this split, every
+ * ledger row in every existing manifest reads as a deleted file.
+ *
  * Returns the absolute resolved path, or the sentinel `'escapes'` for a path that leaves
  * `projectDir`. Callers report the escape as a finding rather than throwing — one bad manifest row
  * must not abort the whole sweep.
  */
 export function resolveManifestPath(projectDir: string, relPathStr: string): string | 'escapes' {
-  const resolved = pathResolve(projectDir, relPathStr);
+  const resolved = resolveDesignRelative(projectDir, relPathStr);
   const rel = relative(projectDir, resolved);
   if (rel === '..' || rel.startsWith(`..${sep}`)) return 'escapes';
   return resolved;

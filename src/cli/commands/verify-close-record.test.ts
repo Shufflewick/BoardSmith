@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -55,7 +56,7 @@ async function makeRulebookProject(
   await fs.mkdir(project, { recursive: true });
   execSync('git init', { cwd: project, stdio: 'ignore' });
 
-  const rulebookDir = join(project, 'rulebook');
+  const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   const sourceBuf = Buffer.from(`%PDF-1.4 fake rulebook bytes for ${name}\n`);
   const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -71,8 +72,8 @@ async function makeRulebookProject(
     }),
   );
   if (kind === 'full') {
-    await fs.mkdir(join(project, 'rulebook', 'source'), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', 'source'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
   }
 
   await fs.writeFile(join(rulebookDir, '01-setup.md'), '# Setup\n\nReal slice content.\n');
@@ -118,7 +119,7 @@ async function makeChunk(
       `\n<!-- Designer prose below, after everything -->\n`;
   }
 
-  const chunkDir = join(project, 'chunks', slug);
+  const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
   await fs.mkdir(chunkDir, { recursive: true });
   const chunkPath = join(chunkDir, 'CHUNK.md');
   await fs.writeFile(chunkPath, text);
@@ -210,7 +211,7 @@ describe('verify-close-record — the durable Close write (SC-3, PROV-02)', () =
     const { project, headSha } = await makeRulebookProject('game-missing-chunk-md', 'full');
     await makeChunk(project, 'jab', { headSha, cite: 'rulebook/01-setup.md' });
     await makeChunk(project, 'cross', { headSha, cite: 'rulebook/01-setup.md' });
-    await fs.mkdir(join(project, 'chunks', 'no-chunk-md'), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'chunks', 'no-chunk-md'), { recursive: true });
     await gitCommitAll(project, 'chunks');
 
     const touched = await computeTouchedChunks(project);
@@ -222,7 +223,7 @@ describe('verify-close-record — the durable Close write (SC-3, PROV-02)', () =
     expect(recordedSlugs).not.toContain('no-chunk-md');
     expect(
       await fs
-        .access(join(project, 'chunks', 'no-chunk-md', 'CHUNK.md'))
+        .access(join(project, DESIGN_DIR, 'chunks', 'no-chunk-md', 'CHUNK.md'))
         .then(() => true)
         .catch(() => false),
     ).toBe(false);

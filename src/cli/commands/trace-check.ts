@@ -25,6 +25,14 @@ import {
   parseRulings,
   resolveManifestPath,
 } from './build-manifest.js';
+import {
+  CHUNK_MD,
+  CHUNKS_DIR,
+  DESIGN_DIR,
+  RULINGS_MD,
+  designChunksDir,
+  designPath,
+} from '../lib/project-paths.js';
 
 // -------------------------------------------------------------------------------------------
 // scanTestCitations
@@ -238,16 +246,17 @@ export async function traceCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<TraceCheckResult> {
   const projectDir = pathResolve(options.project ?? process.cwd());
-  const chunksDir = join(projectDir, 'chunks');
+  const chunksDir = designChunksDir(projectDir);
 
   let chunkDirEntries: Array<{ name: string; isDirectory(): boolean }>;
   try {
     chunkDirEntries = await fs.readdir(chunksDir, { withFileTypes: true });
   } catch {
     throw new Error(
-      `No chunks/ directory in ${projectDir}.\n` +
-        `This command looks for chunks/<slug>/CHUNK.md files — run it from a BoardSmith game\n` +
-        `project directory, or pass --project <dir>.`,
+      `No ${DESIGN_DIR}/${CHUNKS_DIR}/ directory in ${projectDir}.\n` +
+        `This command looks for ${DESIGN_DIR}/${CHUNKS_DIR}/<slug>/${CHUNK_MD} files — run it from a\n` +
+        `BoardSmith game project directory, or pass --project <dir>.\n` +
+        `If this project still uses the old flat layout, run: boardsmith doctor --fix`,
     );
   }
   const slugs = chunkDirEntries
@@ -266,7 +275,7 @@ export async function traceCheckCommand(
   for (const slug of slugs) {
     let chunkText: string;
     try {
-      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
+      chunkText = await fs.readFile(join(chunksDir, slug, CHUNK_MD), 'utf-8');
     } catch {
       continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
     }
@@ -409,7 +418,7 @@ export async function traceCheckCommand(
   // --- RULINGS.md: ruling-untested + unparsed supersessions. Missing file -> zero findings. ---
   let parsedRulings: ReturnType<typeof parseRulings> = [];
   try {
-    const rulingsText = await fs.readFile(join(projectDir, 'RULINGS.md'), 'utf-8');
+    const rulingsText = await fs.readFile(designPath(projectDir, RULINGS_MD), 'utf-8');
     parsedRulings = parseRulings(rulingsText);
   } catch {
     parsedRulings = [];

@@ -1,3 +1,6 @@
+import {
+  designRulebookDir,
+} from '../lib/project-paths.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -257,7 +260,7 @@ function assertValidRangeId(rangeId: string): void {
  */
 export function runRootDir(projectDir: string, runId: string): string {
   assertValidRunId(runId);
-  const verifyRoot = resolve(projectDir, 'rulebook', '.verify');
+  const verifyRoot = join(designRulebookDir(projectDir), '.verify');
   const dir = resolve(verifyRoot, runId);
   const rel = relative(verifyRoot, dir);
   if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
@@ -790,7 +793,7 @@ export async function verifyRunInitCommand(
   options: VerifyRunOptions & { runId?: string; ranges?: string[] } = {},
 ): Promise<VerifyRunInitResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const rulebookDir = join(projectDir, 'rulebook');
+  const rulebookDir = designRulebookDir(projectDir);
 
   try {
     await fs.access(rulebookDir);
@@ -1157,7 +1160,7 @@ export async function verifyRunStatusCommand(
   options: VerifyRunOptions & { runId?: string } = {},
 ): Promise<VerifyRunStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const verifyRoot = join(projectDir, 'rulebook', '.verify');
+  const verifyRoot = join(designRulebookDir(projectDir), '.verify');
 
   let runId = options.runId;
   if (runId) {

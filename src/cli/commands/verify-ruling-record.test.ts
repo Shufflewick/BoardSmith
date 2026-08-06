@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
@@ -37,7 +38,7 @@ const RUN_ID = '2026-08-05T16-49-29Z';
 /** A project with `count` non-superseded rulings and a staged (non-empty) transcription. */
 async function makeProject(count: number, runId = RUN_ID): Promise<string> {
   const project = join(dir, 'game');
-  const slices = join(project, 'rulebook', '.verify', runId, 'slices');
+  const slices = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
   await fs.mkdir(slices, { recursive: true });
   await fs.writeFile(join(slices, '01-setup.md'), '# Setup\n\nFresh transcription.\n');
 
@@ -45,7 +46,7 @@ async function makeProject(count: number, runId = RUN_ID): Promise<string> {
   for (let i = 1; i <= count; i++) {
     parts.push(`### Ruling ${i}`, '', `Decision: ruling number ${i} stands.`, '');
   }
-  await fs.writeFile(join(project, 'RULINGS.md'), parts.join('\n'));
+  await fs.writeFile(join(project, DESIGN_DIR, 'RULINGS.md'), parts.join('\n'));
   return project;
 }
 
@@ -112,7 +113,7 @@ describe('recordRulingVerdicts — upsert-append, not whole-file rewrite', () =>
 describe('readRulingVerdicts — the ledger is a validated second entry path', () => {
   async function writeLedgerBody(project: string, body: string): Promise<void> {
     const path = rulingVerdictsLedgerPath(project, RUN_ID);
-    await fs.mkdir(join(project, 'rulebook', '.verify', RUN_ID), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', RUN_ID), { recursive: true });
     await fs.writeFile(
       path,
       `# Ruling Verdicts — run ${RUN_ID}\n\n${RULING_VERDICTS_LEDGER_BEGIN}\n${body}\n${RULING_VERDICTS_LEDGER_END}\n`,
@@ -147,7 +148,7 @@ describe('readRulingVerdicts — the ledger is a validated second entry path', (
 
   it('reports a missing fence rather than silently returning []', async () => {
     const project = await makeProject(2);
-    await fs.mkdir(join(project, 'rulebook', '.verify', RUN_ID), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', RUN_ID), { recursive: true });
     await fs.writeFile(rulingVerdictsLedgerPath(project, RUN_ID), '# Ruling Verdicts\n\nno fences\n');
 
     await expect(readRulingVerdicts(project, RUN_ID)).rejects.toThrow(/missing begin\/end fence/);
@@ -321,7 +322,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
 
   it('never writes into RULINGS.md', async () => {
     const project = await makeProject(3);
-    const before = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
+    const before = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
 
     await verifyRulingRecordCommand({
       project,
@@ -332,6 +333,6 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
       json: true,
     });
 
-    expect(await fs.readFile(join(project, 'RULINGS.md'), 'utf-8')).toBe(before);
+    expect(await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8')).toBe(before);
   });
 });

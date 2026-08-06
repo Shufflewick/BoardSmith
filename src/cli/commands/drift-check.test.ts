@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync, execFile as execFileImport } from 'node:child_process';
@@ -139,7 +140,7 @@ describe('diffedFilesSince', () => {
 describe('driftCheckCommand — tool-failure preconditions', () => {
   it('a project directory that is not a git repo throws an actionable one-line error, not a finding', async () => {
     const notGit = join(dir, 'not-a-repo');
-    await fs.mkdir(join(notGit, 'chunks'), { recursive: true });
+    await fs.mkdir(join(notGit, DESIGN_DIR, 'chunks'), { recursive: true });
     await expect(driftCheckCommand({ project: notGit })).rejects.toThrow(/not a git repository/);
   });
 });
@@ -158,7 +159,7 @@ async function makeChunk(
   slug: string,
   opts: { hash?: string; manifestRows?: ManifestRow[]; manifestProse?: string; noManifest?: boolean } = {},
 ): Promise<void> {
-  const chunkDir = join(repoDir, 'chunks', slug);
+  const chunkDir = join(repoDir, DESIGN_DIR, 'chunks', slug);
   await fs.mkdir(chunkDir, { recursive: true });
 
   const manifestBody =
@@ -352,7 +353,7 @@ describe('driftCheckCommand', () => {
 
   it('throws a one-line actionable error when there is no chunks/ directory', async () => {
     const { repoDir } = await twoCommitRepo();
-    await expect(driftCheckCommand({ project: repoDir })).rejects.toThrow(/No chunks\/ directory/);
+    await expect(driftCheckCommand({ project: repoDir })).rejects.toThrow(/No design\/chunks\/ directory/);
   });
 
   it('caches the diff/ancestor check per distinct hash rather than once per chunk', async () => {

@@ -1,3 +1,8 @@
+import {
+  DESIGN_DIR,
+  designDir,
+  designRulebookDir,
+} from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -98,7 +103,7 @@ export const DERIVE_CHECK_MODELS = Object.freeze({
 export async function readLiveSlices(
   projectDir: string,
 ): Promise<{ path: string; text: string }[]> {
-  const rulebookDir = join(projectDir, 'rulebook');
+  const rulebookDir = designRulebookDir(projectDir);
   let names: string[];
   try {
     const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
@@ -502,7 +507,7 @@ export function createDeriveCheckRecord(input: {
  * no `runId` anywhere in this path: CHECK-04 has nothing to scope to a run.
  */
 export function deriveCheckLedgerPath(projectDir: string): string {
-  return join(projectDir, 'rulebook', '.derive-check', 'verdicts.md');
+  return join(designRulebookDir(projectDir), '.derive-check', 'verdicts.md');
 }
 
 function deriveCheckKey(r: Pick<DeriveCheckRecord, 'slicePath' | 'lineNumber'>): string {
@@ -1414,12 +1419,12 @@ export async function verifyDeriveRecordCommand(
   // `join()` collapses `..` segments — without this guard, `--slice-path
   // rulebook/../../../../etc/passwd` (or any path escaping `projectDir/rulebook`) is read without
   // complaint. `slicePath` is always caller-supplied as `rulebook/<file>` (the exact shape
-  // `readLiveSlices`/`enumerateDerivedLines` report), so this resolves against `projectDir`
-  // itself (not `rulebook/` — that segment is already part of `slicePath`) and requires the
-  // result stay inside `projectDir/rulebook`. Mirrors `verify-classify.ts`'s `--live-slice` guard
-  // (T-174-14), validated BEFORE any read.
-  const rulebookDir = join(projectDir, 'rulebook');
-  const sliceAbsPath = resolve(projectDir, slicePath);
+  // `readLiveSlices`/`enumerateDerivedLines` report) — a citation, and citations are relative to
+  // `design/` — so this resolves against the DESIGN directory (not `rulebook/` — that segment is
+  // already part of `slicePath`) and requires the result stay inside `design/rulebook`. Mirrors
+  // `verify-classify.ts`'s `--live-slice` guard (T-174-14), validated BEFORE any read.
+  const rulebookDir = designRulebookDir(projectDir);
+  const sliceAbsPath = resolve(designDir(projectDir), slicePath);
   const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
   if (
     sliceRelToRulebook === '' ||
@@ -1428,7 +1433,7 @@ export async function verifyDeriveRecordCommand(
   ) {
     throw new Error(
       `--slice-path "${slicePath}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
-        `Pass a path relative to the project root, of the form "rulebook/<file>.md".`,
+        `Pass a path of the form "rulebook/<file>.md", relative to ${DESIGN_DIR}/.`,
     );
   }
 

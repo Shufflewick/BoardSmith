@@ -5,6 +5,7 @@
  * Used by both `init` and `design` commands.
  */
 
+import { DESIGN_DIR, SCRATCH_DIR } from './project-paths.js';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -708,6 +709,12 @@ export function generateGitignore(): string {
 dist/
 .DS_Store
 *.log
+
+# Dev-host build output and agent scratch (${SCRATCH_DIR}). Regenerated on every
+# run and never portable — tracking it made every dev-server run show spurious
+# deletions, and it is where throwaway repro/debug scripts belong so they can
+# never become tracked litter in the project root.
+.boardsmith/
 `;
 }
 
@@ -745,5 +752,7 @@ export function getRequiredDirectories(): string[] {
     'src/ui/assets',
     'tests',
     'public',
+    // The bs- skills' design artifacts (SKETCH.md, chunks/, rulebook/, …) all live here.
+    DESIGN_DIR,
   ];
 }

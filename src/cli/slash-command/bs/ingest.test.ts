@@ -422,9 +422,12 @@ describe('transcription-subagent.md — output directory is a dispatch input (VE
     expect(contract).toContain('rulebook/00-visual-survey.md');
   });
 
-  it('ingest/transcription.md still fills Write slices to: with rulebook/ — ingest is unchanged', () => {
+  it('ingest/transcription.md fills Write slices to: with the real on-disk design/rulebook/ path', () => {
+    // `Write slices to:` is the ONE place these skills name a project-root-relative path rather
+    // than a design-relative one: the transcription subagent has no project context to resolve
+    // `rulebook/` against, so it must be handed the path it will actually write to (issue #6).
     const transcription = read('ingest/transcription.md');
-    expect(transcription).toContain('Write slices to: rulebook/');
+    expect(transcription).toContain('Write slices to: design/rulebook/');
   });
 
   it('transcription.md names the verify orchestrator as the other caller of this dispatch input', () => {

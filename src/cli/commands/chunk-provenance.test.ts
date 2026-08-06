@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -63,7 +64,7 @@ async function makeProject(
   await fs.mkdir(project, { recursive: true });
   if (shape === 'no-rulebook-project') return project;
 
-  const rulebookDir = join(project, 'rulebook');
+  const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   if (shape === 'index-missing') return project;
 
@@ -92,7 +93,7 @@ async function makeProject(
   const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes for testing\n');
   const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
   const relArchivedPath = 'rulebook/source/rules.pdf';
-  const archivedPath = join(project, relArchivedPath);
+  const archivedPath = join(project, DESIGN_DIR, relArchivedPath);
 
   await fs.writeFile(
     join(rulebookDir, 'INDEX.md'),
@@ -167,7 +168,7 @@ describe('computeVerificationScope — scope', () => {
   it('INVARIANT: correct recorded hash but a deleted file returns source-missing, not full', async () => {
     const project = await makeProject('full');
     const relArchivedPath = 'rulebook/source/rules.pdf';
-    await fs.rm(join(project, relArchivedPath));
+    await fs.rm(join(project, DESIGN_DIR, relArchivedPath));
     const result = await computeVerificationScope(project);
     expect(result.scope).toBe(SCOPE_CODE_ONLY);
     expect(result.reason).toBe('source-missing');
@@ -176,7 +177,7 @@ describe('computeVerificationScope — scope', () => {
   it('INVARIANT: present file but a rewritten hash returns source-hash-mismatch, not full', async () => {
     const project = await makeProject('full');
     const relArchivedPath = 'rulebook/source/rules.pdf';
-    await fs.writeFile(join(project, relArchivedPath), Buffer.from('rewritten, tampered bytes\n'));
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), Buffer.from('rewritten, tampered bytes\n'));
     const result = await computeVerificationScope(project);
     expect(result.scope).toBe(SCOPE_CODE_ONLY);
     expect(result.reason).toBe('source-hash-mismatch');
@@ -364,7 +365,7 @@ describe('chunk-check', () => {
    */
   async function makeCheckProject(): Promise<{ project: string; sliceHash: string }> {
     const project = join(dir, 'game-check');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
 
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes for chunk-check testing\n');
@@ -380,8 +381,8 @@ describe('chunk-check', () => {
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(join(project, 'rulebook', 'source'), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', 'source'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
 
     const sliceBuf = Buffer.from('# Setup and Round Structure\n\nReal slice content for hashing.\n');
     const sliceHash = createHash('sha256').update(sliceBuf).digest('hex');
@@ -404,7 +405,7 @@ describe('chunk-check', () => {
       '1. <!-- claim text --> — cites <!-- rulebook section / RULINGS.md entry -->',
       interpretation,
     );
-    const chunkDir = join(project, 'chunks', slug);
+    const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
     await fs.mkdir(chunkDir, { recursive: true });
     const chunkPath = join(chunkDir, 'CHUNK.md');
     await fs.writeFile(chunkPath, withInterpretation);
@@ -440,7 +441,7 @@ describe('chunk-check', () => {
     await makeChunk(project, 'jab', JAB_CITES);
     await chunkCheckCommand('jab', { project, json: true });
     expect(process.exitCode).toBe(1);
-    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const text = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
     expect(text).toContain(VERIFIED_AGAINST_HEADING);
     expect(text).toContain(VERIFIED_AGAINST_BEGIN);
     expect(text).toContain(VERIFIED_AGAINST_END);
@@ -450,12 +451,12 @@ describe('chunk-check', () => {
     const { project } = await makeCheckProject();
     await makeChunk(project, 'jab', JAB_CITES);
     await chunkCheckCommand('jab', { project, json: true });
-    const after1 = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const after1 = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
 
     process.exitCode = undefined;
     await chunkCheckCommand('jab', { project, json: true });
     expect(process.exitCode).toBeUndefined();
-    const after2 = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const after2 = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
     expect(after2).toBe(after1);
   });
 
@@ -463,7 +464,7 @@ describe('chunk-check', () => {
     const { project, sliceHash } = await makeCheckProject();
     await makeChunk(project, 'jab', JAB_CITES);
     await chunkCheckCommand('jab', { project, json: true });
-    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const text = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
 
     for (const label of [
       'Scope:',
@@ -482,13 +483,13 @@ describe('chunk-check', () => {
     const { project } = await makeCheckProject();
     await makeChunk(project, 'jab', JAB_CITES);
     await chunkCheckCommand('jab', { project, json: true });
-    const fullText = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const fullText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
     expect(fullText).not.toContain('Reason:');
 
-    await fs.rm(join(project, 'rulebook', 'source', 'rules.pdf'));
+    await fs.rm(join(project, DESIGN_DIR, 'rulebook', 'source', 'rules.pdf'));
     process.exitCode = undefined;
     await chunkCheckCommand('jab', { project, json: true });
-    const reducedText = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const reducedText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
     expect(reducedText).toContain('Reason: source-missing');
     expect(SCOPE_REASONS).toContain('source-missing');
   });
@@ -497,9 +498,9 @@ describe('chunk-check', () => {
     const { project } = await makeCheckProject();
     await makeChunk(project, 'jab', JAB_CITES);
     await chunkCheckCommand('jab', { project, json: true });
-    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const text = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
 
-    const sliceBytes = await fs.readFile(join(project, 'rulebook', '01-setup-and-round-structure.md'));
+    const sliceBytes = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'));
     const independentHash = createHash('sha256').update(sliceBytes).digest('hex');
     expect(text).toContain(`| rulebook/01-setup-and-round-structure.md | ${independentHash} |`);
   });
@@ -510,13 +511,13 @@ describe('chunk-check', () => {
     await chunkCheckCommand('jab', { project, json: true });
 
     process.exitCode = undefined;
-    await fs.appendFile(join(project, 'rulebook', '01-setup-and-round-structure.md'), '\nAn added rule.\n');
-    const newBytes = await fs.readFile(join(project, 'rulebook', '01-setup-and-round-structure.md'));
+    await fs.appendFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'), '\nAn added rule.\n');
+    const newBytes = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'));
     const newHash = createHash('sha256').update(newBytes).digest('hex');
 
     await chunkCheckCommand('jab', { project, json: true });
     expect(process.exitCode).toBe(1);
-    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const text = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
     expect(text).toContain(`| rulebook/01-setup-and-round-structure.md | ${newHash} |`);
   });
 
@@ -528,14 +529,14 @@ describe('chunk-check', () => {
       '1. Jab is a basic strike — cites rulebook/09-does-not-exist.md',
     );
     await chunkCheckCommand('jab', { project, json: true });
-    const text = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const text = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
     expect(text).toContain('Unresolved citations:');
     expect(text).toContain('rulebook/09-does-not-exist.md');
 
     await makeChunk(project, 'cross', JAB_CITES);
     process.exitCode = undefined;
     await chunkCheckCommand('cross', { project, json: true });
-    const crossText = await fs.readFile(join(project, 'chunks', 'cross', 'CHUNK.md'), 'utf-8');
+    const crossText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'cross', 'CHUNK.md'), 'utf-8');
     expect(crossText).not.toContain('Unresolved citations:');
   });
 
@@ -545,7 +546,7 @@ describe('chunk-check', () => {
     await chunkCheckCommand('jab', { project, json: true });
     process.exitCode = undefined;
 
-    const chunkPath = join(project, 'chunks', 'jab', 'CHUNK.md');
+    const chunkPath = join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md');
     const withBlock = await fs.readFile(chunkPath, 'utf-8');
     const strippedFences = withBlock
       .replace(VERIFIED_AGAINST_BEGIN, '')
@@ -568,13 +569,13 @@ describe('chunk-check', () => {
     await chunkCheckCommand('jab', { project, json: true }); // first run creates the section
     process.exitCode = undefined;
 
-    const chunkPath = join(project, 'chunks', 'jab', 'CHUNK.md');
+    const chunkPath = join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md');
     const beforeSecondRun = await fs.readFile(chunkPath, 'utf-8');
     const beforeHeadingIdx = beforeSecondRun.indexOf(VERIFIED_AGAINST_HEADING);
     const outsideBefore = beforeSecondRun.slice(0, beforeHeadingIdx);
 
     // Force a repair: change the cited slice's bytes, which rewrites its hash row.
-    await fs.appendFile(join(project, 'rulebook', '01-setup-and-round-structure.md'), '\nAdditional line.\n');
+    await fs.appendFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'), '\nAdditional line.\n');
     await chunkCheckCommand('jab', { project, json: true });
     expect(process.exitCode).toBe(1);
 
@@ -614,7 +615,7 @@ describe('chunk-check', () => {
     await makeChunk(project, 'jab', JAB_CITES);
 
     await chunkCheckCommand('jab', { project, json: true });
-    const withoutFlag = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const withoutFlag = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
     expect(withoutFlag).not.toContain('Re-verified');
 
     process.exitCode = undefined;
@@ -623,7 +624,7 @@ describe('chunk-check', () => {
       json: true,
       reverifiedNoCodeChange: 'aaa111..bbb222 — 0 manifest files changed',
     });
-    const withFlag = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+    const withFlag = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
     expect(withFlag).toContain(
       'Re-verified (no code change): aaa111..bbb222 — 0 manifest files changed',
     );
@@ -663,7 +664,7 @@ describe('chunk-check', () => {
     it('two consecutive calls with nothing changed: the second returns changed: false and the file SHA-256 is identical', async () => {
       const { project } = await makeCheckProject();
       await makeChunk(project, 'jab', JAB_CITES);
-      const chunkPath = join(project, 'chunks', 'jab', 'CHUNK.md');
+      const chunkPath = join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md');
 
       const first = await recordVerifiedAgainst('jab', { project });
       expect(first.changed).toBe(true);
@@ -681,7 +682,7 @@ describe('chunk-check', () => {
       await makeChunk(project, 'jab', JAB_CITES);
       await recordVerifiedAgainst('jab', { project }); // first run creates the section
 
-      const chunkPath = join(project, 'chunks', 'jab', 'CHUNK.md');
+      const chunkPath = join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md');
       const withBlock = await fs.readFile(chunkPath, 'utf-8');
       const strippedFences = withBlock
         .replace(VERIFIED_AGAINST_BEGIN, '')
@@ -709,7 +710,7 @@ describe('chunk-check', () => {
       await recordVerifiedAgainst('jab', { project }); // first write — creates the section
 
       // Force a second, real repair (changes the cited slice's bytes → rewrites its hash row).
-      await fs.appendFile(join(project, 'rulebook', '01-setup-and-round-structure.md'), '\nMore.\n');
+      await fs.appendFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'), '\nMore.\n');
       const second = await recordVerifiedAgainst('jab', { project });
       expect(second.changed).toBe(true);
 
@@ -761,7 +762,7 @@ describe('chunk-provenance-status', () => {
   /** A project with a real archived+hashed source and one real slice file — mirrors makeCheckProject above. */
   async function makeStatusProject(): Promise<{ project: string }> {
     const project = join(dir, 'game-status');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
 
     const sourceBuf = Buffer.from(
@@ -779,8 +780,8 @@ describe('chunk-provenance-status', () => {
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(join(project, 'rulebook', 'source'), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', 'source'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
     await fs.writeFile(
       join(rulebookDir, '01-setup-and-round-structure.md'),
       '# Setup and Round Structure\n\nReal slice content for hashing.\n',
@@ -806,7 +807,7 @@ describe('chunk-provenance-status', () => {
         `1. A claim — cites ${cites}`,
       );
     }
-    const chunkDir = join(project, 'chunks', slug);
+    const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
     await fs.mkdir(chunkDir, { recursive: true });
     const chunkPath = join(chunkDir, 'CHUNK.md');
     await fs.writeFile(chunkPath, text);
@@ -841,7 +842,7 @@ describe('chunk-provenance-status', () => {
   it('a well-formed code-conformance-only block reports that state AND its reason code', async () => {
     const { project } = await makeStatusProject();
     await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
-    await fs.rm(join(project, 'rulebook', 'source', 'rules.pdf'));
+    await fs.rm(join(project, DESIGN_DIR, 'rulebook', 'source', 'rules.pdf'));
     await chunkCheckCommand('jab', { project, json: true });
 
     const result = await chunkProvenanceStatusCommand({ project, json: false });
@@ -1102,7 +1103,7 @@ describe('chunk-provenance-status', () => {
       const { project } = await makeStatusProject();
       await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
       await chunkCheckCommand('jab', { project, json: true });
-      const chunkText = await fs.readFile(join(project, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
+      const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
       const parsed = parseVerifiedAgainst(chunkText);
       expect(parsed.state).toBe(SCOPE_FULL);
       expect(parsed.blockMalformed).toBe(false);
@@ -1132,7 +1133,7 @@ describe('projectProvenanceState', () => {
   async function projectWithChunks(chunks: Array<{ slug: string; status: string; block?: string }>) {
     const project = join(dir, `proj-${Math.abs(chunks.length * 7 + chunks[0].slug.length)}`);
     for (const c of chunks) {
-      const chunkDir = join(project, 'chunks', c.slug);
+      const chunkDir = join(project, DESIGN_DIR, 'chunks', c.slug);
       await fs.mkdir(chunkDir, { recursive: true });
       await fs.writeFile(
         join(chunkDir, 'CHUNK.md'),
@@ -1158,7 +1159,7 @@ describe('projectProvenanceState', () => {
     // THIS is the case that indicates a skipped chunk-check, and the only one worth alarming on.
     const withBlock = await projectWithChunks([{ slug: 'has-block', status: 'verified' }]);
     await chunkCheckCommand('has-block', { project: withBlock, quiet: true }).catch(() => {});
-    const chunkDir = join(withBlock, 'chunks', 'skipped');
+    const chunkDir = join(withBlock, DESIGN_DIR, 'chunks', 'skipped');
     await fs.mkdir(chunkDir, { recursive: true });
     await fs.writeFile(join(chunkDir, 'CHUNK.md'), '# Chunk: skipped\n\nStatus: verified\n');
 
@@ -1169,7 +1170,7 @@ describe('projectProvenanceState', () => {
 
   it('reports empty for a project with no chunks', async () => {
     const project = join(dir, 'no-chunks');
-    await fs.mkdir(join(project, 'chunks'), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'chunks'), { recursive: true });
     const r = await chunkProvenanceStatusCommand({ project, json: false, quiet: true });
     expect(r.projectProvenanceState).toBe('empty');
   });

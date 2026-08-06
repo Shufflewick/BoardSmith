@@ -1,3 +1,9 @@
+import {
+  DESIGN_DIR,
+  designChunksDir,
+  designDir,
+  designRulebookDir,
+} from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -286,7 +292,7 @@ export function createExampleReplayRecord(input: {
  * like its CHECK-04 sibling.
  */
 export function exampleReplayLedgerPath(projectDir: string): string {
-  return join(projectDir, 'rulebook', '.example-replay', 'EXAMPLE-VERDICTS.md');
+  return join(designRulebookDir(projectDir), '.example-replay', 'EXAMPLE-VERDICTS.md');
 }
 
 function exampleReplayKey(r: Pick<ExampleReplayRecord, 'exampleId'>): string {
@@ -524,7 +530,7 @@ export async function verifyExampleReplayCommand(
     // Path containment guard — mirrors `verify-classify.ts`'s `--live-slice` guard (~line 700):
     // 177.1's code review found a traversal exactly at an unvalidated `--*` option reaching
     // `fs.readFile`. `--chunk` resolves into `chunks/<chunk>/CHUNK.md`; validate BEFORE any read.
-    const chunksDir = join(projectDir, 'chunks');
+    const chunksDir = designChunksDir(projectDir);
     const abs = resolve(chunksDir, options.chunk);
     const rel = relative(chunksDir, abs);
     if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
@@ -746,13 +752,15 @@ interface RawExampleTranslationEntry {
  * accepts a `--slice-path` option (`verifyExampleRecordCommand` and, from plan 178-05,
  * `verifyExampleTranslateCommand`) — mirrors `verify-derive-record`'s CR-04 fix /
  * `verify-classify.ts`'s `--live-slice` guard verbatim in shape and message. Resolves `slicePath`
- * against `projectDir` and throws, naming `rulebook/`, BEFORE any read when the resolved path
- * escapes `projectDir/rulebook` — a second, differently-shaped copy of this check is exactly the
- * class of drift 177.1's code review found at this same trust boundary.
+ * against the DESIGN directory — `--slice-path` is a citation, and citations are written relative
+ * to `design/` (`rulebook/<file>.md`), not to the project root — and throws, naming `rulebook/`,
+ * BEFORE any read when the resolved path escapes `design/rulebook` — a second, differently-shaped
+ * copy of this check is exactly the class of drift 177.1's code review found at this same trust
+ * boundary.
  */
 function resolveSlicePathWithinRulebook(projectDir: string, slicePath: string): string {
-  const rulebookDir = join(projectDir, 'rulebook');
-  const sliceAbsPath = resolve(projectDir, slicePath);
+  const rulebookDir = designRulebookDir(projectDir);
+  const sliceAbsPath = resolve(designDir(projectDir), slicePath);
   const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
   if (
     sliceRelToRulebook === '' ||
@@ -761,7 +769,7 @@ function resolveSlicePathWithinRulebook(projectDir: string, slicePath: string): 
   ) {
     throw new Error(
       `--slice-path "${slicePath}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
-        `Pass a path relative to the project root, of the form "rulebook/<file>.md".`,
+        `Pass a path of the form "rulebook/<file>.md", relative to ${DESIGN_DIR}/.`,
     );
   }
   return sliceAbsPath;

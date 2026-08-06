@@ -1,3 +1,4 @@
+import { DESIGN_DIR, resolveDesignRelative } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { promises as fs, readFileSync } from 'node:fs';
@@ -646,7 +647,7 @@ describe('replaceDeriveCheckVerdicts / recordDeriveCheckVerdicts / readDeriveChe
     const { ledgerPath } = await replaceDeriveCheckVerdicts(dir, [sampleUncorroboratedRecord()]);
     expect(ledgerPath).not.toContain('.verify');
     expect(ledgerPath).not.toMatch(/run-?[Ii]d/);
-    expect(ledgerPath).toBe('rulebook/.derive-check/verdicts.md');
+    expect(ledgerPath).toBe('design/rulebook/.derive-check/verdicts.md');
     expect(deriveCheckLedgerPath(dir)).toContain('.derive-check');
     expect(deriveCheckLedgerPath(dir)).not.toMatch(/\.verify\//);
     expect(deriveCheckLedgerPath(dir)).not.toMatch(/run-?[Ii]d/i);
@@ -660,9 +661,9 @@ describe('replaceDeriveCheckVerdicts / recordDeriveCheckVerdicts / readDeriveChe
   });
 
   it('a whole-project byte hash before vs. after recording differs ONLY under rulebook/.derive-check/', async () => {
-    await fs.mkdir(join(dir, 'rulebook', 'source'), { recursive: true });
-    await fs.writeFile(join(dir, 'rulebook', '01-x.md'), 'p.1, X:\n"112 cards total."');
-    await fs.writeFile(join(dir, 'rulebook', 'source', 'rules.pdf'), 'not a real pdf, but bytes');
+    await fs.mkdir(join(dir, DESIGN_DIR, 'rulebook', 'source'), { recursive: true });
+    await fs.writeFile(join(dir, DESIGN_DIR, 'rulebook', '01-x.md'), 'p.1, X:\n"112 cards total."');
+    await fs.writeFile(join(dir, DESIGN_DIR, 'rulebook', 'source', 'rules.pdf'), 'not a real pdf, but bytes');
     const beforeHash = await hashProject(dir);
 
     await recordDeriveCheckVerdicts(dir, [sampleUncorroboratedRecord()]);
@@ -679,16 +680,16 @@ describe('replaceDeriveCheckVerdicts / recordDeriveCheckVerdicts / readDeriveChe
     const allFiles = await walk(dir, []);
     const outsideLedgerDir = allFiles.filter((f) => !f.includes(join('rulebook', '.derive-check')));
     expect(outsideLedgerDir.sort()).toEqual(
-      [join(dir, 'rulebook', '01-x.md'), join(dir, 'rulebook', 'source', 'rules.pdf')].sort(),
+      [join(dir, DESIGN_DIR, 'rulebook', '01-x.md'), join(dir, DESIGN_DIR, 'rulebook', 'source', 'rules.pdf')].sort(),
     );
 
-    const afterSourceHash = await hashProject(join(dir, 'rulebook', 'source'));
-    const beforeSourceHash = await hashProject(join(dir, 'rulebook', 'source'));
+    const afterSourceHash = await hashProject(join(dir, DESIGN_DIR, 'rulebook', 'source'));
+    const beforeSourceHash = await hashProject(join(dir, DESIGN_DIR, 'rulebook', 'source'));
     expect(afterSourceHash).toBe(beforeSourceHash);
     void beforeHash;
 
     // No .tmp/partial file survives anywhere in the ledger directory.
-    const ledgerDirFiles = await fs.readdir(join(dir, 'rulebook', '.derive-check'));
+    const ledgerDirFiles = await fs.readdir(join(dir, DESIGN_DIR, 'rulebook', '.derive-check'));
     expect(ledgerDirFiles.some((f) => f.endsWith('.tmp'))).toBe(false);
   });
 
@@ -708,8 +709,8 @@ describe('readDeriveCheckVerdicts — revalidation through createDeriveCheckReco
 
   beforeEach(async () => {
     dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-check-cr02-'));
-    await fs.mkdir(join(dir, 'rulebook', '.derive-check'), { recursive: true });
-    ledgerFile = join(dir, 'rulebook', '.derive-check', 'verdicts.md');
+    await fs.mkdir(join(dir, DESIGN_DIR, 'rulebook', '.derive-check'), { recursive: true });
+    ledgerFile = join(dir, DESIGN_DIR, 'rulebook', '.derive-check', 'verdicts.md');
   });
 
   afterEach(async () => {
@@ -1326,7 +1327,7 @@ describe('verifyDeriveRecordCommand', () => {
    */
   async function setupProvenanceProject(slicePath: string, sliceText: string): Promise<string> {
     const project = join(dir, 'project');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -1341,10 +1342,10 @@ describe('verifyDeriveRecordCommand', () => {
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
-    await fs.mkdir(dirname(join(project, slicePath)), { recursive: true });
-    await fs.writeFile(join(project, slicePath), sliceText);
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, slicePath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, slicePath), sliceText);
     return project;
   }
 
@@ -1474,9 +1475,9 @@ describe('verifyDeriveRecordCommand', () => {
       sliceAPath,
       'Cards come in 4 colors.\n\nDerived (p.1): There are 4 colors.\n',
     );
-    await fs.mkdir(dirname(join(project, sliceBPath)), { recursive: true });
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, sliceBPath)), { recursive: true });
     await fs.writeFile(
-      join(project, sliceBPath),
+      join(project, DESIGN_DIR, sliceBPath),
       'There are 5 shapes.\n\nDerived (p.2): There are 5 shapes.\n',
     );
 
@@ -1567,7 +1568,7 @@ describe('verifyDeriveRecordCommand', () => {
     // this is rejected before `fs.readFile` is ever reached, not merely that a nonexistent path
     // fails.
     const project = join(dir, 'project');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
     await fs.writeFile(join(project, 'secret.txt'), 'do not leak this');
 
     let message = '';
@@ -1741,7 +1742,9 @@ describe('verifyDeriveCheckCommand', () => {
   async function makeProject(files: Record<string, string>): Promise<string> {
     const project = join(dir, 'project');
     for (const [relPath, text] of Object.entries(files)) {
-      const full = join(project, relPath);
+      // Keys are written the way a design doc writes them — `rulebook/02-x.md`, not
+      // `design/rulebook/02-x.md` — so the fixture exercises the same resolution the CLI does.
+      const full = resolveDesignRelative(project, relPath);
       await fs.mkdir(dirname(full), { recursive: true });
       await fs.writeFile(full, text);
     }
@@ -2040,7 +2043,7 @@ describe('verifyDeriveCheckCommand', () => {
 
   it('an unreadable rulebook/ (EACCES) reports the real condition, not "No rulebook/ directory" (WR-02)', async () => {
     const project = join(dir, 'eacces-project');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.chmod(rulebookDir, 0o000);
     try {

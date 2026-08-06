@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
@@ -54,7 +55,7 @@ const LIVE_07 = '## 07-turn\n\nLive turn slice content.\n';
 /** A fixture project with rulebook/INDEX.md and two distinctive live slices. */
 async function liveProject(name = 'game'): Promise<string> {
   const project = join(dir, name);
-  const rulebookDir = join(project, 'rulebook');
+  const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   await fs.writeFile(
     join(rulebookDir, 'INDEX.md'),
@@ -139,7 +140,7 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
     const project = await liveProject();
     const runId = '2026-07-28T22-18-00Z';
     const result = stagingSlicesDir(project, runId);
-    const prefix = join(project, 'rulebook', '.verify');
+    const prefix = join(project, DESIGN_DIR, 'rulebook', '.verify');
     expect(result.startsWith(prefix)).toBe(true);
   });
 
@@ -153,7 +154,7 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
     for (const bad of badIds) {
       expect(() => stagingSlicesDir(project, bad)).toThrow(/run-id/i);
     }
-    const verifyRoot = join(project, 'rulebook', '.verify');
+    const verifyRoot = join(project, DESIGN_DIR, 'rulebook', '.verify');
     await expect(fs.access(verifyRoot)).rejects.toThrow();
   });
 
@@ -177,12 +178,12 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
       json: true,
     });
 
-    const stillLive03 = await fs.readFile(join(project, 'rulebook', '03-setup.md'), 'utf-8');
-    const stillLive07 = await fs.readFile(join(project, 'rulebook', '07-turn.md'), 'utf-8');
+    const stillLive03 = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', '03-setup.md'), 'utf-8');
+    const stillLive07 = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', '07-turn.md'), 'utf-8');
     expect(stillLive03).toBe(LIVE_03);
     expect(stillLive07).toBe(LIVE_07);
 
-    const names = (await fs.readdir(join(project, 'rulebook'))).filter(
+    const names = (await fs.readdir(join(project, DESIGN_DIR, 'rulebook'))).filter(
       (f) => f.endsWith('.md') && f !== 'INDEX.md',
     );
     expect(names.sort()).toEqual(['03-setup.md', '07-turn.md']);
@@ -210,7 +211,7 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
 
   it('L1: appends exactly one record strictly between the fences, leaving outside-fence content byte-identical', async () => {
     const { project, runId } = await initAndStage();
-    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
     const before = await fs.readFile(ledgerAbs, 'utf-8');
     const beforeOutsideFences =
       before.slice(0, before.indexOf(RUN_LEDGER_BEGIN)) +
@@ -235,7 +236,7 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
 
   it('L2: refuses (no record written) when the slice file does not exist', async () => {
     const { project, runId } = await initAndStage();
-    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
     const before = await fs.readFile(ledgerAbs, 'utf-8');
     await expect(
       verifyRunRecordCommand({ project, runId, unit: 'missing', slice: 'nope.md', json: true }),
@@ -254,7 +255,7 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
 
   it('L2: refuses when --slice resolves outside the run staging dir (T-173-14)', async () => {
     const { project, runId } = await initAndStage();
-    await fs.writeFile(join(project, 'rulebook', 'escape-target.md'), 'not staged\n');
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', 'escape-target.md'), 'not staged\n');
     await expect(
       verifyRunRecordCommand({
         project,
@@ -280,7 +281,7 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     const bytes = await fs.readFile(join(stagingAbs, '03-setup.md'));
     expect(result.sha256).toBe(sha256(bytes.toString()));
 
-    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
     const text = await fs.readFile(ledgerAbs, 'utf-8');
     const body = text.slice(text.indexOf(RUN_LEDGER_BEGIN) + RUN_LEDGER_BEGIN.length, text.indexOf(RUN_LEDGER_END));
     const record = JSON.parse(body.trim());
@@ -292,7 +293,7 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     const first = await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
     expect(first.alreadyRecorded).toBe(false);
 
-    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
     const afterFirst = await fs.readFile(ledgerAbs, 'utf-8');
 
     const second = await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
@@ -323,7 +324,7 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     const { project, runId } = await initAndStage();
     await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
 
-    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
     const text = await fs.readFile(ledgerAbs, 'utf-8');
     const beforeFence = text.slice(0, text.indexOf(RUN_LEDGER_END));
     // Simulate a crash mid-append: a second record whose JSON is torn (truncated mid-object).
@@ -349,7 +350,7 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
 
   it('L9: a RUN.md with its fences removed produces the actionable "missing its machine-owned fences" error', async () => {
     const { project, runId } = await initAndStage();
-    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
     await fs.writeFile(ledgerAbs, '# Verify Run Ledger\n\nno fences here\n');
 
     await expect(verifyRunStatusCommand({ project, runId, json: true })).rejects.toThrow(
@@ -379,11 +380,11 @@ describe('CR-01 — the ledger write is atomic, not a truncate+rewrite', () => {
     // One real, already-durable record before the injected crash.
     await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
 
-    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
     const before = await fs.readFile(ledgerAbs, 'utf-8');
 
     // Stage a second, real, non-empty slice so the call under test gets as far as the write.
-    const stagingAbs = join(project, 'rulebook', '.verify', runId, 'slices');
+    const stagingAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
     await fs.writeFile(join(stagingAbs, '07-turn.md'), 'staged turn content\n');
 
     // Inject the failure at the exact boundary the plan names: the temp file has already been
@@ -405,7 +406,7 @@ describe('CR-01 — the ledger write is atomic, not a truncate+rewrite', () => {
 
     // The orphaned temp file (if any) is never mistaken for the ledger by any reader (T-173-08-04):
     // a fresh status call still reads exactly the pre-crash state.
-    const runDirAbs = join(project, 'rulebook', '.verify', runId);
+    const runDirAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId);
     const entries = await fs.readdir(runDirAbs);
     const tmpFiles = entries.filter((e) => e.endsWith('.tmp'));
     for (const tmp of tmpFiles) {
@@ -420,9 +421,9 @@ describe('CR-01 — the ledger write is atomic, not a truncate+rewrite', () => {
     await fs.writeFile(join(project, init.stagingDir, '03-setup.md'), 'staged setup content\n');
     await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
 
-    const ledgerAbs = join(project, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
     const before = await fs.readFile(ledgerAbs, 'utf-8');
-    const runDirAbs = join(project, 'rulebook', '.verify', runId);
+    const runDirAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId);
     const readySentinel = join(runDirAbs, '.crash-test-ready');
 
     // A standalone script performing the SAME sequence atomicWriteFile does — open a
@@ -468,7 +469,7 @@ describe('CR-01 — the ledger write is atomic, not a truncate+rewrite', () => {
     expect(entries).toContain('.RUN.md.crashsim.tmp');
 
     // A subsequent, normal call still works — the run is not wedged by the orphan.
-    const stagingAbs = join(project, 'rulebook', '.verify', runId, 'slices');
+    const stagingAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
     await fs.writeFile(join(stagingAbs, '07-turn.md'), 'staged turn content\n');
     const result = await verifyRunRecordCommand({ project, runId, unit: '07-turn', slice: '07-turn.md', json: true });
     expect(result.alreadyRecorded).toBe(false);
@@ -699,7 +700,7 @@ describe('the staging tree is invisible to every existing rulebook/ consumer', (
   async function fullProjectWithStagingAndGit(): Promise<string> {
     const project = await liveProject();
     execSync('git init', { cwd: project, stdio: 'ignore' });
-    await fs.mkdir(join(project, 'chunks'), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'chunks'), { recursive: true });
     execSync('git add -A', { cwd: project, stdio: 'ignore' });
     execSync('git -c user.email=t@t -c user.name=t commit -m init', { cwd: project, stdio: 'ignore' });
 
@@ -748,7 +749,7 @@ describe('the staging tree is invisible to every existing rulebook/ consumer', (
     expect(result.slicesScanned).toBe(2);
     expect(result.gapsWritten).toBe(0);
 
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).not.toContain('staged phantom rule');
   });
 });
@@ -782,7 +783,7 @@ describe('verify-run.ts — ledger helper export surface (174-02)', () => {
 
   it('EXPORT-3: atomicWriteFile leaves no *.tmp* sibling behind after a successful write', async () => {
     const project = await liveProject();
-    const targetDir = join(project, 'rulebook');
+    const targetDir = join(project, DESIGN_DIR, 'rulebook');
     const target = join(targetDir, 'atomic-export-check.md');
     await atomicWriteFile(target, 'hello\n');
     expect(await fs.readFile(target, 'utf-8')).toBe('hello\n');

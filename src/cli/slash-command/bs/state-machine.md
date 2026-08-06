@@ -2,6 +2,39 @@
 
 Every `bs-` skill (`bs-ingest-rules`, `bs-build-chunk`, `bs-check-status`, `bs-insert-chunk`, `bs-generate-ai`) cites this file rather than restating its rules. If you are authoring or extending a `bs-` skill, link to the relevant section below instead of copying rule text.
 
+## Project Layout — Where Every Path in This Protocol Lives
+
+Every design artifact this protocol names lives under the project's **`design/`** directory:
+
+```
+<game>/
+  boardsmith.json
+  design/
+    BRIEF.md  SKETCH.md  DESIGN.md  DECISIONS.md  RULINGS.md  ASSETS.md
+    chunks/<slug>/CHUNK.md
+    rulebook/INDEX.md  rulebook/NN-*.md  rulebook/source/
+  src/  tests/  public/          <- the game itself; never a design artifact
+  .boardsmith/scratch/           <- gitignored; every throwaway script goes here
+```
+
+**Every path named in these skills — `SKETCH.md`, `RULINGS.md`, `chunks/<slug>/CHUNK.md`,
+`rulebook/02-*.md` — is written relative to `design/`.** On disk that means `design/SKETCH.md`,
+`design/chunks/<slug>/CHUNK.md`, and so on: prepend `design/` whenever you Read, Write, or `cd` to
+one. The paths are design-relative and not project-relative because that is exactly how citations
+are written inside CHUNK.md's Build Manifest and `## Interpretation` — one grammar, not two, so a
+citation copied out of a doc resolves the same way the `boardsmith` commands resolve it.
+
+**Throwaway scripts go in `.boardsmith/scratch/`, never the project root.** A repro driver, a
+one-off probe, a capture harness — anything you would not ship — is written to
+`.boardsmith/scratch/<name>.mjs`. That directory is gitignored, so scratch can never be committed
+by accident. (It has been: `_dbg.mjs`, `_cap_tmp.mjs` and friends were tracked in a real game,
+which is what issue #6 was filed about.)
+
+**`boardsmith doctor` is the check.** Every `bs-` skill runs `boardsmith doctor` before it does
+anything else. It exits non-zero when a design artifact is loose in the project root or a scratch
+script has escaped; `boardsmith doctor --fix` moves them into place with `git mv`, never deleting
+anything. A project built before this layout existed is migrated by that one command.
+
 ## Companion Authority: How Any of This Is Said
 
 This file governs what the pipeline DOES. `reporting.md` governs what the designer READS, and the

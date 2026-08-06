@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -158,7 +159,7 @@ afterEach(async () => {
 
 async function makeProject(): Promise<string> {
   const project = join(dir, 'game');
-  await fs.mkdir(join(project, 'chunks'), { recursive: true });
+  await fs.mkdir(join(project, DESIGN_DIR, 'chunks'), { recursive: true });
   return project;
 }
 
@@ -172,7 +173,7 @@ async function makeChunk(
   slug: string,
   opts: { claims?: number[]; manifestRows?: ManifestRow[]; manifestProse?: string } = {},
 ): Promise<void> {
-  const chunkDir = join(project, 'chunks', slug);
+  const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
   await fs.mkdir(chunkDir, { recursive: true });
 
   const interpretation = (opts.claims ?? [])
@@ -210,7 +211,7 @@ async function writeTestFile(project: string, relPath: string, content: string):
 }
 
 async function writeRulings(project: string, body: string): Promise<void> {
-  await fs.writeFile(join(project, 'RULINGS.md'), body);
+  await fs.writeFile(join(project, DESIGN_DIR, 'RULINGS.md'), body);
 }
 
 /** Whole-project content hash: every file's relative path + bytes, in sorted order. */
@@ -429,7 +430,7 @@ describe('traceCheckCommand', () => {
     const project = join(dir, 'not-a-bs-project');
     await fs.mkdir(project, { recursive: true });
 
-    await expect(traceCheckCommand({ project })).rejects.toThrow(/No chunks\/ directory/);
+    await expect(traceCheckCommand({ project })).rejects.toThrow(/No design\/chunks\/ directory/);
   });
 });
 

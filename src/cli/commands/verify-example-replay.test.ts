@@ -1,3 +1,4 @@
+import { DESIGN_DIR, resolveDesignRelative } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -236,7 +237,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
 
   it('exampleReplayLedgerPath resolves to rulebook/.example-replay/EXAMPLE-VERDICTS.md', () => {
     expect(exampleReplayLedgerPath('/project')).toBe(
-      join('/project', 'rulebook', '.example-replay', 'EXAMPLE-VERDICTS.md'),
+      join('/project', DESIGN_DIR, 'rulebook', '.example-replay', 'EXAMPLE-VERDICTS.md'),
     );
   });
 
@@ -364,7 +365,9 @@ describe('verifyExampleReplayCommand — command', () => {
   async function makeProject(files: Record<string, string>): Promise<string> {
     const project = join(dir, 'project');
     for (const [relPath, text] of Object.entries(files)) {
-      const full = join(project, relPath);
+      // Keys are written the way a design doc writes them — `rulebook/02-x.md`, not
+      // `design/rulebook/02-x.md` — so the fixture exercises the same resolution the CLI does.
+      const full = resolveDesignRelative(project, relPath);
       await fs.mkdir(dirname(full), { recursive: true });
       await fs.writeFile(full, text);
     }
@@ -535,7 +538,9 @@ describe('verifyExampleRecordCommand — record', () => {
   async function makeProject(files: Record<string, string>): Promise<string> {
     const project = join(dir, 'project');
     for (const [relPath, text] of Object.entries(files)) {
-      const full = join(project, relPath);
+      // Keys are written the way a design doc writes them — `rulebook/02-x.md`, not
+      // `design/rulebook/02-x.md` — so the fixture exercises the same resolution the CLI does.
+      const full = resolveDesignRelative(project, relPath);
       await fs.mkdir(dirname(full), { recursive: true });
       await fs.writeFile(full, text);
     }
@@ -942,15 +947,15 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
   /** No INDEX.md at all — computeVerificationScope never reaches "full"; provenance is null. */
   async function makeUnverifiedProject(): Promise<string> {
     const project = join(dir, 'unverified-project');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
-    await fs.writeFile(join(project, 'rulebook', '02-punch.md'), SLICE_TEXT);
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '02-punch.md'), SLICE_TEXT);
     return project;
   }
 
   /** A genuinely single-source, fully-archived project — provenance covers every slice. */
   async function makeVerifiedProject(): Promise<string> {
     const project = join(dir, 'verified-project');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -965,10 +970,10 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
     await fs.writeFile(join(project, 'rules.pdf'), sourceBuf);
-    await fs.writeFile(join(project, 'rulebook', '02-punch.md'), SLICE_TEXT);
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '02-punch.md'), SLICE_TEXT);
     return project;
   }
 
@@ -979,7 +984,7 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
    */
   async function makeUncoveredSliceProject(): Promise<string> {
     const project = join(dir, 'uncovered-project');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -994,8 +999,8 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
     await fs.writeFile(join(project, 'rules.pdf'), sourceBuf);
     await fs.writeFile(join(project, 'cards.pdf'), Buffer.from('fake bytes for cards.pdf\n'));
     await fs.writeFile(join(rulebookDir, 'CARDS.md'), SLICE_TEXT);
@@ -1132,7 +1137,9 @@ describe('verifyExampleTranslateCommand — translate', () => {
       ...files,
     };
     for (const [relPath, text] of Object.entries(withDefaults)) {
-      const full = join(project, relPath);
+      // Keys are written the way a design doc writes them — `rulebook/02-x.md`, not
+      // `design/rulebook/02-x.md` — so the fixture exercises the same resolution the CLI does.
+      const full = resolveDesignRelative(project, relPath);
       await fs.mkdir(dirname(full), { recursive: true });
       await fs.writeFile(full, text);
     }
