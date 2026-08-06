@@ -467,28 +467,18 @@ const availableActions = computed(() => {
   return flowState.availableActions || [];
 });
 
-// LIBX-01: true when every currently-available action has metadata.suppressFromDock
-// -- i.e. there are no dock buttons left to show. No metadata / empty
-// availableActions means the default unsuppressed rendering (false), not a
-// vacuous "all suppressed" (an empty every() would otherwise return true).
-const allDockActionsSuppressed = computed(() => {
-  const meta = actionMetadata.value;
-  const names = availableActions.value as string[];
-  if (!meta || names.length === 0) return false;
-  return names.every((n) => meta[n]?.suppressFromDock === true);
-});
-
-// WR-01 (164 review): whether a pick is actively in progress on the shared
-// actionController. When true, ActionPanel's `currentActionMeta`/`currentPick`
-// computeds deliberately bypass the (possibly emptied) availableActions/
-// actionMetadata props and read `actionController` directly (ActionPanel.vue),
-// so its anchored-choices operable button list can still be showing choices
-// for a suppressFromDock action. Unmounting ActionPanel in that state would
-// drop the keyboard/SR safety net (A11Y C-2) for exactly the action it exists
-// to protect. Only suppresses the DOCK BUTTON LIST (already filtered by
-// ActionPanel itself, see its suppressFromDock filter); never re-adds a dock
-// button for a suppressed action.
-const hasInProgressPick = computed(() => actionController.currentAction.value !== null);
+// LIBX-01 / A11Y C-2: GameShell no longer unmounts ActionPanel when every
+// available action is `.suppressFromDock()`. It used to, with a mid-pick escape
+// hatch to keep the keyboard/SR safety net alive for the action the net exists
+// to protect. That guard only covered actions that HAVE a pick in progress: an
+// action with no selections can never start one, so a game whose sole
+// available action was a suppressed no-selection confirm emptied the dock with
+// nothing left to press and no way to reach the net — a state the player cannot
+// leave. The fix belongs at the mechanism, not the guard: ActionPanel's own
+// suppression filter now falls back to the full list rather than emptying the
+// dock (see its `visibleActions`), so "all suppressed" is no longer a state
+// this component has to defend against. The only thing that removes the panel
+// is the explicit platform escape hatch below.
 
 // True while a simultaneous step is active (`awaitingPlayers` non-empty).
 // Single source for every D27 guard below: while true, status must never be
@@ -2528,34 +2518,23 @@ if ((import.meta as any).hot) {
             :color="activePlayer.color"
             :size="30"
           />
-          <!-- Turn strip: the fallback prompt surface. Shown when the ActionPanel is
-               explicitly suppressed (the platform-only D-02 escape hatch) OR when
-               every available action's dock button is suppressed via per-action
-               .suppressFromDock() (LIBX-01) AND no pick is in progress — either way
-               the prompt survives even when no panel renders (IA-03, never a silent
-               board / no turn indicator). WR-01: once a suppressFromDock action's
-               pick IS in progress, ActionPanel stays mounted instead (see below) so
-               its operable choice list remains available; the turn strip yields to it. -->
-          <span
-            v-if="props.platformActionPanelEscapeHatch || (allDockActionsSuppressed && !hasInProgressPick)"
-            class="turn"
-          >
+          <!-- Turn strip: the fallback prompt surface, shown ONLY when the platform
+               takes the panel away entirely (the D-02 escape hatch). The prompt
+               survives even when no panel renders (IA-03, never a silent board /
+               no turn indicator). Per-action `.suppressFromDock()` no longer
+               reaches this branch: it can hide redundant buttons but never the
+               last one, so it can never leave the dock empty (LIBX-01, see
+               ActionPanel's `visibleActions`). -->
+          <span v-if="props.platformActionPanelEscapeHatch" class="turn">
             <span class="pr">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
           </span>
-          <!-- Action panel: mounted whenever not explicitly suppressed, AND there is
-               either an un-suppressed dock action OR a pick already in progress —
-               INCLUDING the all-board-anchored case, where ActionPanel renders its
-               anchored-choices operable button list ("Select on board or choose
-               here"). That focusable list is the keyboard/SR safety net (A11Y C-2):
-               the panel is never fully removed while a pick has choices, so custom
-               UIs whose board isn't keyboard-operable still expose an operable
-               control — including mid-pick on a suppressFromDock action (WR-01):
-               unmounting ActionPanel there would drop the safety net for exactly
-               the action it exists to protect, since ActionPanel's own
-               currentActionMeta/currentPick read actionController directly and
-               don't depend on the (possibly emptied) availableActions/
-               actionMetadata props. -->
-          <template v-if="!props.platformActionPanelEscapeHatch && (!allDockActionsSuppressed || hasInProgressPick)">
+          <!-- Action panel: mounted unless the platform escape hatch removes it.
+               It always carries at least one operable control — including in the
+               all-board-anchored case, where it renders its anchored-choices
+               button list ("Select on board or choose here"). That focusable list
+               is the keyboard/SR safety net (A11Y C-2): custom UIs whose board
+               isn't keyboard-operable still expose an operable control. -->
+          <template v-if="!props.platformActionPanelEscapeHatch">
             <slot name="action-panel">
               <ActionPanel
                 :available-actions="isViewingHistory ? [] : availableActions"

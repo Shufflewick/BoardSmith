@@ -597,7 +597,7 @@ Action.create('move')
   .help('Moves one space, orthogonally.')  // Help popover text
   .notUndoable()                    // Cannot undo this action
   .manual()                         // Never auto-execute for the player
-  .suppressFromDock()               // Hide the dock button; still playable from the board
+  .suppressFromDock()               // Hide the redundant dock button (see below)
 ```
 
 To skip a whole step of the flow, use the flow node's `skipIf` — it belongs to
@@ -609,6 +609,24 @@ actionStep({
   skipIf: (ctx) => ctx.game.deck.count(Card) === 0,
 })
 ```
+
+#### `.suppressFromDock()` hides a *redundant* button, never the last one
+
+Use it for an action whose board affordance is inherent — drag-drop,
+click-to-select — where a second button in the dock is clutter. The action stays
+fully executable from the board or a custom UI; this is a rendering filter, not
+a security control.
+
+**If every available action is suppressed, they are all shown anyway.** A button
+is only redundant while something else is offered; when nothing is, the dock is
+the player's last control. That guarantee exists because the alternative has a
+dead end in it: an action with **no selections** can never start a pick, so if
+its button were hidden the player would get a prompt, nothing to press, and no
+mid-pick choice list to fall back on either — a state with no way out. Design
+the board affordance as the primary path, not the only one.
+
+If you want no action panel at all, that is the platform's
+`platformActionPanelEscapeHatch`, not this.
 
 ---
 

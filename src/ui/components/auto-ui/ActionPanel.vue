@@ -172,8 +172,19 @@ const actionsWithMetadata = computed<ActionMetadata[]>(() => {
 // LIBX-01: actions declared with .suppressFromDock() are filtered out of the
 // rendered dock here ONLY -- they remain in actionsWithMetadata / the board
 // substrate (useBoardActionBridge) and stay fully executable there.
+//
+// ...UNLESS suppressing them would leave the dock empty. `.suppressFromDock()`
+// means "this button is redundant with the board affordance", and a button is
+// only redundant while something else is offered. When every available action
+// is suppressed, the dock is the player's only remaining control: emptying it
+// leaves a prompt with nothing to press, and for an action with NO selections
+// that state is terminal — no pick can start, so the mid-pick keyboard/SR
+// safety net (A11Y C-2) never engages either. Falling back to the full list
+// keeps the API's purpose (remove clutter) and drops its trap (remove the last
+// way to act).
 const visibleActions = computed(() => {
-  return actionsWithMetadata.value.filter(a => !a.suppressFromDock);
+  const unsuppressed = actionsWithMetadata.value.filter(a => !a.suppressFromDock);
+  return unsuppressed.length > 0 ? unsuppressed : actionsWithMetadata.value;
 });
 
 // Current action metadata

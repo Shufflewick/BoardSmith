@@ -83,7 +83,7 @@ describe('ActionPanel dock suppression (LIBX-01)', () => {
     expect(renderedNames).toContain('visibleAction');
   });
 
-  it('still passes the suppressed action through in availableActions props (executable-elsewhere invariant)', () => {
+  it('renders the suppressed action when it is the ONLY one, and still passes it through unmodified (executable-elsewhere invariant)', () => {
     const controller = makeMinimalController();
 
     const wrapper = mount(ActionPanel, {
@@ -107,11 +107,16 @@ describe('ActionPanel dock suppression (LIBX-01)', () => {
       },
     });
 
-    // The suppressed action never renders a dock button...
+    // Suppression hides a REDUNDANT button, never the last one. This fixture is
+    // the reported trap exactly: one available action, suppressed, with NO
+    // selections (`selections: []`). Filtering it out would leave the player a
+    // prompt and nothing to press — and with no selections no pick can start,
+    // so the mid-pick anchored-choices affordance never appears either. There
+    // would be no way out of that state.
     const buttons = wrapper.findAll('[data-bs-action]');
-    expect(buttons.map(b => b.attributes('data-bs-action'))).not.toContain('hiddenAction');
+    expect(buttons.map(b => b.attributes('data-bs-action'))).toContain('hiddenAction');
 
-    // ...but the panel received it unmodified via props -- suppression is a
+    // And the panel received it unmodified via props -- suppression is a
     // render-only filter, not an availability mutation.
     const receivedProps = wrapper.props() as {
       availableActions: string[];
