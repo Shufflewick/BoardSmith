@@ -92,18 +92,21 @@ function buildRunner(): GameRunner<AliasGame> {
 }
 
 describe('CR-02: toJSON emits copies — checkpoints do not alias live game state', () => {
-  it('a retained toJSON() result is immune to later live mutations of messages and settings', () => {
+  it('a retained toJSON()/messageLog pair is immune to later live mutations', () => {
     const runner = buildRunner();
     const checkpoint = runner.game.toJSON();
-    const messagesBefore = checkpoint.messages.length;
+    // The log is no longer part of the tree — it is serialized separately (see
+    // GameStateSnapshot.messageLog). Both still have to be COPIES.
+    const frozenLog = runner.game.serializeMessageLog();
+    const messagesBefore = frozenLog.length;
 
     const result = runner.performAction('logAndStash', 1, {});
     expect(result.success).toBe(true);
     expect(runner.game.messages.length).toBe(messagesBefore + 1);
     expect(runner.game.settings.stash).toEqual({ nested: 'undone-value' });
 
-    // The checkpoint was "frozen" before the action — it must not have moved.
-    expect(checkpoint.messages.length).toBe(messagesBefore);
+    // Both were "frozen" before the action — neither must have moved.
+    expect(frozenLog.length).toBe(messagesBefore);
     expect(checkpoint.settings.stash).toBeUndefined();
   });
 
@@ -130,14 +133,17 @@ describe('CR-02: toJSON emits copies — checkpoints do not alias live game stat
     // NO JSON round-trip: restore directly from the in-memory snapshot.
     const snapshot = runner.getSnapshot();
     const restored = GameRunner.fromSnapshot<AliasGame>(snapshot, AliasGame);
-    const snapshotMessages = (snapshot.state as ReturnType<AliasGame['toJSON']>).messages.length;
+    const snapshotMessages = snapshot.messageLog!.length;
 
     restored.game.message('mutation on the restored game');
     (restored.game.settings.stash as { nested: string }).nested = 'mutated-after-restore';
 
-    // The snapshot must still read as it did when taken.
+    // The snapshot must still read as it did when taken — including its log,
+    // which is now a sibling of `state` rather than a field inside it. The
+    // aliasing hazard is identical: `fromSnapshot` hands the array to the
+    // restored game, so it has to be a copy on one side or the other.
     const state = snapshot.state as ReturnType<AliasGame['toJSON']>;
-    expect(state.messages.length).toBe(snapshotMessages);
+    expect(snapshot.messageLog!.length).toBe(snapshotMessages);
     expect((state.settings.stash as { nested: string }).nested).toBe('undone-value');
   });
 

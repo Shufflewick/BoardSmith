@@ -23,7 +23,8 @@
  * - Derived state - recalculated from stored properties
  */
 
-import type { Game, GameOptions } from '../element/game.js';
+import { GAME_SELF_SERIALIZED_FIELDS } from '../element/game.js';
+import type { Game, GameOptions, MessageEntry } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
 import type { ElementJSON, ElementClass, ElementContext } from '../element/types.js';
 import type { FlowPosition, FlowState } from '../flow/types.js';
@@ -37,9 +38,18 @@ export interface DevSnapshot {
   /** Complete element tree as ElementJSON (from game.toJSON()) */
   elements: ElementJSON & {
     phase: string;
-    messages: Array<{ text: string; data?: Record<string, unknown> }>;
     settings: Record<string, unknown>;
   };
+
+  /**
+   * The message log, captured separately from the tree.
+   *
+   * `game.toJSON()` does not carry the log (see `Game.messages`), so HMR must
+   * transfer it explicitly. Omitting this field is how a hot reload silently
+   * empties a game's history — and it reads as a Vite problem, not a state
+   * problem, which is exactly why it gets its own named field here.
+   */
+  messageLog: MessageEntry[];
 
   /** Flow position from flow engine (to resume at same point) */
   flowPosition: FlowPosition | undefined;
@@ -93,6 +103,8 @@ export function captureDevState<G extends Game>(game: G): DevSnapshot {
 
   return {
     elements,
+    // Not part of `elements` — the log is captured separately (see messageLog).
+    messageLog: game.serializeMessageLog(),
     flowPosition,
     flowState,
     timestamp: Date.now(),
@@ -134,8 +146,9 @@ export function restoreDevState<G extends Game>(
 
   // Restore game-level state from snapshot
   game.phase = snapshot.elements.phase as G['phase'];
-  game.messages = [...snapshot.elements.messages];
   game.settings = { ...snapshot.elements.settings };
+  // The log travels beside the tree, not inside it (see DevSnapshot.messageLog).
+  game.messages = [...snapshot.messageLog];
 
   // Clear auto-created children (players, etc.) to restore from snapshot
   game._t.children = [];
@@ -160,7 +173,7 @@ export function restoreDevState<G extends Game>(
   const unserializable = new Set(
     (game.constructor as unknown as { unserializableAttributes: string[] }).unserializableAttributes
   );
-  const handledKeys = new Set(['phase', 'messages', 'settings']);
+  const handledKeys = new Set<string>(GAME_SELF_SERIALIZED_FIELDS);
   for (const [key, value] of Object.entries(snapshot.elements.attributes)) {
     if (!unserializable.has(key) && !key.startsWith('_') && !handledKeys.has(key)) {
       (game as unknown as Record<string, unknown>)[key] = value;

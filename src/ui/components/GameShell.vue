@@ -762,13 +762,13 @@ const actionController = useActionController({
 // Read-only action args for display and slot props.
 const actionArgs = computed(() => actionController.currentArgs.value);
 
-// Extract messages from game state (prefer formatted messages from session, fall back to view)
-const gameMessages = computed(() => {
-  if (state.value?.state?.messages?.length) return state.value.state.messages;
-  if (!state.value?.state?.view) return [];
-  const view = state.value.state.view as any;
-  return view.messages || [];
-});
+// The session's formatted, seat-scoped messages are the ONLY source. There used
+// to be a `state.view.messages` fallback here, reading the raw log off the game
+// tree — that copy is gone (the log is not part of `toJSON()` any more), and it
+// was never the right thing to render: it was unformatted and, before SEC-04,
+// unfiltered. If this is ever empty when it should not be, fix
+// `buildPlayerState`/`getFormattedMessages`, do not reintroduce a second source.
+const gameMessages = computed(() => state.value?.state?.messages ?? []);
 
 // Computed properties derived from game view
 const players = computed(() => state.value?.state.players || []);

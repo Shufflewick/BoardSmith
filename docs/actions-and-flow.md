@@ -1328,13 +1328,27 @@ cannot trust or review.
 
 The audience is enforced **on the server**. An unaddressed seat never receives
 the message in its state payload at all — this is not a UI filter, and there is
-no client-side copy to inspect. Both payload paths (`toJSONForPlayer` and
-`createPlayerView`) withhold it, so a private line is absent from the wrong
-player's browser rather than hidden in it. Spectators, having no seat, see only
-public messages.
+no client-side copy to inspect. Spectators, having no seat, see only public
+messages.
 
-`game.messages` itself stays complete and unfiltered — checkpoints and undo
-restore from it, so every seat's history survives a rewind.
+The log is not part of the element tree, so there is no per-seat copy of it in
+the state payload to redact. It is emitted at exactly two boundaries, and both
+apply the audience:
+
+- `createPlayerView(game, seat)` → `getFormattedMessages(seat)` — the broadcast
+  path, what the shell's log renders.
+- `createSnapshot(game, …, { forSeat })` → `serializeMessageLog(forSeat)` — the
+  redacted-clone path, used by the MCTS search sandbox so a bot cannot reason
+  over lines its seat never saw.
+
+A persisted snapshot (no `forSeat`) carries the **unfiltered** log, and must:
+undo restores from it, so a filtered copy would destroy other seats' history on
+the next rewind. `game.messages` stays complete for the same reason.
+
+> If you find yourself adding a third emission point, give it the audience gate
+> at the same time. The original leak here was a second copy of the log riding
+> in an unrelated payload field, correct on both documented paths and wrong in a
+> third nobody thought to check.
 
 An empty audience throws rather than writing a message nobody could ever read:
 that is always a bug at the call site (a filter that matched nothing, an

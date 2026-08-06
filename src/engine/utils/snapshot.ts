@@ -1,4 +1,4 @@
-import type { Game } from '../element/game.js';
+import type { Game, MessageEntry } from '../element/game.js';
 import { Player } from '../player/player.js';
 import type { SerializedAction } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
@@ -20,6 +20,30 @@ export interface GameStateSnapshot {
    *  This is the exact `game.toJSON()` payload — the same shape consumed by
    *  `loadSerializedState`, so restore is typed end-to-end with no casts. */
   state: ReturnType<Game['toJSON']>;
+
+  /**
+   * The game's message log — stored ONCE per snapshot, NOT inside `state`.
+   *
+   * The log used to ride in the element tree, which meant every retained
+   * `ActionCheckpoint` carried its own full copy: persisted state was
+   * `(checkpoints.max + 1) x (model + log)`, and the log is the term that never
+   * stops growing. Measured on a narration-heavy game it reached 95% of
+   * persisted bytes and crossed a 2 MB host ceiling at four seats, with a state
+   * model of only 4 KB.
+   *
+   * As a snapshot-level sibling it is paid for once, so snapshot size is flat in
+   * `checkpoints.max` again. Each checkpoint instead carries an
+   * `ActionCheckpoint.messageCount` watermark — the log length at that
+   * action-count boundary — and `GameRunner.fromCheckpoint` slices this array to
+   * it, so undo still drops the lines the undone action wrote.
+   *
+   * AUDIENCE: this is the UNFILTERED log on every persistence path, and must
+   * stay that way — a filtered copy would silently destroy other seats' history
+   * on the next restore. The one exception is `createSnapshot`'s `forSeat`
+   * redacted-clone path (the MCTS search sandbox), which filters it through the
+   * same `messageTo` audience gate that redacts the tree.
+   */
+  messageLog?: MessageEntry[];
 
   /** Flow engine state (if flow is active) */
   flowState?: FlowState;
@@ -167,6 +191,22 @@ export interface ActionCheckpoint {
 
   /** Seeded RNG internal state (`game.getRandomState()`) at this checkpoint. */
   randomState?: number;
+
+  /**
+   * Length of `GameStateSnapshot.messageLog` at this action-count boundary —
+   * the watermark that keeps the log undoable without storing it per entry.
+   *
+   * The log lives once on the enclosing snapshot rather than inside each
+   * checkpoint's tree (see `GameStateSnapshot.messageLog`). Undo must still drop
+   * the lines the undone action wrote, so `GameRunner.fromCheckpoint` slices the
+   * snapshot's log to this count. A number per checkpoint instead of an array
+   * per checkpoint is the whole saving.
+   *
+   * Absent on a checkpoint captured before this field existed: read as "restore
+   * the whole log", which is the pre-watermark behaviour and the honest reading
+   * of no recorded boundary.
+   */
+  messageCount?: number;
 }
 
 /**
@@ -291,7 +331,9 @@ export function createSnapshot(
   gameType: string,
   actionHistory: SerializedAction[] = [],
   seed?: string,
-  opts?: { forSeat?: number }
+  /** `forSeat`: build a REDACTED clone for this seat — `null` for the spectator
+   *  (public information only). Omit for the unfiltered authoritative truth. */
+  opts?: { forSeat?: number | null }
 ): GameStateSnapshot {
   const flowState = game.getFlowState();
 
@@ -313,6 +355,14 @@ export function createSnapshot(
     state: opts?.forSeat !== undefined
       ? game.toJSONForPlayer(opts.forSeat, hiddenIdRemap)
       : game.toJSON(),
+    // The log is a snapshot sibling, not part of the tree. It carries the SAME
+    // audience gate as `state`: on the default path the unfiltered truth (a
+    // persisted snapshot that dropped other seats' lines would destroy their
+    // history on restore), and on the `forSeat` redacted-clone path only what
+    // that seat may see. Without the second half, the MCTS search sandbox — a
+    // clone built precisely so a bot cannot reason over hidden information —
+    // would hold every seat's private log.
+    messageLog: game.serializeMessageLog(opts?.forSeat),
     flowState: flowState ?? undefined,
     actionHistory: [...actionHistory],
     seed,
@@ -348,6 +398,10 @@ export function createActionCheckpoint(game: Game): ActionCheckpoint {
     flowState: flowState ?? undefined,
     sequence: game._ctx.sequence,
     randomState: game.getRandomState(),
+    // A watermark into the snapshot-level log, not a copy of it — see
+    // `ActionCheckpoint.messageCount`. This is what keeps undo able to drop the
+    // lines an undone action wrote now that the log is stored once.
+    messageCount: game.messages.length,
   };
 }
 

@@ -163,9 +163,12 @@ describe('Dev State Transfer', () => {
 
       const snapshot = captureDevState(game);
 
-      expect(snapshot.elements.messages).toHaveLength(2);
-      expect(snapshot.elements.messages[0].text).toBe('Game started!');
-      expect(snapshot.elements.messages[1].text).toBe('Player {{player}} joined');
+      // Captured beside the tree, not inside it — `game.toJSON()` does not carry
+      // the log. If this field is ever dropped, HMR silently empties the log.
+      expect(snapshot.messageLog).toHaveLength(2);
+      expect(snapshot.messageLog[0].text).toBe('Game started!');
+      expect(snapshot.messageLog[1].text).toBe('Player {{player}} joined');
+      expect((snapshot.elements as { messages?: unknown }).messages).toBeUndefined();
     });
   });
 

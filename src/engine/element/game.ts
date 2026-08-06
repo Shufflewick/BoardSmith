@@ -436,6 +436,47 @@ function redactHiddenElementAttrs(attrs: Record<string, unknown>): Record<string
   return safe;
 }
 
+/** One entry in a game's message log. `to` is the AUDIENCE — see `Game.messages`. */
+export interface MessageEntry {
+  text: string;
+  data?: Record<string, unknown>;
+  /** Seats allowed to receive this line. Absent means everyone. */
+  to?: number[];
+}
+
+/**
+ * Game-level own properties that `Game` serializes ITSELF, rather than letting
+ * `GameElement.toJSON()`'s generic attribute loop emit them.
+ *
+ * That loop writes every own enumerable property not listed in
+ * `unserializableAttributes` into `attributes`. Each field below is handled
+ * explicitly elsewhere, so without this strip the payload carried a SECOND copy
+ * that no redaction pass ever touched:
+ *
+ * - `phase`, `settings` — hoisted to the top level of `toJSON()`. The duplicate
+ *   was pure weight, paid in every broadcast and every retained checkpoint.
+ * - `messages` — NOT in `toJSON()` at all; the log lives in
+ *   `GameStateSnapshot.messageLog` (see `Game.messages`). The duplicate was an
+ *   outright hidden-information leak (SEC-04): the redaction rebuilt one array
+ *   while `attributes.messages` shipped the full log — every private line, tagged
+ *   with the audience it was withheld from — to every seat and to the spectator,
+ *   defeating `messageTo` inside its own payload.
+ *
+ * NOTE: deliberately NOT `unserializableAttributes`. That list means "never emitted
+ * AND never loaded AND never ref-resolved", and it is read by
+ * `GameElement.resolveElementReferences` as well as by `toJSON`. These fields ARE
+ * loaded (`loadSerializedState` adopts them by reference) and DO need
+ * ref-resolution — `settings` carries `persistentMap` payloads and element/player
+ * refs, `messages` carries `data` payloads. Listing them as unserializable
+ * de-aliases nothing and silently re-opens CR-02 (a restored game sharing its
+ * `settings`/`messages` with the snapshot it restored from) and the F-01 MCTS
+ * undo-soundness fix that depends on it.
+ *
+ * The restore paths skip these same keys in their attribute loops — see
+ * `loadSerializedState` and `restoreDevState`, which both import this constant.
+ */
+export const GAME_SELF_SERIALIZED_FIELDS = ['phase', 'messages', 'settings'] as const;
+
 /**
  * Base Game class. The root of the element tree and container for all game state.
  *
@@ -541,12 +582,20 @@ export class Game<
    * `to` is the message's AUDIENCE — the seats allowed to receive it. Absent
    * means everyone, which is what `message()` writes and what nearly every game
    * should be writing. Only `messageTo()` sets it. The audience is enforced
-   * server-side, in `toJSONForPlayer` and `getFormattedMessages`, so an
-   * unaddressed seat never receives the bytes; this array itself is the
-   * unfiltered truth and must stay that way (checkpoints and undo restore from
-   * it, so a filtered copy here would silently destroy other seats' history).
+   * server-side, in `createSnapshot`'s `forSeat` path and `getFormattedMessages`,
+   * so an unaddressed seat never receives the bytes; this array itself is the
+   * unfiltered truth and must stay that way (undo restores from it, so a
+   * filtered copy here would silently destroy other seats' history).
+   *
+   * NOT part of `toJSON()`. The log is a SNAPSHOT-level sibling
+   * (`GameStateSnapshot.messageLog`), stored ONCE per snapshot, with each
+   * retained checkpoint carrying only an `ActionCheckpoint.messageCount`
+   * watermark into it. Inside the tree it was copied per retained checkpoint,
+   * making persisted state `(checkpoints.max + 1) x (model + log)` — measured at
+   * 95% of a narration-heavy game's bytes, and over a 2 MB host ceiling at four
+   * seats. See `docs/state-size.md`.
    */
-  messages: Array<{ text: string; data?: Record<string, unknown>; to?: number[] }> = [];
+  messages: MessageEntry[] = [];
 
   /** Game settings */
   settings: Record<string, unknown> = {};
@@ -2848,7 +2897,6 @@ export class Game<
   override toJSON(): ElementJSON & {
     phase: GamePhase;
     isFinished: boolean;
-    messages: Array<{ text: string; data?: Record<string, unknown>; to?: number[] }>;
     settings: Record<string, unknown>;
     animationEvents?: AnimationEvent[];
     animationEventSeq?: number;
@@ -2856,21 +2904,30 @@ export class Game<
     // CR-02: the top-level fields below MUST be copies, never live references.
     // `createActionCheckpoint`/`createSnapshot` store this result as-is, and
     // the live-session undo/rewind/time-travel paths never JSON-round-trip it.
-    // Emitting `this.messages`/`this.settings` by reference meant every
-    // retained checkpoint shared ONE settings object and ONE messages array
-    // with the live game: post-checkpoint mutations retroactively corrupted
-    // checkpoints, and undo could never roll back `game.message()` output or
+    // Emitting `this.settings` by reference meant every retained checkpoint
+    // shared ONE settings object with the live game: post-checkpoint mutations
+    // retroactively corrupted checkpoints, and undo could never roll back
     // `actionTempState()`/`persistentMap()` state. `serializeValue` deep-copies
     // and also tags element/player references so they survive cold storage.
+    //
+    // The MESSAGE LOG is deliberately absent from this payload — it is a
+    // snapshot-level sibling (`GameStateSnapshot.messageLog`), serialized once
+    // per snapshot by `serializeMessageLog()`. Inside the tree it was copied
+    // into every retained checkpoint, which is what put a narration-heavy game
+    // over its host's state ceiling. See `Game.messages` / `docs/state-size.md`.
+    //
+    // Strip the self-serialized fields from the generic attribute bag first.
+    // See GAME_SELF_SERIALIZED_FIELDS — without this the payload carries a
+    // second, never-redacted copy of each.
+    const base = super.toJSON();
+    for (const key of GAME_SELF_SERIALIZED_FIELDS) {
+      delete base.attributes[key];
+    }
+
     return {
-      ...super.toJSON(),
+      ...base,
       phase: this.phase,
       isFinished: this.isFinished(),
-      messages: this.serializeValue(this.messages, 'messages') as Array<{
-        text: string;
-        data?: Record<string, unknown>;
-        to?: number[];
-      }>,
       settings: this.serializeValue(this.settings, 'settings') as Record<string, unknown>,
       // The seq must survive a snapshot round-trip on its OWN, independent of
       // whether the CURRENT buffer happens to be empty (the buffer clears at
@@ -2892,6 +2949,33 @@ export class Game<
         animationEvents: this._animationEvents.map((e) => ({ ...e })),
       }),
     };
+  }
+
+  /**
+   * Serialize the message log for storage in `GameStateSnapshot.messageLog`.
+   *
+   * Separate from `toJSON()` on purpose: the log is stored ONCE per snapshot,
+   * while the tree is copied into every retained checkpoint. Keeping the two
+   * apart is what makes persisted state flat in the log's size instead of
+   * multiplying it by `checkpoints.max`.
+   *
+   * Deep-copies and tags element/player refs inside each entry's `data`
+   * (CR-02 — a snapshot must never alias the live array). The matching
+   * rehydration happens in `loadSerializedState`, whose closing
+   * `resolveElementReferences` pass walks `this.messages` like any other
+   * own property.
+   *
+   * @param forSeat - Audience filter. Supply a seat to get only the lines that
+   *   seat is allowed to see; `null` for the spectator view (public lines only).
+   *   Omit for the unfiltered truth — the ONLY correct choice for a snapshot
+   *   that will be persisted or restored, since a filtered copy silently
+   *   destroys other seats' history.
+   */
+  serializeMessageLog(forSeat?: number | null): MessageEntry[] {
+    const source = forSeat === undefined
+      ? this.messages
+      : this.messages.filter((m) => this.canSeeMessage(m, forSeat));
+    return this.serializeValue(source, 'messages') as MessageEntry[];
   }
 
   /**
@@ -3181,27 +3265,18 @@ export class Game<
 
     // The game root is always visible to its own players, so `filterElement`
     // takes the recursive (spread) path and preserves the top-level game fields
-    // (phase/isFinished/messages/settings/animation*) that `toJSON()` adds —
-    // it only strips CHILD elements. `filterElement`'s return is typed to the
-    // base `ElementJSON`, so re-assert the enriched shape the root always carries
+    // (phase/isFinished/settings/animation*) that `toJSON()` adds — it only
+    // strips CHILD elements. `filterElement`'s return is typed to the base
+    // `ElementJSON`, so re-assert the enriched shape the root always carries
     // (this is what makes the redacted view a valid, restorable game state).
-    const view = filteredState as ReturnType<Game['toJSON']>;
-
-    // Withhold messages this seat is not addressed in (`messageTo`). This is
-    // the leak-critical step: `messages` rides in from `toJSON()` on the game
-    // ROOT, which is visible to everyone, so it is NOT touched by the element
-    // visibility pass above. Without this, every client receives every private
-    // message in its state tree and the audience would be nothing but a UI
-    // filter over data the wrong player already holds.
     //
-    // Only rebuild when something is actually withheld, so the overwhelmingly
-    // common all-public case keeps `toJSON()`'s array identity and costs nothing.
-    if (Array.isArray(view.messages) && view.messages.some((m) => m.to)) {
-      const visible = view.messages.filter((m) => this.canSeeMessage(m, playerSeat));
-      return { ...view, messages: visible };
-    }
-
-    return view;
+    // The MESSAGE LOG is not here to redact: it is not part of `toJSON()` at
+    // all. Its audience gate lives at the two boundaries that actually emit it
+    // — `serializeMessageLog(forSeat)` for snapshots and `getFormattedMessages(seat)`
+    // for player views. Do not reintroduce a `messages` field on this payload;
+    // a per-seat tree is not the log's home, and the leak SEC-04 fixed came
+    // from exactly that arrangement.
+    return filteredState as ReturnType<Game['toJSON']>;
   }
 
   /**
@@ -3219,7 +3294,7 @@ export class Game<
    */
   loadSerializedState(
     json: ReturnType<Game['toJSON']>,
-    options?: { animationSeqFloor?: number }
+    options?: { animationSeqFloor?: number; messageLog?: MessageEntry[] }
   ): void {
     // Restore game-level state from JSON. `messages`/`settings` are adopted
     // here by reference but rebuilt into fresh objects (with element/player
@@ -3228,8 +3303,16 @@ export class Game<
     // state with the snapshot it was restored from (CR-02: a retained
     // checkpoint may be restored again; live mutations must not reach it).
     this.phase = json.phase;
-    this.messages = json.messages;
     this.settings = json.settings;
+
+    // The message log does NOT ride in the tree (see `Game.messages`), so it is
+    // supplied separately by whoever holds the enclosing snapshot. Assigned
+    // UNCONDITIONALLY: a caller restoring a tree without a log gets an empty
+    // log, deterministically, rather than silently keeping whatever this
+    // instance happened to hold before — a stale log grafted onto a restored
+    // tree is far worse than an honestly empty one, and reads as history
+    // corruption rather than as a missing argument.
+    this.messages = options?.messageLog ?? [];
 
     // Restore animation events if present.
     //
@@ -3399,7 +3482,7 @@ export class Game<
     const unserializable = new Set(
       (this.constructor as typeof GameElement).unserializableAttributes
     );
-    const handledKeys = new Set(['phase', 'messages', 'settings']);
+    const handledKeys = new Set<string>(GAME_SELF_SERIALIZED_FIELDS);
     for (const [key, value] of Object.entries(json.attributes)) {
       if (!unserializable.has(key) && !key.startsWith('_') && !handledKeys.has(key)) {
         (this as unknown as Record<string, unknown>)[key] = value;

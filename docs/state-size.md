@@ -45,10 +45,19 @@ actions, anything async and multi-round — reaches that cap on ordinary play.
 
 ## Two costs that are invisible until measured
 
-- **`game.messages` lives inside the serialized tree.** An uncapped message log
-  is multiplied by the checkpoint count like everything else. A 100-entry log at
-  75 bytes per entry costs roughly 2 MB across a full game — from the log alone.
-  Cap it.
+- **The message log grows for the life of the game.** `game.messages` is stored
+  once per snapshot (`GameStateSnapshot.messageLog`), so it is no longer
+  multiplied by the checkpoint count — but nothing caps it, and at roughly 90
+  bytes per entry a game that narrates every action accumulates that text
+  forever. Measured on an 8-seat game with a 6.5 KB model and three narration
+  lines per action: 75 KB of log at 325 actions, 13% of a 1.78 MB ceiling. The
+  same game before the log moved out of the tree was 1671 KB — 96% of the
+  ceiling, of which the model was under 8%.
+
+  Read `measureSnapshotSize().messageLogBytes` rather than inferring the log's
+  share from the remainder, and note that `projectSnapshotSize` infers the log's
+  growth rate from the actions the measured game actually played — a fixture
+  that constructs an end-state must pass `messageLogBytes` explicitly instead.
 - **Named-key objects cost about 6× positional arrays.** `{beastLore: 3, …}` is
   137 bytes where `[3, …]` is 23. Across 8 seats and 325 actions, that single
   stylistic choice is ~579 KB of saved state.
