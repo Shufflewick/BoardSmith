@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -60,7 +61,7 @@ async function run(opts: Parameters<typeof ingestArchiveCommand>[1] = {}) {
 describe('ingest-archive — archiving', () => {
   it('copies the source into rulebook/source/ preserving the filename', async () => {
     const project = await run();
-    const archived = await fs.readFile(join(project, 'rulebook', 'source', 'src-rules.pdf'));
+    const archived = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'source', 'src-rules.pdf'));
     expect(archived.equals(SOURCE_BYTES)).toBe(true);
   });
 
@@ -72,7 +73,7 @@ describe('ingest-archive — archiving', () => {
 
   it('records the archived copy hash, matching the source', async () => {
     const project = await run();
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).toContain(`Source hash: ${SOURCE_HASH}`);
   });
 
@@ -83,12 +84,12 @@ describe('ingest-archive — archiving', () => {
       ingestArchiveCommand(join(dir, 'nope.pdf'), { project, json: true }),
     ).rejects.toThrow(/not found or unreadable/);
     // Critically: no INDEX.md claiming provenance for a file that was never archived.
-    await expect(fs.access(join(project, 'rulebook', 'INDEX.md'))).rejects.toThrow();
+    await expect(fs.access(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'))).rejects.toThrow();
   });
 
   it('refuses to clobber a different archived rulebook', async () => {
     const project = await run();
-    await fs.writeFile(join(project, 'rulebook', 'source', 'src-rules.pdf'), 'different bytes');
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', 'source', 'src-rules.pdf'), 'different bytes');
     await expect(ingestArchiveCommand(sourcePath, { project, json: true })).rejects.toThrow(
       /already exists .* and differs/,
     );
@@ -135,7 +136,7 @@ describe('ingest-archive — multiple sources (177-19)', () => {
 
   it('a second, DIFFERENT source does NOT overwrite the primary Source:/Source hash: header', async () => {
     const project = await twoSourceProject();
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     // The primary pair is still rules.pdf's, untouched.
     expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/rules.pdf');
     expect(/^Source hash:\s*(.*)$/m.exec(index)![1].trim()).toBe(RULES_HASH);
@@ -143,10 +144,10 @@ describe('ingest-archive — multiple sources (177-19)', () => {
 
   it('the second source is archived to disk and recorded in ## Additional Sources', async () => {
     const project = await twoSourceProject();
-    const archivedCards = await fs.readFile(join(project, 'rulebook', 'source', 'cards.pdf'));
+    const archivedCards = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'source', 'cards.pdf'));
     expect(archivedCards.equals(CARDS_BYTES)).toBe(true);
 
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).toContain(ADDITIONAL_SOURCES_HEADING);
     const records = parseAdditionalSources(index);
     expect(records).toEqual([{ path: 'rulebook/source/cards.pdf', sourceHash: CARDS_HASH }]);
@@ -185,9 +186,9 @@ describe('ingest-archive — multiple sources (177-19)', () => {
 
   it('re-archiving the SAME additional source (byte-identical) is idempotent — no duplicate row', async () => {
     const project = await twoSourceProject();
-    const before = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const before = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     await ingestArchiveCommand(cardsPath, { project, json: true });
-    const after = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const after = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(after).toBe(before);
     expect(parseAdditionalSources(after)).toHaveLength(1);
   });
@@ -196,12 +197,12 @@ describe('ingest-archive — multiple sources (177-19)', () => {
     const project = await twoSourceProject();
     // "Never clobber" applies here too — remove the stale archived copy first, matching the
     // documented recovery path for the primary source.
-    await fs.rm(join(project, 'rulebook', 'source', 'cards.pdf'));
+    await fs.rm(join(project, DESIGN_DIR, 'rulebook', 'source', 'cards.pdf'));
     const changedCards = Buffer.from('%PDF-1.4 fake cards bytes, CHANGED\n');
     await fs.writeFile(cardsPath, changedCards);
     await ingestArchiveCommand(cardsPath, { project, json: true });
 
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     const records = parseAdditionalSources(index);
     expect(records).toHaveLength(1);
     expect(records[0].sourceHash).toBe(createHash('sha256').update(changedCards).digest('hex'));
@@ -209,7 +210,7 @@ describe('ingest-archive — multiple sources (177-19)', () => {
 
   it('SINGLE-SOURCE projects are byte-identical to pre-177-19 output — no ## Additional Sources section appears', async () => {
     const project = await run();
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).not.toContain(ADDITIONAL_SOURCES_HEADING);
     expect(index).not.toContain(ADDITIONAL_SOURCES_BEGIN);
     expect(index).not.toContain(ADDITIONAL_SOURCES_END);
@@ -237,7 +238,7 @@ describe('ingest-archive — multiple sources (177-19)', () => {
 describe('ingest-archive — INDEX.md contract', () => {
   it('writes all four header labels, in order, with non-empty values', async () => {
     const project = await run({ edition: '2nd edition, 2019 printing' });
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     let cursor = -1;
     for (const label of HEADER_LABELS) {
       const at = index.indexOf(`\n${label}`);
@@ -251,19 +252,19 @@ describe('ingest-archive — INDEX.md contract', () => {
 
   it('writes the explicit not-stated token rather than a blank edition', async () => {
     const project = await run();
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).toContain(`Edition: ${EDITION_UNKNOWN}`);
   });
 
   it('never emits the interview-path wording on the rulebook path', async () => {
     const project = await run();
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).not.toContain('unpublished — designer statement');
   });
 
   it('writes the three exact headings downstream tooling parses', async () => {
     const project = await run();
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     for (const heading of INDEX_HEADINGS) {
       expect(index, `must contain exactly "${heading}"`).toContain(`\n${heading}\n`);
     }
@@ -271,7 +272,7 @@ describe('ingest-archive — INDEX.md contract', () => {
 
   it('always emits the gaps section, with the empty token when unfilled', async () => {
     const project = await run();
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).toContain(GAPS_EMPTY);
   });
 
@@ -290,7 +291,7 @@ describe('ingest-archive — INDEX.md contract', () => {
 
   it('refreshes only the provenance header when INDEX.md already has filled sections', async () => {
     const project = await run();
-    const indexPath = join(project, 'rulebook', 'INDEX.md');
+    const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
     const filled = (await fs.readFile(indexPath, 'utf-8')).replace(
       GAPS_EMPTY,
       'Named-but-undefined (p.1): Ways to Score',
@@ -316,12 +317,12 @@ describe('init --rulebook — the archive rides on a command that is never skipp
       await initCommand('archived-game', { rulebook: sourcePath });
 
       const archived = await fs.readFile(
-        join(parent, 'archived-game', 'rulebook', 'source', 'src-rules.pdf'),
+        join(parent, 'archived-game', DESIGN_DIR, 'rulebook', 'source', 'src-rules.pdf'),
       );
       expect(archived.equals(SOURCE_BYTES)).toBe(true);
 
       const index = await fs.readFile(
-        join(parent, 'archived-game', 'rulebook', 'INDEX.md'),
+        join(parent, 'archived-game', DESIGN_DIR, 'rulebook', 'INDEX.md'),
         'utf-8',
       );
       expect(index).toContain(`Source hash: ${SOURCE_HASH}`);
@@ -406,14 +407,14 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
   async function withSlices(entries: string[], derivedLines: string[] = []) {
     const project = await run();
     await fs.writeFile(
-      join(project, 'rulebook', '01-core.md'),
+      join(project, DESIGN_DIR, 'rulebook', '01-core.md'),
       ['# Core', '', ...entries, '', ...derivedLines, ''].join('\n'),
     );
     return project;
   }
 
   const readIndex = (project: string) =>
-    fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
 
   it('scaffolds the gaps section fenced as machine-owned, holding only the empty token', async () => {
     const project = await run();
@@ -451,7 +452,7 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
     const project = await withSlices(['Named-but-undefined (p.1): real gap']);
     const index = await readIndex(project);
     await fs.writeFile(
-      join(project, 'rulebook', 'INDEX.md'),
+      join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'),
       index.replace(GAPS_EMPTY, 'Named-but-undefined (p.9): invented by the orchestrator'),
     );
     await ingestGapsCommand({ project, quiet: true });
@@ -466,7 +467,7 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
     const project = await withSlices(['Named-but-undefined (p.1): x']);
     const index = await readIndex(project);
     await fs.writeFile(
-      join(project, 'rulebook', 'INDEX.md'),
+      join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'),
       index.replace(GAPS_BEGIN, '').replace(GAPS_END, ''),
     );
     await expect(ingestGapsCommand({ project, quiet: true })).rejects.toThrow(
@@ -523,7 +524,7 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
       process.exitCode = undefined;
       // Re-introduce the misfiled line after the section is already current.
       await fs.writeFile(
-        join(project, 'rulebook', '01-core.md'),
+        join(project, DESIGN_DIR, 'rulebook', '01-core.md'),
         'Derived (p.1): The page is set in a bold sans-serif with four columns.\n',
       );
       await ingestCheckCommand({ project, json: true });
@@ -540,7 +541,7 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
     const project = await withSlices([], [artLine]);
     const result = await ingestRelabelCommand({ project, quiet: true });
     expect(result.relabelled).toBe(1);
-    expect(await fs.readFile(join(project, 'rulebook', '01-core.md'), 'utf-8')).toContain(
+    expect(await fs.readFile(join(project, DESIGN_DIR, 'rulebook', '01-core.md'), 'utf-8')).toContain(
       'Visual (p.1): Card art depicted',
     );
   });
@@ -610,14 +611,14 @@ describe('edition normalization (F-1)', () => {
 
   it('writes the machine-checkable sentinel for a free-text edition, preserving the original on Edition note:', async () => {
     const project = await run({ edition: ONE_TWO_PUNCH_EDITION });
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).toContain(`Edition: ${EDITION_UNKNOWN}`);
     expect(index).toContain(`Edition note: ${ONE_TWO_PUNCH_EDITION}`);
   });
 
   it('writes a real edition string with no Edition note: line', async () => {
     const project = await run({ edition: 'Second Edition, 2019 printing' });
-    const index = await fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    const index = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
     expect(index).toContain('Edition: Second Edition, 2019 printing');
     expect(index).not.toContain('Edition note:');
   });
@@ -696,13 +697,13 @@ describe('ingest-archive — existing INDEX.md adoption (decision 1b)', () => {
       '',
     ].join('\n');
     const project = join(baseDir, opts.projectName ?? 'game');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
-    await fs.writeFile(join(project, 'rulebook', 'INDEX.md'), content);
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), content);
     return project;
   }
 
   const readIndex = (project: string) =>
-    fs.readFile(join(project, 'rulebook', 'INDEX.md'), 'utf-8');
+    fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
 
   it('B1 insert-if-absent (hash): inserts Source hash: with the independently-computed sha256', async () => {
     const project = await writePreProvenanceIndex(dir);
@@ -710,7 +711,7 @@ describe('ingest-archive — existing INDEX.md adoption (decision 1b)', () => {
     const index = await readIndex(project);
     const match = /^Source hash: ([0-9a-f]{64})$/m.exec(index);
     expect(match, 'Source hash: line must be present and well-formed').not.toBeNull();
-    const archived = await fs.readFile(join(project, 'rulebook', 'source', 'rules.pdf'));
+    const archived = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'source', 'rules.pdf'));
     const expectedHash = createHash('sha256').update(archived).digest('hex');
     expect(match![1]).toBe(expectedHash);
     expect(expectedHash).toBe(SOURCE_HASH);
@@ -854,7 +855,7 @@ describe('ingest-archive — existing INDEX.md adoption (decision 1b)', () => {
 
   it('B12b no scaffold-overwrite: a forced repair failure never falls through to a fresh scaffold', async () => {
     const project = await writePreProvenanceIndex(dir, { sliceMarker: 'DISTINCTIVE_MARKER_XYZ' });
-    const indexPath = join(project, 'rulebook', 'INDEX.md');
+    const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
     const before = await fs.readFile(indexPath, 'utf-8');
     // Write-only, no read permission: fs.access's existence probe (F_OK) still succeeds, but the
     // repair's own fs.readFile fails — forcing exactly the mid-repair throw this test exists to

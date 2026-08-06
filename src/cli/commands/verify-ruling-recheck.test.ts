@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -166,7 +167,7 @@ describe('enumerateRulingsForRecheck', () => {
 describe('resolveFreshTranscription', () => {
   it('returns scopeLimited when no verify run has ever been staged, naming the missing path', async () => {
     const project = join(dir, 'game');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
     const result = await resolveFreshTranscription(project);
     expect(result.scopeLimited).toBe(true);
     if (result.scopeLimited) {
@@ -179,7 +180,7 @@ describe('resolveFreshTranscription', () => {
   it('returns scopeLimited when the staged slices directory exists but is empty', async () => {
     const project = join(dir, 'game');
     const runId = '2026-07-30T10-00-00Z';
-    await fs.mkdir(join(project, 'rulebook', '.verify', runId, 'slices'), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices'), { recursive: true });
     const result = await resolveFreshTranscription(project, runId);
     expect(result.scopeLimited).toBe(true);
     if (result.scopeLimited) {
@@ -189,7 +190,7 @@ describe('resolveFreshTranscription', () => {
 
   it('returns scopeLimited for a malformed --run-id, never throwing', async () => {
     const project = join(dir, 'game');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
     const result = await resolveFreshTranscription(project, 'not-a-real-run-id');
     expect(result.scopeLimited).toBe(true);
     if (result.scopeLimited) {
@@ -200,7 +201,7 @@ describe('resolveFreshTranscription', () => {
   it('resolves the staged slice paths when a fresh transcription is present, never a live path', async () => {
     const project = join(dir, 'game');
     const runId = '2026-07-30T10-00-00Z';
-    const stagingDir = join(project, 'rulebook', '.verify', runId, 'slices');
+    const stagingDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
     await fs.mkdir(stagingDir, { recursive: true });
     await fs.writeFile(join(stagingDir, '01-setup.md'), '## Setup\n\nFresh transcription text.\n');
     const result = await resolveFreshTranscription(project, runId);
@@ -216,7 +217,7 @@ describe('resolveFreshTranscription', () => {
   it('excludes a real superseded/ subfolder from resolved slicePaths (176-06 ADDED ITEM 1, promoted from 176-05\'s reported finding)', async () => {
     const project = join(dir, 'game');
     const runId = '2026-07-30T10-00-00Z';
-    const stagingDir = join(project, 'rulebook', '.verify', runId, 'slices');
+    const stagingDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
     await fs.mkdir(stagingDir, { recursive: true });
 
     // Copy the REAL committed fixture layout byte-for-byte, including its `superseded/`
@@ -258,7 +259,7 @@ describe('resolveFreshTranscription', () => {
   it('does NOT exclude a legitimately-named slice containing the substring "superseded" with no directory component', async () => {
     const project = join(dir, 'game');
     const runId = '2026-07-30T10-00-00Z';
-    const stagingDir = join(project, 'rulebook', '.verify', runId, 'slices');
+    const stagingDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
     await fs.mkdir(stagingDir, { recursive: true });
     await fs.writeFile(
       join(stagingDir, '01-superseded-cards.md'),
@@ -276,7 +277,7 @@ describe('resolveFreshTranscription', () => {
     const older = '2026-07-29T10-00-00Z';
     const newer = '2026-07-30T10-00-00Z';
     for (const runId of [older, newer]) {
-      const stagingDir = join(project, 'rulebook', '.verify', runId, 'slices');
+      const stagingDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
       await fs.mkdir(stagingDir, { recursive: true });
       await fs.writeFile(join(stagingDir, '01-setup.md'), '## Setup\n\ntext\n');
     }
@@ -316,9 +317,9 @@ describe('recordRulingVerdicts — the one atomic write path (176-CONTEXT.md dec
   it('persists verdict records to the run-scoped ledger, never touching RULINGS.md', async () => {
     const project = join(dir, 'game');
     const runId = '2026-07-30T10-00-00Z';
-    await fs.mkdir(join(project, 'rulebook', '.verify', runId, 'slices'), { recursive: true });
-    await fs.writeFile(join(project, 'RULINGS.md'), '### Ruling 1\n\nDecision: x.\n');
-    const before = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'RULINGS.md'), '### Ruling 1\n\nDecision: x.\n');
+    const before = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
 
     const record = createRulingVerdictRecord({
       number: 1,
@@ -327,9 +328,11 @@ describe('recordRulingVerdicts — the one atomic write path (176-CONTEXT.md dec
     });
     const { ledgerPath } = await recordRulingVerdicts(project, runId, [record]);
 
-    const after = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
+    const after = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
     expect(after).toBe(before);
 
+    // `ledgerPath` already comes back project-relative (it includes `design/`), so it is joined
+    // to the project root, not to the design dir.
     const ledgerText = await fs.readFile(join(project, ledgerPath), 'utf-8');
     expect(ledgerText).toContain('"verdict":"still-needed"');
   });
@@ -364,8 +367,8 @@ describe('verifyRulingRecheckCommand', () => {
 
   it('is read-only against RULINGS.md — whole-directory sha256 map is byte-identical before/after', async () => {
     const project = join(dir, 'game');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
-    await fs.writeFile(join(project, 'RULINGS.md'), manyRulingsText(5));
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'RULINGS.md'), manyRulingsText(5));
 
     const before = await sha256OfDir(project);
     await verifyRulingRecheckCommand({ project, json: true });
@@ -376,8 +379,8 @@ describe('verifyRulingRecheckCommand', () => {
 
   it('--json output carries verdictCounts summing to the enumerated (non-skipped) ruling count', async () => {
     const project = join(dir, 'game');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
-    await fs.writeFile(join(project, 'RULINGS.md'), manyRulingsText(4));
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'RULINGS.md'), manyRulingsText(4));
 
     const verdicts = new Map<number, { verdict: 'still-needed' | 'contradicted'; reasoning: string }>([
       [1, { verdict: 'still-needed', reasoning: 'still needed' }],
@@ -395,8 +398,8 @@ describe('verifyRulingRecheckCommand', () => {
 
   it('emits one row per ruling with no cap — 30+ rulings emits 30+ rows', async () => {
     const project = join(dir, 'game');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
-    await fs.writeFile(join(project, 'RULINGS.md'), manyRulingsText(35));
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'RULINGS.md'), manyRulingsText(35));
 
     const result = await verifyRulingRecheckCommand({ project, json: true });
     expect(result.rows.length).toBe(35);

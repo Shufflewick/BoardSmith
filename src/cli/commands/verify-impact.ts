@@ -1,3 +1,12 @@
+import {
+  DESIGN_DIR,
+  RULINGS_MD,
+  SKETCH_MD,
+  chunkMdPath,
+  designChunksDir,
+  designPath,
+  relChunkMdPath,
+} from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -333,8 +342,8 @@ export async function writeRulesStalenessMarker(
   const record: RulesStalenessRecord = { ...rest, marker: RULES_STALE_MARKER };
 
   const dir = resolve(projectDir);
-  const chunkPath = join(dir, 'chunks', slug, 'CHUNK.md');
-  const relChunkPath = join('chunks', slug, 'CHUNK.md');
+  const chunkPath = chunkMdPath(dir, slug);
+  const relChunkPath = relChunkMdPath(slug);
 
   const chunkText = await fs.readFile(chunkPath, 'utf-8');
   const headingIdx = findHeadingIndex(chunkText, RULES_STALENESS_HEADING);
@@ -379,7 +388,7 @@ export async function writeRulesStalenessMarker(
   // CHUNK.md first, SKETCH.md second — never the reverse, never SKETCH.md alone
   // (state-machine.md "Write Order"). Everything above this line must have already landed on
   // disk before SKETCH.md is even read.
-  const sketchPath = join(dir, 'SKETCH.md');
+  const sketchPath = designPath(dir, SKETCH_MD);
   const sketchText = await fs.readFile(sketchPath, 'utf-8');
 
   const entryRange = findSketchEntryRange(sketchText, slug);
@@ -734,8 +743,8 @@ export async function appendRuling(
   entry: { decision: string; citation: string; rationale: string },
 ): Promise<{ number: number; path: string }> {
   const dir = resolve(projectDir);
-  const rulingsPath = join(dir, 'RULINGS.md');
-  const relRulingsPath = 'RULINGS.md';
+  const rulingsPath = designPath(dir, RULINGS_MD);
+  const relRulingsPath = join(DESIGN_DIR, RULINGS_MD);
 
   let rulingsText: string;
   try {
@@ -1185,7 +1194,7 @@ export async function verifyImpactStatusCommand(
     let markerState: 'clear' | 'rules-stale' | 'unknown' = 'unknown';
     try {
       const chunkText = await fs.readFile(
-        join(projectDir, 'chunks', verdict.slug, 'CHUNK.md'),
+        chunkMdPath(projectDir, verdict.slug),
         'utf-8',
       );
       markerState = parseRulesStaleness(chunkText).state;
@@ -1356,7 +1365,7 @@ export async function verifyImpactApplyCommand(
   for (const verdict of classifyStatus.chunkVerdicts) {
     if (!verdict.stale) continue;
 
-    const chunkDir = join(projectDir, 'chunks', verdict.slug);
+    const chunkDir = join(designChunksDir(projectDir), verdict.slug);
     try {
       await fs.stat(join(chunkDir, 'CHUNK.md'));
     } catch {

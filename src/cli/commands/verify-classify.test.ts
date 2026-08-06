@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -530,7 +531,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
 /** A fixture project with an archived source, INDEX.md, and one real live slice, in a temp dir. */
 async function provenanceProject(): Promise<{ project: string; liveSliceRel: string; sourceHash: string }> {
   const project = join(dir, 'game');
-  const rulebookDir = join(project, 'rulebook');
+  const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   const sourceDir = join(rulebookDir, 'source');
   await fs.mkdir(sourceDir, { recursive: true });
 
@@ -563,7 +564,7 @@ async function writeCitingChunk(
   citedSlice: string,
   recordedSourceHash: string | undefined,
 ): Promise<void> {
-  const chunkDir = join(project, 'chunks', slug);
+  const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
   await fs.mkdir(chunkDir, { recursive: true });
   const body = renderVerifiedAgainst({
     scope: SCOPE_FULL,
@@ -623,7 +624,7 @@ describe('provenance — three states, hash-only, never the subagent\'s opinion'
 
   it('provenance-5: a project with no archived source at all resolves to unknown with a reason, and does not throw', async () => {
     const project = join(dir, 'bare');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
     // No INDEX.md at all.
     const result = await resolveProvenance(project, ['rulebook/whatever.md']);
     expect(result.provenance).toBe('unknown');
@@ -679,7 +680,7 @@ async function recordedSevenRun(opts?: {
   skipRecordingUnits?: string[];
 }): Promise<{ project: string; runId: string; stagingDirAbs: string }> {
   const project = join(dir, 'game');
-  const rulebookDir = join(project, 'rulebook');
+  const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   for (const name of SEVEN_LIVE_FILES) {
     const text = await readFixture(`seven/live/${name}`);
@@ -763,7 +764,7 @@ describe('verifyClassifyPairsCommand — enumerate pairs with provenance, over a
 
   it('pairs-3: unpaired-slice and presentation-only groups carry kind/missingSide and roll up into summary', async () => {
     const project = join(dir, 'edge');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.writeFile(join(rulebookDir, '03-only-live.md'), 'p.3, Something:\n"A live-only rule."\n');
     await fs.writeFile(
@@ -1080,7 +1081,7 @@ async function threeGroupProject(): Promise<{
   pairIdUnpaired: string;
 }> {
   const project = join(dir, 'edge3');
-  const rulebookDir = join(project, 'rulebook');
+  const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   await fs.writeFile(join(rulebookDir, 'a.md'), 'p.1, A:\n"Rule A live text."\n');
   await fs.writeFile(join(rulebookDir, 'b.md'), 'p.2, B:\n"Rule B live text."\n');
@@ -1121,7 +1122,7 @@ async function threeGroupProject(): Promise<{
 
 /** Writes `chunks/<slug>/CHUNK.md` with plain prose citing every `rulebook/<name>` in `citedNames`. */
 async function writeChunkCiting(project: string, slug: string, citedNames: string[]): Promise<void> {
-  const chunkDir = join(project, 'chunks', slug);
+  const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
   await fs.mkdir(chunkDir, { recursive: true });
   const citations = citedNames.map((n) => `Cites rulebook/${n}.`).join('\n');
   await fs.writeFile(join(chunkDir, 'CHUNK.md'), `# ${slug}\n\n${citations}\n`);
@@ -1138,7 +1139,7 @@ async function writeChunkCitingWithInterpretation(
   citedNames: string[],
   interpretationBody: string,
 ): Promise<void> {
-  const chunkDir = join(project, 'chunks', slug);
+  const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
   await fs.mkdir(chunkDir, { recursive: true });
   const citations = citedNames.map((n) => `Cites rulebook/${n}.`).join('\n');
   await fs.writeFile(
@@ -1284,7 +1285,7 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
 
     // Independent mix: cosmetic + unclassified — decision 8: unclassified always beats cosmetic,
     // since a malformed/blind verdict can never be reported clean.
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.writeFile(join(rulebookDir, 'g.md'), 'p.7, G:\n"Rule G live text."\n');
     const stagingDirAbs = join(
       project,
@@ -1358,7 +1359,7 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
 
   it('decision-18: two chunks citing the SAME pair group, where a sharper delta intersects only the first chunk\'s cited live slice — the first chunk is stale, the second is NOT (the phase goal in miniature)', async () => {
     const project = join(dir, 'bridge');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.writeFile(join(rulebookDir, 'x.md'), 'p.8, X:\n"X original text."\n');
     await fs.writeFile(join(rulebookDir, 'y.md'), 'p.8, Y:\n"Y original text."\n');
@@ -1408,7 +1409,7 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
 
   it('decision-18-corrective-a: quote matches NO live slice in the pair at all — every citing chunk is stale AND the unattributable condition is reported (FALSE-CLEAN closed)', async () => {
     const project = join(dir, 'bridge-unattributable');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.writeFile(join(rulebookDir, 'x.md'), 'p.8, X:\n"X original text."\n');
     await fs.writeFile(join(rulebookDir, 'y.md'), 'p.8, Y:\n"Y original text."\n');
@@ -1458,7 +1459,7 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
 
   it('decision-18-corrective-b: a cited live slice that cannot be read is surfaced and treated conservatively, never silently reported clean', async () => {
     const project = join(dir, 'bridge-unreadable');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.writeFile(join(rulebookDir, 'x.md'), 'p.8, X:\n"X original text."\n');
     await fs.writeFile(join(rulebookDir, 'y.md'), 'p.8, Y:\n"Y original text."\n');
@@ -1737,7 +1738,7 @@ describe('decision-19 — wiring into computeChunkVerdicts: per-citation narrowi
     pairId: string;
   }> {
     const project = join(dir, `decision19-${Math.random().toString(36).slice(2)}`);
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.writeFile(
       join(rulebookDir, 'x.md'),
@@ -1807,7 +1808,7 @@ describe('decision-19 — wiring into computeChunkVerdicts: per-citation narrowi
 
   it('decision-19-narrow-2: page-anchored — chunk A cites (p.1), chunk B cites only (p.2), neither quotes anything; the delta line is on p.1 — A stale via cited-page, B clean via cited-page', async () => {
     const project = join(dir, `decision19-page-${Math.random().toString(36).slice(2)}`);
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.writeFile(join(rulebookDir, 'x.md'), 'p.1, X:\nDerived (p.1): x original derived line.\n');
 
@@ -1885,7 +1886,7 @@ describe('decision-19 — wiring into computeChunkVerdicts: per-citation narrowi
     // section whose claim anchors do NOT overlap — rung 1 would say "not attributed" if the ladder
     // ran, but it must never run here: the pair-level check fires first.
     const projectA = join(dir, `decision19-guard2a-${Math.random().toString(36).slice(2)}`);
-    const rulebookDirA = join(projectA, 'rulebook');
+    const rulebookDirA = join(projectA, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDirA, { recursive: true });
     await fs.writeFile(join(rulebookDirA, 'x.md'), 'p.8, X:\n"X original text."\n');
     await fs.writeFile(join(rulebookDirA, 'y.md'), 'p.8, Y:\n"Y original text."\n');
@@ -1925,7 +1926,7 @@ describe('decision-19 — wiring into computeChunkVerdicts: per-citation narrowi
 
     // Unreadable-slice shape (174-04 corrective-b).
     const projectB = join(dir, `decision19-guard2b-${Math.random().toString(36).slice(2)}`);
-    const rulebookDirB = join(projectB, 'rulebook');
+    const rulebookDirB = join(projectB, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDirB, { recursive: true });
     await fs.writeFile(join(rulebookDirB, 'x.md'), 'p.8, X:\n"X original text."\n');
     await fs.writeFile(join(rulebookDirB, 'y.md'), 'p.8, Y:\n"Y original text."\n');

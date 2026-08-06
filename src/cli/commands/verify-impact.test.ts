@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -358,9 +359,9 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
 
   beforeEach(async () => {
     dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-'));
-    await fs.mkdir(join(dir, 'chunks', SLUG), { recursive: true });
-    await fs.writeFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), fixtureChunkText());
-    await fs.writeFile(join(dir, 'SKETCH.md'), fixtureSketchText());
+    await fs.mkdir(join(dir, DESIGN_DIR, 'chunks', SLUG), { recursive: true });
+    await fs.writeFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), fixtureChunkText());
+    await fs.writeFile(join(dir, DESIGN_DIR, 'SKETCH.md'), fixtureSketchText());
 
     // Reset the mocked atomicWriteFile back to a plain call-through before every test, so a
     // prior test's mockImplementation override (the simulated SKETCH.md write failure) never
@@ -377,7 +378,7 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
 
   it('marker — inserts the section immediately after "## Verified Against" when absent', async () => {
     await writeRulesStalenessMarker(dir, fixtureRecord());
-    const chunkText = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    const chunkText = await fs.readFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
     expect(chunkText).toContain(RULES_STALENESS_HEADING);
     const vaIdx = chunkText.indexOf(VERIFIED_AGAINST_HEADING);
     const rsIdx = chunkText.indexOf(RULES_STALENESS_HEADING);
@@ -386,7 +387,7 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
 
   it('marker — writes the marker as RULES_STALE_MARKER only, never RULES_STALENESS_CLEAR', async () => {
     await writeRulesStalenessMarker(dir, fixtureRecord());
-    const chunkText = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    const chunkText = await fs.readFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
     const parsed = parseRulesStaleness(chunkText);
     expect(parsed.state).toBe('rules-stale');
     expect(parsed.record?.marker).toBe(RULES_STALE_MARKER);
@@ -394,7 +395,7 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
 
   it('write-order — the written CHUNK.md fenced body\'s LAST non-empty line starts with Marker:', async () => {
     await writeRulesStalenessMarker(dir, fixtureRecord());
-    const chunkText = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    const chunkText = await fs.readFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
     const beginIdx = chunkText.indexOf(RULES_STALENESS_BEGIN);
     const endIdx = chunkText.indexOf(RULES_STALENESS_END);
     const body = chunkText.slice(beginIdx + RULES_STALENESS_BEGIN.length, endIdx).trim();
@@ -404,7 +405,7 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
 
   it('write-order — inserts the SKETCH.md derived pointer immediately after the Status line', async () => {
     await writeRulesStalenessMarker(dir, fixtureRecord());
-    const sketchText = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    const sketchText = await fs.readFile(join(dir, DESIGN_DIR, 'SKETCH.md'), 'utf-8');
     const statusIdx = sketchText.indexOf(`- Status (derived from chunks/${SLUG}/CHUNK.md):`);
     const pointerIdx = sketchText.indexOf(
       `- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md):`,
@@ -422,7 +423,7 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
     // between them; only checking `startsWith` (the test above) did not catch it because the fused
     // string still legitimately started with the expected prefix.
     await writeRulesStalenessMarker(dir, fixtureRecord());
-    const sketchText = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    const sketchText = await fs.readFile(join(dir, DESIGN_DIR, 'SKETCH.md'), 'utf-8');
     const lines = sketchText.split('\n');
     const pointerLineIdx = lines.findIndex((l) =>
       l.startsWith(`- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md):`),
@@ -452,31 +453,31 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
       'simulated SKETCH.md write failure',
     );
 
-    const chunkText = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    const chunkText = await fs.readFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
     const parsed = parseRulesStaleness(chunkText);
     expect(parsed.state).toBe('rules-stale');
   });
 
   it('marker — SKETCH.md is repaired to match CHUNK.md when its pointer disagrees; CHUNK.md bytes are unchanged', async () => {
     await writeRulesStalenessMarker(dir, fixtureRecord());
-    const chunkAfterFirst = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    const chunkAfterFirst = await fs.readFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
 
     // Seed SKETCH.md's derived pointer with the WRONG value.
-    let sketchText = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    let sketchText = await fs.readFile(join(dir, DESIGN_DIR, 'SKETCH.md'), 'utf-8');
     sketchText = sketchText.replace(
       `- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md): ${RULES_STALE_MARKER}`,
       `- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md): ${RULES_STALENESS_CLEAR}`,
     );
-    await fs.writeFile(join(dir, 'SKETCH.md'), sketchText);
+    await fs.writeFile(join(dir, DESIGN_DIR, 'SKETCH.md'), sketchText);
 
     const result = await writeRulesStalenessMarker(dir, fixtureRecord());
     expect(result.sketchRepaired).toBe(true);
     expect(result.chunkWritten).toBe(false);
 
-    const chunkAfterSecond = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    const chunkAfterSecond = await fs.readFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
     expect(chunkAfterSecond).toBe(chunkAfterFirst);
 
-    const repairedSketch = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    const repairedSketch = await fs.readFile(join(dir, DESIGN_DIR, 'SKETCH.md'), 'utf-8');
     expect(repairedSketch).toContain(
       `- Rules Staleness (derived from chunks/${SLUG}/CHUNK.md): ${RULES_STALE_MARKER}`,
     );
@@ -486,15 +487,15 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
     const brokenText =
       fixtureChunkText() +
       `\n${RULES_STALENESS_HEADING}\n\n${RULES_STALENESS_BEGIN}\nbroken, no end fence\n`;
-    await fs.writeFile(join(dir, 'chunks', SLUG, 'CHUNK.md'), brokenText);
-    const before = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'));
+    await fs.writeFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), brokenText);
+    const before = await fs.readFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'));
     const beforeHash = createHash('sha256').update(before).digest('hex');
 
     await expect(writeRulesStalenessMarker(dir, fixtureRecord())).rejects.toThrow(
       /boardsmith:rules-staleness:begin[\s\S]*boardsmith:rules-staleness:end/,
     );
 
-    const after = await fs.readFile(join(dir, 'chunks', SLUG, 'CHUNK.md'));
+    const after = await fs.readFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'));
     const afterHash = createHash('sha256').update(after).digest('hex');
     expect(afterHash).toBe(beforeHash);
   });
@@ -503,13 +504,13 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
     const tailSketch =
       `# Sketch: Test Game\n\nSketch Version: 1\n\nSession Lock: none\n\n## Ordered Chunk List\n\n` +
       `## Mandated Chunks\n`;
-    await fs.writeFile(join(dir, 'SKETCH.md'), tailSketch);
+    await fs.writeFile(join(dir, DESIGN_DIR, 'SKETCH.md'), tailSketch);
 
     const result = await writeRulesStalenessMarker(dir, fixtureRecord());
     expect(result.sketchWritten).toBe(false);
     expect(result.sketchRepaired).toBe(false);
 
-    const sketchAfter = await fs.readFile(join(dir, 'SKETCH.md'), 'utf-8');
+    const sketchAfter = await fs.readFile(join(dir, DESIGN_DIR, 'SKETCH.md'), 'utf-8');
     expect(sketchAfter).toBe(tailSketch);
   });
 });
@@ -650,7 +651,7 @@ async function singleContradictoryPairProject(
   projectRoot: string,
 ): Promise<{ project: string; runId: string; pairId: string }> {
   const project = join(projectRoot, 'gate-project');
-  const rulebookDir = join(project, 'rulebook');
+  const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   await fs.writeFile(
     join(rulebookDir, 'a.md'),
@@ -781,6 +782,7 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
 
   beforeEach(async () => {
     dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-rulings-'));
+    await fs.mkdir(join(dir, DESIGN_DIR), { recursive: true });
   });
 
   afterEach(async () => {
@@ -813,7 +815,7 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
 
   it('contradictory: appendRuling is append-only — the new file content startsWith the original byte-for-byte', async () => {
     const text = rulingsCorpus();
-    await fs.writeFile(join(dir, 'RULINGS.md'), text);
+    await fs.writeFile(join(dir, DESIGN_DIR, 'RULINGS.md'), text);
 
     const result = await appendRuling(dir, {
       decision: 'A test decision.',
@@ -822,13 +824,13 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
     });
     expect(result.number).toBe(nextNumberFor());
 
-    const newText = await fs.readFile(join(dir, 'RULINGS.md'), 'utf-8');
+    const newText = await fs.readFile(join(dir, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
     expect(newText.startsWith(text)).toBe(true);
   });
 
   it('contradictory: the appended block matches the corpus\'s own three-field ### Ruling N shape', async () => {
     const text = rulingsCorpus();
-    await fs.writeFile(join(dir, 'RULINGS.md'), text);
+    await fs.writeFile(join(dir, DESIGN_DIR, 'RULINGS.md'), text);
 
     await appendRuling(dir, {
       decision: 'A test decision.',
@@ -836,7 +838,7 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
       rationale: 'A test rationale.',
     });
 
-    const newText = await fs.readFile(join(dir, 'RULINGS.md'), 'utf-8');
+    const newText = await fs.readFile(join(dir, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
     expect(newText).toMatch(
       new RegExp(`^### Ruling ${nextNumberFor()}\\n- Decision: .+\\n- Citation interpreted or overridden: .+\\n- Rationale: .+$`, 'm'),
     );
@@ -844,7 +846,7 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
 
   it('contradictory: the appended entry contains both real quotedPass1 and quotedPass2 verbatim, and does NOT match /supersede[sd]?/i', async () => {
     const text = rulingsCorpus();
-    await fs.writeFile(join(dir, 'RULINGS.md'), text);
+    await fs.writeFile(join(dir, DESIGN_DIR, 'RULINGS.md'), text);
     const record = await readRealContradictoryClassification();
 
     await appendRuling(dir, {
@@ -853,7 +855,7 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
       rationale: 'Designer confirmed at the adjudication gate.',
     });
 
-    const newText = await fs.readFile(join(dir, 'RULINGS.md'), 'utf-8');
+    const newText = await fs.readFile(join(dir, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
     const appendedBlock = newText.slice(newText.indexOf(`### Ruling ${nextNumberFor()}`));
     expect(appendedBlock).toContain(record.quotedPass1);
     expect(appendedBlock).toContain(record.quotedPass2);
@@ -863,8 +865,8 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
   it('appendRuling throws an actionable error when RULINGS.md does not exist, and never creates one', async () => {
     await expect(
       appendRuling(dir, { decision: 'x', citation: 'y', rationale: 'z' }),
-    ).rejects.toThrow(/No RULINGS\.md found/);
-    await expect(fs.access(join(dir, 'RULINGS.md'))).rejects.toThrow();
+    ).rejects.toThrow(/No design\/RULINGS\.md found/);
+    await expect(fs.access(join(dir, DESIGN_DIR, 'RULINGS.md'))).rejects.toThrow();
   });
 });
 
@@ -886,7 +888,7 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
   }> {
     const { project, runId, pairId } = await singleContradictoryPairProject(adjDir);
     const text = rulingsCorpus();
-    await fs.writeFile(join(project, 'RULINGS.md'), text);
+    await fs.writeFile(join(project, DESIGN_DIR, 'RULINGS.md'), text);
     return { project, runId, pairId };
   }
 
@@ -907,7 +909,7 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
 
   it('unadjudicated: outcome "UNADJUDICATED" writes NO RULINGS.md entry (sha256 unchanged) and records an AdjudicationRecord with that outcome', async () => {
     const { project, runId, pairId } = await contradictoryProjectWithRulings();
-    const before = await fs.readFile(join(project, 'RULINGS.md'));
+    const before = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'));
     const beforeHash = createHash('sha256').update(before).digest('hex');
 
     const result = await verifyImpactAdjudicateCommand({
@@ -920,7 +922,7 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     expect(result.outcome).toBe('UNADJUDICATED');
     expect(result.rulingNumber).toBeUndefined();
 
-    const after = await fs.readFile(join(project, 'RULINGS.md'));
+    const after = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'));
     const afterHash = createHash('sha256').update(after).digest('hex');
     expect(afterHash).toBe(beforeHash);
 
@@ -946,7 +948,7 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     expect(result.outcome).toBe('resolved');
     expect(result.rulingNumber).toBe(nextNumberFor());
 
-    const rulingsText = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
+    const rulingsText = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
     expect(rulingsText).toContain(`### Ruling ${nextNumberFor()}`);
 
     const gateResult = await verifyImpactGateCommand({ project, runId, json: true });
@@ -982,14 +984,14 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
 
     expect(second.rulingNumber).toBe(first.rulingNumber);
 
-    const rulingsText = await fs.readFile(join(project, 'RULINGS.md'), 'utf-8');
+    const rulingsText = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
     const occurrences = rulingsText.match(new RegExp(`^### Ruling ${nextNumberFor()}$`, 'gm')) ?? [];
     expect(occurrences).toHaveLength(1);
 
     // A second ledger line IS appended (last-write-wins per pairId), even though RULINGS.md
     // gains no second entry.
     const ledgerText = await fs.readFile(
-      join(project, 'rulebook', '.verify', runId, 'RUN.md'),
+      join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md'),
       'utf-8',
     );
     const { lines } = parseLedgerBody(ledgerText, 'RUN.md');
@@ -1151,7 +1153,7 @@ async function buildImpactTestProject(
   opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted' } = {},
 ): Promise<{ project: string; runId: string; pairId: string; firstSha: string }> {
   const project = join(root, `impact-project-${Math.random().toString(36).slice(2)}`);
-  const rulebookDir = join(project, 'rulebook');
+  const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   await fs.writeFile(join(rulebookDir, 'x.md'), `p.1, X:\n"${IMPACT_QUOTED_PASS1}"\n`);
   // A second, unrelated live slice + cosmetic pair, cited by a SECOND chunk that must stay
@@ -1171,7 +1173,7 @@ async function buildImpactTestProject(
     execSync('git -c user.email=t@t -c user.name=t commit -m second', { cwd: project, stdio: 'ignore' });
   }
 
-  const movementChunkDir = join(project, 'chunks', 'movement');
+  const movementChunkDir = join(project, DESIGN_DIR, 'chunks', 'movement');
   await fs.mkdir(movementChunkDir, { recursive: true });
   await fs.writeFile(
     join(movementChunkDir, 'CHUNK.md'),
@@ -1185,7 +1187,7 @@ async function buildImpactTestProject(
       `## Verified Commit Hash\n\n${firstSha}\n`,
   );
 
-  const scoringChunkDir = join(project, 'chunks', 'scoring');
+  const scoringChunkDir = join(project, DESIGN_DIR, 'chunks', 'scoring');
   await fs.mkdir(scoringChunkDir, { recursive: true });
   await fs.writeFile(
     join(scoringChunkDir, 'CHUNK.md'),
@@ -1199,7 +1201,7 @@ async function buildImpactTestProject(
   );
 
   await fs.writeFile(
-    join(project, 'SKETCH.md'),
+    join(project, DESIGN_DIR, 'SKETCH.md'),
     `# Sketch: Test Game\n\nSketch Version: 1\n\nSession Lock: none\n\n## Ordered Chunk List\n\n` +
       `### movement\n- What it builds: test\n- Citations: none\n- ui: none\n- Milestone: none\n` +
       `- Status (derived from chunks/movement/CHUNK.md): verified\n- Test script (outcome-based): n/a\n\n` +
@@ -1452,7 +1454,7 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     expect(result.blocked).toBe(false);
     expect(result.marked.some((m) => m.slug === 'movement')).toBe(true);
 
-    const chunkText = await fs.readFile(join(project, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
+    const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
     const parsed = parseRulesStaleness(chunkText);
     expect(parsed.state).toBe('rules-stale');
     expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
@@ -1460,12 +1462,12 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
 
   it('marker: a chunk whose ChunkVerdict.stale is false is left byte-identical after the run', async () => {
     const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
-    const before = await fs.readFile(join(project, 'chunks', 'scoring', 'CHUNK.md'));
+    const before = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'scoring', 'CHUNK.md'));
     const beforeHash = createHash('sha256').update(before).digest('hex');
 
     await verifyImpactApplyCommand({ project, runId, json: true });
 
-    const after = await fs.readFile(join(project, 'chunks', 'scoring', 'CHUNK.md'));
+    const after = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'scoring', 'CHUNK.md'));
     const afterHash = createHash('sha256').update(after).digest('hex');
     expect(afterHash).toBe(beforeHash);
   });
@@ -1476,7 +1478,7 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     await verifyImpactApplyCommand({ project, runId, json: true });
     await verifyImpactApplyCommand({ project, runId, json: true });
 
-    const chunkText = await fs.readFile(join(project, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
+    const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
     const headingOccurrences = chunkText.match(/^## Rules Staleness$/gm) ?? [];
     const beginOccurrences = chunkText.match(/boardsmith:rules-staleness:begin/g) ?? [];
     expect(headingOccurrences).toHaveLength(1);
@@ -1488,7 +1490,7 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
 
     await verifyImpactApplyCommand({ project, runId, json: true });
 
-    const ledgerText = await fs.readFile(join(project, 'rulebook', '.verify', runId, 'RUN.md'), 'utf-8');
+    const ledgerText = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md'), 'utf-8');
     const { lines } = parseLedgerBody(ledgerText, 'RUN.md');
     const impactLines = lines.filter((l) => l.type === 'impact');
     expect(impactLines.some((l: any) => l.record.slug === 'movement')).toBe(true);

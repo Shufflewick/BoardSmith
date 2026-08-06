@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -82,8 +83,8 @@ describe('the hook script itself', () => {
   it('exits 0 when INDEX.md exists but no slices do yet', async () => {
     const p = await gitProject();
     await installIngestHook(p);
-    await fs.mkdir(join(p, 'rulebook'), { recursive: true });
-    await fs.writeFile(join(p, 'rulebook', 'INDEX.md'), '# Index\n\n## Open Rules Gaps\n\n_None._\n');
+    await fs.mkdir(join(p, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(p, DESIGN_DIR, 'rulebook', 'INDEX.md'), '# Index\n\n## Open Rules Gaps\n\n_None._\n');
     execSync('git add -A', { cwd: p, stdio: 'ignore' });
     expect(() =>
       execSync('git -c user.email=t@t -c user.name=t commit -m index', { cwd: p, stdio: 'ignore' }),
@@ -93,9 +94,9 @@ describe('the hook script itself', () => {
   it('is not fatal when the boardsmith CLI cannot be resolved', async () => {
     const p = await gitProject();
     await installIngestHook(p);
-    await fs.mkdir(join(p, 'rulebook'), { recursive: true });
-    await fs.writeFile(join(p, 'rulebook', 'INDEX.md'), '# Index\n\n## Open Rules Gaps\n\n_None._\n');
-    await fs.writeFile(join(p, 'rulebook', '01-x.md'), 'Named-but-undefined (p.1): thing\n');
+    await fs.mkdir(join(p, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(p, DESIGN_DIR, 'rulebook', 'INDEX.md'), '# Index\n\n## Open Rules Gaps\n\n_None._\n');
+    await fs.writeFile(join(p, DESIGN_DIR, 'rulebook', '01-x.md'), 'Named-but-undefined (p.1): thing\n');
     execSync('git add -A', { cwd: p, stdio: 'ignore' });
     // No node_modules and --no-install means npx cannot resolve boardsmith here. The commit must
     // still succeed: a game project must never become uncommittable because of this hook.
@@ -117,8 +118,8 @@ describe('the hook script itself', () => {
 
   it('stages its corrections so they land in the same commit', () => {
     // Fixing files without staging them would leave the commit wrong and the tree dirty.
-    expect(INGEST_PRE_COMMIT_HOOK).toContain('git add rulebook/INDEX.md');
-    expect(INGEST_PRE_COMMIT_HOOK).toContain('git add rulebook/*.md');
+    expect(INGEST_PRE_COMMIT_HOOK).toContain('git add "$RULEBOOK/INDEX.md"');
+    expect(INGEST_PRE_COMMIT_HOOK).toContain('git add "$RULEBOOK"/*.md');
   });
 
   it('exits 0 on every path — it fixes, it never blocks a commit', () => {

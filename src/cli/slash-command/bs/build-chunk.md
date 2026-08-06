@@ -42,9 +42,28 @@ sources (slices, docs, code), not on reading chunk state. `${CLAUDE_SKILL_DIR}/.
 `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md` restate the source-reading ban because those are the two steps where the
 temptation to "double-check by re-reading the sources a subagent just read" is strongest.
 
-## Step 0: Entry — Ingest Synthesis Check + Consistency Check + Session Lock
+## Step 0: Entry — Layout Check + Ingest Synthesis Check + Consistency Check + Session Lock
 
 On entry, before any other work, run:
+
+```bash
+npx boardsmith doctor
+```
+
+**This is the layout gate and it is not optional.** Every design artifact — `SKETCH.md`,
+`RULINGS.md`, `chunks/<slug>/CHUNK.md`, `rulebook/` — lives under the project's `design/`
+directory, and every path named in this skill is written relative to it (see
+`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Project Layout"). `doctor` exits non-zero
+when an artifact is loose in the project root — the layout every game built before `design/`
+existed still has. On a non-zero exit run `npx boardsmith doctor --fix`, which moves everything
+into place with `git mv` and deletes nothing, then continue. Do not hand-move these files and do
+not proceed against a project that failed this gate: a stale path silently reads the wrong file.
+
+Throwaway scripts you write during this chunk — repro drivers, probes, capture harnesses — go in
+`.boardsmith/scratch/`, never the project root. That directory is gitignored; the project root is
+not, and scratch left there gets committed.
+
+Then run:
 
 ```bash
 npx boardsmith ingest-check

@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -117,7 +118,7 @@ describe('staged-slice resolution — resolveStagedSlicePaths, over the real com
 
   async function copyFixture(game: 'seven' | 'one-two-punch'): Promise<void> {
     const src = join(FIXTURE_ROOT, game);
-    const dest = join(project, 'rulebook', '.verify', runId);
+    const dest = join(project, DESIGN_DIR, 'rulebook', '.verify', runId);
     await fs.mkdir(dest, { recursive: true });
     await fs.cp(src, dest, { recursive: true });
   }
@@ -417,7 +418,7 @@ async function buildRepairGateTestProject(
   const firstSha = execSync('git rev-parse HEAD', { cwd: project }).toString().trim();
 
   const slug = 'movement';
-  const chunkDir = join(project, 'chunks', slug);
+  const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
   await fs.mkdir(chunkDir, { recursive: true });
   const hash = opts.validHash === false ? 'not-a-hash' : firstSha;
   await fs.writeFile(

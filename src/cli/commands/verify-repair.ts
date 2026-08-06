@@ -1,3 +1,6 @@
+import {
+  chunkMdPath,
+} from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -394,7 +397,7 @@ export async function verifyRepairStatusCommand(
 
       let chunkMd = '';
       try {
-        chunkMd = await fs.readFile(join(projectDir, 'chunks', entry.slug, 'CHUNK.md'), 'utf-8');
+        chunkMd = await fs.readFile(chunkMdPath(projectDir, entry.slug), 'utf-8');
       } catch {
         warnings.push(
           `[repair-status] chunk "${entry.slug}" is marked stale but has no readable ` +

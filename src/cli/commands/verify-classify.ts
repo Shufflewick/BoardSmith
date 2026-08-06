@@ -1,3 +1,10 @@
+import {
+  DESIGN_DIR,
+  RULEBOOK_DIR,
+  designChunksDir,
+  designDir,
+  designRulebookDir,
+} from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -459,17 +466,21 @@ export async function resolveProvenance(
 
   const wantedNames = new Set(
     liveSlices.map((p) => {
-      const rel = relative(dir, resolve(dir, p.startsWith('rulebook/') ? p : join('rulebook', p)));
+      // Citations are written relative to `design/`, so that — not the project root — is the
+      // containment base: `rulebook/02-x.md` and a bare `02-x.md` both land in `design/rulebook/`.
+      const base = designDir(dir);
+      const rel = relative(base, resolve(base, p.startsWith(`${RULEBOOK_DIR}/`) ? p : join(RULEBOOK_DIR, p)));
       if (rel.startsWith('..') || isAbsolute(rel)) {
         throw new Error(
-          `Live slice path "${p}" resolves outside ${dir}.\nPass a path relative to the project.`,
+          `Live slice path "${p}" resolves outside ${base}.\n` +
+            `Pass a path of the form "${RULEBOOK_DIR}/<file>.md", relative to ${DESIGN_DIR}/.`,
         );
       }
       return bareSliceName(p);
     }),
   );
 
-  const chunksDir = join(dir, 'chunks');
+  const chunksDir = designChunksDir(dir);
   let slugs: string[] = [];
   try {
     const entries = await fs.readdir(chunksDir, { withFileTypes: true });
@@ -478,7 +489,7 @@ export async function resolveProvenance(
     slugs = [];
   }
 
-  const rulebookDir = join(dir, 'rulebook');
+  const rulebookDir = designRulebookDir(dir);
   let sliceFilenames: string[] = [];
   try {
     const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
@@ -542,7 +553,7 @@ export async function resolveProvenance(
 
 /** All run-ids present under this project's `rulebook/.verify/`, sorted (empty if none). */
 async function listRunIds(projectDir: string): Promise<string[]> {
-  const verifyRoot = join(projectDir, 'rulebook', '.verify');
+  const verifyRoot = join(designRulebookDir(projectDir), '.verify');
   let entries: Array<{ name: string; isDirectory(): boolean }>;
   try {
     entries = await fs.readdir(verifyRoot, { withFileTypes: true });
@@ -604,7 +615,7 @@ async function computeRunPairs(
 ): Promise<{ pairs: SlicePair[]; provenance: Record<string, ProvenanceResult>; warnings: string[] }> {
   const warnings: string[] = [];
 
-  const rulebookDir = join(projectDir, 'rulebook');
+  const rulebookDir = designRulebookDir(projectDir);
   let ruleFileNames: string[] = [];
   try {
     const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
@@ -698,7 +709,7 @@ export async function verifyClassifyPairsCommand(
   // T-174-14: --live-slice must resolve inside this project's rulebook dir, validated before any
   // read. Mirrors verify-run.ts:756-763's path-escape guard verbatim.
   if (options.liveSlice !== undefined) {
-    const rulebookDir = join(projectDir, 'rulebook');
+    const rulebookDir = designRulebookDir(projectDir);
     const abs = resolve(rulebookDir, options.liveSlice);
     const rel = relative(rulebookDir, abs);
     if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
@@ -1214,7 +1225,7 @@ async function computeChunkVerdicts(
   pairs: SlicePair[],
   classifications: ClassificationRecord[],
 ): Promise<{ verdicts: ChunkVerdict[]; warnings: string[] }> {
-  const chunksDir = join(projectDir, 'chunks');
+  const chunksDir = designChunksDir(projectDir);
   let slugs: string[] = [];
   try {
     const entries = await fs.readdir(chunksDir, { withFileTypes: true });
@@ -1223,7 +1234,7 @@ async function computeChunkVerdicts(
     slugs = [];
   }
 
-  const rulebookDir = join(projectDir, 'rulebook');
+  const rulebookDir = designRulebookDir(projectDir);
   let sliceFilenames: string[] = [];
   try {
     const entries = await fs.readdir(rulebookDir, { withFileTypes: true });

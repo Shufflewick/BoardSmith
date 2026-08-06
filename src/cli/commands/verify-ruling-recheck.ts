@@ -1,3 +1,8 @@
+import {
+  RULINGS_MD,
+  designPath,
+  designRulebookDir,
+} from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -187,7 +192,7 @@ export type FreshTranscriptionResolution =
 
 /** All run-ids present under this project's `rulebook/.verify/`, sorted (empty if none). */
 async function listRunIds(projectDir: string): Promise<string[]> {
-  const verifyRoot = join(projectDir, 'rulebook', '.verify');
+  const verifyRoot = join(designRulebookDir(projectDir), '.verify');
   let entries: Array<{ name: string; isDirectory(): boolean }>;
   try {
     entries = await fs.readdir(verifyRoot, { withFileTypes: true });
@@ -225,7 +230,7 @@ export async function resolveFreshTranscription(
       reason:
         `"--run-id ${runId}" is not a valid verify run id (expected the shape ` +
         `YYYY-MM-DDTHH-MM-SSZ) — no fresh transcription can be resolved from it.`,
-      missingPath: relative(projectDir, join(projectDir, 'rulebook', '.verify', runId)),
+      missingPath: relative(projectDir, join(designRulebookDir(projectDir), '.verify', runId)),
     };
   }
 
@@ -238,7 +243,7 @@ export async function resolveFreshTranscription(
         reason:
           'No verify run has been staged under rulebook/.verify/ — a fresh transcription has ' +
           'never been produced for this project. Run `boardsmith verify-run-init` first.',
-        missingPath: relative(projectDir, join(projectDir, 'rulebook', '.verify')),
+        missingPath: relative(projectDir, join(designRulebookDir(projectDir), '.verify')),
       };
     }
     resolvedRunId = runIds[runIds.length - 1];
@@ -341,7 +346,7 @@ export async function verifyRulingRecheckCommand(
   } = {},
 ): Promise<VerifyRulingRecheckResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const rulingsPath = join(projectDir, 'RULINGS.md');
+  const rulingsPath = designPath(projectDir, RULINGS_MD);
 
   let rulingsText: string;
   try {
@@ -585,7 +590,7 @@ export async function verifyRulingRecordCommand(
     );
   }
 
-  const rulingsPath = join(projectDir, 'RULINGS.md');
+  const rulingsPath = designPath(projectDir, RULINGS_MD);
   let rulingsText: string;
   try {
     rulingsText = await fs.readFile(rulingsPath, 'utf-8');

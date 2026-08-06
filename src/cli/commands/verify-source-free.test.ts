@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -152,7 +153,7 @@ describe('computeSourceFreeReport', () => {
 
   it('project with a Source hash: line but no file at the recorded Source: path -> source-free, code-conformance-only, source-missing', async () => {
     const project = join(dir, 'game-source-missing');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -176,7 +177,7 @@ describe('computeSourceFreeReport', () => {
 
   it('project with archived source whose sha256 matches -> not source-free, full, empty uncheckedDefectClasses', async () => {
     const project = join(dir, 'game-full');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes for the full-scope case\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -191,8 +192,8 @@ describe('computeSourceFreeReport', () => {
         transcribed: '2026-08-01',
       }),
     );
-    await fs.mkdir(join(project, 'rulebook/source'), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook/source'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
 
     const report = await computeSourceFreeReport(project);
     expect(report.sourceFree).toBe(false);
@@ -204,7 +205,7 @@ describe('computeSourceFreeReport', () => {
 
   it('source-free fixture: uncheckedDefectClasses has at least 5 entries, all with non-empty fields', async () => {
     const project = join(dir, 'game-source-free-count');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -230,7 +231,7 @@ describe('computeSourceFreeReport', () => {
 
   it('stepsRun and stepsSkipped never overlap and together cover VERIFY_PIPELINE_STEPS.length', async () => {
     const project = join(dir, 'game-partition');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -264,7 +265,7 @@ describe('computeSourceFreeReport', () => {
 
   it('checksRun always lists the four source-free-by-construction checks, regardless of scope', async () => {
     const project = join(dir, 'game-checks-run');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -279,8 +280,8 @@ describe('computeSourceFreeReport', () => {
         transcribed: '2026-08-01',
       }),
     );
-    await fs.mkdir(join(project, 'rulebook/source'), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook/source'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
 
     const report = await computeSourceFreeReport(project);
     const commands = report.checksRun.map((c) => c.command).sort();
@@ -311,7 +312,7 @@ describe('verifySourceFreeCheckCommand', () => {
 
   async function makeSourceFreeFixture(name: string): Promise<string> {
     const project = join(dir, name);
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -331,7 +332,7 @@ describe('verifySourceFreeCheckCommand', () => {
 
   async function makeFullScopeFixture(name: string): Promise<string> {
     const project = join(dir, name);
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes, full scope\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -346,8 +347,8 @@ describe('verifySourceFreeCheckCommand', () => {
         transcribed: '2026-08-01',
       }),
     );
-    await fs.mkdir(join(project, 'rulebook/source'), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook/source'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
     return project;
   }
 
@@ -471,7 +472,7 @@ describe('PROV-02 data flow — source-free project', () => {
 
   it('source-missing fixture: renderVerifiedAgainst emits code-conformance-only AND a Reason: source-missing line; computeSourceFreeReport and computeVerificationScope agree', async () => {
     const project = join(dir, 'game-source-missing');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -512,7 +513,7 @@ describe('PROV-02 data flow — source-free project', () => {
 
   it('pre-provenance-project fixture (no Source hash: line at all): computeSourceFreeReport reports sourceFree: true and agrees with computeVerificationScope', async () => {
     const project = join(dir, 'game-pre-provenance');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     // one-two-punch's / seven's real pre-Phase-170 shape: an Edition: line, no Source:, no
     // Source hash: line at all — reproduced directly, matching chunk-provenance.test.ts's own
@@ -557,7 +558,7 @@ describe('PROV-02 data flow — source-free project', () => {
 
   it('full-scope fixture: renderVerifiedAgainst emits no line beginning Reason:', async () => {
     const project = join(dir, 'game-full');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes, full scope\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -572,8 +573,8 @@ describe('PROV-02 data flow — source-free project', () => {
         transcribed: '2026-08-01',
       }),
     );
-    await fs.mkdir(join(project, 'rulebook/source'), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook/source'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
 
     const scope = await computeVerificationScope(project);
     expect(scope.scope).toBe('full');
@@ -597,7 +598,7 @@ describe('PROV-02 data flow — source-free project', () => {
 
   it("verify-source-free-check --json's scope and reason match the same fixture's renderVerifiedAgainst inputs (one project state, one answer)", async () => {
     const project = join(dir, 'game-cross-surface');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');

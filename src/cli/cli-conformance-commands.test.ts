@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from './lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync, execFile } from 'node:child_process';
@@ -99,7 +100,7 @@ async function hashProject(root: string): Promise<string> {
 /** A fixture project with real findings: a live claim that no test cites (claim-untested). */
 async function makeTraceCheckFixtureWithFindings(): Promise<string> {
   const project = join(dir, 'trace-fixture');
-  const chunkDir = join(project, 'chunks', 'limb');
+  const chunkDir = join(project, DESIGN_DIR, 'chunks', 'limb');
   await fs.mkdir(chunkDir, { recursive: true });
   const text = [
     '# Chunk: limb',
@@ -136,7 +137,7 @@ async function makeDriftCheckFixtureWithDrift(): Promise<string> {
   execSync('git add -A', { cwd: repoDir, stdio: 'ignore' });
   execSync('git -c user.email=t@t -c user.name=t commit -m second', { cwd: repoDir, stdio: 'ignore' });
 
-  const chunkDir = join(repoDir, 'chunks', 'limb');
+  const chunkDir = join(repoDir, DESIGN_DIR, 'chunks', 'limb');
   await fs.mkdir(chunkDir, { recursive: true });
   const text = [
     '# Chunk: limb',
@@ -213,7 +214,7 @@ describe('drift-check — real CLI entry point', () => {
 
   it('exits 1 with a single clean actionable line against a directory that is not a git repo', async () => {
     const notGitProject = join(dir, 'not-a-git-repo');
-    await fs.mkdir(join(notGitProject, 'chunks'), { recursive: true });
+    await fs.mkdir(join(notGitProject, DESIGN_DIR, 'chunks'), { recursive: true });
 
     const result = await spawnCli(['drift-check', '--project', notGitProject, '--json']);
 

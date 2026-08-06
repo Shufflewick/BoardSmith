@@ -1,3 +1,6 @@
+import {
+  designRulebookDir,
+} from '../lib/project-paths.js';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -329,7 +332,7 @@ export async function ingestGapsCommand(
       await ingestRelabelCommand({ project: projectDir, json: false, quiet: options.quiet })
     ).relabelled;
   }
-  const rulebookDir = join(projectDir, 'rulebook');
+  const rulebookDir = designRulebookDir(projectDir);
   const indexPath = join(rulebookDir, 'INDEX.md');
 
   let index: string;
@@ -480,7 +483,7 @@ export async function ingestRelabelCommand(
   options: { project?: string; json?: boolean; dryRun?: boolean; quiet?: boolean } = {},
 ): Promise<{ relabelled: number; changes: Array<{ file: string; line: number; matched: string }> }> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const dir = join(projectDir, 'rulebook');
+  const dir = designRulebookDir(projectDir);
   const lexicon = new RegExp(`(${PRESENTATION_LEXICON.join('|')})`, 'i');
 
   let names: string[];
@@ -624,7 +627,7 @@ export async function ingestArchiveCommand(
   }
 
   const fileName = basename(sourcePath);
-  const archiveDir = join(projectDir, 'rulebook', 'source');
+  const archiveDir = join(designRulebookDir(projectDir), 'source');
   const archivePath = join(archiveDir, fileName);
   const relArchivePath = `rulebook/source/${fileName}`;
 
@@ -655,7 +658,7 @@ export async function ingestArchiveCommand(
 
   const gameName = basename(projectDir);
   const transcribed = isoDate(new Date());
-  const indexPath = join(projectDir, 'rulebook', 'INDEX.md');
+  const indexPath = join(designRulebookDir(projectDir), 'INDEX.md');
 
   // Decide the branch BEFORE any try/catch that performs a write. Today's bug (T-173-01): the
   // existence probe and the real repair write shared one try, with a catch that overwrote a real

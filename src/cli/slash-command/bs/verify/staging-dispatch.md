@@ -94,7 +94,8 @@ For each pending range (per Resume above), dispatch one Task-tool subagent. **Do
 summarize the transcription contract in the dispatch prompt.** The contract lives in
 `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md`; the subagent reads it
 directly. Copy this pointer block byte-identical except the last line, filling `Write slices to:`
-with the run's `stagingDir` instead of `rulebook/`:
+with the run's `stagingDir` (an absolute path the run-init CLI returns) instead of the ingest
+path's `design/rulebook/`:
 
 ```
 BS-DISPATCH-V2
@@ -114,7 +115,7 @@ You cannot produce the token from memory, so carrying it is the proof you copied
 than recalled one. Copy the block; do not retype it from what you remember a transcription prompt
 looking like.
 
-Fill `{rulebookPath}` with the path recorded at `rulebook/source/<file>` (Step 1's resolved
+Fill `{rulebookPath}` with the path recorded at `design/rulebook/source/<file>` (Step 1's resolved
 archive) and `{N}`-`{M}` with the range being dispatched — a fresh-context Task subagent has no
 inherited knowledge of where the source lives or which run it belongs to.
 

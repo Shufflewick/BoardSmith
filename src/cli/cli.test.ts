@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from './lib/project-paths.js';
 import { describe, it, expect, vi } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -63,9 +64,9 @@ describe('verify-derive-check — registration', () => {
     const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-derive-check-'));
     try {
       const project = join(dir, 'project');
-      await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+      await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
       await fs.writeFile(
-        join(project, 'rulebook', '01-x.md'),
+        join(project, DESIGN_DIR, 'rulebook', '01-x.md'),
         'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 7 unique numbers.\n',
       );
 
@@ -148,9 +149,9 @@ describe('verify-example-replay — registration (CHECK-06)', () => {
     const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-example-replay-'));
     try {
       const project = join(dir, 'project');
-      await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+      await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
       await fs.writeFile(
-        join(project, 'rulebook', '01-x.md'),
+        join(project, DESIGN_DIR, 'rulebook', '01-x.md'),
         'p.1, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
       );
 
@@ -225,10 +226,10 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
     const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-example-translate-'));
     try {
       const project = join(dir, 'project');
-      await fs.mkdir(join(project, 'rulebook'), { recursive: true });
+      await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
       await fs.mkdir(join(project, 'src', 'rules'), { recursive: true });
       await fs.writeFile(
-        join(project, 'rulebook', '02-punch.md'),
+        join(project, DESIGN_DIR, 'rulebook', '02-punch.md'),
         'p.2, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
       );
       await fs.writeFile(
@@ -307,11 +308,11 @@ describe('verify-example-emit — registration (TEST-01, the build-side write su
     const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-example-emit-'));
     try {
       const project = join(dir, 'project');
-      await fs.mkdir(join(project, 'rulebook'), { recursive: true });
-      await fs.writeFile(join(project, 'rulebook', '01-x.md'), 'No worked examples here.\n');
-      await fs.mkdir(join(project, 'chunks', 'chunk-a'), { recursive: true });
+      await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+      await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-x.md'), 'No worked examples here.\n');
+      await fs.mkdir(join(project, DESIGN_DIR, 'chunks', 'chunk-a'), { recursive: true });
       await fs.writeFile(
-        join(project, 'chunks', 'chunk-a', 'CHUNK.md'),
+        join(project, DESIGN_DIR, 'chunks', 'chunk-a', 'CHUNK.md'),
         '# chunk-a\n\n## Verified Against\n\nCites rulebook/01-x.md.\n',
       );
 

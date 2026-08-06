@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
@@ -28,11 +29,11 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 async function mkProject(dir: string, opts: { chunkSlug: string; slicePath: string; sliceText: string }) {
   const project = join(dir, 'project');
   const sliceName = opts.slicePath.slice('rulebook/'.length);
-  await fs.mkdir(join(project, 'rulebook'), { recursive: true });
-  await fs.writeFile(join(project, 'rulebook', sliceName), opts.sliceText);
-  await fs.mkdir(join(project, 'chunks', opts.chunkSlug), { recursive: true });
+  await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+  await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', sliceName), opts.sliceText);
+  await fs.mkdir(join(project, DESIGN_DIR, 'chunks', opts.chunkSlug), { recursive: true });
   await fs.writeFile(
-    join(project, 'chunks', opts.chunkSlug, 'CHUNK.md'),
+    join(project, DESIGN_DIR, 'chunks', opts.chunkSlug, 'CHUNK.md'),
     `# ${opts.chunkSlug}\n\n## Verified Against\n\nCites ${opts.slicePath}.\n`,
   );
   return project;
@@ -189,18 +190,18 @@ describe('verifyExampleEmitCommand', () => {
 
   it('emits one file per chunk; regenerating chunk A never touches chunk B (D-08)', async () => {
     const project = join(dir, 'project');
-    await fs.mkdir(join(project, 'rulebook'), { recursive: true });
-    await fs.writeFile(join(project, 'rulebook', '01-a.md'), 'Slice A, no examples.\n');
-    await fs.writeFile(join(project, 'rulebook', '01-b.md'), 'Slice B, no examples.\n');
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-a.md'), 'Slice A, no examples.\n');
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-b.md'), 'Slice B, no examples.\n');
     for (const slug of ['chunk-a', 'chunk-b']) {
-      await fs.mkdir(join(project, 'chunks', slug), { recursive: true });
+      await fs.mkdir(join(project, DESIGN_DIR, 'chunks', slug), { recursive: true });
     }
     await fs.writeFile(
-      join(project, 'chunks', 'chunk-a', 'CHUNK.md'),
+      join(project, DESIGN_DIR, 'chunks', 'chunk-a', 'CHUNK.md'),
       '# chunk-a\n\n## Verified Against\n\nCites rulebook/01-a.md.\n',
     );
     await fs.writeFile(
-      join(project, 'chunks', 'chunk-b', 'CHUNK.md'),
+      join(project, DESIGN_DIR, 'chunks', 'chunk-b', 'CHUNK.md'),
       '# chunk-b\n\n## Verified Against\n\nCites rulebook/01-b.md.\n',
     );
 

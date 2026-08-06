@@ -1,3 +1,4 @@
+import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -940,7 +941,7 @@ describe('QuoteVerifiedProvenance', () => {
 
   it('is null for a pre-provenance project (INDEX.md with no Source hash: line)', async () => {
     const project = join(dir, 'pre-provenance');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.writeFile(
       join(rulebookDir, 'INDEX.md'),
@@ -952,7 +953,7 @@ describe('QuoteVerifiedProvenance', () => {
 
   it('is non-null when the archived source exists and its hash matches INDEX.md', async () => {
     const project = join(dir, 'full-provenance');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -967,8 +968,8 @@ describe('QuoteVerifiedProvenance', () => {
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
 
     const provenance = await QuoteVerifiedProvenance.obtain(project);
     expect(provenance).not.toBeNull();
@@ -977,7 +978,7 @@ describe('QuoteVerifiedProvenance', () => {
 
   it('is null when the archived source bytes no longer match the recorded hash', async () => {
     const project = join(dir, 'mismatched');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceHash = createHash('sha256').update(Buffer.from('original bytes\n')).digest('hex');
     const relArchivedPath = 'rulebook/source/rules.pdf';
@@ -991,8 +992,8 @@ describe('QuoteVerifiedProvenance', () => {
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), Buffer.from('tampered bytes\n'));
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), Buffer.from('tampered bytes\n'));
 
     const provenance = await QuoteVerifiedProvenance.obtain(project);
     expect(provenance).toBeNull();
@@ -1020,7 +1021,7 @@ async function buildProjectWithSources(
   rootExtras: string[],
 ): Promise<{ project: string; provenance: QuoteVerifiedProvenance }> {
   const project = join(dir, label);
-  const rulebookDir = join(project, 'rulebook');
+  const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
   await fs.mkdir(rulebookDir, { recursive: true });
   const sourceBuf = Buffer.from(`%PDF-1.4 fake bytes ${label}\n`);
   const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -1035,8 +1036,8 @@ async function buildProjectWithSources(
       transcribed: '2026-07-28',
     }),
   );
-  await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
-  await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+  await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+  await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
   // The archived file's own original, at the project root — matches every real reference game.
   await fs.writeFile(join(project, archivedName), sourceBuf);
   for (const extra of rootExtras) {
@@ -1322,7 +1323,7 @@ describe('classifyDerivedLines', () => {
 
   it('reports "contradicted" for real when provenance IS present and cited facts are genuinely grounded', async () => {
     const project = join(dir, 'full-provenance-for-classify');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake bytes\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -1337,8 +1338,8 @@ describe('classifyDerivedLines', () => {
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
     const provenance = await QuoteVerifiedProvenance.obtain(project);
     expect(provenance).not.toBeNull();
 
@@ -1360,7 +1361,7 @@ describe('classifyDerivedLines', () => {
 
   it('downgrades "contradicted" to "uncorroborated" (never trusted as contradiction) when cited facts are not grounded, even with provenance present', async () => {
     const project = join(dir, 'full-provenance-ungrounded-cite');
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from('%PDF-1.4 fake bytes 2\n');
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -1375,8 +1376,8 @@ describe('classifyDerivedLines', () => {
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
     const provenance = await QuoteVerifiedProvenance.obtain(project);
 
     const claim: ReconcilerDerivedLineClaim = {
@@ -1448,7 +1449,7 @@ describe('classifyDerivedLines', () => {
 describe('classifyDerivedLines — absence claims', () => {
   async function fullProvenance(label: string): Promise<QuoteVerifiedProvenance> {
     const project = join(dir, label);
-    const rulebookDir = join(project, 'rulebook');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(rulebookDir, { recursive: true });
     const sourceBuf = Buffer.from(`%PDF-1.4 fake bytes ${label}\n`);
     const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
@@ -1463,8 +1464,8 @@ describe('classifyDerivedLines — absence claims', () => {
         transcribed: '2026-07-28',
       }),
     );
-    await fs.mkdir(dirname(join(project, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, relArchivedPath), sourceBuf);
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
     const provenance = await QuoteVerifiedProvenance.obtain(project);
     if (!provenance) throw new Error('test setup failed to construct provenance');
     return provenance;

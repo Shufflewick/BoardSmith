@@ -63,33 +63,51 @@ the floor, obey it immediately, persist, and stop.
 Read the harness's actual context-usage percentage against these numbers. Never stop on a vague
 "this is getting long" hunch that ignores the real figure.
 
+## Where Everything This Skill Writes Goes
+
+Every artifact this skill produces — `BRIEF.md`, `SKETCH.md`, `ASSETS.md`, `DECISIONS.md`,
+`RULINGS.md`, `rulebook/` and its slices, `chunks/<slug>/CHUNK.md` — is written under the new
+project's **`design/`** directory, which `boardsmith init` creates. Every path named in this file
+is written relative to `design/` (see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Project
+Layout"): `rulebook/02-setup.md` is on disk at `design/rulebook/02-setup.md`. Prepend `design/`
+whenever you Write or Read one directly. The `boardsmith` commands resolve these paths themselves;
+your own file writes must not.
+
+Throwaway scripts — a probe, a repro driver, a conversion one-off — go in `.boardsmith/scratch/`,
+which is gitignored. Never the project root.
+
+Because this skill scaffolds the project rather than entering an existing one, it does not run the
+`boardsmith doctor` layout gate the other `bs-` skills open with; `init` produces the current
+layout by construction. If you are resuming into a project that predates `design/` (case 2 or 3
+below), run `npx boardsmith doctor --fix` first.
+
 ## Step 0: State Detection (INGEST-07)
 
 On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
 ("Consistency Check"). Then determine which of four cases applies (use `ls <file>` direct
 checks in the current directory, never `**/glob` patterns that search subfolders):
 
-1. **Empty / fresh directory** — no `SKETCH.md`, no `PROJECT.md`, no `rulebook/`, no
-   `ASSETS.md`. The current directory is the **parent** the game project will be created
-   under. Proceed straight to Step 1, which scaffolds `<name>/`; every subsequent step then
-   runs from inside `<name>/`.
-2. **Interrupted ingest** (`rulebook/` or `ASSETS.md` present, but no `SKETCH.md`) — a
+1. **Empty / fresh directory** — no `design/`, no `PROJECT.md`. The current directory is the
+   **parent** the game project will be created under. Proceed straight to Step 1, which scaffolds
+   `<name>/`; every subsequent step then runs from inside `<name>/`.
+2. **Interrupted ingest** (`design/rulebook/` or `design/ASSETS.md` present, but no
+   `design/SKETCH.md`) — a
    previous ingest session crashed after transcription/interview started but before Step 7
    wrote the sketch. This is NOT a fresh directory: running Step 1's `init` here would
    scaffold a nested `<name>/<name>/` project, and re-transcribing would orphan the
    already-confirmed slices. STOP and ask the user whether to **resume from the existing
    slices** (skip Steps 1-2, re-run Step 3 onward from the slices' accumulated INDEX/ASSETS
    content — re-dispatching narrow subagents only for anything missing) or **discard and
-   restart** (delete `rulebook/`, `ASSETS.md`, and any `chunks/`, then treat the project
+   restart** (delete `design/rulebook/`, `design/ASSETS.md`, and any `design/chunks/`, then treat the project
    directory per Step 1's verification-only path — `init` already ran). Never proceed
    silently on either path.
-3. **Existing bs- project** (`SKETCH.md` present — i.e. the session was invoked *inside* a
+3. **Existing bs- project** (`design/SKETCH.md` present — i.e. the session was invoked *inside* a
    project this skill already created) — this is a **re-run guard**: re-ingesting is
    destructive to sketch state (it would overwrite the ordered chunk list and rulebook slices).
    STOP and ask the user to explicitly confirm before proceeding. Do not treat re-run as a resume
    — resuming mid-sketch is `/bs-build-chunk`'s job, not this skill's.
 4. **Old `/design-game` project** (`PROJECT.md` + `STATE.md` + `HISTORY.md` present, no
-   `SKETCH.md`, no `rulebook/` — the trio distinguishes it from case 2) — offer a
+   `design/SKETCH.md`, no `design/rulebook/` — the trio distinguishes it from case 2) — offer a
    **one-time migration**: interview data and the old skill's Deferred
    Ideas become sketch chunks; already-completed features are marked verified with a note that
    they were verified under the old process. On acceptance, **skip Step 1 (Scaffold) entirely**

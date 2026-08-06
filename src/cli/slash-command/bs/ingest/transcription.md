@@ -69,11 +69,12 @@ exactly.
 
 Your page range: {N}-{M}
 Rulebook path:   {rulebookPath}
-Write slices to: rulebook/
+Write slices to: design/rulebook/
 ```
 
-`Write slices to:` is a per-dispatch substitution, not a constant — this ingest path always fills
-it with `rulebook/`, but the verify orchestrator (`bs/verify/*.md`) is the other caller of this
+`Write slices to:` is a per-dispatch substitution, not a constant — it is the one place a real
+on-disk path appears rather than a design-relative one, because the subagent has no project
+context to resolve it against. This ingest path always fills it with `design/rulebook/`, but the verify orchestrator (`bs/verify/*.md`) is the other caller of this
 same contract and fills it with a staging path instead. The contract in
 `transcription-subagent.md` treats it as an input either way.
 

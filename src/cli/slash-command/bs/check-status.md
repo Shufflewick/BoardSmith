@@ -32,6 +32,27 @@ Keep requirement tags, run ids, file paths, step names, and command names other 
 command out of the body. A count belongs in the report only when it tells the designer something
 about their game.
 
+## Step 0a: Layout Check on Entry
+
+Before anything else, run:
+
+```bash
+npx boardsmith doctor
+```
+
+Every design artifact this skill reads — `SKETCH.md`, `chunks/<slug>/CHUNK.md`, `ASSETS.md`,
+`RULINGS.md`, `rulebook/` — lives under the project's `design/` directory, and every path named in
+this file is written relative to it (see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
+"Project Layout"): prepend `design/` whenever you actually Read one. `doctor` exits non-zero when
+an artifact is still loose in the project root, which is the layout every game built before
+`design/` existed has.
+
+**This skill is read-only, so it never passes `--fix`.** On a non-zero exit, read the paths from
+the plain `doctor` report so the rest of this status pass reads the files where they actually are,
+and tell the designer their project predates the current layout and one command
+(`boardsmith doctor --fix`) moves it — then let them decide. Repair is `/bs-build-chunk`'s job,
+exactly as it is for every other inconsistency this skill finds.
+
 ## Step 0: Consistency Check on Entry
 
 On entry, before any other work, run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`

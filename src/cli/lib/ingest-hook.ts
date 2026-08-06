@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
+import { DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
 
 /**
  * The `pre-commit` hook `boardsmith init` installs into every scaffolded game project.
@@ -7,7 +8,7 @@ import { join } from 'node:path';
  * WHY A HOOK
  *
  * Thirteen mechanisms were tried to get an ingest session to run the synthesis step that fills
- * `rulebook/INDEX.md`'s gaps section and moves presentation notes off the `Derived (p.N):`
+ * `design/rulebook/INDEX.md`'s gaps section and moves presentation notes off the `Derived (p.N):`
  * prefix. Prose, a template, a pointer, a handshake token, a delegated subagent, re-read gates,
  * a CLI command, that command as an item in a sequence whose other items always run, and finally
  * that command reduced to a single invocation — every one of them was skipped on live runs, often
@@ -27,7 +28,7 @@ import { join } from 'node:path';
  * "The build protocol commits at every step" is true of `/bs-build-chunk` and false of
  * `/bs-ingest-rules`, which has no commit in it at all. A real ingest run therefore ENDS with
  * this hook never having fired: gaps unswept, nothing relabelled. `/bs-build-chunk` then reads
- * `rulebook/INDEX.md` during investigate, before its own first commit, so the first chunk is
+ * `design/rulebook/INDEX.md` during investigate, before its own first commit, so the first chunk is
  * planned against the unsynthesized index.
  *
  * Two things close that window, and neither replaces this hook:
@@ -51,8 +52,8 @@ import { join } from 'node:path';
 export const INGEST_PRE_COMMIT_HOOK = `#!/bin/sh
 # BoardSmith ingest synthesis — installed by \`boardsmith init\`.
 #
-# Fills rulebook/INDEX.md's "## Open Rules Gaps" section from the slice files and relabels
-# Derived (p.N): lines that are pure presentation description as Visual (p.N):.
+# Fills ${DESIGN_DIR}/${RULEBOOK_DIR}/INDEX.md's "## Open Rules Gaps" section from the slice files and
+# relabels Derived (p.N): lines that are pure presentation description as Visual (p.N):.
 #
 # This runs here, rather than as a step in the bs- ingest skill, because thirteen attempts to
 # have the ingest session invoke it were all skipped on live runs. A hook is not chosen by the
@@ -63,22 +64,24 @@ export const INGEST_PRE_COMMIT_HOOK = `#!/bin/sh
 
 set -u
 
+RULEBOOK="${DESIGN_DIR}/${RULEBOOK_DIR}"
+
 # Nothing to synthesize until transcription has produced slices and the index scaffold exists.
-[ -f rulebook/INDEX.md ] || exit 0
-if ! ls rulebook/*.md >/dev/null 2>&1; then exit 0
+[ -f "$RULEBOOK/INDEX.md" ] || exit 0
+if ! ls "$RULEBOOK"/*.md >/dev/null 2>&1; then exit 0
 fi
-SLICES=$(ls rulebook/*.md 2>/dev/null | grep -v 'INDEX.md$' | grep -v '00-visual-survey.md$' | head -1)
+SLICES=$(ls "$RULEBOOK"/*.md 2>/dev/null | grep -v 'INDEX.md$' | grep -v '00-visual-survey.md$' | head -1)
 [ -n "$SLICES" ] || exit 0
 
 if ! npx --no-install boardsmith ingest-gaps >/dev/null 2>&1; then
   echo "boardsmith: ingest synthesis skipped (could not run 'boardsmith ingest-gaps')." >&2
-  echo "boardsmith: run it manually before relying on rulebook/INDEX.md." >&2
+  echo "boardsmith: run it manually before relying on $RULEBOOK/INDEX.md." >&2
   exit 0
 fi
 
 # Include the corrections in THIS commit rather than leaving them dirty afterwards.
-git add rulebook/INDEX.md >/dev/null 2>&1 || true
-git add rulebook/*.md >/dev/null 2>&1 || true
+git add "$RULEBOOK/INDEX.md" >/dev/null 2>&1 || true
+git add "$RULEBOOK"/*.md >/dev/null 2>&1 || true
 
 exit 0
 `;

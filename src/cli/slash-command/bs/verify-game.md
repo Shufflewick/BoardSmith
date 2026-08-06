@@ -105,6 +105,25 @@ commands and dispatched unchanged, which is what keeps the orchestrator's own tr
 even while these subagent payloads legitimately carry exactly the strings that rule forbids from
 this transcript.
 
+## Layout Check on Entry
+
+Before Step 0, run:
+
+```bash
+npx boardsmith doctor
+```
+
+Every artifact this skill reads or stages — `rulebook/` and its `.verify/` staging tree,
+`chunks/<slug>/CHUNK.md`, `SKETCH.md`, `RULINGS.md` — lives under the project's `design/`
+directory, and every path named in this file is written relative to it (see
+`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Project Layout"): prepend `design/` whenever
+you Read or Write one directly. `doctor` exits non-zero when an artifact is still loose in the
+project root — the layout every game built before `design/` existed has, and exactly the projects
+this skill is pointed at. On a non-zero exit run `npx boardsmith doctor --fix`, which moves
+everything into place with `git mv` and deletes nothing, then continue. Do not begin a verify run
+against a project that failed this gate: a run staged under the wrong tree is a run that has to be
+thrown away.
+
 ## Step 0: State Detection and Lock (VERIFY-01)
 
 On entry, before any other work, run the consistency check described in
