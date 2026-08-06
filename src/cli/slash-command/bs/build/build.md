@@ -1,18 +1,39 @@
 # Build — Writing the Code (BUILD-05)
 
-Referenced by `build-chunk.md` Step 4 (`build`, first of the `{build, test}` session step
+Referenced by `build-chunk.md` Step 5 (`build`, second of the `{spec, build, test}` session step
 group — see `state-machine.md` "Session Handoff Seams"). This is the step that actually writes
-code: everything through `ask` produced an approved, plain-language design; `build` turns that
-design into working BoardSmith source for this one chunk, and nothing beyond it.
+code: everything through `ask` produced an approved, plain-language design; `spec` turned that
+design into executable tests and observed them FAILING; `build` turns them GREEN with working
+BoardSmith source for this one chunk, and nothing beyond it.
 
-## Fresh-Context Exception (the one step allowed to read raw slices)
+## The Green Step — the target is `spec`'s failing tests
+
+`build` does not decide what "done" means for this chunk; `build/spec.md` already did, as
+executable tests that currently fail. This step writes the minimum real implementation that makes
+every one of them pass, replacing the signature-only stubs `spec` left behind (each stub's body is
+a single `throw` naming the chunk — a stub surviving into this step's output is unfinished work,
+not a design choice).
+
+**Never edit a spec test to make it pass.** Not to loosen an assertion, not to delete a case, not
+to relax an expected value. A `spec` test encodes an ask-approved claim from `## Interpretation`;
+if the test is genuinely wrong, then the claim behind it is wrong, and that is an interpretation
+change — surfaced to the user per the batched-question model (`build/ask.md` "Ask Triple-Gate"),
+never settled inside `build`. This is the same "surface, don't unilaterally decide" boundary the
+restructuring gate below enforces for code shape, applied to the definition of correct behavior.
+An implementation edited until the test passes is the point of this pipeline; a test edited until
+the implementation passes is its exact inversion.
+
+Adding NEW tests here is fine and expected — regression tests for a bug found mid-build, edge cases
+the implementation reveals. The rule constrains changing `spec`'s tests, not growing the suite.
+
+## Fresh-Context Exception (one of the two steps allowed to read raw slices)
 
 Every other step in this pipeline restates the Context-Economics Hard Rule
 (`build-chunk.md` "Context-Economics Hard Rule") — the orchestrator never reads rulebook slices,
-docs, or generated code itself, only the structured summaries a subagent returns. `build` is the
-sole exception: a fresh-context executor (main context or a dedicated Task-tool subagent) reads
-this chunk's cited raw rulebook slices directly, in addition to the approved interpretation
-already settled in CHUNK.md. Two dual inputs, never one alone:
+docs, or generated code itself, only the structured summaries a subagent returns. `spec` and
+`build` are the two exceptions: a fresh-context executor (main context or a dedicated Task-tool
+subagent) reads this chunk's cited raw rulebook slices directly, in addition to the approved
+interpretation already settled in CHUNK.md. Two dual inputs, never one alone:
 
 1. **The chunk's cited raw rulebook slices** — the actual `rulebook/NN-topic.md` text this
    chunk's citations point at, read fresh, not re-derived from memory of what `investigate`'s
@@ -94,6 +115,9 @@ files.
 
 ## Test Script — Rewritten in Interaction Terms
 
+This is the human playtest script, not the automated suite — `spec` owns the executable tests, this
+section owns what a person clicks through.
+
 Rewrite this chunk's test script (CHUNK.md's `## Playtest Test Script`) in actual interaction
 terms once the real UI/controls exist — click targets, seat names, the literal sequence a human
 plays through — replacing any earlier placeholder language written before the code existed. The
@@ -102,12 +126,13 @@ script must describe what is now really on screen, not what was planned.
 ## Git Protocol (cite, never restate)
 
 Cite `state-machine.md` "Git Protocol" — commit at every step completion
-(`chunk-<slug>/step-<name>`). Commit **before** `build` starts: the last commit before this step
-begins is the verified baseline (everything through `ask`, no code yet); the commit this step
-produces at its end is the WIP snapshot for this chunk's code. Never conflate the two — a session
-resuming mid-build needs to be able to tell "nothing built yet" from "some files written" from
-git history alone, which is exactly what the per-file Build Manifest above exists to make
-explicit inside CHUNK.md as well.
+(`chunk-<slug>/step-<name>`). The last commit before this step begins is `chunk-<slug>/step-spec`,
+the RED anchor (failing tests + signature-only stubs, no implementation); the commit this step
+produces at its end is `chunk-<slug>/step-build`, GREEN. Never conflate the two into one commit —
+that erases the only durable evidence the tests preceded the code, and a session resuming mid-build
+needs to tell "tests written, nothing implemented" from "some files written" from git history
+alone. That is exactly what the per-file Build Manifest above makes explicit inside CHUNK.md as
+well, alongside `spec`'s `## Spec Manifest`.
 
 ## Placeholders — UIQ-02 (cite DESIGN.md, never restate)
 

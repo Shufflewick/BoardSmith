@@ -51,7 +51,7 @@ for the next round WITHOUT a session handoff — this mirrors `build/test.md`'s 
 Back to `build`":
 
 > A failure at any step in the ordered sequence above ... routes this chunk back to `build`
-> (still session group 2, `{build, test}`); it does not advance to `audit`. `test` and `build`
+> (still session group 2, `{spec, build, test}`); it does not advance to `audit`. `test` and `build`
 > stay in the same group specifically so a failing test can be fixed without a session handoff
 > in between.
 

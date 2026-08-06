@@ -14,7 +14,7 @@ Status: proposed
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this Status line, "## ui:",
      "## Ceremony", "## Step Checklist", "## Interpretation", "## Visibility Declaration",
      "## Newly Discovered Citations", "## Redteam Rounds", "## Findings Ledger", "## Revision Rounds",
-     "## Build Manifest", "## Playtest Test Script",
+     "## Spec Manifest", "## Build Manifest", "## Playtest Test Script",
      "## Verified Checklist", "## Verified Commit Hash", "## Verified Against",
      "## Rules Staleness". If any required
      heading is missing, or the Status line doesn't match a recognized enum value above, a
@@ -28,10 +28,12 @@ Status: proposed
 none
 
 ## Ceremony
-<!-- Declared at proposal time. Full ceremony runs all 10 steps below. Light path is for chunks
+<!-- Declared at proposal time. Full ceremony runs all 11 steps below. Light path is for chunks
      tagged trivial at proposal (e.g. "swap in the real card images") and only runs
-     build, test, playtest — skipping investigate/redteam/ask/audit/repair/revise/close's
-     adversarial machinery. The user is told which path is in effect when the chunk is proposed.
+     build, test, playtest — skipping investigate/redteam/ask/spec/audit/repair/revise/close's
+     adversarial machinery. A chunk may only be tagged light if it introduces NO NEW GAME BEHAVIOR,
+     because the light path has no spec step and a rules claim must get a failing test before code
+     (state-machine.md "Step Names (exact, light path — trivial chunks)"). The user is told which path is in effect when the chunk is proposed.
      The `final-acceptance` value is reserved for the sketch's ONE mandated final-acceptance chunk
      (templates/SKETCH.template.md's "## Mandated Chunks") — it is neither full nor light: its Step
      Checklist is the fixed 4-item group [final-acceptance, playtest, revise, close], build-chunk.md's
@@ -42,12 +44,12 @@ full
 
 ## Step Checklist
 <!-- Full-ceremony step names (exact, in order) — do not paraphrase, do not reorder:
-     investigate, redteam, ask, build, test, audit, repair, playtest, revise, close
+     investigate, redteam, ask, spec, build, test, audit, repair, playtest, revise, close
      Light-path step names (exact, in order): build, test, playtest
      Check off a step only when it is fully complete; do not check ahead.
 
      CEREMONY-CONDITIONAL: this section contains exactly ONE checklist matching the declared
-     Ceremony above. When Ceremony: full, it is the 10-item list below. When Ceremony: light,
+     Ceremony above. When Ceremony: full, it is the 11-item list below. When Ceremony: light,
      replace it with exactly these three items (in order):
      - [ ] build
      - [ ] test
@@ -72,6 +74,7 @@ full
 - [ ] investigate
 - [ ] redteam
 - [ ] ask
+- [ ] spec
 - [ ] build
 - [ ] test
 - [ ] audit
@@ -142,6 +145,20 @@ full
 - triaged feedback items:
 - disposition:
 -->
+
+## Spec Manifest
+<!-- Per-file spec manifest for spec-step crash/resume, and the durable RED evidence the TDD
+     guarantee rests on (build/spec.md "Persistence"). One row per test file this chunk introduces.
+     Claims Covered lists the ## Interpretation claim numbers that file pins. RED Observed flips
+     from `pending` to `yes` only after that file's tests have ACTUALLY been run and seen failing —
+     never ahead of the run, never in a batch at the end.
+
+     A chunk that introduces no new game behavior writes a single exemption row naming the reason
+     (build/spec.md "Exemptions") rather than silently leaving the table empty. -->
+
+| Test File | Claims Covered | RED Observed |
+|-----------|----------------|--------------|
+<!-- | src/...test.ts | 1, 3, 4 | pending / yes | -->
 
 ## Build Manifest
 <!-- Per-file build manifest for build-step crash/resume — file-by-file, not step-by-step, so a

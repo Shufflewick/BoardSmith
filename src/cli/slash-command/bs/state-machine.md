@@ -46,17 +46,29 @@ Distinct from the CHUNK-level stale marker above: `stale — re-derive before bu
 
 ## Step Names (exact, full ceremony)
 
-The 10-step `/bs-build-chunk` pipeline, in order, is exactly:
+The 11-step `/bs-build-chunk` pipeline, in order, is exactly:
 
-`investigate, redteam, ask, build, test, audit, repair, playtest, revise, close`
+`investigate, redteam, ask, spec, build, test, audit, repair, playtest, revise, close`
+
+`spec` writes this chunk's executable tests from the ask-approved interpretation and observes them
+FAILING before any implementation exists (`build/spec.md`); `build` then makes those exact tests
+pass. The two are separate steps, with separate commits, specifically so the red-before-green claim
+is auditable from git history rather than taken on faith.
 
 ## Step Names (exact, light path — trivial chunks)
 
-Chunks tagged trivial at proposal time (e.g. "swap in the real card images") run the light path instead of the full 10-step ceremony:
+Chunks tagged trivial at proposal time (e.g. "swap in the real card images") run the light path instead of the full 11-step ceremony:
 
 `build, test, playtest`
 
 The user is told which path is in effect when a chunk is proposed.
+
+The light path has no `spec` step, and that is what bounds what may be tagged `light`: a chunk may
+only be proposed as `light` if it introduces **no new game behavior** — no new action, no new rule,
+no change to how an existing rule resolves. Asset swaps, restyles, and copy changes qualify; a
+chunk with a rules claim to pin does not, and runs the full ceremony so its claims get tests before
+code. If a `light` chunk turns out mid-build to need new behavior, that is a re-proposal (full
+ceremony), not something `build` absorbs.
 
 Light-path status transitions: the light path has no `ask` step, so `approved` is unreachable
 for light chunks. A light chunk moves `proposed → built` directly when the user accepts the
@@ -222,7 +234,8 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
 
 - Commit at every step completion. Message convention: `chunk-<slug>/step-<name>` (e.g. `chunk-movement/step-build`).
 - Revise rounds use `chunk-<slug>/revise-2` (etc.) as the commit message convention.
-- Commit **before** `build` starts, so work-in-progress is always distinguishable from the last verified baseline.
+- Commit **before** `spec` starts, so work-in-progress is always distinguishable from the last verified baseline.
+- `chunk-<slug>/step-spec` is the **RED anchor**: failing tests and signature-only stubs, no implementation. `chunk-<slug>/step-build` is GREEN. Never conflate them into one commit — that erases the only durable evidence the tests preceded the code (`build/spec.md` "Git Protocol").
 - `close` records the verified commit hash in CHUNK.md — this is the bisect anchor for any later regression and the diff base for "what changed since the human last said yes."
 
 ## Repair Loop Bound
@@ -263,11 +276,11 @@ the rules.
 The four step groups are:
 
 1. `{investigate, redteam, ask}`
-2. `{build, test}`
+2. `{spec, build, test}`
 3. `{audit, repair}`
 4. `{playtest, revise, close}`
 
-Every one of the 10 full-ceremony steps belongs to exactly one group. These group boundaries are
+Every one of the 11 full-ceremony steps belongs to exactly one group. These group boundaries are
 the skill's **cold-resume/persistence checkpoints** — a seam marks where a session's work is
 guaranteed durable enough to stop and resume cleanly, NOT a point where the session must hand off.
 Each step still persists its own state to `CHUNK.md` before the next starts, and a commit still
@@ -279,7 +292,7 @@ to answer a question or to test/playtest something — (b) the harness surfaces 
 cannot resolve on its own (a gate that keeps failing and `repair` cannot fix, a subagent that dies
 on a terminal error, a typecheck that will not go green) — which it surfaces to the user rather than
 looping or plowing ahead. Between those points it flows straight through: after `ask` approval it
-runs `build → test → audit → repair` into `playtest`, where it stops for the human client-playtest
+runs `spec → build → test → audit → repair` into `playtest`, where it stops for the human client-playtest
 gate ONLY if this chunk is one of the three milestone chunks with visible UI (see the `playtest`
 bullet below, SKILLAUTO-01) — a non-milestone or UI-less chunk runs its internal `playtest`
 verification (test/self-sim) and flows straight through into `revise`/`close` with no human stop.
@@ -290,7 +303,7 @@ rolls straight into the next chunk rather than ending the session.
 **Human-input gates that DO stop the session:**
 
 - The `ask` approval gate — the full 4-part presentation ceremony; the user approves the
-  interpretation before `Status: approved` is written and `build` begins.
+  interpretation before `Status: approved` is written and `spec` begins.
 - The `playtest` human-verification gate — **scoped to milestone chunks, not every chunk**
   (SKILLAUTO-01). SKETCH.md's `Milestone:` flag (`templates/SKETCH.template.md`'s "## Mandated
   Chunks", set at sketch-derivation time — see `ingest/sketch-derivation.md`) names exactly three

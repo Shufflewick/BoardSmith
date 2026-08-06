@@ -151,7 +151,7 @@ describe('TMPL-01/02/03 — shared enum & step-name invariants', () => {
 
   it('contains the exact full-ceremony step-name list', () => {
     expect(stateMachine).toContain(
-      'investigate, redteam, ask, build, test, audit, repair, playtest, revise, close'
+      'investigate, redteam, ask, spec, build, test, audit, repair, playtest, revise, close'
     );
   });
 
@@ -197,7 +197,7 @@ describe('TMPL-01 — exact step names & status enum', () => {
 
   it('CHUNK.template.md contains the exact full-ceremony step-name list', () => {
     expect(chunkTemplate).toContain(
-      'investigate, redteam, ask, build, test, audit, repair, playtest, revise, close'
+      'investigate, redteam, ask, spec, build, test, audit, repair, playtest, revise, close'
     );
   });
 
@@ -246,7 +246,7 @@ describe('TMPL-03 — CHUNK/SKETCH ↔ state-machine consistency', () => {
   const stateMachine = read('state-machine.md');
 
   it('CHUNK.template.md and state-machine.md list the identical exact step-name string', () => {
-    const stepNames = 'investigate, redteam, ask, build, test, audit, repair, playtest, revise, close';
+    const stepNames = 'investigate, redteam, ask, spec, build, test, audit, repair, playtest, revise, close';
     expect(chunkTemplate).toContain(stepNames);
     expect(stateMachine).toContain(stepNames);
   });
@@ -513,6 +513,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
       '## Redteam Rounds',
       '## Findings Ledger',
       '## Revision Rounds',
+      '## Spec Manifest',
       '## Build Manifest',
       '## Playtest Test Script',
       '## Verified Checklist',

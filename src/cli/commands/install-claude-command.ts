@@ -73,6 +73,7 @@ const SHARED_FILES = ['state-machine.md', 'reporting.md'];
  */
 const SHARED_LEAF_PROBES = [
   ...SHARED_FILES.map((file) => join(SHARED_ROOT, file)),
+  join(SHARED_ROOT, 'build', 'spec.md'),
   join(SHARED_ROOT, 'build', 'build.md'),
   join(SHARED_ROOT, 'ingest', 'transcription.md'),
   join(SHARED_ROOT, 'templates', 'SKETCH.template.md'),

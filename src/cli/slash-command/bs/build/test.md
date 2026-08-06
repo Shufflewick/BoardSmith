@@ -1,6 +1,6 @@
 # Test — The Verification Sequence + A11y Floor (BUILD-06 / UIQ-03 / TEST-01)
 
-Referenced by `build-chunk.md` Step 5 (`test`, second of the `{build, test}` session step
+Referenced by `build-chunk.md` Step 6 (`test`, last of the `{spec, build, test}` session step
 group — see `state-machine.md` "Session Handoff Seams"). This step proves the chunk `build`
 just wrote actually works, in the GENERATED game project (not BoardSmith's own repo). Its
 command outputs — pass/fail, violation lists — are what routes this chunk on to `repair`
@@ -36,10 +36,28 @@ here.
    `boardsmith validate` and `boardsmith lint` — do not reimplement or duplicate this scan; cite
    it and run the real command.
 
-3. **Chunk unit/integration tests** — the tests written or extended for this chunk's own new
-   behavior. Run them with `boardsmith test <pattern>`, naming this chunk's test files. Generated
-   projects carry no npm scripts on purpose: `boardsmith test` is the one way to run a game's
-   tests, so `npm test` will fail with "Missing script".
+3. **Chunk unit/integration tests — the red-to-green check.** These tests are NOT authored here:
+   `build/spec.md` wrote them from the approved interpretation and observed every one of them
+   FAILING before any implementation existed, and `build` wrote the code that makes them pass. This
+   step re-runs them and requires them all GREEN. Run them with `boardsmith test <pattern>`, naming
+   this chunk's test files. Generated projects carry no npm scripts on purpose: `boardsmith test`
+   is the one way to run a game's tests, so `npm test` will fail with "Missing script".
+
+   Two failure modes here are NOT ordinary red-routes-to-`repair` and must be surfaced instead of
+   fixed in place:
+
+   (a) **A `spec` test is missing.** Cross-check the run against CHUNK.md's `## Spec Manifest`: a
+       claim that had a test at `spec` time and has none now means a test was deleted rather than
+       satisfied. That is a `build/build.md` "Never edit a spec test to make it pass" violation —
+       restore the test and route the chunk back to `build`, never accept the shorter suite.
+
+   (b) **A `spec` test's assertion changed.** `git diff chunk-<slug>/step-spec -- <test files>`
+       shows what `build` did to the tests it was supposed to satisfy. New tests appended are
+       expected and fine; a changed expected value, a loosened matcher, or a removed case in a
+       `spec`-authored test is the same violation as (a). Route back to `build`.
+
+   Both checks are cheap and they are the only thing standing between "the tests pass" and "the
+   tests still test what `ask` approved."
 
 4. **Worked-example tests (TEST-01)** — this chunk's cited worked examples become executable
    tests as part of this same build, generated and immediately run, never left as a one-time
@@ -235,7 +253,7 @@ tests — never a manual visual pass:
 ## Failures Loop Back to `build`
 
 A failure at any step in the ordered sequence above — including any of the five a11y floor
-items — routes this chunk back to `build` (still session group 2, `{build, test}`); it does not
+items — routes this chunk back to `build` (still session group 2, `{spec, build, test}`); it does not
 advance to `audit`. `test` and `build` stay in the same group specifically so a failing test can
 be fixed without a session handoff in between.
 

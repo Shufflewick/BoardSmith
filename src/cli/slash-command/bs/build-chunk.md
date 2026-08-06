@@ -195,9 +195,9 @@ its step group is fixed by the "Final-acceptance chunk target" rule in Step 2
 here, skip the full/light routing below and defer to that Step 2 rule instead. For every other
 chunk, quote both step lists verbatim — never paraphrase, never reorder:
 
-**Full ceremony (10 steps, exact):**
+**Full ceremony (11 steps, exact):**
 
-`investigate, redteam, ask, build, test, audit, repair, playtest, revise, close`
+`investigate, redteam, ask, spec, build, test, audit, repair, playtest, revise, close`
 
 **Light path (3 steps, exact):**
 
@@ -210,6 +210,7 @@ chunk, quote both step lists verbatim — never paraphrase, never reorder:
 | investigate | `${CLAUDE_SKILL_DIR}/../bs-shared/build/investigate.md` |
 | redteam | `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md` |
 | ask | `${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md` |
+| spec | `${CLAUDE_SKILL_DIR}/../bs-shared/build/spec.md` |
 | build | `${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md` |
 | test | `${CLAUDE_SKILL_DIR}/../bs-shared/build/test.md` |
 | audit | `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md` |
@@ -218,8 +219,8 @@ chunk, quote both step lists verbatim — never paraphrase, never reorder:
 | revise | `${CLAUDE_SKILL_DIR}/../bs-shared/build/revise.md` |
 | close | `${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md` |
 
-All 10 steps now have live dispatch targets: `${CLAUDE_SKILL_DIR}/../bs-shared/build/investigate.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md`,
-`${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/test.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md`,
+All 11 steps now have live dispatch targets: `${CLAUDE_SKILL_DIR}/../bs-shared/build/investigate.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md`,
+`${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/spec.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/test.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md`,
 `${CLAUDE_SKILL_DIR}/../bs-shared/build/playtest.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/revise.md`, and `${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md` each implement their own step's
 prose, and this router does no more than route to the right one.
 
@@ -230,6 +231,13 @@ Chunks tagged `light` at proposal time run `build, test, playtest` only — no
 same `build.md`/`test.md`/`playtest.md` reference files, not a fourth ceremony with its own prose.
 The user is explicitly **told which** ceremony is in effect when the chunk is proposed, so no one
 discovers mid-chunk that fewer gates ran than they expected.
+
+The light path also has no `spec` step, which is exactly what bounds the `light` tag: cite
+`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Step Names (exact, light path — trivial
+chunks)" — a chunk may only be proposed `light` if it introduces **no new game behavior**, because
+a chunk with a rules claim to pin must get its tests written and observed failing before its code
+exists. Do not restate that bound here; apply it when proposing the ceremony, and re-propose as
+full ceremony if a `light` chunk turns out mid-build to need new behavior.
 
 Light-path status transitions (cite `state-machine.md` "Step Names (exact, light path — trivial chunks)" — do not
 restate the transition rule beyond this pointer): the light path has no `ask` step, so
@@ -251,7 +259,7 @@ This is the first of the four step groups (`${CLAUDE_SKILL_DIR}/../bs-shared/sta
 A session no longer hands off after each group — it runs continuously across the group boundaries
 and stops only at a human-input gate or a harness context-low warning. Group 1's own stopping point
 is the `ask` approval gate below; if the user approves, this same session continues into group 2
-(`build → test`) rather than handing off.
+(`spec → build → test`) rather than handing off.
 
 **Every step persists before the next starts:** when a step completes, the orchestrator checks
 off that step's item on CHUNK.md's Step Checklist (a state-file write) before dispatching the
@@ -298,7 +306,7 @@ pauses for the user's approval decision, not for a session handoff. When approva
 everything written so far (claims list, the `## Redteam Rounds` entry, checked-off Step Checklist
 items, `Status: approved`, SKETCH.md's updated derived-status pointer — CHUNK.md first, SKETCH.md
 second, per `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Write Order" — and any `RULINGS.md`/`ASSETS.md` entries) is
-saved in the game folder, then **continue in this same session into group 2** (`build → test`) —
+saved in the game folder, then **continue in this same session into group 2** (`spec → build → test`) —
 no handoff, no "run `/bs-build-chunk` again" prompt. Only a harness context-low warning interrupts
 that continuation, in which case persist (already guaranteed) and tell the user to `/clear` and
 re-invoke `/bs-build-chunk` to resume (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams").
@@ -312,12 +320,19 @@ human-input gate — the session stops there for the user's ruling before reachi
 
 ## Step Groups 2–3 (dispatch prose lives in their own reference files)
 
-Group 2 `{build, test}` and group 3 `{audit, repair}` are live dispatches, but unlike group 1
+Group 2 `{spec, build, test}` and group 3 `{audit, repair}` are live dispatches, but unlike group 1
 their per-step delegation, persistence discipline, and end-of-group close are authored inside
-`${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/test.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md`, and `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md` themselves rather than
-restated here — those four files already carry their own "Referenced by `build-chunk.md` Step N"
+`${CLAUDE_SKILL_DIR}/../bs-shared/build/spec.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/test.md`, `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md`, and `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md` themselves rather than
+restated here — those five files already carry their own "Referenced by `build-chunk.md` Step N"
 framing and own their own round-persistence rules. This router's Step 3 dispatch table above names
 each target file; there is nothing further to add here for groups 2-3.
+
+The one thing this router does enforce across the group-2 seam is the **red-before-green ordering**:
+`spec` is dispatched first and its Step Checklist item is checked off only when CHUNK.md's
+`## Spec Manifest` shows every row at `RED Observed: yes`. `build` is never dispatched for a chunk
+whose `spec` item is unchecked — an unchecked `spec` means the failing tests were not observed, and
+dispatching `build` anyway produces code with no red-phase evidence behind it, which is precisely
+what the separate step exists to prevent.
 
 ## Step Group 4 Dispatch — `{playtest, revise, close}`
 
@@ -464,6 +479,8 @@ This skill delegates its heavyweight, step-scoped prose to:
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md` — 4-part presentation format, gate-before-write, asset requests
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/design-ask.md` — first-UI-chunk visual identity gate (Adopt/Derive/Original), writes
   DESIGN.md
+- `${CLAUDE_SKILL_DIR}/../bs-shared/build/spec.md` — tests-first step: one test per numbered claim, signature-only stubs,
+  observed-failing RED evidence, per-file spec manifest
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md` — code-writing step, fresh-context raw-slice exception, per-file build
   manifest
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/test.md` — the test-step command sequence, sandbox-rule gate, a11y floor for UI chunks

@@ -195,5 +195,7 @@ sketch state re-written at Step 7).
 ## Downstream Shape (cite, never restate)
 
 Once `Status: approved` lands, the settled, user-approved interpretation from `build/redteam.md`
-is the upstream authority for `build/build.md` — the next session picks up the step group
-`{build, test}`. This file does not restate that step group's structure.
+is the upstream authority for `build/spec.md` — the next session picks up the step group
+`{spec, build, test}`, whose FIRST step writes this chunk's tests from that interpretation and
+observes them failing before any code exists. `build/build.md` runs after it, not first. This file
+does not restate that step group's structure.
