@@ -394,21 +394,36 @@ await actionController.fill(currentPick.name, selectedChoice); // ❌
 
 The `display` property is the human-readable label for rendering in your UI (buttons, lists, etc.).
 
-The `disabled` property is present only on items that are disabled (absent on selectable items). When present, it contains a reason string explaining why the item cannot be selected. Custom UIs can use this to render disabled state however they want -- grey out the item, show a tooltip with the reason, add a lock icon, etc.
+The `disabled` property is present only on items that are disabled (absent on selectable items). When present, it contains a reason string explaining why the item cannot be selected. **Show it.** A dimmed control that will not say why is the fastest way to make a player think the game is broken, and the reason is already in your hand.
 
-```typescript
-const choices = actionController.getChoices(currentPick);
+The shared helpers render it the same way the Action Panel does:
 
-// Render with disabled state
-for (const choice of choices) {
-  if (choice.disabled) {
-    // Show greyed out with reason tooltip
-    renderDisabled(choice.display, choice.disabled);
-  } else {
-    renderSelectable(choice.display, choice.value);
-  }
-}
+```vue
+<script setup lang="ts">
+import { disabledAttrs, runIfEnabled } from 'boardsmith/ui';
+</script>
+
+<template>
+  <button
+    v-for="choice in actionController.getChoices(currentPick)"
+    :key="String(choice.value)"
+    v-bind="disabledAttrs(choice.disabled)"
+    @click="runIfEnabled(choice.disabled, () => actionController.fill(currentPick.name, choice.value))"
+  >
+    {{ choice.display }}
+  </button>
+</template>
 ```
+
+`disabledAttrs()` returns `aria-disabled` + `title` (never the native `disabled`
+attribute — that would drop the control out of the tab order and, in several
+browsers, out of hover hit-testing, making the reason unreachable exactly when
+it is needed). `runIfEnabled()` swallows the click. Style the dimmed state on
+`[aria-disabled='true']`.
+
+The same pair works for a whole action's button: `disabledActions[name]` is a
+`#game-board` slot prop carrying the reason from the action's `.disabled()`
+rule or the tutorial gate.
 
 **Note:** If you do accidentally pass a choice object to `fill()`, BoardSmith will auto-unwrap it in development mode and show a warning. However, passing `choice.value` directly is clearer and recommended.
 

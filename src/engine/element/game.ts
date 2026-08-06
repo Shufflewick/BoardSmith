@@ -1155,26 +1155,59 @@ export class Game<
   }
 
   /**
-   * Get tutorial-disabled action reasons for a player seat.
+   * Get the reason each currently-available action is disabled for a seat.
    *
-   * Returns a `Record<actionName, reason>` for each currently-available action
-   * that the active tutorial step excludes for the given seat. Returns `{}`
-   * when no tutorial is running for the seat (zero overhead in normal play).
+   * Returns a `Record<actionName, reason>` covering both sources of a
+   * disabled action, in one place so the UI has a single channel to render:
+   *   1. the action's own `.disabled(ctx)` rule, and
+   *   2. the active tutorial step's gate.
    *
-   * Unlike `getAvailableActions` (which remains binary), gated actions are NOT
-   * removed from availability — they stay visible so the UI can surface the
-   * reason (RESEARCH Pitfall 3 / success criterion #3).
+   * Returns `{}` when nothing is disabled (the overwhelmingly common case).
+   *
+   * Unlike `getAvailableActions` (which remains binary), a disabled action is
+   * NOT removed from availability — it stays visible precisely so the UI can
+   * grey it out and say why. That is the whole point: a vanished button
+   * teaches the player nothing.
+   *
+   * The tutorial reason wins when both apply: a tutorial is a stronger, more
+   * immediate instruction ("use Move for this step") than a standing rule.
    *
    * @param seat - The player seat number (1-indexed).
    */
-  getTutorialDisabledActions(seat: number): Record<string, string> {
+  getDisabledActions(seat: number): Record<string, string> {
     const player = this.getPlayer(seat);
     if (!player) return {};
 
     const availableActions = this.getAvailableActions(player);
-    const availableActionNames = availableActions.map(a => a.name);
+    const reasons: Record<string, string> = {};
 
-    return getActionLevelDisabledReasons(this, seat, availableActionNames);
+    for (const action of availableActions) {
+      const reason = this.getActionDisabledReason(action, player);
+      if (reason) reasons[action.name] = reason;
+    }
+
+    // Tutorial gate reasons are layered on top (and win) — see JSDoc above.
+    return {
+      ...reasons,
+      ...getActionLevelDisabledReasons(this, seat, availableActions.map(a => a.name)),
+    };
+  }
+
+  /**
+   * Evaluate a single action's own `.disabled(ctx)` rule.
+   *
+   * Returns the reason string when the action is disabled, or `null` when it
+   * is not (or declares no rule). Evaluated with EMPTY args, matching
+   * `condition`'s availability-time contract.
+   *
+   * Shared by `getDisabledActions` (projection) and `performAction`
+   * (enforcement) so the button a player sees and the gate the server applies
+   * can never disagree.
+   */
+  private getActionDisabledReason(action: ActionDefinition, player: P): string | null {
+    if (!action.disabled) return null;
+    const reason = action.disabled({ game: this, player, args: {} });
+    return reason === false ? null : reason;
   }
 
   /**
@@ -1304,17 +1337,20 @@ export class Game<
       return { success: false, error: `Unknown action: ${actionName}` };
     }
 
-    // Enforce tutorial action-level gating at execution, not just in the projection
-    // layer. This is the server-side enforcement required by HR-01: a bare
-    // { action: 'move' } gate must prevent execution of 'pass'/'endTurn', not just
-    // annotate them as disabled for the UI. Reuses the same getActionLevelDisabledReasons
-    // logic already consulted by getTutorialDisabledActions / buildPlayerState so
-    // there is no parallel validator.
-    const gatedReasons = getActionLevelDisabledReasons(this, player.seat, [actionName]);
-    if (gatedReasons[actionName]) {
+    // Enforce action-level disabling at execution, not just in the projection
+    // layer: a greyed-out button must also be a closed door. Covers both the
+    // action's own `.disabled()` rule and the tutorial gate — a bare
+    // { action: 'move' } gate must prevent execution of 'pass'/'endTurn', not
+    // just annotate them for the UI (HR-01). Both reuse the same evaluators the
+    // projection consults (getActionDisabledReason / getActionLevelDisabledReasons),
+    // so there is no parallel validator to drift.
+    const disabledReason =
+      getActionLevelDisabledReasons(this, player.seat, [actionName])[actionName]
+      ?? this.getActionDisabledReason(action, player);
+    if (disabledReason) {
       return {
         success: false,
-        error: `Action '${actionName}' is disabled: ${gatedReasons[actionName]}`,
+        error: `Action '${actionName}' is disabled: ${disabledReason}`,
       };
     }
 
@@ -3344,7 +3380,7 @@ export class Game<
     // person learning the game, not a fact about the game.
     //
     // A seat keeps its OWN entry so the redacted view stays self-consistent —
-    // `isTutorialGateActive`/`getTutorialDisabledActions` evaluate the same way
+    // `isTutorialGateActive`/`getDisabledActions` evaluate the same way
     // against a restored per-seat clone as against the live game. The spectator
     // is nobody, so it gets nothing.
     //

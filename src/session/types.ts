@@ -526,15 +526,16 @@ export interface PlayerGameState {
    */
   tutorial?: TutorialStepView;
   /**
-   * RESERVED (Plan 104-02): Action-level gate reasons for this seat.
+   * Why each disabled action is disabled, for this seat.
    *
-   * Maps action name → human-readable reason string for actions that are
-   * blocked by the active tutorial step's gate. `undefined` when no tutorial
-   * is running or no actions are gated.
+   * Maps action name → human-readable reason, covering both sources: the
+   * action's own `.disabled(ctx)` rule and the active tutorial step's gate.
+   * `undefined` when nothing is disabled.
    *
-   * This fills the gap identified in RESEARCH Pitfall 3: action availability
-   * is currently a binary `string[]`; this field surfaces the "why" for gated
-   * actions so the UI can render a tooltip / disabled state with a reason.
+   * Action availability is otherwise a binary `string[]`; this field carries
+   * the "why" so the UI can grey the button out AND say what is missing. An
+   * action listed here is still in `availableActions` on purpose — a vanished
+   * button teaches the player nothing.
    */
   disabledActions?: Record<string, string>;
   /**

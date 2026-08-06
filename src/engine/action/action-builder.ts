@@ -141,6 +141,44 @@ export class Action<
   }
 
   /**
+   * Offer this action, but greyed out, WITH the reason why.
+   *
+   * Return a reason string to disable the action's button, or `false` to leave
+   * it enabled. The reason is not optional — the only way to disable an action
+   * is to say why, so a player never meets a dead button with no explanation.
+   * The string is shown on hover/focus and read by screen readers.
+   *
+   * Choose between this and `.condition()`:
+   * - `.condition()` — the action is IRRELEVANT here, so it vanishes from the
+   *   panel entirely (playing a card during someone else's turn).
+   * - `.disabled()` — the action is relevant but currently blocked, and the
+   *   player would otherwise wonder why (Build, while two wood short).
+   *
+   * Evaluated at availability time with EMPTY args, exactly like `.condition()`.
+   * A rule that needs the resolved selections belongs in `.validate()`.
+   * Enforced server-side: submitting a disabled action is refused with its reason.
+   *
+   * @param fn - Returns the reason the action is blocked, or `false` when it is not
+   * @returns The builder for chaining
+   *
+   * @example
+   * ```typescript
+   * Action.create<MyGame>('build')
+   *   .disabled((ctx) => {
+   *     const wood = ctx.player.resources.wood;
+   *     return wood < 3 ? `You need 3 wood to build; you have ${wood}.` : false;
+   *   })
+   *   .execute((_args, ctx) => { ... });
+   * ```
+   */
+  disabled(fn: (context: ActionContext<G>) => string | false): this {
+    // Same erasure as `.execute()`/`.validate()`: ActionDefinition is non-generic,
+    // and the runtime always passes the game this chain declared.
+    this.definition.disabled = fn as ActionDefinition['disabled'];
+    return this;
+  }
+
+  /**
    * Gate the whole action at submit time, with every selection resolved.
    *
    * This is the place for a rule that spans selections and needs to explain

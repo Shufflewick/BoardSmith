@@ -20,6 +20,14 @@ export {
   Button,
   type ButtonVariant,
   type ButtonSize,
+  // The one way to disable a control: with a reason a player can read.
+  // Custom UIs use these so a dimmed board control explains itself exactly
+  // like the Action Panel's buttons do.
+  disabledAttrs,
+  isDisabled,
+  runIfEnabled,
+  type DisabledReason,
+  type DisabledAttrs,
 } from './components/helpers/index.js';
 
 // 3D dice are NOT re-exported here. Importing them is what opts a game into

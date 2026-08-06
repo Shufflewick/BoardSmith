@@ -245,11 +245,13 @@ onUnmounted(() => {
         <hr v-if="helpText && disabledReason" class="help-divider" aria-hidden="true" />
 
         <!-- Disabled-reason section — text interpolation only (T-108-03).
-             Label is "Note:" rather than "Why disabled:" because the action button
-             may still be clickable (tutorial-gated actions remain in availableActions);
-             the label must not assert non-functionality that doesn't match the UI state (WR-03). -->
+             The label may assert non-functionality: a `disabledActions` entry now
+             genuinely disables the button (ActionPanel binds the same reason to
+             aria-disabled and blocks the click), so the popover and the UI state
+             agree. This supersedes WR-03, which chose the vaguer "Note:" back when
+             a gated action's button stayed clickable. -->
         <template v-if="disabledReason">
-          <span class="ahp-disabled-label">Note:</span>
+          <span class="ahp-disabled-label">Why it's disabled:</span>
           <p class="ahp-disabled-body">{{ disabledReason }}</p>
         </template>
       </div>

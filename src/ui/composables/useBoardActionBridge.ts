@@ -47,6 +47,17 @@ export interface BoardActionBridgeOptions {
   /** Reactive: available action names for the current player. */
   availableActions: Ref<string[]> | ComputedRef<string[]>;
   /**
+   * Reactive: action name → why it is disabled (from the action's `.disabled()`
+   * rule or the tutorial gate), as projected in `PlayerGameState.disabledActions`.
+   *
+   * A disabled action stays in `availableActions` so the Action Panel can draw
+   * it greyed out WITH its reason. The board substrate must therefore refuse it
+   * separately — otherwise auto-start, auto-execute, and board-element clicks
+   * would all fire an action the server is about to reject, and the player would
+   * meet an error toast instead of an explanation.
+   */
+  disabledActions: Ref<Record<string, string> | undefined> | ComputedRef<Record<string, string> | undefined>;
+  /**
    * Reactive: true while the debug panel shows historical state (time-travel).
    * Board clicks must never commit to the live engine while this is true —
    * LIBX-04 (D31). Guarded independently in all four mutating functions
@@ -83,7 +94,7 @@ function elementClickRef(ve: ValidElement): ElementRef {
  * lifetime. No-op when boardInteraction is undefined.
  */
 export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
-  const { controller, boardInteraction, isMyTurn, autoEndTurn, actionMetadata, availableActions, isViewingHistory } = opts;
+  const { controller, boardInteraction, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions, isViewingHistory } = opts;
 
   // Without a board substrate there is nothing to feed. (Should not happen inside GameShell.)
   if (!boardInteraction) return;
@@ -106,6 +117,17 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       return { name, prompt: formatActionName(name), selections: [] as PickMetadata[] };
     });
   });
+
+  /**
+   * Why this action is disabled for the local player, or `undefined` when it is
+   * not. The single gate consulted by every path in this file that could START
+   * or EXECUTE an action.
+   */
+  function actionDisabledReason(actionName: string): string | undefined {
+    // Optional-chained on the option itself: the type makes it required, and a
+    // missing one must not take the whole board down.
+    return disabledActions?.value?.[actionName];
+  }
 
   // Current action metadata — prefer the controller snapshot (handles followUp
   // actions that aren't in availableActions).
@@ -186,6 +208,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   async function startAction(actionName: string, options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }) {
     if (isViewingHistory.value) return;
+    // A disabled action is offered (so the panel can explain it) but must never
+    // be started from the board. The Action Panel's own button is gated by the
+    // same reason; this is the board-side half of that one rule.
+    if (actionDisabledReason(actionName)) return;
     const meta = actionsWithMetadata.value.find(a => a.name === actionName);
     if (!meta || meta.selections.length === 0) {
       await executeAction(actionName, {});
@@ -205,6 +231,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     if (isViewingHistory.value) return;
     if (isExecuting.value) return;
     if (!isMyTurn.value) return;
+    // Same gate as startAction — reached directly for no-selection actions.
+    if (actionDisabledReason(actionName)) return;
     const filteredArgs: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(args)) if (v !== null) filteredArgs[k] = v;
     try {
@@ -289,6 +317,15 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     const actions = actionsWithMetadata.value;
     if (actions.length !== 1) return;
     const action = actions[0];
+
+    // The sole available action is disabled: leave it alone. Auto-starting it
+    // would replace a button that explains itself with a rejection from the
+    // server, and auto-EXECUTING it would do that without the player touching
+    // anything. Deliberately checked here rather than by filtering the action
+    // list: filtering would change "exactly one action" to mean "exactly one
+    // ENABLED action", which would start auto-executing a lone `pass` the
+    // moment some other action went grey.
+    if (actionDisabledReason(action.name)) return;
 
     if (action.selections.length > 0) {
       autoEndArmed = false; // a selection action auto-started — the auto-end intent is moot

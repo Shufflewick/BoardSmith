@@ -28,6 +28,12 @@ import type {
 import DoneButton from './DoneButton.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
+import {
+  disabledAttrs,
+  isDisabled,
+  runIfEnabled,
+  type DisabledReason,
+} from '../helpers/disabled-reason.js';
 
 // Inject the action controller from GameShell (REQUIRED)
 // ActionPanel is now a thin UI layer over the controller
@@ -612,16 +618,16 @@ async function confirmMultiSelect() {
 }
 
 /**
- * Check if multi-select "Done" button should be enabled
+ * Check if multi-select "Done" button should be enabled.
+ *
+ * Derived from `multiSelectDoneDisabledReason` (defined below with the other
+ * disabled reasons) so the enabled state and the explanation the player reads
+ * come from ONE calculation. `min` is optional; absent means "no minimum" —
+ * i.e. 0 — which that reason already handles.
  */
 const isMultiSelectReady = computed(() => {
   if (!currentMultiSelect.value) return false;
-  // `min` is optional. Comparing against `undefined` yields false for EVERY
-  // count, so a multi-select that declared no minimum could never enable its
-  // Done button. Absent means "no minimum required" — i.e. 0.
-  const min = currentMultiSelect.value.min ?? 0;
-  const selectedCount = multiSelectValues.value.length;
-  return selectedCount >= min;
+  return !isDisabled(multiSelectDoneDisabledReason.value);
 });
 
 /**
@@ -809,6 +815,75 @@ function clearBoardSelection() {
   boardInteraction?.selectElement(null);
 }
 
+// ── Disabled reasons ─────────────────────────────────────────────────────────
+// Every button this panel can grey out must say WHY, on hover and to a screen
+// reader. Each site below resolves to a single DisabledReason that drives both
+// the attributes (disabledAttrs) and the click guard (runIfEnabled), so the
+// look and the behavior cannot drift apart.
+
+/**
+ * Why nothing can be pressed while an action is in flight, or `false` when
+ * none is. Shared by the action buttons and Undo.
+ */
+const submissionInFlightReason = computed<DisabledReason>(() =>
+  isExecuting.value ? 'Finishing your last move — one moment.' : false
+);
+
+/**
+ * Why an action's button is disabled: the server-supplied reason for this
+ * action (its `.disabled()` rule or the tutorial gate) if any, otherwise the
+ * in-flight submission. The server reason wins — it is the specific one, and
+ * it stays true after the in-flight moment passes.
+ */
+function actionDisabledReason(actionName: string): DisabledReason {
+  return props.disabledActions?.[actionName] || submissionInFlightReason.value;
+}
+
+/**
+ * Why a multi-select option cannot be toggled: its own disabled reason if it
+ * has one, otherwise the max-selections cap (which blocks only options that
+ * are not already selected — deselecting is always allowed).
+ */
+function multiSelectDisabledReason(own: DisabledReason, value: unknown): DisabledReason {
+  if (isDisabled(own)) return own;
+  const max = currentMultiSelect.value?.max;
+  if (max === undefined) return false;
+  if (isMultiSelectValueSelected(value)) return false;
+  if (multiSelectValues.value.length < max) return false;
+  return max === 1
+    ? 'You can pick only one — deselect the other first.'
+    : `You have already picked ${max}. Deselect one to change your mind.`;
+}
+
+/**
+ * Why the multi-select Done button cannot be pressed yet: too few selected.
+ * Mirrors `isMultiSelectReady`, which is derived from this so the enabled
+ * state and the explanation can never disagree.
+ */
+const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
+  const config = currentMultiSelect.value;
+  if (!config) return false;
+  const min = config.min ?? 0;
+  const short = min - multiSelectValues.value.length;
+  if (short <= 0) return false;
+  return `Pick ${short} more to continue (at least ${min} required).`;
+});
+
+/**
+ * Click handler for a multi-select checkbox.
+ *
+ * Bound to `click` rather than `change` on purpose: `aria-disabled` does not
+ * stop a checkbox from toggling, and only a click handler can `preventDefault`
+ * before the box flips. A blocked click leaves the DOM exactly as it was.
+ */
+function onMultiSelectClick(event: MouseEvent, reason: DisabledReason, selectionName: string, value: unknown, display?: string) {
+  if (isDisabled(reason)) {
+    event.preventDefault();
+    return;
+  }
+  void toggleMultiSelectValue(selectionName, value, display);
+}
+
 </script>
 
 <template>
@@ -831,11 +906,14 @@ function clearBoardSelection() {
         :key="action.name"
         class="action-btn-group"
       >
+        <!-- A disabled action button stays focusable and hoverable (aria-disabled,
+             not the native attribute) so the player can actually READ the reason
+             it carries in its title. runIfEnabled blocks the click. -->
         <button
           class="action-btn"
           :data-bs-action="action.name"
-          @click="startAction(action.name)"
-          :disabled="isExecuting"
+          v-bind="disabledAttrs(actionDisabledReason(action.name))"
+          @click="runIfEnabled(actionDisabledReason(action.name), () => startAction(action.name))"
         >
           {{ action.prompt || formatActionName(action.name) }}
         </button>
@@ -853,8 +931,8 @@ function clearBoardSelection() {
       <button
         v-if="canUndo"
         class="action-btn undo-btn"
-        @click="emit('undo')"
-        :disabled="isExecuting"
+        v-bind="disabledAttrs(submissionInFlightReason)"
+        @click="runIfEnabled(submissionInFlightReason, () => emit('undo'))"
       >
         Undo
       </button>
@@ -912,9 +990,8 @@ function clearBoardSelection() {
               v-for="element in filteredValidElements"
               :key="element.id"
               class="choice-btn element-btn"
-              :disabled="!!element.disabled"
-              :title="element.disabled || undefined"
-              @click="selectElement(element.id)"
+              v-bind="disabledAttrs(element.disabled)"
+              @click="runIfEnabled(element.disabled, () => selectElement(element.id))"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
             >
@@ -937,20 +1014,23 @@ function clearBoardSelection() {
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
           </div>
           <div class="choice-buttons multi-select-choices">
+            <!-- The reason (own, or the max-selections cap) lands on the LABEL so it is
+                 readable by hovering anywhere on the option, and on the checkbox so a
+                 screen reader announces it on the control itself. -->
             <label
               v-for="element in filteredValidElements"
               :key="element.id"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(element.id) }"
-              :title="element.disabled || undefined"
+              v-bind="disabledAttrs(multiSelectDisabledReason(element.disabled, element.id))"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
             >
               <input
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(element.id)"
-                @change="toggleMultiSelectValue(currentPick.name, element.id, element.display)"
-                :disabled="!!element.disabled || (!isMultiSelectValueSelected(element.id) && currentMultiSelect?.max !== undefined && multiSelectValues.length >= currentMultiSelect.max)"
+                v-bind="disabledAttrs(multiSelectDisabledReason(element.disabled, element.id))"
+                @click="onMultiSelectClick($event, multiSelectDisabledReason(element.disabled, element.id), currentPick!.name, element.id, element.display)"
               />
               <span class="checkbox-label">{{ element.display || element.id }}</span>
             </label>
@@ -959,7 +1039,7 @@ function clearBoardSelection() {
             </span>
             <DoneButton
               v-if="showMultiSelectDoneButton"
-              :disabled="!isMultiSelectReady"
+              :disabled-reason="multiSelectDoneDisabledReason"
               @click="confirmMultiSelect"
             />
           </div>
@@ -976,9 +1056,8 @@ function clearBoardSelection() {
               v-for="element in filteredValidElements"
               :key="element.id"
               class="choice-btn element-btn"
-              :disabled="!!element.disabled"
-              :title="element.disabled || undefined"
-              @click="selectElement(element.id)"
+              v-bind="disabledAttrs(element.disabled)"
+              @click="runIfEnabled(element.disabled, () => selectElement(element.id))"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
             >
@@ -1001,20 +1080,21 @@ function clearBoardSelection() {
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
           </div>
           <div class="choice-buttons multi-select-choices">
+            <!-- Reason on both label and control — see the elements variant above. -->
             <label
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(choice.value) }"
-              :title="choice.disabled || undefined"
+              v-bind="disabledAttrs(multiSelectDisabledReason(choice.disabled, choice.value))"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
               <input
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(choice.value)"
-                @change="toggleMultiSelectValue(currentPick.name, choice.value, choice.display)"
-                :disabled="!!choice.disabled || (!isMultiSelectValueSelected(choice.value) && currentMultiSelect?.max !== undefined && multiSelectValues.length >= currentMultiSelect.max)"
+                v-bind="disabledAttrs(multiSelectDisabledReason(choice.disabled, choice.value))"
+                @click="onMultiSelectClick($event, multiSelectDisabledReason(choice.disabled, choice.value), currentPick!.name, choice.value, choice.display)"
               />
               <span class="checkbox-label">{{ choice.display }}</span>
             </label>
@@ -1023,7 +1103,7 @@ function clearBoardSelection() {
             </span>
             <DoneButton
               v-if="showMultiSelectDoneButton"
-              :disabled="!isMultiSelectReady"
+              :disabled-reason="multiSelectDoneDisabledReason"
               @click="confirmMultiSelect"
             />
           </div>
@@ -1040,9 +1120,8 @@ function clearBoardSelection() {
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="choice-btn filtered-choice-btn"
-              :disabled="!!choice.disabled"
-              :title="choice.disabled || undefined"
-              @click="executeChoice(currentPick.name, choice)"
+              v-bind="disabledAttrs(choice.disabled)"
+              @click="runIfEnabled(choice.disabled, () => executeChoice(currentPick!.name, choice))"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
@@ -1077,9 +1156,8 @@ function clearBoardSelection() {
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="choice-btn"
-              :disabled="!!choice.disabled"
-              :title="choice.disabled || undefined"
-              @click="setSelectionValue(currentPick.name, choice.value, choice.display)"
+              v-bind="disabledAttrs(choice.disabled)"
+              @click="runIfEnabled(choice.disabled, () => setSelectionValue(currentPick!.name, choice.value, choice.display))"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
@@ -1161,10 +1239,9 @@ function clearBoardSelection() {
             v-for="choice in anchoredChoices"
             :key="String(choice.value)"
             class="choice-btn anchored-choice-btn"
-            :disabled="!!choice.disabled"
-            :title="choice.disabled || undefined"
+            v-bind="disabledAttrs(choice.disabled)"
             :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"
-            @click="executeChoice(currentPick.name, choice)"
+            @click="runIfEnabled(choice.disabled, () => executeChoice(currentPick!.name, choice))"
             @mouseenter="handleChoiceHover(choice)"
             @mouseleave="handleChoiceLeave"
           >
@@ -1236,12 +1313,12 @@ function clearBoardSelection() {
   transition: all 0.2s;
 }
 
-.action-btn:hover:not(:disabled) {
+.action-btn:hover:not([aria-disabled='true']) {
   transform: translateY(-1px);
   box-shadow: var(--bsg-shadow);
 }
 
-.action-btn:disabled {
+.action-btn[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1254,7 +1331,7 @@ function clearBoardSelection() {
   box-shadow: none;
 }
 
-.undo-btn:hover:not(:disabled) {
+.undo-btn:hover:not([aria-disabled='true']) {
   background: var(--bsg-surface-3);
   box-shadow: var(--bsg-shadow-sm);
 }
@@ -1411,7 +1488,7 @@ function clearBoardSelection() {
   transition: all 0.2s;
 }
 
-.choice-btn:disabled {
+.choice-btn[aria-disabled='true'] {
   opacity: 0.45;
   cursor: not-allowed;
   filter: grayscale(0.5);
@@ -1419,7 +1496,7 @@ function clearBoardSelection() {
   color: var(--bsg-ink-3);
 }
 
-.choice-btn:hover:not(:disabled) {
+.choice-btn:hover:not([aria-disabled='true']) {
   border-color: var(--bsg-accent);
   background: var(--bsg-selectable);
 }
@@ -1443,7 +1520,7 @@ function clearBoardSelection() {
   border-color: var(--bsg-line-2);
 }
 
-.filtered-choice-btn:hover {
+.filtered-choice-btn:hover:not([aria-disabled='true']) {
   border-color: var(--bsg-accent);
   background: var(--bsg-selectable);
 }
@@ -1455,7 +1532,7 @@ function clearBoardSelection() {
   border-color: var(--bsg-accent);
 }
 
-.anchored-choice-btn:hover:not(:disabled) {
+.anchored-choice-btn:hover:not([aria-disabled='true']) {
   background: var(--bsg-selectable);
 }
 
@@ -1553,7 +1630,7 @@ function clearBoardSelection() {
   transition: all 0.2s;
 }
 
-.multi-select-choice:has(input:disabled) {
+.multi-select-choice[aria-disabled='true'] {
   opacity: 0.45;
   cursor: not-allowed;
   filter: grayscale(0.5);
@@ -1561,7 +1638,7 @@ function clearBoardSelection() {
   color: var(--bsg-ink-3);
 }
 
-.multi-select-choice:hover:not(:has(input:disabled)) {
+.multi-select-choice:hover:not([aria-disabled='true']) {
   border-color: var(--bsg-accent);
   background: var(--bsg-selectable);
 }
@@ -1600,7 +1677,7 @@ function clearBoardSelection() {
   font-weight: bold;
 }
 
-.multi-select-choice input[type="checkbox"]:disabled {
+.multi-select-choice input[type="checkbox"][aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
 }

@@ -2,7 +2,7 @@
  * Tutorial action-gating engine tests (TUT-02).
  *
  * Verifies that the tutorial gate substrate:
- *   1. Surfaces a reason for out-of-step actions via getTutorialDisabledActions —
+ *   1. Surfaces a reason for out-of-step actions via getDisabledActions —
  *      not silently dropped (success criterion #3).
  *   2. Disables non-allowed targets in getChoices with a non-empty reason string,
  *      leaving the allowed target enabled (target-level granularity).
@@ -94,8 +94,8 @@ describe('Tutorial gate — TUT-02', () => {
     // Behavior 1: Out-of-step action surfaces a reason (not silent)
     // ------------------------------------------------------------------
 
-    it('getTutorialDisabledActions names the out-of-step action with a reason', () => {
-      const disabled = game.getTutorialDisabledActions(1);
+    it('getDisabledActions names the out-of-step action with a reason', () => {
+      const disabled = game.getDisabledActions(1);
 
       expect(typeof disabled).toBe('object');
       // `pass` is NOT the gated step's action — it must appear with a non-empty reason
@@ -104,8 +104,8 @@ describe('Tutorial gate — TUT-02', () => {
       expect(disabled['pass'].length).toBeGreaterThan(0);
     });
 
-    it('getTutorialDisabledActions does NOT include the allowed action', () => {
-      const disabled = game.getTutorialDisabledActions(1);
+    it('getDisabledActions does NOT include the allowed action', () => {
+      const disabled = game.getDisabledActions(1);
 
       // `move` IS the allowed action for this step — must not be listed
       expect('move' in disabled).toBe(false);
@@ -184,8 +184,8 @@ describe('Tutorial gate — TUT-02', () => {
       expect(choices.every(c => c.disabled === false)).toBe(true);
     });
 
-    it('getTutorialDisabledActions returns {} for seat 2 (no tutorial running)', () => {
-      const disabled = game.getTutorialDisabledActions(2);
+    it('getDisabledActions returns {} for seat 2 (no tutorial running)', () => {
+      const disabled = game.getDisabledActions(2);
 
       expect(disabled).toEqual({});
     });
@@ -374,8 +374,8 @@ describe('Tutorial gate — TUT-02', () => {
       ]);
     });
 
-    it('getTutorialDisabledActions returns {} (no tutorial)', () => {
-      const disabled = game.getTutorialDisabledActions(1);
+    it('getDisabledActions returns {} (no tutorial)', () => {
+      const disabled = game.getDisabledActions(1);
 
       expect(disabled).toEqual({});
     });
@@ -416,7 +416,7 @@ describe('Tutorial gate — TUT-02', () => {
       predicateGame.tutorialProgress.set(1, { stepId: 'pred-step', status: 'running' });
       predicateGame.registerActions(makeMoveAction(), makePassAction());
 
-      const disabled = predicateGame.getTutorialDisabledActions(1);
+      const disabled = predicateGame.getDisabledActions(1);
 
       expect('move' in disabled).toBe(true);
       expect('pass' in disabled).toBe(true);
@@ -435,7 +435,7 @@ describe('Tutorial gate — TUT-02', () => {
       predicateGame.tutorialProgress.set(1, { stepId: 'pred-step', status: 'running' });
       predicateGame.registerActions(makeMoveAction(), makePassAction());
 
-      const disabled = predicateGame.getTutorialDisabledActions(1);
+      const disabled = predicateGame.getDisabledActions(1);
 
       expect(disabled).toEqual({});
     });
@@ -453,7 +453,7 @@ describe('Tutorial gate — TUT-02', () => {
       predicateGame.tutorialProgress.set(1, { stepId: 'pred-step', status: 'running' });
       predicateGame.registerActions(makeMoveAction(), makePassAction());
 
-      const disabled = predicateGame.getTutorialDisabledActions(1);
+      const disabled = predicateGame.getDisabledActions(1);
 
       expect(disabled['move']).toContain('must be player turn');
       expect(disabled['pass']).toContain('must be player turn');
@@ -495,7 +495,7 @@ describe('Tutorial gate — TUT-02', () => {
       game.tutorialProgress.set(1, { stepId: 'step1', status: 'completed' });
       game.registerActions(makeMoveAction(), makePassAction());
 
-      const disabled = game.getTutorialDisabledActions(1);
+      const disabled = game.getDisabledActions(1);
       expect(disabled).toEqual({});
     });
 
@@ -505,7 +505,7 @@ describe('Tutorial gate — TUT-02', () => {
       game.tutorialProgress.set(1, { stepId: 'step1', status: 'exited' });
       game.registerActions(makeMoveAction(), makePassAction());
 
-      const disabled = game.getTutorialDisabledActions(1);
+      const disabled = game.getDisabledActions(1);
       expect(disabled).toEqual({});
     });
   });
@@ -515,7 +515,7 @@ describe('Tutorial gate — TUT-02', () => {
 // HR-01: Action-level gating must be enforced at EXECUTION
 // ===========================================================
 //
-// The existing tests above verify that `getTutorialDisabledActions` surfaces a
+// The existing tests above verify that `getDisabledActions` surfaces a
 // reason for out-of-step actions to the projection layer.  HR-01 requires that
 // `Game.performAction` ALSO consults that reason and REJECTS execution of a
 // gated action, so enforcement is server-side and not opt-in per UI.
@@ -555,7 +555,7 @@ describe('HR-01: Tutorial action-level gate enforced at execution', () => {
     const g = makeEnforcementGame();
     const p1 = g.getPlayer(1)!;
 
-    const gateReasons = g.getTutorialDisabledActions(1);
+    const gateReasons = g.getDisabledActions(1);
     const expectedReason = gateReasons['pass'];
     expect(expectedReason).toBeTruthy();
 

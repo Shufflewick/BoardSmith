@@ -666,6 +666,10 @@ const actionController = useActionController({
   // refuse a re-submit once this seat has committed this simultaneous step —
   // see useActionController's `completed` option doc for the full rationale.
   completed: myCompleted,
+  // Disabled-action gate (issue #4): same shared-chokepoint principle — a
+  // disabled action stays available so the panel can explain it, so start()/
+  // execute() are where it gets refused, for every UI at once.
+  disabledActions,
   gameView,
   playerSeat,
   // Use autoEndTurn ref for both autoFill and autoExecute
@@ -1011,6 +1015,9 @@ useBoardActionBridge({
   autoEndTurn,
   actionMetadata,
   availableActions,
+  // Same source the Action Panel greys its buttons from, so the board and the
+  // panel refuse exactly the same actions.
+  disabledActions,
   isViewingHistory,
 });
 

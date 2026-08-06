@@ -618,10 +618,14 @@ export function buildPlayerState(
     const tutorial = getActiveTutorialStepView(runner.game, playerPosition);
     if (tutorial !== undefined) {
       state.tutorial = tutorial;
-      const disabled = runner.game.getTutorialDisabledActions(playerPosition);
-      if (Object.keys(disabled).length > 0) {
-        state.disabledActions = disabled;
-      }
+    }
+    // Disabled-action reasons are NOT tutorial-only: an action's own
+    // `.disabled()` rule applies in ordinary play. Projected for every seated
+    // player (spectators have no actions to disable), parity with
+    // createPlayerView.
+    const disabled = runner.game.getDisabledActions(playerPosition);
+    if (Object.keys(disabled).length > 0) {
+      state.disabledActions = disabled;
     }
   }
 
