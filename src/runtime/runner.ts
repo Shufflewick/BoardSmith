@@ -754,8 +754,25 @@ export class GameRunner<G extends Game = Game> {
     // was never in this window". Undo for the turn in progress is unavailable
     // either way (there is no turn-start entry to restore); the window simply
     // rebuilds from here.
+    //
+    // A DISABLED policy inherits nothing. `checkpoints: { enabled: false }` is
+    // the only setting that makes a game's snapshot size independent of its
+    // action count, and inheriting a window would break that promise
+    // permanently: `captureCheckpoint` returns before it can prune when the
+    // policy is off, so entries carried in here are never refreshed, never
+    // dropped, and re-serialize on every snapshot forever. A game that turns
+    // checkpoints off after running under the default -- the fix for a session
+    // already growing toward its host's state ceiling -- would keep paying for
+    // the copies it turned off, and the emitted window would keep reporting
+    // retention the runner is not doing. Dropping it here is what makes the
+    // emitted window honest evidence of the policy actually in force, which is
+    // the only evidence there is (the policy itself is never persisted).
     const window = snapshot.actionCheckpoints;
-    const usable = window && Array.isArray(window.entries) && typeof window.baseIndex === 'number';
+    const usable =
+      runner.checkpointPolicy_.enabled &&
+      window &&
+      Array.isArray(window.entries) &&
+      typeof window.baseIndex === 'number';
     runner.checkpointBaseIndex = usable ? window.baseIndex : snapshot.actionHistory.length;
     runner.actionCheckpoints = usable ? [...window.entries] : [];
 

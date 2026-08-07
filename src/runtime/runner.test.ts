@@ -843,5 +843,42 @@ describe('GameRunner', () => {
       expect(next.actionCheckpoints!.entries).toHaveLength(1);
       expect(JSON.stringify(next.actionCheckpoints)).not.toContain('null');
     });
+
+    it('sheds an inherited window when the policy is disabled, so turning checkpoints off is a fix that works', () => {
+      // Turning checkpoints off is the ONLY way to make snapshot size
+      // independent of action count, and it is the fix a game reaches for once
+      // a session is growing toward its host's state ceiling. If a restore
+      // inherited the window that game had already accumulated, the fix would
+      // do nothing: `captureCheckpoint` returns before it can prune when the
+      // policy is off, so those entries are never refreshed and never dropped
+      // -- they re-serialize on every snapshot for the rest of the game.
+      const grown = playedRunner(12).getSnapshot();
+      expect(grown.actionCheckpoints!.entries).toHaveLength(13);
+
+      const restored = GameRunner.fromSnapshot(grown, LongGame, {
+        checkpoints: { enabled: false },
+      });
+      const next = restored.getSnapshot();
+      expect(next.actionCheckpoints!.entries).toHaveLength(0);
+      expect(next.actionCheckpoints!.baseIndex).toBe(12);
+
+      // And it stays shed: every later round is emitted with an empty window,
+      // so the emitted window is honest evidence of the policy in force rather
+      // than of whatever policy last wrote the stored snapshot.
+      expect(restored.performAction('pass', 1, {}).success).toBe(true);
+      expect(restored.getSnapshot().actionCheckpoints!.entries).toHaveLength(0);
+
+      // The state actually gets smaller, which is the point.
+      expect(JSON.stringify(next).length).toBeLessThan(JSON.stringify(grown).length);
+    });
+
+    it('still inherits the window when the policy is re-enabled', () => {
+      // The shedding above is keyed to the policy, not to the restore: a game
+      // that has NOT disabled checkpoints must keep the entries undo depends
+      // on across every rehydration.
+      const grown = playedRunner(12).getSnapshot();
+      const restored = GameRunner.fromSnapshot(grown, LongGame);
+      expect(restored.getSnapshot().actionCheckpoints!.entries).toHaveLength(13);
+    });
   });
 });
