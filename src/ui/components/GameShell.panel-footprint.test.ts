@@ -172,6 +172,11 @@ describe('#13: the Action Panel reserves a constant, token-derived footprint', (
   it('nothing in the shell measures the Action Panel', () => {
     expect(source).not.toContain('actionPanelHeight');
     expect(source).not.toContain('attachActionPanelObserver');
+    // The suite has to catch this class of leftover on its own: `vue-tsc --noEmit`
+    // in this repo does NOT typecheck SFC scripts (verified by planting an
+    // undefined identifier in this file — no error), so a stale reference to a
+    // deleted binding compiles here and only explodes in a consuming game.
+    expect(source).not.toContain('actionPanelResizeObserver');
     expect(source).not.toContain('actionbarEl');
   });
 });

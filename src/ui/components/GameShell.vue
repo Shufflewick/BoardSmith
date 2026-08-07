@@ -1310,7 +1310,6 @@ onMounted(async () => {
 // Cleanup on unmount
 onUnmounted(() => {
   compactQuery?.removeEventListener('change', updateCompact);
-  actionPanelResizeObserver?.disconnect();
   if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
   disconnectFromLobby();
   if (platformMessageHandler) {
