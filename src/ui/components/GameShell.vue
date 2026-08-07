@@ -333,33 +333,12 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
   if (!mql.matches) mobileExpanded.value = false;
 }
 
-// Floating Action Panel height, measured so the board reserves matching scroll room
-// at the bottom — anything the Action Panel floats over can then be scrolled into view.
-const actionPanelHeight = ref<number>(68);
-let actionPanelResizeObserver: ResizeObserver | null = null;
-const actionbarEl = ref<HTMLElement | null>(null);
-
-// ZOOM-01 / F-14: (re)attach the Action-Panel-height ResizeObserver to the actionbar
-// whenever it appears — the actionbar is v-if'd on the game screen, so a
-// lobby-first mount or a game→lobby→game remount would otherwise leave the RO
-// on a detached element (or never attach it), freezing actionPanelHeight at its
-// default and letting the board sit under the Action Panel. Idempotent: disconnects any
-// prior observer first.
-function attachActionPanelObserver(el: HTMLElement | null): void {
-  actionPanelResizeObserver?.disconnect();
-  actionPanelResizeObserver = null;
-  if (!el || typeof ResizeObserver === 'undefined') return;
-  actionPanelResizeObserver = new ResizeObserver((entries) => {
-    const entry = entries[0];
-    // BORDER-box height (full on-screen footprint incl. padding) + a small
-    // buffer so revealed content clears the Action Panel edge; contentRect excludes
-    // padding and would leave the board's bottom slightly under the Action Panel.
-    const h = entry?.borderBoxSize?.[0]?.blockSize ?? entry?.target.getBoundingClientRect().height;
-    if (h != null) actionPanelHeight.value = Math.round(h) + 8;
-  });
-  actionPanelResizeObserver.observe(el);
-}
-watch(actionbarEl, (el) => attachActionPanelObserver(el));
+// The floating Action Panel's footprint is a CONSTANT, declared in CSS
+// (--bsg-panel-reserved, applied as .boardregion's padding-bottom) and never
+// measured. Its height has no single value — it re-wraps on every selection
+// step — so a fit that reserved the measured height was not reproducible
+// between two loads of the same state (issue #13). The panel's content lays out
+// inside --bsg-panel-max and scrolls internally past it.
 
 // Startup zoom fit: when a game (re)mounts, the board is zoomed once to fill
 // the board region (clamped to the 0.5–2.0 slider range) and then left alone —
@@ -371,7 +350,6 @@ const zoomContainerEl = ref<HTMLElement | null>(null);
 const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
   boardEl: zoomContainerEl,
   regionEl: boardregionEl,
-  actionPanelHeight,
 });
 
 // Connection health (IA-01): driven by postMessage heartbeat in platform mode.
@@ -1318,15 +1296,6 @@ onMounted(async () => {
   compactQuery = window.matchMedia(`(max-width: ${BREAKPOINTS.compact - 1}px)`);
   updateCompact(compactQuery);
   compactQuery.addEventListener('change', updateCompact);
-
-  // Track the floating Action Panel's height so the board reserves matching scroll room
-  // at the bottom — covered board content can then always be scrolled into view.
-  // ZOOM-01 / F-14: the actionbar only exists under v-if="currentScreen==='game'",
-  // so on a lobby-first (or remounted) mount it is ABSENT here and a one-shot
-  // attach would leave actionPanelHeight frozen at its default (board sits under the
-  // Action Panel). `attachActionPanelObserver` is (re)driven by the watch below whenever the
-  // actionbar element appears/disappears, so every mount path rewires it.
-  attachActionPanelObserver(actionbarEl.value);
 
   if (platformMode.value) return;
 
@@ -2418,9 +2387,10 @@ if ((import.meta as any).hot) {
         </aside>
 
         <!-- Board region: hero; ~zero chrome padding; container-query-sized.
-             --action-panel-h carries the floating Action Panel's measured height so the board has
-             matching scroll room at the bottom (covered content stays reachable). -->
-        <main class="boardregion" id="main" role="main" ref="boardregionEl" tabindex="-1" :style="{ '--action-panel-h': actionPanelHeight + 'px' }">
+             Its padding-bottom reserves the Action Panel's CONSTANT footprint
+             (--bsg-panel-reserved), so the board is fitted above the panel without
+             anything measuring the panel. -->
+        <main class="boardregion" id="main" role="main" ref="boardregionEl" tabindex="-1">
           <!-- Connection health dot: platform mode only, and only surfaced when there's
                something to say (stale/connecting). A healthy connection shows nothing —
                a persistent green dot over the board just reads as a mystery speck (IA-01).
@@ -2626,7 +2596,7 @@ if ((import.meta as any).hot) {
            area (full width) so showing/growing it NEVER reflows or moves the board.
            Its options list caps at 5 rows and scrolls; the board reserves the Action Panel's
            measured height as scroll room so anything it floats over stays reachable. -->
-      <div class="actionbar" role="region" aria-label="Actions" ref="actionbarEl">
+      <div class="actionbar" role="region" aria-label="Actions">
         <!-- ⋯ controls menu: always available at the far-left of the bar (the sole
              control surface in platform mode, where GameHeader is hidden). Opens
              upward since the bar is bottom-anchored. -->
@@ -2825,6 +2795,33 @@ if ((import.meta as any).hot) {
   font-family: var(--bsg-font);
   background: var(--bsg-bg);
   color: var(--bsg-ink);
+
+  /* ── Action Panel footprint tokens ────────────────────────────────────────
+     The board is fitted above a CONSTANT reserved footprint, never above the
+     panel's measured height. The panel's height legitimately changes on every
+     selection step, so it has no single value and a fit that reserved it was
+     not reproducible between two loads of the same state (issue #13). These
+     tokens are derived from the panel's own control metrics, so there is one
+     definition of a "row" for both the ceiling and the reservation. */
+  --bsg-panel-row: 44px;   /* one control row: the WCAG 2.5.8 touch-target floor */
+  --bsg-panel-gap: 8px;    /* .actionbar row gap */
+  --bsg-panel-pad: 9px;    /* .actionbar vertical padding */
+
+  /* Visual ceiling: the panel's content lays out inside this and scrolls past it. */
+  --bsg-panel-max: calc(5 * var(--bsg-panel-row) + 4 * var(--bsg-panel-gap)
+                        + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
+
+  /* Reserved footprint the board is fitted above: TWO rows. The panel has two
+     resting states a player sits in between picks — the action-choice row (which
+     routinely wraps once on a phone) and prompt + one row of choices during a
+     pick. One row guarantees routine overlap; three would cost 158px of board on
+     every load to buy headroom that only many-choice moments need, and internal
+     scroll already serves those. */
+  --bsg-panel-reserved: min(
+    calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
+         + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom)),
+    var(--bsg-panel-max)
+  );
 }
 
 /* Platform mode: embedded in host iframe. Paint the Slate ground (var(--bsg-bg))
@@ -3006,14 +3003,20 @@ if ((import.meta as any).hot) {
      and create a resize-observer feedback path into useAutoZoom's re-fit. */
   scrollbar-gutter: stable;
   padding: var(--bsg-s1);
-  padding-bottom: env(safe-area-inset-bottom);
+  /* The Action Panel's reserved footprint is LAYOUT, not arithmetic: the region's
+     own padding excludes it, so the fit's `region.clientHeight - padding` already
+     accounts for it and nothing in JS has to know the panel exists. It is a
+     constant, so this padding never changes and the persistent region observer
+     fires only on genuine viewport changes. Includes the safe-area inset. */
+  padding-bottom: var(--bsg-panel-reserved);
 }
 
 /* Floating Action Panel: absolutely anchored to the bottom, FULL WIDTH (spans under
    the sidebar too). Out of flow, so it never reflows/moves the board — it floats over
-   the board's bottom; the board reserves the Action Panel's measured height (--action-panel-h) as
-   scroll room so covered content stays reachable. Everything inside wraps naturally
-   (flex-wrap) — no reserved columns; the options list caps at 5 rows and scrolls. */
+   the board's bottom; the board reserves a CONSTANT footprint (--bsg-panel-reserved,
+   in .boardregion's padding) plus scroll room up to the panel's ceiling, so covered
+   content stays reachable however tall the panel grows. Everything inside wraps
+   naturally (flex-wrap) — no reserved columns; the options list caps at 5 rows and scrolls. */
 .actionbar {
   position: absolute;
   bottom: 0;
@@ -3034,9 +3037,9 @@ if ((import.meta as any).hot) {
   gap: 8px;
   padding: 9px var(--bsg-s4);
   padding-bottom: calc(9px + env(safe-area-inset-bottom));
-  /* Cap at ~5 button-rows (44px buttons + 8px row gaps + vertical padding), then the
-     whole flow scrolls. The ⋯ menu popover teleports to <body>, so overflow is safe. */
-  max-height: calc(5 * 44px + 4 * 8px + 18px + env(safe-area-inset-bottom));
+  /* Cap at 5 button-rows, then the whole flow scrolls. The ⋯ menu popover teleports
+     to <body>, so overflow is safe. */
+  max-height: var(--bsg-panel-max);
   overflow-y: auto;
 }
 
@@ -3206,8 +3209,15 @@ if ((import.meta as any).hot) {
    The stage already uses the row layout (sidebar | board); this branch only
    reduces the actionbar height cap so the board retains adequate vertical space. */
 @media (orientation: landscape) and (max-height: 600px) {
+  .game-shell {
+    --bsg-panel-max: min(22dvh, 120px);
+    /* One row on a short screen: vertical space is the scarce axis here. */
+    --bsg-panel-reserved: min(
+      calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom)),
+      var(--bsg-panel-max)
+    );
+  }
   .actionbar {
-    max-height: min(22dvh, 120px);
     padding-top: 6px;
     padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
@@ -3216,7 +3226,9 @@ if ((import.meta as any).hot) {
 /* ── AI demo playback control bar ─────────────────────────────────────────── */
 .bsg-demo-controls {
   position: fixed;
-  bottom: 88px; /* clears the floating Action Panel */
+  /* Sits one row-gap above the Action Panel's reserved footprint — the same
+     quantity the board is fitted against, not a second magic number. */
+  bottom: calc(var(--bsg-panel-reserved) + var(--bsg-panel-gap));
   left: 50%;
   transform: translateX(-50%);
   z-index: 21; /* above the board + narration overlay (z-20), below modals */
@@ -3292,10 +3304,11 @@ if ((import.meta as any).hot) {
      which only shifts the paint and left the board un-scrollable / drifting sideways. */
   zoom: var(--zoom-level);
 
-  /* Scroll room equal to the floating Action Panel's height, so the board's bottom — which
-     the Action Panel floats over — can always be scrolled up into view. Measured live by a
-     ResizeObserver (--action-panel-h) so it tracks the Action Panel as it grows/shrinks. */
-  margin-bottom: var(--action-panel-h, 0px);
+  /* Total clearance below the board = .boardregion's padding-bottom
+     (--bsg-panel-reserved) + this margin = --bsg-panel-max, the panel's ceiling.
+     So even a panel grown to its full 5 rows can always be scrolled clear of, while
+     the board is still FITTED against only the constant reserved footprint. */
+  margin-bottom: calc(var(--bsg-panel-max) - var(--bsg-panel-reserved));
 
   /* CONTAINMENT: Prevents position:fixed from escaping to viewport.
      Any fixed-position elements inside will behave like absolute positioning

@@ -45,7 +45,10 @@ import { useBoardSize } from './useBoardSize';
  *  running 736px tall — taller than the region minus the Action Panel. */
 const REGION = { width: 375, height: 765 };
 const NATURAL = { width: 367, height: 736 };
-const ACTION_PANEL_H = 100;
+/** The Action Panel's CONSTANT reserved footprint, which GameShell applies as
+ *  `.boardregion`'s padding-bottom (`--bsg-panel-reserved`). Nothing measures the
+ *  panel; the fit only ever sees region padding. */
+const PANEL_RESERVED = 100;
 
 /** Every live observer watching `el` — a real resize notifies all of them, and
  *  the region is watched by BOTH composables. */
@@ -98,8 +101,7 @@ function mountShell(board: Component | null) {
     setup() {
       const boardregionEl = ref<HTMLElement | null>(null);
       const zoomContainerEl = ref<HTMLElement | null>(null);
-      const actionPanelHeight = ref(ACTION_PANEL_H);
-      api = useAutoZoom({ boardEl: zoomContainerEl, regionEl: boardregionEl, actionPanelHeight });
+      api = useAutoZoom({ boardEl: zoomContainerEl, regionEl: boardregionEl });
       return () => h('main', { class: 'boardregion', ref: boardregionEl }, [
         h('div', { class: 'zoom-container', ref: zoomContainerEl },
           current.value ? [h(current.value)] : []),
@@ -117,6 +119,7 @@ function mountShell(board: Component | null) {
 function layOut(wrapper: ReturnType<typeof mountShell>['wrapper'], minContentWidth = 0) {
   const region = wrapper.find('main.boardregion').element as HTMLElement;
   const zoom = wrapper.find('.zoom-container').element as HTMLElement;
+  region.style.paddingBottom = `${PANEL_RESERVED}px`;
   Object.defineProperty(region, 'clientWidth', { get: () => REGION.width, configurable: true });
   Object.defineProperty(region, 'clientHeight', { get: () => REGION.height, configurable: true });
   zoom.getBoundingClientRect = () => {
@@ -165,7 +168,7 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     // The pin took: the board is the region's width, and the board is really
     // taller than the space the both-axis fit would have measured against.
     expect(zoom.getBoundingClientRect().width).toBe(REGION.width);
-    expect(NATURAL.height).toBeGreaterThan(REGION.height - ACTION_PANEL_H);
+    expect(NATURAL.height).toBeGreaterThan(REGION.height - PANEL_RESERVED);
 
     expect(shell.api.zoomLevel.value).toBe(1);
     shell.wrapper.unmount();
@@ -176,7 +179,7 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     await settle(shell.wrapper);
 
     // min(375/367, (765-100)/736) = height constrains.
-    const expected = (REGION.height - ACTION_PANEL_H) / NATURAL.height;
+    const expected = (REGION.height - PANEL_RESERVED) / NATURAL.height;
     expect(shell.api.zoomLevel.value).toBeCloseTo(expected, 5);
     expect(shell.api.zoomLevel.value).toBeLessThan(1);
     shell.wrapper.unmount();
@@ -203,7 +206,7 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     shell.api.fitZoom(); // "Fit" — re-measures the new board
     await settle(shell.wrapper);
 
-    expect(shell.api.zoomLevel.value).toBeCloseTo((REGION.height - ACTION_PANEL_H) / NATURAL.height, 5);
+    expect(shell.api.zoomLevel.value).toBeCloseTo((REGION.height - PANEL_RESERVED) / NATURAL.height, 5);
     shell.wrapper.unmount();
   });
 });
@@ -214,15 +217,17 @@ describe('B20-5: the game wires nothing — GameShell states no axis of its own'
     'utf-8',
   );
 
-  it('passes useAutoZoom only the three geometry options', () => {
+  it('passes useAutoZoom only the two geometry options', () => {
     const start = gameShellSource.indexOf('useAutoZoom({');
     expect(start).toBeGreaterThan(-1);
     const call = gameShellSource.slice(start, gameShellSource.indexOf('});', start));
     expect(call).toContain('boardEl: zoomContainerEl');
     expect(call).toContain('regionEl: boardregionEl');
-    expect(call).toContain('actionPanelHeight');
     // No axis/pin flag for a game (or the shell) to get wrong: the pin is the
     // single statement of intent, carried by useBoardSize itself.
     expect(call).not.toMatch(/fitAxis|pinned|boardRegionPin/);
+    // And no Action Panel input at all (#13): the panel's footprint is a CSS
+    // constant on `.boardregion`, so the fit reads region padding, never a panel.
+    expect(call).not.toMatch(/[Pp]anel/);
   });
 });

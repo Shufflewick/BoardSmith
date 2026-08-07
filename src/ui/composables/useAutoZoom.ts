@@ -9,6 +9,13 @@
  * once its size has been stable for SETTLE_MS — mid-game board CONTENT
  * growth never moves the zoom on its own.
  *
+ * SETTLE_MS is NOT a race against a fluctuating quantity: the board's natural
+ * size converges (it is 0x0 until session state arrives, then settles on one
+ * number for a given state), so the settle timer only decides WHEN TO STOP
+ * re-fitting a value that has already converged. Any sampling instant after
+ * convergence yields the same zoom, which is what makes the fitted zoom
+ * reproducible across two loads of the same state.
+ *
  * Separately, and for the whole component lifetime, a persistent
  * ResizeObserver on the REGION re-fits the board whenever the available space
  * genuinely changes (a window/iframe resize, the sidebar collapsing) — this is
@@ -16,15 +23,20 @@
  * around it. A manual `setZoom` (the slider) takes control and this auto-refit
  * stops; `fitZoom()` (the header/menu "Fit" button) re-fits once and re-arms it.
  *
- * The Action Panel's height is deliberately NOT part of that persistent re-fit. It is
- * reserved during startup (so the Action Panel landing is accounted for in the initial
- * fit) and then frozen. The action panel's height changes constantly during
- * play — every selection step re-wraps it — and re-fitting on that resized the
- * board under the player's cursor on every click: the board visibly shook when
- * a piece was selected and again when it moved. Nothing is lost by ignoring it:
- * the Action Panel is out of flow (GameShell's `.actionbar` is `position: absolute`) so
- * it never moves the board by itself, and the board region keeps `--action-panel-h` of
- * scroll room, so anything a grown Action Panel covers stays scrollable into view.
+ * NOTHING HERE MEASURES THE ACTION PANEL — the options type does not even admit
+ * a panel input, so the fit cannot read it. The panel's height has no single
+ * value (every selection step re-wraps it), so reserving the measured height
+ * made the fitted zoom depend on when the sample was taken (issue #13). Instead
+ * GameShell reserves a CONSTANT footprint in CSS: `--bsg-panel-reserved` is
+ * `.boardregion`'s padding-bottom, so the padding subtraction below already
+ * excludes the panel's space and the region box is the single source of truth.
+ * Being constant, it never re-triggers the persistent region observer, and the
+ * panel can grow over the board without ever resizing it — the old "board shakes
+ * under the player's cursor on every click" regression is structurally
+ * impossible. The panel is out of flow (`.actionbar` is `position: absolute`) so
+ * it never moves the board by itself, and the region plus the zoom container's
+ * bottom margin keep scroll room up to the panel's ceiling (`--bsg-panel-max`),
+ * so anything a fully grown panel covers stays scrollable into view.
  *
  * Fit axis: a board that has called `useBoardSize()` is pinned to the region's
  * width and documented to grow by VERTICAL SCROLL. Height-fitting such a board
@@ -39,11 +51,12 @@
  * - The board element carries CSS `zoom`, so its getBoundingClientRect() is
  *   scaled. Natural size = rect / the *applied* zoom read from computed style
  *   (not the ref, which may not have flushed to the DOM yet).
- * - Available space is the region's client box minus its padding and the
- *   floating Action Panel's height, so a fitted board sits fully above the Action Panel.
- * - Re-fits triggered by the region observer / Action Panel watch are rAF-coalesced
- *   into a single `measureAndFit()` per frame, so a cascade of layout changes
- *   (e.g. the Action Panel's own ResizeObserver plus a window resize) never thrashes.
+ * - Available space is the region's client box minus its padding — and the
+ *   region's padding-bottom is the Action Panel's reserved footprint, so a
+ *   fitted board sits fully above that footprint with no panel term needed.
+ * - Re-fits triggered by the region observer are rAF-coalesced into a single
+ *   `measureAndFit()` per frame, so a cascade of layout changes (e.g. the
+ *   sidebar collapsing plus a window resize) never thrashes.
  */
 import { ref, watch, onUnmounted, type Ref } from 'vue';
 import { provideBoardRegionPin } from './boardRegionPin.js';
@@ -85,11 +98,8 @@ export function useAutoZoom(options: {
   boardEl: Ref<HTMLElement | null>;
   /** The scrollable board region (`.boardregion`) the board must fit inside. */
   regionEl: Ref<HTMLElement | null>;
-  /** Measured height of the floating Action Panel, reserved so a fitted board
-   *  is fully visible above it rather than sliding underneath. */
-  actionPanelHeight: Ref<number>;
 }) {
-  const { boardEl, regionEl, actionPanelHeight } = options;
+  const { boardEl, regionEl } = options;
 
   const zoomLevel = ref(1.0);
 
@@ -102,11 +112,6 @@ export function useAutoZoom(options: {
    *  persistent available-space re-fit is a no-op — `fitZoom()` clears it. */
   let userControlled = false;
 
-  /** The Action Panel height the fit reserves. Null while startup is still following
-   *  the live Action Panel; set to the Action Panel's height at the moment startup ends, after
-   *  which mid-game Action Panel growth/shrink can no longer change the board's size
-   *  (see the module docblock). Cleared when a new board mounts. */
-  let reservedActionPanelHeight: number | null = null;
 
   /** Measure and apply the fitted zoom. Returns true when both boxes were
    *  measurable (a fit was computed), false when layout isn't ready yet. */
@@ -126,8 +131,7 @@ export function useAutoZoom(options: {
         - (parseFloat(regionStyle.paddingRight) || 0),
       height: region.clientHeight
         - (parseFloat(regionStyle.paddingTop) || 0)
-        - (parseFloat(regionStyle.paddingBottom) || 0)
-        - (reservedActionPanelHeight ?? actionPanelHeight.value),
+        - (parseFloat(regionStyle.paddingBottom) || 0),
     };
 
     const fit = computeFitZoom(natural, avail, pinnedBoards.value > 0 ? 'width' : 'both');
@@ -144,10 +148,6 @@ export function useAutoZoom(options: {
 
   function endStartup() {
     startupDone = true;
-    // Freeze the Action Panel allowance at whatever the Action Panel measures right now, so a
-    // later region-driven re-fit reserves the same space this fit did rather
-    // than silently adopting a mid-game panel height.
-    reservedActionPanelHeight = actionPanelHeight.value;
     if (settleTimer !== null) clearTimeout(settleTimer);
     settleTimer = null;
     boardObserver?.disconnect();
@@ -168,8 +168,6 @@ export function useAutoZoom(options: {
   watch(boardEl, (el) => {
     endStartup();
     startupDone = false;
-    // A new board gets a fresh startup, which follows the live Action Panel again.
-    reservedActionPanelHeight = null;
     if (el && typeof ResizeObserver !== 'undefined') {
       boardObserver = new ResizeObserver(onBoardResize);
       boardObserver.observe(el); // observe() always fires an initial callback
@@ -177,7 +175,7 @@ export function useAutoZoom(options: {
   }, { immediate: true, flush: 'post' });
 
   // --- Persistent re-fit on available-space changes (component lifetime) --
-  // Only reads region/Action Panel geometry and writes the board's zoom — never
+  // Only reads region geometry and writes the board's zoom — never
   // observes the board itself here, so this cannot feed back into its own
   // trigger (the board-content-growth exclusion above holds by construction).
   let pendingFrame: number | null = null;
@@ -215,18 +213,6 @@ export function useAutoZoom(options: {
     // teardownRefit's cancelAnimationFrame(pendingFrame) always covers it.
     scheduleRefit();
   }, { immediate: true, flush: 'post' });
-
-  // The Action Panel's own ResizeObserver already writes fresh actionPanelHeight
-  // (GameShell.vue) — just react to the ref, don't re-measure it here.
-  //
-  // STARTUP ONLY. The frozen allowance in measureAndFit is what actually holds
-  // the board's size still after startup; this guard additionally skips the
-  // pointless rAF + layout measurement that a mid-game Action Panel resize would
-  // otherwise schedule — and the panel re-wraps on every single selection step.
-  watch(actionPanelHeight, () => {
-    if (startupDone) return;
-    scheduleRefit();
-  }, { flush: 'post' });
 
   onUnmounted(() => {
     endStartup();
