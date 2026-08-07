@@ -52,6 +52,11 @@ function landscapeTokens(): string {
 
 type Env = { safeArea: number; dvh: number };
 
+/** The zooms a fit can land on: the slider range's ends and a real measured fit.
+ *  `zoom` scales the zoom container's margin, so clearance must hold at ALL of
+ *  them — at 0.82 an undivided margin left the board's last 27px unreachable. */
+const ZOOMS = [0.5, 0.824363, 1, 2];
+
 /** Resolve a CSS length expression built from our tokens to a number of px. */
 function px(expr: string, tokens: Record<string, string>, env: Env): number {
   let out = expr;
@@ -75,8 +80,9 @@ function px(expr: string, tokens: Record<string, string>, env: Env): number {
 }
 
 /** Token table for a tier: base tokens, with the landscape block layered on top. */
-function tokensFor(tier: 'base' | 'landscape-short'): Record<string, string> {
+function tokensFor(tier: 'base' | 'landscape-short', zoom = 1): Record<string, string> {
   const base: Record<string, string> = {
+    '--zoom-level': String(zoom),
     '--bsg-panel-row': declaration('.game-shell', '--bsg-panel-row'),
     '--bsg-panel-gap': declaration('.game-shell', '--bsg-panel-gap'),
     '--bsg-panel-pad': declaration('.game-shell', '--bsg-panel-pad'),
@@ -106,8 +112,10 @@ describe('#13: the Action Panel reserves a constant, token-derived footprint', (
 
     expect(declaration('.actionbar', 'max-height')).toBe('var(--bsg-panel-max)');
     expect(declaration('.boardregion', 'padding-bottom')).toBe('var(--bsg-panel-reserved)');
+    // Divided by --zoom-level: `zoom` scales this element's margin too, so an
+    // undivided margin under-delivers clearance at any zoom below 1.
     expect(declaration('.game-shell__zoom-container', 'margin-bottom'))
-      .toBe('calc(var(--bsg-panel-max) - var(--bsg-panel-reserved))');
+      .toBe('calc((var(--bsg-panel-max) - var(--bsg-panel-reserved)) / var(--zoom-level))');
     // The demo control bar clears the SAME quantity — not a second magic number.
     expect(declaration('.bsg-demo-controls', 'bottom')).toContain('var(--bsg-panel-reserved)');
   });
@@ -127,18 +135,23 @@ describe('#13: the Action Panel reserves a constant, token-derived footprint', (
     'reserves 2 rows and keeps the whole ceiling reachable (safe-area $safeArea, $dvh dvh)',
     (env) => {
       for (const tier of ['base', 'landscape-short'] as const) {
-        const tokens = tokensFor(tier);
-        const max = px(declaration('.actionbar', 'max-height'), tokens, env);
-        const reserved = px(declaration('.boardregion', 'padding-bottom'), tokens, env);
-        const margin = px(declaration('.game-shell__zoom-container', 'margin-bottom'), tokens, env);
+        for (const zoom of ZOOMS) {
+          const tokens = tokensFor(tier, zoom);
+          const max = px(declaration('.actionbar', 'max-height'), tokens, env);
+          const reserved = px(declaration('.boardregion', 'padding-bottom'), tokens, env);
+          // `zoom` scales the container's own margin, so the clearance the player
+          // actually gets is the declared margin times the zoom.
+          const margin =
+            px(declaration('.game-shell__zoom-container', 'margin-bottom'), tokens, env) * zoom;
 
-        // Reachability: total clearance below the board covers the panel's ceiling.
-        expect(reserved + margin, `${tier}: board content would be unreachable`)
-          .toBeGreaterThanOrEqual(max);
-        // …and the reservation itself is strictly cheaper than that ceiling.
-        expect(reserved).toBeGreaterThan(0);
-        expect(reserved).toBeLessThan(max);
-        expect(margin).toBeGreaterThanOrEqual(0);
+          // Reachability: total clearance below the board covers the panel's ceiling.
+          expect(reserved + margin, `${tier} @ zoom ${zoom}: board content would be unreachable`)
+            .toBeGreaterThanOrEqual(max - 0.001);
+          // …and the reservation itself is strictly cheaper than that ceiling.
+          expect(reserved).toBeGreaterThan(0);
+          expect(reserved).toBeLessThan(max);
+          expect(margin).toBeGreaterThanOrEqual(0);
+        }
       }
     },
   );

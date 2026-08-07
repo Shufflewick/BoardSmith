@@ -3307,8 +3307,11 @@ if ((import.meta as any).hot) {
   /* Total clearance below the board = .boardregion's padding-bottom
      (--bsg-panel-reserved) + this margin = --bsg-panel-max, the panel's ceiling.
      So even a panel grown to its full 5 rows can always be scrolled clear of, while
-     the board is still FITTED against only the constant reserved footprint. */
-  margin-bottom: calc(var(--bsg-panel-max) - var(--bsg-panel-reserved));
+     the board is still FITTED against only the constant reserved footprint.
+     Divided by --zoom-level because `zoom` scales this element's whole layout box,
+     margin included: at zoom 0.82 an undivided margin delivered only 82% of the
+     clearance and the board's last ~27px stayed pinned under the panel. */
+  margin-bottom: calc((var(--bsg-panel-max) - var(--bsg-panel-reserved)) / var(--zoom-level));
 
   /* CONTAINMENT: Prevents position:fixed from escaping to viewport.
      Any fixed-position elements inside will behave like absolute positioning
