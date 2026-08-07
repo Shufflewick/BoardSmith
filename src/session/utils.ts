@@ -576,6 +576,9 @@ export function buildPlayerState(
     messages: playerView.messages.length > 0 ? playerView.messages : undefined,
     // Unconditional, unlike turnStartActionIndex -- see PlayerGameState.actionCount doc.
     actionCount: runner.actionHistory.length,
+    // Unconditional for the same reason: a count, not content -- see
+    // PlayerGameState.restoreEpoch.
+    restoreEpoch: runner.restoreEpoch,
   };
 
   // Action metadata was built above (single-source reconciliation with

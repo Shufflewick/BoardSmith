@@ -514,6 +514,25 @@ export interface PlayerGameState {
    * concern, so it needs no seat gating.
    */
   actionCount: number;
+
+  /**
+   * How many checkpoint RESTORES (undo / rewind / host-driven restore) this
+   * game's timeline has undergone (`runner.restoreEpoch`).
+   *
+   * Published unconditionally for EVERY seat, like `actionCount`. This is the
+   * stated form of "the runner was replaced": a client observing this value
+   * CHANGE between two broadcasts knows every element id it captured from the
+   * previous runner is stale and must be discarded — an open pick's
+   * `validElements`, a drag in progress, any cached element-id list. The
+   * session layer clears its own state of exactly that kind at the same moment
+   * (`GameSession`'s `replaceRunner`: hint, heatmap, pending actions); this
+   * field is how clients get told.
+   *
+   * Prefer this over inferring a restore from a DECREASE in `actionCount`: a
+   * decrease can only see a restore that moves backward, and it asks callers
+   * to reason about direction rather than compare with `!==`.
+   */
+  restoreEpoch: number;
   /**
    * RESERVED (Plan 104-04): Active tutorial step projected for this player.
    *

@@ -114,6 +114,27 @@ export interface GameStateSnapshot {
   executeBarrierIndex?: number;
 
   /**
+   * Monotonic count of CHECKPOINT RESTORES this timeline has undergone
+   * (undo / rewind / any future host-driven restore). Bumped in exactly one
+   * place — `GameRunner.fromCheckpoint`, the single sanctioned restore site —
+   * and carried through `getSnapshot`/`fromSnapshot` so it survives the
+   * stateless boundary and a cold restart.
+   *
+   * This is the DURABLE form of the fact `GameSession`'s `replaceRunner`
+   * already acts on locally: after a restore, every element id captured from
+   * the old runner is stale. The session clears its own such state (hint,
+   * heatmap, pending actions) inline; broadcasting the epoch as
+   * `PlayerGameState.restoreEpoch` lets CLIENTS — which hold exactly the same
+   * kind of state in an open pick's `validElements` — invalidate theirs from a
+   * `!==` comparison instead of deducing it from a rewound `actionCount` (which
+   * only ever sees a restore that moves BACKWARD).
+   *
+   * Absent (older snapshot predating this field): read as `0` — no restore
+   * recorded, the honest reading, not a compat shim.
+   */
+  restoreEpoch?: number;
+
+  /**
    * CR-02 (159): `originalId -> syntheticId` remap for fungible hidden-zone
    * children anonymized by `toJSONForPlayer` (populated only when `state` was
    * built via the `opts.forSeat` redacted path below). Carried alongside

@@ -532,6 +532,13 @@ export class SnapshotSessionHost {
     if (op.type === 'undo' || op.type === 'debugRewind') {
       this.transientTeachingState.clear();
       this.narrationText = null;
+      // Pending selections belong to that list: they hold element ids from the
+      // replaced runner, exactly like the hint/heatmap above. GameSession does
+      // this for EVERY seat (`PendingActionManager.updateRunner` clears the whole
+      // map); `apply` below only ever drops the ACTING seat's, so a simultaneous
+      // step would leave another seat mid-chain against a game tree that no
+      // longer exists. Clients are told the same fact by `restoreEpoch`.
+      this.pendingStates.clear();
     }
 
     await this.apply(res, seat);

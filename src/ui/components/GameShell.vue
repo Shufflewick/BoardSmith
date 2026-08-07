@@ -1020,6 +1020,9 @@ useBoardActionBridge({
   // panel refuse exactly the same actions.
   disabledActions,
   isViewingHistory,
+  // "The runner was replaced" (undo / rewind / host restore). The bridge cancels
+  // the open pick on a change — see BoardActionBridgeOptions.restoreEpoch.
+  restoreEpoch: computed(() => state.value?.state?.restoreEpoch),
 });
 
 // ── DEV-02: devtools postMessage bridge ──────────────────────────────────────
@@ -2566,6 +2569,16 @@ if ((import.meta as any).hot) {
             <!-- `shellMounted` gate: the game UI mounts one tick after GameShell's
                  DOM is in the document, so a game's `<Teleport to="#bs-game-modal">`
                  always resolves its target (see the shellMounted declaration). -->
+            <!-- TIME TRAVEL (LIBX-04/D31): a custom board is a PEER of the auto-UI,
+                 so it gets the identical treatment the auto ActionPanel gets below
+                 — `isViewingHistory` STATED as a prop, and every actionability
+                 signal pre-gated on it. Ungated is not a smaller bug than
+                 undocumented: what the board DRAWS comes from the historical
+                 `gameView`, so an ungated `is-my-turn`/`available-actions` lets it
+                 offer a real, clickable control positioned from a state that is no
+                 longer true, and the click commits against the LIVE game. Gate here,
+                 once, rather than leaving every game to re-derive it from the nulled
+                 `flowState`. -->
             <template v-if="shellMounted">
             <component
               v-if="selectedUiComponent"
@@ -2575,16 +2588,17 @@ if ((import.meta as any).hot) {
               :players="players"
               :my-player="myPlayer"
               :player-seat="playerSeat"
-              :is-my-turn="isMyTurn"
-              :available-actions="availableActions"
+              :is-my-turn="isMyTurn && !isViewingHistory"
+              :available-actions="isViewingHistory ? [] : availableActions"
               :action-args="actionArgs"
               :set-board-prompt="setBoardPrompt"
               :can-undo="canUndo && !isViewingHistory"
+              :is-viewing-history="isViewingHistory"
               :undo="handleUndo"
               :action-controller="actionController"
               :is-action-help-visible="isActionHelpVisible"
-              :disabled-actions="disabledActions"
-              :flow-state="state?.flowState"
+              :disabled-actions="isViewingHistory ? undefined : disabledActions"
+              :flow-state="displayedState?.flowState"
               @retry="handleRetry"
             />
             <!-- Only reachable if the registry's default entry resolved to no

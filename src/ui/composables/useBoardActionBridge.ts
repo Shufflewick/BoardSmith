@@ -66,6 +66,21 @@ export interface BoardActionBridgeOptions {
    * not re-check isMyTurn mid-action.
    */
   isViewingHistory: Ref<boolean> | ComputedRef<boolean>;
+  /**
+   * Reactive: `PlayerGameState.restoreEpoch` — how many checkpoint restores
+   * (undo / rewind / host-driven restore) the server's timeline has undergone.
+   *
+   * A CHANGE means the server replaced its runner, so every element id the
+   * client captured from the old one is stale — including the `validElements`
+   * frozen into the open pick's snapshot. The bridge tears the pick down on
+   * that signal, which is the client-side half of what `GameSession`'s
+   * `replaceRunner` already does for its own element-id state (hint, heatmap,
+   * pending actions).
+   *
+   * `undefined` while no state has arrived yet, and from a host that predates
+   * the field: no epoch observed, so nothing is torn down.
+   */
+  restoreEpoch: Ref<number | undefined> | ComputedRef<number | undefined>;
 }
 
 function formatActionName(name: string): string {
@@ -94,7 +109,7 @@ function elementClickRef(ve: ValidElement): ElementRef {
  * lifetime. No-op when boardInteraction is undefined.
  */
 export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
-  const { controller, boardInteraction, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions, isViewingHistory } = opts;
+  const { controller, boardInteraction, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions, isViewingHistory, restoreEpoch } = opts;
 
   // Without a board substrate there is nothing to feed. (Should not happen inside GameShell.)
   if (!boardInteraction) return;
@@ -427,6 +442,37 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     // auto-executes the moment the broadcast lands — not skip=true, which would
     // leave it as a manual button.
     scheduleAutoStart(/* skipNoSelections */ autoEndArmed ? false : true);
+  });
+
+  // The server replaced its runner (undo / rewind / host restore): every element
+  // id this client captured came from a game tree that no longer exists, so the
+  // open pick is unanswerable and must go.
+  //
+  // Nothing else on the client can see this. `availableActions` is typically
+  // BYTE-IDENTICAL across an undo inside a turn, so the watcher above never
+  // fires; `validElements` is frozen into the pick snapshot taken when the pick
+  // opened and only re-runs on `snapshotVersion`, which a broadcast does not
+  // bump. Without this the board keeps offering destinations computed from the
+  // position the piece was in BEFORE the undo.
+  //
+  // Unconditional, unlike the availableActions teardown above: that one spares a
+  // server-pending followUp because the server still holds it. Here the server
+  // has already discarded every pending action (`PendingActionManager.updateRunner`,
+  // called from `replaceRunner`), so sparing it would strand the client holding
+  // a chain the server has forgotten.
+  // Optional-chained on the option itself, exactly like `disabledActions` above:
+  // the type makes it required, and a missing one must not take the whole board
+  // down (a host that omits it simply never reports a restore).
+  watch(() => restoreEpoch?.value, (epoch, prevEpoch) => {
+    // First observation is not a restore -- there is no prior runner to be stale.
+    if (prevEpoch === undefined || epoch === undefined || epoch === prevEpoch) return;
+    controller.cancel();
+    board.clear();
+    // Re-offer from the restored position: a seat whose sole action auto-starts
+    // gets it back immediately, now computed against the true state. `skip
+    // NoSelections` is TRUE on purpose -- a no-selection action must stay a
+    // deliberate button press here, never auto-execute the thing just undone.
+    scheduleAutoStart(/* skipNoSelections */ true);
   });
 
   // Retry auto-start when an execution completes (next action may auto-start).

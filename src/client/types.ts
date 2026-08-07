@@ -183,6 +183,15 @@ export interface PlayerState {
    */
   actionCount?: number;
 
+  /**
+   * How many checkpoint restores (undo / rewind) this timeline has undergone.
+   * Published unconditionally for every seat -- see
+   * `PlayerGameState.restoreEpoch` (`src/session/types.ts`). A CHANGE means
+   * every element id captured from the previous runner is stale; GameShell
+   * feeds it to `useBoardActionBridge`, which cancels the open pick.
+   */
+  restoreEpoch?: number;
+
   // The fields below are sent by the server (`PlayerGameState`, session/types.ts)
   // and consumed by GameShell, but were never declared here. Nothing caught the
   // drift because the `*.vue` shim typed every component as

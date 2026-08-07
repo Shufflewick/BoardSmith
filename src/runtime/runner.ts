@@ -127,6 +127,19 @@ export class GameRunner<G extends Game = Game> {
   executeBarrierIndex = 0;
 
   /**
+   * How many CHECKPOINT RESTORES (undo / rewind / host-driven restore) this
+   * timeline has undergone. Advanced in exactly one place —
+   * `fromCheckpoint`, the single sanctioned restore site — and adopted from
+   * the snapshot by `fromSnapshot`, so it is durable across the stateless
+   * boundary exactly like `executeBarrierIndex`.
+   *
+   * Published to every seat as `PlayerGameState.restoreEpoch`: it is the
+   * client's "the runner was replaced, every element id you captured is
+   * stale" signal. See `GameStateSnapshot.restoreEpoch`.
+   */
+  restoreEpoch = 0;
+
+  /**
    * Last-observed value of `game.getExecuteNodeCompletions()` (the live
    * `FlowEngine`'s monotonic execute() counter). Compared on every history
    * append to detect an advance; NOT itself persisted -- a fresh `FlowEngine`
@@ -618,6 +631,7 @@ export class GameRunner<G extends Game = Game> {
       ...base,
       actionCheckpoints: this.checkpointWindow(),
       executeBarrierIndex: this.executeBarrierIndex,
+      restoreEpoch: this.restoreEpoch,
     };
   }
 
@@ -747,6 +761,12 @@ export class GameRunner<G extends Game = Game> {
     // read as 0 -- no barrier recorded, the honest reading, not a compat
     // shim (project no-back-compat rule).
     runner.executeBarrierIndex = snapshot.executeBarrierIndex ?? 0;
+
+    // Adopt the restore epoch as-is. A plain rehydration is NOT a restore --
+    // only `fromCheckpoint` advances it (it hands us an already-incremented
+    // snapshot), so reloading the same snapshot twice can never look like a
+    // restore to a client comparing epochs.
+    runner.restoreEpoch = snapshot.restoreEpoch ?? 0;
 
     // Adopt the authoritative element tree. loadSerializedState fully clears and
     // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState
@@ -896,6 +916,12 @@ export class GameRunner<G extends Game = Game> {
           entries: window!.entries.slice(0, actionIndex - window!.baseIndex + 1),
         },
         executeBarrierIndex,
+        // The restore itself, recorded durably. This is the ONE site that
+        // advances the epoch -- same reasoning as `animationSeqFloor` and the
+        // `executeBarrierIndex` clamp above: derived at the single sanctioned
+        // checkpoint-restore site, so no undo/rewind caller has to remember it,
+        // and no host can ship a restore that forgets to tell its clients.
+        restoreEpoch: (snapshot.restoreEpoch ?? 0) + 1,
       },
       GameClass,
       { animationSeqFloor, checkpoints: options?.checkpoints },
