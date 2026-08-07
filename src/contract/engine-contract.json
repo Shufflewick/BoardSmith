@@ -1,7 +1,7 @@
 {
-  "revision": 13,
+  "revision": 14,
   "bundleProtocol": 1,
-  "surfaceHash": "b543aaa74731df1e",
+  "surfaceHash": "715e016e6f9a9d57",
   "payloadHash": "7d7e5e0a4de161cb",
   "history": [
     {
@@ -107,6 +107,14 @@
       "surfaceHash": "b543aaa74731df1e",
       "payloadHash": "7d7e5e0a4de161cb",
       "summary": "execute() flow nodes are undo-transparent by default; only execute(fn, { irreversible: true }) fences undo/rewind (Game.getExecuteNodeCompletions renamed to getIrreversibleCommitCount). PlayerGameState also gains restoreEpoch, a per-seat counter of checkpoint restores clients use to invalidate element ids held from the replaced runner."
+    },
+    {
+      "revision": 14,
+      "date": "2026-08-07",
+      "bundleProtocol": 1,
+      "surfaceHash": "715e016e6f9a9d57",
+      "payloadHash": "7d7e5e0a4de161cb",
+      "summary": "Epic #24 engine changes, landed together: (1) a flow that completes inside startFlow() now publishes its winners, so a game that ends during setup reports a result instead of none; (2) checkpoints:{enabled:false} sheds an inherited checkpoint window rather than silently keeping it; (3) randomness policy moved to GameOptions.randomness, applied inside Game's own constructor, so 'forbidden' forbids draws from the game's FIRST instruction (subclass constructors included) and is stripped from _constructorOptions so no host policy persists into a snapshot — RandomnessPolicy is exported from boardsmith/runtime, forbidRandomness() is private, an undo random fence closes RNG scumming, and GameRunner.checkpointWindow() is public so the fence reports the real cause of a missing checkpoint; (4) an action's ActionResult.data now reaches its caller across engine/runtime/session/cli and the board on every transport, via useActionController.lastActionResult (BUG-017)."
     }
   ]
 }

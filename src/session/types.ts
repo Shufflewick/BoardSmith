@@ -9,7 +9,7 @@
 import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
-import type { CheckpointPolicy } from '../engine/index.js';
+import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
 import type {
   LobbyState,
   SlotStatus,
@@ -130,6 +130,20 @@ export interface GameDefinition {
    * restores that seat's turn-start checkpoint. See `docs/state-size.md`.
    */
   checkpoints?: CheckpointPolicy;
+  /**
+   * What undo is allowed to take back in this game.
+   *
+   * ```ts
+   * undo: { fenceRandomRewind: true }   // a draw, once made, is final
+   * ```
+   *
+   * Set `fenceRandomRewind` on any COMPETITIVE game. Undo already restores the
+   * RNG position, so redoing the same action cannot re-roll — but reordering
+   * can: undo, act differently first, then draw again on a different generator
+   * position. A player alone in a private session can repeat that unobserved
+   * until the draw suits them. See `UndoPolicy`.
+   */
+  undo?: UndoPolicy;
 }
 
 // ============================================

@@ -293,7 +293,31 @@ export type GameOptions = {
    * `unserializableAttributes`).
    */
   tutorial?: TutorialDefinition;
+  /**
+   * Whether this session may consume randomness at all (host policy, never
+   * serialized). Default: `'allowed'`.
+   *
+   * Threaded here from `GameRunnerOptions.randomness` /
+   * `hostOptions.randomness` by `GameRunner`, and NOT declarable by a game:
+   * it is a property of the session the host opened, so `GameRunner` writes it
+   * onto the options it passes down on every construction path.
+   *
+   * It arrives through the CONSTRUCTOR rather than a method called afterwards
+   * because a subclass constructor body runs after `Game`'s and real games draw
+   * there — picking a dealer, deriving a map seed. Forbidding after
+   * `new GameClass(...)` returned would let exactly those draws through.
+   */
+  randomness?: RandomnessPolicy;
 };
+
+/**
+ * Whether a session may consume randomness at all.
+ *
+ * `'forbidden'` is the order-entry / intent-capture policy: every draw throws
+ * {@link RandomnessForbiddenError}. Defined here, beside `GameOptions`, so the
+ * engine, `boardsmith/runtime` and `boardsmith/session` all name one type.
+ */
+export type RandomnessPolicy = 'allowed' | 'forbidden';
 
 /**
  * Game phase
@@ -374,6 +398,30 @@ function createSeededRandom(seed: string): SeededRandom {
   };
 
   return random;
+}
+
+/**
+ * Thrown by every random draw once {@link Game.forbidRandomness} has been
+ * applied to a game — the host declared this session an INTENT-CAPTURE session
+ * (`hostOptions.randomness: 'forbidden'`), which must consume no randomness at
+ * all.
+ *
+ * Why the whole session, rather than a per-action rule: a player alone in a
+ * private session can undo, reorder their actions, and redo to re-roll any draw
+ * that has not been fenced — and can abandon the session entirely and start a
+ * new one, which mints a new seed. Both channels close only if the session
+ * never draws. A session that draws zero times is provably immune to both,
+ * because the generator's state advances on draws and nothing else.
+ */
+export class RandomnessForbiddenError extends Error {
+  constructor() {
+    super(
+      'This session forbids randomness (order-entry mode): every random draw ' +
+      "must happen in the round's resolution session. Replace this draw with " +
+      'an order the resolver executes.',
+    );
+    this.name = 'RandomnessForbiddenError';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -772,8 +820,18 @@ export class Game<
     this.game = this as unknown as G;
     this._ctx.game = this;
 
-    // Store all constructor options for snapshot restoration, EXCLUDING tutorial.
-    // This enables MCTS clones and other restores to receive full options.
+    // Order-entry / intent-capture sessions consume no randomness at all, and
+    // the engine enforces that rather than trusting the game not to draw: one
+    // cosmetic shuffle silently reopens RNG scumming. Applied HERE, before any
+    // subclass constructor body has run, so a draw is impossible from the
+    // game's very first instruction — games routinely draw during construction
+    // (dealer choice, map seed), and those draws are exactly the ones a
+    // post-construction switch would miss.
+    if (options.randomness === 'forbidden') this.forbidRandomness();
+
+    // Store all constructor options for snapshot restoration, EXCLUDING
+    // tutorial and randomness. This enables MCTS clones and other restores to
+    // receive full options.
     //
     // `tutorial` is intentionally excluded: it is static config (like _actions /
     // flow definitions) that must be re-supplied on restore from the session layer
@@ -781,7 +839,12 @@ export class Game<
     // serialized into the snapshot. Storing it here would silently embed it in
     // `snapshot.gameOptions` via `getConstructorOptions()` → `createSnapshot()`.
     // Functions in predicate-style gates would also fail JSON.stringify.
-    const { tutorial: _tutorialOption, ...restOptions } = options;
+    //
+    // `randomness` is excluded for the same reason and one more: it is the
+    // HOST's per-session policy, re-supplied on every stateless op from
+    // `hostOptions`. Persisting it into the snapshot would let a snapshot
+    // carry a policy the host did not declare for the op being run.
+    const { tutorial: _tutorialOption, randomness: _randomnessOption, ...restOptions } = options;
     this._constructorOptions = { ...restOptions, seed };
 
     // Wire tutorial definition (un-serialized static config, see tutorialDefinition JSDoc).
@@ -1927,11 +1990,31 @@ export class Game<
     if (this.phase === 'setup') {
       this.phase = 'started';
     }
-    if (state.complete) {
-      this.phase = 'finished';
-    }
+    // A flow can run to completion inside start() (a game whose whole result is
+    // decided in setup, or a flow restored one step from its end). That is a
+    // completion like any other, so it must publish winners the same way --
+    // otherwise the session host reports `winners: []` and derives a false draw.
+    this.#applyFlowCompletion(state);
 
     return state;
+  }
+
+  /**
+   * Single place where a completed `FlowState` is reflected onto the game.
+   * Every flow-advancing entry point (`startFlow`, `continueFlow`,
+   * `continueFlowAfterPendingAction`) routes completion through here so a new
+   * entry point cannot finish a game without publishing its winners.
+   *
+   * `settings.winners` is left untouched when the flow declared no winner, so a
+   * game that ended by calling `this.finish([...])` itself keeps its own result.
+   */
+  #applyFlowCompletion(state: FlowState): void {
+    if (!state.complete) return;
+    this.phase = 'finished';
+    const winners = this._flowEngine!.getWinners();
+    if (winners.length > 0) {
+      this.settings.winners = winners.map(p => p.seat);
+    }
   }
 
   /**
@@ -1947,13 +2030,7 @@ export class Game<
 
     const state = this._flowEngine.resume(actionName, args, playerIndex);
 
-    if (state.complete) {
-      this.phase = 'finished';
-      const winners = this._flowEngine.getWinners();
-      if (winners.length > 0) {
-        this.settings.winners = winners.map(p => p.seat);
-      }
-    }
+    this.#applyFlowCompletion(state);
 
     return state;
   }
@@ -1970,13 +2047,7 @@ export class Game<
 
     const state = this._flowEngine.resumeAfterExternalAction(result);
 
-    if (state.complete) {
-      this.phase = 'finished';
-      const winners = this._flowEngine.getWinners();
-      if (winners.length > 0) {
-        this.settings.winners = winners.map(p => p.seat);
-      }
-    }
+    this.#applyFlowCompletion(state);
 
     return state;
   }
@@ -1986,6 +2057,16 @@ export class Game<
    */
   getFlowState(): FlowState | undefined {
     return this._flowEngine?.getState();
+  }
+
+  /**
+   * The `ActionResult` the most recent action's `execute()` returned, verbatim
+   * — including `data`, an action's private return value to the seat that took
+   * it (BUG-017). Deliberately kept off `FlowState`, which fans out to every
+   * seat; see `FlowEngine.getLastActionResult()` for the lifetime rules.
+   */
+  getLastActionResult(): ActionResult | undefined {
+    return this._flowEngine?.getLastActionResult();
   }
 
   /**
@@ -2102,6 +2183,44 @@ export class Game<
    */
   setRandomState(state: number): void {
     this.random.setState(state);
+  }
+
+  /**
+   * Make every random draw on this game throw {@link RandomnessForbiddenError}.
+   *
+   * PRIVATE and called from this class's own constructor only, driven by
+   * `GameOptions.randomness` — which `GameRunner` writes from the host's
+   * `hostOptions.randomness` (an order-entry / intent-capture session). There is
+   * no public switch on purpose: flipping randomness off partway through a
+   * session leaves whatever was already drawn standing, and calling it after
+   * `new GameClass(...)` returned misses every draw a subclass constructor
+   * made. The constructor is the only moment at which "this session drew zero
+   * times" is still provable.
+   *
+   * It is deliberately a hard failure rather than a lint or a convention: a
+   * single cosmetic shuffle in an order-entry session silently reopens RNG
+   * scumming, and the author must find out at development time.
+   *
+   * Both holders of the generator are swapped — `this.random` (what game code
+   * calls) and `this._ctx.random` (what `Space.shuffle` and every other element
+   * reads, since every element shares this one context object). Swapping only
+   * one would leave a live draw path open, which is the exact failure this
+   * exists to prevent.
+   *
+   * `getState`/`setState` keep delegating to the real generator, so snapshot
+   * capture and checkpoint restore continue to work untouched — a forbidden
+   * session must still round-trip its (never-advancing) RNG position.
+   */
+  private forbidRandomness(): void {
+    const real = this.random;
+    const forbidden = function (): number {
+      throw new RandomnessForbiddenError();
+    } as SeededRandom;
+    forbidden.getState = () => real.getState();
+    forbidden.setState = (state: number) => real.setState(state);
+
+    this.random = forbidden;
+    this._ctx.random = forbidden;
   }
 
   /**

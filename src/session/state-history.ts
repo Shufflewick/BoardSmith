@@ -137,7 +137,7 @@ export class StateHistory<G extends Game = Game> {
       return {
         success: false,
         error: `Cannot view state at action index ${actionIndex}: ` +
-          `${describeCheckpointAbsence(snapshot, actionIndex)} The session accumulates per-action ` +
+          `${describeCheckpointAbsence(snapshot.actionCheckpoints, actionIndex)} The session accumulates per-action ` +
           `checkpoints as it runs; a session cold-restored from action history alone cannot ` +
           `time-travel across pending mutations.`,
       };
@@ -312,19 +312,25 @@ export class StateHistory<G extends Game = Game> {
       // try so the existing catch below converts the throw into the
       // established `{ success: false, error }` shape.
       assertUndoAllowed({
-        game: runner.game,
+        runner,
         actionHistory: this.#storedState.actionHistory,
         turnStartActionIndex,
-        executeBarrierIndex: runner.executeBarrierIndex,
+        fenceRandomRewind: runner.undoPolicy.fenceRandomRewind,
       });
 
-      // Restore the checkpoint, carrying its prefix forward so further undos work.
-      const newRunner = GameRunner.fromCheckpoint<G>(snapshot, turnStartActionIndex, this.#GameClass);
+      // Restore the checkpoint, carrying its prefix forward so further undos
+      // work -- and carrying BOTH policies off the runner being replaced. A
+      // replacement runner built without them silently reverts this game to
+      // unbounded checkpoint retention and an unfenced undo from here on.
+      const newRunner = GameRunner.fromCheckpoint<G>(snapshot, turnStartActionIndex, this.#GameClass, {
+        checkpoints: runner.checkpointPolicy,
+        undo: runner.undoPolicy,
+      });
       if (!newRunner) {
         return {
           success: false,
           error: `Cannot undo to the start of this turn: ` +
-            `${describeCheckpointAbsence(snapshot, turnStartActionIndex)} The session accumulates ` +
+            `${describeCheckpointAbsence(snapshot.actionCheckpoints, turnStartActionIndex)} The session accumulates ` +
             `per-action checkpoints as it runs; a session cold-restored from action history alone ` +
             `cannot undo across pending mutations.`,
           errorCode: ErrorCode.NO_ACTIONS_TO_UNDO,
@@ -399,19 +405,27 @@ export class StateHistory<G extends Game = Game> {
       // rewind twin (`handleDebugRewind`) -- rewind must not be a bypass
       // route around the notUndoable/finished-phase fences (T-155-02).
       assertUndoAllowed({
-        game: this.#getRunner().game,
+        runner: this.#getRunner(),
         actionHistory: this.#storedState.actionHistory,
         turnStartActionIndex: targetActionIndex,
-        executeBarrierIndex: this.#getRunner().executeBarrierIndex,
+        // Deliberately UNFENCED against random draws: this is the dev-time
+        // rewind (`boardsmith dev`), never reachable in a deployed session,
+        // and rewinding across a draw is exactly what the tool is for.
+        fenceRandomRewind: false,
       });
 
-      // Restore the checkpoint, carrying its prefix forward so further undos/rewinds work.
-      const newRunner = GameRunner.fromCheckpoint<G>(snapshot, targetActionIndex, this.#GameClass);
+      // Restore the checkpoint, carrying its prefix forward so further
+      // undos/rewinds work -- and both policies off the runner being replaced
+      // (see undoToTurnStart).
+      const newRunner = GameRunner.fromCheckpoint<G>(snapshot, targetActionIndex, this.#GameClass, {
+        checkpoints: this.#getRunner().checkpointPolicy,
+        undo: this.#getRunner().undoPolicy,
+      });
       if (!newRunner) {
         return {
           success: false,
           error: `Cannot rewind to action index ${targetActionIndex}: ` +
-            `${describeCheckpointAbsence(snapshot, targetActionIndex)} The session accumulates ` +
+            `${describeCheckpointAbsence(snapshot.actionCheckpoints, targetActionIndex)} The session accumulates ` +
             `per-action checkpoints as it runs; a session cold-restored from action history alone ` +
             `cannot rewind across pending mutations.`,
         };

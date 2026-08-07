@@ -152,12 +152,42 @@ export interface PickStepResult {
   done?: boolean;
   nextChoices?: unknown[];
   actionComplete?: boolean;
+  /**
+   * `ActionResult.data` from the action this step completed (BUG-017). Present
+   * only on the step where `actionComplete` is true — that is the step on which
+   * the server actually ran `execute()`.
+   */
+  data?: Record<string, unknown>;
+  /** `ActionResult.message` from the action this step completed (BUG-012). */
+  message?: string;
   followUp?: {
     action: string;
     args?: Record<string, unknown>;
     metadata?: ActionMetadata;
     display?: Record<string, string>;
   };
+}
+
+/**
+ * An action that has just resolved on the server, with the result verbatim.
+ *
+ * This is the ONE place a UI reads an action's return value, whichever transport
+ * carried it: `execute()`/`executeCurrentAction()` return their `ActionResult`
+ * to their caller, but a pick-driven action (an `onSelect` selection, or a
+ * repeating one) completes inside `fill()` — often triggered by an ActionPanel
+ * click that no board code called at all — so a return value would reach nobody.
+ * Watch `lastActionResult` and every path is covered on the same terms.
+ *
+ * A fresh object is assigned on every resolution, so a `watch` fires even when
+ * two consecutive results are value-identical.
+ */
+export interface ResolvedAction {
+  /** Name of the action that resolved. */
+  action: string;
+  /** Seat that took it. */
+  seat: number;
+  /** The server's result, verbatim — including `data` (BUG-017) and `message`. */
+  result: ActionResult;
 }
 
 /** Result from fetching pick choices */
@@ -413,6 +443,15 @@ export interface UseActionControllerReturn {
    * `boardsmith:action-resolved` event, which fires on every individual action resolution.
    */
   actionCompletedTick: Readonly<Ref<number>>;
+
+  /**
+   * The most recently resolved action and its server result — `null` until one
+   * resolves. Set at EVERY terminal resolution site (execute, executeCurrentAction,
+   * and both pick-driven completion paths), on failure as well as success, so a
+   * board reads an action's `data`/`message` the same way no matter which transport
+   * ran it. See `ResolvedAction`.
+   */
+  lastActionResult: ComputedRef<ResolvedAction | null>;
 
   /**
    * True when every choice for the current pick has at least one refs entry (is board-anchored).
