@@ -907,6 +907,34 @@ Do not use `useBoardSize()` on a fixed-intrinsic board: pinning it to the
 region accomplishes nothing (its natural size doesn't change), and the
 startup zoom-fit already handles it.
 
+### The Action Panel's reserved footprint
+
+The board region reserves a **constant** strip at its bottom for the floating
+Action Panel — two control rows, declared in CSS as `--bsg-panel-reserved` and
+applied as `.boardregion`'s `padding-bottom`. The startup fit sits your board
+above that strip simply by subtracting the region's own padding; nothing
+measures the panel.
+
+That constancy is the contract, and two things follow from it for a custom
+board:
+
+- **The fitted zoom is reproducible.** For one game state on one viewport the
+  fit is a pure function of the region box and your board's natural size, so
+  two loads produce byte-identical geometry. (It did not used to be: the fit
+  reserved the panel's *measured* height, frozen at whatever it happened to be
+  ~300ms after the board stopped changing — the same card measured 220px on one
+  load and 202px on the next.)
+- **A tall panel floats over the board rather than resizing it.** The panel
+  grows past its reservation on choice-heavy steps, up to a ceiling of five
+  rows (`--bsg-panel-max`), then scrolls internally. It never moves your board:
+  the region plus the zoom container's bottom margin keep scroll room all the
+  way to that ceiling, so anything the panel covers can be scrolled into view.
+
+Do **not** try to measure the Action Panel from a custom board, and do not size
+your board against a panel height — there is no such value to read. If your
+board needs to know how much room the shell reserves, read
+`--bsg-panel-reserved`, which is inherited by everything inside the shell.
+
 ## Debugging
 
 ### Why Isn't My Action Available?

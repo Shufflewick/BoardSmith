@@ -16,13 +16,16 @@
  *      but action buttons are suppressed (buttons-only gate).
  *   3. (IA-04) When not actionable (not my turn, no awaiting), the entire
  *      Action Panel is absent.
- *   4. (IA-04) ResizeObserver on the actionbar element sets --bsg-action-panel-h on
- *      the document root when the actionbar block size changes.
+ *   4. (IA-04) The Action Panel's footprint is a CSS constant the board region
+ *      reserves — nothing measures the panel (#13).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { mount } from '@vue/test-utils';
-import { defineComponent, ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { defineComponent, ref, onUnmounted, nextTick } from 'vue';
 import type { PropType } from 'vue';
 
 // ---------------------------------------------------------------------------
@@ -61,32 +64,6 @@ const ActionbarHarness = defineComponent({
       </template>
     </div>
   `,
-});
-
-// ---------------------------------------------------------------------------
-// ResizeObserver harness — minimal component with the exact ResizeObserver
-// pattern from GameShell.vue: observe actionbarRef, set --bsg-action-panel-h on root.
-// ---------------------------------------------------------------------------
-const ResizeObserverHarness = defineComponent({
-  name: 'ResizeObserverHarness',
-  setup() {
-    const actionbarRef = ref<HTMLElement | null>(null);
-    let actionPanelObserver: ResizeObserver | null = null;
-
-    // Mirrors the GameShell.vue onMounted pattern exactly
-    const initObserver = () => {
-      actionPanelObserver = new ResizeObserver((entries) => {
-        const h = entries[0]?.borderBoxSize?.[0]?.blockSize ?? 0;
-        document.documentElement.style.setProperty('--bsg-action-panel-h', `${h}px`);
-      });
-      if (actionbarRef.value) actionPanelObserver.observe(actionbarRef.value);
-    };
-
-    const disconnectObserver = () => actionPanelObserver?.disconnect();
-
-    return { actionbarRef, initObserver, disconnectObserver };
-  },
-  template: `<div ref="actionbarRef" class="actionbar" role="region" aria-label="Actions"></div>`,
 });
 
 // ---------------------------------------------------------------------------
@@ -181,90 +158,35 @@ describe('GameShell actionbar — IA-02/IA-03/IA-04 template conditions', () => 
 });
 
 // ---------------------------------------------------------------------------
-// Suite 2: ResizeObserver sets --bsg-action-panel-h (IA-04)
+// Suite 2: the Action Panel's footprint is a CONSTANT, not a measurement (#13)
+//
+// This suite used to prove a ResizeObserver publishing the panel's measured
+// height. That measurement is gone: it made the startup zoom fit depend on when
+// the sample was taken, so the same state fitted differently on every reload.
+// The panel's footprint is now declared in CSS, which is what is asserted here.
+// The arithmetic (reachability, the 2-row budget) lives in
+// GameShell.panel-footprint.test.ts.
 // ---------------------------------------------------------------------------
-describe('GameShell actionbar — IA-04 ResizeObserver Action-Panel-height', () => {
-  let originalResizeObserver: typeof ResizeObserver | undefined;
-  let observerCallback: ResizeObserverCallback | null = null;
-  let observedElement: Element | null = null;
+describe('GameShell actionbar — IA-04 constant panel footprint (#13)', () => {
+  const gameShellSource = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'),
+    'utf-8',
+  );
 
-  beforeEach(() => {
-    originalResizeObserver = (globalThis as any).ResizeObserver;
-    observerCallback = null;
-    observedElement = null;
-    document.documentElement.style.removeProperty('--bsg-action-panel-h');
-
-    // Fake ResizeObserver that captures the callback and the observed element
-    (globalThis as any).ResizeObserver = class FakeResizeObserver {
-      private cb: ResizeObserverCallback;
-      constructor(cb: ResizeObserverCallback) {
-        this.cb = cb;
-        observerCallback = cb;
-      }
-      observe(el: Element) {
-        observedElement = el;
-      }
-      disconnect() {
-        observerCallback = null;
-        observedElement = null;
-      }
-    };
+  it('caps the actionbar with the shared ceiling token', () => {
+    expect(gameShellSource).toMatch(/\.actionbar \{[\s\S]*?max-height: var\(--bsg-panel-max\);/);
   });
 
-  afterEach(() => {
-    (globalThis as any).ResizeObserver = originalResizeObserver;
-    document.documentElement.style.removeProperty('--bsg-action-panel-h');
+  it('reserves the panel footprint as .boardregion padding, not as a measured value', () => {
+    expect(gameShellSource).toMatch(
+      /\.boardregion \{[\s\S]*?padding-bottom: var\(--bsg-panel-reserved\);/,
+    );
   });
 
-  it('sets --bsg-action-panel-h when ResizeObserver fires with a blockSize', () => {
-    const wrapper = mount(ResizeObserverHarness);
-
-    // Initialise the observer (mirrors GameShell onMounted)
-    wrapper.vm.initObserver();
-
-    expect(observerCallback).not.toBeNull();
-    expect(observedElement).not.toBeNull();
-
-    // Simulate a resize event with blockSize = 56
-    observerCallback!([
-      {
-        borderBoxSize: [{ blockSize: 56, inlineSize: 400 }],
-        contentBoxSize: [],
-        devicePixelContentBoxSize: [],
-        contentRect: new DOMRectReadOnly(),
-        target: observedElement!,
-      },
-    ], {} as ResizeObserver);
-
-    expect(document.documentElement.style.getPropertyValue('--bsg-action-panel-h')).toBe('56px');
-  });
-
-  it('falls back to 0px when borderBoxSize is empty', () => {
-    const wrapper = mount(ResizeObserverHarness);
-    wrapper.vm.initObserver();
-
-    observerCallback!([
-      {
-        borderBoxSize: [],
-        contentBoxSize: [],
-        devicePixelContentBoxSize: [],
-        contentRect: new DOMRectReadOnly(),
-        target: observedElement!,
-      },
-    ], {} as ResizeObserver);
-
-    expect(document.documentElement.style.getPropertyValue('--bsg-action-panel-h')).toBe('0px');
-  });
-
-  it('disconnects on unmount, clearing the observer', () => {
-    const wrapper = mount(ResizeObserverHarness);
-    wrapper.vm.initObserver();
-
-    expect(observerCallback).not.toBeNull();
-
-    wrapper.vm.disconnectObserver();
-
-    expect(observerCallback).toBeNull();
+  it('observes nothing on the actionbar — no ref, no ResizeObserver, no custom property', () => {
+    expect(gameShellSource).not.toContain('actionbarEl');
+    expect(gameShellSource).not.toContain('actionPanelHeight');
+    expect(gameShellSource).not.toContain('--action-panel-h');
   });
 });
 
