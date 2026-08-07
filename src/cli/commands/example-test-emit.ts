@@ -360,6 +360,26 @@ function renderExampleTestFile(input: {
     lines.push('');
   }
 
+  // B19: an exempt-only chunk would otherwise emit a describe() body of nothing but comments —
+  // zero tests, so vitest fails the file with `No test found in suite`, the exact failure this
+  // whole gate exists to prevent. The exemption is ASSERTED here, not merely commented, and its
+  // test name carries the record dispositions so a CI log alone tells the real state.
+  if (executable.length === 0) {
+    const unexecutable = exempt.filter((r) => r.verdict === 'unexecutable').length;
+    const inconsistent = exempt.filter((r) => r.verdict === 'example-inconsistent').length;
+    lines.push(
+      `  it('names its exemption: ${exempt.length} worked example(s) in this chunk\\'s cited ` +
+        `slices, none executable — ${unexecutable} unexecutable, ${inconsistent} ` +
+        `example-inconsistent (each named with its reason above)', () => {`,
+    );
+    lines.push('    expect(true).toBe(true);');
+    lines.push('  });');
+    lines.push('');
+    lines.push('});');
+    lines.push('');
+    return lines.join('\n');
+  }
+
   for (const record of executable) {
     const entry = codeByExampleId.get(record.exampleId);
     if (!entry) continue; // unreachable — validated by the caller before this function runs.
@@ -392,8 +412,9 @@ function renderExampleTestFile(input: {
  *    writes it via `atomicWriteFile` — the ONLY write this command performs. Re-running for the
  *    same chunk with the same ledger/`--translated` input reproduces byte-identical output;
  *    re-running for a DIFFERENT chunk never touches this chunk's file.
- * 6. A chunk whose cited slices carry zero recorded worked examples still gets a file — the
- *    exemption is named explicitly in a comment, never a silently absent file.
+ * 6. A chunk with no executable examples — zero recorded worked examples at all, or only
+ *    exempt ones — still gets a file, and that file still declares one test: the exemption is
+ *    named explicitly and ASSERTED, never a silently absent file and never an uncollectable one.
  */
 export async function verifyExampleEmitCommand(
   options: VerifyExampleEmitOptions = {},
@@ -546,10 +567,10 @@ export async function verifyExampleEmitCommand(
     testFilePath,
     relTestFilePath,
     emittedCount: executable.length,
-    // The chunk-wide-exemption file (records.length === 0) is the one file whose single test the
-    // renderer writes itself — the named-exemption `it(...)` — rather than transporting it from a
-    // translated snippet.
-    testBlockCount: records.length === 0 ? 1 : testBlockCount,
+    // An exemption file — no executable records, whether or not any exempt ones exist — is the
+    // one file whose single test the renderer writes itself (the named-exemption `it(...)`)
+    // rather than transporting it from a translated snippet.
+    testBlockCount: executable.length === 0 ? 1 : testBlockCount,
     exemptCount: exempt.length,
     chunkExempt: records.length === 0,
     repairs,
