@@ -882,6 +882,17 @@ describe('translate-example.md — CHECK-06/TEST-01\'s second judgment contract 
     }
   });
 
+  // B19: the doc used to bless TWO testCode shapes ("composed under a describe/it the CLI wraps
+  // around it, OR a self-contained it(...) block") while the emitter only ever transported the
+  // second — a translator that took the first at its word produced a suite with no test in it.
+  // The emitter now rejects that shape, so the doc must offer exactly one.
+  it('demands a self-contained it(...) block as testCode and never offers a wrapped-by-the-CLI alternative', () => {
+    const doc = flat(read('verify/translate-example.md'));
+    expect(doc).toMatch(/`testCode` MUST be a self-contained `it\('\.\.\.', \(\) => \{ \.\.\. \}\)` block/);
+    expect(doc).not.toMatch(/wraps around it/);
+    expect(doc).toMatch(/REJECTED outright/);
+  });
+
   it('carries a scope-limit sentence', () => {
     expect(read('verify/translate-example.md')).toContain('## Scope limit');
   });
