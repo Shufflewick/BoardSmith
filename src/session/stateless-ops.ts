@@ -129,6 +129,18 @@ export interface OpResult {
    */
   warnings?: WarningEntry[];
 
+  /**
+   * `ActionResult.data` from the action this op executed — the acting seat's
+   * return value (BUG-017). Set by the `action` op and by the `selectionStep`
+   * op that completes a multi-step action; absent everywhere else.
+   *
+   * Reaches only the caller of this op. It is NOT part of the state envelope
+   * and is never broadcast (per-seat player views publish no such field).
+   */
+  data?: Record<string, unknown>;
+  /** `ActionResult.message` from the action this op executed (BUG-012). */
+  message?: string;
+
   // Op-specific fields
   followUp?: unknown;
   done?: boolean;
@@ -419,6 +431,9 @@ function handleAction(
     // is the authoritative value returned by performAction — override with it.
     flowState: actionResult.flowState,
     followUp,
+    // The acting seat's return value from execute() (BUG-017/BUG-012).
+    data: actionResult.data,
+    message: actionResult.message,
   };
 }
 
@@ -464,6 +479,9 @@ async function handleSelectionStep(
     actionComplete: step.actionComplete,
     followUp: step.followUp,
     warnings: step.warnings,
+    // Present only on the step that completes the action (BUG-017/BUG-012).
+    data: step.data,
+    message: step.message,
   };
 }
 

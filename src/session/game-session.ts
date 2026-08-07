@@ -1532,6 +1532,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       serializedAction: result.serializedAction,
       // Pass through action chaining info from flowState, including metadata for the followUp action
       followUp: followUpWithMetadata,
+      // The action's own return value to the acting seat (BUG-017/BUG-012).
+      data: result.data,
+      message: result.message,
     };
   }
 
@@ -2052,6 +2055,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     actionResult?: ActionResult;
     state?: PlayerGameState;
     followUp?: FollowUpAction & { metadata?: ReturnType<typeof buildSingleActionMetadata> };
+    /** `ActionResult.data` from the action this step completed (BUG-017). */
+    data?: Record<string, unknown>;
+    /** `ActionResult.message` from the action this step completed (BUG-012). */
+    message?: string;
   }> {
     const result = await this.#pendingActionManager.processSelectionStep(playerPosition, selectionName, value, actionName, initialArgs);
 

@@ -97,6 +97,33 @@ export interface ActionExecutionResult {
   flowState?: FlowState;
   /** Player views after the action */
   playerViews?: PlayerStateView[];
+  /**
+   * `ActionResult.data` returned by the action's `execute()` (BUG-017) — the
+   * only channel by which an action returns a computed value to the seat that
+   * took it. Private to that seat: it is returned to this op's caller and is
+   * NOT part of `flowState`/`playerViews`, which fan out to the whole table.
+   */
+  data?: Record<string, unknown>;
+  /** `ActionResult.message` returned by the action's `execute()` (BUG-012). */
+  message?: string;
+}
+
+/**
+ * Result of one session-free selection step driven through
+ * {@link GameRunner.processSelectionStep}. Carries the completed action's
+ * `data`/`message` for exactly the same reason {@link ActionExecutionResult}
+ * does — a multi-step action must return its computed value on the same terms
+ * as a single-step one (BUG-017).
+ */
+export interface PendingStepResult {
+  success: boolean;
+  error?: string;
+  /** True once the final selection was supplied and the action executed. */
+  actionComplete?: boolean;
+  /** `ActionResult.data` from the completed action. Only set when `actionComplete`. */
+  data?: Record<string, unknown>;
+  /** `ActionResult.message` from the completed action. Only set when `actionComplete`. */
+  message?: string;
 }
 
 /**
@@ -468,11 +495,17 @@ export class GameRunner<G extends Game = Game> {
     // Record in history
     this.actionHistory.push(serializedAction);
 
+    // The action's own return value to the acting seat. Read straight off the
+    // flow engine rather than out of `flowState`, which is broadcast (BUG-017).
+    const actionResult = this.game.getLastActionResult();
+
     return {
       success: true,
       serializedAction,
       flowState,
       playerViews: createAllPlayerViews(this.game),
+      data: actionResult?.data,
+      message: actionResult?.message,
     };
   }
 
@@ -583,7 +616,7 @@ export class GameRunner<G extends Game = Game> {
     playerPosition: number,
     selectionName: string,
     value: unknown
-  ): { success: boolean; error?: string; actionComplete?: boolean } {
+  ): PendingStepResult {
     const pendingState = this.pendingActions.get(playerPosition);
     if (!pendingState) {
       return { success: false, error: 'No pending action for this player. Call startPendingAction first.' };
@@ -648,7 +681,7 @@ export class GameRunner<G extends Game = Game> {
     player: Player,
     pendingState: PendingActionState,
     playerPosition: number
-  ): { success: boolean; error?: string; actionComplete: true } {
+  ): PendingStepResult & { actionComplete: true } {
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
     const actionResult = executor.executePendingAction(action, player, pendingState);
     this.pendingActions.delete(playerPosition);
@@ -658,7 +691,13 @@ export class GameRunner<G extends Game = Game> {
       this.game.continueFlowAfterPendingAction(actionResult);
     }
 
-    return { success: actionResult.success, error: actionResult.error, actionComplete: true };
+    return {
+      success: actionResult.success,
+      error: actionResult.error,
+      actionComplete: true,
+      data: actionResult.data,
+      message: actionResult.message,
+    };
   }
 
   /**
