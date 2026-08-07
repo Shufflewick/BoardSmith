@@ -1572,6 +1572,29 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | `validElements` | `ComputedRef<ValidElement[]>` | **Reactive** list of valid elements for current selection |
 | `isExecuting` | `Ref<boolean>` | Whether an action is currently executing (read `.value`) |
 | `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
+| `lastActionResult` | `ComputedRef<ResolvedAction \| null>` | The most recently resolved action and its server result — `{ action, seat, result }`. See below. |
+
+### Reading an action's return value (`lastActionResult`)
+
+An action's `execute()` can return a computed value to the seat that took it via
+`ActionResult.data` (a map recall, a scout report, a peek at the top of a deck).
+`execute()` hands that back to its own caller — but an action driven by picks
+(a selection with `onSelect`, or a repeating one) *completes inside `fill()`*,
+usually from an ActionPanel click no board code called at all. There is no caller
+to return to, so the controller publishes every resolution here instead:
+
+```typescript
+watch(actionController.lastActionResult, (resolved) => {
+  if (resolved?.action !== 'viewMap' || !resolved.result.success) return;
+  cartography.value = resolved.result.data?.cartography as CartographyView;
+});
+```
+
+Set at every resolution — single-step, `onSelect`-routed, repeating, each link of
+a `followUp` chain, and failures as well as successes. A fresh object is assigned
+each time, so a `watch` fires even when two consecutive results are identical.
+`data` reaches the acting seat only: it never rides `flowState`, a player view, or
+the spectator view.
 
 ### Element Selections with validElements
 
