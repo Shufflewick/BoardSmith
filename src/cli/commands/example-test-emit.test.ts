@@ -412,6 +412,202 @@ describe('verifyExampleEmitCommand', () => {
     ).rejects.toThrow();
   });
 
+  // -----------------------------------------------------------------------------------------
+  // B19 — a translated snippet that declares no test of its own once produced a file that was
+  // simultaneously "everything passed" and "there are no tests": the assertions ran at collect
+  // time inside the describe() body, registered nothing, and vitest failed the file with
+  // `No test found in suite` while the command printed `✓ … 1 test(s)`. The emitter transports
+  // the translator's bytes verbatim and never wraps them, so the self-contained `it(...)` block
+  // is the ONE shape that can work — anything else is rejected before a byte is written.
+  // -----------------------------------------------------------------------------------------
+
+  it('rejects translated code with no top-level it()/test(), naming the example; writes nothing (B19)', async () => {
+    const project = await mkProject(dir, {
+      chunkSlug: 'chunk-bare',
+      slicePath: 'rulebook/02-punch.md',
+      sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
+    });
+    await recordExampleReplayVerdicts(project, [
+      agreesRecord({
+        exampleId: 'rulebook/02-punch.md:2',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+      }),
+    ]);
+    const translated = [
+      {
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        pageCitation: 'p.2, Punch Examples',
+        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+        // The exact shape translate-example.md used to bless: bare statements, no `it(...)`.
+        code: "const state = 'READY';\nexpect(state).toBe('READY');",
+      },
+    ];
+    const translatedPath = join(dir, 'translated.json');
+    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
+
+    await expect(
+      verifyExampleEmitCommand({ project, chunk: 'chunk-bare', translated: translatedPath }),
+    ).rejects.toThrow(/rulebook\/02-punch\.md:2/);
+    await expect(
+      verifyExampleEmitCommand({ project, chunk: 'chunk-bare', translated: translatedPath }),
+    ).rejects.toThrow(/declares no top-level `it\(\.\.\.\)` or `test\(\.\.\.\)` block/);
+
+    // Nothing written: the file that would have collected zero tests never reaches disk.
+    await expect(fs.access(generatedTestFilePath(project, 'chunk-bare'))).rejects.toThrow();
+  });
+
+  it('rejects a translated snippet that does not parse, naming the example; writes nothing', async () => {
+    const project = await mkProject(dir, {
+      chunkSlug: 'chunk-unparseable',
+      slicePath: 'rulebook/02-punch.md',
+      sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
+    });
+    await recordExampleReplayVerdicts(project, [
+      agreesRecord({
+        exampleId: 'rulebook/02-punch.md:2',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+      }),
+    ]);
+    const translated = [
+      {
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        pageCitation: 'p.2, Punch Examples',
+        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+        code: "it('never closes its brace', () => {\n  expect(true).toBe(true);",
+      },
+    ];
+    const translatedPath = join(dir, 'translated.json');
+    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
+
+    await expect(
+      verifyExampleEmitCommand({ project, chunk: 'chunk-unparseable', translated: translatedPath }),
+    ).rejects.toThrow(/rulebook\/02-punch\.md:2.*does not parse as TypeScript/s);
+
+    await expect(fs.access(generatedTestFilePath(project, 'chunk-unparseable'))).rejects.toThrow();
+  });
+
+  it('every emitted file vitest is asked to run declares at least one test, and testBlockCount is that number (B19)', async () => {
+    const project = await mkProject(dir, {
+      chunkSlug: 'chunk-counted',
+      slicePath: 'rulebook/02-punch.md',
+      sliceText:
+        'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n' +
+        'p.2, Punch Examples:\nA second example, also about Guards.\n',
+    });
+    await recordExampleReplayVerdicts(project, [
+      agreesRecord({
+        exampleId: 'rulebook/02-punch.md:2',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+      }),
+      agreesRecord({
+        exampleId: 'rulebook/02-punch.md:4',
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 4,
+      }),
+    ]);
+    const translated = [
+      {
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        pageCitation: 'p.2, Punch Examples',
+        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+        code: "it('becomes EXHAUSTED', () => {\n  expect(true).toBe(true);\n});",
+      },
+      {
+        // One snippet, two tests — the ledger says "1 example" but the FILE carries two `it`s,
+        // which is exactly the gap the old `N test(s)` (a ledger count) hid.
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 4,
+        pageCitation: 'p.2, Punch Examples',
+        sourceText: 'A second example, also about Guards.',
+        code:
+          "it('first half', () => {\n  expect(true).toBe(true);\n});\n" +
+          "it('second half', () => {\n  expect(true).toBe(true);\n});",
+      },
+    ];
+    const translatedPath = join(dir, 'translated.json');
+    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
+
+    const result = await verifyExampleEmitCommand({
+      project,
+      chunk: 'chunk-counted',
+      translated: translatedPath,
+    });
+    expect(result.emittedCount).toBe(2); // ledger records
+    expect(result.testBlockCount).toBe(3); // tests the file actually declares
+
+    // The authority on that number is vitest itself, not our own parse of the file.
+    await fs.symlink(join(REPO_ROOT, 'node_modules'), join(project, 'node_modules'), 'dir');
+    const vitestBin = join(REPO_ROOT, 'node_modules', '.bin', 'vitest');
+    const { stdout } = await execFileAsync(vitestBin, ['run'], { cwd: project });
+    expect(stdout).toMatch(/3 passed/i);
+  });
+
+  it('reports the chunk-wide exemption file as 1 test — the count vitest collects, not the ledger count', async () => {
+    const project = await mkProject(dir, {
+      chunkSlug: 'chunk-count-exempt',
+      slicePath: 'rulebook/02-punch.md',
+      sliceText: 'No worked examples in this slice.\n',
+    });
+    const result = await verifyExampleEmitCommand({ project, chunk: 'chunk-count-exempt' });
+    expect(result.emittedCount).toBe(0);
+    expect(result.testBlockCount).toBe(1);
+  });
+
+  it('an exempt-only chunk asserts its exemption in a real test vitest collects and passes (B19)', async () => {
+    const project = await mkProject(dir, {
+      chunkSlug: 'chunk-exempt-only',
+      slicePath: 'rulebook/03-seven.md',
+      sliceText: 'example: 5, 6, 7\nexample: image-only\n',
+    });
+    await recordExampleReplayVerdicts(project, [
+      createExampleReplayRecord({
+        exampleId: 'rulebook/03-seven.md:1',
+        slicePath: 'rulebook/03-seven.md',
+        lineNumber: 1,
+        kind: 'predicate',
+        verdict: 'example-inconsistent',
+        reason: 'Printed text says 5,6,7 but the card images show 1,2,3 (INDEX.md gap #4).',
+        contradictionA: 'text: 5, 6, 7',
+        contradictionB: 'images: 1, 2, 3',
+        provenance: 'quote-verified',
+      }),
+      createExampleReplayRecord({
+        exampleId: 'rulebook/03-seven.md:2',
+        slicePath: 'rulebook/03-seven.md',
+        lineNumber: 2,
+        kind: 'predicate',
+        verdict: 'unexecutable',
+        reason: 'Image-derived and indeterminate — no assertable outcome.',
+        provenance: 'quote-verified',
+      }),
+    ]);
+
+    const result = await verifyExampleEmitCommand({ project, chunk: 'chunk-exempt-only' });
+    expect(result.emittedCount).toBe(0);
+    expect(result.exemptCount).toBe(2);
+    expect(result.chunkExempt).toBe(false);
+    // The file declares exactly one test — the exemption itself — so the printed count is what
+    // vitest will collect, and the file is never the uncollectable "No test found in suite" kind.
+    expect(result.testBlockCount).toBe(1);
+
+    const bytes = await fs.readFile(result.testFilePath, 'utf-8');
+    // The test NAME alone must carry the real state, for a reader who only sees a CI log.
+    expect(bytes).toContain('1 unexecutable, 1 example-inconsistent');
+    expect(bytes).toContain('none executable');
+
+    await fs.symlink(join(REPO_ROOT, 'node_modules'), join(project, 'node_modules'), 'dir');
+    const vitestBin = join(REPO_ROOT, 'node_modules', '.bin', 'vitest');
+    // execFileAsync REJECTS on a non-zero exit: a suite vitest collects nothing from exits 1.
+    const { stdout } = await execFileAsync(vitestBin, ['run'], { cwd: project });
+    expect(stdout).toMatch(/1 passed|1 test/i);
+  });
+
   it('an unexecutable/example-inconsistent record is emitted as a named-reason comment, never a test', async () => {
     const project = await mkProject(dir, {
       chunkSlug: 'chunk-exempt-example',
@@ -503,9 +699,10 @@ describe('verifyExampleEmitCommand', () => {
       slicePath: 'rulebook/02-punch.md',
       sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
     });
-    // A real, executable entry so the emitted file carries an actual `it(...)` (an exempt-only
-    // file has none, and vitest treats an empty suite as a failure unrelated to this fix) — its
-    // pageCitation is the hostile WR-03 payload: a newline followed by a `require(...)` call that
+    // A real, executable entry, so the `it(...)` this file carries is a TRANSPORTED one — the
+    // path where a hostile pageCitation is actually interpolated (an exempt-only file would
+    // instead carry the renderer's own named-exemption test, which never touches a citation) —
+    // its pageCitation is the hostile WR-03 payload: a newline followed by a `require(...)` call that
     // would run as live code if `commentSafeLine` did not strip the newline first.
     await recordExampleReplayVerdicts(project, [
       createExampleReplayRecord({
