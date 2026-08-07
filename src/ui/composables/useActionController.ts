@@ -112,6 +112,7 @@ export type {
   ActionMetadata,
   FollowUpAction,
   ActionResult,
+  ResolvedAction,
   ValidationResult,
   ActionStateSnapshot,
   UseActionControllerOptions,
@@ -128,6 +129,7 @@ import type {
   CollectedPick,
   ActionMetadata,
   ActionResult,
+  ResolvedAction,
   ValidationResult,
   ActionStateSnapshot,
   UseActionControllerOptions,
@@ -164,22 +166,31 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Vite's production build when import.meta.env.DEV is false.
   const isDevBuild = import.meta.env.DEV;
 
-  // DEV-03: single source for the boardsmith:action-resolved signal. Called at EVERY
-  // terminal action-resolution site (execute(), executeCurrentAction(), and the
-  // pickStep completion paths) so an agent/devtools listener sees exactly one event
-  // per resolved action — including actions that chain a followUp (each resolution is
-  // its own event). This is deliberately decoupled from actionCompletedTick, which
-  // signals end-of-chain auto-advance only. Dev-gated; erased in production builds.
-  function dispatchActionResolved(
-    action: string,
-    success: boolean,
-    seat: number,
-    error?: string,
-  ): void {
+  // Single source for BOTH halves of "an action just resolved": the reactive
+  // `lastActionResult` a UI reads the result off, and the DEV-03
+  // `boardsmith:action-resolved` signal. Called at EVERY terminal
+  // action-resolution site — execute(), executeCurrentAction(), and both pickStep
+  // completion paths — so an agent/devtools listener sees exactly one event per
+  // resolved action (including each link of a followUp chain), and so a new
+  // resolution site cannot publish one half and forget the other.
+  //
+  // The event half is deliberately decoupled from actionCompletedTick, which
+  // signals end-of-chain auto-advance only, and is dev-gated (erased in
+  // production builds). `lastActionResult` is NOT dev-gated: it carries the
+  // action's return value to the board, which is a shipped feature.
+  function resolveAction(action: string, seat: number, result: ActionResult): void {
+    // A fresh object every time, so a watcher fires even on two identical results.
+    lastActionResult.value = { action, seat, result };
+
     if (!isDevBuild || typeof window === 'undefined') return;
     window.dispatchEvent(
       new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
-        detail: { action, success, seat, ...(success ? {} : { error }) },
+        detail: {
+          action,
+          success: result.success,
+          seat,
+          ...(result.success ? {} : { error: result.error }),
+        },
       }),
     );
   }
@@ -236,6 +247,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // leaving a stale manual End Turn + Undo. The bridge watches this counter and runs
   // the same skip=false auto-start, so single moves and capture chains behave alike.
   const actionCompletedTick = ref(0);
+
+  // The most recently resolved action and its server result, verbatim. This is
+  // the ONLY channel by which a pick-driven action's `ActionResult.data` reaches
+  // a UI (BUG-017): such an action completes inside fill() — usually from an
+  // ActionPanel click no board code called — so returning the value to a caller
+  // reaches nobody. Written exclusively by resolveAction().
+  const lastActionResult = ref<ResolvedAction | null>(null);
+  // Exposed through a computed rather than readonly(): readonly() would deep-freeze
+  // the type, so a board reading `data.myPayload` would be fighting DeepReadonly on
+  // a value the game itself authored. A ComputedRef is read-only by construction.
+  const exposedLastActionResult = computed(() => lastActionResult.value);
 
   // Monotonic counter bumped in clearAdvancedState (every action tear-down).
   // Captured at the start of each fetchChoicesForPick call; compared after the
@@ -1059,9 +1081,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(result.error || 'Action failed');
       }
 
-      // DEV-03: this is a terminal resolution path for multi-step actions submitted
-      // via the wizard/ActionPanel — fire the action-resolved signal here too.
-      dispatchActionResolved(actionName, result.success, playerSeat?.value ?? 0, result.error);
+      // This is a terminal resolution path for multi-step actions submitted via the
+      // wizard/ActionPanel — publish the result here too.
+      resolveAction(actionName, playerSeat?.value ?? 0, result);
 
       // Clear state on success or failure — but only if no NEWER action started
       // during the await (otherwise we'd clobber a freshly auto-started action).
@@ -1080,7 +1102,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Action failed';
       setError(error);
-      dispatchActionResolved(actionName, false, playerSeat?.value ?? 0, error);
+      resolveAction(actionName, playerSeat?.value ?? 0, { success: false, error });
       return { success: false, error };
     } finally {
       isExecuting.value = false;
@@ -1137,7 +1159,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         if (!result.success) {
           setError(result.error || 'Action failed');
         }
-        dispatchActionResolved(actionName, result.success, playerSeat?.value ?? 0, result.error);
+        resolveAction(actionName, playerSeat?.value ?? 0, result);
         // Executing resolves the action — clear in-progress state, unless a newer
         // action started during the await (see note below).
         if (actionStartSeq === seq) {
@@ -1149,7 +1171,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Action failed';
         setError(error);
-        dispatchActionResolved(actionName, false, playerSeat?.value ?? 0, error);
+        resolveAction(actionName, playerSeat?.value ?? 0, { success: false, error });
         return { success: false, error };
       } finally {
         isExecuting.value = false;
@@ -1204,7 +1226,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(result.error || 'Action failed');
       }
 
-      dispatchActionResolved(actionName, result.success, playerSeat?.value ?? 0, result.error);
+      resolveAction(actionName, playerSeat?.value ?? 0, result);
 
       // Executing an action resolves it — clear any in-progress action state, exactly
       // like executeCurrentAction(). Without this, a custom UI that calls execute()
@@ -1226,7 +1248,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Action failed';
       setError(error);
-      dispatchActionResolved(actionName, false, playerSeat?.value ?? 0, error);
+      resolveAction(actionName, playerSeat?.value ?? 0, { success: false, error });
       return { success: false, error };
     } finally {
       isExecuting.value = false;
@@ -1625,8 +1647,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Check if action is complete (termination condition met)
       if (result.actionComplete) {
-        // DEV-03: capture the action name before it is nulled below, then fire the
-        // action-resolved signal for this terminal (repeating-selection) path too.
+        // Capture the action name before it is nulled below, then publish the
+        // resolution for this terminal (repeating-selection) path too.
         const completedActionName = currentAction.value;
         // Action completed - clear everything
         repeatingState.value = null;
@@ -1634,7 +1656,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         clearArgs();
         clearAdvancedState();
 
-        dispatchActionResolved(completedActionName ?? '', true, player);
+        // The server ran execute() on THIS step, so its return value rides this
+        // response (BUG-017/BUG-012). Publishing it here is what makes a repeating
+        // action's `data` reach the board on the same terms as a single-step one's.
+        resolveAction(completedActionName ?? '', player, {
+          success: true,
+          data: result.data,
+          message: result.message,
+          followUp: result.followUp,
+        });
 
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
@@ -1719,11 +1749,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         clearArgs();
         clearAdvancedState();
 
-        // DEV-03: the action resolved on the server — fire the action-resolved signal
-        // on EVERY completion, including mid-chain followUp completions (an agent needs
-        // to confirm each committed action). This is separate from actionCompletedTick,
-        // which only signals end-of-chain auto-advance (below).
-        dispatchActionResolved(completedActionName ?? '', true, player);
+        // The action resolved on the server — publish on EVERY completion, including
+        // mid-chain followUp completions (an agent needs to confirm each committed
+        // action, and each link of a chain can return its own `data`). Separate from
+        // actionCompletedTick, which only signals end-of-chain auto-advance (below).
+        //
+        // The server ran execute() on THIS step, so its return value rides this
+        // response (BUG-017/BUG-012) — without carrying it here, every onSelect-routed
+        // action would still hand the board `undefined`.
+        resolveAction(completedActionName ?? '', player, {
+          success: true,
+          data: result.data,
+          message: result.message,
+          followUp: result.followUp,
+        });
 
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
@@ -2036,6 +2075,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // the next action (parity with the execute() path's isExecuting toggle), which is
     // what auto-ends the turn after a multi-jump capture chain.
     actionCompletedTick: readonly(actionCompletedTick),
+    // The most recently resolved action and its server result, verbatim — the one
+    // place to read an action's `data`/`message` regardless of which transport ran
+    // it. execute() also returns its own result to its caller; a pick-driven action
+    // has no caller to return to, so this is its only channel (BUG-017).
+    lastActionResult: exposedLastActionResult,
     lastError,
     // Bumped on EVERY failure that sets lastError — including a repeat of the
     // identical error message, which a plain watch on lastError would miss.

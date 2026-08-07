@@ -168,7 +168,7 @@ describe('Board + controller interaction integration', () => {
       autoEndTurn,
       actionMetadata,
       availableActions,
-      isViewingHistory: ref(false),
+      disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch: ref(0),
     });
 
     // Flush: auto-start → controller.start('move') → fetchChoicesForPick('piece')
@@ -280,7 +280,7 @@ describe('Board + controller interaction integration', () => {
       autoFill: false, autoExecute: false, fetchPickChoices,
     });
     const board = createBoardInteraction();
-    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, isViewingHistory: ref(false) });
+    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch: ref(0) });
     return { isMyTurn, autoEndTurn, availableActions, actionMetadata, sendAction, controller, board };
   }
 
@@ -361,7 +361,7 @@ describe('Board + controller interaction integration', () => {
       fetchPickChoices: vi.fn(async () => ({ success: false, error: 'n/a' })),
     });
     const board = createBoardInteraction();
-    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, isViewingHistory: ref(false) });
+    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch: ref(0) });
     await flush();
 
     // It becomes my turn with a sole no-selection action available.
@@ -412,7 +412,7 @@ describe('Board + controller interaction integration', () => {
       autoEndTurn,
       actionMetadata,
       availableActions,
-      isViewingHistory: ref(false),
+      disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch: ref(0),
     });
 
     // Flush: auto-start 'place' → fetchChoicesForPick('hex') → board shows hexes
@@ -433,6 +433,120 @@ describe('Board + controller interaction integration', () => {
     // Stone placed via a single board click — regression guard
     expect(sendAction).toHaveBeenCalledWith('place', { hex: 10 });
     expect(sendAction).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Test B17 ────────────────────────────────────────────────────────────────
+
+  it('B17: an undo (restoreEpoch bump) discards the open pick and re-offers from the restored position', async () => {
+    // The reported symptom, on the real controller + bridge: a player opens a
+    // board pick, the server undoes, and the client keeps offering the answer
+    // set computed BEFORE the undo — including the pawn's own room (a 0-space
+    // self-move the rules forbid) while refusing the pawn's only legal step.
+    //
+    // Nothing else on the client can catch it: an undo INSIDE a turn leaves
+    // `availableActions` byte-identical, so the bridge's action-set teardown
+    // never fires, and `validElements` is frozen in the pick snapshot taken when
+    // the pick opened.
+    const isMyTurn = ref<boolean | undefined>(true);
+    const autoEndTurn = ref(true);
+    // Byte-identical across the undo, on purpose — this is what makes the
+    // pre-existing teardown watcher blind to it.
+    const availableActions = ref(['move']);
+    const actionMetadata = ref<Record<string, ActionMetadata>>({
+      move: { name: 'move', prompt: 'Move', selections: [{ name: 'destination', type: 'element', prompt: 'Where to?' }] },
+    });
+    const sendAction = vi.fn().mockResolvedValue({ success: true });
+    const restoreEpoch = ref<number | undefined>(0);
+
+    // The server's answer set: every room EXCEPT the one the pawn stands in.
+    // Rooms are ids 1/2/3; the pawn is in room 2 when the pick opens.
+    let pawnRoom = 2;
+    const fetchPickChoices = vi.fn(async (_action: string, selectionName: string) => {
+      if (selectionName !== 'destination') return { success: false, error: `Unknown selection: ${selectionName}` };
+      return {
+        success: true,
+        validElements: [1, 2, 3].filter((id) => id !== pawnRoom).map((id) => ({ id, display: `room${id}` })),
+      };
+    });
+
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoFill: false, autoExecute: false, fetchPickChoices,
+    });
+    const board = createBoardInteraction();
+    useBoardActionBridge({
+      controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions,
+      disabledActions: ref(undefined),
+      isViewingHistory: ref(false),
+      restoreEpoch,
+    });
+
+    await flush();
+    expect(controller.currentAction.value).toBe('move');
+    // Pick is open against the pawn-in-room-2 position: rooms 1 and 3 offered.
+    expect(board.isSelectableElement({ id: 1 })).toBe(true);
+    expect(board.isSelectableElement({ id: 3 })).toBe(true);
+    expect(board.isSelectableElement({ id: 2 })).toBe(false);
+
+    // ── The undo lands: the pawn is back in room 1, and the server says so by
+    // bumping the epoch. availableActions does NOT change.
+    pawnRoom = 1;
+    restoreEpoch.value = 1;
+    await flush();
+
+    // Room 1 is now the pawn's OWN room — the 0-space self-move the stale list
+    // used to offer. It must be gone.
+    expect(board.isSelectableElement({ id: 1 })).toBe(false);
+    // And room 2, refused client-side while the stale list was in force, is
+    // offered again: the pick was re-opened against the restored position.
+    expect(controller.currentAction.value).toBe('move');
+    expect(board.isSelectableElement({ id: 2 })).toBe(true);
+    expect(board.isSelectableElement({ id: 3 })).toBe(true);
+
+    // Nothing was committed by the teardown — an undo must never execute.
+    expect(sendAction).not.toHaveBeenCalled();
+  });
+
+  it('B17: the first observed epoch is not a restore, and an unchanged epoch never tears down a pick', async () => {
+    // Guard the two ways a naive watcher would fire spuriously: on the first
+    // broadcast (no prior runner to be stale) and on ordinary re-broadcasts.
+    const isMyTurn = ref<boolean | undefined>(true);
+    const availableActions = ref(['place']);
+    const actionMetadata = ref({ place: hexPlacementAction });
+    const sendAction = vi.fn().mockResolvedValue({ success: true });
+    const restoreEpoch = ref<number | undefined>(undefined);
+    const fetchPickChoices = vi.fn(async () => ({
+      success: true,
+      validElements: [{ id: 10, display: 'a1' }, { id: 11, display: 'a2' }],
+    }));
+
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoFill: false, autoExecute: false, fetchPickChoices,
+    });
+    const board = createBoardInteraction();
+    useBoardActionBridge({
+      controller, boardInteraction: board, isMyTurn, autoEndTurn: ref(true), actionMetadata, availableActions,
+      disabledActions: ref(undefined),
+      isViewingHistory: ref(false),
+      restoreEpoch,
+    });
+
+    await flush();
+    // First state arrives carrying epoch 7 (a session that was undone before
+    // this client ever connected). Not a restore FOR THIS CLIENT.
+    restoreEpoch.value = 7;
+    await flush();
+    expect(controller.currentAction.value).toBe('place');
+    expect(board.isSelectableElement({ id: 10 })).toBe(true);
+
+    // Board-select a hex, then re-broadcast the same epoch (an ordinary
+    // opponent move): the in-progress pick survives.
+    board.triggerElementSelect({ id: 10 });
+    await flush();
+    restoreEpoch.value = 7;
+    await flush();
+    expect(controller.currentAction.value).toBe('place');
   });
 
 });

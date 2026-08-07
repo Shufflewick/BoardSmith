@@ -315,15 +315,19 @@ export class FlowEngine<G extends Game = Game> {
   /** Current action step config (for move limit tracking) */
   private currentActionConfig?: ActionStepConfig;
   /**
-   * Monotonic count of completed `execute()` flow nodes, incremented in
-   * `executeExecute` (UNDO-02, 155-02). Public so `GameRunner` can read it
-   * after every recorded action and detect an advance, but it is NOT itself
-   * the durable fence -- a fresh `FlowEngine` (built on every restore) zeroes
-   * this back to 0. `GameRunner.executeBarrierIndex` (the persisted action
-   * index at which the counter last advanced) is the durable fact; this
-   * counter only signals "did an execute() complete since I last checked".
+   * Monotonic count of completed IRREVERSIBLE `execute()` flow nodes --
+   * those declared `{ irreversible: true }` (UNDO-02, 155-02). An ordinary
+   * `execute()` is undo-transparent and does NOT advance this: its effects
+   * live in the game state, which a checkpoint restore reproduces exactly.
+   *
+   * Public so `GameRunner` can read it after every recorded action and detect
+   * an advance, but it is NOT itself the durable fence -- a fresh `FlowEngine`
+   * (built on every restore) zeroes this back to 0.
+   * `GameRunner.executeBarrierIndex` (the persisted action index at which the
+   * counter last advanced) is the durable fact; this counter only signals "did
+   * a commitment happen since I last checked".
    */
-  executeNodeCompletions = 0;
+  irreversibleCommitCount = 0;
 
   constructor(game: G, definition: FlowDefinition) {
     this.game = game;
@@ -815,7 +819,9 @@ export class FlowEngine<G extends Game = Game> {
       state.actionError = this.actionError;
     }
 
-    // Include followUp if last action returned one
+    // Include followUp if last action returned one. NOTE: the sibling fields
+    // `data`/`message` are deliberately NOT published here — see the note on
+    // FlowState (BUG-017); they would fan out to every seat.
     if (this.lastActionResult?.followUp) {
       state.followUp = this.lastActionResult.followUp;
     }
@@ -1049,6 +1055,25 @@ export class FlowEngine<G extends Game = Game> {
    */
   isComplete(): boolean {
     return this.complete;
+  }
+
+  /**
+   * The `ActionResult` the most recent action's `execute()` returned, verbatim.
+   *
+   * This is the ONLY way `ActionResult.data` — an action's computed return
+   * value to the seat that took it (a map recall, a scout report, a peek at a
+   * deck) — reaches anything above the flow engine (BUG-017). `FlowState`
+   * cannot carry it: that object is fanned out to every seat and the
+   * spectator, and `data` is private to the acting seat by construction.
+   *
+   * Per-action and non-durable: replaced by the next action, cleared by
+   * `start()`, and NOT reconstructed by `restoreFullState` (a restored
+   * snapshot has no "last action" of its own). Read it immediately after the
+   * `continueFlow`/`resume` call that produced it — `GameRunner.performAction`
+   * is the one place that does.
+   */
+  getLastActionResult(): ActionResult | undefined {
+    return this.lastActionResult;
   }
 
   /**
@@ -1842,14 +1867,15 @@ export class FlowEngine<G extends Game = Game> {
     // Update variables in engine from context
     this.variables = { ...context.variables };
     frame.completed = true;
-    // UNDO-02: signal that an execute() node just committed an irreversible
-    // side effect. `GameRunner` reads this after every recorded action to
-    // set/advance its durable `executeBarrierIndex`. `frame.completed` above
-    // does NOT survive checkpoint restore (a fresh FlowEngine is built with a
-    // fresh stack), so it cannot be the fence on its own -- this counter
-    // exists only to be observed by the runner before that engine is
-    // discarded.
-    this.executeNodeCompletions++;
+    // UNDO-02: signal a COMMITMENT the author declared irreversible, so
+    // `GameRunner` can set/advance its durable `executeBarrierIndex` (it reads
+    // this after every recorded action). An ordinary bookkeeping `execute()`
+    // deliberately does not fence undo -- see `ExecuteConfig.irreversible`.
+    // `frame.completed` above does NOT survive checkpoint restore (a fresh
+    // FlowEngine is built with a fresh stack), so it cannot be the fence on its
+    // own -- this counter exists only to be observed by the runner before that
+    // engine is discarded.
+    if (config.irreversible) this.irreversibleCommitCount++;
     return { continue: true, awaitingInput: false };
   }
 

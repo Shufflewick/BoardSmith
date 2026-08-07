@@ -1194,6 +1194,67 @@ execute((ctx) => {
 })
 ```
 
+**Undo crosses an `execute()` by default.** Everything the step touches is game
+state, and undo restores state from a checkpoint, so it reproduces the step's
+effect exactly. This is the right default for the common case — flow bookkeeping,
+derived values, messages:
+
+```typescript
+// Bookkeeping. Undo may cross it.
+execute((ctx) => ctx.set('turnComplete', true))
+```
+
+**Mark a step `{ irreversible: true }` when a restore cannot honestly take it
+back**, and the case that matters is *information reaching a human*. Restoring
+the tree un-deals a card; it cannot un-see it. That would let a player look at
+a hand, undo, and keep what they learned:
+
+```typescript
+// The hand is in a player's eyes the instant this completes.
+execute((ctx) => ctx.game.deck.deal(ctx.game.players, 7), { irreversible: true })
+```
+
+An irreversible step **fences undo and rewind**: no restore may target an action
+before it — for the rest of the game, not just the current turn.
+
+Decide with one question: *if the engine restored the snapshot from just before
+this step, would anything be wrong?* Not "is this step important". Scoring,
+moving pieces, and drawing into a face-down hand are all state, and state
+restores. Marking a bookkeeping step needlessly is not a safe default — it
+silently disables undo and debug rewind from that point on.
+
+#### Undo and randomness — `undo: { fenceRandomRewind: true }`
+
+Undo restores the seeded generator's position along with the state, so redoing
+the **same** action after an undo cannot re-roll. What *can* re-roll is
+**reordering**: undo, take some other action that also draws, then take the
+drawing action again — it now lands on a different generator position. A player
+alone in a private session with unlimited undo can repeat that until the roll
+suits them, and nobody observes it.
+
+Declare the fence on any **competitive** game:
+
+```typescript
+export const gameDefinition = {
+  // ...
+  undo: { fenceRandomRewind: true },
+};
+```
+
+An undo whose span consumed a draw is then refused. Each draw happens exactly
+once no matter how the actions around it are ordered: reordering *before* a draw
+without observing it carries no advantage (the value depends only on the
+generator position, which non-drawing actions never move), and observing a draw
+fences the rewind.
+
+Leave it off for cooperative and solo games, where a take-back is a feature.
+It is off by default for that reason.
+
+The fence has nothing to say about a player who abandons a private session and
+starts a new one — a fresh start mints a new seed. A session that must be immune
+to *that* has to consume no randomness at all; hosts declare such a session with
+`hostOptions.randomness: 'forbidden'`, and every draw in it fails loudly.
+
 #### `setVar` - Set flow variable
 
 Initialize a variable before reading it. Reading a variable that was never set

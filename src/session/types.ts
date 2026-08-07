@@ -9,7 +9,7 @@
 import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
-import type { CheckpointPolicy } from '../engine/index.js';
+import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
 import type {
   LobbyState,
   SlotStatus,
@@ -130,6 +130,20 @@ export interface GameDefinition {
    * restores that seat's turn-start checkpoint. See `docs/state-size.md`.
    */
   checkpoints?: CheckpointPolicy;
+  /**
+   * What undo is allowed to take back in this game.
+   *
+   * ```ts
+   * undo: { fenceRandomRewind: true }   // a draw, once made, is final
+   * ```
+   *
+   * Set `fenceRandomRewind` on any COMPETITIVE game. Undo already restores the
+   * RNG position, so redoing the same action cannot re-roll — but reordering
+   * can: undo, act differently first, then draw again on a different generator
+   * position. A player alone in a private session can repeat that unobserved
+   * until the draw suits them. See `UndoPolicy`.
+   */
+  undo?: UndoPolicy;
 }
 
 // ============================================
@@ -514,6 +528,25 @@ export interface PlayerGameState {
    * concern, so it needs no seat gating.
    */
   actionCount: number;
+
+  /**
+   * How many checkpoint RESTORES (undo / rewind / host-driven restore) this
+   * game's timeline has undergone (`runner.restoreEpoch`).
+   *
+   * Published unconditionally for EVERY seat, like `actionCount`. This is the
+   * stated form of "the runner was replaced": a client observing this value
+   * CHANGE between two broadcasts knows every element id it captured from the
+   * previous runner is stale and must be discarded — an open pick's
+   * `validElements`, a drag in progress, any cached element-id list. The
+   * session layer clears its own state of exactly that kind at the same moment
+   * (`GameSession`'s `replaceRunner`: hint, heatmap, pending actions); this
+   * field is how clients get told.
+   *
+   * Prefer this over inferring a restore from a DECREASE in `actionCount`: a
+   * decrease can only see a restore that moves backward, and it asks callers
+   * to reason about direction rather than compare with `!==`.
+   */
+  restoreEpoch: number;
   /**
    * RESERVED (Plan 104-04): Active tutorial step projected for this player.
    *

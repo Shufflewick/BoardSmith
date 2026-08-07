@@ -423,6 +423,49 @@ describe('SnapshotSessionHost', () => {
       expect(calls[0]).toMatch(/seat\(s\) 2/);
     });
 
+    it.each(['undo', 'debugRewind'] as const)(
+      'pumps the AI after a %s, so a restore landing on an AI seat does not stall the table',
+      async (opType) => {
+        // A restore can put the game on an AI seat's turn. Nothing else wakes
+        // the pump — the only op that would arrive is a human action the AI
+        // seat is never going to take — so without this the table just sits
+        // there. Reproduced in `boardsmith dev`: a rewind onto player 2 left
+        // the AI motionless indefinitely.
+        const baseResult: OpResult = {
+          success: true,
+          snapshot: { stubbed: true },
+          pendingState: null,
+          flowState: null,
+          playerViews: [],
+          isComplete: false,
+          winners: [],
+          aiMoved: false,
+        };
+
+        let aiCallCount = 0;
+        const adapters: SnapshotSessionAdapters = {
+          playerCount: 2,
+          executeOp: async (_snap, _pend, op) => {
+            if (op.type === 'aiTurn') {
+              aiCallCount++;
+              return { ...baseResult, aiMoved: false };
+            }
+            return { ...baseResult };
+          },
+          broadcast: () => {},
+          aiSeats: [{ seat: 2 }],
+        };
+
+        const host = new SnapshotSessionHost(adapters);
+        await host.start();
+        aiCallCount = 0; // start() pumps once on its own — measure only the restore.
+
+        await host.handleOp(1, { type: opType, player: 1, actionIndex: 0 } as Op);
+
+        expect(aiCallCount).toBeGreaterThan(0);
+      },
+    );
+
     it('runAITurns loops while aiMoved:true then stops, applying each move', async () => {
       // Use a stub executeOp that answers start normally, then returns aiMoved:true
       // once and aiMoved:false on the next call.

@@ -11,10 +11,12 @@
  *    `currentActionConfig`, so `FlowState` never reports `moveCount` for it
  *    (moveCount is only surfaced when the action-step config declares
  *    `minMoves`/`maxMoves` -- `engine.ts` `getState()`).
- *  - `execute()` runs an observable, IRREVERSIBLE side effect: increments
- *    `score`, a plain `Game` property (not an element), so its value is
- *    trivially readable straight off the serialized state for assertions
- *    without needing to walk the element tree.
+ *  - `execute({ irreversible: true })` stands in for a real COMMITMENT (a
+ *    dealt hand, a revealed role). The MARKER is what fences undo; the `score`
+ *    increment is just an observable proxy so tests can read the effect
+ *    straight off the serialized state without walking the element tree.
+ *    An UNMARKED `execute()` would (correctly) not fence anything -- see
+ *    `execute-barrier-undo.test.ts`'s bookkeeping counterpart.
  *  - `actionStep2` offers `act2`, configured with `maxMoves: 2` (two moves
  *    required) so it reports a real, moveCount-based turn-start boundary
  *    WHILE it's still open:
@@ -54,9 +56,10 @@ import {
 import type { GameDefinitionLike } from '../../stateless-ops.js';
 
 class ExecuteBarrierGame extends Game<ExecuteBarrierGame, Player> {
-  /** Irreversible side effect written by the execute() node. A plain Game
-   *  property (not an element), so it round-trips through toJSON()/undo
-   *  restore as an ordinary serialized field -- easy to assert on directly. */
+  /** Observable proxy for the commitment written by the irreversible
+   *  execute() node. A plain Game property (not an element), so it round-trips
+   *  through toJSON()/undo restore as an ordinary serialized field -- easy to
+   *  assert on directly. */
   score = 0;
 
   constructor(options: GameOptions) {
@@ -76,9 +79,13 @@ class ExecuteBarrierGame extends Game<ExecuteBarrierGame, Player> {
       defineFlow({
         root: sequence(
           actionStep({ actions: ['act1'], player: p1 }),
-          execute((ctx) => {
-            (ctx.game as ExecuteBarrierGame).score += 1;
-          }),
+          execute(
+            (ctx) => {
+              (ctx.game as ExecuteBarrierGame).score += 1;
+            },
+            // Declares the commitment: this is the fence these tests exercise.
+            { irreversible: true },
+          ),
           actionStep({ actions: ['act2'], player: p1, maxMoves: 2 }),
           actionStep({ actions: ['idle'], player: p1 }),
         ),

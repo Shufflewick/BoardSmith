@@ -102,23 +102,29 @@ describe('stateful time-travel across a pending mutation', () => {
     expect(viewChildIds(at2.state!.view, 'held-1')).toContain(collectedId);
   });
 
-  // UNDO-02 (155-02) supersedes this expectation: `collect-turns-fixture.ts`'s
-  // turn-advance `execute()` node (which flips `activeSeat`) now sets a durable
-  // execute()-barrier at the END of every turn. `buildSessionWithCollectedItem`
-  // plays through TWO full turns (player 1's then player 2's), so the live
-  // barrier sits at action index 5 by the time this test runs. Rewinding to
-  // action count 2 would cross BOTH turn-advance barriers -- which is exactly
-  // the class of defect this plan closes (T-155-05/06): the debug-panel
-  // time-travel path (`rewindToAction`) is one of the FOUR fenced entry
-  // points, not just live gameplay `undo`. The refusal below is the CORRECT,
-  // intended new behavior, not a regression -- see the next test for proof
-  // that a rewind which does NOT cross a barrier still authoritatively
-  // restores the collected equipment.
-  it('rewindToAction refuses to cross the turn-advance execute() barrier', async () => {
-    const { session } = await buildSessionWithCollectedItem();
+  // The turn-advance `execute()` in `collect-turns-fixture.ts` only flips
+  // `activeSeat` -- pure flow bookkeeping, which a checkpoint restore
+  // reproduces exactly. Under UNDO-02's opt-in commitment fence it is NOT
+  // marked `{ irreversible: true }`, so it does not fence anything and this
+  // rewind is ALLOWED.
+  //
+  // This assertion is the inverse of what it was while EVERY `execute()` node
+  // fenced undo. That blanket rule made the fence fire on bookkeeping — a game
+  // with one turn-advance execute() (i.e. most games) could never rewind past
+  // the current turn, which is not what the fence is for. It exists for effects
+  // a restore cannot honestly take back, above all information a human has
+  // already seen. See `ExecuteConfig.irreversible`, and the marked fixture in
+  // `execute-barrier-fixture.ts` for the fence's own coverage.
+  it('rewindToAction crosses a bookkeeping (unmarked) execute() and restores authoritatively', async () => {
+    const { session, collectedId } = await buildSessionWithCollectedItem();
 
     const rewind = await session.rewindToAction(2);
-    expect(rewind.success).toBe(false);
+    expect(rewind.success).toBe(true);
+
+    // Not just "allowed" — the restore is authoritative: the collected piece
+    // is back in held-1 exactly as it stood at action count 2.
+    const view = session.buildPlayerState(1).view;
+    expect(viewChildIds(view, 'held-1')).toContain(collectedId);
   });
 
   it('rewindToAction restores the collected equipment when the target does not cross an execute() barrier', async () => {

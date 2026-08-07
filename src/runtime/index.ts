@@ -24,7 +24,10 @@ export {
   describeCheckpointAbsence,
   type GameRunnerOptions,
   type CheckpointPolicy,
+  type UndoPolicy,
+  type RandomnessPolicy,
   type ActionExecutionResult,
+  type PendingStepResult,
 } from './runner.js';
 
 // Serialized action type (used by callers that invoke GameRunner.replay)

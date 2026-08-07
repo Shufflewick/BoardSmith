@@ -162,6 +162,37 @@ The `#game-board` slot receives:
 | `setBoardPrompt` | `function` | Set a prompt message: `(text) => void` |
 | `canUndo` | `boolean` | Whether undo is available |
 | `undo` | `function` | Undo to turn start: `() => Promise` |
+| `isViewingHistory` | `boolean` | True while the player is browsing a past position (see below) |
+| `disabledActions` | `object` | Action name → why it is disabled, for greying a control WITH its reason |
+| `flowState` | `FlowState \| null` | Turn info for the displayed position — `null` while browsing history |
+
+#### Time travel: browsing a past position
+
+Clicking a log line puts the shell into a read-only historical view. Your board
+is told, and is pre-gated so it cannot act by accident:
+
+- `isViewingHistory` is `true`.
+- `gameView` / `state` show the HISTORICAL position, and `flowState` is `null` —
+  there is no historical flow state to substitute.
+- `isMyTurn` is `false` and `availableActions` is `[]` for the whole browse, the
+  identical gating the auto-UI's Action Panel gets. A control your board gates on
+  those props therefore goes inert on its own.
+
+Use `isViewingHistory` for anything the props cannot gate for you — most often to
+tell "the game moved" from "the player clicked a log line" when you react to
+`gameView` changing. Do not infer the mode from `flowState === null`; the boolean
+is the stated fact.
+
+#### Undo, rewind, and an open pick
+
+An undo or rewind replaces the server's runner, which invalidates every element
+id captured from the old one. GameShell handles this for you: it cancels the
+shared `actionController` and clears board interaction the moment the server
+reports the restore (`PlayerGameState.restoreEpoch` changes), then re-offers the
+action from the restored position. A board that drives selection through
+`actionController` / `useBoardInteraction` needs no watcher of its own — and
+should not add one, since a game-specific "is my snapshot stale" fingerprint can
+only restate a fact the shell already acts on.
 
 #### Action State (actionArgs)
 
@@ -1541,6 +1572,29 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | `validElements` | `ComputedRef<ValidElement[]>` | **Reactive** list of valid elements for current selection |
 | `isExecuting` | `Ref<boolean>` | Whether an action is currently executing (read `.value`) |
 | `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
+| `lastActionResult` | `ComputedRef<ResolvedAction \| null>` | The most recently resolved action and its server result — `{ action, seat, result }`. See below. |
+
+### Reading an action's return value (`lastActionResult`)
+
+An action's `execute()` can return a computed value to the seat that took it via
+`ActionResult.data` (a map recall, a scout report, a peek at the top of a deck).
+`execute()` hands that back to its own caller — but an action driven by picks
+(a selection with `onSelect`, or a repeating one) *completes inside `fill()`*,
+usually from an ActionPanel click no board code called at all. There is no caller
+to return to, so the controller publishes every resolution here instead:
+
+```typescript
+watch(actionController.lastActionResult, (resolved) => {
+  if (resolved?.action !== 'viewMap' || !resolved.result.success) return;
+  cartography.value = resolved.result.data?.cartography as CartographyView;
+});
+```
+
+Set at every resolution — single-step, `onSelect`-routed, repeating, each link of
+a `followUp` chain, and failures as well as successes. A fresh object is assigned
+each time, so a `watch` fires even when two consecutive results are identical.
+`data` reaches the acting seat only: it never rides `flowState`, a player view, or
+the spectator view.
 
 ### Element Selections with validElements
 

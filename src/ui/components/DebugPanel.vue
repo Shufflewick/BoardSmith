@@ -1312,14 +1312,53 @@ function clearHistoricalState() {
 const rewindLoading = ref(false);
 const rewindError = ref<string | null>(null);
 
+/**
+ * Pending rewind target, or null when no confirmation is open.
+ *
+ * This confirmation is an IN-PANEL dialog (same shape as the deck transfer
+ * dialog below), never `window.confirm`. A native dialog is the wrong tool here
+ * for three separate reasons, each of which broke this control:
+ *
+ *  - It BLOCKS the whole page while open. The game holds a live WebSocket and
+ *    renders continuously; a modal dialog freezes the renderer, so nothing in
+ *    the tab (including the debug panel that opened it) responds until it is
+ *    dismissed. That is also what it looks like to any browser automation
+ *    driving the shell — an unresponsive page, not a prompt.
+ *  - The game runs INSIDE AN IFRAME in platform mode. Chrome blocks modal
+ *    dialogs from cross-origin iframes outright: `confirm()` returns false
+ *    without ever showing anything, so "Rewind Here" silently did nothing —
+ *    no rewind, no error, no explanation.
+ *  - One tick of Chrome's "prevent this page from creating additional dialogs"
+ *    box makes every later `confirm()` return false, permanently and silently
+ *    disabling the control for that session.
+ *
+ * The rewind is irreversible, so it keeps a confirmation — just one this app
+ * actually controls, which can state what will be discarded and stay operable.
+ */
+const pendingRewindIndex = ref<number | null>(null);
+
+function requestRewind(actionIndex: number): void {
+  rewindError.value = null;
+  pendingRewindIndex.value = actionIndex;
+}
+
+function cancelRewind(): void {
+  pendingRewindIndex.value = null;
+}
+
+/** How many actions the pending rewind would permanently discard. */
+const pendingRewindDiscardCount = computed(() =>
+  pendingRewindIndex.value === null ? 0 : actionHistory.value.length - pendingRewindIndex.value
+);
+
+async function confirmRewind(): Promise<void> {
+  const actionIndex = pendingRewindIndex.value;
+  if (actionIndex === null) return;
+  pendingRewindIndex.value = null;
+  await rewindToAction(actionIndex);
+}
+
 async function rewindToAction(actionIndex: number) {
-  const actionsToDiscard = actionHistory.value.length - actionIndex;
-  const confirmed = window.confirm(
-    `Rewind to action ${actionIndex}?\n\nThis will permanently discard ${actionsToDiscard} action(s) and cannot be undone.`
-  );
-
-  if (!confirmed) return;
-
   rewindLoading.value = true;
   rewindError.value = null;
 
@@ -1750,15 +1789,15 @@ const displayedState = computed(() => {
           </div>
 
           <!-- Transfer Dialog -->
-          <div v-if="transferDialogOpen" class="transfer-dialog-overlay" @click.self="closeTransferDialog">
-            <div class="transfer-dialog">
-              <div class="transfer-dialog-header">
+          <div v-if="transferDialogOpen" class="debug-dialog-overlay" @click.self="closeTransferDialog">
+            <div class="debug-dialog">
+              <div class="debug-dialog-header">
                 <span>Transfer Card</span>
                 <button class="close-btn" @click="closeTransferDialog" aria-label="Close transfer dialog">
                   <span aria-hidden="true">×</span>
                 </button>
               </div>
-              <div class="transfer-dialog-body">
+              <div class="debug-dialog-body">
                 <div class="form-group">
                   <label>Target Container:</label>
                   <select v-model="transferDialogTargetDeckId">
@@ -1782,7 +1821,7 @@ const displayedState = computed(() => {
                   </div>
                 </div>
               </div>
-              <div class="transfer-dialog-footer">
+              <div class="debug-dialog-footer">
                 <button class="debug-btn" @click="closeTransferDialog">Cancel</button>
                 <button
                   class="debug-btn primary"
@@ -2032,11 +2071,42 @@ const displayedState = computed(() => {
               v-if="isViewingHistory && selectedActionIndex !== null && selectedActionIndex < actionHistory.length"
               class="debug-btn small rewind-btn"
               :disabled="rewindLoading"
-              @click="rewindToAction(selectedActionIndex)"
+              @click="requestRewind(selectedActionIndex)"
               title="Permanently rewind game to this action"
             >
               {{ rewindLoading ? 'Rewinding...' : 'Rewind Here' }}
             </button>
+          </div>
+          <!-- Rewind confirmation. In-panel, NOT window.confirm — see
+               `pendingRewindIndex` for the three ways the native dialog broke
+               this control (page freeze, silent no-op inside the platform
+               iframe, and Chrome's suppress-dialogs box). -->
+          <div
+            v-if="pendingRewindIndex !== null"
+            class="debug-dialog-overlay"
+            @click.self="cancelRewind"
+          >
+            <div class="debug-dialog" role="dialog" aria-modal="true" aria-labelledby="rewind-confirm-title">
+              <div class="debug-dialog-header">
+                <span id="rewind-confirm-title">Rewind to action {{ pendingRewindIndex }}?</span>
+                <button class="close-btn" @click="cancelRewind" aria-label="Cancel rewind">
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+              <div class="debug-dialog-body">
+                <p>
+                  This permanently discards
+                  {{ pendingRewindDiscardCount }}
+                  action{{ pendingRewindDiscardCount === 1 ? '' : 's' }} and cannot be undone.
+                </p>
+              </div>
+              <div class="debug-dialog-footer">
+                <button class="debug-btn" @click="cancelRewind">Cancel</button>
+                <button class="debug-btn primary" :disabled="rewindLoading" @click="confirmRewind">
+                  {{ rewindLoading ? 'Rewinding...' : 'Rewind' }}
+                </button>
+              </div>
+            </div>
           </div>
           <div v-if="rewindError" class="rewind-error">
             {{ rewindError }}
@@ -3826,7 +3896,7 @@ const displayedState = computed(() => {
 }
 
 /* Transfer dialog */
-.transfer-dialog-overlay {
+.debug-dialog-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -3839,7 +3909,7 @@ const displayedState = computed(() => {
   z-index: 1000;
 }
 
-.transfer-dialog {
+.debug-dialog {
   background: var(--bsg-surface);
   border: 1px solid var(--bsg-line);
   border-radius: 8px;
@@ -3848,7 +3918,7 @@ const displayedState = computed(() => {
   box-shadow: var(--bsg-shadow);
 }
 
-.transfer-dialog-header {
+.debug-dialog-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -3858,7 +3928,7 @@ const displayedState = computed(() => {
   color: var(--bsg-ink);
 }
 
-.transfer-dialog-header .close-btn {
+.debug-dialog-header .close-btn {
   background: none;
   border: none;
   color: var(--bsg-ink-2);
@@ -3872,29 +3942,37 @@ const displayedState = computed(() => {
   justify-content: center;
 }
 
-.transfer-dialog-header .close-btn:hover {
+.debug-dialog-header .close-btn:hover {
   color: var(--bsg-ink);
 }
 
-.transfer-dialog-body {
+.debug-dialog-body {
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.transfer-dialog-body .form-group {
+/* Confirmation copy (the rewind dialog): the body's own gap does the spacing. */
+.debug-dialog-body p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--bsg-ink);
+}
+
+.debug-dialog-body .form-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.transfer-dialog-body label {
+.debug-dialog-body label {
   color: var(--bsg-ink-2);
   font-size: 12px;
 }
 
-.transfer-dialog-body select {
+.debug-dialog-body select {
   background: var(--bsg-surface-3);
   border: 1px solid var(--bsg-line);
   border-radius: 4px;
@@ -3903,17 +3981,17 @@ const displayedState = computed(() => {
   font-size: 13px;
 }
 
-.transfer-dialog-body select:focus {
+.debug-dialog-body select:focus {
   outline: none;
   border-color: var(--bsg-accent-2);
 }
 
-.transfer-dialog-body .radio-group {
+.debug-dialog-body .radio-group {
   display: flex;
   gap: 16px;
 }
 
-.transfer-dialog-body .radio-group label {
+.debug-dialog-body .radio-group label {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3921,11 +3999,11 @@ const displayedState = computed(() => {
   color: var(--bsg-ink-2);
 }
 
-.transfer-dialog-body .radio-group input[type="radio"] {
+.debug-dialog-body .radio-group input[type="radio"] {
   accent-color: var(--bsg-accent-2);
 }
 
-.transfer-dialog-footer {
+.debug-dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;

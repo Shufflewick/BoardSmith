@@ -43,3 +43,6 @@ Vector Cards (Version 3.2)
 
 # Agent scratch (never commit)
 /scratchpad/
+
+# Git worktrees (per-branch checkouts; never part of a commit)
+/.worktrees/

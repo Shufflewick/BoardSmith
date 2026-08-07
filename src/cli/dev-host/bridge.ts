@@ -258,6 +258,9 @@ export function shapeResult(
         errorCode: result.errorCode,
         followUp: result.followUp,
         warnings: result.warnings,
+        // The acting seat's return value from execute() (BUG-017/BUG-012).
+        data: result.data,
+        message: result.message,
       };
     case 'resolve_choices':
       return result as unknown as Record<string, unknown>;
@@ -270,6 +273,9 @@ export function shapeResult(
         actionComplete: result.actionComplete,
         followUp: result.followUp,
         warnings: result.warnings,
+        // Present only on the step that completes the action (BUG-017/BUG-012).
+        data: result.data,
+        message: result.message,
       };
     case 'cancel_action':
     case 'undo':

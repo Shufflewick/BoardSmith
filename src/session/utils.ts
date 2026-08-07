@@ -6,6 +6,7 @@ import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game,
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
+import { describeCheckpointAbsence } from '../runtime/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 import type { ElementJSON } from '../engine/index.js';
@@ -362,10 +363,16 @@ export function computeUndoEligibility(
  * phase reason -- no file paths, line numbers, or stack traces (project hard
  * rule; T-155-03).
  */
-export class UndoRefusedError extends Error {
-  readonly reason: 'non-undoable' | 'finished-phase' | 'execute-barrier';
+export type UndoRefusalReason =
+  | 'non-undoable'
+  | 'finished-phase'
+  | 'execute-barrier'
+  | 'random-fence';
 
-  constructor(message: string, reason: 'non-undoable' | 'finished-phase' | 'execute-barrier') {
+export class UndoRefusedError extends Error {
+  readonly reason: UndoRefusalReason;
+
+  constructor(message: string, reason: UndoRefusalReason) {
     super(message);
     this.name = 'UndoRefusedError';
     this.reason = reason;
@@ -381,7 +388,7 @@ export class UndoRefusedError extends Error {
  * and UNDO-02 (the `finished`-phase fence AND the durable execute()-barrier
  * fence).
  *
- * Three independent, composable checks (order does not matter -- Open
+ * Four independent, composable checks (order does not matter -- Open
  * Question 2, 155-RESEARCH.md -- each is O(1)/O(k) and evaluates against the
  * SAME inputs regardless of what ran before it):
  *  1. Phase fence: refuse up front once `game.isFinished()` (D-04) --
@@ -391,14 +398,31 @@ export class UndoRefusedError extends Error {
  *     for an entry recorded with `undoable === false`
  *     (`.notUndoable()` -> `action-builder.ts`) and refuse, naming the
  *     blocking action by name and index.
- *  3. Execute-barrier fence (155-02): refuse when
- *     `turnStartActionIndex < executeBarrierIndex` -- the target would
- *     rewind through a completed `execute()` flow node, silently discarding
- *     the irreversible side effect (scoring, dealing, revealing hidden
- *     info) it committed. `executeBarrierIndex` is `GameRunner`'s durable
+ *  3. Commitment fence (155-02): refuse when
+ *     `turnStartActionIndex < executeBarrierIndex` -- the target would rewind
+ *     through a completed `execute({ irreversible: true })` node, taking back
+ *     something a state restore cannot honestly take back (above all,
+ *     information a human has already seen: a dealt hand, a revealed role).
+ *     An ordinary bookkeeping `execute()` does NOT fence undo -- its effects
+ *     are state, and state restores. `executeBarrierIndex` is `GameRunner`'s durable
  *     replacement for the transient `frame.completed` flag (see
  *     `runner.ts`'s doc comments) -- callers pass `runner.executeBarrierIndex`
  *     directly; there is nothing else to compute.
+ *  4. Random fence (#18): opt-in per game via
+ *     `GameDefinition.undo: { fenceRandomRewind: true }` and passed here as
+ *     `fenceRandomRewind`. Refuse when the seeded RNG position at the target
+ *     checkpoint differs from the live one -- i.e. a random draw was consumed
+ *     inside the span being rewound. Undo already restores `randomState`, so
+ *     redoing the SAME action cannot re-roll; what scums is REORDERING (undo,
+ *     act differently first, then draw again on a different generator
+ *     position), which a private session with unlimited undo can repeat
+ *     unobserved. Off by default: it costs a cooperative game a legitimate
+ *     take-back, and only a competitive session needs it.
+ *
+ * Every argument is REQUIRED, including `fenceRandomRewind`. An optional
+ * fence is a fence a new call site forgets, and forgetting is silent -- the
+ * undo simply succeeds. Callers pass the runner itself rather than its parts,
+ * so there is nothing to recompute and nothing to mismatch.
  *
  * Throws {@link UndoRefusedError}; returns normally (void) when the undo/
  * rewind is allowed. This is the pit-of-success mechanic (D-02): a new call
@@ -407,12 +431,14 @@ export class UndoRefusedError extends Error {
  * could compute and then ignore.
  */
 export function assertUndoAllowed(args: {
-  game: Game;
+  runner: GameRunner;
   actionHistory: Array<{ player: number; undoable?: boolean; name?: string }>;
   turnStartActionIndex: number;
-  executeBarrierIndex: number;
+  fenceRandomRewind: boolean;
 }): void {
-  const { game, actionHistory, turnStartActionIndex, executeBarrierIndex } = args;
+  const { runner, actionHistory, turnStartActionIndex, fenceRandomRewind } = args;
+  const game = runner.game;
+  const executeBarrierIndex = runner.executeBarrierIndex;
 
   if (game.isFinished()) {
     throw new UndoRefusedError('Cannot undo: the game is finished.', 'finished-phase');
@@ -430,8 +456,40 @@ export function assertUndoAllowed(args: {
 
   if (turnStartActionIndex < executeBarrierIndex) {
     throw new UndoRefusedError(
-      `Cannot undo: an execute() step has already committed at action ${executeBarrierIndex}.`,
+      `Cannot undo past action ${executeBarrierIndex}: a step marked ` +
+      `execute({ irreversible: true }) has committed there. If that step only ` +
+      `changes game state (scoring, moving pieces, flow bookkeeping), drop the ` +
+      `flag — state is restored by undo, and marking it needlessly blocks undo ` +
+      `for the rest of the game.`,
       'execute-barrier',
+    );
+  }
+
+  if (!fenceRandomRewind) return;
+
+  const targetRandomState = runner.randomStateAt(turnStartActionIndex);
+  if (targetRandomState === undefined) {
+    // The CAUSE is not assumed here. A missing checkpoint is `pruned` (a
+    // `checkpoints: { max }` the author can raise) or `uncaptured` (above all
+    // `checkpoints: { enabled: false }`, which the epic mandates on resolver
+    // sessions — telling that author to raise `max` names a knob they never
+    // set). `describeCheckpointAbsence` already distinguishes them, so the
+    // fence asks it rather than hardcoding one.
+    throw new UndoRefusedError(
+      `Cannot undo to action ${turnStartActionIndex}: this game fences undo ` +
+      `across random draws, so it needs the retained checkpoint there to tell ` +
+      `whether a draw was consumed — but ` +
+      `${describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex)}`,
+      'random-fence',
+    );
+  }
+  if (targetRandomState !== game.getRandomState()) {
+    throw new UndoRefusedError(
+      `Cannot undo past action ${turnStartActionIndex}: a random draw was ` +
+      `consumed there, and this game fences undo across draws so a draw ` +
+      `cannot be re-rolled by undoing and acting in a different order. ` +
+      `Nothing is wrong with the move you made — the result is simply final.`,
+      'random-fence',
     );
   }
 }
@@ -576,6 +634,9 @@ export function buildPlayerState(
     messages: playerView.messages.length > 0 ? playerView.messages : undefined,
     // Unconditional, unlike turnStartActionIndex -- see PlayerGameState.actionCount doc.
     actionCount: runner.actionHistory.length,
+    // Unconditional for the same reason: a count, not content -- see
+    // PlayerGameState.restoreEpoch.
+    restoreEpoch: runner.restoreEpoch,
   };
 
   // Action metadata was built above (single-source reconciliation with
