@@ -4,6 +4,7 @@ import {
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
+import { parse as parseTypeScript } from '@typescript-eslint/parser';
 import { atomicWriteFile } from './verify-run.js';
 import {
   readLiveSlices,
@@ -68,6 +69,70 @@ export const GENERATED_TEST_SANDBOX_RULES = Object.freeze([
  */
 export function scanGeneratedTestCode(code: string, relPath: string): SandboxViolation[] {
   return scanSourceForSandboxViolations(code, relPath, GENERATED_TEST_SANDBOX_RULES);
+}
+
+// -------------------------------------------------------------------------------------------
+// The one legal shape of a translated snippet: a self-contained `it(...)`/`test(...)` block
+// -------------------------------------------------------------------------------------------
+
+/**
+ * B19: `renderExampleTestFile` renders a translated snippet VERBATIM into the chunk's
+ * `describe()` body. Bare statements there execute at collect time and register no test, so
+ * vitest reports `Error: No test found in suite` for a file whose assertions all "passed" — a run
+ * that is simultaneously green and empty. The emitter is a pure transport of the translator's
+ * bytes (it never wraps, so it can never double-wrap), which makes the self-contained
+ * `it(...)`/`test(...)` block the ONE shape that can work. This check is what makes that the
+ * contract instead of a hope: anything else is rejected before a byte is written, exactly like a
+ * malformed hoisted import (`collectHoistedImports`).
+ */
+type TestBlockCheck = { ok: true; count: number } | { ok: false; problem: string };
+
+/** Minimal structural view of the parser's AST — this module reads shape, never types. */
+type TSESTreeNode = {
+  type: string;
+  [key: string]: unknown;
+};
+
+/**
+ * The root identifier a (possibly chained/curried) call expression is ultimately calling:
+ * `it(...)` → `it`, `it.each([...])(...)` → `it`, `foo.bar()` → `foo`. Returns null for anything
+ * whose callee is not rooted in a plain identifier.
+ */
+function rootCalleeName(expression: TSESTreeNode): string | null {
+  let node: TSESTreeNode = expression;
+  while (node.type === 'CallExpression') node = node.callee as TSESTreeNode;
+  while (node.type === 'MemberExpression') node = node.object as TSESTreeNode;
+  return node.type === 'Identifier' ? (node as { name: string }).name : null;
+}
+
+/**
+ * Counts the top-level `it(...)`/`test(...)` blocks in ONE translated snippet, or names why it
+ * has none. Parses with the same TypeScript parser the sandbox scan uses, so a snippet that does
+ * not parse is caught here rather than becoming an unrunnable generated file.
+ */
+function checkTopLevelTestBlock(code: string): TestBlockCheck {
+  let ast: { body: TSESTreeNode[] };
+  try {
+    ast = parseTypeScript(code, { ecmaVersion: 'latest', sourceType: 'module' }) as unknown as {
+      body: TSESTreeNode[];
+    };
+  } catch (err) {
+    return { ok: false, problem: `it does not parse as TypeScript (${(err as Error).message})` };
+  }
+
+  let count = 0;
+  for (const statement of ast.body) {
+    if (statement.type !== 'ExpressionStatement') continue;
+    const expression = statement.expression as TSESTreeNode;
+    if (expression.type !== 'CallExpression') continue;
+    const name = rootCalleeName(expression);
+    if (name === 'it' || name === 'test') count += 1;
+  }
+
+  if (count === 0) {
+    return { ok: false, problem: 'it declares no top-level `it(...)` or `test(...)` block' };
+  }
+  return { ok: true, count };
 }
 
 // -------------------------------------------------------------------------------------------
@@ -171,6 +236,14 @@ export interface VerifyExampleEmitResult {
   relTestFilePath: string;
   /** Records with verdict `agrees`/`disagrees` — emitted as real, runnable tests. */
   emittedCount: number;
+  /**
+   * How many `it(...)`/`test(...)` blocks the emitted FILE actually declares — i.e. what vitest
+   * will collect when it runs it. `emittedCount` counts ledger records, which is a different
+   * question (B19: an emission once reported "1 test(s)" for a file vitest collected zero tests
+   * from). This is the number the success message prints, so the number a reader sees is a claim
+   * about the file, not about the ledger.
+   */
+  testBlockCount: number;
   /** Records with verdict `unexecutable`/`example-inconsistent` — a named-reason comment, never a
    * test. */
   exemptCount: number;
@@ -313,7 +386,8 @@ function renderExampleTestFile(input: {
  * 4. For every executable record, requires a matching `--translated` entry (keyed by
  *    `workedExampleId`, never by prose) and scans its code via `scanGeneratedTestCode` — a
  *    violation of `GENERATED_TEST_SANDBOX_RULES` anywhere REJECTS THE WHOLE EMISSION (validate-
- *    everything-then-write; nothing is written).
+ *    everything-then-write; nothing is written), as does a snippet that declares no top-level
+ *    `it(...)`/`test(...)` block of its own (`checkTopLevelTestBlock` — B19).
  * 5. Composes the one file deterministically (slices/examples sorted by slicePath+lineNumber) and
  *    writes it via `atomicWriteFile` — the ONLY write this command performs. Re-running for the
  *    same chunk with the same ledger/`--translated` input reproduces byte-identical output;
@@ -422,6 +496,7 @@ export async function verifyExampleEmitCommand(
   // composing or writing anything. A single violation rejects the whole emission.
   const testFilePath = generatedTestFilePath(projectDir, chunkSlug);
   const relTestFilePath = relative(projectDir, testFilePath);
+  let testBlockCount = 0;
   for (const record of executable) {
     const entry = codeByExampleId.get(record.exampleId)!;
     const scanned = [...(entry.imports ?? []), entry.code].join('\n');
@@ -434,6 +509,23 @@ export async function verifyExampleEmitCommand(
           `snippet (imports+code): ${v.message}\nRe-dispatch the translator; writing nothing.`,
       );
     }
+
+    // B19: the snippet is rendered verbatim into the chunk's describe() body, so a snippet that
+    // declares no test of its own produces a suite vitest refuses to collect ("No test found in
+    // suite") while every assertion in it still runs and "passes".
+    const shape = checkTopLevelTestBlock(entry.code);
+    if (!shape.ok) {
+      throw new Error(
+        `Translated test code for ${record.slicePath}:${record.lineNumber} (id ` +
+          `"${record.exampleId}") is not a self-contained test: ${shape.problem}.\n` +
+          `The emitter renders your code verbatim inside this chunk's describe() block and never ` +
+          `wraps it, so bare statements would run at collect time and register no test — vitest ` +
+          `reports "No test found in suite" for a file whose assertions all passed. Return the ` +
+          `whole example inside a single self-contained it('...', () => { ... }) block.\n` +
+          `Re-dispatch the translator; writing nothing.`,
+      );
+    }
+    testBlockCount += shape.count;
   }
 
   const fileText = renderExampleTestFile({
@@ -454,6 +546,10 @@ export async function verifyExampleEmitCommand(
     testFilePath,
     relTestFilePath,
     emittedCount: executable.length,
+    // The chunk-wide-exemption file (records.length === 0) is the one file whose single test the
+    // renderer writes itself — the named-exemption `it(...)` — rather than transporting it from a
+    // translated snippet.
+    testBlockCount: records.length === 0 ? 1 : testBlockCount,
     exemptCount: exempt.length,
     chunkExempt: records.length === 0,
     repairs,
@@ -466,7 +562,7 @@ export async function verifyExampleEmitCommand(
 
   console.log(
     chalk.green(
-      `✓ Emitted ${relTestFilePath} — ${result.emittedCount} test(s), ` +
+      `✓ Emitted ${relTestFilePath} — ${result.testBlockCount} test(s), ` +
         `${result.exemptCount} exempt example(s)${result.chunkExempt ? ' (chunk-wide exemption)' : ''}.`,
     ),
   );

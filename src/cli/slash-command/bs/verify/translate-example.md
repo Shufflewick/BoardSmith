@@ -154,10 +154,15 @@ Return exactly one object:
 }
 ```
 
-- `testCode` is the runnable test body (assumed to be composed under a `describe`/`it` the CLI
-  wraps around it, or a self-contained `it(...)` block — follow the target project's own idiom for
-  which shape you were shown as illustration in the payload). Leave it `''` only when
-  `verdictHint` is `"unexecutable"`.
+- `testCode` MUST be a self-contained `it('...', () => { ... })` block — one whole test, declared
+  by your own code. This is the only accepted shape. The CLI renders `testCode` verbatim inside
+  the chunk's `describe(...)` block and never wraps it, so bare statements would execute at
+  collect time and register no test at all: vitest then reports `No test found in suite` for a
+  file whose assertions every one of them "passed". **An emission whose `testCode` declares no
+  top-level `it(...)`/`test(...)` is REJECTED outright, naming your example's
+  `slicePath:lineNumber`, and nothing is written** — the same treatment a malformed `imports`
+  entry gets. Follow the target project's own `it(...)` idiom as shown in the payload. Leave
+  `testCode` `''` only when `verdictHint` is `"unexecutable"`.
 - `imports` are the import statements the code needs, kept separate from `testCode` so the emitter
   can compose them predictably rather than parsing them back out of a code string.
 - **`verdictHint` is advisory only. The actual `agrees`/`disagrees` verdict this pipeline records
