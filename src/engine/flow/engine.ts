@@ -819,7 +819,9 @@ export class FlowEngine<G extends Game = Game> {
       state.actionError = this.actionError;
     }
 
-    // Include followUp if last action returned one
+    // Include followUp if last action returned one. NOTE: the sibling fields
+    // `data`/`message` are deliberately NOT published here — see the note on
+    // FlowState (BUG-017); they would fan out to every seat.
     if (this.lastActionResult?.followUp) {
       state.followUp = this.lastActionResult.followUp;
     }
@@ -1053,6 +1055,25 @@ export class FlowEngine<G extends Game = Game> {
    */
   isComplete(): boolean {
     return this.complete;
+  }
+
+  /**
+   * The `ActionResult` the most recent action's `execute()` returned, verbatim.
+   *
+   * This is the ONLY way `ActionResult.data` — an action's computed return
+   * value to the seat that took it (a map recall, a scout report, a peek at a
+   * deck) — reaches anything above the flow engine (BUG-017). `FlowState`
+   * cannot carry it: that object is fanned out to every seat and the
+   * spectator, and `data` is private to the acting seat by construction.
+   *
+   * Per-action and non-durable: replaced by the next action, cleared by
+   * `start()`, and NOT reconstructed by `restoreFullState` (a restored
+   * snapshot has no "last action" of its own). Read it immediately after the
+   * `continueFlow`/`resume` call that produced it — `GameRunner.performAction`
+   * is the one place that does.
+   */
+  getLastActionResult(): ActionResult | undefined {
+    return this.lastActionResult;
   }
 
   /**

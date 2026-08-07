@@ -50,7 +50,19 @@ export interface PickStepResult {
     error?: string;
     flowState?: FlowState;
     state?: PlayerGameState;
+    /**
+     * `ActionResult.data` from the completed multi-step action (BUG-017), so a
+     * pick-driven action returns its computed value exactly like a single-step
+     * one does.
+     */
+    data?: Record<string, unknown>;
+    /** `ActionResult.message` from the completed multi-step action (BUG-012). */
+    message?: string;
   };
+  /** Mirrors `actionResult.data`, hoisted for callers that read the step result directly. */
+  data?: Record<string, unknown>;
+  /** Mirrors `actionResult.message`, hoisted for callers that read the step result directly. */
+  message?: string;
   state?: PlayerGameState;
   followUp?: FollowUpAction;
   /**
@@ -362,9 +374,15 @@ export class PendingActionManager<G extends Game = Game> {
         error: actionResult.error,
         flowState,
         state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
+        data: actionResult.data,
+        message: actionResult.message,
       },
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
       followUp: flowState?.followUp,
+      // Hoisted beside followUp so a multi-step action's return value reaches
+      // the ops layer on the same footing as a single-step one (BUG-017).
+      data: actionResult.data,
+      message: actionResult.message,
     };
   }
 }

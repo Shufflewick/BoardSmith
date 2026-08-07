@@ -312,6 +312,14 @@ export interface FlowState {
    * with the provided args pre-filled.
    */
   followUp?: FollowUpAction;
+  // NOTE (BUG-017): `ActionResult.data`/`.message` deliberately do NOT live
+  // here, even though `followUp` does. `FlowState` fans out: `stateless-ops`'s
+  // `buildViews`/`buildSpectatorView` hand the whole object to EVERY seat and
+  // to the spectator. `data` is the acting seat's private return value (a map
+  // recall, a scout report), so a field on this interface would publish it to
+  // the whole table — the same leak that rules out `game.animate()` as a
+  // channel. It travels instead via `FlowEngine.getLastActionResult()`, read
+  // by `GameRunner.performAction` and returned only to that op's caller.
 }
 
 /**

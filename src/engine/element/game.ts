@@ -1989,6 +1989,16 @@ export class Game<
   }
 
   /**
+   * The `ActionResult` the most recent action's `execute()` returned, verbatim
+   * — including `data`, an action's private return value to the seat that took
+   * it (BUG-017). Deliberately kept off `FlowState`, which fans out to every
+   * seat; see `FlowEngine.getLastActionResult()` for the lifetime rules.
+   */
+  getLastActionResult(): ActionResult | undefined {
+    return this._flowEngine?.getLastActionResult();
+  }
+
+  /**
    * Read the live `FlowEngine`'s monotonic count of completed IRREVERSIBLE
    * `execute()` nodes -- those declared `{ irreversible: true }` (UNDO-02,
    * 155-02). Ordinary bookkeeping `execute()` nodes never advance it. `0` when

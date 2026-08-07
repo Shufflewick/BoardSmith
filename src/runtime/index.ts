@@ -25,6 +25,7 @@ export {
   type GameRunnerOptions,
   type CheckpointPolicy,
   type ActionExecutionResult,
+  type PendingStepResult,
 } from './runner.js';
 
 // Serialized action type (used by callers that invoke GameRunner.replay)
