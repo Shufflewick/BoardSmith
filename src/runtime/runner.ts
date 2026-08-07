@@ -25,16 +25,19 @@ import {
   type ActionDefinition,
   type CheckpointPolicy,
   type UndoPolicy,
+  type RandomnessPolicy,
 } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
 
 /**
- * Re-exported so `boardsmith/runtime` keeps naming the policy type alongside
- * `GameRunnerOptions`. Its single definition lives in the engine
- * (`engine/utils/snapshot.ts`) so a published bundle can name it from the two
- * modules it is allowed to import — `boardsmith` and `boardsmith/session`.
+ * Re-exported so `boardsmith/runtime` keeps naming these policy types alongside
+ * `GameRunnerOptions`. Their single definitions live in the engine
+ * (`engine/utils/snapshot.ts`, and `engine/element/game.ts` for
+ * `RandomnessPolicy`, which is also a `GameOptions` field) so a published
+ * bundle can name them from the two modules it is allowed to import —
+ * `boardsmith` and `boardsmith/session`.
  */
-export type { CheckpointPolicy, UndoPolicy };
+export type { CheckpointPolicy, UndoPolicy, RandomnessPolicy };
 
 /**
  * Options for creating a game runner
@@ -73,12 +76,6 @@ export interface GameRunnerOptions<G extends Game> {
    */
   undo?: UndoPolicy;
 }
-
-/**
- * Whether a session may consume randomness. See
- * {@link GameRunnerOptions.randomness}.
- */
-export type RandomnessPolicy = 'allowed' | 'forbidden';
 
 /**
  * Result of performing an action through the runner
@@ -255,15 +252,23 @@ export class GameRunner<G extends Game = Game> {
       );
     }
 
-    this.game = new options.GameClass(options.gameOptions);
-
     // Order-entry / intent-capture sessions consume no randomness at all, and
     // the engine enforces that rather than trusting the game to avoid drawing:
-    // one cosmetic shuffle silently reopens RNG scumming. Applied here, in the
-    // single constructor every restore path funnels through, so a draw is
-    // impossible from the game's first instruction — including anything setup
-    // does before `start()` returns.
-    if (options.randomness === 'forbidden') this.game.forbidRandomness();
+    // one cosmetic shuffle silently reopens RNG scumming.
+    //
+    // Threaded through the game's own CONSTRUCTOR options — not applied to the
+    // instance afterwards — because `Game`'s constructor runs before the
+    // subclass's body, and games really do draw there (cribbage picks its
+    // dealer with `this.random()` in the constructor; sotf derives its map seed
+    // the same way). Forbidding after `new GameClass(...)` returned would let
+    // every one of those draws through in silence. This is the single
+    // constructor every runner path funnels through, so a draw is impossible
+    // from the game's first instruction — including anything setup does before
+    // `start()` returns.
+    this.game = new options.GameClass({
+      ...options.gameOptions,
+      randomness: options.randomness,
+    });
 
     // Capture the effective seed: use the passed seed when supplied, or read
     // back the auto-generated seed from the game's constructor options so an
@@ -377,8 +382,14 @@ export class GameRunner<G extends Game = Game> {
     return checkpointAt(this.checkpointWindow(), actionIndex).checkpoint?.randomState;
   }
 
-  /** The retained checkpoint window, in the shape a snapshot carries it. */
-  private checkpointWindow(): ActionCheckpointWindow {
+  /**
+   * The retained checkpoint window, in the shape a snapshot carries it.
+   *
+   * Public because a caller that finds nothing at an action index must be able
+   * to ask `describeCheckpointAbsence` WHY — pruned by policy, or never
+   * captured because checkpointing is off — rather than assert a cause.
+   */
+  checkpointWindow(): ActionCheckpointWindow {
     return { baseIndex: this.checkpointBaseIndex, entries: [...this.actionCheckpoints] };
   }
 
@@ -1018,19 +1029,23 @@ export class GameRunner<G extends Game = Game> {
 }
 
 /**
- * Why a checkpoint restore at `actionIndex` failed, as an actionable sentence.
+ * Why there is no checkpoint at `actionIndex`, as an actionable sentence.
  *
  * `GameRunner.fromCheckpoint` returns `null` for two very different reasons,
  * and reporting them identically is what made the original problem so hard to
  * diagnose. `pruned` is a policy the game author chose and can change;
  * `uncaptured` means the snapshot was not produced by `getSnapshot` at all, or
  * this game has checkpointing disabled.
+ *
+ * Takes the WINDOW rather than the enclosing snapshot so the live runner
+ * (`GameRunner.checkpointWindow()`) can ask it too — the random fence in
+ * `assertUndoAllowed` runs before any restore is attempted and has no snapshot
+ * in hand, and it must not re-guess a cause this function already knows.
  */
 export function describeCheckpointAbsence(
-  snapshot: GameStateSnapshot,
+  window: ActionCheckpointWindow | undefined,
   actionIndex: number,
 ): string {
-  const window = snapshot.actionCheckpoints;
   const found = checkpointAt(window, actionIndex);
   if (found.checkpoint) return '';
   if (found.absence === 'pruned') {
@@ -1042,7 +1057,7 @@ export function describeCheckpointAbsence(
   }
   return (
     `no checkpoint was captured at action ${actionIndex} ` +
-    `(the snapshot carries ${checkpointCount(window)}). Either the snapshot was not produced by ` +
+    `(the retained window carries ${checkpointCount(window)}). Either the snapshot was not produced by ` +
     `GameRunner.getSnapshot, or this game sets \`checkpoints: { enabled: false }\`, which disables undo.`
   );
 }

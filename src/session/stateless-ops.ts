@@ -580,7 +580,7 @@ function handleUndo(
   if (!restored) {
     return errorResult(
       `Cannot undo to the start of this turn: ` +
-      `${describeCheckpointAbsence(snapshot, turnStartActionIndex)}`,
+      `${describeCheckpointAbsence(snapshot.actionCheckpoints, turnStartActionIndex)}`,
     );
   }
 

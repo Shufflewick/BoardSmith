@@ -781,12 +781,12 @@ describe('GameRunner', () => {
       // Below it: refused, and the message says the policy dropped it (not that
       // something is broken) and how to reach further back.
       expect(GameRunner.fromCheckpoint(snapshot, 2, LongGame)).toBeNull();
-      const why = describeCheckpointAbsence(snapshot, 2);
+      const why = describeCheckpointAbsence(snapshot.actionCheckpoints, 2);
       expect(why).toContain('older than');
       expect(why).toContain('checkpoints: { max }');
 
       // Above it: a different absence, with a different fix.
-      const never = describeCheckpointAbsence(snapshot, 999);
+      const never = describeCheckpointAbsence(snapshot.actionCheckpoints, 999);
       expect(never).toContain('no checkpoint was captured');
       expect(never).not.toContain('older than');
     });
@@ -809,7 +809,7 @@ describe('GameRunner', () => {
       const snapshot = playedRunner(8, { enabled: false }).getSnapshot();
       expect(snapshot.actionCheckpoints!.entries).toHaveLength(0);
       expect(GameRunner.fromCheckpoint(snapshot, 4, LongGame)).toBeNull();
-      expect(describeCheckpointAbsence(snapshot, 4)).toContain('enabled: false');
+      expect(describeCheckpointAbsence(snapshot.actionCheckpoints, 4)).toContain('enabled: false');
     });
 
     it('still advances the execute() barrier with checkpointing disabled', () => {

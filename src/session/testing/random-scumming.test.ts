@@ -35,6 +35,8 @@ import {
   unfencedScumDefinition,
   fencedPrunedScumDefinition,
   fencedSimulScumDefinition,
+  fencedUncheckpointedScumDefinition,
+  constructorDrawDefinition,
 } from './fixtures/random-scumming-fixture.js';
 
 type HostOptions = Parameters<typeof executeOp>[5];
@@ -155,6 +157,23 @@ describe('#18 undo random fence (GameDefinition.undo.fenceRandomRewind)', () => 
     expect(undo.error).toMatch(/checkpoints: \{ max \}/);
   });
 
+  it('names `enabled: false`, not the retention limit, when nothing is checkpointed', async () => {
+    // The two absences have different fixes, and the fence must not assert the
+    // wrong one: this author never set `checkpoints: { max }`, so telling them
+    // to raise it names a knob that does not exist in their game.
+    const s = statelessSession(fencedUncheckpointedScumDefinition, soloOptions);
+    expect((await s.send({ type: 'start' })).success).toBe(true);
+    await s.send({ type: 'action', actionName: 'move', player: 1, args: {} });
+
+    const undo = await s.send({ type: 'undo', player: 1 });
+    expect(undo.success).toBe(false);
+    // From the FENCE (it runs before any restore is attempted), carrying the
+    // absence cause `describeCheckpointAbsence` derived rather than a guess.
+    expect(undo.error).toMatch(/fences undo/);
+    expect(undo.error).toMatch(/enabled: false/);
+    expect(undo.error).not.toMatch(/Raise or remove/);
+  });
+
   it('fences a seat that drew inside its own run of a simultaneous step', async () => {
     const s = statelessSession(fencedSimulScumDefinition, { playerCount: 2, seed: 'simul' });
     expect((await s.send({ type: 'start' })).success).toBe(true);
@@ -258,6 +277,37 @@ describe("#18 order-entry sessions (hostOptions.randomness: 'forbidden')", () =>
     expect(ai.success).toBe(false);
     expect(ai.error).toMatch(/order-entry session/);
     expect(ai.error).toMatch(/randomness/);
+  });
+
+  it('refuses a draw made in the GAME CONSTRUCTOR, before start() returns', async () => {
+    // The gap a post-construction switch leaves open: a subclass constructor
+    // body runs after `Game`'s, so forbidding randomness on the instance after
+    // `new GameClass(...)` returned misses every setup draw. Real games draw
+    // exactly there (dealer pick, map seed). Without this, an order-entry
+    // `start` would succeed and its setup would be silently re-rollable by
+    // abandoning the session and creating a new one.
+    const s = statelessSession(constructorDrawDefinition, soloOptions, forbidden);
+
+    const started = await s.send({ type: 'start' });
+    expect(started.success).toBe(false);
+    expect(started.error).toMatch(/order-entry/);
+    expect(started.error).toMatch(/resolution session/);
+    expect(s.snapshot).toBeNull();
+  });
+
+  it('CONTROL — that same constructor draw re-rolls per session when allowed', async () => {
+    // The channel the refusal above closes, demonstrated: three sessions, three
+    // seeds, three different setups. If this ever stops holding, the test above
+    // stops being evidence that anything was closed.
+    const rolls = await Promise.all(
+      ['seed-a', 'seed-b', 'seed-c'].map(async (seed) => {
+        const s = statelessSession(constructorDrawDefinition, { playerCount: 1, seed });
+        expect((await s.send({ type: 'start' })).success).toBe(true);
+        return attributesOf(s.snapshot).setupRoll as number;
+      }),
+    );
+
+    expect(new Set(rolls).size).toBe(3);
   });
 
   it('a game bundle cannot smuggle its own randomness policy past the host', async () => {

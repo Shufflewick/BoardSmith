@@ -137,7 +137,7 @@ export class StateHistory<G extends Game = Game> {
       return {
         success: false,
         error: `Cannot view state at action index ${actionIndex}: ` +
-          `${describeCheckpointAbsence(snapshot, actionIndex)} The session accumulates per-action ` +
+          `${describeCheckpointAbsence(snapshot.actionCheckpoints, actionIndex)} The session accumulates per-action ` +
           `checkpoints as it runs; a session cold-restored from action history alone cannot ` +
           `time-travel across pending mutations.`,
       };
@@ -330,7 +330,7 @@ export class StateHistory<G extends Game = Game> {
         return {
           success: false,
           error: `Cannot undo to the start of this turn: ` +
-            `${describeCheckpointAbsence(snapshot, turnStartActionIndex)} The session accumulates ` +
+            `${describeCheckpointAbsence(snapshot.actionCheckpoints, turnStartActionIndex)} The session accumulates ` +
             `per-action checkpoints as it runs; a session cold-restored from action history alone ` +
             `cannot undo across pending mutations.`,
           errorCode: ErrorCode.NO_ACTIONS_TO_UNDO,
@@ -425,7 +425,7 @@ export class StateHistory<G extends Game = Game> {
         return {
           success: false,
           error: `Cannot rewind to action index ${targetActionIndex}: ` +
-            `${describeCheckpointAbsence(snapshot, targetActionIndex)} The session accumulates ` +
+            `${describeCheckpointAbsence(snapshot.actionCheckpoints, targetActionIndex)} The session accumulates ` +
             `per-action checkpoints as it runs; a session cold-restored from action history alone ` +
             `cannot rewind across pending mutations.`,
         };

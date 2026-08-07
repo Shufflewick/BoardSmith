@@ -41,6 +41,7 @@ export type {
   ElementAttributes,
   Sorter,
   GameOptions,
+  RandomnessPolicy,
   GamePhase,
   PlayerViewFunction,
   ElementLayout,

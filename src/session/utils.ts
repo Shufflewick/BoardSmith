@@ -6,6 +6,7 @@ import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game,
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
+import { describeCheckpointAbsence } from '../runtime/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 import type { ElementJSON } from '../engine/index.js';
@@ -468,12 +469,17 @@ export function assertUndoAllowed(args: {
 
   const targetRandomState = runner.randomStateAt(turnStartActionIndex);
   if (targetRandomState === undefined) {
+    // The CAUSE is not assumed here. A missing checkpoint is `pruned` (a
+    // `checkpoints: { max }` the author can raise) or `uncaptured` (above all
+    // `checkpoints: { enabled: false }`, which the epic mandates on resolver
+    // sessions — telling that author to raise `max` names a knob they never
+    // set). `describeCheckpointAbsence` already distinguishes them, so the
+    // fence asks it rather than hardcoding one.
     throw new UndoRefusedError(
       `Cannot undo to action ${turnStartActionIndex}: this game fences undo ` +
-      `across random draws, and no retained checkpoint records the random ` +
-      `state there, so whether a draw was consumed cannot be established. ` +
-      `Raise or remove \`checkpoints: { max }\` on the game definition so the ` +
-      `undo window reaches back at least one full turn.`,
+      `across random draws, so it needs the retained checkpoint there to tell ` +
+      `whether a draw was consumed — but ` +
+      `${describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex)}`,
       'random-fence',
     );
   }

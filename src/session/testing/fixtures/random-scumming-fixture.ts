@@ -34,8 +34,16 @@
  * because a shared random stream must not be rewound underneath the seats that
  * already saw it.
  *
- * Nothing in either game draws during construction or setup, so an order-entry
- * session can `start` cleanly and only the drawing ACTIONS fail.
+ * Neither of those two games draws during construction or setup, so an
+ * order-entry session can `start` cleanly and only the drawing ACTIONS fail.
+ *
+ * `ConstructorDrawGame` is the deliberate opposite, and it is not a synthetic
+ * shape: real games draw in the constructor (BoardSmithGames' cribbage picks
+ * its dealer with `this.random()` there; sotf derives its map seed the same
+ * way). A subclass constructor body runs AFTER `Game`'s, so this is the game
+ * that catches a `randomness: 'forbidden'` implementation which only forbids
+ * drawing once construction has already returned — the version that would let
+ * a whole session's setup roll freely and re-roll on every new session.
  */
 
 import {
@@ -152,7 +160,44 @@ class SimulScumGame extends Game<SimulScumGame, Player> {
   }
 }
 
-export { ScumGame, SimulScumGame };
+/**
+ * Draws in its CONSTRUCTOR — the shape a post-construction switch misses.
+ * `setupRoll` is the drawn value, so a test can also show that three separate
+ * sessions on three different seeds produce three different setups: exactly the
+ * re-rollable channel an order-entry session is supposed to have closed.
+ */
+class ConstructorDrawGame extends Game<ConstructorDrawGame, Player> {
+  /** Drawn in the constructor, like a dealer pick or a map seed. */
+  setupRoll = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.setupRoll = Math.floor(this.random() * 1_000_000) + 1;
+
+    this.registerAction(
+      Action.create('note').execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          maxIterations: 1000,
+          while: (ctx) => !ctx.game.isFinished(),
+          do: sequence(
+            actionStep({
+              actions: ['note'],
+              player: (ctx) => ctx.game.getPlayer(1)!,
+              repeatUntil: () => false,
+            }),
+          ),
+        }),
+      }),
+    );
+  }
+}
+
+export { ScumGame, SimulScumGame, ConstructorDrawGame };
 
 /** Competitive: a draw, once made, is final. */
 export const fencedScumDefinition: GameDefinitionLike = {
@@ -195,4 +240,30 @@ export const fencedSimulScumDefinition: GameDefinitionLike = {
   minPlayers: 2,
   maxPlayers: 2,
   undo: { fenceRandomRewind: true },
+};
+
+/**
+ * A game whose only randomness is in its constructor. No `undo` policy — the
+ * fence has nothing to say about setup; only the order-entry policy does.
+ */
+export const constructorDrawDefinition: GameDefinitionLike = {
+  gameClass: ConstructorDrawGame as new (...args: unknown[]) => unknown,
+  gameType: 'scum-constructor-draw',
+  minPlayers: 1,
+  maxPlayers: 1,
+};
+
+/**
+ * Fenced AND with checkpointing off entirely — the pairing the epic mandates on
+ * a resolver session (`checkpoints: { enabled: false }`, #11/#14). The fence
+ * still cannot establish whether a draw happened, but the FIX is a different
+ * one from a too-short window, and the refusal has to say so.
+ */
+export const fencedUncheckpointedScumDefinition: GameDefinitionLike = {
+  gameClass: ScumGame as new (...args: unknown[]) => unknown,
+  gameType: 'scum-fenced-uncheckpointed',
+  minPlayers: 1,
+  maxPlayers: 1,
+  undo: { fenceRandomRewind: true },
+  checkpoints: { enabled: false },
 };
