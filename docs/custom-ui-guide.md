@@ -874,6 +874,14 @@ ancestor GameShell sizes to the visible viewport) and pins your board root to
 the region's available width, so wrapping works and growth is
 vertical-scroll only. It re-measures on region resize and window resize.
 
+Calling it also tells GameShell which model your board is in, so the startup
+zoom-fit stops fitting your board's **height**: a pinned board that grows
+taller than the region scrolls — it is never scaled down to avoid that
+scrollbar (which would shrink every glyph on the board below its declared
+size). Width is still fitted, but since the board *is* the region's width,
+that lands at 100% in the normal case. You do not wire this up; calling
+`useBoardSize()` is the whole opt-in.
+
 ```vue
 <script setup>
 import { ref } from 'vue';
@@ -892,8 +900,8 @@ Pick the model that matches your board:
 
 | Board type | Example | Sizing |
 |---|---|---|
-| Fixed intrinsic size | grid, hex map | Nothing — max-content + auto-zoom fits it |
-| Content-driven width | card hands, wrapping rows | `useBoardSize()` on the board root |
+| Fixed intrinsic size | grid, hex map | Nothing — max-content + auto-zoom fits it (both axes) |
+| Content-driven width | card hands, wrapping rows | `useBoardSize()` on the board root (width-fit only; grows by scrolling) |
 
 Do not use `useBoardSize()` on a fixed-intrinsic board: pinning it to the
 region accomplishes nothing (its natural size doesn't change), and the
