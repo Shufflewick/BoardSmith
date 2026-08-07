@@ -391,11 +391,13 @@ export class UndoRefusedError extends Error {
  *     for an entry recorded with `undoable === false`
  *     (`.notUndoable()` -> `action-builder.ts`) and refuse, naming the
  *     blocking action by name and index.
- *  3. Execute-barrier fence (155-02): refuse when
- *     `turnStartActionIndex < executeBarrierIndex` -- the target would
- *     rewind through a completed `execute()` flow node, silently discarding
- *     the irreversible side effect (scoring, dealing, revealing hidden
- *     info) it committed. `executeBarrierIndex` is `GameRunner`'s durable
+ *  3. Commitment fence (155-02): refuse when
+ *     `turnStartActionIndex < executeBarrierIndex` -- the target would rewind
+ *     through a completed `execute({ irreversible: true })` node, taking back
+ *     something a state restore cannot honestly take back (above all,
+ *     information a human has already seen: a dealt hand, a revealed role).
+ *     An ordinary bookkeeping `execute()` does NOT fence undo -- its effects
+ *     are state, and state restores. `executeBarrierIndex` is `GameRunner`'s durable
  *     replacement for the transient `frame.completed` flag (see
  *     `runner.ts`'s doc comments) -- callers pass `runner.executeBarrierIndex`
  *     directly; there is nothing else to compute.
@@ -430,7 +432,11 @@ export function assertUndoAllowed(args: {
 
   if (turnStartActionIndex < executeBarrierIndex) {
     throw new UndoRefusedError(
-      `Cannot undo: an execute() step has already committed at action ${executeBarrierIndex}.`,
+      `Cannot undo past action ${executeBarrierIndex}: a step marked ` +
+      `execute({ irreversible: true }) has committed there. If that step only ` +
+      `changes game state (scoring, moving pieces, flow bookkeeping), drop the ` +
+      `flag — state is restored by undo, and marking it needlessly blocks undo ` +
+      `for the rest of the game.`,
       'execute-barrier',
     );
   }

@@ -1,7 +1,7 @@
 {
-  "revision": 12,
+  "revision": 13,
   "bundleProtocol": 1,
-  "surfaceHash": "0e99b42ef64c4229",
+  "surfaceHash": "b543aaa74731df1e",
   "payloadHash": "7d7e5e0a4de161cb",
   "history": [
     {
@@ -99,6 +99,14 @@
       "surfaceHash": "0e99b42ef64c4229",
       "payloadHash": "7d7e5e0a4de161cb",
       "summary": "Actions gain .disabled(ctx) => string|false; Game.getTutorialDisabledActions renamed to getDisabledActions and now merges action-level disabled reasons with tutorial gate reasons; disabledActions is projected outside tutorials."
+    },
+    {
+      "revision": 13,
+      "date": "2026-08-07",
+      "bundleProtocol": 1,
+      "surfaceHash": "b543aaa74731df1e",
+      "payloadHash": "7d7e5e0a4de161cb",
+      "summary": "execute() flow nodes are undo-transparent by default; only execute(fn, { irreversible: true }) fences undo/rewind (Game.getExecuteNodeCompletions renamed to getIrreversibleCommitCount). PlayerGameState also gains restoreEpoch, a per-seat counter of checkpoint restores clients use to invalidate element ids held from the replaced runner."
     }
   ]
 }

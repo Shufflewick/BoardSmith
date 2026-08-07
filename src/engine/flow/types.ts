@@ -209,6 +209,29 @@ export interface IfConfig extends BaseFlowConfig {
 export interface ExecuteConfig extends BaseFlowConfig {
   /** Function to execute */
   fn: (context: FlowContext) => void;
+  /**
+   * Does this step COMMIT something an undo cannot honestly take back
+   * (UNDO-02)?
+   *
+   * `false`/absent (the default) — the step is undo-transparent. Anything it
+   * touches lives in the game state, and a checkpoint restore reproduces it
+   * exactly, so undo/rewind may cross it freely. This covers the overwhelmingly
+   * common case: flow bookkeeping (`ctx.set('turnComplete', true)`, resetting a
+   * per-turn flag), derived state, messages.
+   *
+   * `true` — undo and rewind are FENCED at this point: no restore may target an
+   * action before it. Mark a step irreversible when its effect escapes the state
+   * model, and the canonical case is INFORMATION REACHING A HUMAN — dealing or
+   * revealing hidden cards, showing a secret role. Restoring the tree un-deals
+   * the card; it cannot un-see it, so allowing the rewind would let a player
+   * learn what they should not know and then take it back.
+   *
+   * Choose by asking "if the engine restored the snapshot from just before this
+   * step, would anything be WRONG?" — not "is this step important". Scoring,
+   * drawing into a face-down deck, and moving pieces are all state, and state
+   * restores.
+   */
+  irreversible?: boolean;
 }
 
 /**

@@ -315,15 +315,19 @@ export class FlowEngine<G extends Game = Game> {
   /** Current action step config (for move limit tracking) */
   private currentActionConfig?: ActionStepConfig;
   /**
-   * Monotonic count of completed `execute()` flow nodes, incremented in
-   * `executeExecute` (UNDO-02, 155-02). Public so `GameRunner` can read it
-   * after every recorded action and detect an advance, but it is NOT itself
-   * the durable fence -- a fresh `FlowEngine` (built on every restore) zeroes
-   * this back to 0. `GameRunner.executeBarrierIndex` (the persisted action
-   * index at which the counter last advanced) is the durable fact; this
-   * counter only signals "did an execute() complete since I last checked".
+   * Monotonic count of completed IRREVERSIBLE `execute()` flow nodes --
+   * those declared `{ irreversible: true }` (UNDO-02, 155-02). An ordinary
+   * `execute()` is undo-transparent and does NOT advance this: its effects
+   * live in the game state, which a checkpoint restore reproduces exactly.
+   *
+   * Public so `GameRunner` can read it after every recorded action and detect
+   * an advance, but it is NOT itself the durable fence -- a fresh `FlowEngine`
+   * (built on every restore) zeroes this back to 0.
+   * `GameRunner.executeBarrierIndex` (the persisted action index at which the
+   * counter last advanced) is the durable fact; this counter only signals "did
+   * a commitment happen since I last checked".
    */
-  executeNodeCompletions = 0;
+  irreversibleCommitCount = 0;
 
   constructor(game: G, definition: FlowDefinition) {
     this.game = game;
@@ -1842,14 +1846,15 @@ export class FlowEngine<G extends Game = Game> {
     // Update variables in engine from context
     this.variables = { ...context.variables };
     frame.completed = true;
-    // UNDO-02: signal that an execute() node just committed an irreversible
-    // side effect. `GameRunner` reads this after every recorded action to
-    // set/advance its durable `executeBarrierIndex`. `frame.completed` above
-    // does NOT survive checkpoint restore (a fresh FlowEngine is built with a
-    // fresh stack), so it cannot be the fence on its own -- this counter
-    // exists only to be observed by the runner before that engine is
-    // discarded.
-    this.executeNodeCompletions++;
+    // UNDO-02: signal a COMMITMENT the author declared irreversible, so
+    // `GameRunner` can set/advance its durable `executeBarrierIndex` (it reads
+    // this after every recorded action). An ordinary bookkeeping `execute()`
+    // deliberately does not fence undo -- see `ExecuteConfig.irreversible`.
+    // `frame.completed` above does NOT survive checkpoint restore (a fresh
+    // FlowEngine is built with a fresh stack), so it cannot be the fence on its
+    // own -- this counter exists only to be observed by the runner before that
+    // engine is discarded.
+    if (config.irreversible) this.irreversibleCommitCount++;
     return { continue: true, awaitingInput: false };
   }
 

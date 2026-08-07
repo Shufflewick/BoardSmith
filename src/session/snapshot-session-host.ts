@@ -543,7 +543,14 @@ export class SnapshotSessionHost {
 
     await this.apply(res, seat);
     const actionCompleted = op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete);
-    if (!this.isComplete && actionCompleted) {
+    // A restore can land the game on an AI seat's turn, and nothing else will
+    // ever wake it: the pump is driven by ops, and the only op that would
+    // arrive is a human action the AI seat is not going to take. The table
+    // just sits there. (Undo alone never showed this — it rewinds to the
+    // requesting seat's own turn start, so the pump would find no due AI seat
+    // anyway. A rewind can target ANY point, which is what made it reachable.)
+    const restored = op.type === 'undo' || op.type === 'debugRewind';
+    if (!this.isComplete && (actionCompleted || restored)) {
       // Already inside the critical section — drive the pump directly rather
       // than re-entering enqueue (which would deadlock on our own opChain link).
       await this.runAITurnsInner();

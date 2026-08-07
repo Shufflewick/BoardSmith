@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../headless-session.js';
 import { GameSession } from '../game-session.js';
 import { executeBarrierFixtureDefinition, ExecuteBarrierGame } from './fixtures/execute-barrier-fixture.js';
+import { bookkeepingExecuteFixtureDefinition, BookkeepingExecuteGame } from './fixtures/bookkeeping-execute-fixture.js';
 import type { Op } from '../stateless-ops.js';
+import { ErrorCode } from '../../types/index.js';
 
 /**
  * UNDO-02 regression: an undo/rewind must not cross a completed `execute()`
@@ -158,5 +160,68 @@ describe('UNDO-02 execute-barrier (stateful)', () => {
 
     const rewind = await session.rewindToAction(0);
     expect(rewind.success).toBe(false);
+  });
+});
+
+/**
+ * The other half of the contract: an UNMARKED `execute()` fences NOTHING.
+ *
+ * Same flow shape as the fixture above, minus `{ irreversible: true }`. Both
+ * executors must let undo and rewind cross it, because everything the node
+ * touched is game state and the checkpoint restores state.
+ *
+ * This is the case the blanket fence got wrong. A bookkeeping node after an
+ * action step is the ordinary way to write a turn (Checkers' move loop), and
+ * while every `execute()` fenced undo, one such node parked the fence at the
+ * current action count every turn — so undo and debug rewind could never reach
+ * behind the current turn in almost any real game.
+ */
+describe('UNDO-02: a bookkeeping (unmarked) execute() does not fence undo', () => {
+  it('stateless: undo is never refused BY THE FENCE (only by its own scope rules)', async () => {
+    const session = createHeadlessSession(bookkeepingExecuteFixtureDefinition, gameOptions);
+    await session.start();
+
+    await playThroughToBarrierCrossingPoint((op) => session.send(1, op));
+
+    // Undo may still decline here for an unrelated, pre-existing reason: once
+    // both act2 moves land, the step auto-completes and `flowState.moveCount`
+    // stops being reported, which UNDO-03 treats as "no action step is active,
+    // so there is nothing in scope to undo". What must NEVER appear is the
+    // commitment refusal — an unmarked execute() commits nothing.
+    const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
+    expect(undo.error ?? '').not.toMatch(/irreversible/i);
+    expect(undo.errorCode).not.toBe(ErrorCode.UNDO_NOT_ALLOWED);
+  });
+
+  it('stateless: debugRewind targeting an index before it is allowed', async () => {
+    const session = createHeadlessSession(bookkeepingExecuteFixtureDefinition, gameOptions);
+    await session.start();
+
+    await playThroughToBarrierCrossingPoint((op) => session.send(1, op));
+
+    const rewind = await session.send(1, { type: 'debugRewind', actionIndex: 0 } as Op);
+    expect(rewind.success).toBe(true);
+  });
+
+  it('stateful: rewindToAction crosses it, and the state it wrote is restored', async () => {
+    const session = GameSession.create<BookkeepingExecuteGame>({
+      gameType: 'bookkeeping-execute',
+      GameClass: BookkeepingExecuteGame,
+      playerCount: 1,
+      playerNames: ['A'],
+      seed: 't',
+    });
+
+    await session.performAction('act1', 1, {});
+    await session.performAction('act2', 1, {});
+    await session.performAction('act2', 1, {});
+    // The bookkeeping node ran: the flag it wrote is live.
+    expect(session.runner.game.turnFlag).toBe(1);
+
+    const rewind = await session.rewindToAction(0);
+    expect(rewind.success).toBe(true);
+    // Rewinding BEHIND the node restores the state as it stood before it —
+    // which is exactly why crossing it is sound.
+    expect(session.runner.game.turnFlag).toBe(0);
   });
 });

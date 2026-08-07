@@ -111,8 +111,11 @@ export class GameRunner<G extends Game = Game> {
   private readonly checkpointPolicy_: Required<CheckpointPolicy>;
 
   /**
-   * The durable execute()-barrier fence (UNDO-02, 155-02): the action-history
-   * length at the moment the MOST RECENT `execute()` flow node completed.
+   * The durable commitment fence (UNDO-02, 155-02): the action-history length
+   * at the moment the MOST RECENT `execute({ irreversible: true })` flow node
+   * completed. An ordinary bookkeeping `execute()` never moves it -- its
+   * effects are game state, and a checkpoint restore reproduces them exactly,
+   * so undo may cross it freely (see `ExecuteConfig.irreversible`).
    * Read by the session layer's shared `assertUndoAllowed` guard
    * (`session/utils.ts`) to refuse an undo/rewind that would cross it.
    * Public (like `actionHistory`) rather than accessed via a getter -- there
@@ -140,8 +143,8 @@ export class GameRunner<G extends Game = Game> {
   restoreEpoch = 0;
 
   /**
-   * Last-observed value of `game.getExecuteNodeCompletions()` (the live
-   * `FlowEngine`'s monotonic execute() counter). Compared on every history
+   * Last-observed value of `game.getIrreversibleCommitCount()` (the live
+   * `FlowEngine`'s monotonic commitment counter). Compared on every history
    * append to detect an advance; NOT itself persisted -- a fresh `FlowEngine`
    * (built on every restore) always starts its own counter at 0, so this
    * field is explicitly re-baselined to the freshly-built engine's counter
@@ -149,13 +152,13 @@ export class GameRunner<G extends Game = Game> {
    * over. Re-baselining, not the counter's raw value, is what makes
    * `executeBarrierIndex` durable across a restore.
    */
-  private lastSeenExecuteNodeCompletions = 0;
+  private lastSeenIrreversibleCommits = 0;
 
   /**
-   * Compare the live flow engine's execute()-completion counter to the last
+   * Compare the live flow engine's irreversible-commitment counter to the last
    * seen value; if it advanced, extend `executeBarrierIndex` to the current
    * action-history length (the barrier is set AT the action count where the
-   * execute() node completed) and update the last-seen value. Idempotent to
+   * commitment completed) and update the last-seen value. Idempotent to
    * call repeatedly with no intervening advance -- a no-op once the counter
    * has already been observed.
    *
@@ -173,9 +176,9 @@ export class GameRunner<G extends Game = Game> {
    * observe whether an execute() node ran during this op.
    */
   private recordExecuteBarrierAdvance(): void {
-    const completions = this.game.getExecuteNodeCompletions();
-    if (completions !== this.lastSeenExecuteNodeCompletions) {
-      this.lastSeenExecuteNodeCompletions = completions;
+    const completions = this.game.getIrreversibleCommitCount();
+    if (completions !== this.lastSeenIrreversibleCommits) {
+      this.lastSeenIrreversibleCommits = completions;
       this.executeBarrierIndex = this.actionHistory.length;
     }
   }
@@ -825,7 +828,7 @@ export class GameRunner<G extends Game = Game> {
     // detect (or miss) an advance. This is what makes `executeBarrierIndex`
     // -- not the live counter -- the durable fact: every restore starts
     // observation fresh from the persisted number adopted above.
-    runner.lastSeenExecuteNodeCompletions = runner.game.getExecuteNodeCompletions();
+    runner.lastSeenIrreversibleCommits = runner.game.getIrreversibleCommitCount();
 
     return runner;
   }

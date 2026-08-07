@@ -1989,16 +1989,17 @@ export class Game<
   }
 
   /**
-   * Read the live `FlowEngine`'s monotonic count of completed `execute()`
-   * nodes (UNDO-02, 155-02). `0` when there is no active flow engine yet
-   * (matches the counter's own starting value). `GameRunner` is the only
-   * consumer -- it compares this against its own last-seen value after every
-   * recorded action to detect an advance and set/extend its durable
-   * `executeBarrierIndex`. This counter itself resets to 0 on every flow
-   * engine rebuild (restore); it is NOT durable on its own.
+   * Read the live `FlowEngine`'s monotonic count of completed IRREVERSIBLE
+   * `execute()` nodes -- those declared `{ irreversible: true }` (UNDO-02,
+   * 155-02). Ordinary bookkeeping `execute()` nodes never advance it. `0` when
+   * there is no active flow engine yet (matches the counter's own starting
+   * value). `GameRunner` is the only consumer -- it compares this against its
+   * own last-seen value after every recorded action to detect an advance and
+   * set/extend its durable `executeBarrierIndex`. This counter itself resets to
+   * 0 on every flow engine rebuild (restore); it is NOT durable on its own.
    */
-  getExecuteNodeCompletions(): number {
-    return this._flowEngine?.executeNodeCompletions ?? 0;
+  getIrreversibleCommitCount(): number {
+    return this._flowEngine?.irreversibleCommitCount ?? 0;
   }
 
   /**

@@ -495,11 +495,38 @@ export function noop(): FlowNode {
  *   actionStep({ actions: ['play'] })
  * )
  * ```
+ *
+ * ## Undo (UNDO-02)
+ *
+ * By default this step is UNDO-TRANSPARENT: undo and rewind may cross it,
+ * because everything it touches is game state and a checkpoint restore
+ * reproduces that state exactly.
+ *
+ * Pass `{ irreversible: true }` when the step commits something a restore
+ * cannot honestly take back — above all, information reaching a human (dealing
+ * or revealing hidden cards, showing a secret role). That FENCES undo/rewind:
+ * no restore may target an action before it.
+ *
+ * @example
+ * ```typescript
+ * // Bookkeeping — undo may cross it (the default).
+ * execute((ctx) => ctx.set('turnComplete', true))
+ *
+ * // The hand is now in a player's eyes. Undo must not reach behind this.
+ * execute((ctx) => ctx.game.deck.deal(ctx.game.players, 7), { irreversible: true })
+ * ```
+ *
+ * @param fn - The side effect to run
+ * @param options.irreversible - Fence undo/rewind at this point. Default false.
+ *   See {@link ExecuteConfig.irreversible} for how to decide.
  */
-export function execute(fn: (context: FlowContext) => void): FlowNode {
+export function execute(
+  fn: (context: FlowContext) => void,
+  options?: { irreversible?: boolean }
+): FlowNode {
   return {
     type: 'execute',
-    config: { fn },
+    config: { fn, ...(options?.irreversible ? { irreversible: true } : {}) },
   };
 }
 
