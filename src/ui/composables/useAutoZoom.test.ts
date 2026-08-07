@@ -31,17 +31,35 @@ import { computeFitZoom, useAutoZoom, ZOOM_MIN, ZOOM_MAX, SETTLE_MS } from './us
 describe('computeFitZoom (AZ-1)', () => {
   it('fits the constraining axis', () => {
     // Width would allow 2x, height only 1.5x → height constrains.
-    expect(computeFitZoom({ width: 500, height: 400 }, { width: 1000, height: 600 })).toBe(1.5);
+    expect(computeFitZoom({ width: 500, height: 400 }, { width: 1000, height: 600 }, 'both')).toBe(1.5);
   });
 
   it('clamps to the slider range', () => {
-    expect(computeFitZoom({ width: 100, height: 100 }, { width: 1000, height: 1000 })).toBe(ZOOM_MAX);
-    expect(computeFitZoom({ width: 4000, height: 4000 }, { width: 500, height: 500 })).toBe(ZOOM_MIN);
+    expect(computeFitZoom({ width: 100, height: 100 }, { width: 1000, height: 1000 }, 'both')).toBe(ZOOM_MAX);
+    expect(computeFitZoom({ width: 4000, height: 4000 }, { width: 500, height: 500 }, 'both')).toBe(ZOOM_MIN);
   });
 
   it('returns null for unmeasurable boxes (not laid out yet)', () => {
-    expect(computeFitZoom({ width: 0, height: 0 }, { width: 800, height: 600 })).toBeNull();
-    expect(computeFitZoom({ width: 500, height: 400 }, { width: 0, height: 0 })).toBeNull();
+    expect(computeFitZoom({ width: 0, height: 0 }, { width: 800, height: 600 }, 'both')).toBeNull();
+    expect(computeFitZoom({ width: 500, height: 400 }, { width: 0, height: 0 }, 'both')).toBeNull();
+  });
+
+  it("B20: 'width' ignores the height term entirely", () => {
+    // Same boxes as the constraining-axis case: height would force 1.5.
+    expect(computeFitZoom({ width: 500, height: 400 }, { width: 1000, height: 600 }, 'width')).toBe(2);
+    // A board far taller than the space still fits at 1 when its width matches.
+    expect(computeFitZoom({ width: 367, height: 4000 }, { width: 367, height: 600 }, 'width')).toBe(1);
+    // Genuine horizontal overflow is still fitted — that is the one case where
+    // scaling a pinned board down is correct.
+    expect(computeFitZoom({ width: 800, height: 100 }, { width: 400, height: 600 }, 'width')).toBe(0.5);
+  });
+
+  it("B20: 'width' still fits when the height boxes are unmeasurable", () => {
+    // A tall board under a taller-than-region Action Panel allowance yields a
+    // non-positive avail height; that must not suppress the width fit.
+    expect(computeFitZoom({ width: 400, height: 900 }, { width: 400, height: 0 }, 'width')).toBe(1);
+    // The width boxes are still required on both axis modes.
+    expect(computeFitZoom({ width: 0, height: 900 }, { width: 400, height: 600 }, 'width')).toBeNull();
   });
 });
 
