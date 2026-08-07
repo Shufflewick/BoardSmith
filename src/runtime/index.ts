@@ -24,6 +24,8 @@ export {
   describeCheckpointAbsence,
   type GameRunnerOptions,
   type CheckpointPolicy,
+  type UndoPolicy,
+  type RandomnessPolicy,
   type ActionExecutionResult,
 } from './runner.js';
 

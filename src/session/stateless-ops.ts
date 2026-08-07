@@ -20,6 +20,8 @@ import {
   type GameStateSnapshot,
   type GameRunnerOptions,
   type CheckpointPolicy,
+  type UndoPolicy,
+  type RandomnessPolicy,
 } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import { describeMoveForHint } from './move-summary.js';
@@ -210,7 +212,30 @@ export interface GameDefinitionLike {
    * everything (the default).
    */
   checkpoints?: CheckpointPolicy;
+  /**
+   * Optional undo policy — threaded into the shared `assertUndoAllowed` guard
+   * by `handleUndo`. Declared on the game definition (never carried in the
+   * snapshot) for the same reason as `checkpoints`: every stateless op rebuilds
+   * its runner, and a policy living in the snapshot could be dropped by any op
+   * that forgot to copy it forward. Absent: no random fence (the default).
+   */
+  undo?: UndoPolicy;
 }
+
+/**
+ * A game definition with this op's HOST session policy resolved onto it.
+ *
+ * `executeOp` builds one on every call and hands it to every handler, so the
+ * three runner-construction sites in this module (`handleStart`,
+ * `runnerFromSnapshot`, `runnerFromCheckpoint`) can read the policy without
+ * threading an extra parameter through twenty handler signatures — the kind of
+ * plumbing where one missed call site silently re-allows randomness.
+ *
+ * `randomness` is REQUIRED and is written unconditionally from `hostOptions`,
+ * so a published bundle cannot declare it (or smuggle a value through) — the
+ * host is the only authority on whether a session may draw.
+ */
+type RunnerDef = GameDefinitionLike & { readonly randomness: RandomnessPolicy };
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -310,7 +335,7 @@ function selectDueAISeat(
 // ---------------------------------------------------------------------------
 
 function handleStart(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   seedSnapshot?: GameStateSnapshot,
 ): OpResult {
@@ -339,6 +364,8 @@ function handleStart(
     gameType: def.gameType,
     gameOptions: effectiveOptions,
     checkpoints: def.checkpoints,
+    randomness: def.randomness,
+    undo: def.undo,
   } as GameRunnerOptions<never>);
 
   runner.start();
@@ -350,7 +377,7 @@ function handleStart(
 }
 
 function handleAction(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'action' }>,
@@ -396,7 +423,7 @@ function handleAction(
 }
 
 async function handleSelectionStep(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   pendingState: Record<string, unknown> | null,
@@ -441,7 +468,7 @@ async function handleSelectionStep(
 }
 
 function handleResolveChoices(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'resolveChoices' }>,
@@ -466,7 +493,7 @@ function handleResolveChoices(
 }
 
 function handleCancelAction(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   pendingState: Record<string, unknown> | null,
@@ -484,7 +511,7 @@ function handleCancelAction(
 }
 
 function handleUndo(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'undo' }>,
@@ -526,10 +553,10 @@ function handleUndo(
   // the client's `canUndo` flag is advisory only and must not be trusted.
   try {
     assertUndoAllowed({
-      game: runner.game,
+      runner,
       actionHistory: runner.actionHistory,
       turnStartActionIndex,
-      executeBarrierIndex: runner.executeBarrierIndex,
+      fenceRandomRewind: runner.undoPolicy.fenceRandomRewind,
     });
   } catch (err) {
     if (err instanceof UndoRefusedError) {
@@ -553,7 +580,7 @@ function handleUndo(
   if (!restored) {
     return errorResult(
       `Cannot undo to the start of this turn: ` +
-      `${describeCheckpointAbsence(snapshot, turnStartActionIndex)}`,
+      `${describeCheckpointAbsence(snapshot.actionCheckpoints, turnStartActionIndex)}`,
     );
   }
 
@@ -564,7 +591,7 @@ function handleUndo(
 }
 
 async function handleAITurn(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'aiTurn' }>,
@@ -631,7 +658,7 @@ async function handleAITurn(
 const DEST_ARGS = ['to', 'destination', 'target', 'square', 'cell', 'position'] as const;
 
 async function handleHint(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'hint' }>,
@@ -700,7 +727,7 @@ async function handleHint(
 }
 
 async function handleHeatmapToggle(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'heatmapToggle' }>,
@@ -809,7 +836,7 @@ async function handleHeatmapToggle(
  * and `aiPlayer` are set beyond the standard stateEnvelope fields.
  */
 async function handleAISuggest(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'aiSuggest' }>,
@@ -873,12 +900,12 @@ function gameClassOf(def: GameDefinitionLike): GameRunnerOptions<never>['GameCla
  */
 function runnerFromSnapshot(
   snapshot: GameStateSnapshot,
-  def: GameDefinitionLike,
+  def: RunnerDef,
 ): GameRunner {
   const runner = GameRunner.fromSnapshot(
     snapshot,
     def.gameClass as GameRunnerOptions<never>['GameClass'],
-    { checkpoints: def.checkpoints },
+    { checkpoints: def.checkpoints, randomness: def.randomness, undo: def.undo },
   );
   if (def.tutorial) {
     (runner.game as Game).tutorialDefinition = def.tutorial;
@@ -894,7 +921,7 @@ function runnerFromSnapshot(
  * mutation instead of re-deriving them. Returns null if the checkpoint is absent.
  */
 function runnerFromCheckpoint(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   snap: GameStateSnapshot,
   actionIndex: number,
 ): GameRunner | null {
@@ -902,6 +929,8 @@ function runnerFromCheckpoint(
   // keeps the linear history coherent (mirrors the undo op).
   const runner = GameRunner.fromCheckpoint(snap, actionIndex, gameClassOf(def), {
     checkpoints: def.checkpoints,
+    randomness: def.randomness,
+    undo: def.undo,
   });
   if (runner && def.tutorial) {
     (runner.game as Game).tutorialDefinition = def.tutorial;
@@ -910,7 +939,7 @@ function runnerFromCheckpoint(
 }
 
 function handleDebugHistory(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
 ): OpResult {
@@ -923,7 +952,7 @@ function handleDebugHistory(
 }
 
 function handleDebugStateAt(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugStateAt' }>,
@@ -948,7 +977,7 @@ function handleDebugStateAt(
 }
 
 function handleDebugStateDiff(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugStateDiff' }>,
@@ -979,7 +1008,7 @@ function handleDebugStateDiff(
 }
 
 function handleDebugActionTraces(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugActionTraces' }>,
@@ -1011,7 +1040,7 @@ function handleDebugActionTraces(
 }
 
 function handleDebugFlowState(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   pendingState: Record<string, unknown> | null,
@@ -1037,7 +1066,7 @@ function handleDebugFlowState(
 }
 
 function handleDebugRewind(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugRewind' }>,
@@ -1065,10 +1094,13 @@ function handleDebugRewind(
   // not be a bypass route around the notUndoable/finished-phase fences.
   try {
     assertUndoAllowed({
-      game: current.game,
+      runner: current,
       actionHistory: current.actionHistory,
       turnStartActionIndex: op.actionIndex,
-      executeBarrierIndex: current.executeBarrierIndex,
+      // Deliberately UNFENCED against random draws: debug rewind is dev-time
+      // travel (`boardsmith dev`), the debug ops never run in a deployed
+      // session, and rewinding across a draw is the point of the tool.
+      fenceRandomRewind: false,
     });
   } catch (err) {
     if (err instanceof UndoRefusedError) {
@@ -1085,7 +1117,7 @@ function handleDebugRewind(
 }
 
 function handleDebugCommand(
-  def: GameDefinitionLike,
+  def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   command: GameCommand,
@@ -1122,17 +1154,39 @@ function handleDebugCommand(
  *                       `seedSnapshot` (FEAT-01/168-02) follows the same
  *                       rule: a `start` op with a seed threaded here returns
  *                       that seed's state envelope instead of a fresh start.
+ *                       `randomness: 'forbidden'` (#18) declares an
+ *                       ORDER-ENTRY session: pure intent capture, no draws.
+ *                       Every random draw then throws
+ *                       `RandomnessForbiddenError`, which surfaces as an error
+ *                       OpResult with NO snapshot, so the prior state is
+ *                       preserved. It belongs here, per op, because the host is
+ *                       the only authority on what kind of session this is —
+ *                       and a session that never draws is provably immune to
+ *                       re-rolling by undo, by reordering, and by abandoning
+ *                       the session and starting a new one (a fresh `start`
+ *                       mints a new seed). An order-entry session is normally
+ *                       paired with `seedSnapshot`: a fresh start whose setup
+ *                       shuffles would (correctly) fail here.
  */
 export async function executeOp(
-  def: GameDefinitionLike,
+  definition: GameDefinitionLike,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: unknown,
   pendingState: Record<string, unknown> | null,
   op: Op,
-  hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot } | null,
+  hostOptions?: {
+    teachingDisabled?: boolean;
+    seedSnapshot?: GameStateSnapshot;
+    randomness?: RandomnessPolicy;
+  } | null,
 ): Promise<OpResult> {
   try {
     const teachingDisabled = hostOptions?.teachingDisabled ?? false;
+    // Written unconditionally from hostOptions, never read off the bundle: the
+    // host is the sole authority on whether this session may draw, and every
+    // handler below builds its runner from this `def`.
+    const randomness: RandomnessPolicy = hostOptions?.randomness ?? 'allowed';
+    const def: RunnerDef = { ...definition, randomness };
     const { playerCount } = gameOptions;
     if (playerCount < def.minPlayers || playerCount > def.maxPlayers) {
       return errorResult(
@@ -1160,6 +1214,16 @@ export async function executeOp(
       case 'undo':
         return handleUndo(def, gameOptions, snap, op);
       case 'aiTurn':
+        // Refused up front, not left to throw from inside the search: an MCTS
+        // playout draws thousands of times, and an order-entry session has no
+        // bot seats to begin with. Naming the mode is what makes it fixable.
+        if (randomness === 'forbidden') {
+          return errorResult(
+            'AI turns are unavailable in an order-entry session: bot playouts ' +
+            'consume randomness, which this session forbids.',
+            'protocol',
+          );
+        }
         return handleAITurn(def, gameOptions, snap, op);
       case 'debugHistory':
         return handleDebugHistory(def, gameOptions, snap);
