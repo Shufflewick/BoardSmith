@@ -26,6 +26,15 @@
  * it never moves the board by itself, and the board region keeps `--action-panel-h` of
  * scroll room, so anything a grown Action Panel covers stays scrollable into view.
  *
+ * Fit axis: a board that has called `useBoardSize()` is pinned to the region's
+ * width and documented to grow by VERTICAL SCROLL. Height-fitting such a board
+ * contradicts that model — it scales the whole layout box down (type included)
+ * purely to avoid a scrollbar the board already opted into. So a pinned board
+ * is fitted on WIDTH ONLY. Nothing is lost: its width is the region's width, so
+ * the width term is 1 unless content genuinely overflows sideways, which is
+ * the one case where scaling down is still the right answer. The game states
+ * this once, by calling `useBoardSize()`; see composables/boardRegionPin.ts.
+ *
  * Measurement notes:
  * - The board element carries CSS `zoom`, so its getBoundingClientRect() is
  *   scaled. Natural size = rect / the *applied* zoom read from computed style
@@ -37,24 +46,38 @@
  *   (e.g. the Action Panel's own ResizeObserver plus a window resize) never thrashes.
  */
 import { ref, watch, onUnmounted, type Ref } from 'vue';
+import { provideBoardRegionPin } from './boardRegionPin.js';
 
 export const ZOOM_MIN = 0.5;
 export const ZOOM_MAX = 2.0;
+
+/** Which axes the board must fit inside the available space.
+ *  `'both'` for a fixed-intrinsic board; `'width'` for a board pinned to the
+ *  region by `useBoardSize()`, whose growth is vertical scroll by contract. */
+export type FitAxis = 'both' | 'width';
 
 /** How long the board's size must hold still after a successful fit before
  *  startup is considered over and the startup board observer disconnects. */
 export const SETTLE_MS = 300;
 
-/** Largest zoom at which `natural` fits entirely inside `avail`, clamped to the
- *  slider range. Returns null when either box is unmeasurable (not laid out yet). */
+/** Largest zoom at which `natural` fits inside `avail` on the requested axes,
+ *  clamped to the slider range. Returns null when a box the chosen axes need is
+ *  unmeasurable (not laid out yet). `fitAxis` is required, not defaulted: the
+ *  axis is a property of the board, and a caller that hasn't decided it hasn't
+ *  finished the measurement. */
 export function computeFitZoom(
   natural: { width: number; height: number },
   avail: { width: number; height: number },
+  fitAxis: FitAxis,
 ): number | null {
-  if (natural.width < 1 || natural.height < 1) return null;
-  if (avail.width < 1 || avail.height < 1) return null;
-  const fit = Math.min(avail.width / natural.width, avail.height / natural.height);
-  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+  if (natural.width < 1 || avail.width < 1) return null;
+  const clamp = (fit: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+  const widthFit = avail.width / natural.width;
+  // Width-only: the height boxes are irrelevant, and an unmeasurable height
+  // (a tall board under a tall Action Panel) must not suppress the fit.
+  if (fitAxis === 'width') return clamp(widthFit);
+  if (natural.height < 1 || avail.height < 1) return null;
+  return clamp(Math.min(widthFit, avail.height / natural.height));
 }
 
 export function useAutoZoom(options: {
@@ -69,6 +92,11 @@ export function useAutoZoom(options: {
   const { boardEl, regionEl, actionPanelHeight } = options;
 
   const zoomLevel = ref(1.0);
+
+  /** Non-zero while a `useBoardSize()`-pinned board is mounted below the shell.
+   *  Such a board is width-fit only (see the module docblock). The game opts in
+   *  by calling `useBoardSize()` — there is no second flag to remember. */
+  const pinnedBoards = provideBoardRegionPin();
 
   /** True once the user has manually zoomed (the slider). While true, the
    *  persistent available-space re-fit is a no-op — `fitZoom()` clears it. */
@@ -102,7 +130,7 @@ export function useAutoZoom(options: {
         - (reservedActionPanelHeight ?? actionPanelHeight.value),
     };
 
-    const fit = computeFitZoom(natural, avail);
+    const fit = computeFitZoom(natural, avail, pinnedBoards.value > 0 ? 'width' : 'both');
     if (fit == null) return false;
     // Epsilon guard: ignore sub-visible deltas from layout rounding.
     if (Math.abs(fit - zoomLevel.value) > 0.005) zoomLevel.value = fit;

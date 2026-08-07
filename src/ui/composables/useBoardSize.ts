@@ -30,18 +30,29 @@
  * accomplishes nothing, and the max-content + auto-zoom model already fits
  * them. See the "Board Sizing" section of docs/custom-ui-guide.md.
  *
- * Auto-zoom interaction: a region-pinned board measures region-sized at
- * startup, so the fitted zoom lands at ~1.0 when the board's height fits
- * (backdrop edge-to-edge from turn one). When the height doesn't fit, the
- * startup fit may still shrink below 1 — the width stays pinned in CSS
- * pixels; only the rendered scale changes. The pin is deliberately measured
- * WITHOUT dividing out the applied zoom: compensating would feed the pinned
- * width back into useAutoZoom's natural-size measurement mid-settle and the
- * two would chase each other.
+ * Auto-zoom interaction: calling this composable also TELLS the shell which
+ * model the board is in, so useAutoZoom fits a pinned board on WIDTH ONLY
+ * (see composables/boardRegionPin.ts). A board taller than the region scrolls,
+ * as documented — it is never scaled down to avoid that scrollbar, which would
+ * shrink every glyph on it below its declared size. The width term still
+ * applies, so genuine horizontal overflow is still fitted; since the board is
+ * pinned to the region's width, that term is 1 in the normal case and the
+ * board renders at 100%. There is nothing for the game to wire up: the pin is
+ * the statement of intent, and the pin carries it.
+ *
+ * The pin is deliberately measured WITHOUT dividing out the applied zoom:
+ * compensating would feed the pinned width back into useAutoZoom's
+ * natural-size measurement mid-settle and the two would chase each other.
  */
 import { ref, computed, watch, onBeforeUnmount, type Ref } from 'vue';
+import { registerBoardRegionPin } from './boardRegionPin.js';
 
 export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
+  // Declare the model to the shell for this scope's lifetime. Done at call
+  // time, not on first measurement: calling useBoardSize IS the declaration,
+  // and the fit must not depend on which composable measured first.
+  registerBoardRegionPin();
+
   /** Region width available to the board (region client box minus horizontal
    *  padding), in CSS pixels. 0 until the first successful measurement. */
   const availWidth = ref(0);
