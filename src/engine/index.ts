@@ -29,6 +29,7 @@ export {
   ElementCollection,
   PersistentMap,
   DEFAULT_COLOR_PALETTE,
+  RandomnessForbiddenError,
 } from './element/index.js';
 
 export type {
@@ -257,6 +258,7 @@ export type {
   ActionCheckpointWindow,
   CheckpointAbsence,
   CheckpointPolicy,
+  UndoPolicy,
   PlayerStateView,
   // Dev state types
   DevSnapshot,

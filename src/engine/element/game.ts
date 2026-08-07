@@ -376,6 +376,30 @@ function createSeededRandom(seed: string): SeededRandom {
   return random;
 }
 
+/**
+ * Thrown by every random draw once {@link Game.forbidRandomness} has been
+ * applied to a game — the host declared this session an INTENT-CAPTURE session
+ * (`hostOptions.randomness: 'forbidden'`), which must consume no randomness at
+ * all.
+ *
+ * Why the whole session, rather than a per-action rule: a player alone in a
+ * private session can undo, reorder their actions, and redo to re-roll any draw
+ * that has not been fenced — and can abandon the session entirely and start a
+ * new one, which mints a new seed. Both channels close only if the session
+ * never draws. A session that draws zero times is provably immune to both,
+ * because the generator's state advances on draws and nothing else.
+ */
+export class RandomnessForbiddenError extends Error {
+  constructor() {
+    super(
+      'This session forbids randomness (order-entry mode): every random draw ' +
+      "must happen in the round's resolution session. Replace this draw with " +
+      'an order the resolver executes.',
+    );
+    this.name = 'RandomnessForbiddenError';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Per-player serialization helpers — module-private (not exported, not class
 // methods).  Placed at module level so they are pure functions with no access
@@ -2102,6 +2126,37 @@ export class Game<
    */
   setRandomState(state: number): void {
     this.random.setState(state);
+  }
+
+  /**
+   * Make every random draw on this game throw {@link RandomnessForbiddenError}.
+   *
+   * Applied by `GameRunner` when the host declares
+   * `hostOptions.randomness: 'forbidden'` (an order-entry / intent-capture
+   * session). It is deliberately a hard failure rather than a lint or a
+   * convention: a single cosmetic shuffle in an order-entry session silently
+   * reopens RNG scumming, and the author must find out at development time.
+   *
+   * Both holders of the generator are swapped — `this.random` (what game code
+   * calls) and `this._ctx.random` (what `Space.shuffle` and every other element
+   * reads, since every element shares this one context object). Swapping only
+   * one would leave a live draw path open, which is the exact failure this
+   * exists to prevent.
+   *
+   * `getState`/`setState` keep delegating to the real generator, so snapshot
+   * capture and checkpoint restore continue to work untouched — a forbidden
+   * session must still round-trip its (never-advancing) RNG position.
+   */
+  forbidRandomness(): void {
+    const real = this.random;
+    const forbidden = function (): number {
+      throw new RandomnessForbiddenError();
+    } as SeededRandom;
+    forbidden.getState = () => real.getState();
+    forbidden.setState = (state: number) => real.setState(state);
+
+    this.random = forbidden;
+    this._ctx.random = forbidden;
   }
 
   /**

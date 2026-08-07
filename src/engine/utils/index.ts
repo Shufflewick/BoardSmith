@@ -28,6 +28,7 @@ export type {
   ActionCheckpointWindow,
   CheckpointAbsence,
   CheckpointPolicy,
+  UndoPolicy,
   PlayerStateView,
 } from './snapshot.js';
 

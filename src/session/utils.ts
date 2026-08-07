@@ -362,10 +362,16 @@ export function computeUndoEligibility(
  * phase reason -- no file paths, line numbers, or stack traces (project hard
  * rule; T-155-03).
  */
-export class UndoRefusedError extends Error {
-  readonly reason: 'non-undoable' | 'finished-phase' | 'execute-barrier';
+export type UndoRefusalReason =
+  | 'non-undoable'
+  | 'finished-phase'
+  | 'execute-barrier'
+  | 'random-fence';
 
-  constructor(message: string, reason: 'non-undoable' | 'finished-phase' | 'execute-barrier') {
+export class UndoRefusedError extends Error {
+  readonly reason: UndoRefusalReason;
+
+  constructor(message: string, reason: UndoRefusalReason) {
     super(message);
     this.name = 'UndoRefusedError';
     this.reason = reason;
@@ -381,7 +387,7 @@ export class UndoRefusedError extends Error {
  * and UNDO-02 (the `finished`-phase fence AND the durable execute()-barrier
  * fence).
  *
- * Three independent, composable checks (order does not matter -- Open
+ * Four independent, composable checks (order does not matter -- Open
  * Question 2, 155-RESEARCH.md -- each is O(1)/O(k) and evaluates against the
  * SAME inputs regardless of what ran before it):
  *  1. Phase fence: refuse up front once `game.isFinished()` (D-04) --
@@ -401,6 +407,21 @@ export class UndoRefusedError extends Error {
  *     replacement for the transient `frame.completed` flag (see
  *     `runner.ts`'s doc comments) -- callers pass `runner.executeBarrierIndex`
  *     directly; there is nothing else to compute.
+ *  4. Random fence (#18): opt-in per game via
+ *     `GameDefinition.undo: { fenceRandomRewind: true }` and passed here as
+ *     `fenceRandomRewind`. Refuse when the seeded RNG position at the target
+ *     checkpoint differs from the live one -- i.e. a random draw was consumed
+ *     inside the span being rewound. Undo already restores `randomState`, so
+ *     redoing the SAME action cannot re-roll; what scums is REORDERING (undo,
+ *     act differently first, then draw again on a different generator
+ *     position), which a private session with unlimited undo can repeat
+ *     unobserved. Off by default: it costs a cooperative game a legitimate
+ *     take-back, and only a competitive session needs it.
+ *
+ * Every argument is REQUIRED, including `fenceRandomRewind`. An optional
+ * fence is a fence a new call site forgets, and forgetting is silent -- the
+ * undo simply succeeds. Callers pass the runner itself rather than its parts,
+ * so there is nothing to recompute and nothing to mismatch.
  *
  * Throws {@link UndoRefusedError}; returns normally (void) when the undo/
  * rewind is allowed. This is the pit-of-success mechanic (D-02): a new call
@@ -409,12 +430,14 @@ export class UndoRefusedError extends Error {
  * could compute and then ignore.
  */
 export function assertUndoAllowed(args: {
-  game: Game;
+  runner: GameRunner;
   actionHistory: Array<{ player: number; undoable?: boolean; name?: string }>;
   turnStartActionIndex: number;
-  executeBarrierIndex: number;
+  fenceRandomRewind: boolean;
 }): void {
-  const { game, actionHistory, turnStartActionIndex, executeBarrierIndex } = args;
+  const { runner, actionHistory, turnStartActionIndex, fenceRandomRewind } = args;
+  const game = runner.game;
+  const executeBarrierIndex = runner.executeBarrierIndex;
 
   if (game.isFinished()) {
     throw new UndoRefusedError('Cannot undo: the game is finished.', 'finished-phase');
@@ -438,6 +461,29 @@ export function assertUndoAllowed(args: {
       `flag — state is restored by undo, and marking it needlessly blocks undo ` +
       `for the rest of the game.`,
       'execute-barrier',
+    );
+  }
+
+  if (!fenceRandomRewind) return;
+
+  const targetRandomState = runner.randomStateAt(turnStartActionIndex);
+  if (targetRandomState === undefined) {
+    throw new UndoRefusedError(
+      `Cannot undo to action ${turnStartActionIndex}: this game fences undo ` +
+      `across random draws, and no retained checkpoint records the random ` +
+      `state there, so whether a draw was consumed cannot be established. ` +
+      `Raise or remove \`checkpoints: { max }\` on the game definition so the ` +
+      `undo window reaches back at least one full turn.`,
+      'random-fence',
+    );
+  }
+  if (targetRandomState !== game.getRandomState()) {
+    throw new UndoRefusedError(
+      `Cannot undo past action ${turnStartActionIndex}: a random draw was ` +
+      `consumed there, and this game fences undo across draws so a draw ` +
+      `cannot be re-rolled by undoing and acting in a different order. ` +
+      `Nothing is wrong with the move you made — the result is simply final.`,
+      'random-fence',
     );
   }
 }

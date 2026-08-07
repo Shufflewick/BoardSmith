@@ -192,6 +192,47 @@ export interface CheckpointPolicy {
 }
 
 /**
+ * A game's declared undo policy — what undo is allowed to take back.
+ *
+ * Defined here, alongside `CheckpointPolicy`, for the same reason:
+ * `GameDefinition.undo` is a field GAMES set, and a published bundle may import
+ * only `boardsmith` and `boardsmith/session`. Both re-export it.
+ */
+export interface UndoPolicy {
+  /**
+   * Refuse an undo whose span contains a random draw. Default: `false`.
+   *
+   * Undo already restores the RNG position along with the state, so re-doing
+   * the SAME action after an undo cannot re-roll. It is REORDERING that scums:
+   * undo, take a different action first, then take the drawing action again,
+   * and the draw lands on a different generator position. A player alone in a
+   * private session with unlimited undo can repeat that until the draw suits
+   * them, and nobody observes it.
+   *
+   * ```ts
+   * import type { UndoPolicy } from 'boardsmith';
+   *
+   * export const gameDefinition = {
+   *   // ...
+   *   undo: { fenceRandomRewind: true } satisfies UndoPolicy,
+   * };
+   * ```
+   *
+   * Set it on any competitive game — above all a persistent world, where one
+   * long-lived shared session IS the world. Each draw then happens exactly once
+   * no matter how the actions around it are ordered: reordering BEFORE a draw
+   * without observing it carries no advantage (the value depends only on the
+   * generator position, which non-drawing actions never move), and observing a
+   * draw fences the rewind.
+   *
+   * Deliberately conservative inside a simultaneous step: another seat's draw
+   * since your turn began also fences YOUR undo, because a shared random stream
+   * is precisely what must not be rewound underneath the seats that saw it.
+   */
+  fenceRandomRewind?: boolean;
+}
+
+/**
  * A lean per-action checkpoint for authoritative undo / debug time-travel.
  *
  * Carries ONLY the state that varies per recorded action; the snapshot-wide

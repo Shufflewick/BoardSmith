@@ -22,7 +22,7 @@ import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
 import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '../engine/index.js';
-import { GameRunner, type CheckpointPolicy } from '../runtime/index.js';
+import { GameRunner, type CheckpointPolicy, type UndoPolicy } from '../runtime/index.js';
 import {
   ErrorCode,
   type GameClass,
@@ -163,6 +163,15 @@ export interface GameSessionOptions<G extends Game = Game> {
    * reverts the game to unbounded retention from that point on.
    */
   checkpoints?: CheckpointPolicy;
+  /**
+   * The game's declared undo policy, threaded from `GameDefinition.undo`.
+   * Absent: undo is unfenced against random draws (the default).
+   *
+   * Carried onto every runner this session builds -- create, restore, and both
+   * HMR reload paths -- for the same reason as `checkpoints`: one that forgets
+   * it silently unfences undo for the rest of the game.
+   */
+  undo?: UndoPolicy;
 }
 
 /**
@@ -545,6 +554,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             // replacement runner that drops it silently reverts this game to
             // unbounded checkpoint retention.
             checkpoints: session.#runner.checkpointPolicy,
+            undo: session.#runner.undoPolicy,
           });
           newRunner.start();
 
@@ -646,6 +656,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       debugEnabled,
       onPersistenceError,
       checkpoints,
+      undo,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -685,6 +696,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       gameType,
       gameOptions: effectiveGameOptions,
       checkpoints,
+      undo,
     });
 
     // Build lobby slots from player configs
@@ -866,6 +878,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
      * reverts the game to unbounded checkpoint retention.
      */
     checkpoints?: CheckpointPolicy,
+    /**
+     * The game's `GameDefinition.undo` policy. Re-supplied for the same reason
+     * as `checkpoints`: code-declared config, deliberately not persisted, and a
+     * restore that omits it silently unfences undo for the rest of the game.
+     */
+    undo?: UndoPolicy,
   ): GameSession<G> {
     // Snapshot-authoritative restore (audit F42). Reconstruct game state directly
     // from the persisted snapshot via GameRunner.fromSnapshot — NOT by replaying
@@ -886,7 +904,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       );
     }
 
-    const runner = GameRunner.fromSnapshot<G>(storedState.snapshot, GameClass, { checkpoints });
+    const runner = GameRunner.fromSnapshot<G>(storedState.snapshot, GameClass, { checkpoints, undo });
 
     // Re-supply static config that is intentionally excluded from the snapshot
     // (see Game constructor — tutorial is stripped from _constructorOptions so
@@ -1658,6 +1676,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       gameType: this.#storedState.gameType,
       gameOptions,
       checkpoints: definition.checkpoints,
+      undo: definition.undo,
     });
 
     // Replace the runner's game with our restored game
@@ -1742,6 +1761,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         gameType: this.#storedState.gameType,
         gameOptions: this.#buildGameOptions(),
         checkpoints: definition.checkpoints,
+        undo: definition.undo,
       },
       this.#storedState.actionHistory
     );
@@ -1810,6 +1830,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         gameType: this.#storedState.gameType,
         gameOptions,
         checkpoints: definition.checkpoints,
+        undo: definition.undo,
       });
 
       // @ts-expect-error - Accessing readonly for HMR

@@ -24,6 +24,7 @@ import {
   type PendingActionState,
   type ActionDefinition,
   type CheckpointPolicy,
+  type UndoPolicy,
 } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
 
@@ -33,7 +34,7 @@ import { ErrorCode } from '../types/protocol.js';
  * (`engine/utils/snapshot.ts`) so a published bundle can name it from the two
  * modules it is allowed to import — `boardsmith` and `boardsmith/session`.
  */
-export type { CheckpointPolicy };
+export type { CheckpointPolicy, UndoPolicy };
 
 /**
  * Options for creating a game runner
@@ -49,7 +50,35 @@ export interface GameRunnerOptions<G extends Game> {
   serializeOptions?: SerializeOptions;
   /** Per-action undo checkpoint retention. Default: retain everything. */
   checkpoints?: CheckpointPolicy;
+  /**
+   * Whether this session may consume randomness at all. Default: `'allowed'`.
+   *
+   * `'forbidden'` makes EVERY draw throw `RandomnessForbiddenError` — the
+   * order-entry / intent-capture policy (`hostOptions.randomness`). It is a
+   * whole-session property rather than a per-action one because the exploit it
+   * closes (undo, reorder, redo to re-roll — or abandon the session and start a
+   * new one, which mints a new seed) is only shut by drawing zero times.
+   *
+   * Every runner construction path takes it, so a restore that forgets it
+   * silently re-enables draws for the rest of the session.
+   */
+  randomness?: RandomnessPolicy;
+  /**
+   * The game's declared undo policy (`GameDefinition.undo`). Default: no
+   * random fence.
+   *
+   * Carried on the runner — like `checkpoints` — so every host path that
+   * builds a REPLACEMENT runner can read it off the runner it is replacing
+   * instead of re-threading it from the game definition at each call site.
+   */
+  undo?: UndoPolicy;
 }
+
+/**
+ * Whether a session may consume randomness. See
+ * {@link GameRunnerOptions.randomness}.
+ */
+export type RandomnessPolicy = 'allowed' | 'forbidden';
 
 /**
  * Result of performing an action through the runner
@@ -109,6 +138,9 @@ export class GameRunner<G extends Game = Game> {
 
   /** This game's checkpoint retention policy. Default: retain everything. */
   private readonly checkpointPolicy_: Required<CheckpointPolicy>;
+
+  /** This game's declared undo policy. Default: no random fence. */
+  private readonly undoPolicy_: Required<UndoPolicy>;
 
   /**
    * The durable commitment fence (UNDO-02, 155-02): the action-history length
@@ -213,6 +245,9 @@ export class GameRunner<G extends Game = Game> {
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
       enabled: options.checkpoints?.enabled ?? true,
     };
+    this.undoPolicy_ = {
+      fenceRandomRewind: options.undo?.fenceRandomRewind ?? false,
+    };
     if (this.checkpointPolicy_.max < 1) {
       throw new Error(
         `checkpoints.max must be at least 1 (got ${this.checkpointPolicy_.max}). ` +
@@ -221,6 +256,14 @@ export class GameRunner<G extends Game = Game> {
     }
 
     this.game = new options.GameClass(options.gameOptions);
+
+    // Order-entry / intent-capture sessions consume no randomness at all, and
+    // the engine enforces that rather than trusting the game to avoid drawing:
+    // one cosmetic shuffle silently reopens RNG scumming. Applied here, in the
+    // single constructor every restore path funnels through, so a draw is
+    // impossible from the game's first instruction — including anything setup
+    // does before `start()` returns.
+    if (options.randomness === 'forbidden') this.game.forbidRandomness();
 
     // Capture the effective seed: use the passed seed when supplied, or read
     // back the auto-generated seed from the game's constructor options so an
@@ -306,6 +349,32 @@ export class GameRunner<G extends Game = Game> {
    */
   get checkpointPolicy(): Required<CheckpointPolicy> {
     return this.checkpointPolicy_;
+  }
+
+  /**
+   * This runner's resolved undo policy.
+   *
+   * Exposed for the same reason as `checkpointPolicy`: every path that builds
+   * a replacement runner (undo, rewind, HMR reload) reads it off the runner it
+   * replaces, so the fence cannot be silently dropped one call site at a time.
+   */
+  get undoPolicy(): Required<UndoPolicy> {
+    return this.undoPolicy_;
+  }
+
+  /**
+   * The seeded RNG position recorded at the checkpoint for `actionIndex`, or
+   * `undefined` when this runner holds no checkpoint there (never captured, or
+   * dropped by the retention policy — ask `describeCheckpointAbsence` which).
+   *
+   * Exists for the undo random fence (`UndoPolicy.fenceRandomRewind`): compare
+   * it with `game.getRandomState()` and any difference means a draw was
+   * consumed in the span being rewound. The generator advances on draws and on
+   * nothing else, so this comparison IS "did anything draw here", in O(1),
+   * from data every checkpoint already carries.
+   */
+  randomStateAt(actionIndex: number): number | undefined {
+    return checkpointAt(this.checkpointWindow(), actionIndex).checkpoint?.randomState;
   }
 
   /** The retained checkpoint window, in the shape a snapshot carries it. */
@@ -714,7 +783,12 @@ export class GameRunner<G extends Game = Game> {
   static fromSnapshot<G extends Game>(
     snapshot: GameStateSnapshot,
     GameClass: new (options: GameOptions) => G,
-    options?: { animationSeqFloor?: number; checkpoints?: CheckpointPolicy }
+    options?: {
+      animationSeqFloor?: number;
+      checkpoints?: CheckpointPolicy;
+      randomness?: RandomnessPolicy;
+      undo?: UndoPolicy;
+    }
   ): GameRunner<G> {
     // Use full gameOptions from snapshot if available, falling back to basic options
     // This ensures custom options like playerConfigs are preserved
@@ -735,6 +809,12 @@ export class GameRunner<G extends Game = Game> {
       // forgets it silently reverts that game to unbounded retention on the very
       // next op, which is the defect this policy exists to prevent.
       checkpoints: options?.checkpoints,
+      // Session policy is NOT carried in the snapshot (same reason as the
+      // retention policy above): every stateless op rebuilds its runner, so the
+      // host re-supplies it per op. A restore that drops it silently re-allows
+      // draws for the rest of the session.
+      randomness: options?.randomness,
+      undo: options?.undo,
     });
 
     // Preserve action history for the undo op (which reads runner.actionHistory).
@@ -859,7 +939,7 @@ export class GameRunner<G extends Game = Game> {
     snapshot: GameStateSnapshot,
     actionIndex: number,
     GameClass: new (options: GameOptions) => G,
-    options?: { checkpoints?: CheckpointPolicy }
+    options?: { checkpoints?: CheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
   ): GameRunner<G> | null {
     const window = snapshot.actionCheckpoints;
     const found = checkpointAt(window, actionIndex);
@@ -927,7 +1007,12 @@ export class GameRunner<G extends Game = Game> {
         restoreEpoch: (snapshot.restoreEpoch ?? 0) + 1,
       },
       GameClass,
-      { animationSeqFloor, checkpoints: options?.checkpoints },
+      {
+        animationSeqFloor,
+        checkpoints: options?.checkpoints,
+        randomness: options?.randomness,
+        undo: options?.undo,
+      },
     );
   }
 }
