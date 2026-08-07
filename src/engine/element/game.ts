@@ -1927,11 +1927,31 @@ export class Game<
     if (this.phase === 'setup') {
       this.phase = 'started';
     }
-    if (state.complete) {
-      this.phase = 'finished';
-    }
+    // A flow can run to completion inside start() (a game whose whole result is
+    // decided in setup, or a flow restored one step from its end). That is a
+    // completion like any other, so it must publish winners the same way --
+    // otherwise the session host reports `winners: []` and derives a false draw.
+    this.#applyFlowCompletion(state);
 
     return state;
+  }
+
+  /**
+   * Single place where a completed `FlowState` is reflected onto the game.
+   * Every flow-advancing entry point (`startFlow`, `continueFlow`,
+   * `continueFlowAfterPendingAction`) routes completion through here so a new
+   * entry point cannot finish a game without publishing its winners.
+   *
+   * `settings.winners` is left untouched when the flow declared no winner, so a
+   * game that ended by calling `this.finish([...])` itself keeps its own result.
+   */
+  #applyFlowCompletion(state: FlowState): void {
+    if (!state.complete) return;
+    this.phase = 'finished';
+    const winners = this._flowEngine!.getWinners();
+    if (winners.length > 0) {
+      this.settings.winners = winners.map(p => p.seat);
+    }
   }
 
   /**
@@ -1947,13 +1967,7 @@ export class Game<
 
     const state = this._flowEngine.resume(actionName, args, playerIndex);
 
-    if (state.complete) {
-      this.phase = 'finished';
-      const winners = this._flowEngine.getWinners();
-      if (winners.length > 0) {
-        this.settings.winners = winners.map(p => p.seat);
-      }
-    }
+    this.#applyFlowCompletion(state);
 
     return state;
   }
@@ -1970,13 +1984,7 @@ export class Game<
 
     const state = this._flowEngine.resumeAfterExternalAction(result);
 
-    if (state.complete) {
-      this.phase = 'finished';
-      const winners = this._flowEngine.getWinners();
-      if (winners.length > 0) {
-        this.settings.winners = winners.map(p => p.seat);
-      }
-    }
+    this.#applyFlowCompletion(state);
 
     return state;
   }
