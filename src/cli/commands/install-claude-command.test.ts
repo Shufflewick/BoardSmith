@@ -5,7 +5,7 @@
  * against a scratch temp directory with `skipLink: true`, then asserts the full installed
  * layout, that every SKILL.md entry-point relative reference resolves to a real file, that
  * no `.test.ts` leaks into the installed tree, that no design-game residue remains, and that
- * `bs-generate-ai` (not `generate-ai`) is present with its 5 AI hooks.
+ * `bs-build-ai` (not `generate-ai`/`bs-generate-ai`) is present with its 5 AI hooks.
  *
  * `skipLink: true` is MANDATORY here — Plan 02 added it specifically so this test never runs
  * the `npm link --force` step and never leaves a global side-effect. The install only ever
@@ -112,7 +112,7 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
   });
 
   describe('DIST-01', () => {
-    it('installs bs- skill family: all 7 bs-<name>/SKILL.md + shared reference tree under bs-shared/', () => {
+    it('installs bs- skill family: every bs-<name>/SKILL.md + shared reference tree under bs-shared/', () => {
       for (const name of SKILL_NAMES) {
         expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
       }
@@ -120,6 +120,7 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
       // as generic flat siblings (build/, templates/, …) that a reinstall could collide with.
       expect(existsSync(join(skillsRoot, 'bs-shared', 'build'))).toBe(true);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'ingest'))).toBe(true);
+      expect(existsSync(join(skillsRoot, 'bs-shared', 'orchestrate'))).toBe(true);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'templates'))).toBe(true);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'aspects'))).toBe(true);
       expect(existsSync(join(skillsRoot, 'bs-shared', 'verify'))).toBe(true);
@@ -233,9 +234,10 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
   });
 
   describe('DIST-02', () => {
-    it('bs-generate-ai renamed and repositioned: generate-ai/ absent, bs-generate-ai/SKILL.md present with all 5 hooks', () => {
+    it('bs-build-ai renamed and repositioned: generate-ai/ and bs-generate-ai/ absent, bs-build-ai/SKILL.md present with all 5 hooks', () => {
       expect(existsSync(join(skillsRoot, 'generate-ai'))).toBe(false);
-      const body = readFileSync(join(skillsRoot, 'bs-generate-ai', 'SKILL.md'), 'utf-8');
+      expect(existsSync(join(skillsRoot, 'bs-generate-ai'))).toBe(false);
+      const body = readFileSync(join(skillsRoot, 'bs-build-ai', 'SKILL.md'), 'utf-8');
       for (const hook of [
         'objectives',
         'threatResponseMoves',
@@ -311,6 +313,58 @@ describe('installClaudeCommand — bs- skill handoff contract (no Skill-tool sel
 });
 
 /**
+ * Issue #16: `bs-generate-ai` was renamed to `bs-build-ai`. A machine that installed the earlier
+ * version has the retired directory on disk, and neither `fs.cp` nor the owned-path pre-clean
+ * would have removed it — leaving the designer two AI skills, one stale. The installer retires it
+ * explicitly, on a plain install (no `--force`) and on uninstall.
+ */
+describe('installClaudeCommand — retires bs-generate-ai (issue #16)', () => {
+  let tempDir: string;
+  let origCwd: string;
+  let skillsRoot: string;
+
+  beforeAll(async () => {
+    origCwd = process.cwd();
+    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-retired-'));
+    process.chdir(tempDir);
+    await installClaudeCommand({ local: true, force: true, skipLink: true });
+    skillsRoot = join(tempDir, '.claude', 'skills');
+  });
+
+  afterAll(() => {
+    process.chdir(origCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('a plain reinstall (no --force) deletes a leftover bs-generate-ai/ install', async () => {
+    // Simulate the pre-rename install: a complete current tree PLUS the retired skill dir.
+    const retired = join(skillsRoot, 'bs-generate-ai');
+    mkdirSync(retired, { recursive: true });
+    writeFileSync(join(retired, 'SKILL.md'), '---\nname: bs-generate-ai\n---\nstale copy');
+    expect(existsSync(join(retired, 'SKILL.md'))).toBe(true);
+
+    // No force: the retired dir must make this read as "not a current install" so the copy runs.
+    await installClaudeCommand({ local: true, skipLink: true });
+
+    expect(existsSync(retired)).toBe(false);
+    expect(existsSync(join(skillsRoot, 'bs-build-ai', 'SKILL.md'))).toBe(true);
+  });
+
+  it('uninstall removes a leftover bs-generate-ai/ too', async () => {
+    const retired = join(skillsRoot, 'bs-generate-ai');
+    mkdirSync(retired, { recursive: true });
+    writeFileSync(join(retired, 'SKILL.md'), 'stale copy');
+
+    await uninstallClaudeCommand({ local: true });
+
+    expect(existsSync(retired)).toBe(false);
+    for (const name of SKILL_NAMES) {
+      expect(existsSync(join(skillsRoot, name))).toBe(false);
+    }
+  });
+});
+
+/**
  * WR-01: a `--force` reinstall must produce a tree identical to a fresh install — orphaned
  * files left inside installer-owned dirs (from a prior install where an upstream file was
  * renamed/removed) must NOT survive. fs.cp merges, so the installer pre-cleans owned paths.
@@ -353,7 +407,7 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
     for (const name of SKILL_NAMES) {
       expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
     }
-    for (const dir of ['build', 'ingest', 'templates', 'aspects', 'verify']) {
+    for (const dir of ['build', 'ingest', 'orchestrate', 'templates', 'aspects', 'verify']) {
       expect(existsSync(join(skillsRoot, 'bs-shared', dir))).toBe(true);
     }
     expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
@@ -472,7 +526,7 @@ describe('installClaudeCommand — partial install is not misreported as complet
     for (const name of SKILL_NAMES) {
       expect(existsSync(join(skillsRoot, name, 'SKILL.md'))).toBe(true);
     }
-    for (const dir of ['build', 'ingest', 'templates', 'aspects', 'verify']) {
+    for (const dir of ['build', 'ingest', 'orchestrate', 'templates', 'aspects', 'verify']) {
       expect(existsSync(join(skillsRoot, 'bs-shared', dir))).toBe(true);
     }
     expect(existsSync(join(skillsRoot, 'bs-shared', 'state-machine.md'))).toBe(true);
@@ -502,7 +556,7 @@ describe('installClaudeCommand — empty shared dir is detected as partial, not 
       mkdirSync(join(skillsRoot, name), { recursive: true });
       writeFileSync(join(skillsRoot, name, 'SKILL.md'), 'placeholder from interrupted install');
     }
-    for (const dir of ['build', 'ingest', 'templates', 'aspects', 'verify']) {
+    for (const dir of ['build', 'ingest', 'orchestrate', 'templates', 'aspects', 'verify']) {
       mkdirSync(join(skillsRoot, 'bs-shared', dir), { recursive: true });
     }
   });

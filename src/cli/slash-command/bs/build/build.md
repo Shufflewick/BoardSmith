@@ -83,8 +83,15 @@ the wrong move (patch or suppress) is always out of bounds:
    editing a file under `node_modules/boardsmith` is the correct move for a `build` chunk.
 3. **A shortfall in the library is a library gap, and a library gap is FILED, never patched.** If
    this chunk's design needs something the library does not do, the correct action is to file the
-   gap (report it, concretely, as a finding) and build the chunk around the gap — never reach into
-   `node_modules/boardsmith` to add or change the missing behavior yourself. Every filing made
+   gap and build the chunk around the gap — never reach into
+   `node_modules/boardsmith` to add or change the missing behavior yourself. **Filing means an
+   entry in `FILINGS.md`** (`templates/FILINGS.template.md`), written the moment the gap is found,
+   with what was expected, what happened, the smallest reproduction, and how this chunk works
+   around it — the same append-as-made discipline `DECISIONS.md` gets below. A BoardSmith **bug**
+   (the library not doing what it documents) files the same way, even when the game routes around
+   it. From there `orchestrate/filings.md` owns getting it upstream to the BoardSmith issue
+   tracker, with the designer's say-so — that is where a gap actually gets fixed, and a
+   `/bs-build-game` run offers it automatically. Every filing made
    here is a durable ledger entry, not a one-off note: `build/close.md`'s Bookkeeping Sequence
    (SKILLAUTO-08) reconciles this filings/library-gap ledger against what each chunk actually
    changed and re-touches a filing when a later fix resolves or advances it — a filing recorded

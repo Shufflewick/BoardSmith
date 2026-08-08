@@ -214,11 +214,15 @@ describe('PROV-03 — check-status.md item 8: verification provenance and drift'
     expect(checkStatus).toContain('verifiedWithoutProvenance');
   });
 
-  it('the count sentences say "nine items", never "eight items" or "seven items"', () => {
+  it('the count sentences say "eleven items", never an earlier count', () => {
+    // The report grew from seven → nine (provenance + rules staleness) → eleven (unanswered
+    // questions + BoardSmith filings). Pinning the exact number keeps a newly-added item from
+    // shipping with a count sentence that still claims the old one.
     const checkStatus = read('check-status.md');
     expect(checkStatus).not.toMatch(/seven items/i);
     expect(checkStatus).not.toMatch(/eight items/i);
-    const matches = checkStatus.match(/nine items/gi) ?? [];
+    expect(checkStatus).not.toMatch(/nine items/i);
+    const matches = checkStatus.match(/eleven items/gi) ?? [];
     expect(matches.length).toBeGreaterThanOrEqual(2);
   });
 

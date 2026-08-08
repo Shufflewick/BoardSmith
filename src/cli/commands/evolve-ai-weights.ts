@@ -37,9 +37,9 @@ export async function evolveAIWeightsCommand(options: EvolveAIWeightsOptions): P
     console.error(chalk.dim(`Expected at: ${aiPath}`));
     console.error();
     console.error(chalk.yellow('This command optimizes weights for an existing AI.'));
-    console.error(chalk.yellow('To create a new AI, use the /generate-ai slash command in Claude Code:'));
+    console.error(chalk.yellow('To create a new AI, use the /bs-build-ai skill in Claude Code:'));
     console.error(chalk.dim('  boardsmith claude install'));
-    console.error(chalk.dim('  Then in Claude Code: /generate-ai'));
+    console.error(chalk.dim('  Then in Claude Code: /bs-build-ai'));
     process.exit(1);
   }
 
@@ -118,7 +118,7 @@ export async function evolveAIWeightsCommand(options: EvolveAIWeightsOptions): P
     if (!existingAI || existingAI.objectives.length === 0) {
       spinner.fail('No objectives found in ai.ts');
       console.error(chalk.red('\nThe existing ai.ts file has no objectives to optimize.'));
-      console.error(chalk.dim('Use /generate-ai to create an AI with objectives first.'));
+      console.error(chalk.dim('Use /bs-build-ai to create an AI with objectives first.'));
       process.exit(1);
     }
 

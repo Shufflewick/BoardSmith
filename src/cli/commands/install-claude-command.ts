@@ -1,9 +1,9 @@
 /**
  * Install BoardSmith Agent Skills for Claude Code
  *
- * This installs the bs- skill family (bs-create-game, bs-ingest-rules, bs-build-chunk,
- * bs-check-status, bs-insert-chunk, bs-generate-ai, bs-verify-game) globally so users can
- * design and build BoardSmith games directly within Claude Code conversations.
+ * This installs the bs- skill family (bs-create-game, bs-ingest-rules, bs-build-game,
+ * bs-build-chunk, bs-check-status, bs-insert-chunk, bs-build-ai, bs-verify-game) globally so
+ * users can design and build BoardSmith games directly within Claude Code conversations.
  */
 
 import { promises as fs } from 'node:fs';
@@ -30,12 +30,26 @@ interface InstallOptions {
 const SKILL_ENTRY_POINTS: Array<{ source: string; skillName: string }> = [
   { source: join('bs', 'create-game.md'), skillName: 'bs-create-game' },
   { source: join('bs', 'ingest-rules.md'), skillName: 'bs-ingest-rules' },
+  { source: join('bs', 'build-game.md'), skillName: 'bs-build-game' },
   { source: join('bs', 'build-chunk.md'), skillName: 'bs-build-chunk' },
   { source: join('bs', 'check-status.md'), skillName: 'bs-check-status' },
   { source: join('bs', 'insert-chunk.md'), skillName: 'bs-insert-chunk' },
-  { source: 'generate-ai-instructions.md', skillName: 'bs-generate-ai' },
+  { source: join('bs', 'build-ai.md'), skillName: 'bs-build-ai' },
   { source: join('bs', 'verify-game.md'), skillName: 'bs-verify-game' },
 ];
+
+/**
+ * Skill directories this installer USED to own and no longer ships. They are deleted on every
+ * install and uninstall, exactly like an owned path.
+ *
+ * Without this, a machine that installed an earlier version keeps the retired directory forever:
+ * `fs.cp` only merges, and the pre-copy clean only removes paths in `SKILL_ENTRY_POINTS`. The
+ * designer would then see BOTH `/bs-generate-ai` and `/bs-build-ai` offered — one of them a stale
+ * copy whose prose predates the rename — and picking the wrong one is the easy path, not the hard
+ * one. Every entry here must be `bs-`-prefixed, for the same collision-safety reason `ownedPaths`
+ * is (never a generic top-level name a user's unrelated skill could share).
+ */
+const RETIRED_SKILL_NAMES = ['bs-generate-ai'];
 
 /**
  * The single source of truth for "what skills does this installer ship" — derived from
@@ -47,16 +61,17 @@ export const SKILL_NAMES: string[] = SKILL_ENTRY_POINTS.map(({ skillName }) => s
 
 /**
  * Single namespaced root the installer owns for the shared reference tree. Everything the
- * skills read in common (build/, ingest/, templates/, aspects/, state-machine.md, reporting.md)
- * lives UNDER this one `bs-`-prefixed dir — `~/.claude/skills/bs-shared/{build,ingest,templates,
- * aspects,state-machine.md,reporting.md}` — so the installer never owns a generic top-level name.
+ * skills read in common (build/, ingest/, orchestrate/, templates/, aspects/, state-machine.md,
+ * reporting.md) lives UNDER this one `bs-`-prefixed dir —
+ * `~/.claude/skills/bs-shared/{build,ingest,orchestrate,templates,aspects,state-machine.md,
+ * reporting.md}` — so the installer never owns a generic top-level name.
  * This makes the pre-copy clean and the uninstaller collision-proof: a user's unrelated skill
  * named exactly `templates`/`build`/`ingest`/`aspects` at the skills root is never touched.
  */
 const SHARED_ROOT = 'bs-shared';
 
 /** Shared reference directories copied under the `bs-shared/` namespace root. */
-const SHARED_DIRS = ['build', 'ingest', 'templates', 'aspects', 'verify'];
+const SHARED_DIRS = ['build', 'ingest', 'orchestrate', 'templates', 'aspects', 'verify'];
 
 /**
  * Shared single files copied to the ROOT of the `bs-shared/` namespace (not inside any
@@ -77,6 +92,13 @@ const SHARED_LEAF_PROBES = [
   join(SHARED_ROOT, 'build', 'build.md'),
   join(SHARED_ROOT, 'ingest', 'transcription.md'),
   join(SHARED_ROOT, 'templates', 'SKETCH.template.md'),
+  join(SHARED_ROOT, 'templates', 'RUN.template.md'),
+  join(SHARED_ROOT, 'templates', 'QUESTIONS.template.md'),
+  join(SHARED_ROOT, 'templates', 'FILINGS.template.md'),
+  join(SHARED_ROOT, 'orchestrate', 'chunk-dispatch.md'),
+  join(SHARED_ROOT, 'orchestrate', 'run-state.md'),
+  join(SHARED_ROOT, 'orchestrate', 'questions.md'),
+  join(SHARED_ROOT, 'orchestrate', 'filings.md'),
   join(SHARED_ROOT, 'aspects', 'index.md'),
   join(SHARED_ROOT, 'verify', 'source-resolution.md'),
   join(SHARED_ROOT, 'verify', 'source-free-mode.md'),
@@ -104,6 +126,7 @@ function excludeTestFiles(src: string): boolean {
 function ownedPaths(targetDir: string): string[] {
   return [
     ...SKILL_ENTRY_POINTS.map(({ skillName }) => join(targetDir, skillName)),
+    ...RETIRED_SKILL_NAMES.map((skillName) => join(targetDir, skillName)),
     join(targetDir, SHARED_ROOT),
   ];
 }
@@ -121,13 +144,26 @@ function expectedInstallPaths(targetDir: string): string[] {
   ];
 }
 
-/** True only when EVERY expected install path is present (a complete, non-partial install). */
+/**
+ * True only when EVERY expected install path is present AND no retired skill directory survives
+ * (a complete, current, non-partial install). A tree that still carries a retired directory is
+ * NOT complete: it must fall through to the pre-copy clean that removes it, or a designer who
+ * installed an earlier version would keep the stale skill until they thought to pass `--force`.
+ */
 async function isFullyInstalled(targetDir: string): Promise<boolean> {
   for (const path of expectedInstallPaths(targetDir)) {
     try {
       await fs.access(path);
     } catch {
       return false; // Missing piece → partial/absent install
+    }
+  }
+  for (const skillName of RETIRED_SKILL_NAMES) {
+    try {
+      await fs.access(join(targetDir, skillName));
+      return false; // A retired skill is still on disk → not a current install
+    } catch {
+      // Absent, as it should be.
     }
   }
   return true;
@@ -259,15 +295,18 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log('Skills:');
   console.log(chalk.cyan('  bs-create-game') + chalk.gray('   - Start a new game — from an idea or a rulebook (start here)'));
   console.log(chalk.cyan('  bs-ingest-rules') + chalk.gray('  - Ingest a rulebook and produce the initial sketch/chunk plan'));
+  console.log(chalk.cyan('  bs-build-game') + chalk.gray('    - Build the whole game: one chunk at a time, resumable, questions filed'));
   console.log(chalk.cyan('  bs-build-chunk') + chalk.gray('   - Build, test, audit, and playtest one chunk at a time'));
   console.log(chalk.cyan('  bs-check-status') + chalk.gray('  - Report sketch/chunk progress and next steps'));
   console.log(chalk.cyan('  bs-insert-chunk') + chalk.gray('  - Insert a new chunk into an existing sketch'));
-  console.log(chalk.cyan('  bs-generate-ai') + chalk.gray('   - Generate AI evaluation functions for a game chunk'));
+  console.log(chalk.cyan('  bs-build-ai') + chalk.gray('      - Generate a computer opponent for the finished game'));
   console.log(chalk.cyan('  bs-verify-game') + chalk.gray('   - Re-verify an existing game against its archived rulebook source'));
   console.log('');
   console.log(chalk.gray('Each skill reads from a shared reference tree (build/, ingest/,'));
   console.log(
-    chalk.gray('templates/, aspects/, state-machine.md, reporting.md) installed under bs-shared/.')
+    chalk.gray(
+      'orchestrate/, templates/, aspects/, state-machine.md, reporting.md) installed under bs-shared/.'
+    )
   );
   console.log(chalk.gray('Projects built with an older BoardSmith skill are auto-detected'));
   console.log(chalk.gray('and offered a one-time conversion by bs-ingest-rules.'));
@@ -295,6 +334,7 @@ export async function uninstallClaudeCommand(options: { local?: boolean } = {}):
   // uninstall cannot wipe an unrelated user skill that happens to share that name.
   const itemsToRemove = [
     ...SKILL_ENTRY_POINTS.map(({ skillName }) => skillName),
+    ...RETIRED_SKILL_NAMES,
     SHARED_ROOT,
   ];
 

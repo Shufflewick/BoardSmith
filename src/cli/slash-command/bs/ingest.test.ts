@@ -1013,7 +1013,10 @@ describe('context floor + ceiling — ingest-rules.md (SKILLAUTO-06)', () => {
   it('treats the ingest→build seam as a continuation seam, not a session terminus', () => {
     const ingestRules = flat(read('ingest-rules.md'));
     expect(ingestRules).toMatch(/continuation seam, not a session terminus/i);
-    expect(ingestRules).toMatch(/auto-advance.*into `\/bs-build-chunk`.*in the same session/i);
+    expect(ingestRules).toMatch(/auto-advance straight into the build in the same session/i);
+    // The continuation target is the whole-game run, which dispatches each chunk into its own
+    // fresh context — the seam must name the sibling instructions it reads, never re-dispatch.
+    expect(ingestRules).toMatch(/bs-build-game\/SKILL\.md/);
     expect(ingestRules).toMatch(/Do not end the turn telling the designer to `\/clear`/i);
   });
 

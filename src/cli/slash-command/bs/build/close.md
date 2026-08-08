@@ -63,25 +63,31 @@ release) and no tail detailing.
    re-reading its whole CHUNK.md.
 
 5. **Reconcile the paperwork ledgers (SKILLAUTO-08).** Before the lock is released, audit the
-   paperwork, not just the code: reconcile, against what this chunk actually changed, the three
+   paperwork, not just the code: reconcile, against what this chunk actually changed, the four
    ledgers this pipeline keeps —
-   - the **filings / library-gap ledger** — `build/build.md` "Boundaries" `## 3` (a library gap is
-     FILED, never patched) — did this chunk file any new gap, and does an EARLIER filing this
-     chunk's own fix touched still read accurately?
+   - the **filings / library-gap ledger** — `FILINGS.md`, per `build/build.md` "Boundaries" `## 3`
+     (a library gap is FILED, never patched) — did this chunk file any new gap, and does an EARLIER
+     filing this chunk's own fix touched still read accurately? A gap this chunk's work resolved has
+     its entry updated here, never left describing a library that has since moved.
+   - the **question ledger** — `QUESTIONS.md` (`orchestrate/questions.md`) — is every question this
+     chunk posed either answered-and-recorded, or still legitimately pending for a later gate? An
+     entry whose answer arrived but whose `Recorded in` field names nothing is the paperwork gap
+     this reconciliation catches: the answer shaped the build, so it belongs in `RULINGS.md` or
+     `DECISIONS.md` too.
    - the **asset-debt ledger** — `check-status.md` item 5, "Outstanding asset debts" (reads
      `ASSETS.md`'s `## Ledger`) — did this chunk receive an asset that was previously a debt row?
    - the **waived-chunk ledger** — `check-status.md` item 4, "Waived verifications" — did this
      chunk's own work (a fix, a revise round) touch a chunk that is still `verified (user-waived)`
      and now deserves a real playtest instead of remaining waived?
 
-   These three ledgers are exactly the ones `check-status.md` surfaces (cite it by name, do not
+   All four are ledgers `check-status.md` surfaces (cite it by name, do not
    re-derive the scan logic here — `check-status.md` remains the single read-only reader of
    `ASSETS.md`'s `## Ledger` and the `## Ordered Chunk List` waived scan). This step's job is
    narrower and different from `check-status.md`'s: it is not a report, it is the point where a
    fix this chunk landed **re-touches** the filing or ruling it resolved or advanced — mark a
    closed library-gap filing resolved, update an advanced one, and do not leave the paperwork
    stale once the code that made it stale has already landed. If nothing this chunk did changes
-   any of the three ledgers, record that explicitly ("no ledger changes this chunk") rather than
+   any of the four ledgers, record that explicitly ("no ledger changes this chunk") rather than
    omitting the step — a reconciliation that never appears is indistinguishable from one that
    never ran.
 
@@ -179,7 +185,7 @@ resolved the same session **auto-advances**: it rolls straight into the next chu
 entry first), and running `investigate → redteam` continuously, stopping at that chunk's `ask`
 gate (or, for a light-path next chunk, its `playtest` gate; or, for the mandated final-acceptance
 chunk, dispatch `build/final-acceptance.md`; or, when the sketch's next mandated step is
-`bs-generate-ai`, auto-advance carries the same way into that chunk and on into the
+`bs-build-ai`, auto-advance carries the same way into that chunk and on into the
 final-acceptance chunk that follows it — the generate-AI → final-acceptance progression is one
 continuous run, not two separately re-invoked sessions). The printed command exists **only** as
 the cold-resume/crash fallback for the case where a stop condition *does* fire at this boundary —
@@ -187,6 +193,11 @@ the user said stop, context has crossed the 60% low-water mark, or an automated 
 stuck/unrecoverable. It is never the default end-of-close signal: presenting the proposal lets the
 user see the next chunk (and say "stop") before its first gate, but silence means auto-advance, not
 a wait for re-invocation.
+
+**In orchestrated mode, close returns instead of auto-advancing** (`build-chunk.md` "Orchestrated
+Mode"): the chunk's own lifecycle is complete, so the dispatched subagent reports `outcome: closed`
+and the run's loop — not this step — dispatches the next chunk into its own fresh context. If the
+tail delta above needs approval, that is a gate returned for the designer, not a question asked here.
 
 ## Downstream Shape (cite, never restate)
 
@@ -196,7 +207,7 @@ and SKETCH.md reflects the (possibly updated) tail. By default **the same sessio
 into a fresh `{investigate, redteam, ask}` group for the proposed chunk (`state-machine.md`
 "Session Handoff Seams" → "Cross-chunk continuation"), stopping at its `ask` gate — or, if the
 sketch's `## Mandated Chunks` final-acceptance chunk is next, dispatches `build/final-acceptance.md`
-instead — carrying the same auto-advance through a `bs-generate-ai` chunk into the
+instead — carrying the same auto-advance through a `bs-build-ai` chunk into the
 final-acceptance chunk that follows it. Only when a stop condition fires at the chunk boundary does
 the printed command's cold-resume/crash fallback come into play, picked up by a fresh
 `/bs-build-chunk` invocation. This file does not restate either downstream shape.

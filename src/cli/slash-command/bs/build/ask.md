@@ -66,6 +66,27 @@ chunk's own earlier redteam escalation, at a prior chunk's `ask`, or as a standi
 entry — that approval stands; re-presenting it as a fresh question wastes the user's attention and
 implies their prior answer didn't count.
 
+**Read the answer cache before asking, and write to it as you ask.** A question that lived only in
+a conversation was lost to the next `/clear`, and the designer got asked it again — so `QUESTIONS.md`
+(`templates/QUESTIONS.template.md`, protocol in `orchestrate/questions.md`) is the durable half of
+the rule above, and both directions are mandatory:
+
+- **Before** a part (b) question reaches the user, read `QUESTIONS.md` alongside `RULINGS.md`. An
+  answered entry that already decides it means it is answered: use that answer, do not re-present it
+  "to confirm." Under an orchestrated run the settled answers arrive quoted in the dispatch brief's
+  digest, so no read is needed — but a question the digest already answers is just as forbidden.
+- **As** each part (b) question is posed, append its `### Question N` entry with `Answer: pending`,
+  in the designer's own words. Not after the answer arrives: a session that dies between asking and
+  answering must leave the question on record as outstanding.
+- **When** the answer lands, fill that entry's `Answer`/`Answered at`/`Recorded in` fields once, and
+  name in `Recorded in` the durable entry the answer earned — the `RULINGS.md` ruling below for a
+  rules call, or the `DECISIONS.md` entry for an assumption. `QUESTIONS.md` is the transcript;
+  `RULINGS.md` stays the authority (`state-machine.md` "Rulings Outrank Rulebook").
+
+In orchestrated mode this step does not converse: it composes the four parts, writes its pending
+question entries, and returns the presentation verbatim as the report's `gate.payload` for the
+orchestrator to put to the designer (`build-chunk.md` "Orchestrated Mode").
+
 **Never route a human playtest for a chunk with no visible UI.** A `ui: none` chunk has nothing
 for a human to click through — this ask step never proposes or implies a client-playtest stop for
 it (see `state-machine.md` "Session Handoff Seams" — the milestone/UI-gated `playtest` stop,

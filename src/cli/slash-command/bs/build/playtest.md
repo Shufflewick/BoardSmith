@@ -146,6 +146,14 @@ CHUNK.template.md's `## Verified Checklist` with one line per script item, and c
 line only as the human confirms that specific item worked as expected. Do not mark the whole
 checklist done because the human said "looks good" once; walk it one at a time.
 
+**In orchestrated mode this gate is returned, not conducted** (`build-chunk.md` "Orchestrated
+Mode"): a dispatched subagent has no human to walk the script with, so it stops here and returns the
+numbered script verbatim as its report's `gate.payload` with `gate.kind: playtest`. The orchestrator
+walks it with the designer item by item and the next dispatch writes the confirmed checklist. A
+subagent must never fill the `## Verified Checklist`, write `Status: verified`, or infer a waiver
+from silence — no human confirmed anything, and a self-confirmed playtest is exactly the fabricated
+verification this gate exists to prevent.
+
 Presenting the script is not verifying it — only the human's explicit, item-by-item confirmation
 (or an explicit, honest choice to skip playtesting) authorizes the write. If the human explicitly
 chooses to skip playtesting this chunk, record that honestly as `verified (user-waived)` rather

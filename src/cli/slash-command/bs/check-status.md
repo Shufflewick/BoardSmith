@@ -1,14 +1,14 @@
 ---
 name: bs-check-status
-description: Report where a BoardSmith game project stands — chunks done/remaining, current chunk/step, outstanding playtest feedback, waived verifications, asset debts, ideas backlog, and the exact next command. Read-only. Use when the designer wants a status summary.
+description: Report where a BoardSmith game project stands — chunks done/remaining, current chunk/step, outstanding playtest feedback, waived verifications, asset debts, ideas backlog, unanswered questions, BoardSmith bugs filed, and the exact next command. Read-only. Use when the designer wants a status summary.
 ---
 
 # `/bs-check-status` — Where Are We?
 
 Cite `state-machine.md` and `templates/*.template.md` rather than restating their rules — if
 you are extending this skill, link to the relevant section instead of copying rule text. This
-file is a lean, READ-ONLY reader: it reads `SKETCH.md`, the in-progress chunk's `CHUNK.md`, and
-`ASSETS.md` directly, and dispatches **no subagents** — cite `build-chunk.md`'s Context-Economics
+file is a lean, READ-ONLY reader: it reads `SKETCH.md`, the in-progress chunk's `CHUNK.md`,
+`ASSETS.md`, `QUESTIONS.md`, `FILINGS.md`, and `RUN.md` directly, and dispatches **no subagents** — cite `build-chunk.md`'s Context-Economics
 Hard Rule, "reading state files is exactly the orchestrator's job." It does not explain the
 status enum, the step names, the session lock, or the consistency check inline — see
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
@@ -24,7 +24,7 @@ user how to proceed; it does not repair them itself.
 
 This skill's whole output is a report, so it is the one place structure is welcome — but it is
 written in `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`'s voice, not the pipeline's. Report the
-nine items in plain words: what's done, what's left, what needs the designer, and the one command
+eleven items in plain words: what's done, what's left, what needs the designer, and the one command
 to run next. Translate every internal spelling rather than printing it (`verified (user-waived)` →
 "you chose to skip testing this one"; `rules-stale` → "needs re-testing, because the rules
 underneath it changed"; `reopen-playtest` → "you'll need to play this one again after the fix").
@@ -64,10 +64,11 @@ to proceed before continuing — this skill never silently repairs a problem it 
 guesses the intended state. If `SKETCH.md` does not exist at all, report that no project has been
 ingested yet and stop here — there is nothing to report status on.
 
-## Body: Read, Then Synthesize the Nine Items
+## Body: Read, Then Synthesize the Eleven Items
 
 Read `SKETCH.md`'s `## Ordered Chunk List`, then the in-progress chunk's `chunks/<slug>/CHUNK.md`
-(derived below), then `ASSETS.md`. Synthesize exactly the following nine items — this is the
+(derived below), then `ASSETS.md`, `QUESTIONS.md`, `FILINGS.md`, and `RUN.md`. Synthesize exactly
+the following eleven items — this is the
 canonical contract (see `.planning/bs-skills-plan.md` "/bs-check-status"). Do not add or omit
 items.
 
@@ -128,8 +129,12 @@ from the state just read:
 - If the current chunk exists and is not yet fully verified — whether it is mid-ceremony (some
   steps checked, more remain), detailed but not yet started (zero steps checked), or still a
   sketch-level tail entry "not yet detailed" (no `chunks/<slug>/` directory yet, per Item 2) — the
-  next command is `/bs-build-chunk` (to start, detail, or resume it). This one bullet covers every
-  in-progress state so none falls through.
+  next command builds it. Which one depends on scope, and `RUN.md` decides it: if `RUN.md` exists
+  and its `Run Status:` is `active` or `paused`, an orchestrated run is in play and the next command
+  is `/bs-build-game` (it resumes at the open gate and keeps going through the remaining chunks);
+  otherwise the next command is `/bs-build-chunk` for that one chunk, and mention `/bs-build-game`
+  once as the way to build the rest in one run. This one bullet covers every in-progress state so
+  none falls through.
 - If a sketch reshape was just discussed with the user in this same conversation (reordering,
   inserting, splitting, or removing a chunk), the next command is `/bs-insert-chunk` (this
   overrides the build-chunk case above).
@@ -191,13 +196,35 @@ rather than inventing a zero (never a fabricated clean).
 This command is read-only — item 9 does not violate this skill's no-writes-of-any-kind posture
 (see `## Read-Only Posture (explicit)` below).
 
-Present all nine items together as one report, in the order above, followed by the exact next
+**10. Unanswered questions.** Read `QUESTIONS.md`'s `## Ledger`. Report every entry whose `Answer:`
+is still `pending` — the question in the designer's own words, and which part of the game raised it.
+These are the things the pipeline is waiting on them for; if a run is paused with an open gate
+(`RUN.md`'s `Open Gate:`), say which of these questions is that gate. If there are none, say so
+explicitly rather than omitting the item. Never re-pose an ANSWERED entry here: a report is not a
+gate, and re-surfacing a settled answer reads as re-asking it
+(`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/questions.md`).
+
+**11. BoardSmith bugs and gaps filed.** Read `FILINGS.md`'s `## Ledger`. Report each entry whose
+`Reported:` is `recorded` (found, not yet reported upstream) or `posted`/`posted-by-designer` with
+an open issue, in plain terms: what BoardSmith can't do yet, whether this game worked around it,
+and whether it has been reported. Name the ones still only recorded as things the designer may want
+reported — reporting them is `/bs-build-game`'s job
+(`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md`), never this skill's, which stays
+read-only. A `declined` filing is not reported here; the designer already decided. If `FILINGS.md`
+does not exist, check for a pre-conversion ledger under the older hand-rolled name
+(`BOARDSMITH-BUGS.md`) and report from that instead — its one-time conversion is `/bs-build-game`'s
+job, not this skill's (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md` "Adopting a
+Pre-Existing Bug Ledger"). If neither exists, this game has hit no library gaps — say that plainly.
+
+Present all eleven items together as one report, in the order above, followed by the exact next
 command on its own line.
 
 ## Read-Only Posture (explicit)
 
 This skill performs **no writes** of any kind — not to `SKETCH.md`, not to any `CHUNK.md`, not to
-`ASSETS.md`, and not to the session-lock timestamp inside `SKETCH.md`. Item 8's
+`ASSETS.md`, not to `QUESTIONS.md`, `FILINGS.md`, or `RUN.md`, and not to the session-lock timestamp
+inside `SKETCH.md`. Items 10 and 11 read their ledgers and report them; answering a pending question
+and reporting a filing upstream are `/bs-build-game`'s jobs. Item 8's
 `boardsmith chunk-provenance-status --json` call and item 9's
 `boardsmith verify-impact-status --json` call are themselves read-only (they aggregate and report;
 neither ever writes a `CHUNK.md` or `SKETCH.md`), so neither violates this posture. It may REPORT the
@@ -207,7 +234,8 @@ lock; refreshing a live-resume lock is `/bs-build-chunk`'s job (Step 0's "Same c
 outcome), not this skill's. If Step 0's consistency check finds a problem, this skill reports it
 and asks the user how to proceed — it never repairs `SKETCH.md` or a `CHUNK.md` itself. There is
 no mode, flag, or user request that causes this skill to write a state file; if a user asks this
-skill to fix something it found, direct them to `/bs-build-chunk` or `/bs-insert-chunk` instead.
+skill to fix something it found, direct them to `/bs-build-game`, `/bs-build-chunk`, or
+`/bs-insert-chunk` instead.
 
 ## Reference Files
 
@@ -222,6 +250,9 @@ so each is described in the body where its item is synthesized rather than liste
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CHUNK.template.md` — the `## Step Checklist` / `## Revision Rounds` grammar this
   skill reads from
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md` — the asset ledger this skill reads from
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/QUESTIONS.template.md` — the answer cache item 10 reads from
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/FILINGS.template.md` — the filings ledger item 11 reads from
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN.template.md` — the orchestrated-run journal items 7 and 10 read from
 
 **Installed location:** this file installs as `.claude/skills/bs-check-status/SKILL.md`. The
 shared `templates/` and `state-machine.md` referenced above install under the `bs-shared/`
