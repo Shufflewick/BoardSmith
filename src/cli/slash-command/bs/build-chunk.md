@@ -24,6 +24,35 @@ or say plainly that there's nothing; describe what changed in the game they can 
 pipeline; keep internal ids, step names, file paths, ledger counts, and verdict spellings out of
 the body; never narrate bookkeeping. An ordinary step completion is one to three sentences.
 
+## Orchestrated Mode (dispatched by `/bs-build-game`)
+
+This skill has two callers: a designer typing `/bs-build-chunk`, and `/bs-build-game` dispatching it
+into a fresh subagent for one chunk of a whole-game run
+(`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md`). **Orchestrated mode is declared
+in the brief, never inferred** — a brief that says "You are running in orchestrated mode" for a named
+chunk puts these four rules in force for this session (`state-machine.md` "Orchestrated Runs"):
+
+1. **Build exactly the named chunk, then return.** Do not auto-advance into the next chunk — the
+   cross-chunk continuation described below is the ordinary-session behavior, and the run's own loop
+   replaces it here.
+2. **There is no designer on the other end of this context.** Never ask a question, never wait for
+   approval, never assume approval. At a human gate — `ask`, a milestone `playtest`, a refuted-twice
+   escalation, a repair round-3 triage, `close`'s tail delta — stop and return the gate's own
+   composed text as the report's `gate.payload`. Gate-before-write is unchanged: nothing a gate
+   authorizes is written until a later dispatch arrives carrying the designer's actual answer.
+3. **Read the brief's answered-questions digest before any gate.** Every question the designer has
+   already answered arrives quoted in the brief, and an answer already given is never re-asked
+   (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/questions.md`). Questions this chunk genuinely
+   needs are written to `QUESTIONS.md` as they are posed and returned in the report's `questions`
+   field.
+4. **Your final message is the return shape and nothing else** — the fields
+   `orchestrate/chunk-dispatch.md` "The Return Shape" pins, consumed by name. A designer-facing
+   summary belongs in its `designerSummary` field, not around the report.
+
+Everything else in this file applies unchanged in both modes. Where a rule below says "tell the
+user" or "stop for the user's decision," orchestrated mode satisfies it by returning the gate rather
+than by asking — the gate still stops the work, and the human still decides.
+
 ## Context-Economics Hard Rule
 
 **The orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself.**
@@ -531,6 +560,11 @@ And to the shared reference files that ship with every `bs-` skill:
   findings ledger belongs to `audit`/`repair`)
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RULINGS.template.md` — the ledger `ask`'s house-rule choices and redteam's
   refuted-twice escalations append to
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/QUESTIONS.template.md` — the answer cache every gate
+  writes a question to when it is posed, so it is asked exactly once
+  (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/questions.md`)
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/FILINGS.template.md` — the filings/library-gap ledger
+  `build` writes to when the library falls short (`build/build.md` "Boundaries")
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/ASSETS.template.md` — the ledger `ask`'s asset requests append to
 
 **Installed location:** this file installs as `.claude/skills/bs-build-chunk/SKILL.md`. The

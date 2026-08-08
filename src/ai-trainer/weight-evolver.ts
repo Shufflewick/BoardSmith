@@ -71,7 +71,7 @@ const DEFAULT_CONFIG: Required<Omit<WeightEvolverConfig, 'seed' | 'onProgress' |
 
 /**
  * WeightEvolver focuses solely on evolving weights for existing objectives.
- * Use /generate-ai to create objectives, then WeightEvolver to tune weights.
+ * Use /bs-build-ai to create objectives, then WeightEvolver to tune weights.
  */
 export class WeightEvolver<G extends Game = Game> {
   private GameClass: GameClass<G>;

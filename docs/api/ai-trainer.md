@@ -138,7 +138,7 @@ console.log('Final fitness:', result.fitness);
 
 `WeightEvolver` is the live training engine, but the supported end-to-end entry
 point is the `evolve-ai-weights` CLI command. It introspects the game, loads the
-existing objectives produced by `/generate-ai`, evolves their weights via parallel
+existing objectives produced by `/bs-build-ai`, evolves their weights via parallel
 benchmarking, and regenerates the AI file:
 
 ```bash

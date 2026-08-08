@@ -1372,7 +1372,7 @@ describe('SKILLAUTO-05 — auto-advance', () => {
     const stateMachine = read('state-machine.md');
     const close = read('build/close.md');
     expect(stateMachine).toMatch(/auto-advance/i);
-    expect(stateMachine).toMatch(/generate-ai\s*(→|->)\s*final-acceptance/i);
+    expect(stateMachine).toMatch(/generate-AI\s*(→|->)\s*final-acceptance/i);
     expect(close).toMatch(/auto-advance/i);
   });
 

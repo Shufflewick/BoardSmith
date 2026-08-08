@@ -307,19 +307,27 @@ Never restate template or state-machine content inline in this file or in the wr
 files beyond what each template already documents — fill the placeholders, don't reinvent the
 structure.
 
-## Step 8: Continue Into the First Chunk
+## Step 8: Continue Into the Build
 
 **The ingest→build seam is a continuation seam, not a session terminus** — the same rule
 `state-machine.md` gives the chunk→chunk seam ("Cross-chunk continuation") applies here. Once the
-files are written, confirm in a sentence that everything is saved, then **auto-advance straight
-into `/bs-build-chunk` for the first chunk in the same session**, stopping at that chunk's first
-human gate (its `ask` approval). Do not end the turn telling the designer to `/clear` and re-invoke.
+files are written, confirm in a sentence that everything is saved, then **auto-advance straight into
+the build in the same session**, stopping at the first chunk's first human gate (its `ask` approval).
+Do not end the turn telling the designer to `/clear` and re-invoke.
+
+Continue by **reading `${CLAUDE_SKILL_DIR}/../bs-build-game/SKILL.md` and following it from its
+Step 0** — the whole-game run, which builds the sketch's chunks one at a time in fresh contexts and
+so does not hand the designer a `/clear` every chunk or two (`state-machine.md` "Orchestrated Runs").
+Read the sibling instructions and execute them in this same turn, exactly as `/bs-create-game` hands
+off to this file — never re-dispatch it as a separate skill invocation. If the designer has said they
+want one chunk only, read `${CLAUDE_SKILL_DIR}/../bs-build-chunk/SKILL.md` instead.
 
 Stop at this seam ONLY if one of the state-machine's three stop conditions actually holds: the
 designer said stop, an automated step is stuck, or context is at/above the ~60% ceiling (or the
 harness surfaced a real context-low warning) — **and never below the ≥50% floor** on a
 self-assessed hunch, per "Context Floor + Ceiling" above. If a stop condition does hold, print the
-exact next command (`/bs-build-chunk`) as the cold-resume path and say what it will pick up.
+exact next command (`/bs-build-game`, or `/bs-build-chunk` for a single chunk) as the cold-resume
+path and say what it will pick up.
 
 ## Reference Files
 

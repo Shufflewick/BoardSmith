@@ -1,6 +1,6 @@
 # BS Skills — State-Machine Authority Rules
 
-Every `bs-` skill (`bs-ingest-rules`, `bs-build-chunk`, `bs-check-status`, `bs-insert-chunk`, `bs-generate-ai`) cites this file rather than restating its rules. If you are authoring or extending a `bs-` skill, link to the relevant section below instead of copying rule text.
+Every `bs-` skill (`bs-ingest-rules`, `bs-build-game`, `bs-build-chunk`, `bs-check-status`, `bs-insert-chunk`, `bs-build-ai`) cites this file rather than restating its rules. If you are authoring or extending a `bs-` skill, link to the relevant section below instead of copying rule text.
 
 ## Project Layout — Where Every Path in This Protocol Lives
 
@@ -11,11 +11,18 @@ Every design artifact this protocol names lives under the project's **`design/`*
   boardsmith.json
   design/
     BRIEF.md  SKETCH.md  DESIGN.md  DECISIONS.md  RULINGS.md  ASSETS.md
+    QUESTIONS.md  FILINGS.md  RUN.md
     chunks/<slug>/CHUNK.md
     rulebook/INDEX.md  rulebook/NN-*.md  rulebook/source/
   src/  tests/  public/          <- the game itself; never a design artifact
   .boardsmith/scratch/           <- gitignored; every throwaway script goes here
 ```
+
+`QUESTIONS.md` (every question put to the designer and the answer they gave), `FILINGS.md` (every
+BoardSmith bug/library gap found while building), and `RUN.md` (the orchestrated run's journal) are
+the three newest of these; the first two are written by any skill that asks a question or hits a
+library gap, the third only by `/bs-build-game`. See `orchestrate/questions.md`,
+`orchestrate/filings.md`, and `orchestrate/run-state.md`.
 
 **Every path named in these skills — `SKETCH.md`, `RULINGS.md`, `chunks/<slug>/CHUNK.md`,
 `rulebook/02-*.md` — is written relative to `design/`.** On disk that means `design/SKETCH.md`,
@@ -401,7 +408,7 @@ gate. (A light-path next chunk has no `ask`; it continues to that chunk's `playt
 human gate, instead. The mandated final-acceptance chunk dispatches `build/final-acceptance.md` per
 "Final-acceptance chunk exception" below.) Auto-advance is not limited to ordinary chunk-to-chunk
 continuation: it carries into the next LOGICAL step across chunk types, including the **generate-AI
-→ final-acceptance** progression — once a sketch's `bs-generate-ai` chunk closes, the same session
+→ final-acceptance** progression — once a sketch's `bs-build-ai` chunk closes, the same session
 auto-advances into the final-acceptance chunk that follows it exactly as it would any other next
 chunk, rather than stopping to let the human re-invoke between them. This is what makes the router a
 **loop over chunks** bounded by human gates, context, and stuck-state — not a one-shot that halts
@@ -413,8 +420,9 @@ from the user means auto-advance, not a wait for re-invocation.
 
 **The ingest→build seam is a continuation seam too.** `/bs-ingest-rules` Step 7 writing `SKETCH.md`
 and the first `CHUNK.md` files is the same kind of boundary as `close`→next chunk: durable, and NOT
-a session terminus. The ingest session auto-advances into the first chunk's `/bs-build-chunk` work
-and stops at that chunk's `ask` gate, subject to the identical (a)/(b)/(c) stop conditions and the
+a session terminus. The ingest session auto-advances into the build — by default the whole-game run
+(`/bs-build-game`, see "Orchestrated Runs" below), which dispatches the first chunk's
+`/bs-build-chunk` work — and stops at that chunk's `ask` gate, subject to the identical (a)/(b)/(c) stop conditions and the
 floor+ceiling below. See `ingest-rules.md` "Step 8: Continue Into the First Chunk".
 
 **Context floor + ceiling (SKILLAUTO-06).** Two numbers govern context, and both must hold at
@@ -452,3 +460,38 @@ unchanged: the orchestrator reads structured return-shapes and chunk state, neve
 behind them.
 
 **Final-acceptance chunk exception.** The sketch's one mandated final-acceptance chunk (`templates/SKETCH.template.md` "## Mandated Chunks") has a fixed 4-item Step Checklist `[final-acceptance, playtest, revise, close]` (`build-chunk.md` "Final-acceptance chunk target"). Its leading `final-acceptance` content step — a coverage check plus a 7-point design-QA pass with a fresh-context agent dispatch and two human-narrated checks — is by far the heaviest single step in the skill. The seam between `final-acceptance` and `playtest` is therefore a first-class **resume checkpoint**: because that content step is so heavy it is the most likely place a context-low warning fires, and its sub-parts persist individually so a resume re-enters mid-pass rather than re-running the whole step. It is NOT a mandatory auto-stop — if context holds, the same session flows from `final-acceptance` straight into the `{playtest, revise, close}` group and stops at the human `playtest` gate that follows, exactly like any other chunk. See `build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the sub-part persistence that keeps a mid-pass crash resumable.
+
+## Orchestrated Runs (`/bs-build-game`)
+
+Everything above describes one session running the pipeline. `/bs-build-game` adds one level above
+that: a **run** that builds many chunks by dispatching each into its own fresh subagent
+(`orchestrate/chunk-dispatch.md`). Nothing in this file's machinery changes underneath it — the
+status enum, write order, cold-resume parse contract, session lock, git protocol, and human gates
+are identical whether a chunk is built by a designer typing `/bs-build-chunk` or by a dispatched
+subagent. Four rules govern the seam between the two:
+
+1. **Orchestrated mode is declared, never inferred.** A subagent is told, in its brief, that it is
+   running in orchestrated mode for exactly one named chunk. A session that was not told this is an
+   ordinary session and auto-advances across chunk boundaries as "Cross-chunk continuation" above
+   describes; a session that WAS told it builds that one chunk and returns instead.
+2. **A dispatched subagent has no designer.** It never asks a question, never waits for approval,
+   and never assumes approval — it stops at the human gate and returns the gate's own text for the
+   orchestrator to put to the designer. Gate-before-write is unchanged: no `Status: approved`, no
+   ruling, no verified checklist until a later dispatch arrives carrying the designer's actual
+   answer. Only *who relays* the answer changes, never *who decides* it (the same "How, Never What"
+   boundary "Autonomy Scope" above draws).
+3. **The context floor and ceiling apply per subagent, not per run.** Each dispatch gets a fresh
+   window and winds down against the same ≥50% floor / ~60% ceiling; a subagent that crosses its
+   ceiling persists, commits, and returns, and the run re-dispatches the same chunk. The
+   orchestrator's own thread stays flat by reading only state files and structured returns, so the
+   ceiling stops being the thing that ends the designer's session.
+4. **The run journal is not an authority.** `RUN.md` records which gate is open, why a run stopped,
+   and how many passes a chunk took. Chunk status still lives in `CHUNK.md` with `SKETCH.md`'s
+   derived pointer, and on any disagreement `CHUNK.md` wins and `RUN.md` is repaired to match — the
+   same "Authority" rule this file applies to `SKETCH.md`.
+
+The batched-question queue gets a durable home under a run: an open question is a `QUESTIONS.md`
+entry whose answer is still pending, and a settled one is never re-asked because every dispatch
+carries the settled answers with it (`orchestrate/questions.md`). A library gap is still FILED and
+never patched (`build/build.md` "Boundaries"), and a run additionally offers to report it upstream
+(`orchestrate/filings.md`).
