@@ -4,7 +4,13 @@ import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
-import { findUnknownKeys } from '../lib/config-schema.js';
+import {
+  findUnknownKeys,
+  findUnknownKeysIn,
+  ALLOWED_WORLD_KEYS,
+  ALLOWED_ROUND_DEADLINE_KEYS,
+  ALLOWED_NAMED_ACTION_KEYS,
+} from '../lib/config-schema.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
 
@@ -48,42 +54,44 @@ export async function validateCommand(): Promise<void> {
   // 6. Required files check
   results.push(await validateRequiredFiles(cwd));
 
-  // Print results
+  if (!printResults(results)) {
+    console.log(chalk.red('Validation failed. Please fix the issues above.\n'));
+    process.exit(1);
+  }
+
+  printSuccessGuidance();
+}
+
+/** Prints every check's verdict and its failure detail. Returns whether all passed. */
+function printResults(results: ValidationResult[]): boolean {
   console.log(chalk.cyan('\nValidation Results:\n'));
 
-  let allPassed = true;
   for (const result of results) {
     const icon = result.passed ? chalk.green('✓') : chalk.red('✗');
     const status = result.passed ? chalk.green('PASS') : chalk.red('FAIL');
     console.log(`  ${icon} ${result.name}: ${status}`);
+    if (result.passed) continue;
 
-    if (!result.passed) {
-      allPassed = false;
-      console.log(chalk.dim(`    ${result.message}`));
-      if (result.details) {
-        for (const detail of result.details) {
-          console.log(chalk.dim(`      - ${detail}`));
-        }
-      }
+    console.log(chalk.dim(`    ${result.message}`));
+    for (const detail of result.details ?? []) {
+      console.log(chalk.dim(`      - ${detail}`));
     }
   }
 
   console.log('');
+  return results.every((result) => result.passed);
+}
 
-  if (allPassed) {
-    console.log(chalk.green('All validation checks passed!\n'));
-    console.log(chalk.cyan('Next steps:'));
-    console.log(chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'));
-    console.log(chalk.dim('  boardsmith build    - Build for production'));
-    console.log(chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'));
-    console.log(chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'));
-    console.log(chalk.dim('     The engine will warn about issues like:'));
-    console.log(chalk.dim('     - Flow steps referencing non-existent actions'));
-    console.log(chalk.dim('     - Element reference comparisons instead of ID comparisons\n'));
-  } else {
-    console.log(chalk.red('Validation failed. Please fix the issues above.\n'));
-    process.exit(1);
-  }
+function printSuccessGuidance(): void {
+  console.log(chalk.green('All validation checks passed!\n'));
+  console.log(chalk.cyan('Next steps:'));
+  console.log(chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'));
+  console.log(chalk.dim('  boardsmith build    - Build for production'));
+  console.log(chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'));
+  console.log(chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'));
+  console.log(chalk.dim('     The engine will warn about issues like:'));
+  console.log(chalk.dim('     - Flow steps referencing non-existent actions'));
+  console.log(chalk.dim('     - Element reference comparisons instead of ID comparisons\n'));
 }
 
 /**
@@ -109,6 +117,7 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
   }
 
   issues.push(...checkTaxonomyShape(config));
+  issues.push(...checkPlatformBlockShapes(config));
 
   // Unknown top-level keys — did-you-mean suggestions from the shared
   // allowed-key set (CLIX-02). Removed/renamed keys get pointed migration
@@ -174,6 +183,158 @@ export function checkTaxonomyShape(config: Record<string, unknown>): string[] {
 
   if (config.colorPalette !== undefined) {
     issues.push(...checkColorPaletteShape(config.colorPalette));
+  }
+
+  return issues;
+}
+
+/** A JSON object — not null, not an array. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Unknown-key pass for a nested block, phrased like the top-level one so a
+ * typo inside `world` reads the same as a typo beside it.
+ */
+function checkBlockKeys(
+  block: Record<string, unknown>,
+  path: string,
+  allowed: readonly string[],
+): string[] {
+  return findUnknownKeysIn(block, allowed).map(({ key, suggestion }) => (
+    suggestion
+      ? `Unknown key '${key}' in "${path}" — did you mean '${suggestion}'?`
+      : `Unknown key '${key}' in "${path}" — not a recognized field of "${path}".`
+  ));
+}
+
+/**
+ * Shape checks for the blocks the PUBLISHING PLATFORM reads out of the built
+ * manifest: `persistence`, `ai`, `joinInProgress`, `idleAction`,
+ * `roundDeadline` and `world`. They reach the platform untouched through
+ * build.ts's `deriveManifest` config spread, so a malformed block is only
+ * discovered at upload unless it is caught here.
+ *
+ * SHAPE only, deliberately — the platform's own POLICY (its hour bounds, and
+ * its rule that `roundDeadline` needs either `ai: true` or an `idleAction`)
+ * stays where it is enforced, `games/src/manifest-schema.ts`. Restating
+ * platform policy here would give it two homes and one of them would drift.
+ */
+function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
+  const issues: string[] = [];
+
+  const booleans: Record<string, string> = {
+    persistence: 'true when the game opts into the platform\'s cross-session key/value store',
+    ai: 'true when the bundle ships a gameDefinition.ai block',
+    joinInProgress: 'true when a player may join a session already underway',
+  };
+  for (const [key, meaning] of Object.entries(booleans)) {
+    if (config[key] !== undefined && typeof config[key] !== 'boolean') {
+      issues.push(`"${key}" must be a boolean — ${meaning}.`);
+    }
+  }
+
+  if (config.idleAction !== undefined) {
+    issues.push(...checkNamedActionShape(
+      config.idleAction,
+      'idleAction',
+      'the legal no-op action the platform submits for a seat whose deadline expired',
+    ));
+  }
+  if (config.roundDeadline !== undefined) {
+    issues.push(...checkRoundDeadlineShape(config.roundDeadline));
+  }
+  if (config.world !== undefined) {
+    issues.push(...checkWorldShape(config.world));
+  }
+
+  return issues;
+}
+
+/**
+ * Shape check for an action the platform submits on the game's behalf —
+ * `idleAction`, `world.resolveAction`, `world.enrolAction`. One
+ * implementation, because they are one shape.
+ */
+function checkNamedActionShape(raw: unknown, path: string, names: string): string[] {
+  if (!isPlainObject(raw)) {
+    return [`"${path}" must be an object naming ${names}, e.g. { "name": "pass" }.`];
+  }
+
+  const issues = checkBlockKeys(raw, path, ALLOWED_NAMED_ACTION_KEYS);
+
+  if (typeof raw.name !== 'string' || raw.name.length === 0) {
+    issues.push(`"${path}.name" must be a non-empty string naming ${names}, exactly as your rules register the action.`);
+  }
+  if (raw.args !== undefined && !isPlainObject(raw.args)) {
+    issues.push(`"${path}.args" must be an object of literal action arguments if present (e.g. { "count": 1 }).`);
+  }
+
+  return issues;
+}
+
+/**
+ * Shape check for the persistent-world block. `resolveAction` is REQUIRED
+ * once `world` is present — a world that declares no resolver can never
+ * advance a round, and the platform refuses such a bundle at upload.
+ */
+function checkWorldShape(raw: unknown): string[] {
+  const example = '{ "resolveAction": { "name": "resolveRound" } }';
+  if (!isPlainObject(raw)) {
+    return [`"world" must be an object, e.g. ${example} — remove the key entirely if this game is not a persistent world.`];
+  }
+
+  const issues = checkBlockKeys(raw, 'world', ALLOWED_WORLD_KEYS);
+
+  if (raw.resolveAction === undefined) {
+    issues.push(`"world" must declare a "resolveAction" naming the action one round resolution submits, e.g. ${example}. A world with no resolver can never advance a round.`);
+  } else {
+    issues.push(...checkNamedActionShape(
+      raw.resolveAction,
+      'world.resolveAction',
+      'the action one round resolution submits',
+    ));
+  }
+
+  if (raw.enrolAction !== undefined) {
+    issues.push(...checkNamedActionShape(
+      raw.enrolAction,
+      'world.enrolAction',
+      'the action that enrols an arriving player into the world',
+    ));
+  }
+
+  return issues;
+}
+
+/**
+ * Shape + internal arithmetic for `roundDeadline`. The platform's hour bounds
+ * are NOT restated here (see checkPlatformBlockShapes); min <= default <= max
+ * is the block's own arithmetic, not platform policy, so it belongs here.
+ */
+function checkRoundDeadlineShape(raw: unknown): string[] {
+  const example = '"roundDeadline" must be { "defaultHours", "minHours", "maxHours" } integer hours (e.g. { "defaultHours": 24, "minHours": 6, "maxHours": 72 })';
+  if (!isPlainObject(raw)) return [`${example}.`];
+
+  const issues = checkBlockKeys(raw, 'roundDeadline', ALLOWED_ROUND_DEADLINE_KEYS);
+
+  const bad = (['defaultHours', 'minHours', 'maxHours'] as const).filter(
+    (key) => !Number.isInteger(raw[key]),
+  );
+  if (bad.length > 0) {
+    issues.push(`${example} — ${bad.map((b) => `"${b}"`).join(', ')} missing or not an integer.`);
+  }
+  if (raw.mindingSafe !== undefined && typeof raw.mindingSafe !== 'boolean') {
+    issues.push('"roundDeadline.mindingSafe" must be a boolean if present — your acknowledgement that a caretaker bot may play an absent player\'s seat in this game.');
+  }
+  if (bad.length > 0) return issues;
+
+  const { defaultHours, minHours, maxHours } = raw as { defaultHours: number; minHours: number; maxHours: number };
+  if (minHours > maxHours) {
+    issues.push(`"roundDeadline.minHours" (${minHours}) must be <= "roundDeadline.maxHours" (${maxHours}).`);
+  } else if (defaultHours < minHours || defaultHours > maxHours) {
+    issues.push(`"roundDeadline.defaultHours" (${defaultHours}) must be between "roundDeadline.minHours" (${minHours}) and "roundDeadline.maxHours" (${maxHours}).`);
   }
 
   return issues;
@@ -386,6 +547,30 @@ export async function validateBundleSize(cwd: string): Promise<ValidationResult>
   };
 }
 
+/** Files in `dir` with the given extension, or none if `dir` does not exist. */
+function listFilesWithExtension(dir: string, extension: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((entry) => entry.endsWith(extension))
+    .map((entry) => join(dir, entry));
+}
+
+/**
+ * One issue per offending file: the first `"/<publicDir>/"` reference it
+ * contains is enough to tell the author the path style is wrong.
+ */
+function findAbsolutePathIssues(cwd: string, files: string[], publicDirs: string[]): string[] {
+  const issues: string[] = [];
+  for (const filePath of files) {
+    const content = readFileSync(filePath, 'utf-8');
+    const offending = publicDirs.find((dir) => new RegExp(`["'\`]\\/${dir}\\/`).test(content));
+    if (offending) {
+      issues.push(`${filePath.replace(cwd + '/', '')}: absolute path "/${offending}/..." found`);
+    }
+  }
+  return issues;
+}
+
 async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
   const publicDir = join(cwd, 'public');
   if (!existsSync(publicDir)) {
@@ -401,42 +586,13 @@ async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
     return { name: 'Asset Paths', passed: true, message: '' };
   }
 
-  // Scan built UI JS and source files for absolute paths like "/dirname/"
-  const filesToScan: string[] = [];
+  // Built UI JS, plus source data files (JSON carrying image paths).
+  const filesToScan = [
+    ...listFilesWithExtension(join(cwd, 'dist', 'ui', 'assets'), '.js'),
+    ...listFilesWithExtension(join(cwd, 'data'), '.json'),
+  ];
 
-  // Check built JS if it exists
-  const uiAssetsDir = join(cwd, 'dist', 'ui', 'assets');
-  if (existsSync(uiAssetsDir)) {
-    for (const entry of readdirSync(uiAssetsDir)) {
-      if (entry.endsWith('.js')) {
-        filesToScan.push(join(uiAssetsDir, entry));
-      }
-    }
-  }
-
-  // Also check source data files (JSON with image paths)
-  const dataDir = join(cwd, 'data');
-  if (existsSync(dataDir)) {
-    for (const entry of readdirSync(dataDir)) {
-      if (entry.endsWith('.json')) {
-        filesToScan.push(join(dataDir, entry));
-      }
-    }
-  }
-
-  const issues: string[] = [];
-  for (const filePath of filesToScan) {
-    const content = readFileSync(filePath, 'utf-8');
-    for (const dir of publicDirs) {
-      // Match absolute paths like "/${dir}/" in strings
-      const pattern = new RegExp(`["'\`]\\/${dir}\\/`, 'g');
-      if (pattern.test(content)) {
-        const relPath = filePath.replace(cwd + '/', '');
-        issues.push(`${relPath}: absolute path "/${dir}/..." found`);
-        break; // One issue per file is enough
-      }
-    }
-  }
+  const issues = findAbsolutePathIssues(cwd, filesToScan, publicDirs);
 
   if (issues.length === 0) {
     return { name: 'Asset Paths', passed: true, message: '' };

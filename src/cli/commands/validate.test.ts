@@ -294,3 +294,112 @@ describe('validateBundleSize measures the real publish zip, not the raw dist (WR
     }
   });
 });
+
+/**
+ * The platform-consumed blocks (`world`, `roundDeadline`, `idleAction`, `ai`,
+ * `persistence`, `joinInProgress`). Every one of them reaches the publishing
+ * platform through build.ts's `deriveManifest` config spread, and until this
+ * change none of them was in `boardsmith.schema.json` — so `boardsmith
+ * validate` / `boardsmith dev` flagged an author for writing exactly the block
+ * the platform requires. The shapes below mirror ShufflewickPub
+ * `games/src/manifest-schema.ts`, which is the upload-time authority.
+ */
+describe('platform-consumed blocks', () => {
+  it('accepts a config carrying a valid persistent-world block', () => {
+    const issues = checkMetadataIssues({
+      ...validConfig(),
+      world: { resolveAction: { name: 'resolveRound' } },
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it('accepts world.resolveAction args and the optional enrolAction', () => {
+    const issues = checkMetadataIssues({
+      ...validConfig(),
+      world: {
+        resolveAction: { name: 'resolveRound', args: { scope: 'all' } },
+        enrolAction: { name: 'enrol' },
+      },
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it('rejects an unknown key INSIDE world, naming the key and suggesting the real one', () => {
+    const issues = checkMetadataIssues({
+      ...validConfig(),
+      world: { resolveAction: { name: 'resolveRound' }, resolvAction: { name: 'x' } },
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("Unknown key 'resolvAction'");
+    expect(issues[0]).toContain('world');
+    expect(issues[0]).toContain('resolveAction');
+  });
+
+  it('rejects an unknown key inside world.resolveAction', () => {
+    const issues = checkMetadataIssues({
+      ...validConfig(),
+      world: { resolveAction: { name: 'resolveRound', arg: {} } },
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("Unknown key 'arg'");
+    expect(issues[0]).toContain('world.resolveAction');
+    expect(issues[0]).toContain("'args'");
+  });
+
+  it('rejects a world block with no resolveAction — a world with no resolver can never advance', () => {
+    const issues = checkMetadataIssues({ ...validConfig(), world: {} });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('resolveAction');
+    expect(issues[0]).toContain('advance a round');
+  });
+
+  it('rejects a non-object world block and a resolveAction with an empty name', () => {
+    expect(checkMetadataIssues({ ...validConfig(), world: true })[0]).toContain('"world" must be an object');
+    expect(
+      checkMetadataIssues({ ...validConfig(), world: { resolveAction: { name: '' } } })[0],
+    ).toContain('"world.resolveAction.name"');
+  });
+
+  it('accepts the boolean platform flags and rejects non-boolean values', () => {
+    expect(checkMetadataIssues({
+      ...validConfig(),
+      persistence: true,
+      ai: true,
+      joinInProgress: false,
+    })).toEqual([]);
+    expect(checkMetadataIssues({ ...validConfig(), persistence: 'yes' })[0]).toContain('"persistence" must be a boolean');
+    expect(checkMetadataIssues({ ...validConfig(), ai: 1 })[0]).toContain('"ai" must be a boolean');
+    expect(checkMetadataIssues({ ...validConfig(), joinInProgress: 'true' })[0]).toContain('"joinInProgress" must be a boolean');
+  });
+
+  it('accepts a valid idleAction + roundDeadline pair', () => {
+    const issues = checkMetadataIssues({
+      ...validConfig(),
+      idleAction: { name: 'pass' },
+      roundDeadline: { defaultHours: 24, minHours: 6, maxHours: 72, mindingSafe: true },
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it('rejects a roundDeadline whose hours are not integers, are inverted, or whose default sits outside the range', () => {
+    expect(
+      checkMetadataIssues({ ...validConfig(), roundDeadline: { defaultHours: 24, minHours: 6 } })[0],
+    ).toContain('"maxHours"');
+    expect(
+      checkMetadataIssues({ ...validConfig(), roundDeadline: { defaultHours: 24, minHours: 72, maxHours: 6 } })[0],
+    ).toContain('must be <=');
+    expect(
+      checkMetadataIssues({ ...validConfig(), roundDeadline: { defaultHours: 96, minHours: 6, maxHours: 72 } })[0],
+    ).toContain('must be between');
+  });
+
+  it('rejects an unknown key inside roundDeadline and a malformed idleAction', () => {
+    const deadline = checkMetadataIssues({
+      ...validConfig(),
+      roundDeadline: { defaultHours: 24, minHours: 6, maxHours: 72, mindingSafeish: true },
+    });
+    expect(deadline).toHaveLength(1);
+    expect(deadline[0]).toContain("Unknown key 'mindingSafeish'");
+    expect(checkMetadataIssues({ ...validConfig(), idleAction: 'pass' })[0]).toContain('"idleAction" must be an object');
+  });
+});

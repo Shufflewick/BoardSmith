@@ -30,6 +30,31 @@ describe('deriveManifest', () => {
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
   });
 
+  it('carries the platform-consumed blocks through the config spread untouched', () => {
+    // `world` (and its FR-006 siblings) have no derivation of their own: the
+    // platform reads them straight out of manifest.json, so the spread is the
+    // whole transport. If a future manifest allowlist ever replaces the
+    // spread, this is the test that catches the drop.
+    const config = {
+      name: 'fixture',
+      world: { resolveAction: { name: 'resolveRound', args: { scope: 'all' } }, enrolAction: { name: 'enrol' } },
+      persistence: true,
+      ai: true,
+      joinInProgress: true,
+      idleAction: { name: 'pass' },
+      roundDeadline: { defaultHours: 24, minHours: 6, maxHours: 72, mindingSafe: true },
+    };
+
+    const manifest = deriveManifest(config, makeGameDefinition(2, 4), { protocol: 1, revision: 7 });
+
+    expect(manifest.world).toEqual(config.world);
+    expect(manifest.persistence).toBe(true);
+    expect(manifest.ai).toBe(true);
+    expect(manifest.joinInProgress).toBe(true);
+    expect(manifest.idleAction).toEqual({ name: 'pass' });
+    expect(manifest.roundDeadline).toEqual(config.roundDeadline);
+  });
+
   it('PROC-02: a stale config playerCount does NOT reach the manifest — gameDefinition wins', () => {
     // Stale/hand-edited boardsmith.json claiming a 9-9 player count, while the
     // compiled rules (gameDefinition) say 2-4. This is exactly the drift

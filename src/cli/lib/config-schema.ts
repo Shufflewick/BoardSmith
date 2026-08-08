@@ -14,12 +14,41 @@
 
 import schema from './boardsmith.schema.json';
 
+interface ObjectSchema {
+  properties: Record<string, unknown>;
+}
+
+/**
+ * Every allowed-key list in this module is read out of the shipped schema, so
+ * a block's keys are declared in exactly one place — the JSON an author's
+ * editor also validates against.
+ */
+function keysOf(block: unknown): readonly string[] {
+  return Object.freeze(Object.keys((block as ObjectSchema).properties));
+}
+
+const rootSchema = schema as unknown as ObjectSchema & {
+  definitions: Record<string, unknown>;
+};
+
 /** The full set of legitimate top-level `boardsmith.json` keys. */
-export const ALLOWED_TOP_LEVEL_KEYS: readonly string[] = Object.freeze(
-  Object.keys((schema as { properties: Record<string, unknown> }).properties),
+export const ALLOWED_TOP_LEVEL_KEYS: readonly string[] = keysOf(rootSchema);
+
+/** Legitimate keys inside the persistent-world block. */
+export const ALLOWED_WORLD_KEYS: readonly string[] = keysOf(rootSchema.properties.world);
+
+/** Legitimate keys inside the `roundDeadline` block. */
+export const ALLOWED_ROUND_DEADLINE_KEYS: readonly string[] = keysOf(
+  rootSchema.properties.roundDeadline,
 );
 
-const ALLOWED_KEY_SET = new Set(ALLOWED_TOP_LEVEL_KEYS);
+/**
+ * Legitimate keys inside a platform-submitted action declaration —
+ * `idleAction`, `world.resolveAction`, `world.enrolAction`.
+ */
+export const ALLOWED_NAMED_ACTION_KEYS: readonly string[] = keysOf(
+  rootSchema.definitions.namedAction,
+);
 
 /**
  * Maximum edit distance for a did-you-mean suggestion. Beyond this the two
@@ -59,14 +88,18 @@ function levenshtein(a: string, b: string): number {
 }
 
 /**
- * Returns the nearest allowed top-level key to `unknown` (by edit distance),
- * or `undefined` if nothing is within `SUGGESTION_THRESHOLD`.
+ * Returns the nearest key in `candidates` to `unknown` (by edit distance), or
+ * `undefined` if nothing is within `SUGGESTION_THRESHOLD`. Defaults to the
+ * top-level key set; nested blocks pass their own.
  */
-export function suggestKey(unknown: string): string | undefined {
+export function suggestKey(
+  unknown: string,
+  candidates: readonly string[] = ALLOWED_TOP_LEVEL_KEYS,
+): string | undefined {
   let best: string | undefined;
   let bestDistance = Infinity;
 
-  for (const key of ALLOWED_TOP_LEVEL_KEYS) {
+  for (const key of candidates) {
     const distance = levenshtein(unknown, key);
     if (distance < bestDistance) {
       bestDistance = distance;
@@ -77,7 +110,12 @@ export function suggestKey(unknown: string): string | undefined {
   return best !== undefined && bestDistance <= SUGGESTION_THRESHOLD ? best : undefined;
 }
 
-export interface UnknownKeyResult {
+/**
+ * Not exported: nothing outside this module names the type — callers
+ * destructure `{ key, suggestion }` off the returned array. Exporting it would
+ * read as public API that no consumer has.
+ */
+interface UnknownKeyResult {
   key: string;
   suggestion?: string;
 }
@@ -88,11 +126,25 @@ export interface UnknownKeyResult {
  * is close enough. Order matches the key's order in `config`.
  */
 export function findUnknownKeys(config: Record<string, unknown>): UnknownKeyResult[] {
+  return findUnknownKeysIn(config, ALLOWED_TOP_LEVEL_KEYS);
+}
+
+/**
+ * The same unknown-key + did-you-mean pass against an arbitrary allowed-key
+ * list, for the nested blocks (`world`, `roundDeadline`, and the named-action
+ * declarations inside them). A typo one level down is exactly as silent as a
+ * typo at the top level, so it gets exactly the same treatment.
+ */
+export function findUnknownKeysIn(
+  block: Record<string, unknown>,
+  allowed: readonly string[],
+): UnknownKeyResult[] {
+  const allowedSet = new Set(allowed);
   const results: UnknownKeyResult[] = [];
 
-  for (const key of Object.keys(config)) {
-    if (ALLOWED_KEY_SET.has(key)) continue;
-    const suggestion = suggestKey(key);
+  for (const key of Object.keys(block)) {
+    if (allowedSet.has(key)) continue;
+    const suggestion = suggestKey(key, allowed);
     results.push(suggestion ? { key, suggestion } : { key });
   }
 
