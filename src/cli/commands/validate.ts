@@ -48,42 +48,44 @@ export async function validateCommand(): Promise<void> {
   // 6. Required files check
   results.push(await validateRequiredFiles(cwd));
 
-  // Print results
+  if (!printResults(results)) {
+    console.log(chalk.red('Validation failed. Please fix the issues above.\n'));
+    process.exit(1);
+  }
+
+  printSuccessGuidance();
+}
+
+/** Prints every check's verdict and its failure detail. Returns whether all passed. */
+function printResults(results: ValidationResult[]): boolean {
   console.log(chalk.cyan('\nValidation Results:\n'));
 
-  let allPassed = true;
   for (const result of results) {
     const icon = result.passed ? chalk.green('✓') : chalk.red('✗');
     const status = result.passed ? chalk.green('PASS') : chalk.red('FAIL');
     console.log(`  ${icon} ${result.name}: ${status}`);
+    if (result.passed) continue;
 
-    if (!result.passed) {
-      allPassed = false;
-      console.log(chalk.dim(`    ${result.message}`));
-      if (result.details) {
-        for (const detail of result.details) {
-          console.log(chalk.dim(`      - ${detail}`));
-        }
-      }
+    console.log(chalk.dim(`    ${result.message}`));
+    for (const detail of result.details ?? []) {
+      console.log(chalk.dim(`      - ${detail}`));
     }
   }
 
   console.log('');
+  return results.every((result) => result.passed);
+}
 
-  if (allPassed) {
-    console.log(chalk.green('All validation checks passed!\n'));
-    console.log(chalk.cyan('Next steps:'));
-    console.log(chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'));
-    console.log(chalk.dim('  boardsmith build    - Build for production'));
-    console.log(chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'));
-    console.log(chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'));
-    console.log(chalk.dim('     The engine will warn about issues like:'));
-    console.log(chalk.dim('     - Flow steps referencing non-existent actions'));
-    console.log(chalk.dim('     - Element reference comparisons instead of ID comparisons\n'));
-  } else {
-    console.log(chalk.red('Validation failed. Please fix the issues above.\n'));
-    process.exit(1);
-  }
+function printSuccessGuidance(): void {
+  console.log(chalk.green('All validation checks passed!\n'));
+  console.log(chalk.cyan('Next steps:'));
+  console.log(chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'));
+  console.log(chalk.dim('  boardsmith build    - Build for production'));
+  console.log(chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'));
+  console.log(chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'));
+  console.log(chalk.dim('     The engine will warn about issues like:'));
+  console.log(chalk.dim('     - Flow steps referencing non-existent actions'));
+  console.log(chalk.dim('     - Element reference comparisons instead of ID comparisons\n'));
 }
 
 /**
@@ -386,6 +388,30 @@ export async function validateBundleSize(cwd: string): Promise<ValidationResult>
   };
 }
 
+/** Files in `dir` with the given extension, or none if `dir` does not exist. */
+function listFilesWithExtension(dir: string, extension: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((entry) => entry.endsWith(extension))
+    .map((entry) => join(dir, entry));
+}
+
+/**
+ * One issue per offending file: the first `"/<publicDir>/"` reference it
+ * contains is enough to tell the author the path style is wrong.
+ */
+function findAbsolutePathIssues(cwd: string, files: string[], publicDirs: string[]): string[] {
+  const issues: string[] = [];
+  for (const filePath of files) {
+    const content = readFileSync(filePath, 'utf-8');
+    const offending = publicDirs.find((dir) => new RegExp(`["'\`]\\/${dir}\\/`).test(content));
+    if (offending) {
+      issues.push(`${filePath.replace(cwd + '/', '')}: absolute path "/${offending}/..." found`);
+    }
+  }
+  return issues;
+}
+
 async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
   const publicDir = join(cwd, 'public');
   if (!existsSync(publicDir)) {
@@ -401,42 +427,13 @@ async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
     return { name: 'Asset Paths', passed: true, message: '' };
   }
 
-  // Scan built UI JS and source files for absolute paths like "/dirname/"
-  const filesToScan: string[] = [];
+  // Built UI JS, plus source data files (JSON carrying image paths).
+  const filesToScan = [
+    ...listFilesWithExtension(join(cwd, 'dist', 'ui', 'assets'), '.js'),
+    ...listFilesWithExtension(join(cwd, 'data'), '.json'),
+  ];
 
-  // Check built JS if it exists
-  const uiAssetsDir = join(cwd, 'dist', 'ui', 'assets');
-  if (existsSync(uiAssetsDir)) {
-    for (const entry of readdirSync(uiAssetsDir)) {
-      if (entry.endsWith('.js')) {
-        filesToScan.push(join(uiAssetsDir, entry));
-      }
-    }
-  }
-
-  // Also check source data files (JSON with image paths)
-  const dataDir = join(cwd, 'data');
-  if (existsSync(dataDir)) {
-    for (const entry of readdirSync(dataDir)) {
-      if (entry.endsWith('.json')) {
-        filesToScan.push(join(dataDir, entry));
-      }
-    }
-  }
-
-  const issues: string[] = [];
-  for (const filePath of filesToScan) {
-    const content = readFileSync(filePath, 'utf-8');
-    for (const dir of publicDirs) {
-      // Match absolute paths like "/${dir}/" in strings
-      const pattern = new RegExp(`["'\`]\\/${dir}\\/`, 'g');
-      if (pattern.test(content)) {
-        const relPath = filePath.replace(cwd + '/', '');
-        issues.push(`${relPath}: absolute path "/${dir}/..." found`);
-        break; // One issue per file is enough
-      }
-    }
-  }
+  const issues = findAbsolutePathIssues(cwd, filesToScan, publicDirs);
 
   if (issues.length === 0) {
     return { name: 'Asset Paths', passed: true, message: '' };
