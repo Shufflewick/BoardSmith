@@ -70,6 +70,7 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 - Don't leave a dev server running that you start.
 
 # Testing
+- All development is done as test-driven development, meaning you'll write a test first, make sure it is failing. Then you will fix the code or add the code and you are not done until all of the tests are green.
 - Verify behavior by running the application, not just reviewing code structure. Confirm features work end-to-end in the browser before marking work complete.
 - Enumerate all code paths a change affects (e.g. lobby mode, `--ai` mode, presets) and verify each one — not just the primary happy path.
 - Trace at least one real value through the full stack (config → engine → session → UI) to confirm data survives every layer boundary.
