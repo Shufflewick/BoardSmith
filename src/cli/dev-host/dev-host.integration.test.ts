@@ -8,6 +8,21 @@
  *
  * Exercises DRIVE-01 (getState/getLobby), DRIVE-02 (a browserless Node client
  * speaking real WS), and DRIVE-03 (debugToggle/uiSwitch relay) in one flow.
+ *
+ * ORDER-DEPENDENT BY DESIGN. `beforeAll` stands up ONE server and ONE
+ * `MultiplayerHost` for the whole file, and the tests below are consecutive
+ * steps against that single live session rather than independent cases — the
+ * CR-01 test states this outright ("By this point in the suite the game is
+ * already 'playing' with both seats claimed"). Running this file with
+ * `--sequence.shuffle` therefore fails, and that failure is the shuffle
+ * violating the fixture's contract, not a bug in the code under test. The
+ * project's configured order is declaration order (no `sequence.shuffle` in
+ * vitest.config.ts), where this file is green.
+ *
+ * Making it shuffle-safe means a fresh server+host per test, which changes what
+ * several of these assertions can observe (first-hello auto-seating, an
+ * unseated client on an occupied table) — a deliberate restructure, not a
+ * cleanup to fold into an unrelated change.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';

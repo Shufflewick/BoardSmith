@@ -17,23 +17,30 @@ const rule: Rule.RuleModule = {
       noFs: 'Filesystem access is not allowed in game rules. Games run in a sandboxed environment.',
       noPath: 'Path module is not allowed in game rules.',
       noChildProcess: 'Child process execution is not allowed in game rules.',
+      noOs: "The 'os' module is not allowed in game rules: it reports host state (platform, cpus, hostname), which differs per machine and breaks deterministic replay.",
     },
     schema: [],
   },
 
   create(context) {
-    const forbiddenModules = ['fs', 'fs/promises', 'path', 'child_process', 'os'];
+    // One entry per forbidden module, each naming its OWN hazard. Previously a
+    // ternary chain fell through to 'noChildProcess' for anything that was not
+    // fs or path, so `import os` told the author child-process execution was
+    // banned — sending them hunting for a spawn() they never wrote. A map makes
+    // adding a module without its own message impossible.
+    const forbiddenModules: Record<string, 'noFs' | 'noPath' | 'noChildProcess' | 'noOs'> = {
+      'fs': 'noFs',
+      'fs/promises': 'noFs',
+      'path': 'noPath',
+      'child_process': 'noChildProcess',
+      'os': 'noOs',
+    };
 
     function checkModuleName(name: string, node: Rule.Node) {
-      if (forbiddenModules.includes(name) || name.startsWith('node:')) {
-        const cleanName = name.replace('node:', '');
-        if (forbiddenModules.includes(cleanName)) {
-          context.report({
-            node,
-            messageId: cleanName === 'fs' || cleanName === 'fs/promises' ? 'noFs' :
-                       cleanName === 'path' ? 'noPath' : 'noChildProcess',
-          });
-        }
+      const cleanName = name.replace(/^node:/, '');
+      const messageId = forbiddenModules[cleanName];
+      if (messageId) {
+        context.report({ node, messageId });
       }
     }
 

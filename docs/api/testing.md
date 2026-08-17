@@ -294,15 +294,24 @@ console.log(toDebugString(testGame.game));
 //   DiscardPile (id=2): 10 children
 
 // Trace why an action fails (game, actionName, player?)
+// Delegates to the engine's own availability tracer, so the wording matches
+// `game.debugActionAvailability()` exactly.
 const trace = traceAction(testGame.game, 'move', testGame.getPlayer(1));
 console.log(trace.reason);
-// "No valid elements for selection 'destination'"
+// "Selection 'destination' has no valid choices"
+
+// Step-by-step detail behind that verdict
+for (const detail of trace.details) {
+  console.log(`${detail.step}: ${detail.passed ? '✓' : '✗'} ${detail.info}`);
+}
+// Condition: ✓ No condition (always available)
+// Selection 'destination': ✗ 0 choices available
 
 // Summarize all actions' availability for a player
 console.log(logAvailableActions(testGame.game, testGame.getPlayer(1)));
 // Available actions for Player 1:
-//   ✓ move - Action available
-//   ✗ attack - No valid elements for selection 'target'
+//   ✓ move - Action is available with 3 choices for 'destination'
+//   ✗ attack - Selection 'target' has no valid choices
 ```
 
 ### Asserting Hidden Information (VIS)

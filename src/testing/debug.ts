@@ -7,7 +7,7 @@
  * @module
  */
 
-import { Player, type Game, type GameElement, type ActionContext } from '../engine/index.js';
+import { Player, type Game, type GameElement } from '../engine/index.js';
 
 /**
  * Options for {@link toDebugString}.
@@ -181,152 +181,48 @@ export function traceAction(
   actionName: string,
   player?: Player
 ): ActionTraceResult {
-  const details: ActionTraceDetail[] = [];
-  const currentPlayer = player || game.currentPlayer;
+  const subject = player ?? game.currentPlayer;
 
-  // Find the action
-  const actions = (game as any).actions || {};
-  const action = actions[actionName];
-
-  if (!action) {
+  // A trace is always about a specific seat: conditions and selections are
+  // evaluated for a player, so without one there is nothing to report.
+  if (!subject) {
     return {
       actionName,
       available: false,
-      reason: `Action '${actionName}' not found in game.actions`,
-      details: [{ step: 'Lookup', passed: false, info: `No action named '${actionName}' exists` }],
+      reason: 'Cannot trace an action without a player: the game has no current player yet',
+      details: [{
+        step: 'Player',
+        passed: false,
+        info: 'Pass a player explicitly, or start the game so a current player exists',
+      }],
     };
   }
 
-  details.push({ step: 'Lookup', passed: true, info: `Found action '${actionName}'` });
+  // Delegates to the engine's own availability tracer rather than re-walking
+  // the action internals here. Two readers of the same private shape drift,
+  // and this one did: it read a `game.actions` property that does not exist,
+  // so every action of every real game traced as "not found".
+  const info = game.debugActionAvailability(actionName, subject);
 
-  // Check if action has a condition
-  if (action.condition) {
-    try {
-      const ctx: Partial<ActionContext> = {
-        game,
-        player: currentPlayer,
-        args: {},
-      };
-      const conditionResult = action.condition(ctx);
-      details.push({
-        step: 'Condition',
-        passed: conditionResult,
-        info: conditionResult ? 'Condition returned true' : 'Condition returned false',
-      });
+  const details: ActionTraceDetail[] = [{
+    step: 'Condition',
+    passed: info.details.conditionPassed,
+    info: info.details.conditionNote
+      ?? (info.details.conditionPassed ? 'Condition passed' : 'Condition failed'),
+  }];
 
-      if (!conditionResult) {
-        return {
-          actionName,
-          available: false,
-          reason: 'Action condition returned false',
-          details,
-        };
-      }
-    } catch (error) {
-      details.push({
-        step: 'Condition',
-        passed: false,
-        info: `Condition threw error: ${error instanceof Error ? error.message : String(error)}`,
-      });
-      return {
-        actionName,
-        available: false,
-        reason: `Action condition threw error: ${error instanceof Error ? error.message : String(error)}`,
-        details,
-      };
-    }
-  } else {
-    details.push({ step: 'Condition', passed: true, info: 'No condition (always allowed)' });
-  }
-
-  // Check selections
-  const selections = action.selections || [];
-  for (let i = 0; i < selections.length; i++) {
-    const selection = selections[i];
-    const selName = selection.name || `selection${i}`;
-    const selType = selection.type || 'unknown';
-
-    if (selType === 'element') {
-      try {
-        const ctx: Partial<ActionContext> = {
-          game,
-          player: currentPlayer,
-          args: {},
-        };
-        const elements = selection.getElements?.(ctx) || [];
-        const filtered = selection.filter
-          ? elements.filter((e: any) => selection.filter(e, ctx))
-          : elements;
-
-        details.push({
-          step: `Selection '${selName}'`,
-          passed: filtered.length > 0,
-          info: `${filtered.length} valid elements (${elements.length} before filter)`,
-        });
-
-        if (filtered.length === 0) {
-          return {
-            actionName,
-            available: false,
-            reason: `No valid elements for selection '${selName}'`,
-            details,
-          };
-        }
-      } catch (error) {
-        details.push({
-          step: `Selection '${selName}'`,
-          passed: false,
-          info: `Error evaluating: ${error instanceof Error ? error.message : String(error)}`,
-        });
-        return {
-          actionName,
-          available: false,
-          reason: `Error in selection '${selName}'`,
-          details,
-        };
-      }
-    } else if (selType === 'choice') {
-      try {
-        const ctx: Partial<ActionContext> = {
-          game,
-          player: currentPlayer,
-          args: {},
-        };
-        const choices = selection.getChoices?.(ctx) || [];
-        details.push({
-          step: `Selection '${selName}'`,
-          passed: choices.length > 0,
-          info: `${choices.length} choices available`,
-        });
-
-        if (choices.length === 0) {
-          return {
-            actionName,
-            available: false,
-            reason: `No choices available for selection '${selName}'`,
-            details,
-          };
-        }
-      } catch (error) {
-        details.push({
-          step: `Selection '${selName}'`,
-          passed: false,
-          info: `Error evaluating: ${error instanceof Error ? error.message : String(error)}`,
-        });
-      }
-    } else {
-      details.push({
-        step: `Selection '${selName}'`,
-        passed: true,
-        info: `Type '${selType}' (assumed available)`,
-      });
-    }
+  for (const selection of info.details.selections) {
+    details.push({
+      step: `Selection '${selection.name}'`,
+      passed: selection.passed,
+      info: selection.note ?? `${selection.choices} choices available`,
+    });
   }
 
   return {
     actionName,
-    available: true,
-    reason: 'Action available',
+    available: info.available,
+    reason: info.reason,
     details,
   };
 }
@@ -344,19 +240,17 @@ export function traceAction(
  * ```typescript
  * console.log(logAvailableActions(game));
  * // Available actions for Player 1:
- * //   ✓ move - 3 valid moves
- * //   ✓ attack - 2 valid targets
- * //   ✗ heal - No healing targets available
- * //   ✗ rest - Condition: must have < 3 actions
+ * //   ✓ move - Action is available with 3 choices for 'destination'
+ * //   ✗ heal - Selection 'target' has no valid choices
+ * //   ✗ rest - Condition failed: must have < 3 actions
  * ```
  */
 export function logAvailableActions(game: Game, player?: Player): string {
-  const currentPlayer = player || game.currentPlayer;
-  const lines: string[] = [`Available actions for ${currentPlayer?.name || 'current player'}:`];
+  const subject = player ?? game.currentPlayer;
+  const lines: string[] = [`Available actions for ${subject?.name ?? 'current player'}:`];
 
-  const actions = (game as any).actions || {};
-  for (const actionName of Object.keys(actions)) {
-    const trace = traceAction(game, actionName, currentPlayer);
+  for (const actionName of game.getActionNames()) {
+    const trace = traceAction(game, actionName, subject);
     const icon = trace.available ? '✓' : '✗';
     lines.push(`  ${icon} ${actionName} - ${trace.reason}`);
   }

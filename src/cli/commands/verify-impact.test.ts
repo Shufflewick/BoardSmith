@@ -315,6 +315,17 @@ vi.mock('./verify-run.js', async (importOriginal) => {
   return { ...actual, atomicWriteFile: vi.fn(actual.atomicWriteFile) };
 });
 
+// The mock above is FILE-wide, but only the write-order describe used to put its
+// throwing override back. Any test that ran after it in a different describe
+// inherited "simulated SKETCH.md write failure" — invisible in declaration order,
+// a failure under --sequence.shuffle. Restoring here covers every block, and
+// `vi.clearAllMocks()` is not enough: it clears call records, not implementations.
+afterEach(async () => {
+  const { atomicWriteFile } = await import('./verify-run.js');
+  const actual = await vi.importActual<typeof import('./verify-run.js')>('./verify-run.js');
+  vi.mocked(atomicWriteFile).mockImplementation(actual.atomicWriteFile);
+});
+
 const SLUG = 'movement';
 
 function fixtureChunkText(): string {

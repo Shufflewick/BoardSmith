@@ -65,6 +65,24 @@ export interface DevSnapshot {
 
   /** Sequence counter for element IDs */
   sequence: number;
+
+  /**
+   * The seeded generator's position (mulberry32 `h`), so a hot reload resumes
+   * the RNG where the live game left it.
+   *
+   * Without this the restore path rebuilds the game with `new GameClass({seed})`
+   * and the generator REWINDS to its seed-initial position, while the element
+   * tree comes back fully advanced. The next draw after a reload then replays
+   * values the game already consumed — a deck reshuffled after HMR reproduces
+   * the opening shuffle. `ActionCheckpoint` has always captured this for the
+   * undo path (see `createActionCheckpoint`); the HMR path was the one that
+   * dropped it.
+   *
+   * Optional so a snapshot captured before this field existed still restores
+   * (the RNG position is simply left at its constructor default, the old
+   * behaviour) rather than throwing.
+   */
+  randomState?: number;
 }
 
 /**
@@ -110,6 +128,10 @@ export function captureDevState<G extends Game>(game: G): DevSnapshot {
     timestamp: Date.now(),
     registeredClasses,
     sequence,
+    // The generator's position travels with the tree: restoring an advanced
+    // tree beside a rewound RNG is what made a post-reload shuffle replay the
+    // opening one. See DevSnapshot.randomState.
+    randomState: game.getRandomState(),
   };
 }
 
@@ -183,12 +205,36 @@ export function restoreDevState<G extends Game>(
   // Restore the sequence counter to maintain ID consistency
   game._ctx.sequence = snapshot.sequence;
 
+  // Resume the seeded generator where the live game left it. Guarded because a
+  // snapshot taken before this field existed carries no position; skipping it
+  // then leaves the old (rewinding) behaviour rather than throwing.
+  if (snapshot.randomState !== undefined) {
+    game.setRandomState(snapshot.randomState);
+  }
+
   // Resolve element references in all restored elements
   game.resolveElementReferences(game);
 
-  // Restore flow position if flow was active
-  if (snapshot.flowPosition && game.getFlow()) {
-    game.restoreFlow(snapshot.flowPosition);
+  // Restore flow if it was active.
+  //
+  // Prefer the FULL flow state over the bare position. `restoreFlow(position)`
+  // rebuilds where the flow is but not that it is AWAITING INPUT, so a game
+  // restored that way reports `awaitingInput: false` and refuses the very next
+  // action. That silently broke both callers of this function:
+  //   - `restoreFromDevCheckpoint` threw "game is not awaiting input" for any
+  //     non-empty replay list, making its documented replay path unreachable.
+  //   - `GameSession`'s checkpoint fast-path failed its first replayed action
+  //     and fell back to a full replay every time, so the optimization never
+  //     actually ran.
+  // `restoreFlowState` exists for exactly this ("restore exactly where we
+  // were"); the position-only call remains the fallback for a snapshot taken
+  // before the flow state was captured.
+  if (game.getFlow()) {
+    if (snapshot.flowState) {
+      game.restoreFlowState(snapshot.flowState);
+    } else if (snapshot.flowPosition) {
+      game.restoreFlow(snapshot.flowPosition);
+    }
   }
 
   return game;
@@ -685,13 +731,29 @@ export function restoreFromDevCheckpoint<G extends Game>(
 
     try {
       game.continueFlow(action.name, action.args, action.player);
-      replayed++;
     } catch (error) {
       throw new Error(
         `[DevCheckpoint] Failed to replay action "${action.name}" at index ${checkpoint.actionIndex + replayed}: ` +
         `${error instanceof Error ? error.message : String(error)}`
       );
     }
+
+    // `continueFlow` does NOT throw when the flow refuses the action — an
+    // unknown action name, or args the selections reject, simply leave the flow
+    // where it was. Counting those as replayed reported a successful restore
+    // for a game that had silently lost moves, which is the worst possible
+    // outcome for a recovery path: no error, and a state that no longer matches
+    // the real game. Confirm the action actually applied before counting it.
+    const result = game.getLastActionResult();
+    if (!result?.success) {
+      throw new Error(
+        `[DevCheckpoint] Action "${action.name}" at index ${checkpoint.actionIndex + replayed} ` +
+        `did not apply during replay${result?.error ? `: ${result.error}` : ''}. ` +
+        `The restored game would silently diverge from the real one, so the restore is abandoned; ` +
+        `fall back to a full replay from the start of the action history.`
+      );
+    }
+    replayed++;
   }
 
   return { game, actionsReplayed: replayed };

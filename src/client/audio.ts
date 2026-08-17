@@ -26,12 +26,35 @@ class AudioService {
   /**
    * Initialize the audio service with options
    */
+  /**
+   * The ONE place a volume is validated, so a new entry point cannot
+   * reintroduce the hole this closes. Two traps live here:
+   *
+   * - `Math.max(0, Math.min(1, NaN))` is `NaN` — the clamp PROPAGATES NaN
+   *   rather than rejecting it, so a bare clamp looks safe and is not.
+   * - Assigning `NaN` to `HTMLAudioElement.volume` throws in the browser, and
+   *   the throw happens inside `playTurnSound`'s catch, so the failure mode is
+   *   silently muted audio rather than a visible error.
+   *
+   * A non-finite value therefore keeps the current setting instead of taking
+   * it. Returns whether the volume was accepted, so callers know whether there
+   * is anything worth persisting.
+   */
+  private applyVolume(volume: number): boolean {
+    if (!Number.isFinite(volume)) return false;
+    this.volume = Math.max(0, Math.min(1, volume));
+    if (this.audioElement) {
+      this.audioElement.volume = this.volume;
+    }
+    return true;
+  }
+
   init(options: AudioServiceOptions = {}): void {
     if (options.enabled !== undefined) {
       this.enabled = options.enabled;
     }
     if (options.volume !== undefined) {
-      this.volume = Math.max(0, Math.min(1, options.volume));
+      this.applyVolume(options.volume);
     }
     if (options.turnSoundUrl !== undefined) {
       this.turnSoundUrl = options.turnSoundUrl;
@@ -105,11 +128,9 @@ class AudioService {
    * Set volume level (0-1)
    */
   setVolume(volume: number): void {
-    this.volume = Math.max(0, Math.min(1, volume));
-    if (this.audioElement) {
-      this.audioElement.volume = this.volume;
-    }
-    // Save preference to localStorage
+    if (!this.applyVolume(volume)) return;
+    // Save preference to localStorage. Only reached for an accepted value, so
+    // a rejected one can never be written back and re-read on the next load.
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('boardsmith-audio-volume', String(this.volume));
     }
@@ -135,7 +156,10 @@ class AudioService {
 
     const volume = localStorage.getItem('boardsmith-audio-volume');
     if (volume !== null) {
-      this.volume = parseFloat(volume);
+      // Routed through the shared guard rather than assigned raw: localStorage
+      // is user-writable and outlives any version of this code, so a stale or
+      // hand-edited value must not become the live volume.
+      this.applyVolume(parseFloat(volume));
     }
   }
 }

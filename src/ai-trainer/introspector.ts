@@ -138,7 +138,16 @@ function discoverProperties(element: GameElement, typeInfo: ElementTypeInfo): vo
     if (SKIP_PROPERTIES.has(prop)) continue;
     if (prop.startsWith('_')) continue;
     if (SPATIAL_PROPERTIES.has(prop)) {
-      typeInfo.isSpatial = true;
+      // The NAME is not enough. `GameElement` declares `row`/`column` as class
+      // fields, and ES2022 class fields are DEFINED (as undefined) on every
+      // instance — so every element in every game carries those own keys. Marking
+      // spatial on the name alone made introspection report a board for a pure
+      // card game, which switched on the spatial feature templates and inflated
+      // the complexity estimate. Only a real coordinate counts.
+      const coordinate = (element as any)[prop];
+      if (typeof coordinate === 'number') {
+        typeInfo.isSpatial = true;
+      }
       continue;
     }
 

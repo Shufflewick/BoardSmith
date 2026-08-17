@@ -7,18 +7,30 @@
 import { computed } from 'vue';
 import HamburgerMenu from './HamburgerMenu.vue';
 
-const props = defineProps<{
-  /** Display name for the game */
-  gameTitle: string;
-  /** Current game ID/code */
-  gameId: string | null;
-  /** Connection status */
-  connectionStatus: string;
-  /** Current zoom level (0.5 to 2.0, default 1.0) */
-  zoom?: number;
-  /** Auto mode: skip unnecessary clicks when there's only one option (default: true) */
-  autoEndTurn?: boolean;
-}>();
+// Defaults are declared HERE rather than as `?? fallback` in the template.
+// An absent BOOLEAN prop does not arrive as `undefined` — Vue's boolean casting
+// turns it into `false` — so `autoEndTurn ?? true` could never fire, and a
+// consumer that omitted the prop got auto mode rendered OFF while this file
+// documented it as on. `withDefaults` is the only form where the declared
+// default is the real one.
+const props = withDefaults(
+  defineProps<{
+    /** Display name for the game */
+    gameTitle: string;
+    /** Current game ID/code */
+    gameId: string | null;
+    /** Connection status */
+    connectionStatus: string;
+    /** Current zoom level (0.5 to 2.0) */
+    zoom?: number;
+    /** Auto mode: skip unnecessary clicks when there's only one option */
+    autoEndTurn?: boolean;
+  }>(),
+  {
+    zoom: 1.0,
+    autoEndTurn: true,
+  }
+);
 
 const emit = defineEmits<{
   (e: 'menu-item-click', id: string): void;
@@ -33,7 +45,7 @@ function handleZoomChange(event: Event) {
   emit('update:zoom', value);
 }
 
-const zoomPercent = computed(() => Math.round((props.zoom ?? 1.0) * 100));
+const zoomPercent = computed(() => Math.round(props.zoom * 100));
 </script>
 
 <template>
@@ -58,7 +70,7 @@ const zoomPercent = computed(() => Math.round((props.zoom ?? 1.0) * 100));
           min="0.5"
           max="2"
           step="0.1"
-          :value="zoom ?? 1.0"
+          :value="zoom"
           @input="handleZoomChange"
           title="Zoom level"
         />
@@ -66,7 +78,7 @@ const zoomPercent = computed(() => Math.round((props.zoom ?? 1.0) * 100));
       <label class="auto-end-turn-toggle" title="Auto mode: Skip unnecessary clicks when there's only one option">
         <input
           type="checkbox"
-          :checked="autoEndTurn ?? true"
+          :checked="autoEndTurn"
           @change="emit('update:autoEndTurn', ($event.target as HTMLInputElement).checked)"
         />
         <span class="toggle-label">Auto</span>

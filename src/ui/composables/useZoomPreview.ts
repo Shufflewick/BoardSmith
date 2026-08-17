@@ -142,6 +142,11 @@ function detachKeyboardListeners() {
     cleanup();
     keyboardCleanupMap.delete(window);
   }
+  // `isAltPressed` is module-global and outlives every instance. With the
+  // listeners gone, nothing can ever observe the keyup — so leaving it true
+  // means the NEXT mount (a UI switch, a new game, an HMR reload) starts
+  // believing Alt is held and zooms the first card the cursor touches.
+  isAltPressed.value = false;
 }
 
 export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewReturn {
