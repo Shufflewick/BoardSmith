@@ -161,6 +161,7 @@ describe('formatUnknownKeyWarnings (CLIX-02: dev startup warns loudly, does not 
   it('returns no warnings for a clean config with only allowed keys', () => {
     const warnings = formatUnknownKeyWarnings({ name: 'x', displayName: 'X', description: 'd' });
     expect(warnings).toEqual([]);
+    expect(formatUnknownKeyWarnings({ name: 'x', displayName: 'X', description: 'd', asyncPlay: true })).toEqual([]);
   });
 });
 

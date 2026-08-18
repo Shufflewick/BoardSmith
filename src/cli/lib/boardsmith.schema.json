@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://boardsmith.io/schemas/boardsmith.schema.json",
   "title": "boardsmith.json",
-  "description": "Single source of truth for the set of top-level keys a boardsmith.json project config may legitimately carry. `src/cli/lib/config-schema.ts` derives ALLOWED_TOP_LEVEL_KEYS from `Object.keys(properties)` below, and `boardsmith validate` / `boardsmith dev` startup use that list to reject unknown/misspelled keys with a did-you-mean suggestion. Do NOT add a key here unless it has a real read site: either a command in src/cli/commands consumes it (see the file:line trace in 135-05-PLAN.md's read_first), or the PUBLISHING PLATFORM consumes it out of the manifest that build.ts's deriveManifest produces by spreading this config. The platform's own manifest allowlist is ShufflewickPub `games/src/manifest-schema.ts` \u2014 a key it does not accept must not be listed here, or the failure moves from author time to publish time, which is the exact bug the platform-consumed keys below were added to fix.",
+  "description": "Single source of truth for the set of top-level keys a boardsmith.json project config may legitimately carry. `src/cli/lib/config-schema.ts` derives ALLOWED_TOP_LEVEL_KEYS from `Object.keys(properties)` below, and `boardsmith validate` / `boardsmith dev` startup use that list to reject unknown/misspelled keys with a did-you-mean suggestion. Do NOT add a key here unless it has a real read site: either a command in src/cli/commands consumes it (see the file:line trace in 135-05-PLAN.md's read_first), or the PUBLISHING PLATFORM consumes it out of the manifest that build.ts's deriveManifest produces by spreading this config. The platform has two manifest sinks: Convex stores the manifest this build produces VERBATIM (`convex/publish.ts` `initiatePublishServer`), which is what platform-level flags like `asyncPlay` are read from; the games worker separately rebuilds an R2 copy through an allowlist (`games/src/manifest-schema.ts`) for the runtime session host, and silently drops keys that allowlist does not name. A key must have a named reader on at least one of the two \u2014 and a key only the Convex sink carries is invisible to the runtime session host by design.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -130,6 +130,10 @@
     "joinInProgress": {
       "type": "boolean",
       "description": "May a player join a session that is already underway? Absence is the 'no' answer; only a game whose rules can seat a latecomer (a persistent world, a dormant-seat design) should set it. Consumed by the platform (manifest-schema.ts `joinInProgress`)."
+    },
+    "asyncPlay": {
+      "type": "boolean",
+      "description": "May this game be played asynchronously — one move at a time, over hours or days, with nobody else connected? Absence is the 'no' answer; only a game whose rules survive long gaps between moves should set it. Consumed by the platform (ShufflewickPub convex/games.ts parseAsyncPlayFlag, which gates async table creation in convex/sessions.ts)."
     },
     "idleAction": {
       "$ref": "#/definitions/namedAction",

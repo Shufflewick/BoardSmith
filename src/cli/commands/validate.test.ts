@@ -48,6 +48,7 @@ describe('config-schema', () => {
       paths: { rules: 'src/rules' },
       gameId: 'abc123',
       version: '1.0.0',
+      asyncPlay: true,
     });
     expect(result).toEqual([]);
   });
@@ -366,10 +367,12 @@ describe('platform-consumed blocks', () => {
       persistence: true,
       ai: true,
       joinInProgress: false,
+      asyncPlay: true,
     })).toEqual([]);
     expect(checkMetadataIssues({ ...validConfig(), persistence: 'yes' })[0]).toContain('"persistence" must be a boolean');
     expect(checkMetadataIssues({ ...validConfig(), ai: 1 })[0]).toContain('"ai" must be a boolean');
     expect(checkMetadataIssues({ ...validConfig(), joinInProgress: 'true' })[0]).toContain('"joinInProgress" must be a boolean');
+    expect(checkMetadataIssues({ ...validConfig(), asyncPlay: 'yes' })[0]).toContain('"asyncPlay" must be a boolean');
   });
 
   it('accepts a valid idleAction + roundDeadline pair', () => {

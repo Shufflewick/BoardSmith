@@ -228,6 +228,7 @@ function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
     persistence: 'true when the game opts into the platform\'s cross-session key/value store',
     ai: 'true when the bundle ships a gameDefinition.ai block',
     joinInProgress: 'true when a player may join a session already underway',
+    asyncPlay: 'true when the game can be played asynchronously over hours or days',
   };
   for (const [key, meaning] of Object.entries(booleans)) {
     if (config[key] !== undefined && typeof config[key] !== 'boolean') {

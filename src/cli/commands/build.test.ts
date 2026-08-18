@@ -41,6 +41,7 @@ describe('deriveManifest', () => {
       persistence: true,
       ai: true,
       joinInProgress: true,
+      asyncPlay: true,
       idleAction: { name: 'pass' },
       roundDeadline: { defaultHours: 24, minHours: 6, maxHours: 72, mindingSafe: true },
     };
@@ -51,6 +52,7 @@ describe('deriveManifest', () => {
     expect(manifest.persistence).toBe(true);
     expect(manifest.ai).toBe(true);
     expect(manifest.joinInProgress).toBe(true);
+    expect(manifest.asyncPlay).toBe(true);
     expect(manifest.idleAction).toEqual({ name: 'pass' });
     expect(manifest.roundDeadline).toEqual(config.roundDeadline);
   });
