@@ -39,6 +39,99 @@ function errorMessageFrom(body: Record<string, unknown>, fallback: string): stri
   return fallback;
 }
 
+/**
+ * `fetch`, with a transport failure turned into a NETWORK PublishError whose
+ * message `describe` renders. Every call in this module needs this, and each
+ * one phrases its own failure ("Upload failed: …", "Complete failed: …").
+ */
+async function fetchOrNetworkError(
+  url: string,
+  init: RequestInit | undefined,
+  describe: (detail: string) => string,
+): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw { kind: 'NETWORK', message: describe(detail) } satisfies PublishError;
+  }
+}
+
+/**
+ * Coded refusals an endpoint can return, keyed `"<status>:<data.code>"`.
+ * Anything not listed degrades to a generic SERVER error, so an endpoint that
+ * grows a new code stays safe (it reports the server's own message) until the
+ * code is named here.
+ */
+type CodedRefusals = Record<string, PublishError['kind']>;
+
+/**
+ * Turn a non-ok Response into the right PublishError and throw it. Reads the
+ * body exactly once — `res.json()` may only be consumed once — so this is the
+ * single place allowed to inspect a failed response.
+ */
+async function throwResponseError(
+  res: Response,
+  fallbackMessage: string,
+  coded: CodedRefusals = {},
+): Promise<never> {
+  const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+  const data = body.data as { code?: string } | undefined;
+  const message = errorMessageFrom(body, fallbackMessage);
+
+  const kind = data?.code ? coded[`${res.status}:${data.code}`] : undefined;
+  throw { kind: kind ?? 'SERVER', message, statusCode: res.status } satisfies PublishError;
+}
+
+/**
+ * THE ALLOW-LIST: everything the platform is told about a game at publish time.
+ *
+ * This is a projection of `dist/manifest.json`, NOT the manifest itself. A key
+ * that is not named here never reaches the platform, however well it is
+ * declared in `boardsmith.json` and however faithfully `deriveManifest` writes
+ * it into `dist/manifest.json` — it is dropped silently, with nothing raised
+ * anywhere. `asyncPlay` was lost exactly that way, which is why this is a named
+ * function with its own tests rather than an object literal buried in a fetch
+ * body: adding a platform-consumed key means adding it HERE.
+ *
+ * The body this produces becomes ShufflewickPub's `gameVersions.manifestJson`
+ * row verbatim (`convex/publish.ts` stringifies whatever it receives), so this
+ * function is the whole of what Convex-side readers can ever see. The separate
+ * R2 copy the games worker's Durable Object reads travels in the bundle zip and
+ * is not affected by this list.
+ */
+function buildInitiateManifest(
+  manifest: Record<string, unknown>,
+  gameSlug: string,
+): Record<string, unknown> {
+  // Optional keys are spread conditionally so an undeclared one stays absent
+  // rather than arriving as an explicit undefined/false.
+  const optional: Record<string, unknown> = {};
+  for (const key of ['gameOptions', 'playerOptions', 'colorPalette']) {
+    if (manifest[key]) optional[key] = manifest[key];
+  }
+  // Platform capability flags. `asyncPlay` is read by ShufflewickPub's
+  // convex/games.ts parseAsyncPlayFlag off the row this body becomes.
+  for (const key of ['asyncPlay']) {
+    if (manifest[key] !== undefined) optional[key] = manifest[key];
+  }
+
+  return {
+    playerCount: manifest.playerCount,
+    displayName: manifest.displayName ?? manifest.name ?? gameSlug,
+    description: manifest.description,
+    // Taxonomy — audience/tags/playtime/complexity seed the game record
+    // on first publish (website-editable after); cooperative and
+    // playerCount are structural facts synced on every publish.
+    audience: manifest.audience,
+    tags: manifest.tags,
+    playtime: manifest.playtime,
+    cooperative: manifest.cooperative,
+    complexity: manifest.complexity,
+    ...optional,
+  };
+}
+
 export async function initiatePublish(
   platformUrl: string,
   apiKey: string,
@@ -50,9 +143,9 @@ export async function initiatePublish(
   publisherId?: string,
 ): Promise<InitiateResponse> {
   const url = `${platformUrl}/api/publish/initiate`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
+  const res = await fetchOrNetworkError(
+    url,
+    {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -64,51 +157,25 @@ export async function initiatePublish(
         publisherId,
         gameSlug,
         version,
-        manifest: {
-          playerCount: manifest.playerCount,
-          displayName: manifest.displayName ?? manifest.name ?? gameSlug,
-          description: manifest.description,
-          // Taxonomy — audience/tags/playtime/complexity seed the game record
-          // on first publish (website-editable after); cooperative and
-          // playerCount are structural facts synced on every publish.
-          audience: manifest.audience,
-          tags: manifest.tags,
-          playtime: manifest.playtime,
-          cooperative: manifest.cooperative,
-          complexity: manifest.complexity,
-          // Lobby option declarations — platform uses these for lobby UI
-          ...(manifest.gameOptions ? { gameOptions: manifest.gameOptions } : {}),
-          ...(manifest.playerOptions ? { playerOptions: manifest.playerOptions } : {}),
-          ...(manifest.colorPalette ? { colorPalette: manifest.colorPalette } : {}),
-        },
+        manifest: buildInitiateManifest(manifest, gameSlug),
       }),
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw { kind: 'NETWORK', message: `Failed to connect to ${platformUrl}: ${msg}` } satisfies PublishError;
-  }
+    },
+    (detail) => `Failed to connect to ${platformUrl}: ${detail}`,
+  );
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-    const data = body.data as { code?: string } | undefined;
-    const message = errorMessageFrom(body, res.statusText);
-
-    if (res.status === 409 && data?.code === 'SLUG_TAKEN') {
-      throw { kind: 'SLUG_TAKEN', message, statusCode: 409 } satisfies PublishError;
-    }
-    if (res.status === 409 && data?.code === 'VERSION_EXISTS') {
-      throw { kind: 'VERSION_EXISTS', message, statusCode: 409 } satisfies PublishError;
-    }
-    if (res.status === 403 && data?.code === 'NO_ACCESS') {
-      throw { kind: 'NO_ACCESS', message, statusCode: 403 } satisfies PublishError;
-    }
-    if (res.status === 403 && data?.code === 'SCOPE_VIOLATION') {
-      throw { kind: 'SCOPE_VIOLATION', message, statusCode: 403 } satisfies PublishError;
-    }
+    // 401 is answered without consulting the body: an unauthenticated response
+    // carries no useful detail, and "Invalid or revoked API key." is the
+    // actionable phrasing.
     if (res.status === 401) {
       throw { kind: 'SERVER', message: 'Invalid or revoked API key.', statusCode: 401 } satisfies PublishError;
     }
-    throw { kind: 'SERVER', message, statusCode: res.status } satisfies PublishError;
+    await throwResponseError(res, res.statusText, {
+      '409:SLUG_TAKEN': 'SLUG_TAKEN',
+      '409:VERSION_EXISTS': 'VERSION_EXISTS',
+      '403:NO_ACCESS': 'NO_ACCESS',
+      '403:SCOPE_VIOLATION': 'SCOPE_VIOLATION',
+    });
   }
 
   return res.json() as Promise<InitiateResponse>;
@@ -119,29 +186,20 @@ export async function uploadBundle(
   uploadCode: string,
   zip: Uint8Array,
 ): Promise<void> {
-  let res: Response;
-  try {
-    res = await fetch(uploadUrl, {
+  const res = await fetchOrNetworkError(
+    uploadUrl,
+    {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${uploadCode}`,
         'Content-Type': 'application/zip',
       },
       body: zip as unknown as BodyInit,
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw { kind: 'NETWORK', message: `Upload failed: ${msg}` } satisfies PublishError;
-  }
+    },
+    (detail) => `Upload failed: ${detail}`,
+  );
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-    throw {
-      kind: 'SERVER',
-      message: errorMessageFrom(body, `Upload returned HTTP ${res.status}`),
-      statusCode: res.status,
-    } satisfies PublishError;
-  }
+  if (!res.ok) await throwResponseError(res, `Upload returned HTTP ${res.status}`);
 }
 
 export async function completePublish(
@@ -150,29 +208,20 @@ export async function completePublish(
   versionId: string,
 ): Promise<{ gameUrl: string }> {
   const url = `${platformUrl}/api/publish/complete`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
+  const res = await fetchOrNetworkError(
+    url,
+    {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ versionId }),
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw { kind: 'NETWORK', message: `Complete failed: ${msg}` } satisfies PublishError;
-  }
+    },
+    (detail) => `Complete failed: ${detail}`,
+  );
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-    throw {
-      kind: 'SERVER',
-      message: errorMessageFrom(body, `Complete returned HTTP ${res.status}`),
-      statusCode: res.status,
-    } satisfies PublishError;
-  }
+  if (!res.ok) await throwResponseError(res, `Complete returned HTTP ${res.status}`);
 
   return res.json() as Promise<{ gameUrl: string }>;
 }
@@ -184,32 +233,22 @@ export async function checkVersionAvailable(
   version: string,
 ): Promise<void> {
   const url = `${platformUrl}/api/publish/check-version`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
+  const res = await fetchOrNetworkError(
+    url,
+    {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ gameIdOrSlug, version }),
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw { kind: 'NETWORK', message: msg } satisfies PublishError;
-  }
+    },
+    (detail) => detail,
+  );
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-    const data = body.data as { code?: string } | undefined;
-    const message = errorMessageFrom(body, res.statusText);
-
-    if (res.status === 409 && data?.code === 'VERSION_EXISTS') {
-      throw { kind: 'VERSION_EXISTS', message, statusCode: 409 } satisfies PublishError;
-    }
-    // Other errors are non-fatal for preflight
-    throw { kind: 'SERVER', message, statusCode: res.status } satisfies PublishError;
-  }
+  // Anything other than VERSION_EXISTS degrades to SERVER, which the caller
+  // treats as non-fatal for a preflight.
+  if (!res.ok) await throwResponseError(res, res.statusText, { '409:VERSION_EXISTS': 'VERSION_EXISTS' });
 }
 
 export interface TaxonomyAudience {
@@ -226,22 +265,13 @@ export interface TaxonomyAudience {
  */
 export async function fetchTaxonomy(platformUrl: string): Promise<{ audiences: TaxonomyAudience[] }> {
   const url = `${platformUrl}/api/taxonomy`;
-  let res: Response;
-  try {
-    res = await fetch(url);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw { kind: 'NETWORK', message: `Failed to fetch taxonomy from ${url}: ${msg}` } satisfies PublishError;
-  }
+  const res = await fetchOrNetworkError(
+    url,
+    undefined,
+    (detail) => `Failed to fetch taxonomy from ${url}: ${detail}`,
+  );
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-    throw {
-      kind: 'SERVER',
-      message: errorMessageFrom(body, `Taxonomy endpoint returned HTTP ${res.status}`),
-      statusCode: res.status,
-    } satisfies PublishError;
-  }
+  if (!res.ok) await throwResponseError(res, `Taxonomy endpoint returned HTTP ${res.status}`);
 
   const body = await res.json().catch(() => null) as { audiences?: unknown } | null;
   if (!body || !Array.isArray(body.audiences)) {

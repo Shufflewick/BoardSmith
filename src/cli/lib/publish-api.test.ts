@@ -154,7 +154,14 @@ describe('initiatePublish error reporting', () => {
 });
 
 describe('initiatePublish manifest payload', () => {
-  it('threads the taxonomy fields into the manifest body (seed/sync contract)', async () => {
+  /**
+   * Publish `manifest` through the real `initiatePublish` against a stubbed
+   * fetch, and return the `manifest` object as it was actually serialized onto
+   * the wire. Goes through the transport deliberately rather than calling
+   * `buildInitiateManifest` directly: the bug being pinned was a key that
+   * existed everywhere except in the bytes that were sent.
+   */
+  async function sentManifest(manifest: Record<string, unknown>): Promise<Record<string, unknown>> {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -165,7 +172,13 @@ describe('initiatePublish manifest payload', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await initiatePublish('https://platform.example', 'key', 'slug', '1.0.0', {
+    await initiatePublish('https://platform.example', 'key', 'slug', '1.0.0', manifest);
+
+    return JSON.parse(fetchMock.mock.calls[0][1].body as string).manifest;
+  }
+
+  it('threads the taxonomy fields into the manifest body (seed/sync contract)', async () => {
+    const body = { manifest: await sentManifest({
       playerCount: { min: 2, max: 4 },
       displayName: 'Fixture',
       description: 'desc',
@@ -174,15 +187,33 @@ describe('initiatePublish manifest payload', () => {
       playtime: { min: 15, max: 30 },
       cooperative: false,
       complexity: 2,
-    });
+    }) };
 
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.manifest.audience).toBe('casual');
     expect(body.manifest.tags).toEqual(['abstract']);
     expect(body.manifest.playtime).toEqual({ min: 15, max: 30 });
     expect(body.manifest.cooperative).toBe(false);
     expect(body.manifest.complexity).toBe(2);
     expect(body.manifest.playerCount).toEqual({ min: 2, max: 4 });
+  });
+
+  // The initiate body is an ALLOW-LIST projection, not the whole manifest, so a
+  // key the platform reads must be named here or it is silently dropped between
+  // dist/manifest.json and Convex's gameVersions.manifestJson. `asyncPlay` is
+  // read by ShufflewickPub's convex/games.ts parseAsyncPlayFlag off exactly that
+  // row; it was authorable and present in dist/manifest.json and still arrived
+  // as `asyncPlaySupported: false` because of this projection.
+  it('threads asyncPlay through to the initiate body', async () => {
+    expect((await sentManifest({ displayName: 'Fixture', asyncPlay: true })).asyncPlay).toBe(true);
+  });
+
+  // The CLI must not editorialize the author's declaration on the way through:
+  // an explicit `asyncPlay: false` arrives as `false`, not as an absent key.
+  // Guards against "simplifying" the conditional spread to the truthy form its
+  // neighbours use (`manifest.colorPalette ? ... : {}`), which would silently
+  // swallow a declared false.
+  it('carries a declared asyncPlay: false through as false', async () => {
+    expect((await sentManifest({ displayName: 'Fixture', asyncPlay: false })).asyncPlay).toBe(false);
   });
 });
 
