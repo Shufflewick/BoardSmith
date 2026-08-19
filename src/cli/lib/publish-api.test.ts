@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { uploadBundle, initiatePublish, completePublish, fetchTaxonomy, isPublishError } from './publish-api.js';
 import type { PublishError } from './publish-api.js';
+import { ALLOWED_TOP_LEVEL_KEYS, CONVEX_SINK_KEYS } from './config-schema.js';
 
 function mockFetchResponse(status: number, body: unknown): void {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
@@ -214,6 +215,53 @@ describe('initiatePublish manifest payload', () => {
   // swallow a declared false.
   it('carries a declared asyncPlay: false through as false', async () => {
     expect((await sentManifest({ displayName: 'Fixture', asyncPlay: false })).asyncPlay).toBe(false);
+  });
+
+  // The same drop, a second time, in the very function written to stop it:
+  // checkers 1.1.6 shipped a full `roundDeadline` block in dist/manifest.json
+  // and dev Convex still answered `roundDeadline: null`, because the forwarding
+  // list named only `asyncPlay`. ShufflewickPub's convex/sessions.ts
+  // parseRoundDeadline reads this block off the stored row; without it no
+  // deadline can ever be armed for the game.
+  it('threads a roundDeadline block through to the initiate body', async () => {
+    const roundDeadline = { defaultHours: 72, minHours: 6, maxHours: 336, mindingSafe: true };
+    expect((await sentManifest({ displayName: 'Fixture', roundDeadline })).roundDeadline)
+      .toEqual(roundDeadline);
+  });
+
+  /**
+   * The named cases above are the two keys that were actually lost. This one
+   * covers the ones nobody has thought of yet: it walks the schema's OWN
+   * disposition list and demands each marked key survive the trip, so a future
+   * key is proven to reach the wire the moment it is marked — no third
+   * incident, and no third test to remember to write.
+   *
+   * It is deliberately end-to-end through `initiatePublish` and the serialized
+   * body rather than asserting on the exported constant: the bug both times was
+   * a key that existed everywhere EXCEPT the bytes that were sent, so a test
+   * that stops short of the bytes would have passed through both incidents.
+   */
+  it('forwards every key the schema marks x-convex-sink, all the way to the wire', async () => {
+    const declared = Object.fromEntries(CONVEX_SINK_KEYS.map((key) => [key, { probe: key }]));
+
+    const sent = await sentManifest(declared);
+
+    expect(CONVEX_SINK_KEYS.filter((key) => sent[key] === undefined)).toEqual([]);
+  });
+
+  /**
+   * The other half: this is an ALLOW-list, and it stays one. Forwarding the
+   * whole manifest would make the test above pass forever while leaking
+   * `gameId`, `publisherId`, `paths` and the rest of the author's local
+   * bookkeeping into a platform row that has no reader for any of it.
+   */
+  it('forwards nothing the schema does not mark', async () => {
+    const unmarked = ALLOWED_TOP_LEVEL_KEYS.filter((key) => !CONVEX_SINK_KEYS.includes(key));
+    const declared = Object.fromEntries(unmarked.map((key) => [key, { probe: key }]));
+
+    const sent = await sentManifest({ ...declared, displayName: 'Fixture' });
+
+    expect(unmarked.filter((key) => sent[key] !== undefined)).toEqual([]);
   });
 });
 

@@ -1,3 +1,5 @@
+import { CONVEX_SINK_KEYS } from './config-schema.js';
+
 export type PlatformTarget = 'dev' | 'test' | 'prod';
 
 const PLATFORM_URLS: Record<PlatformTarget, string> = {
@@ -86,49 +88,46 @@ async function throwResponseError(
 /**
  * THE ALLOW-LIST: everything the platform is told about a game at publish time.
  *
- * This is a projection of `dist/manifest.json`, NOT the manifest itself. A key
- * that is not named here never reaches the platform, however well it is
- * declared in `boardsmith.json` and however faithfully `deriveManifest` writes
- * it into `dist/manifest.json` — it is dropped silently, with nothing raised
- * anywhere. `asyncPlay` was lost exactly that way, which is why this is a named
- * function with its own tests rather than an object literal buried in a fetch
- * body: adding a platform-consumed key means adding it HERE.
+ * This is a projection of `dist/manifest.json`, NOT the manifest itself — a key
+ * it does not carry never reaches the platform, however well it is declared in
+ * `boardsmith.json` and however faithfully `deriveManifest` writes it into
+ * `dist/manifest.json`. It is dropped silently, with nothing raised anywhere.
+ * `asyncPlay` was lost that way once and `roundDeadline` a second time, the
+ * second time under a comment in this very function telling the reader to add
+ * the key here. So the list is no longer written here at all:
+ *
+ *   **`CONVEX_SINK_KEYS` is derived from `boardsmith.schema.json`, where every
+ *   top-level property carries a required `x-convex-sink` boolean.** Marking a
+ *   property `true` forwards it, by construction; a property that declares
+ *   neither fails `validate.test.ts`. There is nothing left to remember.
+ *
+ * Only two keys stay explicit, and neither is an authorable schema key:
+ * `playerCount` is derived by `deriveManifest` from the compiled game
+ * definition, and `displayName` needs its fallback chain. They are applied
+ * AFTER the spread so the derivation can never shadow them.
  *
  * The body this produces becomes ShufflewickPub's `gameVersions.manifestJson`
  * row verbatim (`convex/publish.ts` stringifies whatever it receives), so this
  * function is the whole of what Convex-side readers can ever see. The separate
- * R2 copy the games worker's Durable Object reads travels in the bundle zip and
- * is not affected by this list.
+ * R2 copy the games worker's Durable Object reads travels in the bundle zip
+ * through a different allowlist and is unaffected by this one.
  */
 function buildInitiateManifest(
   manifest: Record<string, unknown>,
   gameSlug: string,
 ): Record<string, unknown> {
-  // Optional keys are spread conditionally so an undeclared one stays absent
-  // rather than arriving as an explicit undefined/false.
-  const optional: Record<string, unknown> = {};
-  for (const key of ['gameOptions', 'playerOptions', 'colorPalette']) {
-    if (manifest[key]) optional[key] = manifest[key];
-  }
-  // Platform capability flags. `asyncPlay` is read by ShufflewickPub's
-  // convex/games.ts parseAsyncPlayFlag off the row this body becomes.
-  for (const key of ['asyncPlay']) {
-    if (manifest[key] !== undefined) optional[key] = manifest[key];
+  // `!== undefined`, not truthiness: an author's declared `false` is an answer,
+  // and forwarding it as an absent key would let the platform read its own
+  // default instead. An undeclared key is `undefined` and stays absent.
+  const forwarded: Record<string, unknown> = {};
+  for (const key of CONVEX_SINK_KEYS) {
+    if (manifest[key] !== undefined) forwarded[key] = manifest[key];
   }
 
   return {
+    ...forwarded,
     playerCount: manifest.playerCount,
     displayName: manifest.displayName ?? manifest.name ?? gameSlug,
-    description: manifest.description,
-    // Taxonomy — audience/tags/playtime/complexity seed the game record
-    // on first publish (website-editable after); cooperative and
-    // playerCount are structural facts synced on every publish.
-    audience: manifest.audience,
-    tags: manifest.tags,
-    playtime: manifest.playtime,
-    cooperative: manifest.cooperative,
-    complexity: manifest.complexity,
-    ...optional,
   };
 }
 

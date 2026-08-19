@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   ALLOWED_TOP_LEVEL_KEYS,
+  CONVEX_SINK_KEYS,
   suggestKey,
   findUnknownKeys,
 } from '../lib/config-schema.js';
@@ -16,6 +17,52 @@ describe('config-schema', () => {
       properties: Record<string, unknown>;
     };
     expect([...ALLOWED_TOP_LEVEL_KEYS].sort()).toEqual(Object.keys(schema.properties).sort());
+  });
+
+  /**
+   * THE GATE THAT MAKES THE FORWARDING DECISION MANDATORY.
+   *
+   * Twice now a key was declared here, written faithfully into
+   * dist/manifest.json, and then dropped silently on its way to the platform
+   * because nobody added it to `buildInitiateManifest`'s list: `asyncPlay`
+   * (Phase 65.1) and then `roundDeadline` (Phase 66) — the second one four
+   * lines below a comment telling the reader to add it. Prose does not hold
+   * this.
+   *
+   * So the disposition lives IN the schema, as `x-convex-sink`, and it is
+   * REQUIRED on every top-level property. `CONVEX_SINK_KEYS` is derived from
+   * it and `buildInitiateManifest` forwards exactly that set, which makes
+   * "marked true but not forwarded" unrepresentable rather than merely
+   * discouraged. The one remaining way to be silent — adding a key and
+   * declaring nothing — is what this test refuses.
+   */
+  it('every top-level schema property declares an x-convex-sink disposition', async () => {
+    const schema = (await import('../lib/boardsmith.schema.json')).default as {
+      properties: Record<string, Record<string, unknown>>;
+    };
+
+    const undeclared = Object.entries(schema.properties)
+      .filter(([, property]) => typeof property['x-convex-sink'] !== 'boolean')
+      .map(([key]) => key);
+
+    expect(undeclared).toEqual([]);
+  });
+
+  /**
+   * The derived set is the one the publish path forwards, so it must be
+   * exactly what the schema marks — a hand-maintained copy would be the same
+   * drift this whole arrangement exists to remove.
+   */
+  it('CONVEX_SINK_KEYS is exactly the set of properties marked x-convex-sink', async () => {
+    const schema = (await import('../lib/boardsmith.schema.json')).default as {
+      properties: Record<string, Record<string, unknown>>;
+    };
+
+    const marked = Object.entries(schema.properties)
+      .filter(([, property]) => property['x-convex-sink'] === true)
+      .map(([key]) => key);
+
+    expect([...CONVEX_SINK_KEYS].sort()).toEqual(marked.sort());
   });
 
   it('suggestKey maps a near-miss typo to the correct allowed key', () => {

@@ -18,6 +18,11 @@ interface ObjectSchema {
   properties: Record<string, unknown>;
 }
 
+/** A top-level property, with the sink disposition every one of them carries. */
+interface SinkAnnotatedProperty {
+  'x-convex-sink'?: boolean;
+}
+
 /**
  * Every allowed-key list in this module is read out of the shipped schema, so
  * a block's keys are declared in exactly one place — the JSON an author's
@@ -33,6 +38,24 @@ const rootSchema = schema as unknown as ObjectSchema & {
 
 /** The full set of legitimate top-level `boardsmith.json` keys. */
 export const ALLOWED_TOP_LEVEL_KEYS: readonly string[] = keysOf(rootSchema);
+
+/**
+ * The keys the publishing platform's CONVEX sink consumes — read straight off
+ * each schema property's `x-convex-sink` annotation, which the schema requires
+ * on every top-level property (`validate.test.ts` fails a property that omits
+ * it).
+ *
+ * `buildInitiateManifest` (publish-api.ts) forwards EXACTLY this set, so
+ * marking a key here is the whole of what it takes to make it reach the
+ * platform. There is no second list to remember: `asyncPlay` and then
+ * `roundDeadline` were each dropped silently by a hand-maintained one, the
+ * second time inside the function written to prevent the first.
+ */
+export const CONVEX_SINK_KEYS: readonly string[] = Object.freeze(
+  Object.entries((schema as unknown as ObjectSchema).properties)
+    .filter(([, property]) => (property as SinkAnnotatedProperty)['x-convex-sink'] === true)
+    .map(([key]) => key),
+);
 
 /** Legitimate keys inside the persistent-world block. */
 export const ALLOWED_WORLD_KEYS: readonly string[] = keysOf(rootSchema.properties.world);
