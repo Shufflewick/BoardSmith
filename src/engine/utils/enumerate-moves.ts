@@ -9,8 +9,19 @@
  * IDs. The bot's serializeArgs converts them to IDs for its wire format.
  */
 
-import type { Game, Player, ActionDefinition, Selection } from '../index.js';
-import { availableActionsForSeat } from '../index.js';
+// Imported from the DEFINING modules, not from `../index.js`.
+//
+// The package barrel re-exports this file, so importing the barrel from here
+// closed a cycle -- and not a harmless one: it was the single edge that all
+// THREE of this package's circular-dependency findings routed through
+// (`action-metadata -> resolve-multiselect -> enumerate-moves -> index -> ...`
+// twice, plus `index -> utils/index -> enumerate-moves -> index`). Breaking it
+// here breaks all three, because a barrel import is never load-bearing: every
+// name below has exactly one defining module.
+import type { Game } from '../element/game.js';
+import type { Player } from '../player/player.js';
+import type { ActionDefinition, Selection } from '../action/types.js';
+import { availableActionsForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect } from './resolve-multiselect.js';
 import { devWarn } from '../../utils/dev.js';
 
@@ -94,23 +105,6 @@ export function enumerateSelectionsCore(
 // ─── Pure Combinatorics Helpers (exported for bot import + testability) ──────
 
 /**
- * Parse a multiSelect config value into { min, max }.
- */
-export function parseMultiSelect(multiSelect: unknown): { min: number; max: number } {
-  if (typeof multiSelect === 'number') {
-    return { min: 1, max: multiSelect };
-  }
-  if (typeof multiSelect === 'object' && multiSelect !== null) {
-    const config = multiSelect as { min?: number; max?: number };
-    return {
-      min: config.min ?? 1,
-      max: config.max ?? Infinity,
-    };
-  }
-  return { min: 1, max: Infinity };
-}
-
-/**
  * AI-01 / F-08: hard ceiling on how many multiSelect combinations enumeration
  * will ever MATERIALIZE. An unbounded/dynamic multiSelect (e.g.
  * `multiSelect: { min: 1 }`, max defaulting to Infinity) over an N-item choice
@@ -152,7 +146,11 @@ export function generateCombinations(
  * Recursive helper: generate all combinations of exactly `size` items from
  * `choices`, stopping once `results` reaches `limit` (F-08).
  */
-export function combinationsOfSize(
+// Module-private. Its docblock used to say "exported for bot import +
+// testability"; nothing outside this file has ever imported it (no bot, no
+// test, only the barrel re-export), so the export was the stale half of that
+// sentence rather than a contract.
+function combinationsOfSize(
   choices: unknown[],
   size: number,
   current: unknown[],
