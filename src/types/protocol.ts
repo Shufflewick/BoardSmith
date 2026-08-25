@@ -380,6 +380,20 @@ export interface ActionMessage {
   action: string;
   /** Action arguments */
   args: Record<string, unknown>;
+  /**
+   * The identity of the turn/round this submission was composed against —
+   * echoed back from the `turnBoundary.key` the server sent with the state this
+   * client rendered.
+   *
+   * REQUIRED. A simultaneous round can close and re-open between a seat
+   * rendering the board and that seat pressing the button; without this the
+   * server cannot tell an hours-old submission from a fresh one, and lands it
+   * in whichever round is open now. The server compares it for equality and
+   * nothing else, and it can only ever cause a REFUSAL — never widen what this
+   * seat is allowed to do. See
+   * `docs/simultaneous-and-interrupt-semantics.md`.
+   */
+  boundaryKey: string;
   /** Request ID for action request/response correlation */
   requestId?: string;
 }

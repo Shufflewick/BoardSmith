@@ -52,6 +52,11 @@ class SequenceGame extends Game<SequenceGame, RebelPlayer> {
   constructor(options: GameOptions) {
     super(options);
 
+    // `Merc` is created mid-flow (hireFirstMerc), not in this constructor, so
+    // it would otherwise never reach a restored game's class registry and the
+    // fixture's snapshot would be unrestorable once a merc exists.
+    this.registerElements([Merc]);
+
     this.board = this.create(Space, 'board');
     this.board.create(Sector, 'sector-A');
     this.board.create(Sector, 'sector-B');

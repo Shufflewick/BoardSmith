@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from '../headless-session.js';
+import { createHeadlessSession, type HeadlessOp } from '../headless-session.js';
 import { GameSession } from '../game-session.js';
 import { executeBarrierFixtureDefinition, ExecuteBarrierGame } from './fixtures/execute-barrier-fixture.js';
 import { bookkeepingExecuteFixtureDefinition, BookkeepingExecuteGame } from './fixtures/bookkeeping-execute-fixture.js';
@@ -30,7 +30,10 @@ import { ErrorCode } from '../../types/index.js';
 const gameOptions = { playerCount: 1, seed: 't' };
 
 async function playThroughToBarrierCrossingPoint(
-  send: (op: Op) => Promise<{ success: boolean; error?: string }>,
+  // `HeadlessOp`, not `Op`: these ops are handed to `createHeadlessSession`'s
+  // `send`, which stamps the host's CURRENT boundary key on an in-process
+  // caller that composes and submits in the same tick.
+  send: (op: HeadlessOp) => Promise<{ success: boolean; error?: string }>,
 ) {
   const act1 = await send({ type: 'action', actionName: 'act1', player: 1, args: {} });
   expect(act1.success).toBe(true);

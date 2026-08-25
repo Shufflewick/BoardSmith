@@ -77,7 +77,19 @@ export interface DevHostClient {
   getState(): Promise<DevHostStateReply>;
   /** Fetch the lobby payload, in any phase (DRIVE-01). Rejects on host-reported error or timeout. */
   getLobby(): Promise<DevHostLobbyReply>;
-  /** Perform a server op (e.g. `action`) and resolve with its result payload. */
+  /**
+   * Perform a server op (e.g. `action`) and resolve with its result payload.
+   *
+   * A SUBMISSION op (`action`, `selection_step`) must carry
+   * `payload.boundaryKey` — the identity of the flow position it was composed
+   * against, read off the last `game_state` this client received
+   * (`flowBoundaryKey(view.flowState)`). It is not defaulted for you: an
+   * absent key names no round, and the host refuses it with "The round you
+   * acted in has closed; reload to see the current round." Nothing is stamped
+   * on a caller's behalf here precisely because this client can be driven
+   * hours after it read its state. See
+   * `docs/simultaneous-and-interrupt-semantics.md`.
+   */
   serverRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** Relay-only: fan out a debug-panel toggle to every connected client (DRIVE-03). */
   debugToggle(): void;

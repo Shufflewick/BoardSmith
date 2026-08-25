@@ -26,6 +26,7 @@ import {
 import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { shapeResult } from '../cli/dev-host/bridge.js';
 
 // The map an action "returns" to the seat that paid for it. Structured, not
@@ -179,6 +180,7 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
         actionName: 'viewMap',
         player: 1,
         args: {},
+        boundaryKey: boundaryKeyOf(start.snapshot),
       });
 
       expect(result.success).toBe(true);
@@ -195,6 +197,7 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
         player: 1,
         selectionName: 'item',
         value: 'shield',
+        boundaryKey: boundaryKeyOf(start.snapshot),
       });
       expect(step1.success).toBe(true);
       expect(step1.data).toBeUndefined();
@@ -205,6 +208,7 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
         player: 1,
         selectionName: 'lens',
         value: 'fine',
+        boundaryKey: boundaryKeyOf(step1.snapshot),
       });
 
       expect(step2.actionComplete).toBe(true);
@@ -219,6 +223,7 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
         actionName: 'viewMap',
         player: 1,
         args: {},
+        boundaryKey: boundaryKeyOf(start.snapshot),
       });
 
       // The whole point of `data` is that it goes to the acting caller only.
@@ -239,6 +244,7 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
         actionName: 'viewMap',
         player: 1,
         args: {},
+        boundaryKey: boundaryKeyOf(start.snapshot),
       });
 
       const shaped = shapeResult('action', opResult);
@@ -255,6 +261,7 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
         player: 1,
         selectionName: 'item',
         value: 'sword',
+        boundaryKey: boundaryKeyOf(start.snapshot),
       });
       const step2 = await executeOp(gameDef, gameOptions, step1.snapshot, step1.pendingState, {
         type: 'selectionStep',
@@ -262,6 +269,7 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
         player: 1,
         selectionName: 'lens',
         value: 'coarse',
+        boundaryKey: boundaryKeyOf(step1.snapshot),
       });
 
       const shaped = shapeResult('selection_step', step2);

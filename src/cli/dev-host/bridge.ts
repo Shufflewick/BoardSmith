@@ -138,6 +138,20 @@ export interface DebugLogsMarker {
   type: 'debugLogs';
 }
 
+/**
+ * The boundary key the CLIENT sent, forwarded verbatim.
+ *
+ * This carries a HUMAN's intent across a wire, so it is never defaulted, never
+ * repaired, and never replaced with the host's current key — that would restore
+ * the exact defect the token exists to close
+ * (docs/simultaneous-and-interrupt-semantics.md §4). A client that sends no key
+ * (or a malformed one) forwards a value that cannot equal the current key, and
+ * the engine refuses it. Fail-closed, by construction.
+ */
+function clientBoundaryKey(payload: Record<string, unknown>): string {
+  return payload.boundaryKey as string;
+}
+
 export function translateOp(
   wireOp: string,
   seat: number,
@@ -150,6 +164,7 @@ export function translateOp(
         actionName: payload.actionName as string,
         player: seat,
         args: (payload.args as Record<string, unknown>) ?? {},
+        boundaryKey: clientBoundaryKey(payload),
       };
     case 'resolve_choices':
       return {
@@ -167,6 +182,7 @@ export function translateOp(
         value: payload.value,
         actionName: payload.actionName as string | undefined,
         initialArgs: payload.initialArgs as Record<string, unknown> | undefined,
+        boundaryKey: clientBoundaryKey(payload),
       };
     case 'cancel_action':
       return { type: 'cancelAction', player: seat };

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike, type OpResult } from './stateless-ops.js';
+import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { collectFixtureDefinition } from './testing/fixtures/collect-fixture.js';
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,7 @@ async function passNTimes(n: number): Promise<unknown> {
       actionName: 'pass',
       player: 1,
       args: {},
+      boundaryKey: boundaryKeyOf(snapshot),
     });
     expect(res.success).toBe(true);
     snapshot = res.snapshot;

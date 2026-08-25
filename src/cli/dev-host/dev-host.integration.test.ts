@@ -31,6 +31,7 @@ import { executeOp, ErrorCode, type GameDefinitionLike } from '../../session/ind
 import { MultiplayerHost, type ClientInbound } from './multiplayer-host.js';
 import { createDevHostConnectionHandler } from './connection-handler.js';
 import { createDevHostClient, type DevHostInboundMessage } from '../../client/dev-host-client.js';
+import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 
 /**
  * Minimal always-live game: seat 1 alone may act, mirroring multiplayer-host.test.ts's PassGame.
@@ -198,7 +199,10 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     expect(stateB.view).not.toEqual(stateA.view);
 
     // ── Perform an action via serverRequest (seat 1, held by A). ──
-    const actionResult = await clientA.serverRequest('action', { actionName: 'pass', args: {} });
+    // The key a client echoes is the one on the state it last fetched — read
+    // fresh each time, because the flow moves between submissions.
+    const keyFor = async (c: typeof clientA) => boundaryKeyOf((await c.getState()).view);
+    const actionResult = await clientA.serverRequest('action', { actionName: 'pass', args: {}, boundaryKey: await keyFor(clientA) });
     expect(actionResult.success).toBe(true);
 
     // ── v4.4 milestone-audit gap #1 (Phase 123 payload): debug:flow-state's
@@ -221,6 +225,7 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
       actionName: 'twoStep',
       selectionName: 'first',
       value: 'a',
+      boundaryKey: await keyFor(clientA),
     });
     expect(stepResult.success).toBe(true);
     expect(stepResult.actionComplete).toBe(false);
@@ -238,7 +243,9 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     // ── v4.4 milestone-audit gap #3 (Phase 126 payload): a failing action
     //    (B acting out of turn — only seat 1 may act in PassGame) round-trips
     //    a real, host-sourced `errorCode` to the Node client, not just a message. ──
-    const wrongTurnResult = await clientB.serverRequest('action', { actionName: 'pass', args: {} });
+    // A CURRENT key, deliberately: this must still be refused for the reason
+    // the test is about (B may not act), proving the key narrows and never widens.
+    const wrongTurnResult = await clientB.serverRequest('action', { actionName: 'pass', args: {}, boundaryKey: await keyFor(clientB) });
     expect(wrongTurnResult.success).toBe(false);
     expect(wrongTurnResult.errorCode).toBe(ErrorCode.NOT_YOUR_TURN);
 
@@ -424,7 +431,7 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
       await new Promise<void>((resolve) => s2.once('open', resolve));
       // Collect every message S2 receives, starting BEFORE its hello so we can
       // observe reinitSeat's own init/game_state reply as proof hello landed.
-      const s2Messages: Array<{ type?: string; requestId?: string }> = [];
+      const s2Messages: Array<{ type?: string; requestId?: string; view?: unknown }> = [];
       s2.on('message', (raw) => {
         try {
           s2Messages.push(JSON.parse(raw.toString()));
@@ -445,7 +452,9 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       // A submits an action over S2 (the reconnected, live socket).
-      s2.send(JSON.stringify({ type: 'server_request', requestId: 'stale-r1', op: 'action', payload: { actionName: 'pass', args: {} } }));
+      // The key S2 would echo: off the last `game_state` frame it actually received.
+      const s2Key = boundaryKeyOf([...s2Messages].reverse().find((m) => m.type === 'game_state')?.view);
+      s2.send(JSON.stringify({ type: 'server_request', requestId: 'stale-r1', op: 'action', payload: { actionName: 'pass', args: {}, boundaryKey: s2Key } }));
 
       // EXPECTATION (post-fix / GREEN — current behavior with the guard in
       // place): S2 still receives its own server_response AND the resulting

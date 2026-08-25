@@ -189,12 +189,14 @@ export {
   execute,
   setVar,
   turnLoop,
+  stateAwareLoop,
   TurnOrder,
   dueSeats,
   canSeatAct,
   availableActionsForSeat,
   turnSequence,
   orderSeatsByTurn,
+  flowBoundaryKey,
 } from './flow/index.js';
 
 export type {
@@ -209,6 +211,7 @@ export type {
   BaseFlowConfig,
   SequenceConfig,
   LoopConfig,
+  RepeatNodeConfig,
   EachPlayerConfig,
   ForEachConfig,
   ActionStepConfig,
@@ -220,6 +223,7 @@ export type {
   PlayerAwaitingState,
   TurnOrderConfig,
   SeatActivityState,
+  BoundaryKeyState,
 } from './flow/index.js';
 
 // Utilities (serialization, snapshots, replays, action helpers, dev state)

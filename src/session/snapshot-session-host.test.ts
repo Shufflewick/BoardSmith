@@ -4,6 +4,8 @@ import type { Annotation } from '../engine/index.js';
 import type { AIConfig } from '../ai/types.js';
 import { executeOp, type GameDefinitionLike, type Op, type OpResult } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
+import { BotGame, botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
+import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 
 // ---------------------------------------------------------------------------
 // Inline game: player 1 repeatedly takes a "pass" action in a loop.
@@ -74,81 +76,6 @@ const twoStepGameDef: GameDefinitionLike = {
 
 const twoStepGameOptions = { playerCount: 2, seed: 'step-seed' };
 
-// ---------------------------------------------------------------------------
-// Inline game: two players alternating with 2+ legal moves each turn.
-// Reusable fixture for Plans 02/03 (hint/heatmap/demo ops); also used to prove
-// that aiTurn picks from multiple choices.
-//
-// MEMORY note: MCTS short-circuits when only 1 move is available — the bot
-// skips the clone step. Tests that need real MCTS branching require 2+ choices.
-// BotGame uses chooseFrom('direction', ['left', 'right']) to provide 2 legal moves.
-// ---------------------------------------------------------------------------
-
-class BotGame extends Game<BotGame, Player> {
-  moveCount = 0;
-
-  constructor(options: GameOptions) {
-    super(options);
-    this.registerAction(
-      Action.create('move')
-        .chooseFrom('direction', { choices: ['left', 'right'] })
-        .execute(() => {
-          this.moveCount++;
-          return { success: true };
-        }),
-    );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          // 155-03: repeatUntil (never true within these tests) keeps the
-          // SAME action-step frame -- and its moveCount -- open across
-          // repeated 'move' actions. Without it, a plain single-move
-          // actionStep auto-completes and reopens a FRESH frame
-          // (moveCount === 0) after every move, and undo (now frame-scoped,
-          // UNDO-03) would always report "No actions to undo" -- this
-          // fixture's undo test needs undo to actually succeed.
-          do: actionStep({
-            actions: ['move'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            repeatUntil: () => false,
-          }),
-        }),
-      }),
-    );
-  }
-}
-
-// Extended def type — supports ai config (Plans 02/03 will add ai? to GameDefinitionLike;
-// for now this test-local interface allows the fixture to carry the ai config).
-interface BotGameDefinitionLike extends GameDefinitionLike {
-  ai?: AIConfig;
-}
-
-const botGameAI: AIConfig = {
-  objectives: (_game, _playerIndex) => ({
-    moves: {
-      checker: (game) => Math.min(1, (game as BotGame).moveCount / 20),
-      weight: 1,
-    },
-  }),
-  // Extract 'direction' arg as notation so heatmap entries have extractable cell refs.
-  // Without this, DEST_ARGS fallback wouldn't find 'direction' and entries would be empty.
-  hintTargetFromMove: (move) => {
-    const dir = (move.args as { direction?: string }).direction;
-    return dir ? { notation: dir } : undefined;
-  },
-};
-
-export const botGameDef: BotGameDefinitionLike = {
-  gameClass: BotGame as new (...args: unknown[]) => unknown,
-  gameType: 'bot-game',
-  minPlayers: 1,
-  maxPlayers: 2,
-  ai: botGameAI,
-};
-
-export const botGameOptions = { playerCount: 2, seed: 'bot-seed' };
 
 // ---------------------------------------------------------------------------
 // Helper: build adapters bound to a real game definition
@@ -196,7 +123,7 @@ describe('SnapshotSessionHost', () => {
 
       host.dispose();
       broadcastLog.length = 0;
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
       expect(broadcastLog.length).toBe(0);
     });
@@ -220,7 +147,7 @@ describe('SnapshotSessionHost', () => {
       const snapshotBefore = host.snapshot;
       eventLog.length = 0; // reset after start
 
-      const resultPromise = host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      const resultPromise = host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
       // Push 'response' AFTER the promise resolves
       const result = await resultPromise;
       eventLog.push('response');
@@ -285,6 +212,7 @@ describe('SnapshotSessionHost', () => {
         selectionName: 'color',
         value: 'red',
         actionName: 'pick',
+        boundaryKey: boundaryKeyOfHost(host),
       });
 
       expect(step1.success).toBe(true);
@@ -302,6 +230,7 @@ describe('SnapshotSessionHost', () => {
         value: 'M',
         actionName: 'pick',
         initialArgs: { color: 'red' },
+        boundaryKey: boundaryKeyOfHost(host),
       });
 
       expect(step2.success).toBe(true);
@@ -341,6 +270,7 @@ describe('SnapshotSessionHost', () => {
         selectionName: 'color',
         value: 'red',
         actionName: 'pick',
+        boundaryKey: boundaryKeyOfHost(host),
       });
 
       // Seat 1 step 2 — the host should pass seat 1's pendingState automatically
@@ -352,6 +282,7 @@ describe('SnapshotSessionHost', () => {
         value: 'M',
         actionName: 'pick',
         initialArgs: { color: 'red' },
+        boundaryKey: boundaryKeyOfHost(host),
       });
 
       // The executeOp call for step2 must have received a non-null pendingState
@@ -633,7 +564,7 @@ describe('SnapshotSessionHost', () => {
 
       const pump = host.runAITurns(); // starts, blocks in the first aiTurn
       // Fire a human action while the pump is stalled mid-flight.
-      const human = host.handleOp(1, { type: 'action', actionName: 'x', player: 1, args: {} } as unknown as Op);
+      const human = host.handleOp(1, { type: 'action', actionName: 'x', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) } as unknown as Op);
       // Let the pump finish; the human op should only then proceed.
       releaseAiTurn();
       await Promise.all([pump, human]);
@@ -663,7 +594,7 @@ describe('SnapshotSessionHost', () => {
       await host.start();
       broadcastLog.length = 0;
 
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
       // AI pump should have been triggered (at least one aiTurn call)
       expect(aiCallCount).toBeGreaterThanOrEqual(1);
@@ -760,6 +691,7 @@ describe('SnapshotSessionHost', () => {
         selectionName: 'color',
         value: 'red',
         actionName: 'pick',
+        boundaryKey: boundaryKeyOfHost(host),
       });
 
       // Step B: a follow-up selectionStep proves the pending state was retained.
@@ -769,6 +701,7 @@ describe('SnapshotSessionHost', () => {
         selectionName: 'size',
         value: 'M',
         actionName: 'pick',
+        boundaryKey: boundaryKeyOfHost(host),
       });
       const followUpCall = calls[startCalls + 1];
       expect(followUpCall.type).toBe('selectionStep');
@@ -780,6 +713,7 @@ describe('SnapshotSessionHost', () => {
         actionName: 'pass',
         player: 1,
         args: {},
+        boundaryKey: boundaryKeyOfHost(host),
       });
       expect(actionRes.success).toBe(false);
       // The action itself must have run with pending already cleared.
@@ -794,6 +728,7 @@ describe('SnapshotSessionHost', () => {
         selectionName: 'color',
         value: 'blue',
         actionName: 'pick',
+        boundaryKey: boundaryKeyOfHost(host),
       });
       const afterActionCall = calls[startCalls + 3];
       expect(afterActionCall.type).toBe('selectionStep');
@@ -813,7 +748,7 @@ describe('SnapshotSessionHost', () => {
       await host.start();
 
       persisted.length = 0; // reset after start
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
       expect(persisted).toHaveLength(1);
       const saved = persisted[0] as { snapshot: unknown; pendingStates: Record<number, unknown> };
@@ -837,7 +772,7 @@ describe('SnapshotSessionHost', () => {
       captured.length = 0; // reset after start's own failing persist
 
       await expect(
-        host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} })
+        host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) })
       ).resolves.not.toThrow();
 
       expect(captured.length).toBeGreaterThan(0);
@@ -851,7 +786,7 @@ describe('SnapshotSessionHost', () => {
       const host = new SnapshotSessionHost(adapters);
       await host.start();
 
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
       expect(host.persistenceHealthy).toBe(true);
       expect(host.lastPersistenceError).toBeNull();
@@ -864,7 +799,7 @@ describe('SnapshotSessionHost', () => {
       const host = new SnapshotSessionHost(adapters);
       await host.start();
 
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
       expect(host.persistenceHealthy).toBe(true);
       expect(host.lastPersistenceError).toBeNull();
@@ -879,17 +814,17 @@ describe('SnapshotSessionHost', () => {
       await host.start(); // succeeds — does not count toward the 3 failures below
 
       fail = true;
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
       expect(host.persistenceHealthy).toBe(true);
 
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
       expect(host.persistenceHealthy).toBe(true);
 
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
       expect(host.persistenceHealthy).toBe(false);
 
       fail = false;
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
       expect(host.persistenceHealthy).toBe(true);
     });
   });
@@ -912,7 +847,7 @@ describe('SnapshotSessionHost', () => {
       await host.start();
       broadcastLog.length = 0;
 
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
       // At least one broadcast must have fired (from apply())
       expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
@@ -933,7 +868,7 @@ describe('SnapshotSessionHost', () => {
       await host.start();
       broadcastLog.length = 0;
 
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
       expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
 
@@ -1096,7 +1031,7 @@ describe('SnapshotSessionHost', () => {
       broadcastLog.length = 0;
 
       // Seat 1 performs an action
-      await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' } });
+      await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' }, boundaryKey: boundaryKeyOfHost(host) });
 
       // The broadcast after the action must NOT carry state.hint for seat 1
       const s1 = lastBroadcastState(broadcastLog, 1);
@@ -1128,7 +1063,7 @@ describe('SnapshotSessionHost', () => {
 
       // Seat 1 acts — BotGame loops on seat 1, so it is STILL seat 1's turn →
       // the heatmap must recompute (compute #2), NOT clear or stay frozen.
-      await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' } });
+      await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' }, boundaryKey: boundaryKeyOfHost(host) });
 
       expect(heatmapComputes).toBe(2);
       const s1 = lastBroadcastState(broadcastLog, 1);
@@ -1146,7 +1081,7 @@ describe('SnapshotSessionHost', () => {
       await host.start();
 
       // First perform an action so undo has something to undo
-      await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' } });
+      await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' }, boundaryKey: boundaryKeyOfHost(host) });
 
       // Request a hint for seat 1 (seeded into transient state)
       await host.handleOp(1, { type: 'hint', seat: 1 });
@@ -1633,7 +1568,7 @@ describe('SnapshotSessionHost', () => {
       await host.start();
       broadcastLog.length = 0;
 
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
       expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
       const [views] = broadcastLog[0] as [Array<{ state: { teachingDisabled?: boolean } }>, unknown];
@@ -1678,7 +1613,7 @@ describe('SnapshotSessionHost', () => {
       await host.start();
       broadcastLog.length = 0;
 
-      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
       expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
       const [views] = broadcastLog[0] as [Array<{ state: { teachingDisabled?: boolean } }>, unknown];
@@ -1731,6 +1666,7 @@ describe('SnapshotSessionHost', () => {
         selectionName: 'color',
         value: 'red',
         actionName: 'pick',
+        boundaryKey: boundaryKeyOfHost(host),
       });
       expect(step1.success).toBe(true);
       expect(step1.actionComplete).toBe(false);

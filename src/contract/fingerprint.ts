@@ -187,6 +187,95 @@ function assertCoversFlowLayer(views: unknown[]): void {
 }
 
 /**
+ * Fail loudly if the fingerprinted flow position stopped carrying element
+ * bindings.
+ *
+ * `payloadHash` covers what the fixture exercises, and a per-player view does
+ * NOT include `position` at all (`createPlayerView` publishes only
+ * `awaitingInput`/`isMyTurn`/`availableActions`), so before this the whole
+ * serialize/relink layer BSMITH-04 is about was invisible to the contract: a
+ * re-vendor that reverted `frameData` to a raw spread would move neither hash.
+ *
+ * Hashing the position closes that only while the position actually HOLDS a
+ * live element on both sides. If a future flow edit stops producing one, the
+ * hash keeps changing for other reasons and keeps looking healthy while
+ * covering nothing — the same silent narrowing `assertCoversFlowLayer` exists
+ * to prevent. So the fixture asserts what it claims to cover.
+ *
+ * Two failure shapes, both reported as themselves rather than as a hash move:
+ * a position that no longer CLONES (a live element leaked through), and a
+ * position that no longer CARRIES a marker (the fixture stopped covering the
+ * path). Note that neither is fixable with `boardsmith contract --update` —
+ * `--update` recomputes through this same function, so a regression cannot be
+ * blessed away by recording it.
+ *
+ * What this catches: `getPosition` dropping the general serializer for
+ * `variables` or for `frameData`. What it does NOT catch: a change confined to
+ * a frame-data field this fixture never writes, or to `relinkFlowVariables`'s
+ * resolution rules — both hashes see the SERIALIZED form only, because nothing
+ * here restores. The restore half is covered by
+ * `src/engine/flow/flow-state-clone.test.ts`, and 68-10 adds a
+ * platform-side check against the VENDORED engine.
+ */
+function assertCoversElementBindings(position: unknown): void {
+  assertPositionIsCloneable(position);
+  assertPositionCarriesMarkers(position);
+}
+
+/**
+ * The property itself: a serialized flow position crosses postMessage and the
+ * executor RPC, so a live element left in one throws `DataCloneError` and kills
+ * the broadcast for every seat.
+ *
+ * Checked here, and not left to the hash, because `canonicalize` walks the
+ * value: a live element's parent back-references send `sortDeep` into infinite
+ * recursion, and "RangeError: Maximum call stack size exceeded" names nothing a
+ * reader could act on. This is the same regression, reported as itself.
+ */
+function assertPositionIsCloneable(position: unknown): void {
+  try {
+    structuredClone(position);
+  } catch (cause) {
+    throw new Error(
+      "The engine-contract fixture's flow position is no longer structured-cloneable.\n"
+      + 'A live GameElement/Player is reaching the serialized position, which in production '
+      + 'throws DataCloneError out of the broadcast (BSMITH-04). `getPosition` must run BOTH '
+      + '`variables` and every frame\'s `data` through `serializeFlowVariables`.\n'
+      + 'See src/engine/flow/engine.ts getPosition, and '
+      + 'src/engine/flow/flow-state-clone.test.ts for the general test.',
+      { cause },
+    );
+  }
+}
+
+function assertPositionCarriesMarkers(position: unknown): void {
+  const { variables, frameData } = (position ?? {}) as {
+    variables?: Record<string, unknown>;
+    frameData?: Record<string, Record<string, unknown>>;
+  };
+
+  const missing: string[] = [];
+  if (!hasElementMarker(variables)) missing.push('position.variables');
+  if (!hasElementMarker(frameData)) missing.push('position.frameData');
+  if (missing.length === 0) return;
+
+  throw new Error(
+    `The engine-contract fixture is no longer binding a live element into ${missing.join(' or ')}.\n`
+    + 'payloadHash would still change and still look healthy while no longer covering the '
+    + 'flow-state serialize path (BSMITH-04) at all.\n'
+    + 'Fix the fixture in src/contract/fingerprint.ts rather than removing this check.',
+  );
+}
+
+/** True when `value` contains a serialized element marker anywhere inside. */
+function hasElementMarker(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.__flowElementId === 'number') return true;
+  return Object.values(record).some(hasElementMarker);
+}
+
+/**
  * Render the fixture game's per-player views and hash them.
  *
  * The fixture is defined here rather than borrowed from an example game on
@@ -203,7 +292,7 @@ export async function computePayloadHash(): Promise<string> {
   const { GameRunner } = await import('../runtime/index.js');
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
-    defineFlow, actionStep, simultaneousActionStep, sequence,
+    defineFlow, actionStep, simultaneousActionStep, sequence, eachPlayer,
   } = engine as any;
 
   class FixturePlayer extends Player<any, any> {
@@ -238,6 +327,19 @@ export async function computePayloadHash(): Promise<string> {
       // blank-action-bar bug on this platform — a game's opening simultaneous
       // step reported zero available actions — so leaving it out of the
       // fingerprint would omit the single most expensive skew we have had.
+      // The second step is an `eachPlayer` whose body carries a `player:`
+      // override, because that combination is the only one that puts a live
+      // `GameElement` into BOTH halves of a serialized flow position:
+      //   - `eachPlayer` binds the current Player into `position.variables`;
+      //   - the `player:` override makes the engine save the PREVIOUS current
+      //     player into that action step's `frame.data`, which lands in
+      //     `position.frameData`.
+      // Both are serialized by `serializeFlowVariables` (BSMITH-04). If either
+      // side regresses to a raw spread, the marker disappears from the
+      // fingerprinted position and `payloadHash` moves — which is the whole
+      // point of fingerprinting the position at all. The override deliberately
+      // names a seat OTHER than eachPlayer's first, so the saved previous
+      // player is a genuinely different element from the acting one.
       this.setFlow(
         defineFlow({
           root: sequence(
@@ -245,7 +347,12 @@ export async function computePayloadHash(): Promise<string> {
               actions: ['bid'],
               playerDone: (_ctx: unknown, p: any) => p.hasBid,
             }),
-            actionStep({ actions: ['draw'] }),
+            eachPlayer({
+              do: actionStep({
+                actions: ['draw'],
+                player: (ctx: any) => ctx.game.getPlayer(2),
+              }),
+            }),
           ),
         }),
       );
@@ -310,7 +417,29 @@ export async function computePayloadHash(): Promise<string> {
   const views = runner.getAllPlayerViews();
   assertCoversFlowLayer(views);
 
-  return sha256(canonicalize(views));
+  // Views are captured at the SIMULTANEOUS step, where both seats are on the
+  // clock — that is the coverage assertCoversFlowLayer pins, and advancing
+  // first would quietly drop it. The flow POSITION is captured one step later,
+  // because that is where the element bindings exist.
+  for (const player of game.all(Player)) {
+    const bid = runner.performAction('bid', player.seat, {});
+    if (!bid.success) {
+      throw new Error(
+        `The engine-contract fixture could not advance past its simultaneous step `
+        + `(seat ${player.seat}: ${bid.error ?? 'unknown error'}). The flow position below `
+        + 'would then be fingerprinted at the wrong place. Fix the fixture.',
+      );
+    }
+  }
+
+  const flowPosition = game.getFlowState()?.position;
+  assertCoversElementBindings(flowPosition);
+
+  // Both halves are hashed together: the per-player payload the platform ships,
+  // and the serialized flow position the platform STORES and restores. The
+  // second is not reachable from the first (createPlayerView omits `position`),
+  // so a flow-serialization regression was previously invisible here.
+  return sha256(canonicalize({ views, flowPosition }));
 }
 
 export interface ComputedFingerprints {

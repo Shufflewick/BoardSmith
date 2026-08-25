@@ -30,6 +30,11 @@ export type { TurnOrderConfig } from './turn-order.js';
 export { dueSeats, canSeatAct, availableActionsForSeat, turnSequence, orderSeatsByTurn } from './seat-activity.js';
 export type { SeatActivityState } from './seat-activity.js';
 
+// Canonical "WHICH turn/round is this?" identity — the one primitive every
+// consumer must compare instead of comparing due-seat sets.
+export { flowBoundaryKey } from './boundary-key.js';
+export type { BoundaryKeyState } from './boundary-key.js';
+
 // Types
 export type {
   FlowNodeType,

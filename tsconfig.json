@@ -18,6 +18,23 @@
     "verbatimModuleSyntax": true,
     "noEmit": true
   },
+  // WITHOUT THIS, `tsc -p tsconfig.json` TYPECHECKS NOTHING AT ALL.
+  //
+  // Absent an `include`, TypeScript defaults to `**/*`, which picks up
+  // `docs/*.test.ts`. Those violate `rootDir: "src"`, so tsc reports three
+  // TS6059 CONFIG errors and stops before checking a single file -- and it
+  // exits 0 while doing it. Measured 2026-08-25 by planting a deliberate type
+  // error and watching it go unreported.
+  //
+  // That is the same false-green class ShufflewickPub's own CLAUDE.md documents
+  // for `npx tsc --noEmit` (which cannot see inside .vue files and so checks
+  // about half that repo while looking green). It matters more here: this
+  // package ships TYPESCRIPT SOURCE -- `exports` maps both `types` and `import`
+  // straight at `src/**/*.ts` -- so every type error in this repo is inherited
+  // by consumers that DO typecheck, via the vendored tarball.
+  //
+  // See docs/typecheck.md for the 217 pre-existing errors this revealed.
+  "include": ["src/**/*"],
   "exclude": [
     "node_modules",
     "dist",

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike, type OpResult } from '../../session/index.js';
 import { createDevSession, translateOp, shapeResult } from './bridge.js';
+import { boundaryKeyOfHost } from '../../session/testing/boundary-stamp.js';
 import { getEntries, clearEntries } from './log-capture.js';
 
 // ---------------------------------------------------------------------------
@@ -269,14 +270,19 @@ describe('dev host bridge', () => {
         return original(seat, op);
       };
 
-      await session.handleServerRequest(1, 'req-0', 'action', { actionName: 'pass', args: {} });
+      // Captured BEFORE the request: the op runs and the host moves on, so
+      // re-reading the key afterwards would read the NEXT boundary.
+      const submittedKey = boundaryKeyOfHost(session.host);
+      await session.handleServerRequest(1, 'req-0', 'action', { actionName: 'pass', args: {}, boundaryKey: submittedKey });
 
-      // (a) handleOp was called with the translated Op
+      // (a) handleOp was called with the translated Op — including the client's
+      // boundary key, forwarded verbatim (never replaced with the host's own).
       expect(handleOpCalls).toHaveLength(1);
       expect(handleOpCalls[0]).toEqual({
         seat: 1,
-        op: { type: 'action', actionName: 'pass', player: 1, args: {} },
+        op: { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: submittedKey },
       });
+      expect(boundaryKeyOfHost(session.host)).not.toBe(submittedKey);
 
       // (b) a game_state was posted BEFORE the server_response
       const firstResponseIdx = posted.findIndex((p) => p.kind === 'server_response');
@@ -376,7 +382,7 @@ describe('dev host bridge', () => {
 
     async function pass(session: ReturnType<typeof makeResultSession>['session'], n: number) {
       for (let i = 0; i < n; i++) {
-        await session.handleServerRequest(1, `a${i}`, 'action', { actionName: 'pass', args: {} });
+        await session.handleServerRequest(1, `a${i}`, 'action', { actionName: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(session.host) });
       }
     }
 
@@ -449,8 +455,8 @@ describe('dev host bridge', () => {
       });
 
       await session.start(); // failure 1 (healthy)
-      await session.handleServerRequest(1, 'a1', 'action', { actionName: 'pass', args: {} }); // failure 2 (healthy)
-      await session.handleServerRequest(1, 'a2', 'action', { actionName: 'pass', args: {} }); // failure 3 (unhealthy)
+      await session.handleServerRequest(1, 'a1', 'action', { actionName: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(session.host) }); // failure 2 (healthy)
+      await session.handleServerRequest(1, 'a2', 'action', { actionName: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(session.host) }); // failure 3 (unhealthy)
 
       const persistenceEntries = getEntries().filter((e) => e.source === 'persistence');
       expect(persistenceEntries).toHaveLength(3);
@@ -495,7 +501,7 @@ describe('dev host bridge', () => {
       });
 
       await session.start();
-      await session.handleServerRequest(1, 'r1', 'action', { actionName: 'pass', args: {} });
+      await session.handleServerRequest(1, 'r1', 'action', { actionName: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(session.host) });
 
       const warningEntries = getEntries().filter((e) => e.source === 'action');
       expect(warningEntries).toHaveLength(1);
@@ -530,7 +536,7 @@ describe('dev host bridge', () => {
       });
 
       await session.start();
-      await session.handleServerRequest(1, 'r', 'action', { actionName: 'pass', args: {} });
+      await session.handleServerRequest(1, 'r', 'action', { actionName: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(session.host) });
 
       expect(responses).toHaveLength(1);
       expect(responses[0].success).toBe(false);
