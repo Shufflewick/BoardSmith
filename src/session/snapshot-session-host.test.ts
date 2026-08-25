@@ -4,6 +4,7 @@ import type { Annotation } from '../engine/index.js';
 import type { AIConfig } from '../ai/types.js';
 import { executeOp, type GameDefinitionLike, type Op, type OpResult } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
+import { BotGame, botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
 
 // ---------------------------------------------------------------------------
 // Inline game: player 1 repeatedly takes a "pass" action in a loop.
@@ -74,81 +75,6 @@ const twoStepGameDef: GameDefinitionLike = {
 
 const twoStepGameOptions = { playerCount: 2, seed: 'step-seed' };
 
-// ---------------------------------------------------------------------------
-// Inline game: two players alternating with 2+ legal moves each turn.
-// Reusable fixture for Plans 02/03 (hint/heatmap/demo ops); also used to prove
-// that aiTurn picks from multiple choices.
-//
-// MEMORY note: MCTS short-circuits when only 1 move is available — the bot
-// skips the clone step. Tests that need real MCTS branching require 2+ choices.
-// BotGame uses chooseFrom('direction', ['left', 'right']) to provide 2 legal moves.
-// ---------------------------------------------------------------------------
-
-class BotGame extends Game<BotGame, Player> {
-  moveCount = 0;
-
-  constructor(options: GameOptions) {
-    super(options);
-    this.registerAction(
-      Action.create('move')
-        .chooseFrom('direction', { choices: ['left', 'right'] })
-        .execute(() => {
-          this.moveCount++;
-          return { success: true };
-        }),
-    );
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          maxIterations: 100,
-          // 155-03: repeatUntil (never true within these tests) keeps the
-          // SAME action-step frame -- and its moveCount -- open across
-          // repeated 'move' actions. Without it, a plain single-move
-          // actionStep auto-completes and reopens a FRESH frame
-          // (moveCount === 0) after every move, and undo (now frame-scoped,
-          // UNDO-03) would always report "No actions to undo" -- this
-          // fixture's undo test needs undo to actually succeed.
-          do: actionStep({
-            actions: ['move'],
-            player: (ctx) => ctx.game.getPlayer(1)!,
-            repeatUntil: () => false,
-          }),
-        }),
-      }),
-    );
-  }
-}
-
-// Extended def type — supports ai config (Plans 02/03 will add ai? to GameDefinitionLike;
-// for now this test-local interface allows the fixture to carry the ai config).
-interface BotGameDefinitionLike extends GameDefinitionLike {
-  ai?: AIConfig;
-}
-
-const botGameAI: AIConfig = {
-  objectives: (_game, _playerIndex) => ({
-    moves: {
-      checker: (game) => Math.min(1, (game as BotGame).moveCount / 20),
-      weight: 1,
-    },
-  }),
-  // Extract 'direction' arg as notation so heatmap entries have extractable cell refs.
-  // Without this, DEST_ARGS fallback wouldn't find 'direction' and entries would be empty.
-  hintTargetFromMove: (move) => {
-    const dir = (move.args as { direction?: string }).direction;
-    return dir ? { notation: dir } : undefined;
-  },
-};
-
-export const botGameDef: BotGameDefinitionLike = {
-  gameClass: BotGame as new (...args: unknown[]) => unknown,
-  gameType: 'bot-game',
-  minPlayers: 1,
-  maxPlayers: 2,
-  ai: botGameAI,
-};
-
-export const botGameOptions = { playerCount: 2, seed: 'bot-seed' };
 
 // ---------------------------------------------------------------------------
 // Helper: build adapters bound to a real game definition
