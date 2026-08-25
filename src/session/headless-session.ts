@@ -1,5 +1,9 @@
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { executeOp, type GameDefinitionLike, type Op } from './stateless-ops.js';
+import type { SnapshotSessionAdapters } from './snapshot-session-host.js';
+
+/** The `meta` object the host hands to every broadcast, captured verbatim. */
+type BroadcastMeta = Parameters<SnapshotSessionAdapters['broadcast']>[1];
 
 /**
  * Drives a SnapshotSessionHost with an IN-PROCESS executeOp, forcing every op
@@ -30,6 +34,9 @@ import { executeOp, type GameDefinitionLike, type Op } from './stateless-ops.js'
  * });
  *
  * console.log(result.success, session.broadcasts.length);
+ *
+ * // The engine's authoritative turn boundary for broadcast N is `metas[N]`:
+ * console.log(session.metas.at(-1)?.turnBoundary.dueSeats);
  * ```
  */
 export function createHeadlessSession(
@@ -38,19 +45,32 @@ export function createHeadlessSession(
   aiSeats: Array<{ seat: number; level?: string }> = [],
 ) {
   const broadcasts: unknown[] = [];
+  const metas: BroadcastMeta[] = [];
   const host = new SnapshotSessionHost({
     playerCount: gameOptions.playerCount,
     aiSeats,
     executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op),
-    broadcast: (views) => {
+    broadcast: (views, meta) => {
       // structuredClone here mirrors the production postMessage boundary: a
       // broadcast carrying a live game object would throw a DataCloneError.
       broadcasts.push(structuredClone(views));
+      // `meta` crosses the SAME boundary in production (the dev host's bridge
+      // hands it to postGameState, the platform DO puts it on the wire), so it
+      // is cloned for the same reason: a meta that is not structured-cloneable
+      // would be a live defect, and this harness exists to surface exactly that.
+      metas.push(structuredClone(meta));
     },
   });
   return {
     host,
     broadcasts,
+    /**
+     * The `meta` of each broadcast, index-aligned with {@link broadcasts}.
+     * Carries `turnBoundary` — the engine's authoritative statement of which
+     * seats owe a move, and in which boundary. Never reconstruct that from a
+     * player view.
+     */
+    metas,
     async start() {
       await host.start();
     },
