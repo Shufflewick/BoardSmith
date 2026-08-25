@@ -1,6 +1,8 @@
 import type { Op, OpResult } from './stateless-ops.js';
 import { READ_ONLY_OP_TYPES } from './stateless-ops.js';
 import type { Annotation } from '../engine/index.js';
+import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
+import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import { describeMoveForNarration } from './move-summary.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 
@@ -23,10 +25,48 @@ export interface PersistenceErrorEntry {
   timestamp: number;
 }
 
+/**
+ * The engine's AUTHORITATIVE answer to "whose move is it, and in which turn?",
+ * carried on every broadcast's `meta`.
+ *
+ * **A consumer must NEVER reconstruct this from a player view.** A per-seat view
+ * carries the whole-game `flowState` only because `buildViews` happens to share
+ * one object across seats; reading `playerViews[0].flowState` makes that engine
+ * internal into an invariant the consumer holds in a comment. Read `meta`.
+ * Likewise, never derive "who is up" from `flowState.currentPlayer`: it is
+ * `undefined` for the entire life of a simultaneous step, which is how a
+ * simultaneous game reported "nobody is up" every round forever (BUG-006).
+ */
+export interface TurnBoundary {
+  /**
+   * The identity of the turn/round this broadcast belongs to.
+   *
+   * **Compared for EQUALITY only.** It is an identity, not an ordering — two
+   * different keys tell you the round moved, never which came first. A consumer
+   * that needs ordering owns its own monotonic counter (the platform's
+   * `turnSeq`) and advances it when this value changes.
+   *
+   * Equal keys mean the same round, so a re-broadcast (a heatmap toggle, a demo
+   * frame, a reconnect) republishes the key unchanged and must not re-stamp a
+   * round clock or re-notify a seat. Crucially, the same seats are due on BOTH
+   * sides of a real 2-seat simultaneous round boundary, so no comparison of
+   * `dueSeats` can substitute for this.
+   */
+  key: string;
+  /**
+   * The seats that owe a move right now, in canonical order. Empty in a
+   * finished game — nobody owes a move once it is over.
+   */
+  dueSeats: number[];
+}
+
 export interface SnapshotSessionAdapters {
   playerCount: number;
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
-  broadcast: (playerViews: unknown[], meta: { isComplete: boolean; winners: number[]; isDraw: boolean }) => void;
+  broadcast: (
+    playerViews: unknown[],
+    meta: { isComplete: boolean; winners: number[]; isDraw: boolean; turnBoundary: TurnBoundary },
+  ) => void;
   aiSeats?: Array<{ seat: number; level?: string }>;
   /**
    * When true, demoStart is rejected fail-loud and state.teachingDisabled is broadcast
@@ -66,8 +106,24 @@ export interface SnapshotSessionAdapters {
 }
 
 export class SnapshotSessionHost {
-  snapshot: unknown = null;
-  flowState: unknown = null;
+  // `snapshot` and `flowState` are ONE value in two halves, and they are exposed
+  // read-only so a caller cannot restore one without the other. A host holding a
+  // snapshot but no flow state would compute `dueSeats: []` and broadcast it as
+  // though that were the answer — BUG-006 reborn on the live post-eviction path.
+  // The only way in from outside is `restoreFrom()`, which takes the pair.
+  private _snapshot: unknown = null;
+  private _flowState: unknown = null;
+
+  /** The authoritative game snapshot. Restore it via {@link restoreFrom}. */
+  get snapshot(): unknown {
+    return this._snapshot;
+  }
+
+  /** The whole-game flow state matching {@link snapshot}. Restore it via {@link restoreFrom}. */
+  get flowState(): unknown {
+    return this._flowState;
+  }
+
   isComplete = false;
   winners: number[] = [];
   private pendingStates = new Map<number, Record<string, unknown>>();
@@ -298,17 +354,72 @@ export class SnapshotSessionHost {
    */
   broadcastCurrent(): void {
     if (this.disposed) return; // F-12: a dead session never broadcasts.
+    // Second enforcement point behind restoreFrom(): even a bug INSIDE this
+    // class must not reach a broadcast that names no seats because the flow
+    // state went missing. Silence here is indistinguishable, to every seat,
+    // from "the game says nobody is up".
+    if (this._snapshot !== null && this._flowState === null) {
+      throw new Error(
+        'SnapshotSessionHost holds a snapshot but no flow state, so it cannot state a turn ' +
+          'boundary — broadcasting one now would tell every seat that nobody owes a move. ' +
+          'Restore both halves together with restoreFrom({ snapshot, flowState }).',
+      );
+    }
     const mergedViews = this.mergeTransientState(this.lastPlayerViews);
     this.adapters.broadcast(mergedViews, {
       isComplete: this.isComplete,
       winners: this.winners,
       isDraw: this.isComplete && this.winners.length === 0,
+      turnBoundary: this.turnBoundary(),
     });
   }
 
+  /**
+   * Restore a host from persisted state after its process died (a Durable Object
+   * eviction, a worker restart). Takes the snapshot and its flow state TOGETHER
+   * because they are one value: a host given only a snapshot would answer "who
+   * owes a move?" with the empty set and broadcast that as the truth.
+   *
+   * @param state.snapshot   The persisted game snapshot.
+   * @param state.flowState  The whole-game flow state captured with it. Persist
+   *   it alongside the snapshot; there is nothing to recompute it from here.
+   * @param state.playerViews Optional last-known player views, so a
+   *   `broadcastCurrent()` before the next op still carries board state.
+   */
+  restoreFrom(state: { snapshot: unknown; flowState: unknown; playerViews?: unknown[] }): void {
+    if (state.flowState === null || state.flowState === undefined) {
+      throw new Error(
+        'restoreFrom requires the flowState that was captured with this snapshot: without it the ' +
+          'host cannot say which seats owe a move, and would broadcast an empty due-seat set as ' +
+          'the answer. Persist flowState alongside snapshot and pass both.',
+      );
+    }
+    this._snapshot = state.snapshot;
+    this._flowState = state.flowState;
+    if (state.playerViews) this.lastPlayerViews = state.playerViews;
+  }
+
+  /**
+   * The engine answering its own question, from the flow state it already holds.
+   * ONE expression, used at both broadcast construction sites: `apply()` assigns
+   * `this._flowState` BEFORE it broadcasts, so a re-broadcast necessarily
+   * republishes the identical boundary rather than minting a new one.
+   *
+   * Routed through `dueSeats` / `flowBoundaryKey` — never a second predicate.
+   */
+  private turnBoundary(): TurnBoundary {
+    // A finished game has no seats that owe a move. `dueSeats` already returns
+    // [] for a completed flow (it is not awaiting input); this is belt-and-braces
+    // for a host whose `isComplete` was set from an op result.
+    return {
+      key: flowBoundaryKey(this._flowState as BoundaryKeyState | null),
+      dueSeats: this.isComplete ? [] : dueSeats(this._flowState as SeatActivityState | null),
+    };
+  }
+
   private async apply(res: OpResult, seat?: number): Promise<void> {
-    this.snapshot = res.snapshot;
-    this.flowState = res.flowState;
+    this._snapshot = res.snapshot;
+    this._flowState = res.flowState;
     this.isComplete = res.isComplete;
     this.winners = res.winners;
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
@@ -328,6 +439,10 @@ export class SnapshotSessionHost {
       isComplete: res.isComplete,
       winners: res.winners,
       isDraw: res.isComplete && res.winners.length === 0,
+      // `this._flowState` was assigned from `res.flowState` at the top of
+      // apply(), so this is `res`'s own answer — and is provably the same
+      // expression broadcastCurrent() will republish.
+      turnBoundary: this.turnBoundary(),
     });
     // Routed through persistSafely (ERR-03) — a persist() failure must never
     // throw out of apply() and must be observable via onPersistenceError /
@@ -839,8 +954,8 @@ export class SnapshotSessionHost {
   private demoRewindOne(): void {
     const prev = this.demoHistory.pop();
     if (!prev) return;
-    this.snapshot = prev.snapshot;
-    this.flowState = prev.flowState;
+    this._snapshot = prev.snapshot;
+    this._flowState = prev.flowState;
     this.isComplete = prev.isComplete;
     this.winners = prev.winners;
     this.lastPlayerViews = prev.lastPlayerViews;
