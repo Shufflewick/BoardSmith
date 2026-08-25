@@ -11,7 +11,8 @@
 
 import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
-import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
+import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey } from '../engine/index.js';
+import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import {
@@ -41,17 +42,43 @@ import {
 // Op discriminated union
 // ---------------------------------------------------------------------------
 
+/**
+ * The staleness token a SUBMISSION carries: the identity of the flow position
+ * the submission was composed against ({@link flowBoundaryKey}).
+ *
+ * Specification: `docs/simultaneous-and-interrupt-semantics.md`.
+ *
+ * **REQUIRED, deliberately.** An optional token is a bypass that every
+ * un-updated caller takes by default and silently, which is the exact defect
+ * this field exists to close: a submission that names no round lands in
+ * whichever round the game happens to be in when it arrives. The compile error
+ * at each caller IS the migration.
+ *
+ * The engine MINTED this value (it rides out on every broadcast as
+ * `meta.turnBoundary.key`) and is being handed it back. It is compared for
+ * **equality and nothing else** — never parsed, never derived from. Equality or
+ * refusal.
+ *
+ * It can only ever REJECT. `canPlayerAct`/`dueSeats`/the game author's
+ * conditions remain the sole authorities on legality; a correct key buys
+ * nothing. There is no `?? flowBoundaryKey(current)` fallback anywhere, on any
+ * path — an absent key is refused, never defaulted.
+ */
+export interface BoundaryStamped {
+  boundaryKey: string;
+}
+
 export type Op =
   | { type: 'start' }
-  | { type: 'action'; actionName: string; player: number; args: Record<string, unknown> }
-  | {
+  | ({ type: 'action'; actionName: string; player: number; args: Record<string, unknown> } & BoundaryStamped)
+  | ({
       type: 'selectionStep';
       player: number;
       selectionName: string;
       value: unknown;
       actionName?: string;
       initialArgs?: Record<string, unknown>;
-    }
+    } & BoundaryStamped)
   | {
       type: 'resolveChoices';
       actionName: string;
@@ -94,6 +121,26 @@ export type Op =
   // step back one move) and speed (inter-move delay in ms). Host lifecycle op like
   // demoStart/demoStop — handled in SnapshotSessionHost.handleOp, never in executeOp.
   | { type: 'demoControl'; control: 'pause' | 'play' | 'step' | 'back'; delay?: number };
+
+/** The op types that carry a player's intent, and therefore a boundary key. */
+export type SubmissionOpType = Extract<Op, BoundaryStamped>['type'];
+
+/**
+ * The submission op types, enumerated ONCE.
+ *
+ * The `Record<SubmissionOpType, true>` makes the enumeration exhaustive: adding
+ * a `BoundaryStamped` member to `Op` without listing it here is a compile
+ * error. It exists for CALLERS that stamp their own current key (the headless
+ * driver); the engine's own staleness guard needs no list at all — it keys on
+ * the presence of `boundaryKey`, so it cannot fall out of step with the union.
+ */
+const SUBMISSION_OP_TYPE_MAP: Record<SubmissionOpType, true> = {
+  action: true,
+  selectionStep: true,
+};
+export const SUBMISSION_OP_TYPES: ReadonlySet<Op['type']> = new Set(
+  Object.keys(SUBMISSION_OP_TYPE_MAP) as SubmissionOpType[],
+);
 
 /** The read-only debug ops — reported without mutating or broadcasting state. */
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
@@ -333,6 +380,41 @@ function errorResult(
     isComplete: false,
     winners: [],
   };
+}
+
+/**
+ * The refusal a stale submission gets. Specification:
+ * `docs/simultaneous-and-interrupt-semantics.md` §3.
+ *
+ * It names what happened and what to do, and nothing else — no frame path, no
+ * file, no internal identifier (T-68-14). And it leaves the seat a way forward:
+ * after this refusal the seat can still act in the CURRENT round.
+ */
+export const STALE_SUBMISSION_MESSAGE =
+  'The round you acted in has closed; reload to see the current round.';
+
+/**
+ * The ONE staleness comparison in the codebase.
+ *
+ * Keyed on the PRESENCE of `boundaryKey` rather than on a list of op types, so
+ * an op that is later given a boundary key is guarded the moment it has one:
+ * a token-bearing op that bypasses this guard is not expressible. Two
+ * comparison sites would be the duplicate-enforcement shape the motto forbids.
+ *
+ * Returns a refusal, or `undefined` to mean "carry on to the checks that
+ * already existed". Those are its only two outcomes — it can narrow what is
+ * permitted and can never widen it.
+ */
+function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Op): OpResult | undefined {
+  if (!('boundaryKey' in op)) return undefined;
+  // Equality against the key this very snapshot's flow position mints. No
+  // parsing, no structural tolerance, and no default for an absent or
+  // wrong-typed value: anything that is not equal is stale.
+  if (op.boundaryKey === flowBoundaryKey(snapshot?.flowState as BoundaryKeyState | undefined)) return undefined;
+  // 'protocol', and no errorCode: this refusal is raised here, ahead of any
+  // runner call, so there is no upstream ErrorCode to forward and one must
+  // never be fabricated (see OpResult.errorCode).
+  return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol');
 }
 
 function selectDueAISeat(
@@ -1219,6 +1301,12 @@ export async function executeOp(
 
     // All ops below require an existing snapshot
     const snap = snapshot as GameStateSnapshot;
+
+    // BSMITH-05: a submission composed against a boundary that has since closed
+    // is refused here, BEFORE any action is performed. See
+    // docs/simultaneous-and-interrupt-semantics.md.
+    const stale = refuseStaleSubmission(snap, op);
+    if (stale) return stale;
 
     switch (op.type) {
       case 'action':

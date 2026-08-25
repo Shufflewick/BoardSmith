@@ -28,7 +28,9 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { executeOp, type GameDefinitionLike, type Op } from '../stateless-ops.js';
+import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type Op } from '../stateless-ops.js';
+import type { HeadlessOp } from '../headless-session.js';
+import { boundaryKeyOf } from './boundary-stamp.js';
 import type { GameStateSnapshot } from '../../runtime/index.js';
 import {
   fencedScumDefinition,
@@ -57,8 +59,16 @@ function statelessSession(
     get snapshot() {
       return snapshot;
     },
-    async send(op: Op) {
-      const res = await executeOp(def, gameOptions, snapshot, null, op, hostOptions);
+    async send(op: HeadlessOp) {
+      // This driver IS the client: it composed `op` against the snapshot it is
+      // holding, in this same tick, so that snapshot's boundary is the true
+      // answer — not a default. A caller that supplies its own key keeps it.
+      const stamped = (
+        SUBMISSION_OP_TYPES.has(op.type) && (op as { boundaryKey?: string }).boundaryKey === undefined
+          ? { ...op, boundaryKey: boundaryKeyOf(snapshot) }
+          : op
+      ) as Op;
+      const res = await executeOp(def, gameOptions, snapshot, null, stamped, hostOptions);
       if (res.success) snapshot = JSON.parse(JSON.stringify(res.snapshot));
       return res;
     },

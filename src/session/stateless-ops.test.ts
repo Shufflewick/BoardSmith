@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import type { AIConfig } from '../ai/types.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { ErrorCode } from '../types/protocol.js';
 import { PickHandler } from './pick-handler.js';
 
@@ -281,7 +282,7 @@ describe('executeOp', () => {
         simpleGameOptions,
         startResult.snapshot,
         null,
-        { type: 'action', actionName: 'pass', player: 1, args: {} },
+        { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
       );
 
       expect(actionResult.success).toBe(true);
@@ -296,7 +297,7 @@ describe('executeOp', () => {
         simpleGameOptions,
         startResult.snapshot,
         null,
-        { type: 'action', actionName: 'nonexistent', player: 1, args: {} },
+        { type: 'action', actionName: 'nonexistent', player: 1, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
       );
 
       expect(result.success).toBe(false);
@@ -313,7 +314,7 @@ describe('executeOp', () => {
         simpleGameOptions,
         startResult.snapshot,
         null,
-        { type: 'action', actionName: 'pass', player: 2, args: {} },
+        { type: 'action', actionName: 'pass', player: 2, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
       );
 
       expect(result.success).toBe(false);
@@ -329,7 +330,7 @@ describe('executeOp', () => {
         followUpGameOptions,
         startResult.snapshot,
         null,
-        { type: 'action', actionName: 'begin', player: 1, args: {} },
+        { type: 'action', actionName: 'begin', player: 1, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
       );
 
       expect(actionResult.success).toBe(true);
@@ -352,7 +353,7 @@ describe('executeOp', () => {
         twoStepGameOptions,
         startResult.snapshot,
         null,
-        { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick' },
+        { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
       );
 
       expect(step1.success).toBe(true);
@@ -368,7 +369,7 @@ describe('executeOp', () => {
         twoStepGameOptions,
         startResult.snapshot,
         null,
-        { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick' },
+        { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
       );
       expect(step1.success).toBe(true);
       expect(step1.pendingState).not.toBeNull();
@@ -385,6 +386,7 @@ describe('executeOp', () => {
           value: 'M',
           actionName: 'pick',
           initialArgs: { color: 'red' },
+          boundaryKey: boundaryKeyOf(step1.snapshot),
         },
       );
 
@@ -502,7 +504,7 @@ describe('executeOp', () => {
           twoStepGameOptions,
           startResult.snapshot,
           null,
-          { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick' },
+          { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
         );
 
         expect(step1.success).toBe(true);
@@ -525,7 +527,7 @@ describe('executeOp', () => {
         twoStepGameOptions,
         startResult.snapshot,
         null,
-        { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick' },
+        { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
       );
       expect(step1.success).toBe(true);
 
@@ -556,7 +558,7 @@ describe('executeOp', () => {
         simpleGameOptions,
         startResult.snapshot,
         null,
-        { type: 'action', actionName: 'pass', player: 1, args: {} },
+        { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) },
       );
       expect(afterAction.success).toBe(true);
       const snapshotAfterAction = JSON.stringify(afterAction.snapshot);
@@ -587,7 +589,7 @@ describe('executeOp', () => {
           simpleGameOptions,
           snapshot,
           null,
-          { type: 'action', actionName: 'pass', player: 1, args: {} },
+          { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(snapshot) },
         );
         expect(result.success).toBe(true);
         snapshot = result.snapshot;
@@ -625,7 +627,7 @@ describe('executeOp', () => {
           simpleGameOptions,
           snapshot,
           null,
-          { type: 'action', actionName: 'pass', player: 1, args: {} },
+          { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(snapshot) },
         )).snapshot;
       }
 
@@ -909,7 +911,7 @@ describe('executeOp', () => {
         countingGameOptions,
         tutorialStartResult.snapshot,
         null,
-        { type: 'action', actionName: 'pass', player: 1, args: {} },
+        { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(tutorialStartResult.snapshot) },
       );
       expect(actionResult.success).toBe(true);
 
@@ -1640,7 +1642,7 @@ describe('executeOp', () => {
         twoStepGameOptions,
         startResult.snapshot,
         null,
-        { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick' },
+        { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(startResult.snapshot) },
       );
       expect(step1.success).toBe(true);
       expect(step1.pendingState).not.toBeNull();

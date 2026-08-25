@@ -16,6 +16,7 @@ import type {
   LobbyInfo,
 } from './types.js';
 import { resolveWsCtor } from './ws-ctor.js';
+import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 
 export class GameConnection {
   private config: Required<Omit<GameConnectionConfig, 'wsImplementation'>>;
@@ -219,6 +220,17 @@ export class GameConnection {
       type: 'action',
       action: actionName,
       args,
+      // Stamped from the flow state THIS CLIENT RENDERED — the round the human
+      // was actually looking at when they pressed the button, not whatever the
+      // server has moved on to. That is the entire point: a simultaneous round
+      // can close and re-open in between, and the server refuses a submission
+      // that names a boundary which has closed
+      // (docs/simultaneous-and-interrupt-semantics.md).
+      //
+      // No `??` fallback to a server-side current key exists, here or anywhere:
+      // a client that has rendered nothing yet stamps the key of nothing, and
+      // is refused. Fail-closed.
+      boundaryKey: flowBoundaryKey(this.lastState?.flowState as BoundaryKeyState | undefined),
       requestId,
     };
 

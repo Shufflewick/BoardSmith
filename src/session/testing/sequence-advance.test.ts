@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { executeOp } from '../stateless-ops.js';
+import { boundaryKeyOf } from './boundary-stamp.js';
+import { STALE_SUBMISSION_MESSAGE } from '../stateless-ops.js';
 import { sequenceFixtureDefinition } from './fixtures/sequence-fixture.js';
 
 /**
@@ -53,6 +55,7 @@ describe('simultaneous-step action advancement survives snapshot round-trip', ()
       actionName: 'placeLanding',
       player: 1,
       args: { sector: sectorId },
+      boundaryKey: boundaryKeyOf(started.snapshot),
     });
     expect(acted.success).toBe(true);
 
@@ -71,8 +74,12 @@ describe('simultaneous-step action advancement survives snapshot round-trip', ()
       actionName: 'placeLanding',
       player: 1,
       args: {},
+      // The CURRENT key: this replay must still be refused for the reason the
+      // test is about (placeLanding is no longer available), not for staleness.
+      boundaryKey: boundaryKeyOf(acted.snapshot),
     });
     expect(replayEmpty.success).toBe(false);
+    expect(replayEmpty.error).not.toBe(STALE_SUBMISSION_MESSAGE);
 
     // And hireFirstMerc must be the available action after the round-trip.
     const after = await executeOp(sequenceFixtureDefinition, gameOptions, acted.snapshot, null, {
@@ -80,6 +87,7 @@ describe('simultaneous-step action advancement survives snapshot round-trip', ()
       actionName: 'hireFirstMerc',
       player: 1,
       args: {},
+      boundaryKey: boundaryKeyOf(acted.snapshot),
     });
     expect(after.success).toBe(true);
   });

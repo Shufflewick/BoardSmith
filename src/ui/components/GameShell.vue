@@ -13,6 +13,7 @@ import {
   announceOpponentTurn,
 } from '../composables/liveRegionAnnouncer.js';
 import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
+import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { MeepleClient, MeepleClientError, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
 
@@ -596,7 +597,20 @@ function platformRequest(op: string, payload: Record<string, unknown>): Promise<
   // Strip Vue reactivity (a reactive proxy / ref is not structured-cloneable) so the
   // natural `someRef.value` arg survives postMessage; a genuine live-element leak
   // still fails loud via assertCloneable inside toCloneablePayload.
-  const cloneable = toCloneablePayload(op, payload);
+  //
+  // BSMITH-05: the boundary key is stamped HERE, on the ONE outbound chokepoint,
+  // from the flow state THIS SHELL RENDERED — the round the human was actually
+  // looking at. Stamping it per call site is how a submission ends up carrying
+  // no key at all and landing in whichever round is open by the time it arrives.
+  // It rides on every op, not just the two the engine reads it from: an inert
+  // extra field on a debug payload costs nothing, and "remember to add it when
+  // you add a submission op" is not a guardrail. See
+  // docs/simultaneous-and-interrupt-semantics.md.
+  //
+  // `state.value`, deliberately, NOT `displayedState`: during time travel the
+  // displayed flow state is nulled out, and a submission must name the LIVE
+  // round it will be judged against, not the historical frame on screen.
+  const cloneable = toCloneablePayload(op, payload, state.value?.flowState as BoundaryKeyState | null | undefined);
   return new Promise((resolve) => {
     const requestId = `req-${platformRequestSeq++}`;
     const timer = setTimeout(() => {
@@ -724,6 +738,10 @@ const actionController = useActionController({
           value,
           action: actionName,
           initialArgs,
+          // Same rule as the platform path above: a selection is a SUBMISSION,
+          // so it names the boundary this shell rendered it against
+          // (docs/simultaneous-and-interrupt-semantics.md).
+          boundaryKey: flowBoundaryKey(state.value?.flowState as BoundaryKeyState | null | undefined),
         }),
       });
       return await response.json();

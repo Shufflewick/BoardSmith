@@ -1,7 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { createDevHostClientMemory } from './test-client-memory.js';
+
+/** This suite's stand-in browser memory — see test-client-memory.ts. */
+const clients = createDevHostClientMemory();
+const rememberRendered = clients.remember;
+/** The boundary key `clientId` would echo on its next submission. */
+const clientKey = (clientId: string) => clients.key(clientId);
+
+beforeEach(() => clients.reset());
 
 class PassGame extends Game<PassGame, Player> {
   constructor(options: GameOptions) {
@@ -54,7 +63,7 @@ function makeAltHost() {
     minPlayers: 2,
     makeSeed: () => 'alt',
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(altDef, gameOptions, snap, pend, op, hostOptions),
-    send: (clientId, msg) => sent.push({ clientId, msg }),
+    send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
   const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
   const has = (clientId: string, type: HostOutbound['type']) => to(clientId).some((m) => m.type === type);
@@ -65,7 +74,7 @@ function makeAltHost() {
       type: 'server_request',
       requestId,
       op: 'action',
-      payload: { actionName: 'pass', args: {} },
+      payload: { actionName: 'pass', args: {}, boundaryKey: clientKey(clientId) },
     });
   return { host, sent, to, has, lastOfType, pass, clear: () => (sent.length = 0) };
 }
@@ -78,7 +87,7 @@ function makeHost(opts: { designatedAiSeats?: number[] } = {}) {
     makeSeed: () => 'mp',
     designatedAiSeats: opts.designatedAiSeats,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
-    send: (clientId, msg) => sent.push({ clientId, msg }),
+    send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
   const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
   const has = (clientId: string, type: HostOutbound['type']) => to(clientId).some((m) => m.type === type);
@@ -137,7 +146,7 @@ describe('MultiplayerHost (always-live)', () => {
       type: 'server_request',
       requestId: 'r1',
       op: 'action',
-      payload: { actionName: 'pass', args: {} },
+      payload: { actionName: 'pass', args: {}, boundaryKey: clientKey('A') },
     });
     expect(has('A', 'game_state')).toBe(true);
     const resp = to('A').find((m) => m.type === 'server_response') as any;
@@ -175,7 +184,7 @@ describe('MultiplayerHost (always-live)', () => {
         if (op.type === 'start') startOps++;
         return executeOp(def, gameOptions, snap, pend, op, hostOptions);
       },
-      send: (clientId, msg) => sent.push({ clientId, msg }),
+      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
     });
 
     await host.handleMessage('A', { type: 'hello' }); // initial start
@@ -219,7 +228,7 @@ describe('MultiplayerHost — player configs', () => {
         if (op.type === 'start') startOptions = gameOptions;
         return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
       },
-      send: (clientId, msg) => sent.push({ clientId, msg }),
+      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
     });
 
     await host.handleMessage('A', { type: 'hello' }); // A → seat 1 (human); seat 2 open → AI
@@ -251,7 +260,7 @@ describe('MultiplayerHost — seat stability on reconnect', () => {
         }
         return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
       },
-      send: (clientId, msg) => sent.push({ clientId, msg }),
+      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
     });
 
     await host.handleMessage('A', { type: 'hello' }); // auto-seat seat 1, start FAILS
@@ -431,7 +440,7 @@ function makeLockedHost() {
     makeSeed: () => 'locked',
     teachingDisabled: true,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
-    send: (clientId, msg) => sent.push({ clientId, msg }),
+    send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
   const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
   const lastOfType = (clientId: string, type: HostOutbound['type']) =>
@@ -496,7 +505,7 @@ describe('MultiplayerHost — teaching lockout (cross-layer: teachingDisabled:tr
       type: 'server_request',
       requestId: 'r-pass',
       op: 'action',
-      payload: { actionName: 'pass', args: {} },
+      payload: { actionName: 'pass', args: {}, boundaryKey: clientKey('A') },
     });
     const resp = lastOfType('A', 'server_response');
     expect(resp.result.success).toBe(true);
@@ -627,7 +636,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
         if (op.type === 'start') seeds.push((gameOptions as { seed?: string }).seed ?? '');
         return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
       },
-      send: (clientId, msg) => sent.push({ clientId, msg }),
+      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
     });
     const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
     const lastOfType = (clientId: string, type: HostOutbound['type']) =>
@@ -637,7 +646,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
         type: 'server_request',
         requestId,
         op: 'action',
-        payload: { actionName: 'pass', args: {} },
+        payload: { actionName: 'pass', args: {}, boundaryKey: clientKey(clientId) },
       });
     return { host, sent, to, lastOfType, pass, seeds, clear: () => (sent.length = 0) };
   }
@@ -688,7 +697,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
       makeSeed: () => 'never-started',
       executeOp: (gameOptions, snap, pend, op, hostOptions) =>
         executeOp(altDef, gameOptions, snap, pend, op, hostOptions),
-      send: (clientId, msg) => sent.push({ clientId, msg }),
+      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
     });
     // No 'hello' — the host is never told a client connected, so it never
     // auto-starts. Bypass the happy path entirely: send restart cold.

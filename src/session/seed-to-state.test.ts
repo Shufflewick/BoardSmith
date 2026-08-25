@@ -42,6 +42,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { TestGame } from '../testing/test-game.js';
 
 // ---------------------------------------------------------------------------
@@ -195,7 +196,7 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
       gameOptions,
       started.snapshot,
       null,
-      { type: 'action', actionName: 'draw', player: 1, args: {} },
+      { type: 'action', actionName: 'draw', player: 1, args: {}, boundaryKey: boundaryKeyOf(started.snapshot) },
     );
 
     expect(drawn.success).toBe(true);

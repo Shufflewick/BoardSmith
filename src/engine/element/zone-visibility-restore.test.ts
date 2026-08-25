@@ -45,6 +45,7 @@ import {
 import { GameRunner } from '../../runtime/index.js';
 import { StateHistory } from '../../session/state-history.js';
 import { executeOp, type GameDefinitionLike } from '../../session/stateless-ops.js';
+import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import type { StoredGameState } from '../../session/types.js';
 
 // ---------------------------------------------------------------------------
@@ -230,7 +231,7 @@ describe('SEC-01/F1/F7: zone visibility survives restore (byte-identity of oppon
       { playerCount: 2, seed: 'zone-vis-seed' },
       startResult.snapshot,
       null,
-      { type: 'action', actionName: 'noop', player: 1, args: {} }
+      { type: 'action', actionName: 'noop', player: 1, args: {}, boundaryKey: boundaryKeyOf(startResult.snapshot) }
     );
     expect(actionResult.success).toBe(true);
     const afterPlayerViews = (actionResult as unknown as { playerViews: Array<{ state: { view: unknown } }> })

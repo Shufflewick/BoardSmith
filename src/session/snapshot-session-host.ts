@@ -868,6 +868,14 @@ export class SnapshotSessionHost {
           actionName: suggestedAction,
           player: aiPlayer,
           args: suggestedArgs as Record<string, unknown>,
+          // A SERVER-COMPOSED op acting NOW: the demo bot chose this move from
+          // `iterSnapshot` in this same iteration, so the boundary it was
+          // composed against is that snapshot's own. Stamping the current key
+          // is correct HERE and would be a silent bypass anywhere a human's
+          // intent is being carried (docs/simultaneous-and-interrupt-semantics.md §7).
+          // Read off iterSnapshot, not `this.flowState`: WR-01 — a concurrent
+          // human op may have moved the host on since the iteration started.
+          boundaryKey: flowBoundaryKey((iterSnapshot as { flowState?: BoundaryKeyState } | null)?.flowState),
         });
 
         if (!execRes.success) { this.demoHistory.pop(); break; } // fail-clean: undo the history push

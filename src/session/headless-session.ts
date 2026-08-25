@@ -1,6 +1,27 @@
 import { SnapshotSessionHost } from './snapshot-session-host.js';
-import { executeOp, type GameDefinitionLike, type Op } from './stateless-ops.js';
+import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type Op } from './stateless-ops.js';
+import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import type { SnapshotSessionAdapters } from './snapshot-session-host.js';
+
+/**
+ * An op as a headless CALLER writes it: a submission may omit `boundaryKey`,
+ * and {@link createHeadlessSession}'s `send` stamps the host's CURRENT key.
+ *
+ * That is correct here and ONLY here: this is an in-process driver that
+ * composes and submits in the same tick, so there is no interval for a round to
+ * close in — the same standing the AI pump and the demo loop have
+ * (docs/simultaneous-and-interrupt-semantics.md §7). It is NOT a way to opt out
+ * of the token: an explicitly supplied key is forwarded verbatim, which is how
+ * `stale-submission.test.ts` submits a key that is deliberately not current.
+ */
+type WithOptionalBoundary<T> = T extends { boundaryKey: string }
+  ? Omit<T, 'boundaryKey'> & { boundaryKey?: string }
+  : T;
+// Distributes over the `Op` union (naked type parameter), so each submission
+// member keeps its OWN fields. A non-distributive `Omit<Extract<Op, ...>, ...>`
+// would collapse `action` and `selectionStep` into their common keys and make
+// `args`/`value` unrepresentable.
+export type HeadlessOp = WithOptionalBoundary<Op>;
 
 /** The `meta` object the host hands to every broadcast, captured verbatim. */
 type BroadcastMeta = Parameters<SnapshotSessionAdapters['broadcast']>[1];
@@ -74,9 +95,19 @@ export function createHeadlessSession(
     async start() {
       await host.start();
     },
-    async send(seat: number, op: Op) {
+    async send(seat: number, op: HeadlessOp) {
       structuredClone(op); // throws DataCloneError if a payload carries a non-cloneable game object
-      return host.handleOp(seat, op);
+      // Stamp the host's CURRENT boundary only when the caller supplied none.
+      // Never `??` over a supplied key — an explicit key, including a stale one,
+      // is the caller's statement of which round it composed against.
+      const needsStamp =
+        SUBMISSION_OP_TYPES.has(op.type) && (op as { boundaryKey?: string }).boundaryKey === undefined;
+      const stamped = (
+        needsStamp
+          ? { ...op, boundaryKey: flowBoundaryKey(host.flowState as BoundaryKeyState | null) }
+          : op
+      ) as Op;
+      return host.handleOp(seat, stamped);
     },
   };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from '../headless-session.js';
+import { createHeadlessSession, type HeadlessOp } from '../headless-session.js';
 import { collectFixtureDefinition } from './fixtures/collect-fixture.js';
 import { undoFenceFixtureDefinition, UndoFenceGame } from './fixtures/undo-fence-fixture.js';
 import { executeBarrierFixtureDefinition, ExecuteBarrierGame } from './fixtures/execute-barrier-fixture.js';
@@ -285,7 +285,7 @@ function newExecuteBarrierStatefulSession() {
   });
 }
 
-async function playThroughExecuteBarrierStateless(send: (op: Op) => Promise<{ success: boolean }>) {
+async function playThroughExecuteBarrierStateless(send: (op: HeadlessOp) => Promise<{ success: boolean }>) {
   expect((await send({ type: 'action', actionName: 'act1', player: 1, args: {} })).success).toBe(true);
   expect((await send({ type: 'action', actionName: 'act2', player: 1, args: {} })).success).toBe(true);
   expect((await send({ type: 'action', actionName: 'act2', player: 1, args: {} })).success).toBe(true);

@@ -19,6 +19,7 @@ import { executeOp, type GameDefinitionLike, type Op, type OpResult } from '../s
 import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { simultaneousRoundsFixtureDefinition } from './fixtures/simultaneous-rounds-fixture.js';
 import { collectTurnsFixtureDefinition } from './fixtures/collect-turns-fixture.js';
+import { boundaryKeyOf } from './boundary-stamp.js';
 
 const OPTIONS = { playerCount: 2, seed: 'stale-submission' };
 
@@ -258,5 +259,53 @@ describe('BSMITH-05: a submission composed against a closed boundary', () => {
       expect(result.errorCode).toBeUndefined();
       expect(committed(result, 1)).toBe(false);
     }
+  });
+});
+
+/**
+ * The token the engine HANDS OUT and the token the guard ACCEPTS are computed
+ * from two different places, and that is a real hazard.
+ *
+ * The broadcast key comes from `OpResult.flowState` (via
+ * `SnapshotSessionHost.turnBoundary()`, which reads `this._flowState`). The
+ * guard compares against `snapshot.flowState`, because `executeOp` is stateless
+ * and the snapshot is all it is given. If those two ever diverged, EVERY
+ * legitimate submission would be refused — the whole system would wedge, with
+ * a message telling players to reload into a round they can never act in. No
+ * other test in this file would notice: they all read the key from the same
+ * side they submit it to.
+ *
+ * This is the cross-unit identity test that holds the two halves together.
+ */
+describe('BSMITH-05: the key handed out is the key accepted', () => {
+  it('OpResult.flowState and OpResult.snapshot.flowState agree, on every op of a full multi-round game', async () => {
+    const def = simultaneousRoundsFixtureDefinition;
+    let result = await run(def, null, { type: 'start' });
+    let compared = 0;
+
+    // Play all three rounds out, both seats, every op.
+    for (let round = 0; round < 4 && !result.isComplete; round++) {
+      for (const seat of [1, 2]) {
+        const broadcastKey = keyOf(result);
+        const guardKey = boundaryKeyOf(result.snapshot);
+        expect(guardKey).toBe(broadcastKey);
+        compared++;
+
+        if (result.isComplete) break;
+        const next = await run(def, result.snapshot, {
+          type: 'action', actionName: 'commit', player: seat, args: {}, boundaryKey: broadcastKey,
+        });
+        // Every one of these must be ACCEPTED — a divergence would show up here
+        // as the staleness refusal firing on a perfectly current submission.
+        expect(next.error).not.toBe(STALE_MESSAGE);
+        expect(next.success).toBe(true);
+        result = next;
+      }
+    }
+
+    expect(compared).toBeGreaterThanOrEqual(6);
+    // The game really did run to the end, so the terminal key was compared too.
+    expect(result.isComplete).toBe(true);
+    expect(keyOf(result)).toBe('flow:complete');
   });
 });

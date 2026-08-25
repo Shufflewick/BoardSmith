@@ -1,4 +1,5 @@
 import { isRef, unref, toRaw } from 'vue';
+import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 
 /**
  * Throws an actionable error if `payload` cannot survive postMessage's
@@ -54,12 +55,29 @@ function deepUnwrap(value: unknown, seen: WeakMap<object, unknown>): unknown {
 }
 
 /**
- * Normalize an op payload into a structured-cloneable, reactivity-free value, then
- * assert it really is cloneable. Use this at the platform boundary so reactive args
- * (the easy path) work while genuine non-cloneable leaks still fail loud.
+ * Build the outbound payload for ONE platform `server_request`: the caller's
+ * fields, stamped with the boundary this shell rendered, normalized into a
+ * structured-cloneable reactivity-free value, and asserted cloneable.
+ *
+ * `renderedFlowState` is a REQUIRED parameter, and that is the point. It is the
+ * only outbound path from the embedded game to the host, so making the question
+ * "which round was the player looking at?" unskippable here is what stops a
+ * submission ever leaving without an answer. A caller that has rendered nothing
+ * passes `null` and gets the "no flow state" key, which the engine refuses —
+ * fail-closed, never defaulted to the server's current round. See
+ * `docs/simultaneous-and-interrupt-semantics.md`.
+ *
+ * The key is stamped on EVERY op, not just the two the engine reads it from.
+ * An inert extra field on a debug payload costs nothing, and "remember to add
+ * it when you add a submission op" is not a guardrail.
  */
-export function toCloneablePayload<T>(op: string, payload: T): T {
-  const plain = deepUnwrap(payload, new WeakMap()) as T;
+export function toCloneablePayload<T extends object>(
+  op: string,
+  payload: T,
+  renderedFlowState: BoundaryKeyState | null | undefined,
+): T & { boundaryKey: string } {
+  const stamped = { ...payload, boundaryKey: flowBoundaryKey(renderedFlowState) };
+  const plain = deepUnwrap(stamped, new WeakMap()) as T & { boundaryKey: string };
   assertCloneable(op, plain);
   return plain;
 }

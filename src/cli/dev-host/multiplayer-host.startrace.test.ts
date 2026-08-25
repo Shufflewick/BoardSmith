@@ -17,10 +17,20 @@
  * immediately after, still inside the `await session.start()` window, with no
  * manual microtask-flushing required.
  */
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike, type Op, type OpResult } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { createDevHostClientMemory } from './test-client-memory.js';
+
+/** This suite's stand-in browser memory — see test-client-memory.ts. */
+const clients = createDevHostClientMemory();
+const rememberRendered = clients.remember;
+/** The boundary key `clientId` would echo on its next submission. */
+const clientKey = (clientId: string) => clients.key(clientId);
+
+beforeEach(() => clients.reset());
+
 
 /** Every seat must `pass` once per round, seat 1 before seat 2; several rounds
  *  so a reclaimed seat 1 has a SECOND turn to prove the bot yields (Task 3),
@@ -74,7 +84,7 @@ function makeRaceHost(gate: { promise: Promise<void> } | null) {
       if (op.type === 'start' && gate) await gate.promise;
       return executeOp(raceDef, gameOptions, snap, pend, op, hostOptions);
     },
-    send: (clientId, msg) => sent.push({ clientId, msg }),
+    send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
   const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
   const lastOfType = (clientId: string, type: HostOutbound['type']) =>
@@ -186,7 +196,7 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
       type: 'server_request',
       requestId: 'b1',
       op: 'action',
-      payload: { actionName: 'pass', args: {} },
+      payload: { actionName: 'pass', args: {}, boundaryKey: clientKey('B') },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bResp = to('B').find((m) => m.type === 'server_response' && (m as any).requestId === 'b1') as any;
@@ -198,7 +208,7 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
       type: 'server_request',
       requestId: 'a2',
       op: 'action',
-      payload: { actionName: 'pass', args: {} },
+      payload: { actionName: 'pass', args: {}, boundaryKey: clientKey('A') },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const aResp = to('A').find((m) => m.type === 'server_response' && (m as any).requestId === 'a2') as any;
@@ -250,7 +260,7 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
       type: 'server_request',
       requestId: 'b-mid',
       op: 'action',
-      payload: { actionName: 'pass', args: {} },
+      payload: { actionName: 'pass', args: {}, boundaryKey: clientKey('B') },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bResp = to('B').find((m) => m.type === 'server_response' && (m as any).requestId === 'b-mid') as any;
