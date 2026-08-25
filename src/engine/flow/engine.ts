@@ -519,9 +519,11 @@ export class FlowEngine<G extends Game = Game> {
    */
   private restorePlayerFromActionStep(frame: ExecutionFrame): void {
     if (frame.data?.playerSaved) {
-      const previousPlayer = frame.data.previousPlayer as Player | undefined;
-      const previousPlayerSeat = frame.data.previousPlayerSeat as number | undefined;
-      this.currentPlayer = previousPlayer ?? (previousPlayerSeat ? this.game.getPlayer(previousPlayerSeat) : undefined);
+      // Always a live Player (or a deliberate `undefined`, when no player was
+      // current at save time): `getPosition`/`restore` round-trip frame data
+      // through serializeFlowVariables/relinkFlowVariables, so there is no
+      // serialized form to decode here.
+      this.currentPlayer = frame.data.previousPlayer as Player | undefined;
     }
   }
 
@@ -848,14 +850,16 @@ export class FlowEngine<G extends Game = Game> {
     for (let i = 0; i < position.path.length; i++) {
       const index = position.path[i];
       const iterationKey = `__iter_${i}`;
-      const restoredFrameData = {
-        ...(position.frameData?.[`__frame_${i}`] ?? {}),
-      } as Record<string, unknown>;
+      // Inverse of getPosition's serializeFlowVariables on frame data: an
+      // element-valued entry comes back as a LIVE element of this game, under
+      // whatever field name the engine wrote it to.
+      const restoredFrameData = relinkFlowVariables(
+        { ...(position.frameData?.[`__frame_${i}`] ?? {}) },
+        this.game,
+        this.hiddenIdRemap,
+      ) as Record<string, unknown>;
       if (restoredFrameData.iteration === undefined) {
         restoredFrameData.iteration = position.iterations[iterationKey] ?? 0;
-      }
-      if (typeof restoredFrameData.previousPlayerSeat === 'number' && restoredFrameData.previousPlayer === undefined) {
-        restoredFrameData.previousPlayer = this.game.getPlayer(restoredFrameData.previousPlayerSeat as number);
       }
 
       this.stack.push({
@@ -1107,11 +1111,18 @@ export class FlowEngine<G extends Game = Game> {
       const frame = this.stack[i];
       path.push(frame.index);
       if (frame.data) {
-        const serializedData: Record<string, unknown> = { ...frame.data };
-        if (serializedData.previousPlayer && typeof serializedData.previousPlayer === 'object' && 'seat' in (serializedData.previousPlayer as Record<string, unknown>)) {
-          serializedData.previousPlayerSeat = (serializedData.previousPlayer as Player).seat;
-          delete serializedData.previousPlayer;
-        }
+        // Serialize element-valued FRAME data by exactly the same general path
+        // as `variables` below (BSMITH-04). The engine writes `frame.data` from
+        // more than a dozen sites and any of them can put a live
+        // `GameElement`/`Player` there -- `executeActionStep`'s `previousPlayer`
+        // does today -- so a hand-written special case per field name is a hole
+        // waiting for the fourteenth site. Plain values (`moveCount`,
+        // `iteration`, `eligibleSeats: number[]`, `branchIndex`, the
+        // deliberately pre-tagged `forEachItems`) pass through untouched, which
+        // is what `turnSequence`/`dueSeats` (seat-activity.ts) and
+        // `getNavigationIndex` read back out. Do NOT "simplify" this to a
+        // spread: that is the asymmetry this replaced.
+        const serializedData = serializeFlowVariables({ ...frame.data }) as Record<string, unknown>;
         frameData[`__frame_${i}`] = serializedData;
         if (serializedData.iteration !== undefined) {
           iterations[`__iter_${i}`] = serializedData.iteration as number;
