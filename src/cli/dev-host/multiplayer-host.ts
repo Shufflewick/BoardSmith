@@ -763,13 +763,13 @@ export class MultiplayerHost {
       playerIsAI: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
       // Mirror the production lobby's playerConfigs (game-session.ts builds the
       // same shape from lobby slots) so games that read
-      // options.playerConfigs[seat-1] — e.g. per-seat isAI to drive in-flow AI —
+      // options.playerConfigs[seat-1] — e.g. per-seat isBot to drive in-flow AI —
       // behave identically in dev. Without this an AI seat is invisible to such
       // games: they treat the bot seat as a human, build an interactive turn, and
       // the dev host's MCTS bot then finds "No available moves" and locks up.
       playerConfigs: Array.from({ length: playerCount }, (_, i) => ({
         name: this.seats.get(i + 1)?.name ?? `Player ${i + 1}`,
-        isAI: !humanSeats.has(i + 1),
+        isBot: !humanSeats.has(i + 1),
         aiLevel: this.opts.aiLevel,
         ...perSeatOptions[i],
       })),

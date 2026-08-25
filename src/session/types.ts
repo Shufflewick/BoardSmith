@@ -205,7 +205,7 @@ export type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOptio
  */
 export interface PlayerConfig {
   name?: string;
-  isAI?: boolean;
+  isBot?: boolean;
   aiLevel?: string;
   /** Custom player options (color, role, etc.) */
   [key: string]: unknown;

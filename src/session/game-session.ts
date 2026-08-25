@@ -520,7 +520,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         // This allows games to access player options via options.playerConfigs[seat-1]
         const playerConfigs = storedState.lobbySlots?.map(slot => ({
           name: slot.name,
-          isAI: slot.status === 'ai',
+          isBot: slot.status === 'ai',
           aiLevel: slot.aiLevel,
           ...slot.playerOptions,
         }));
@@ -705,27 +705,27 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     if (useLobby && playerConfigs) {
       lobbySlots = playerConfigs.map((config, i) => {
-        const isAI = config.isAI ?? false;
+        const isBot = config.isBot ?? false;
         const seat = i + 1; // 1-indexed seats
         const isCreator = seat === 1; // Seat 1 is always the creator
 
-        // Extract player options (everything except name, isAI, aiLevel)
+        // Extract player options (everything except name, isBot, aiLevel)
         const playerOptions: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(config)) {
-          if (!['name', 'isAI', 'aiLevel'].includes(key)) {
+          if (!['name', 'isBot', 'aiLevel'].includes(key)) {
             playerOptions[key] = value;
           }
         }
 
         return {
           seat,
-          status: isAI ? 'ai' : (isCreator ? 'claimed' : 'open'),
-          name: config.name ?? (isAI ? 'Bot' : `Player ${seat}`),
+          status: isBot ? 'ai' : (isCreator ? 'claimed' : 'open'),
+          name: config.name ?? (isBot ? 'Bot' : `Player ${seat}`),
           playerId: isCreator ? creatorId : undefined,
-          aiLevel: isAI ? (config.aiLevel ?? 'medium') : undefined,
+          aiLevel: isBot ? (config.aiLevel ?? 'medium') : undefined,
           playerOptions: Object.keys(playerOptions).length > 0 ? playerOptions : undefined,
           // AI is always ready, humans start not ready
-          ready: isAI ? true : false,
+          ready: isBot ? true : false,
         } as LobbySlot;
       });
 
@@ -1887,7 +1887,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     if (this.#storedState.lobbySlots && this.#storedState.lobbyState === 'playing') {
       options.playerConfigs = this.#storedState.lobbySlots.map(slot => ({
         name: slot.name,
-        isAI: slot.status === 'ai',
+        isBot: slot.status === 'ai',
         aiLevel: slot.aiLevel,
         ...slot.playerOptions,
       }));
@@ -2570,20 +2570,20 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    *
    * @param playerId Must be the creator's ID
    * @param seat Seat of the slot to modify
-   * @param isAI Whether to make this an AI slot
-   * @param aiLevel AI difficulty level (if isAI is true)
+   * @param isBot Whether to make this an AI slot
+   * @param aiLevel AI difficulty level (if isBot is true)
    * @returns Result with updated lobby info
    */
   async setSlotAI(
     playerId: string,
     seat: number,
-    isAI: boolean,
+    isBot: boolean,
     aiLevel: string = 'medium'
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#lobbyManager) {
       return { success: false, error: 'Game does not have a lobby' };
     }
-    const result = await this.#lobbyManager.setSlotAI(playerId, seat, isAI, aiLevel);
+    const result = await this.#lobbyManager.setSlotAI(playerId, seat, isBot, aiLevel);
     // If game started, also broadcast initial game state
     if (result.success && result.gameStarted) {
       this.broadcast();

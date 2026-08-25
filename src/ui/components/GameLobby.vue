@@ -11,7 +11,7 @@ import { ref, onMounted } from 'vue';
 
 interface PlayerConfig {
   name: string;
-  isAI: boolean;
+  isBot: boolean;
   aiLevel: string;
   [key: string]: unknown;
 }
@@ -91,7 +91,7 @@ function handleCreate() {
   // Create with minimum players, applying default AI settings
   const playerConfigs: PlayerConfig[] = Array.from({ length: minPlayers }, (_, i) => ({
     name: defaultAI.includes(i) ? 'Bot' : `Player ${i + 1}`,
-    isAI: defaultAI.includes(i),
+    isBot: defaultAI.includes(i),
     aiLevel: 'medium',
   }));
 

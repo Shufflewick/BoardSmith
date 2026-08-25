@@ -211,8 +211,8 @@ describe('MultiplayerHost (always-live)', () => {
 });
 
 describe('MultiplayerHost — player configs', () => {
-  it('passes playerConfigs with per-seat isAI to the game (production parity, drives in-flow AI)', async () => {
-    // Games like MERC read options.playerConfigs[seat-1].isAI to decide whether a
+  it('passes playerConfigs with per-seat isBot to the game (production parity, drives in-flow AI)', async () => {
+    // Games like MERC read options.playerConfigs[seat-1].isBot to decide whether a
     // seat is AI-controlled in their own flow. The production lobby supplies this;
     // the dev host must too, or the game treats the bot seat as a human and the
     // dev host's MCTS later finds "No available moves".
@@ -233,10 +233,10 @@ describe('MultiplayerHost — player configs', () => {
 
     await host.handleMessage('A', { type: 'hello' }); // A → seat 1 (human); seat 2 open → AI
 
-    const configs = startOptions?.playerConfigs as Array<{ isAI: boolean; aiLevel?: string }> | undefined;
+    const configs = startOptions?.playerConfigs as Array<{ isBot: boolean; aiLevel?: string }> | undefined;
     expect(configs).toBeDefined();
-    expect(configs?.[0].isAI).toBe(false); // seat 1 = human (A)
-    expect(configs?.[1].isAI).toBe(true); // seat 2 = AI
+    expect(configs?.[0].isBot).toBe(false); // seat 1 = human (A)
+    expect(configs?.[1].isBot).toBe(true); // seat 2 = AI
     expect(configs?.[1].aiLevel).toBe('hard');
   });
 });

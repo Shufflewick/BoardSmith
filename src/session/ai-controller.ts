@@ -48,7 +48,7 @@ export class AIController<G extends Game = Game> {
   /**
    * Check if a specific player is AI-controlled
    */
-  isAIPlayer(playerIndex: number): boolean {
+  isBotPlayer(playerIndex: number): boolean {
     return this.#aiPlayers.has(playerIndex);
   }
 

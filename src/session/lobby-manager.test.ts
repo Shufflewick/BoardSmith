@@ -222,7 +222,7 @@ describe('GameSession lobby integration', () => {
       creatorId: 'creator-123',
       playerConfigs: [
         { name: 'Alice' },
-        { name: 'Bot', isAI: true },
+        { name: 'Bot', isBot: true },
       ],
       playerOptionsDefinitions: {
         role: {

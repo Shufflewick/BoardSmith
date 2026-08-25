@@ -69,7 +69,7 @@ export function createHeadlessSession(
   const metas: BroadcastMeta[] = [];
   // The roster is a LIVE list this harness owns, handed to the host through a
   // GETTER — the same shape the platform DO supplies (`get aiSeats()` over
-  // `slots[].isAI` + `mindedSeats`). The positional `aiSeats` argument seeds it;
+  // `slots[].isBot` + `mindedSeats`). The positional `aiSeats` argument seeds it;
   // it is not its identity, so `makeSeatAI` below can change it mid-game.
   //
   // Before this, the argument was passed straight through as a frozen array and
@@ -107,7 +107,7 @@ export function createHeadlessSession(
     metas,
     /**
      * Record on the ROSTER that `seat` is now AI-driven, exactly as the platform
-     * DO's `mindSeats` flips `slots[seat].isAI`.
+     * DO's `mindSeats` flips `slots[seat].isBot`.
      *
      * This is HALF of a conversion and deliberately does nothing on its own: the
      * roster is the adapter's, and the engine is told about the change by the

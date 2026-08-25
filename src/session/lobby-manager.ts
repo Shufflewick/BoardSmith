@@ -542,14 +542,14 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
    *
    * @param playerId Must be the creator's ID
    * @param seat Seat of the slot to modify
-   * @param isAI Whether to make this an AI slot
-   * @param aiLevel AI difficulty level (if isAI is true)
+   * @param isBot Whether to make this an AI slot
+   * @param aiLevel AI difficulty level (if isBot is true)
    * @returns Result with updated lobby info
    */
   async setSlotAI(
     playerId: string,
     seat: number,
-    isAI: boolean,
+    isBot: boolean,
     aiLevel: string = 'medium'
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo; gameStarted?: boolean }> {
     this.#validateSeat(seat);
@@ -582,7 +582,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Cannot change a claimed slot - player must leave first' };
     }
 
-    if (isAI) {
+    if (isBot) {
       slot.status = 'ai';
       slot.name = 'Bot';
       slot.aiLevel = aiLevel;

@@ -449,13 +449,13 @@ export class MeepleClient {
   /**
    * Toggle slot between open and AI (host only).
    */
-  async setSlotAI(gameId: string, seat: number, isAI: boolean, aiLevel?: string): Promise<LobbyResponse> {
+  async setSlotAI(gameId: string, seat: number, isBot: boolean, aiLevel?: string): Promise<LobbyResponse> {
     const response = await this.fetch(`/games/${gameId}/set-slot-ai`, {
       method: 'POST',
       body: JSON.stringify({
         playerId: this.playerId,
         seat,
-        isAI,
+        isBot,
         aiLevel,
       }),
     });

@@ -54,8 +54,8 @@ describe('AIController error propagation', () => {
     // (as opposed to being swallowed and returning null)
 
     // Verify the controller detects player 1 as AI and attempts to act
-    expect(controller.isAIPlayer(1)).toBe(true);
-    expect(controller.isAIPlayer(2)).toBe(false);
+    expect(controller.isBotPlayer(1)).toBe(true);
+    expect(controller.isBotPlayer(2)).toBe(false);
     expect(controller.hasAIPlayers()).toBe(true);
   });
 });

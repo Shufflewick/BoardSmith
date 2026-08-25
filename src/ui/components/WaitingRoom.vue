@@ -48,7 +48,7 @@ const emit = defineEmits<{
   (e: 'set-ready', ready: boolean): void;
   (e: 'add-slot'): void;
   (e: 'remove-slot', position: number): void;
-  (e: 'set-slot-ai', position: number, isAI: boolean, aiLevel?: string): void;
+  (e: 'set-slot-ai', position: number, isBot: boolean, aiLevel?: string): void;
   (e: 'kick-player', position: number): void;
   (e: 'update-player-options', options: Record<string, unknown>): void;
   (e: 'update-slot-player-options', position: number, options: Record<string, unknown>): void;

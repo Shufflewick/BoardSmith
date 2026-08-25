@@ -1499,7 +1499,7 @@ interface LobbyConfig {
   gameOptions: Record<string, unknown>;
   playerConfigs: Array<{
     name: string;
-    isAI: boolean;
+    isBot: boolean;
     aiLevel: string;
     [key: string]: unknown;
   }>;
@@ -1518,14 +1518,14 @@ async function createGame(config?: LobbyConfig) {
 
     if (config?.playerConfigs?.length) {
       playerNames = config.playerConfigs.map((pc, i) =>
-        pc.name || (pc.isAI ? 'Bot' : `Player ${i + 1}`)
+        pc.name || (pc.isBot ? 'Bot' : `Player ${i + 1}`)
       );
       // Extract AI players
       aiPlayers = config.playerConfigs
-        .map((pc, i) => (pc.isAI ? i : -1))
+        .map((pc, i) => (pc.isBot ? i : -1))
         .filter((i) => i >= 0);
       // Get AI level from first AI player
-      const firstAI = config.playerConfigs.find((pc) => pc.isAI);
+      const firstAI = config.playerConfigs.find((pc) => pc.isBot);
       if (firstAI) {
         aiLevel = firstAI.aiLevel || 'medium';
       }
@@ -1845,11 +1845,11 @@ async function handleRemoveSlot(position: number) {
   }
 }
 
-async function handleSetSlotAI(position: number, isAI: boolean, aiLevel?: string) {
+async function handleSetSlotAI(position: number, isBot: boolean, aiLevel?: string) {
   if (!createdGameId.value) return;
 
   try {
-    const result = await client.setSlotAI(createdGameId.value, position, isAI, aiLevel);
+    const result = await client.setSlotAI(createdGameId.value, position, isBot, aiLevel);
 
     if (result.lobby) {
       lobbyInfo.value = result.lobby;

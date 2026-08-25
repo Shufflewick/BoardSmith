@@ -235,7 +235,7 @@ export interface CreateGameRequest {
  */
 export interface PlayerConfig {
   name?: string;
-  isAI?: boolean;
+  isBot?: boolean;
   aiLevel?: string;
   /** Custom player options (color, role, etc.) */
   [key: string]: unknown;
@@ -335,8 +335,8 @@ export interface SetSlotAIRequest {
   /** Seat to target (1-indexed) */
   seat: number;
   /** Whether the slot should be AI */
-  isAI: boolean;
-  /** AI difficulty level (when isAI is true) */
+  isBot: boolean;
+  /** AI difficulty level (when isBot is true) */
   aiLevel?: string;
 }
 
@@ -461,8 +461,8 @@ export interface SetSlotAIMessage {
   /** Seat to target (1-indexed) */
   seat: number;
   /** Whether the slot should be AI */
-  isAI: boolean;
-  /** AI difficulty level (when isAI is true) */
+  isBot: boolean;
+  /** AI difficulty level (when isBot is true) */
   aiLevel?: string;
 }
 
