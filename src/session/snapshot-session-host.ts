@@ -67,6 +67,33 @@ export interface SnapshotSessionAdapters {
     playerViews: unknown[],
     meta: { isComplete: boolean; winners: number[]; isDraw: boolean; turnBoundary: TurnBoundary },
   ) => void;
+  /**
+   * The seats a bot plays.
+   *
+   * STILL NAMED `aiSeats`, DELIBERATELY, and this is a decision rather than a
+   * miss. The rest of this engine now says BOT -- it is an automaton, not an
+   * artificial intelligence, and calling it AI invites a reader to think of an
+   * LLM (ShufflewickPub issue #28).
+   *
+   * This name, the `aiTurn`/`aiSuggest` ops and `playerOptions.aiLevel` are the
+   * three that did not move, because they are not vocabulary -- they are WIRE
+   * SURFACE:
+   *
+   *   `aiTurn` is a field of the bundle protocol that ShufflewickPub's executor
+   *     validates, and SEVEN ARCHIVED ENGINE REVISIONS (r6-r9, r13-r15) still
+   *     speak it. Those tarballs are immutable artifacts that published games
+   *     execute on, so renaming the op means either a protocol bump that
+   *     invalidates every pinned game, or one runner source speaking two names
+   *     across revisions -- a shim.
+   *   `aiLevel` is the GAME AUTHOR's namespace, declared in published
+   *     manifests. Renaming it breaks every game shipping a difficulty option.
+   *
+   * A naming preference is not worth either of those. ShufflewickPub keeps the
+   * matching decision at its single translation point
+   * (`games/src/game-session.ts:createHost`), where anything reading `isBot`
+   * and writing `aiSeats` sits at the boundary -- and a second such site
+   * appearing anywhere means the vocabulary has leaked.
+   */
   aiSeats?: Array<{ seat: number; level?: string }>;
   /**
    * When true, demoStart is rejected fail-loud and state.teachingDisabled is broadcast
