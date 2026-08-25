@@ -34,9 +34,9 @@ is **inherited by consumers that do typecheck** — ShufflewickPub's `games/` an
 `executor/` both consume this source through the vendored tarball. A type error
 here is not local.
 
-## The 217 pre-existing errors
+## The 213 pre-existing errors
 
-With the config fixed, `tsc` reports **217 errors**, none of them new. The
+With the config fixed, `tsc` reports **213 errors**, none of them new. The
 concentration:
 
 | File | Errors |
@@ -51,7 +51,16 @@ concentration:
 | `src/session/teaching.test.ts` | 6 |
 | …long tail | rest |
 
-**Phase 68's own files are clean** — zero of the 217 are in
+This was **217** until 68-06, which added
+`/// <reference types="vite/client" />` to
+`src/engine/flow/flow-state-clone.test.ts` (that file needs `import.meta.glob`
+to derive its fixture list). A triple-slash reference applies to the whole
+program, so it also resolved four pre-existing `import.meta.env` errors in
+`src/ui/composables/useActionController{,.devtools.test}.ts` and
+`src/ui/game-uis.ts`. Nothing was suppressed and nothing was silenced — the
+types were simply missing.
+
+**Phase 68's own files are clean** — zero of the 213 are in
 `boundary-key.ts`, `turn-boundary.test.ts`, `simultaneous-rounds-fixture.ts`,
 `snapshot-session-host.ts` or `headless-session.ts`. Eight errors WERE
 introduced by Phase 68 work and all eight were fixed once the broken config was
@@ -59,12 +68,12 @@ discovered; before that they were invisible.
 
 ## What has NOT been done, and why
 
-The 217 are **not** fixed, and no `typecheck` npm script has been added. This
+The 213 are **not** fixed, and no `typecheck` npm script has been added. This
 repo has exactly one script (`setup`), nothing runs tsc automatically, and a
 script that always exits non-zero is a gate that cannot fail meaningfully —
 the same objection this project raises to a vacuous green.
 
-Paying the 217 down is real work with real risk (`src/cli` and `src/ui` are the
+Paying the 213 down is real work with real risk (`src/cli` and `src/ui` are the
 bulk) and it deserves to be sized on its own merits rather than absorbed by
 whichever change happens to notice it. **This is a decision for the maintainer,
 not for a plan about turn boundaries.**
