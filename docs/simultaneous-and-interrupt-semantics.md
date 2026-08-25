@@ -181,6 +181,19 @@ simultaneous) and `src/session/testing/fixtures/collect-turns-fixture.ts`
 | 6 | Sequential games too | On a sequential fixture, a previous turn's key is refused and the current key succeeds. The rule is not simultaneous-only. |
 | 7 | `selectionStep` | A mid-action selection composed against a closed boundary is refused, by the same single guard. |
 | 8 | Malformed key | A wrong-typed / absurd key is a plain mismatch: the same graceful refusal, no separate parse path, no throw. |
+| 9 | The key handed out IS the key accepted | Across a full multi-round game, `OpResult.flowState` and `OpResult.snapshot.flowState` yield the same key, and every current-key submission is accepted. |
+
+### On case 9, and why it is not redundant
+
+The key the engine HANDS OUT and the key the guard ACCEPTS are computed in two
+different places. The broadcast key comes from `OpResult.flowState` (via
+`SnapshotSessionHost.turnBoundary()`, reading `this._flowState`); the guard
+compares against `snapshot.flowState`, because `executeOp` is stateless and the
+snapshot is all it is given. If those ever diverged, EVERY legitimate
+submission would be refused — the system would wedge, telling players to reload
+into a round they could never act in. No other case here would notice: they all
+read the key from the same side they submit it to. Case 9 is the cross-unit
+identity test that holds the two halves together.
 
 ### On case 7, and why the selection path is still guarded
 
