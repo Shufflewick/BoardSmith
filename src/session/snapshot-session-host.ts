@@ -558,6 +558,14 @@ export class SnapshotSessionHost {
       };
     }
 
+    // convertSeatToAI: also a host lifecycle op — it needs the pump, which the
+    // stateless executor does not have. Unlike the demo ops it is ENQUEUED on
+    // opChain, because it drives the AI pump and must not interleave with an
+    // in-flight human op reading the same base snapshot.
+    if (op.type === 'convertSeatToAI') {
+      return this.enqueue(() => this.applyConvertSeatToAI(op.seat));
+    }
+
     // Teaching ops (hint / heatmapToggle): compute annotation, store in
     // transient state, re-broadcast via broadcastCurrent() — NOT apply() because
     // these ops do NOT change game state (mirrors the production GameSession
@@ -679,6 +687,90 @@ export class SnapshotSessionHost {
       await this.refreshVisibleHeatmaps();
     }
     return res;
+  }
+
+  /**
+   * Acknowledge that `seat` is now played by a bot, and WAKE THE PUMP.
+   *
+   * Always run inside the opChain critical section (via `handleOp`'s enqueue).
+   *
+   * ## Why this exists at all
+   *
+   * The pump already honoured a mid-game conversion — it re-reads
+   * `this.adapters.aiSeats` on every iteration, so a roster that changed between
+   * moves was picked up on the next turn. What was missing was that nothing
+   * DROVE the pump when the roster changed: `runAITurnsInner` runs only off
+   * `applyMutatingOp` or the public `runAITurns()`, so a conversion with no
+   * following op parked the table on a seat no human was going to play. Callers
+   * compensated by hand-calling `runAITurns()` after flipping their roster, and
+   * a caller that forgot did so silently. Here that is one call.
+   *
+   * ## What it deliberately does NOT do
+   *
+   * It stores nothing. There is no seat→AI map on this host and nothing about
+   * the conversion enters the snapshot: the roster is the ADAPTER's, and an
+   * engine-side copy would fight the platform's roster on restore and would let
+   * a caretaker bot act outside the single turn window it was authorized for
+   * (the platform's `aiSeats` getter legitimately reports `[]` for a minded seat
+   * outside its window — a cached copy would not).
+   *
+   * That is also why the roster, not this op, is the authority on whether the
+   * seat IS a bot: a conversion the roster does not back is refused rather than
+   * silently doing nothing, which is the half of the old two-step that used to
+   * fail in silence. The other half — flipping the roster and forgetting the
+   * wake — is what this op removes.
+   *
+   * Idempotent by construction: with no state to double-write, re-converting an
+   * already-converted seat is just another wake, and `aiPumpRunning` plus the
+   * opChain keep that from doubling any work.
+   */
+  private async applyConvertSeatToAI(seat: number): Promise<OpResult> {
+    const envelope = {
+      snapshot: this.snapshot,
+      pendingState: null,
+      flowState: this.flowState,
+      playerViews: [],
+      isComplete: this.isComplete,
+      winners: this.winners,
+    };
+    if (this.isComplete) {
+      return {
+        ...envelope,
+        success: false,
+        category: 'protocol',
+        error:
+          `Cannot convert seat ${seat} to AI: the game is already complete, so no seat owes a move. ` +
+          `Nothing further is required — release the seat instead of converting it.`,
+      };
+    }
+    if (!this.adapters.aiSeats?.some((s) => s.seat === seat)) {
+      return {
+        ...envelope,
+        success: false,
+        category: 'protocol',
+        error:
+          `Cannot convert seat ${seat} to AI: seat ${seat} is not reported as AI by the roster — ` +
+          `convert the roster first, then send this op. The roster (adapters.aiSeats) is the ` +
+          `authority on which seats a bot may play; this op only acknowledges the change and runs the AI.`,
+      };
+    }
+    // `runAITurnsInner`, not the public `runAITurns()`: we are ALREADY inside
+    // our own opChain link, and `runAITurns()` enqueues onto that same chain, so
+    // it would wait for a link that cannot settle until it returns — a deadlock.
+    // `applyMutatingOp`'s trailing pump calls the inner one for the same reason.
+    await this.runAITurnsInner();
+    return {
+      // Re-read AFTER the pump: the bot's moves are the whole point, so the
+      // caller must not be handed the pre-pump state as this op's answer.
+      snapshot: this.snapshot,
+      pendingState: null,
+      flowState: this.flowState,
+      playerViews: this.lastPlayerViews,
+      isComplete: this.isComplete,
+      winners: this.winners,
+      success: true,
+      convertedSeat: seat,
+    };
   }
 
   /**

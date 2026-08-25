@@ -177,6 +177,73 @@ describe('mid-game AI takeover (BSMITH-03)', () => {
     expect(await actionHistory(session)).toEqual(historyAfterFirst);
   });
 
+  it('case 5b — a re-conversion arriving DURING an in-flight pump waits its turn instead of being swallowed', async () => {
+    // The sequential case above cannot see a double-run: with nothing due for
+    // the bot, one pump and two pumps are indistinguishable. This one can.
+    //
+    // The hazard is `aiPumpRunning`. It is the right re-entrancy guard, but it
+    // makes a concurrent wake a SILENT no-op — so a conversion op that ran
+    // inline instead of on `opChain` would return success to a caller whose
+    // re-wake did nothing at all. That matters because "convert an
+    // already-converted seat" is precisely how a caller un-parks a table that
+    // is stalled on a seat which is already a bot, and a wake that is silently
+    // dropped whenever a pump happens to be in flight is not a wake.
+    const base: OpResult = {
+      success: true,
+      snapshot: {},
+      pendingState: null,
+      flowState: {},
+      playerViews: [],
+      isComplete: false,
+      winners: [],
+      aiMoved: false,
+    };
+    const events: string[] = [];
+    let aiTurnCalls = 0;
+    let releaseFirstAiTurn = () => {};
+    const firstAiTurn = new Promise<void>((resolve) => {
+      releaseFirstAiTurn = resolve;
+    });
+
+    const adapters: SnapshotSessionAdapters = {
+      playerCount: 2,
+      executeOp: async (_snap, _pend, op: Op) => {
+        if (op.type !== 'aiTurn') return { ...base };
+        aiTurnCalls++;
+        const n = aiTurnCalls;
+        events.push(`read${n}`);
+        if (n === 1) {
+          await firstAiTurn; // hold the first pump open
+          events.push(`write${n}`);
+          return { ...base, aiMoved: true, aiPlayer: 2 };
+        }
+        return { ...base, aiMoved: false };
+      },
+      broadcast: () => {},
+      aiSeats: [{ seat: 2 }],
+    };
+
+    const host = new SnapshotSessionHost(adapters);
+    await host.start();
+
+    const firstConversion = host.handleOp(2, { type: 'convertSeatToAI', seat: 2 });
+    // Fire the second while the first is stalled mid-pump.
+    const secondConversion = host.handleOp(2, { type: 'convertSeatToAI', seat: 2 });
+    releaseFirstAiTurn();
+    const [first, second] = await Promise.all([firstConversion, secondConversion]);
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+
+    // Pump 1 ran to exhaustion (moved once, then found nothing due) and pump 2
+    // ran AFTER it, not inside it. A conversion handled inline would have hit
+    // `aiPumpRunning` and made no aiTurn call at all — three calls, in this
+    // order, is what proves the op is serialized on opChain and that the
+    // re-wake really happened.
+    expect(events).toEqual(['read1', 'write1', 'read2', 'read3']);
+    expect(aiTurnCalls).toBe(3);
+  });
+
   // ── 6. Terminal game ───────────────────────────────────────────────────────
 
   it('case 6 — converting a seat in a finished game is refused with a clear reason, and never hangs', async () => {

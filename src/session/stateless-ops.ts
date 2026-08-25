@@ -120,7 +120,28 @@ export type Op =
   // demoControl: live playback control for a running demo (pause/play/step one move/
   // step back one move) and speed (inter-move delay in ms). Host lifecycle op like
   // demoStart/demoStop — handled in SnapshotSessionHost.handleOp, never in executeOp.
-  | { type: 'demoControl'; control: 'pause' | 'play' | 'step' | 'back'; delay?: number };
+  | { type: 'demoControl'; control: 'pause' | 'play' | 'step' | 'back'; delay?: number }
+  /**
+   * convertSeatToAI: a seat is now played by a bot. A host lifecycle op like the
+   * demo family — handled in `SnapshotSessionHost.handleOp`, never in executeOp.
+   *
+   * It exists so a conversion is an EVENT THE ENGINE ACKNOWLEDGES AND ACTS ON,
+   * replacing "mutate a config object and hope the host re-reads it". The re-read
+   * always worked — `runAITurnsInner` re-reads `adapters.aiSeats` on every
+   * iteration — but nothing woke the pump when the roster changed with no other
+   * op in flight, so a table converted between moves just sat there; and with no
+   * op to send, no engine test could express a conversion at all.
+   *
+   * **It deliberately carries NO level, and must never grow one.** The roster
+   * stays the ADAPTER's: a seat's level comes from `adapters.aiSeats` at the
+   * moment the pump reads it, which is also where the platform's caretaker
+   * one-window authorization lives. A `level` here would have nowhere to go
+   * without the host keeping a seat→AI copy that fights the DO's roster on
+   * restore and would let a caretaker bot act outside the window it was
+   * authorized for. Set the level on the roster; this op says only "the roster
+   * changed — acknowledge it and go".
+   */
+  | { type: 'convertSeatToAI'; seat: number };
 
 /** The op types that carry a player's intent, and therefore a boundary key. */
 export type SubmissionOpType = Extract<Op, BoundaryStamped>['type'];
@@ -198,6 +219,15 @@ export interface OpResult {
   multiSelect?: { min: number; max?: number };
   aiMoved?: boolean;
   aiPlayer?: number;
+  /**
+   * The seat a `convertSeatToAI` op converted — the engine's ACKNOWLEDGEMENT
+   * that it saw the conversion, as opposed to a roster mutation it may or may
+   * not have noticed. Present only on a successful `convertSeatToAI`.
+   *
+   * It is an echo, not a record: the host stores nothing about the conversion
+   * and the snapshot carries nothing about it. The roster remains the adapter's.
+   */
+  convertedSeat?: number;
 
   // Transient teaching annotation results — consumed by SnapshotSessionHost
   // to update transientTeachingState. Returned by hint/heatmapToggle ops.
@@ -1416,11 +1446,12 @@ export async function executeOp(
         return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
       }
     }
-    // Fallback for host-only ops (demoStart / demoStop) that are intercepted by
-    // SnapshotSessionHost.handleOp before reaching this function. If they somehow
-    // reach executeOp, fail loud rather than silently returning undefined.
-    // This branch also satisfies TypeScript's return-completeness check now that
-    // demoStart/demoStop are in the Op union.
+    // Fallback for host-only ops (demoStart / demoStop / demoControl /
+    // convertSeatToAI) that are intercepted by SnapshotSessionHost.handleOp
+    // before reaching this function. If they somehow reach executeOp, fail loud
+    // rather than silently returning undefined. This branch also satisfies
+    // TypeScript's return-completeness check now that those ops are in the Op
+    // union.
     return errorResult(
       `Op type '${(op as { type: string }).type}' is a host lifecycle op and cannot be executed directly`,
       'protocol',
