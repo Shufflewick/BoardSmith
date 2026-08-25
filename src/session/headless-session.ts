@@ -67,9 +67,22 @@ export function createHeadlessSession(
 ) {
   const broadcasts: unknown[] = [];
   const metas: BroadcastMeta[] = [];
+  // The roster is a LIVE list this harness owns, handed to the host through a
+  // GETTER — the same shape the platform DO supplies (`get aiSeats()` over
+  // `slots[].isAI` + `mindedSeats`). The positional `aiSeats` argument seeds it;
+  // it is not its identity, so `makeSeatAI` below can change it mid-game.
+  //
+  // Before this, the argument was passed straight through as a frozen array and
+  // "seat 2 became AI at move 7" was not expressible in the engine's own harness
+  // at all — which is why nothing had ever asserted that the engine plays a
+  // converted seat, even though the pump re-reads the roster on every iteration
+  // and always could.
+  const aiRoster: Array<{ seat: number; level?: string }> = [...aiSeats];
   const host = new SnapshotSessionHost({
     playerCount: gameOptions.playerCount,
-    aiSeats,
+    get aiSeats() {
+      return aiRoster;
+    },
     executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op),
     broadcast: (views, meta) => {
       // structuredClone here mirrors the production postMessage boundary: a
@@ -92,6 +105,22 @@ export function createHeadlessSession(
      * player view.
      */
     metas,
+    /**
+     * Record on the ROSTER that `seat` is now AI-driven, exactly as the platform
+     * DO's `mindSeats` flips `slots[seat].isAI`.
+     *
+     * This is HALF of a conversion and deliberately does nothing on its own: the
+     * roster is the adapter's, and the engine is told about the change by the
+     * `convertSeatToAI` op, which is also what wakes the pump. Flipping the
+     * roster and never sending the op leaves the table parked — send the op.
+     * Sending the op without flipping the roster is refused loudly.
+     *
+     * Idempotent: a seat already on the roster keeps its existing entry.
+     */
+    makeSeatAI(seat: number, level?: string) {
+      if (aiRoster.some((s) => s.seat === seat)) return;
+      aiRoster.push({ seat, level });
+    },
     async start() {
       await host.start();
     },
