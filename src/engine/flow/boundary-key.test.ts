@@ -13,7 +13,7 @@ import { flowBoundaryKey, type BoundaryKeyState } from './boundary-key.js';
 // Imported a SECOND time through the package root on purpose — see the
 // reachability test at the bottom of this file.
 import { flowBoundaryKey as flowBoundaryKeyFromPackageRoot } from 'boardsmith';
-import { dueSeats } from './seat-activity.js';
+import { dueSeats, type SeatActivityState } from './seat-activity.js';
 import { createHeadlessSession } from '../../session/headless-session.js';
 import { executeOp } from '../../session/stateless-ops.js';
 import {
@@ -24,8 +24,15 @@ import { collectTurnsFixtureDefinition } from '../../session/testing/fixtures/co
 
 const twoSeats = { playerCount: 2, seed: 'boundary-key' };
 
-function flowOf(host: { flowState: unknown }): BoundaryKeyState {
-  return host.flowState as BoundaryKeyState;
+/**
+ * The host's whole-game flow state, typed as BOTH structural shapes these tests
+ * read it through: `flowBoundaryKey` takes a `BoundaryKeyState`, `dueSeats`
+ * takes a `SeatActivityState`, and several cases assert on `currentPlayer`,
+ * which only the latter declares. Narrowing to one of the two silently made
+ * every `dueSeats(flowOf(...))` call in this file a type error.
+ */
+function flowOf(host: { flowState: unknown }): BoundaryKeyState & SeatActivityState {
+  return host.flowState as BoundaryKeyState & SeatActivityState;
 }
 
 async function startRounds() {
@@ -171,7 +178,7 @@ describe('flowBoundaryKey', () => {
     // clock and re-notify every seat on every eviction.
     expect(flowBoundaryKey(restored.flowState as BoundaryKeyState)).toBe(keyBefore);
     // And the restored runner is genuinely mid-round, not re-started.
-    expect(dueSeats(restored.flowState as BoundaryKeyState)).toEqual([2]);
+    expect(dueSeats(restored.flowState as SeatActivityState)).toEqual([2]);
   });
 
   it('negative contract — undefined and null yield defined, stable strings and never throw', () => {
