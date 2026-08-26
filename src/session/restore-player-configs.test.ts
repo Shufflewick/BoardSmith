@@ -3,7 +3,7 @@
  *
  * Bug: After HMR or server restart, storedState.gameOptions only contained
  * host-level options (not playerConfigs). The constructor ran without
- * playerConfigs, so constructor-time logic (e.g. setting up AI flags,
+ * playerConfigs, so constructor-time logic (e.g. setting up bot flags,
  * roles like isDictator) produced wrong results. MCTS clones then
  * captured these incomplete options via getConstructorOptions(), causing
  * flow divergence in simulations.
@@ -122,7 +122,7 @@ describe('playerConfigs survives GameSession.restore()', () => {
   });
 
   it('should not add playerConfigs for non-lobby games', () => {
-    // Non-lobby game (e.g., --ai mode or direct creation)
+    // Non-lobby game (e.g., --bot mode or direct creation)
     const session = GameSession.create<RestoreTestGame>({
       gameType: 'restore-test',
       GameClass: RestoreTestGame,

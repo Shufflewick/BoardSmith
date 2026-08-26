@@ -104,9 +104,9 @@ Spectator panel flow:
 2. Player picks equipment → `execute()` → result visible
 3. OR player cancels → `onCancel` → `animate('equip-session-end')` → broadcast → panel closes
 
-## AI / Programmatic Fill
+## Bot / Programmatic Fill
 
-`onSelect` fires identically for AI picks and `followUp` pre-filled args. No distinction between human and programmatic selection. This is correct: spectators should see the panel regardless of who is picking.
+`onSelect` fires identically for bot picks and `followUp` pre-filled args. No distinction between human and programmatic selection. This is correct: spectators should see the panel regardless of who is picking.
 
 ## What This Does NOT Change
 

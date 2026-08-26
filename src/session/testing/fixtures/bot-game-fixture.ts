@@ -1,6 +1,6 @@
 /**
- * The bot-capable fixture: a 2-seat game carrying a real `ai` config, so ops
- * that need a bot (`hint`, `heatmapToggle`, the AI-vs-AI demo loop) are
+ * The bot-capable fixture: a 2-seat game carrying a real `bot` config, so ops
+ * that need a bot (`hint`, `heatmapToggle`, the bot-vs-bot demo loop) are
  * reachable from ANY test file.
  *
  * It lived inside `snapshot-session-host.test.ts` until Phase 68 — already
@@ -23,7 +23,7 @@
  */
 
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../../engine/index.js';
-import type { AIConfig } from '../../../ai/types.js';
+import type { BotStrategy } from '../../../bot/types.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
 
 export class BotGame extends Game<BotGame, Player> {
@@ -61,13 +61,13 @@ export class BotGame extends Game<BotGame, Player> {
   }
 }
 
-// Extended def type — supports ai config (Plans 02/03 will add ai? to GameDefinitionLike;
-// for now this test-local interface allows the fixture to carry the ai config).
+// Extended def type — supports bot config (Plans 02/03 will add bot? to GameDefinitionLike;
+// for now this test-local interface allows the fixture to carry the bot config).
 interface BotGameDefinitionLike extends GameDefinitionLike {
-  ai?: AIConfig;
+  bot?: BotStrategy;
 }
 
-const botGameAI: AIConfig = {
+const botGameBotDef: BotStrategy = {
   objectives: (_game, _playerIndex) => ({
     moves: {
       checker: (game) => Math.min(1, (game as BotGame).moveCount / 20),
@@ -87,7 +87,7 @@ export const botGameDef: BotGameDefinitionLike = {
   gameType: 'bot-game',
   minPlayers: 1,
   maxPlayers: 2,
-  ai: botGameAI,
+  bot: botGameBotDef,
 };
 
 export const botGameOptions = { playerCount: 2, seed: 'bot-seed' };

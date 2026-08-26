@@ -389,14 +389,14 @@ describe('traceCheckCommand', () => {
 
   it('manifest-file-missing: a whole-chunk manifest that is not table-shaped', async () => {
     const project = await makeProject();
-    await makeChunk(project, 'ai-opponent', {
+    await makeChunk(project, 'bot-opponent', {
       claims: [],
-      manifestProse: '- **src/rules/ai.ts** (new) — the AI opponent logic',
+      manifestProse: '- **src/rules/bot.ts** (new) — the bot opponent logic',
     });
 
     const result = await traceCheckCommand({ project });
 
-    const missing = result.findings.filter((f) => f.kind === 'manifest-file-missing' && f.chunk === 'ai-opponent');
+    const missing = result.findings.filter((f) => f.kind === 'manifest-file-missing' && f.chunk === 'bot-opponent');
     expect(missing.some((f) => f.detail.includes('not table-shaped'))).toBe(true);
   });
 

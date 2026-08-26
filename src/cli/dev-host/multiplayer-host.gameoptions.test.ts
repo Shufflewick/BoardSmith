@@ -161,7 +161,7 @@ describe('MultiplayerHost — adversarial: preset bundle, override precedence, r
     expect(opts.playerCount).toBe(3);
   });
 
-  it('CR-01: a preset-applied player count keeps playerOptions/playerIsAI/playerConfigs SIZED to match — no length mismatch reaches the game constructor', async () => {
+  it('CR-01: a preset-applied player count keeps playerOptions/playerIsBot/playerConfigs SIZED to match — no length mismatch reaches the game constructor', async () => {
     // Host launched with 2 seats (CLI --players 2); the 'advanced' preset
     // declares 3 players. Pre-fix: opts.playerCount === 3 but the per-seat
     // arrays stay length 2 (built from the frozen constructor-time
@@ -175,7 +175,7 @@ describe('MultiplayerHost — adversarial: preset bundle, override precedence, r
     const opts = getStartOptions();
     expect(opts.playerCount).toBe(3);
     expect((opts.playerOptions as unknown[]).length).toBe(3);
-    expect((opts.playerIsAI as unknown[]).length).toBe(3);
+    expect((opts.playerIsBot as unknown[]).length).toBe(3);
     expect((opts.playerConfigs as unknown[]).length).toBe(3);
   });
 

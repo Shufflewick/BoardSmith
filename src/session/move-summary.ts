@@ -1,6 +1,6 @@
 /**
  * Human-readable, single-line summaries of a move's destination — shared by the
- * AI move-hint bubble and the AI-vs-AI demo narration so both read as prose
+ * bot move-hint bubble and the bot-vs-bot demo narration so both read as prose
  * (e.g. "c5 → a3 (capture)") instead of dumping raw JSON or element ids.
  *
  * SAFETY (mirrors buildNarration's SAFE_DEST_ARGS rationale): only DESTINATION-like

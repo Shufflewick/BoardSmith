@@ -129,7 +129,7 @@ describe('ControlsMenu — teachingDisabled lockout (Phase 111 LOCK-01)', () => 
   /** Find any Teaching group item (hint, demo, heatmap, tutorial) in document.body. */
   function findTeachingItems(): HTMLElement[] {
     const all = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]'));
-    const teachingLabels = ['Get a hint', 'Watch AI demo', 'Stop demo', 'Show move quality', 'Start tutorial', 'Exit tutorial'];
+    const teachingLabels = ['Get a hint', 'Watch bot demo', 'Stop demo', 'Show move quality', 'Start tutorial', 'Exit tutorial'];
     return all.filter(el => {
       const text = el.textContent?.trim() ?? '';
       return teachingLabels.some(label => text.includes(label));
@@ -180,7 +180,7 @@ describe('ControlsMenu — teachingDisabled lockout (Phase 111 LOCK-01)', () => 
     await wrapper.find('button.menubtn').trigger('click');
 
     const items = findTeachingItems();
-    // Expect Get a hint, Watch AI demo, Show move quality, Start tutorial
+    // Expect Get a hint, Watch bot demo, Show move quality, Start tutorial
     expect(items.length, 'Teaching items should render when teachingDisabled=false').toBeGreaterThanOrEqual(4);
     wrapper.unmount();
   });
@@ -208,9 +208,9 @@ describe('ControlsMenu — teachingDisabled lockout (Phase 111 LOCK-01)', () => 
 // misleading. GameShell computes heatmapSupported from the game's archetype
 // ($layout grid/hex-grid → grid-board) and hides the toggle when false.
 //
-// Only the heatmap toggle is gated — Get a hint and Watch AI demo still render,
+// Only the heatmap toggle is gated — Get a hint and Watch bot demo still render,
 // since they remain meaningful for gridless games (hint highlights the rank to
-// ask; demo narrates AI play).
+// ask; demo narrates bot play).
 
 describe('ControlsMenu — heatmap toggle gating (heatmapSupported)', () => {
   beforeEach(() => {
@@ -251,9 +251,9 @@ describe('ControlsMenu — heatmap toggle gating (heatmapSupported)', () => {
 
     // Heatmap toggle gone…
     expect(findHeatmapToggle(), 'Show move quality must hide for gridless games').toBeUndefined();
-    // …but the other AI aids remain (only the heatmap is gated).
+    // …but the other bot aids remain (only the heatmap is gated).
     expect(findTeachingItem('Get a hint'), 'Get a hint stays available for gridless games').toBeDefined();
-    expect(findTeachingItem('Watch AI demo'), 'Watch AI demo stays available for gridless games').toBeDefined();
+    expect(findTeachingItem('Watch bot demo'), 'Watch bot demo stays available for gridless games').toBeDefined();
     wrapper.unmount();
   });
 });

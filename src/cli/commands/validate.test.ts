@@ -344,7 +344,7 @@ describe('validateBundleSize measures the real publish zip, not the raw dist (WR
 });
 
 /**
- * The platform-consumed blocks (`world`, `roundDeadline`, `idleAction`, `ai`,
+ * The platform-consumed blocks (`world`, `roundDeadline`, `idleAction`, `bot`,
  * `persistence`, `joinInProgress`). Every one of them reaches the publishing
  * platform through build.ts's `deriveManifest` config spread, and until this
  * change none of them was in `boardsmith.schema.json` — so `boardsmith
@@ -412,12 +412,12 @@ describe('platform-consumed blocks', () => {
     expect(checkMetadataIssues({
       ...validConfig(),
       persistence: true,
-      ai: true,
+      bot: true,
       joinInProgress: false,
       asyncPlay: true,
     })).toEqual([]);
     expect(checkMetadataIssues({ ...validConfig(), persistence: 'yes' })[0]).toContain('"persistence" must be a boolean');
-    expect(checkMetadataIssues({ ...validConfig(), ai: 1 })[0]).toContain('"ai" must be a boolean');
+    expect(checkMetadataIssues({ ...validConfig(), bot: 1 })[0]).toContain('"bot" must be a boolean');
     expect(checkMetadataIssues({ ...validConfig(), joinInProgress: 'true' })[0]).toContain('"joinInProgress" must be a boolean');
     expect(checkMetadataIssues({ ...validConfig(), asyncPlay: 'yes' })[0]).toContain('"asyncPlay" must be a boolean');
   });

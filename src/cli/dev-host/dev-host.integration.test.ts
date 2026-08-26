@@ -177,7 +177,7 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     const seatAView = stateA.view as { state: { isMyTurn: boolean } };
     expect(seatAView.state.isMyTurn).toBe(true); // seat 1 acts first in PassGame
 
-    // ── A second scripted client joins the open (AI) seat 2. ──
+    // ── A second scripted client joins the open (bot) seat 2. ──
     const clientB = createDevHostClient(url);
     await clientB.opened;
     clientB.hello();

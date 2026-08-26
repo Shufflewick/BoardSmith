@@ -53,7 +53,7 @@ Stop Reason: <!-- none | designer-stopped | context-ceiling | stuck | gate-open 
 
 <!-- Each entry is a numbered "### Dispatch N" section with exactly these fields:
      - Chunk: the chunk slug this dispatch was for
-     - Pipeline: build-chunk | build-ai | insert-chunk
+     - Pipeline: build-chunk | build-bot | insert-chunk
      - Dispatched at: ISO timestamp from `date -u +%Y-%m-%dT%H:%M:%SZ` (never fabricated — the
        same single sanctioned clock read state-machine.md "Session Lock" requires)
      - Outcome: pending | closed | gate | filing | stuck

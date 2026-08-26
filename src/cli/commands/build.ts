@@ -171,7 +171,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     // (CLIX-01 / T-135-07 — mirrors simulate.ts:158-167).
     const rulesPath = join(cwd, 'src', 'rules');
     // Command-scoped subdirectory (WR-02): `.boardsmith` is SHARED — pack puts
-    // tarballs in `.boardsmith/tarballs`, evolve-ai-weights reads
+    // tarballs in `.boardsmith/tarballs`, evolve-bot-weights reads
     // `.boardsmith/rules-bundle.mjs`, and a running dev server keeps its
     // runtime bundle there. Only ever create and delete what build owns.
     const tempDir = join(cwd, '.boardsmith', 'build-tmp');

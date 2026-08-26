@@ -127,7 +127,7 @@ Loop until there is nothing left to build or a stop condition fires
    entry whose derived status is neither `verified` nor `verified (user-waived)`. Never take it from
    `RUN.md` — the journal is not an authority (`orchestrate/run-state.md` "The One Authority Rule").
 2. **Pick the pipeline** for it:
-   - the sketch's AI-opponent chunk → `bs-build-ai` (see Step 6);
+   - the sketch's bot-opponent chunk → `bs-build-bot` (see Step 6);
    - anything else, including the mandated final-acceptance chunk → `bs-build-chunk`, which routes
      ceremony and final-acceptance itself (`build-chunk.md` Steps 2-3). This skill never routes
      steps within a chunk.
@@ -171,14 +171,14 @@ said stop, a gate is unanswered, a dispatch is stuck, or this thread crossed its
 — and never for a vaguer "this is getting long." Write `RUN.md`'s `Run Status:`/`Stop Reason:` last,
 after everything else has landed, and print the one command that resumes it: `/bs-build-game`.
 
-## Step 6: The AI Opponent, Then Final Acceptance
+## Step 6: The bot Opponent, Then Final Acceptance
 
 The run is not finished when the last rules chunk closes.
 
-**The AI opponent.** When the sketch's AI-opponent chunk comes up, dispatch it against
-`${CLAUDE_SKILL_DIR}/../bs-build-ai/SKILL.md` instead of the chunk pipeline (same brief, same return
+**The bot opponent.** When the sketch's bot-opponent chunk comes up, dispatch it against
+`${CLAUDE_SKILL_DIR}/../bs-build-bot/SKILL.md` instead of the chunk pipeline (same brief, same return
 shape). It belongs late — after game-end/scoring is verified, since an opponent needs real terminal
-states to evaluate against. If the sketch has **no** AI-opponent chunk, ask the designer once,
+states to evaluate against. If the sketch has **no** bot-opponent chunk, ask the designer once,
 before final acceptance, whether they want a computer opponent; if yes, dispatch a subagent against
 `${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md` to insert it ahead of final acceptance (which
 re-validates dependency order and bumps the sketch version — never edit the ordered chunk list by
@@ -216,7 +216,7 @@ And to the shared reference files that ship with every `bs-` skill:
   reports from
 
 The pipelines it dispatches: `${CLAUDE_SKILL_DIR}/../bs-build-chunk/SKILL.md`,
-`${CLAUDE_SKILL_DIR}/../bs-build-ai/SKILL.md`, `${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md`.
+`${CLAUDE_SKILL_DIR}/../bs-build-bot/SKILL.md`, `${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md`.
 
 **Installed location:** this file installs as `.claude/skills/bs-build-game/SKILL.md`. The shared
 `orchestrate/`, `templates/`, `state-machine.md`, and `reporting.md` referenced above install under

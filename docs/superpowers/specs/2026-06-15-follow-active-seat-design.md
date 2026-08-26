@@ -4,6 +4,11 @@
 **Status:** Approved design, pending implementation plan
 **Module(s):** `cli` (dev-host), `types` (protocol)
 
+> **ARCHIVED, PRE-RENAME.** The names below are quoted as they stood on
+> 2026-06-15. The automaton has since been renamed from AI to BOT everywhere
+> (ShufflewickPub #28, engine contract r16): `aiSeats` is now `botSeats`,
+> `aiLevel` is `botLevel`, `aiTurn` is `botTurn`. Read them as history.
+
 ## Problem
 
 When testing a game on the dev server, automation (AI bots) plays the open

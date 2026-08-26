@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * HeatmapOverlay — per-cell MCTS evaluation chips (AI-03).
+ * HeatmapOverlay — per-cell MCTS evaluation chips (bot-03).
  *
  * Renders via `<Teleport to="body">` as a `position:fixed; inset:0` layer at
  * z-index 15 (below TutorialOverlay/HintOverlay at z-20).

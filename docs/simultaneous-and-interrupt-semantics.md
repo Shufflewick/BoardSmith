@@ -215,7 +215,7 @@ The distinction that matters is **whose intent is being carried**.
 
 - A **player's** submission must echo the key it was rendered with. Stamping the
   current key on a player's behalf is the defect, not the fix.
-- A **server-composed op acting NOW** — the AI pump, a demo playback step, an
+- A **server-composed op acting NOW** — the bot pump, a demo playback step, an
   in-process headless driver — legitimately stamps the current key, because
   there is no interval between composing and submitting for a round to close
   in. Every such site says so in a comment at the site.

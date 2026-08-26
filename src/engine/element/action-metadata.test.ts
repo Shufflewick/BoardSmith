@@ -1,6 +1,6 @@
 /**
  * Tests for buildPickMetadata's resolution of function-valued `multiSelect` —
- * AI-01 / C.2 (the panel half of the shared root cause closed by Plan 01's
+ * bot-01 / C.2 (the panel half of the shared root cause closed by Plan 01's
  * `resolveMultiSelect` for MCTS enumeration).
  *
  * Pre-fix: `buildPickMetadata` emits `base.multiSelect` ONLY when
@@ -141,7 +141,7 @@ function getSelection(
   return actionDef.selections[0] as ChoiceSelection | ElementsSelection;
 }
 
-describe('buildPickMetadata: function-valued multiSelect (AI-01 / C.2)', () => {
+describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => {
   it('resolves a function-valued multiSelect to a concrete {min,max} on a choice selection', () => {
     const { game, player } = makeGame();
     const selection = getSelection(game, 'pickChoice');

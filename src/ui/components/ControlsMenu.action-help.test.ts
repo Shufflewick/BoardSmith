@@ -7,7 +7,7 @@
  *
  * Behaviors under test:
  *   A. A "Show action help" menuitemcheckbox renders even when `showHint` is
- *      undefined (non-AI game / Teaching group hidden).
+ *      undefined (non-bot game / Teaching group hidden).
  *   B. Clicking it emits `teaching-action` with payload `'help-toggle'`.
  *   C. `aria-checked` reflects the `isActionHelpVisible` prop.
  *   D. The `.toggle` pill carries the `on` class when `isActionHelpVisible` is true.
@@ -37,7 +37,7 @@ function mountMenu(props: Record<string, unknown> = {}) {
       autoEndTurn: false,
       zoom: 1,
       canUndo: false,
-      // showHint intentionally omitted (non-AI game) unless overridden
+      // showHint intentionally omitted (non-bot game) unless overridden
       ...props,
     },
     attachTo: document.body,
@@ -154,7 +154,7 @@ describe('ControlsMenu — Show action help toggle', () => {
     const wrapper = mountMenu({ isActionHelpVisible: true, showHint: undefined });
     await wrapper.find('button.menubtn').trigger('click');
     const helpBtn = findHelpToggle();
-    expect(helpBtn, 'Toggle must be visible in non-AI games (Play group, not Teaching group)').toBeDefined();
+    expect(helpBtn, 'Toggle must be visible in non-bot games (Play group, not Teaching group)').toBeDefined();
     wrapper.unmount();
   });
 });

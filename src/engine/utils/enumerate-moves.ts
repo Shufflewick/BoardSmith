@@ -105,7 +105,7 @@ export function enumerateSelectionsCore(
 // ─── Pure Combinatorics Helpers (exported for bot import + testability) ──────
 
 /**
- * AI-01 / F-08: hard ceiling on how many multiSelect combinations enumeration
+ * bot-01 / F-08: hard ceiling on how many multiSelect combinations enumeration
  * will ever MATERIALIZE. An unbounded/dynamic multiSelect (e.g.
  * `multiSelect: { min: 1 }`, max defaulting to Infinity) over an N-item choice
  * set is 2^N−1 combinations — N=25 is 33M objects (multi-GB), N=30 hangs/OOMs.
@@ -208,7 +208,7 @@ function _enumerateRecursive(
   const results: Record<string, unknown>[] = [];
 
   // Resolve static OR function-valued multiSelect through the single shared
-  // helper (AI-01 / D9). Concrete config -> real combinations; `undefined`
+  // helper (bot-01 / D9). Concrete config -> real combinations; `undefined`
   // -> single-select below; a thrown error propagates (fail loud, never a
   // silent skip).
   const resolved = resolveMultiSelect(selection, { game, player, args: currentArgs });
@@ -220,7 +220,7 @@ function _enumerateRecursive(
     // F-08: surface the truncation loudly rather than silently searching a
     // partial move set. Hitting the cap means the multiSelect's combinatorics
     // are unbounded/huge relative to the choice set — the game likely wants a
-    // tighter `max` so the AI (and UI) enumerate a tractable space.
+    // tighter `max` so the bot (and UI) enumerate a tractable space.
     if (combinations.length >= MAX_MULTISELECT_COMBINATIONS) {
       devWarn(
         `multiselect-enumeration-capped:${actionDef.name}:${selection.name}`,
@@ -260,7 +260,7 @@ function _enumerateRecursive(
  * a usable move: `{...args, [name]: undefined}` serializes to args with the key
  * missing entirely, so the bot emits a move that looks complete, passes every
  * check here, and is then rejected by `performAction` with "Missing required
- * selection: <name>" — an AI seat that stops driving the flow for a reason
+ * selection: <name>" — a bot seat that stops driving the flow for a reason
  * nothing upstream can see. The usual source is a `choices`/`filter` closure
  * reading state that is REDACTED in the bot's search sandbox (e.g. deriving
  * choices from an opponent's hidden hand), which yields `undefined` fields.

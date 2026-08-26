@@ -131,8 +131,8 @@ interface GameShellProps {
   playerCount?: number;
   /** Enable debug panel (default: true in dev) */
   debugMode?: boolean;
-  /** Player positions that should be AI by default (1-indexed). E.g., [2] makes player 2 AI */
-  defaultAIPlayers?: number[];
+  /** Player positions that should be bot by default (1-indexed). E.g., [2] makes player 2 bot */
+  defaultBotPlayers?: number[];
   /**
    * Platform-only escape hatch that suppresses the entire Action Panel
    * (D-02 escape hatch, LIBX-01). Do NOT use from a game's own
@@ -438,7 +438,7 @@ provideAnimationEvents(animationEvents);
 const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
 provideAnnouncer(announcer);
 
-// Sync colorSelectionEnabled from game state (for non-lobby mode like --ai where lobbyInfo is never set)
+// Sync colorSelectionEnabled from game state (for non-lobby mode like --bot where lobbyInfo is never set)
 watch(state, (s) => {
   if (s?.state?.colorSelectionEnabled) {
     colorSelectionEnabled.value = true;
@@ -813,8 +813,8 @@ const opponentPlayers = computed(() => players.value.filter(p => p.seat !== play
 
 // Per-seat live connection status for the players panel. The lobby slots are the
 // only source of truth for human presence (lobby-manager.setPlayerConnected), kept
-// reactive in `lobbyInfo` for the life of the session. AI slots and modes with no
-// lobby (e.g. --ai) leave `connected` undefined so PlayersPanel renders no indicator
+// reactive in `lobbyInfo` for the life of the session. bot slots and modes with no
+// lobby (e.g. --bot) leave `connected` undefined so PlayersPanel renders no indicator
 // rather than fabricating presence we don't actually know.
 // Built on `panelPlayers`, so the panel's ordering and its presence indicators
 // are the same list — deriving this from seat-ordered `players` instead would
@@ -824,7 +824,7 @@ const playersWithConnection = computed(() => {
   if (!slots) return panelPlayers.value;
   return panelPlayers.value.map((p) => {
     const slot = slots.find((s) => s.seat === p.seat);
-    const connected = slot && slot.aiLevel == null ? slot.connected : undefined;
+    const connected = slot && slot.botLevel == null ? slot.connected : undefined;
     return connected === undefined ? p : { ...p, connected };
   });
 });
@@ -1065,7 +1065,7 @@ const { previewState } = useZoomPreview();
 // Toast notifications
 const toast = useToast();
 
-// ── Teaching controls state (AI-01/02/03) ────────────────────────────────────
+// ── Teaching controls state (bot-01/02/03) ────────────────────────────────────
 // isDemoRunning is derived from broadcast state — injected by GameSession.broadcast()
 // when #demoMode is true. This ensures all connections (second window, reconnect)
 // see the correct toggle state rather than a local ref that can desync (WR-04).
@@ -1106,16 +1106,16 @@ function setDemoSpeed(delay: number): void {
 }
 
 // Show Teaching group when:
-//   (a) Production lobby path: at least one AI slot in lobbyInfo — unchanged.
-//   (b) Dev-host (platform mode) path: SnapshotSessionHost injects hasAIPlayers
-//       into broadcast state when aiSeats are present. GameSession (production)
-//       never sets hasAIPlayers, so this branch is unreachable in prod (safe
+//   (a) Production lobby path: at least one bot slot in lobbyInfo — unchanged.
+//   (b) Dev-host (platform mode) path: SnapshotSessionHost injects hasBotPlayers
+//       into broadcast state when botSeats are present. GameSession (production)
+//       never sets hasBotPlayers, so this branch is unreachable in prod (safe
 //       by construction — RESEARCH Pitfall 5).
 const showHintProp = computed<boolean | undefined>(() => {
   // Production lobby path — unchanged
-  if (lobbyInfo.value?.slots?.some(s => s.aiLevel != null)) return true;
-  // Dev-host path: SnapshotSessionHost injects hasAIPlayers into broadcast state
-  if ((state.value?.state as any)?.hasAIPlayers) return true;
+  if (lobbyInfo.value?.slots?.some(s => s.botLevel != null)) return true;
+  // Dev-host path: SnapshotSessionHost injects hasBotPlayers into broadcast state
+  if ((state.value?.state as any)?.hasBotPlayers) return true;
   return undefined;
 });
 
@@ -1194,7 +1194,7 @@ async function handleTeachingAction(
     try {
       await platformRequest('hint', { seat: playerSeat.value });
     } catch {
-      toast.error('Hint unavailable — the AI could not suggest a move.');
+      toast.error('Hint unavailable — the bot could not suggest a move.');
     } finally {
       toast.remove(thinkingId);
     }
@@ -1500,7 +1500,7 @@ interface LobbyConfig {
   playerConfigs: Array<{
     name: string;
     isBot: boolean;
-    aiLevel: string;
+    botLevel: string;
     [key: string]: unknown;
   }>;
 }
@@ -1511,36 +1511,36 @@ async function createGame(config?: LobbyConfig) {
     // Use config from lobby if provided, otherwise fallback to props
     const effectivePlayerCount = config?.playerCount ?? props.playerCount;
 
-    // Build player names and AI config from lobby config
+    // Build player names and bot config from lobby config
     let playerNames: string[];
-    let aiPlayers: number[] = [];
-    let aiLevel = 'medium';
+    let botPlayers: number[] = [];
+    let botLevel = 'medium';
 
     if (config?.playerConfigs?.length) {
       playerNames = config.playerConfigs.map((pc, i) =>
         pc.name || (pc.isBot ? 'Bot' : `Player ${i + 1}`)
       );
-      // Extract AI players
-      aiPlayers = config.playerConfigs
+      // Extract bot players
+      botPlayers = config.playerConfigs
         .map((pc, i) => (pc.isBot ? i : -1))
         .filter((i) => i >= 0);
-      // Get AI level from first AI player
-      const firstAI = config.playerConfigs.find((pc) => pc.isBot);
-      if (firstAI) {
-        aiLevel = firstAI.aiLevel || 'medium';
+      // Get bot level from first bot player
+      const firstBot = config.playerConfigs.find((pc) => pc.isBot);
+      if (firstBot) {
+        botLevel = firstBot.botLevel || 'medium';
       }
     } else {
       // Fallback when no config provided
       playerNames = Array.from({ length: effectivePlayerCount }, (_, i) => `Player ${i + 1}`);
     }
 
-    // Always use the lobby so host can configure players, add AI, change settings
+    // Always use the lobby so host can configure players, add bot, change settings
     const result = await client.createGame({
       gameType: props.gameType,
       playerCount: effectivePlayerCount,
       playerNames,
-      aiPlayers: aiPlayers.length > 0 ? aiPlayers : undefined,
-      aiLevel: aiPlayers.length > 0 ? aiLevel : undefined,
+      botPlayers: botPlayers.length > 0 ? botPlayers : undefined,
+      botLevel: botPlayers.length > 0 ? botLevel : undefined,
       gameOptions: config?.gameOptions,
       playerConfigs: config?.playerConfigs,
       useLobby: true,
@@ -1845,17 +1845,17 @@ async function handleRemoveSlot(position: number) {
   }
 }
 
-async function handleSetSlotAI(position: number, isBot: boolean, aiLevel?: string) {
+async function handleSetSlotBot(position: number, isBot: boolean, botLevel?: string) {
   if (!createdGameId.value) return;
 
   try {
-    const result = await client.setSlotAI(createdGameId.value, position, isBot, aiLevel);
+    const result = await client.setSlotBot(createdGameId.value, position, isBot, botLevel);
 
     if (result.lobby) {
       lobbyInfo.value = result.lobby;
     }
   } catch (err) {
-    console.error('Failed to set slot AI:', err);
+    console.error('Failed to set slot bot:', err);
     toast.error(err instanceof Error ? err.message : 'Failed to update slot');
   }
 }
@@ -2101,7 +2101,7 @@ watch(
       const text = announceGameOver(winnerNames, derived.isDraw);
       announcer.announce(text, { assertive: true });
 
-      // Stop any running AI demo when the game completes. isDemoRunning is
+      // Stop any running bot demo when the game completes. isDemoRunning is
       // now derived from broadcast state (WR-04), so we only fire the request;
       // the session broadcasts the updated state on its own.
       if (isDemoRunning.value) {
@@ -2148,7 +2148,7 @@ watch(actionController.errorTick, () => {
 // 134-RESEARCH.md: a definite-width ancestor breaks useAutoZoom's fit formula
 // for every board, not just percentage-width ones). Fires ONCE per session
 // (WR-01 latch — this reports a structural CSS bug, so re-logging on every
-// state broadcast while collapsed would flood the console in AI-vs-AI dev
+// state broadcast while collapsed would flood the console in bot-vs-bot dev
 // games); gated on game state having arrived (non-null gameView), the slot
 // having mounted children (RESEARCH Pitfall 2: startup transient), AND the
 // board actually being rendered — a display:none ancestor (v-show behind a
@@ -2251,7 +2251,7 @@ if ((import.meta as any).hot) {
       v-if="currentScreen === 'lobby'"
       :display-name="displayName || gameType"
       :api-url="apiUrl"
-      :default-a-i-players="defaultAIPlayers"
+      :default-a-i-players="defaultBotPlayers"
       v-model:join-game-id="joinGameId"
       @create="createGame"
       @join="joinGame"
@@ -2273,7 +2273,7 @@ if ((import.meta as any).hot) {
       @set-ready="handleSetReady"
       @add-slot="handleAddSlot"
       @remove-slot="handleRemoveSlot"
-      @set-slot-ai="handleSetSlotAI"
+      @set-slot-bot="handleSetSlotBot"
       @kick-player="handleKickPlayer"
       @update-player-options="handleUpdatePlayerOptions"
       @update-slot-player-options="handleUpdateSlotPlayerOptions"
@@ -2457,16 +2457,16 @@ if ((import.meta as any).hot) {
                is present (v-if internal). Not inside zoom-container so it measures
                boardregion rects unscaled by --zoom-level. -->
           <TutorialOverlay />
-          <!-- AI hint overlay (AI-01): renders when state.hint is set.
+          <!-- bot hint overlay (bot-01): renders when state.hint is set.
                Shares z-index 20 with TutorialOverlay — both may coexist (Phase 109).
                Teleports to body (position:fixed); resolves data-bs-el-* anchors the
                same way TutorialOverlay does — no renderer coupling (project hard-rule). -->
           <HintOverlay />
-          <!-- Heatmap overlay (AI-03): renders when state.heatmap.visible is true.
+          <!-- Heatmap overlay (bot-03): renders when state.heatmap.visible is true.
                z-index 15 — below TutorialOverlay/HintOverlay, above turn prompt (z-5).
                pointer-events:none throughout. Resolves same data-bs-el-* anchors. -->
           <HeatmapOverlay />
-          <!-- AI demo narration card (AI-02): announces each move before it executes.
+          <!-- bot demo narration card (bot-02): announces each move before it executes.
                Rendered via BoardMessage variant="narration" (position:fixed, top, z-10).
                Text is from broadcast state.narration (engine-derived, plain string —
                never v-html, T-107-08 mitigated). -->
@@ -2475,13 +2475,13 @@ if ((import.meta as any).hot) {
             variant="narration"
             :visible="true"
           >{{ (state?.state as any)?.narration?.text }}</BoardMessage>
-          <!-- AI demo playback controls — speed + step so the learner follows at
+          <!-- bot demo playback controls — speed + step so the learner follows at
                their own pace. Fixed bottom-center (never over the board). -->
           <div
             v-if="isDemoRunning && demoControls"
             class="bsg-demo-controls"
             role="group"
-            aria-label="AI demo playback controls"
+            aria-label="bot demo playback controls"
           >
             <div class="bsg-demo-controls__speeds" role="group" aria-label="Speed">
               <button
@@ -3240,7 +3240,7 @@ if ((import.meta as any).hot) {
   }
 }
 
-/* ── AI demo playback control bar ─────────────────────────────────────────── */
+/* ── bot demo playback control bar ─────────────────────────────────────────── */
 .bsg-demo-controls {
   position: fixed;
   /* Sits one row-gap above the Action Panel's reserved footprint — the same

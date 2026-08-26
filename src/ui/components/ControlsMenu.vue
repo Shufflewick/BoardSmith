@@ -29,13 +29,13 @@ const props = withDefaults(defineProps<{
   align?: 'left' | 'right';
   /**
    * When defined (true), renders the Teaching group. When undefined, the
-   * Teaching group is hidden entirely (game has no AI / AI not configured).
-   * Pass `true` when the session has an AI player; omit otherwise.
+   * Teaching group is hidden entirely (game has no bot / bot not configured).
+   * Pass `true` when the session has a bot player; omit otherwise.
    */
   showHint?: boolean;
   /** Disable the "Get a hint" item when the local player is not at a decision point. */
   hintDisabled?: boolean;
-  /** Whether an AI demo is currently running (toggles "Watch AI demo" / "Stop demo"). */
+  /** Whether a bot demo is currently running (toggles "Watch bot demo" / "Stop demo"). */
   isDemoRunning?: boolean;
   /** Whether the move quality heatmap overlay is currently visible (drives aria-checked). */
   isHeatmapVisible?: boolean;
@@ -70,7 +70,7 @@ const props = withDefaults(defineProps<{
   isTutorialRunning?: boolean;
   /**
    * When true, suppresses the entire Teaching group and Tutorial group
-   * (host anti-cheat lockout). Get-a-hint, Watch-AI-demo, Show-move-quality,
+   * (host anti-cheat lockout). Get-a-hint, Watch-bot-demo, Show-move-quality,
    * and Start-tutorial will not render.
    *
    * Action help (the "Show action help" toggle in the Play group) is NEVER
@@ -97,8 +97,8 @@ const emit = defineEmits<{
   /**
    * Emitted when the user selects a Teaching group item, a Tutorial item, or
    * a global display toggle.
-   * - 'hint': request a one-shot move hint from the AI
-   * - 'demo-toggle': start or stop the AI narrated demo
+   * - 'hint': request a one-shot move hint from the bot
+   * - 'demo-toggle': start or stop the bot narrated demo
    * - 'heatmap-toggle': toggle the per-cell move quality overlay
    * - 'help-toggle': toggle action help affordances (Play group, always visible)
    * - 'start-tutorial': (re)start the tutorial from step 0
@@ -224,7 +224,7 @@ function handleLeave() {
         </span>
       </button>
 
-      <!-- Show action help (Play group — not AI-gated; hidden when no available
+      <!-- Show action help (Play group — not bot-gated; hidden when no available
            action has help text, so the toggle is never present-but-inert). -->
       <button
         v-if="hasActionHelp"
@@ -312,16 +312,16 @@ function handleLeave() {
       </button>
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
-           has an AI player (showHint !== undefined) OR a tutorial (hasTutorial),
+           has a bot player (showHint !== undefined) OR a tutorial (hasTutorial),
            AND teaching is not disabled by the host (teachingDisabled).
            The tutorial item lives here too — it is teaching, not a separate group. -->
       <template v-if="(showHint !== undefined || hasTutorial) && !teachingDisabled">
         <div class="sep"></div>
         <div class="grouplabel">Teaching</div>
 
-        <!-- AI-driven aids: only when the game has an AI player. -->
+        <!-- bot-driven aids: only when the game has a bot player. -->
         <template v-if="showHint !== undefined && !teachingDisabled">
-          <!-- Get a hint: request a one-shot AI move suggestion -->
+          <!-- Get a hint: request a one-shot bot move suggestion -->
           <button
             class="mi"
             type="button"
@@ -334,7 +334,7 @@ function handleLeave() {
             Get a hint
           </button>
 
-          <!-- Watch AI demo / Stop demo: toggle the narrated AI demo mode -->
+          <!-- Watch bot demo / Stop demo: toggle the narrated bot demo mode -->
           <button
             class="mi"
             type="button"
@@ -342,7 +342,7 @@ function handleLeave() {
             @click="emit('teaching-action', 'demo-toggle'); close()"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 9-14 9V3z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            {{ isDemoRunning ? 'Stop demo' : 'Watch AI demo' }}
+            {{ isDemoRunning ? 'Stop demo' : 'Watch bot demo' }}
           </button>
 
           <!-- Show move quality: toggle the per-cell MCTS evaluation heatmap.

@@ -48,7 +48,7 @@ const emit = defineEmits<{
   (e: 'set-ready', ready: boolean): void;
   (e: 'add-slot'): void;
   (e: 'remove-slot', position: number): void;
-  (e: 'set-slot-ai', position: number, isBot: boolean, aiLevel?: string): void;
+  (e: 'set-slot-bot', position: number, isBot: boolean, botLevel?: string): void;
   (e: 'kick-player', position: number): void;
   (e: 'update-player-options', options: Record<string, unknown>): void;
   (e: 'update-slot-player-options', position: number, options: Record<string, unknown>): void;
@@ -99,7 +99,7 @@ function getSlotColor(slot: LobbySlot): string {
 
 // Check if current user can edit a slot's color
 function canEditSlotColor(slot: LobbySlot): boolean {
-  // Host can edit any non-open slot (their own, AI, or other players)
+  // Host can edit any non-open slot (their own, bot, or other players)
   if (props.isCreator && slot.status !== 'open') return true;
   // Players can edit their own slot
   if (slot.playerId === props.playerId) return true;
@@ -133,7 +133,7 @@ function handleSlotColorChange(seat: number, color: string) {
     // Player changing their own color
     emit('update-player-options', { color });
   } else if (props.isCreator) {
-    // Host changing another player's color (AI or other human)
+    // Host changing another player's color (bot or other human)
     emit('update-slot-player-options', seat, { color });
   }
 
@@ -262,34 +262,34 @@ function handleRemoveSlot(position: number) {
   emit('remove-slot', position);
 }
 
-function handleToggleAI(slot: LobbySlot) {
-  if (slot.status === 'ai') {
+function handleToggleBot(slot: LobbySlot) {
+  if (slot.status === 'bot') {
     // Convert to open
-    emit('set-slot-ai', slot.seat, false);
+    emit('set-slot-bot', slot.seat, false);
   } else if (slot.status === 'open') {
-    // Convert to AI
-    emit('set-slot-ai', slot.seat, true, 'medium');
+    // Convert to bot
+    emit('set-slot-bot', slot.seat, true, 'medium');
   }
 }
 
 const DIFFICULTY_LEVELS = ['easy', 'medium', 'hard'] as const;
 
-function handleCycleAILevel(slot: LobbySlot) {
-  const currentLevel = slot.aiLevel || 'medium';
+function handleCycleBotLevel(slot: LobbySlot) {
+  const currentLevel = slot.botLevel || 'medium';
   const currentIndex = DIFFICULTY_LEVELS.indexOf(currentLevel as typeof DIFFICULTY_LEVELS[number]);
   const nextIndex = (currentIndex + 1) % DIFFICULTY_LEVELS.length;
   const nextLevel = DIFFICULTY_LEVELS[nextIndex];
-  emit('set-slot-ai', slot.seat, true, nextLevel);
+  emit('set-slot-bot', slot.seat, true, nextLevel);
 }
 
 function getSlotStatusClass(slot: LobbySlot): string {
-  if (slot.status === 'ai') return 'ai';
+  if (slot.status === 'bot') return 'bot';
   if (slot.status === 'claimed') return 'claimed';
   return 'open';
 }
 
 function canHostManageSlot(slot: LobbySlot): boolean {
-  // Host can manage open or AI slots (not claimed by humans, not position 1/host)
+  // Host can manage open or bot slots (not claimed by humans, not position 1/host)
   return props.isCreator && slot.seat !== 1 && slot.status !== 'claimed';
 }
 
@@ -299,7 +299,7 @@ function canHostRemoveSlot(slot: LobbySlot): boolean {
 }
 
 function canHostKickPlayer(slot: LobbySlot): boolean {
-  // Host can kick claimed players (not themselves at position 1, not AI)
+  // Host can kick claimed players (not themselves at position 1, not bot)
   return props.isCreator && slot.seat !== 1 && slot.status === 'claimed';
 }
 
@@ -564,11 +564,11 @@ function handleUpdateGameOption(key: string, value: unknown) {
               <span class="slot-name open-label">Open Slot</span>
               <div class="slot-controls">
                 <button
-                  @click="handleToggleAI(slot)"
+                  @click="handleToggleBot(slot)"
                   class="btn small control-btn"
-                  title="Make AI"
+                  title="Make bot"
                 >
-                  Make AI
+                  Make bot
                 </button>
                 <button
                   v-if="canRemoveSlots"
@@ -582,23 +582,23 @@ function handleUpdateGameOption(key: string, value: unknown) {
             </div>
           </template>
 
-          <!-- AI slot -->
-          <template v-else-if="slot.status === 'ai'">
+          <!-- bot slot -->
+          <template v-else-if="slot.status === 'bot'">
             <div class="slot-content">
-              <span class="slot-name ai-name">{{ slot.name }}</span>
+              <span class="slot-name bot-name">{{ slot.name }}</span>
               <button
                 v-if="isCreator"
-                class="slot-badge ai-badge clickable"
-                @click="handleCycleAILevel(slot)"
+                class="slot-badge bot-badge clickable"
+                @click="handleCycleBotLevel(slot)"
                 title="Click to change difficulty"
               >
-                AI ({{ slot.aiLevel || 'medium' }})
+                bot ({{ slot.botLevel || 'medium' }})
               </button>
-              <span v-else class="slot-badge ai-badge">AI ({{ slot.aiLevel || 'medium' }})</span>
+              <span v-else class="slot-badge bot-badge">bot ({{ slot.botLevel || 'medium' }})</span>
               <span class="ready-indicator ready">Ready</span>
               <div v-if="isCreator && slot.seat !== 1" class="slot-controls">
                 <button
-                  @click="handleToggleAI(slot)"
+                  @click="handleToggleBot(slot)"
                   class="btn small control-btn"
                   title="Make open"
                 >
@@ -1114,7 +1114,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   font-style: italic;
 }
 
-.slot-name.ai-name {
+.slot-name.bot-name {
   color: var(--bsg-seat-5);
 }
 
@@ -1135,18 +1135,18 @@ function handleUpdateGameOption(key: string, value: unknown) {
   color: var(--bsg-accent);
 }
 
-.ai-badge {
+.bot-badge {
   background: color-mix(in srgb, var(--bsg-seat-5) 20%, transparent);
   color: var(--bsg-seat-5);
 }
 
-.ai-badge.clickable {
+.bot-badge.clickable {
   cursor: pointer;
   transition: all 0.2s;
   border: 1px solid transparent;
 }
 
-.ai-badge.clickable:hover {
+.bot-badge.clickable:hover {
   background: color-mix(in srgb, var(--bsg-seat-5) 35%, transparent);
   border-color: var(--bsg-seat-5);
   transform: scale(1.05);

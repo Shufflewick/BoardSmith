@@ -521,7 +521,7 @@ export class GameRunner<G extends Game = Game> {
    *     actions, via `PendingActionManager`).
    * Keeping both paths on this one helper guarantees every `actionHistory` entry
    * is identical in shape regardless of how the action was driven, so replay,
-   * undo, and AI history treat them the same.
+   * undo, and bot history treat them the same.
    *
    * Does NOT push to history — callers decide when to record (e.g. only after a
    * successful execute). Use `recordSerializedAction` to append.
@@ -823,7 +823,7 @@ export class GameRunner<G extends Game = Game> {
    * three of which are now restored authoritatively below. Crucially, replay was
    * also unsound: selection-step / pending-completed actions are recorded in
    * NEITHER command nor action history, so replaying an incomplete actionHistory
-   * mis-positioned the flow and crashed real games (e.g. MERC's AI dictator
+   * mis-positioned the flow and crashed real games (e.g. MERC's bot dictator
    * Day-1 turn: "Player N is not awaiting action"). Restoring state directly
    * sidesteps that entire class of bug.
    *

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
 import type { Annotation } from '../engine/index.js';
-import type { AIConfig } from '../ai/types.js';
+import type { BotStrategy } from '../bot/types.js';
 import { executeOp, type GameDefinitionLike, type Op, type OpResult } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { BotGame, botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
@@ -292,12 +292,12 @@ describe('SnapshotSessionHost', () => {
     });
   });
 
-  // ── 4. AI pump ─────────────────────────────────────────────────────────────
+  // ── 4. bot pump ─────────────────────────────────────────────────────────────
 
-  describe('AI pump', () => {
-    it('a REJECTED AI turn stops the pump LOUDLY — never a silent break that strands every seat', async () => {
+  describe('bot pump', () => {
+    it('a REJECTED bot turn stops the pump LOUDLY — never a silent break that strands every seat', async () => {
       // The 1-2 Punch stall: the bot returned a move the engine rejected, the
-      // pump did `if (!res.success || !res.aiMoved) break` with no output, and
+      // pump did `if (!res.success || !res.botMoved) break` with no output, and
       // the game sat forever on a seat nothing would ever drive — no error on
       // the client, none on the server. Failing must be observable.
       const baseResult: OpResult = {
@@ -308,16 +308,16 @@ describe('SnapshotSessionHost', () => {
         playerViews: [null, null],
         isComplete: false,
         winners: [],
-        aiMoved: false,
+        botMoved: false,
       };
 
-      let aiCallCount = 0;
+      let botCallCount = 0;
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
         executeOp: async (_snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult, snapshot: { turn: 0 } };
-          if (op.type === 'aiTurn') {
-            aiCallCount++;
+          if (op.type === 'botTurn') {
+            botCallCount++;
             return {
               success: false,
               error: 'Missing required selection: namedType',
@@ -332,21 +332,21 @@ describe('SnapshotSessionHost', () => {
           return { ...baseResult };
         },
         broadcast: () => {},
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       };
 
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const host = new SnapshotSessionHost(adapters);
-      // `start()` pumps the AI itself, so the spy has to be in place first —
+      // `start()` pumps the bot itself, so the spy has to be in place first —
       // the rejection this test is about happens on that very first pump.
       await host.start();
-      await host.runAITurns();
+      await host.runBotTurns();
       // Capture before restoring — mockRestore() also clears the call history.
       const calls = errorSpy.mock.calls.map((c) => String(c[0]));
       errorSpy.mockRestore();
 
       // The pump still stops (no infinite retry of a move that cannot work)...
-      expect(aiCallCount).toBe(1);
+      expect(botCallCount).toBe(1);
       // ...but says why, naming the seat and the engine's own reason so the
       // developer can find the action definition at fault.
       expect(calls).toHaveLength(1);
@@ -355,13 +355,13 @@ describe('SnapshotSessionHost', () => {
     });
 
     it.each(['undo', 'debugRewind'] as const)(
-      'pumps the AI after a %s, so a restore landing on an AI seat does not stall the table',
+      'pumps the bot after a %s, so a restore landing on a bot seat does not stall the table',
       async (opType) => {
-        // A restore can put the game on an AI seat's turn. Nothing else wakes
-        // the pump — the only op that would arrive is a human action the AI
+        // A restore can put the game on a bot seat's turn. Nothing else wakes
+        // the pump — the only op that would arrive is a human action the bot
         // seat is never going to take — so without this the table just sits
         // there. Reproduced in `boardsmith dev`: a rewind onto player 2 left
-        // the AI motionless indefinitely.
+        // the bot motionless indefinitely.
         const baseResult: OpResult = {
           success: true,
           snapshot: { stubbed: true },
@@ -370,36 +370,36 @@ describe('SnapshotSessionHost', () => {
           playerViews: [],
           isComplete: false,
           winners: [],
-          aiMoved: false,
+          botMoved: false,
         };
 
-        let aiCallCount = 0;
+        let botCallCount = 0;
         const adapters: SnapshotSessionAdapters = {
           playerCount: 2,
           executeOp: async (_snap, _pend, op) => {
-            if (op.type === 'aiTurn') {
-              aiCallCount++;
-              return { ...baseResult, aiMoved: false };
+            if (op.type === 'botTurn') {
+              botCallCount++;
+              return { ...baseResult, botMoved: false };
             }
             return { ...baseResult };
           },
           broadcast: () => {},
-          aiSeats: [{ seat: 2 }],
+          botSeats: [{ seat: 2 }],
         };
 
         const host = new SnapshotSessionHost(adapters);
         await host.start();
-        aiCallCount = 0; // start() pumps once on its own — measure only the restore.
+        botCallCount = 0; // start() pumps once on its own — measure only the restore.
 
         await host.handleOp(1, { type: opType, player: 1, actionIndex: 0 } as Op);
 
-        expect(aiCallCount).toBeGreaterThan(0);
+        expect(botCallCount).toBeGreaterThan(0);
       },
     );
 
-    it('runAITurns loops while aiMoved:true then stops, applying each move', async () => {
-      // Use a stub executeOp that answers start normally, then returns aiMoved:true
-      // once and aiMoved:false on the next call.
+    it('runBotTurns loops while botMoved:true then stops, applying each move', async () => {
+      // Use a stub executeOp that answers start normally, then returns botMoved:true
+      // once and botMoved:false on the next call.
       const baseSnapshot = { stubbed: true };
       const baseResult: OpResult = {
         success: true,
@@ -409,10 +409,10 @@ describe('SnapshotSessionHost', () => {
         playerViews: [null, null],
         isComplete: false,
         winners: [],
-        aiMoved: false,
+        botMoved: false,
       };
 
-      let aiCallCount = 0;
+      let botCallCount = 0;
       const broadcastLog: unknown[][] = [];
 
       const adapters: SnapshotSessionAdapters = {
@@ -421,47 +421,47 @@ describe('SnapshotSessionHost', () => {
           if (op.type === 'start') {
             return { ...baseResult, snapshot: { turn: 0 } };
           }
-          if (op.type === 'aiTurn') {
-            aiCallCount++;
-            if (aiCallCount === 1) {
-              return { ...baseResult, snapshot: { turn: 1 }, aiMoved: true, aiPlayer: 2 };
+          if (op.type === 'botTurn') {
+            botCallCount++;
+            if (botCallCount === 1) {
+              return { ...baseResult, snapshot: { turn: 1 }, botMoved: true, botPlayer: 2 };
             }
-            return { ...baseResult, snapshot: { turn: 1 }, aiMoved: false };
+            return { ...baseResult, snapshot: { turn: 1 }, botMoved: false };
           }
           return { ...baseResult };
         },
         broadcast: (views, meta) => broadcastLog.push([views, meta]),
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       };
 
       const host = new SnapshotSessionHost(adapters);
       await host.start();
 
       broadcastLog.length = 0;
-      await host.runAITurns();
+      await host.runBotTurns();
 
-      // Loop should have called executeOp(aiTurn) twice: once getting aiMoved:true
-      // (applies move, broadcasts) and once getting aiMoved:false (stops).
-      expect(aiCallCount).toBe(2);
+      // Loop should have called executeOp(botTurn) twice: once getting botMoved:true
+      // (applies move, broadcasts) and once getting botMoved:false (stops).
+      expect(botCallCount).toBe(2);
 
-      // One broadcast from the applied AI move
+      // One broadcast from the applied bot move
       expect(broadcastLog).toHaveLength(1);
 
       // Snapshot updated to the moved state
       expect((host.snapshot as { turn: number }).turn).toBe(1);
     });
 
-    it('serializes concurrent runAITurns calls (opChain — no overlapping pump execution)', async () => {
-      // Two concurrent runAITurns() calls must NOT run their pumps at the same
-      // time. Before the opChain fix, the aiPumpRunning guard made the second
+    it('serializes concurrent runBotTurns calls (opChain — no overlapping pump execution)', async () => {
+      // Two concurrent runBotTurns() calls must NOT run their pumps at the same
+      // time. Before the opChain fix, the botPumpRunning guard made the second
       // call a silent no-op; now the chain serializes them so the second runs
       // strictly AFTER the first completes. Either way the invariant the
-      // dev-host relies on holds: aiTurn executions never overlap.
-      let concurrentAiTurns = 0;
-      let maxConcurrentAiTurns = 0;
-      let resolveFirstAiCall!: (v: OpResult) => void;
-      const firstAiCallPromise = new Promise<OpResult>((res) => {
-        resolveFirstAiCall = res;
+      // dev-host relies on holds: botTurn executions never overlap.
+      let concurrentBotTurns = 0;
+      let maxConcurrentBotTurns = 0;
+      let resolveFirstBotCall!: (v: OpResult) => void;
+      const firstBotCallPromise = new Promise<OpResult>((res) => {
+        resolveFirstBotCall = res;
       });
 
       const baseResult: OpResult = {
@@ -474,51 +474,51 @@ describe('SnapshotSessionHost', () => {
         winners: [],
       };
 
-      let aiCall = 0;
+      let botCall = 0;
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
         executeOp: async (_snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult };
-          if (op.type === 'aiTurn') {
-            concurrentAiTurns++;
-            maxConcurrentAiTurns = Math.max(maxConcurrentAiTurns, concurrentAiTurns);
+          if (op.type === 'botTurn') {
+            concurrentBotTurns++;
+            maxConcurrentBotTurns = Math.max(maxConcurrentBotTurns, concurrentBotTurns);
             try {
-              aiCall++;
-              // First pump's first aiTurn stalls until we release it, holding the
-              // critical section open while the second runAITurns() is pending.
-              if (aiCall === 1) return await firstAiCallPromise;
-              return { ...baseResult, aiMoved: false };
+              botCall++;
+              // First pump's first botTurn stalls until we release it, holding the
+              // critical section open while the second runBotTurns() is pending.
+              if (botCall === 1) return await firstBotCallPromise;
+              return { ...baseResult, botMoved: false };
             } finally {
-              concurrentAiTurns--;
+              concurrentBotTurns--;
             }
           }
           return { ...baseResult };
         },
         broadcast: () => {},
-        aiSeats: [{ seat: 1 }],
+        botSeats: [{ seat: 1 }],
       };
 
       const host = new SnapshotSessionHost(adapters);
       await host.start();
 
-      const pump1 = host.runAITurns(); // stalls on the first aiTurn
-      const pump2 = host.runAITurns(); // queued behind pump1 on opChain
-      resolveFirstAiCall({ ...baseResult, aiMoved: false });
+      const pump1 = host.runBotTurns(); // stalls on the first botTurn
+      const pump2 = host.runBotTurns(); // queued behind pump1 on opChain
+      resolveFirstBotCall({ ...baseResult, botMoved: false });
       await Promise.all([pump1, pump2]);
 
-      // The core guarantee: the two pumps never executed aiTurn concurrently.
-      expect(maxConcurrentAiTurns).toBe(1);
+      // The core guarantee: the two pumps never executed botTurn concurrently.
+      expect(maxConcurrentBotTurns).toBe(1);
     });
 
-    it('serializes a human op arriving during an in-flight AI pump (lost-update wedge fix)', async () => {
-      // Regression for the dev-host lost-update race (dev-host-ai-op-race #1):
-      // a human action op that arrives WHILE the AI pump is mid-flight must not
+    it('serializes a human op arriving during an in-flight bot pump (lost-update wedge fix)', async () => {
+      // Regression for the dev-host lost-update race (dev-host-bot-op-race #1):
+      // a human action op that arrives WHILE the bot pump is mid-flight must not
       // read the same base snapshot and last-write-wins clobber the pump's move.
       // The opChain must make the human op wait until the pump fully finishes.
       const events: string[] = [];
-      let releaseAiTurn!: () => void;
-      const aiTurnGate = new Promise<void>((res) => {
-        releaseAiTurn = res;
+      let releaseBotTurn!: () => void;
+      const botTurnGate = new Promise<void>((res) => {
+        releaseBotTurn = res;
       });
 
       const baseResult: OpResult = {
@@ -529,23 +529,23 @@ describe('SnapshotSessionHost', () => {
         playerViews: [null, null],
         isComplete: false,
         winners: [],
-        aiMoved: false,
+        botMoved: false,
       };
 
-      let aiCall = 0;
+      let botCall = 0;
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
         executeOp: async (snap, _pend, op) => {
           if (op.type === 'start') return { ...baseResult, snapshot: { v: 0 } };
-          if (op.type === 'aiTurn') {
-            aiCall++;
-            if (aiCall === 1) {
-              events.push('ai-read');
-              await aiTurnGate; // hold the pump open
-              events.push('ai-write');
-              return { ...baseResult, snapshot: { v: 1 }, aiMoved: true, aiPlayer: 2 };
+          if (op.type === 'botTurn') {
+            botCall++;
+            if (botCall === 1) {
+              events.push('bot-read');
+              await botTurnGate; // hold the pump open
+              events.push('bot-write');
+              return { ...baseResult, snapshot: { v: 1 }, botMoved: true, botPlayer: 2 };
             }
-            return { ...baseResult, snapshot: snap as object, aiMoved: false };
+            return { ...baseResult, snapshot: snap as object, botMoved: false };
           }
           if (op.type === 'action') {
             // The human op MUST observe the snapshot the pump wrote (v:1), never
@@ -556,39 +556,39 @@ describe('SnapshotSessionHost', () => {
           return { ...baseResult };
         },
         broadcast: () => {},
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       };
 
       const host = new SnapshotSessionHost(adapters);
       await host.start();
 
-      const pump = host.runAITurns(); // starts, blocks in the first aiTurn
+      const pump = host.runBotTurns(); // starts, blocks in the first botTurn
       // Fire a human action while the pump is stalled mid-flight.
       const human = host.handleOp(1, { type: 'action', actionName: 'x', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) } as unknown as Op);
       // Let the pump finish; the human op should only then proceed.
-      releaseAiTurn();
+      releaseBotTurn();
       await Promise.all([pump, human]);
 
       // Order proves serialization: the pump fully wrote before the human read,
       // and the human read the pump's result (v:1), not the stale base (v:0).
-      expect(events).toEqual(['ai-read', 'ai-write', 'human-read:v=1']);
+      expect(events).toEqual(['bot-read', 'bot-write', 'human-read:v=1']);
       expect((host.snapshot as { v: number }).v).toBe(2);
     });
 
-    it('triggers runAITurns automatically after a successful human action', async () => {
+    it('triggers runBotTurns automatically after a successful human action', async () => {
       const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions);
 
-      // Track ai pump calls
-      let aiCallCount = 0;
+      // Track bot pump calls
+      let botCallCount = 0;
       const realExecOp = adapters.executeOp;
       adapters.executeOp = async (snap, pend, op) => {
-        if (op.type === 'aiTurn') {
-          aiCallCount++;
-          return { ...(await realExecOp(snap, pend, op)), aiMoved: false };
+        if (op.type === 'botTurn') {
+          botCallCount++;
+          return { ...(await realExecOp(snap, pend, op)), botMoved: false };
         }
         return realExecOp(snap, pend, op);
       };
-      adapters.aiSeats = [{ seat: 2 }];
+      adapters.botSeats = [{ seat: 2 }];
 
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -596,11 +596,11 @@ describe('SnapshotSessionHost', () => {
 
       await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
 
-      // AI pump should have been triggered (at least one aiTurn call)
-      expect(aiCallCount).toBeGreaterThanOrEqual(1);
+      // bot pump should have been triggered (at least one botTurn call)
+      expect(botCallCount).toBeGreaterThanOrEqual(1);
     });
 
-    it('caps the AI pump at MAX_AI_MOVES (500) and logs when a runaway bundle never stops', async () => {
+    it('caps the bot pump at MAX_BOT_MOVES (500) and logs when a runaway bundle never stops', async () => {
       const base: OpResult = {
         success: true,
         snapshot: {},
@@ -609,24 +609,24 @@ describe('SnapshotSessionHost', () => {
         playerViews: [],
         isComplete: false,
         winners: [],
-        aiMoved: true,
+        botMoved: true,
       };
 
-      let aiCallCount = 0;
+      let botCallCount = 0;
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
         // A buggy bundle that ALWAYS reports a move was made — would loop forever
         // without the cap.
         executeOp: async (_snap, _pend, op) => {
-          if (op.type === 'start') return { ...base, aiMoved: false };
-          if (op.type === 'aiTurn') {
-            aiCallCount++;
-            return { ...base, aiMoved: true };
+          if (op.type === 'start') return { ...base, botMoved: false };
+          if (op.type === 'botTurn') {
+            botCallCount++;
+            return { ...base, botMoved: true };
           }
           return { ...base };
         },
         broadcast: () => {},
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       };
 
       const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -635,11 +635,11 @@ describe('SnapshotSessionHost', () => {
       await host.start();
 
       // Must terminate (not hang) and stop exactly at the cap.
-      await host.runAITurns();
+      await host.runBotTurns();
 
-      expect(aiCallCount).toBe(500);
+      expect(botCallCount).toBe(500);
       expect(errSpy).toHaveBeenCalledWith(
-        '[SnapshotSessionHost] AI pump hit MAX_AI_MOVES cap (500); stopping to avoid runaway.',
+        '[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.',
       );
 
       errSpy.mockRestore();
@@ -831,17 +831,17 @@ describe('SnapshotSessionHost', () => {
 
   // ── 6. Transient teaching state foundation (Plan 110-01) ───────────────────
   //
-  // These tests verify the mergeTransientState / broadcastCurrent / hasAIPlayers
+  // These tests verify the mergeTransientState / broadcastCurrent / hasBotPlayers
   // primitives added in Plan 110-01, Task 1. No hint/heatmap/demo ops are tested
   // here — that is Plans 02/03.
 
   describe('transient teaching state foundation', () => {
 
-    // ── Test (1): hasAIPlayers in every broadcast when aiSeats present ────────
+    // ── Test (1): hasBotPlayers in every broadcast when botSeats present ────────
 
-    it('injects state.hasAIPlayers === true into every broadcast view when aiSeats is set', async () => {
+    it('injects state.hasBotPlayers === true into every broadcast view when botSeats is set', async () => {
       const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -852,17 +852,17 @@ describe('SnapshotSessionHost', () => {
       // At least one broadcast must have fired (from apply())
       expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
 
-      // The broadcast from the action (first entry after reset) must carry hasAIPlayers
+      // The broadcast from the action (first entry after reset) must carry hasBotPlayers
       const [views] = broadcastLog[0] as [Array<{ flowState: unknown; state: Record<string, unknown> }>, unknown];
       for (const view of views) {
-        expect(view.state.hasAIPlayers).toBe(true);
+        expect(view.state.hasBotPlayers).toBe(true);
       }
     });
 
-    // ── Test (2): identity short-circuit when no aiSeats and no transient state
+    // ── Test (2): identity short-circuit when no botSeats and no transient state
 
-    it('returns views unchanged (no hasAIPlayers) when aiSeats is absent and no transient state', async () => {
-      // No aiSeats in adapters
+    it('returns views unchanged (no hasBotPlayers) when botSeats is absent and no transient state', async () => {
+      // No botSeats in adapters
       const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions);
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -874,7 +874,7 @@ describe('SnapshotSessionHost', () => {
 
       const [views] = broadcastLog[0] as [Array<{ flowState: unknown; state: Record<string, unknown> }>, unknown];
       for (const view of views) {
-        expect(view.state.hasAIPlayers).toBeUndefined();
+        expect(view.state.hasBotPlayers).toBeUndefined();
       }
     });
 
@@ -959,7 +959,7 @@ describe('SnapshotSessionHost', () => {
 
     it('hint op stores hintAnnotation and re-broadcasts with state.hint on the seat', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -982,7 +982,7 @@ describe('SnapshotSessionHost', () => {
 
     it('heatmapToggle visible=true broadcasts heatmap.visible===true with entries', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1002,7 +1002,7 @@ describe('SnapshotSessionHost', () => {
 
     it('heatmapToggle visible=false broadcasts heatmap.visible===false with empty entries', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1021,7 +1021,7 @@ describe('SnapshotSessionHost', () => {
 
     it('clears seat hint from transient state after a successful action by that seat', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1044,7 +1044,7 @@ describe('SnapshotSessionHost', () => {
     // live position rather than freezing where it was first enabled.
     it('recomputes a visible heatmap after the owner acts (stays fresh, not frozen)', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       // Count the heatmap recompute calls routed through executeOp.
       const realExec = adapters.executeOp;
@@ -1075,7 +1075,7 @@ describe('SnapshotSessionHost', () => {
 
     it('clears all transient state (hint + heatmap) on undo', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1102,7 +1102,7 @@ describe('SnapshotSessionHost', () => {
 
     it('demoControl pause/speed are reflected in broadcast demoControls, and stop cleans up with no leaked timer', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1154,7 +1154,7 @@ describe('SnapshotSessionHost', () => {
 
     it('per-seat hint and heatmap coexist — storing heatmap does not overwrite hint', async () => {
       const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1174,7 +1174,7 @@ describe('SnapshotSessionHost', () => {
 
     it('rejects hint with an actionable error while demoRunning is true', async () => {
       const { adapters } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1195,14 +1195,14 @@ describe('SnapshotSessionHost', () => {
 
   // ── 8. Demo loop (Plan 110-03) ────────────────────────────────────────────
   //
-  // Tests for the AI-vs-AI narrated demo loop in runDemoLoop + handleOp
+  // Tests for the bot-vs-bot narrated demo loop in runDemoLoop + handleOp
   // demoStart/demoStop. Uses fake timers to control the delay between
   // narration and execution.
   //
   // CLAUDE.md hard rule: no timer may remain pending after demo-stop OR
   // after game-over. Verified with vi.getTimerCount() === 0.
   //
-  // DESIGN NOTE: These tests stub the aiSuggest op (returning a deterministic
+  // DESIGN NOTE: These tests stub the botSuggest op (returning a deterministic
   // canned move) to avoid MCTS's internal setImmediate scheduling from
   // conflicting with vi.useFakeTimers(). The real 'action' op still runs
   // through executeOp to advance genuine game state. This approach tests
@@ -1213,10 +1213,10 @@ describe('SnapshotSessionHost', () => {
 
     afterEach(() => vi.useRealTimers());
 
-    // ── makeDemoAdapters: stub aiSuggest, real action execution ───────────────
+    // ── makeDemoAdapters: stub botSuggest, real action execution ───────────────
     //
-    // Stubs aiSuggest to return a deterministic canned move without MCTS.
-    // maxSuggestions: after this many aiSuggest calls, return failure to
+    // Stubs botSuggest to return a deterministic canned move without MCTS.
+    // maxSuggestions: after this many botSuggest calls, return failure to
     // simulate a game reaching its end (no more actable seat).
 
     function makeDemoAdapters(
@@ -1229,7 +1229,7 @@ describe('SnapshotSessionHost', () => {
       const adapters: SnapshotSessionAdapters = {
         playerCount: opts.playerCount,
         executeOp: async (snap, pend, op) => {
-          if (op.type === 'aiSuggest') {
+          if (op.type === 'botSuggest') {
             suggestCount++;
             if (extra.maxSuggestions !== undefined && suggestCount > extra.maxSuggestions) {
               // Simulate no more moves (game-over equivalent)
@@ -1254,7 +1254,7 @@ describe('SnapshotSessionHost', () => {
               isComplete: false,
               winners: [],
               pendingState: null,
-              aiPlayer: 1,
+              botPlayer: 1,
               suggestedAction: 'move',
               suggestedArgs: { direction: 'left' } as Record<string, unknown>,
             };
@@ -1264,7 +1264,7 @@ describe('SnapshotSessionHost', () => {
           return executeOp(botGameDef, opts, snap, pend, op);
         },
         broadcast: (views, meta) => broadcastLog.push([views, meta]),
-        aiSeats: [{ seat: 1 }],
+        botSeats: [{ seat: 1 }],
       };
       return { adapters, broadcastLog };
     }
@@ -1298,7 +1298,7 @@ describe('SnapshotSessionHost', () => {
       // Advance all timers (processes the delay:0 setTimeout in the loop)
       await vi.runAllTimersAsync();
 
-      // With stubs and delay:0, the loop runs until aiSuggest keeps succeeding
+      // With stubs and delay:0, the loop runs until botSuggest keeps succeeding
       // (no maxSuggestions limit) until MAX_DEMO_MOVES. Use demo-stop to stop.
       // Actually the loop runs many iterations. Let's stop it now.
       await host.handleOp(1, { type: 'demoStop' });
@@ -1336,12 +1336,12 @@ describe('SnapshotSessionHost', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    // ── Test 2: self-terminates when aiSuggest fails (game-over simulation) ──
+    // ── Test 2: self-terminates when botSuggest fails (game-over simulation) ──
 
     it('self-terminates when no more moves available (game-over), final broadcast isDemoRunning=false, timer count 0', async () => {
       vi.useFakeTimers();
 
-      // maxSuggestions:2 → loop runs 2 full moves then aiSuggest returns failure
+      // maxSuggestions:2 → loop runs 2 full moves then botSuggest returns failure
       const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 2 });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1349,7 +1349,7 @@ describe('SnapshotSessionHost', () => {
 
       await host.handleOp(1, { type: 'demoStart', delay: 0 });
 
-      // Run all timers: 2 x setTimeout(0) for the 2 move delays, then loop exits on 3rd aiSuggest failure
+      // Run all timers: 2 x setTimeout(0) for the 2 move delays, then loop exits on 3rd botSuggest failure
       await vi.runAllTimersAsync();
 
       // Loop should have self-terminated: demoRunning=false
@@ -1359,7 +1359,7 @@ describe('SnapshotSessionHost', () => {
       const bLast = broadcastState(broadcastLog, broadcastLog.length - 1, 1);
       expect(bLast.isDemoRunning).toBeUndefined();
 
-      // CLAUDE.md hard rule: no pending timer after game-over / aiSuggest failure
+      // CLAUDE.md hard rule: no pending timer after game-over / botSuggest failure
       expect(vi.getTimerCount()).toBe(0);
     });
 
@@ -1385,7 +1385,7 @@ describe('SnapshotSessionHost', () => {
       // Start demo with a 5-second delay
       void host.handleOp(1, { type: 'demoStart', delay: 5000 });
 
-      // Flush microtasks so the loop runs through aiSuggest + narration broadcast
+      // Flush microtasks so the loop runs through botSuggest + narration broadcast
       // and reaches the `await new Promise<void>(...)` with setTimeout(5000).
       for (let i = 0; i < 20; i++) await Promise.resolve();
 
@@ -1429,7 +1429,7 @@ describe('SnapshotSessionHost', () => {
       // Start demo with delay:5000 (stuck at first timer)
       void host.handleOp(1, { type: 'demoStart', delay: 5000 });
 
-      // Let the loop get past aiSuggest and reach the setTimeout
+      // Let the loop get past botSuggest and reach the setTimeout
       for (let i = 0; i < 20; i++) await Promise.resolve();
 
       const broadcastsAfterFirstStart = broadcastLog.length;
@@ -1532,7 +1532,7 @@ describe('SnapshotSessionHost', () => {
 
     it('demoStart throws a lockout error when adapters.teachingDisabled is true', async () => {
       const { adapters } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
         teachingDisabled: true,
       });
       const host = new SnapshotSessionHost(adapters);
@@ -1547,7 +1547,7 @@ describe('SnapshotSessionHost', () => {
 
     it('demoStop succeeds (is not guarded) when teachingDisabled is true', async () => {
       const { adapters } = makeAdapters(botGameDef, botGameOptions, {
-        aiSeats: [{ seat: 2 }],
+        botSeats: [{ seat: 2 }],
         teachingDisabled: true,
       });
       const host = new SnapshotSessionHost(adapters);
@@ -1580,13 +1580,13 @@ describe('SnapshotSessionHost', () => {
     // ── Test (4): state.teachingDisabled === true even with NO other transient state ─
     //
     // This is the critical criterion 4 case: a lockout-only session with no hint/heatmap/
-    // demo/aiSeats must STILL reflect the flag. The hasTransient short-circuit must not
+    // demo/botSeats must STILL reflect the flag. The hasTransient short-circuit must not
     // skip injection for this case.
 
     it('reflects teachingDisabled into broadcast even when there is no other transient state', async () => {
       const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
         teachingDisabled: true,
-        // No aiSeats, no hint/heatmap/demo — pure lockout-only session.
+        // No botSeats, no hint/heatmap/demo — pure lockout-only session.
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();
@@ -1607,7 +1607,7 @@ describe('SnapshotSessionHost', () => {
     it('broadcasts state.teachingDisabled === false when teachingDisabled is absent', async () => {
       // teachingDisabled not set in adapters — must still appear as false in every view.
       const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
-        aiSeats: [{ seat: 2 }], // ensure hasTransient is true so mergeTransientState runs
+        botSeats: [{ seat: 2 }], // ensure hasTransient is true so mergeTransientState runs
       });
       const host = new SnapshotSessionHost(adapters);
       await host.start();

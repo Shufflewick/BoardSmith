@@ -330,7 +330,7 @@ describe('Session Lock released-value rule (180-01 finding 2)', () => {
     expect(stateMachine).toContain('`Session Lock: none` → leading token `none` → **RELEASED**');
     expect(stateMachine).toContain(
       '`Session Lock: (none — final-acceptance closed 2026-07-20; sketch complete except\n' +
-        '    ai-opponent, deferred on BSR-12)`',
+        '    bot-opponent, deferred on BSR-12)`',
     );
     expect(stateMachine).toContain(
       '`Session Lock: "movement @ session-f3a1 — locked at\n    2026-07-31T14:22:00Z"` → leading token `movement` → **LOCK**',
@@ -346,7 +346,7 @@ describe('Session Lock released-value rule (180-01 finding 2)', () => {
 
   it("seven's real cleanly-closed value (verbatim) classifies as RELEASED despite having no parseable lock grammar", () => {
     const seven =
-      '(none — final-acceptance closed 2026-07-20; sketch complete except ai-opponent, deferred on BSR-12)';
+      '(none — final-acceptance closed 2026-07-20; sketch complete except bot-opponent, deferred on BSR-12)';
     expect(classifySessionLockValue(seven)).toBe('released');
   });
 

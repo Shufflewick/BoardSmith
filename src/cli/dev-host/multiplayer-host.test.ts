@@ -35,7 +35,7 @@ const def: GameDefinitionLike = {
 };
 
 // Each seat passes exactly once (no outer loop), then the flow completes →
-// game over. Lets tests observe whether AI played the open seat (isComplete)
+// game over. Lets tests observe whether bot played the open seat (isComplete)
 // and whether the follower borrows the active seat as it rotates.
 class AlternateGame extends Game<AlternateGame, Player> {
   constructor(options: GameOptions) {
@@ -79,13 +79,13 @@ function makeAltHost() {
   return { host, sent, to, has, lastOfType, pass, clear: () => (sent.length = 0) };
 }
 
-function makeHost(opts: { designatedAiSeats?: number[] } = {}) {
+function makeHost(opts: { designatedBotSeats?: number[] } = {}) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: 1,
     makeSeed: () => 'mp',
-    designatedAiSeats: opts.designatedAiSeats,
+    designatedBotSeats: opts.designatedBotSeats,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
@@ -105,8 +105,8 @@ describe('MultiplayerHost (always-live)', () => {
     expect((to('A').find((m) => m.type === 'init') as any).seat).toBe(1);
   });
 
-  it('the auto-seated dev avoids an --ai-designated seat', async () => {
-    const { host, to } = makeHost({ designatedAiSeats: [1] }); // --ai 1
+  it('the auto-seated dev avoids an --bot-designated seat', async () => {
+    const { host, to } = makeHost({ designatedBotSeats: [1] }); // --bot 1
     await host.handleMessage('A', { type: 'hello' });
     // Seat 1 is reserved for the bot, so the dev lands in seat 2.
     expect((to('A').find((m) => m.type === 'init') as any).seat).toBe(2);
@@ -120,7 +120,7 @@ describe('MultiplayerHost (always-live)', () => {
     expect(has('B', 'init')).toBe(false); // B must pick a seat
   });
 
-  it('a second client can take over an open/AI seat mid-game', async () => {
+  it('a second client can take over an open/bot seat mid-game', async () => {
     const { host, has } = makeHost();
     await host.handleMessage('A', { type: 'hello' });
     await host.handleMessage('B', { type: 'hello' });
@@ -199,7 +199,7 @@ describe('MultiplayerHost (always-live)', () => {
     expect(startOps).toBe(1);
   });
 
-  it('leaving a seat mid-game frees it (reverts to open/AI)', async () => {
+  it('leaving a seat mid-game frees it (reverts to open/bot)', async () => {
     const { host, lastOfType } = makeHost();
     await host.handleMessage('A', { type: 'hello' });
     await host.handleMessage('B', { type: 'hello' });
@@ -211,9 +211,9 @@ describe('MultiplayerHost (always-live)', () => {
 });
 
 describe('MultiplayerHost — player configs', () => {
-  it('passes playerConfigs with per-seat isBot to the game (production parity, drives in-flow AI)', async () => {
+  it('passes playerConfigs with per-seat isBot to the game (production parity, drives in-flow bot)', async () => {
     // Games like MERC read options.playerConfigs[seat-1].isBot to decide whether a
-    // seat is AI-controlled in their own flow. The production lobby supplies this;
+    // seat is bot-controlled in their own flow. The production lobby supplies this;
     // the dev host must too, or the game treats the bot seat as a human and the
     // dev host's MCTS later finds "No available moves".
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -223,7 +223,7 @@ describe('MultiplayerHost — player configs', () => {
       playerCount: 2,
       minPlayers: 2,
       makeSeed: () => 'mp',
-      aiLevel: 'hard',
+      botLevel: 'hard',
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
         if (op.type === 'start') startOptions = gameOptions;
         return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
@@ -231,18 +231,18 @@ describe('MultiplayerHost — player configs', () => {
       send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
     });
 
-    await host.handleMessage('A', { type: 'hello' }); // A → seat 1 (human); seat 2 open → AI
+    await host.handleMessage('A', { type: 'hello' }); // A → seat 1 (human); seat 2 open → bot
 
-    const configs = startOptions?.playerConfigs as Array<{ isBot: boolean; aiLevel?: string }> | undefined;
+    const configs = startOptions?.playerConfigs as Array<{ isBot: boolean; botLevel?: string }> | undefined;
     expect(configs).toBeDefined();
     expect(configs?.[0].isBot).toBe(false); // seat 1 = human (A)
-    expect(configs?.[1].isBot).toBe(true); // seat 2 = AI
-    expect(configs?.[1].aiLevel).toBe('hard');
+    expect(configs?.[1].isBot).toBe(true); // seat 2 = bot
+    expect(configs?.[1].botLevel).toBe('hard');
   });
 });
 
 describe('MultiplayerHost — seat stability on reconnect', () => {
-  it('a seated client reconnecting after a failed start keeps its seat (not reassigned to the AI)', async () => {
+  it('a seated client reconnecting after a failed start keeps its seat (not reassigned to the bot)', async () => {
     // Repro: the dev auto-seats into seat 1, the first start fails (or hasn't
     // finished), then the browser reconnects. The reconnecting client must NOT be
     // bumped to another seat — otherwise seat 1 is released and played by a bot
@@ -311,23 +311,23 @@ describe('MultiplayerHost — stale disconnect after reconnect (DEF-C session-la
 });
 
 describe('MultiplayerHost — follow active seat', () => {
-  it('baseline: without follow, AI plays the open seat and the game completes', async () => {
+  it('baseline: without follow, bot plays the open seat and the game completes', async () => {
     const { host, lastOfType, pass } = makeAltHost();
-    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = AI
-    await pass('A', 'r1'); // A passes seat 1 → AI passes seat 2 → flow completes
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = bot
+    await pass('A', 'r1'); // A passes seat 1 → bot passes seat 2 → flow completes
     expect(lastOfType('A', 'game_state').isComplete).toBe(true);
   });
 
-  it('enabling follow pauses AI and lets one client drive both seats', async () => {
+  it('enabling follow pauses bot and lets one client drive both seats', async () => {
     const { host, lastOfType, pass, clear } = makeAltHost();
-    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = AI
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = bot
     clear();
 
     // Enable follow while seat 1 (A's own seat) is active.
     await host.handleMessage('A', { type: 'follow', enabled: true });
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: true, seat: 1 });
 
-    // A passes as seat 1. AI must NOT play seat 2 — instead the follower is
+    // A passes as seat 1. bot must NOT play seat 2 — instead the follower is
     // handed seat 2 (init seat 2) and the game is NOT complete.
     clear();
     await pass('A', 'r1');
@@ -358,14 +358,14 @@ describe('MultiplayerHost — follow active seat', () => {
     expect(resp).toBeDefined();
   });
 
-  it('disabling follow mid-game resumes AI for the open seat', async () => {
+  it('disabling follow mid-game resumes bot for the open seat', async () => {
     const { host, lastOfType, pass, clear } = makeAltHost();
     await host.handleMessage('A', { type: 'hello' });
     await host.handleMessage('A', { type: 'follow', enabled: true });
-    await pass('A', 'r1'); // seat 1 passed; now seat 2 is active, AI paused
+    await pass('A', 'r1'); // seat 1 passed; now seat 2 is active, bot paused
     clear();
 
-    // Disable while seat 2 is active → seat 2 reverts to AI, which passes →
+    // Disable while seat 2 is active → seat 2 reverts to bot, which passes →
     // flow completes.
     await host.handleMessage('A', { type: 'follow', enabled: false });
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
@@ -653,8 +653,8 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
 
   it("CHARACTERIZATION (already passes pre-fix): a {type:'restart'} sent to a FINISHED game restarts with a fresh runner+seed (the guard never rejected this)", async () => {
     const { host, lastOfType, pass, seeds } = makeAltHostWithSeedCapture();
-    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = AI
-    await pass('A', 'r1'); // A passes seat 1 → AI passes seat 2 → flow completes
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = bot
+    await pass('A', 'r1'); // A passes seat 1 → bot passes seat 2 → flow completes
     expect(lastOfType('A', 'game_state').isComplete).toBe(true);
     expect(seeds).toHaveLength(1);
 

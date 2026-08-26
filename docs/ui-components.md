@@ -343,7 +343,7 @@ function handleCreate(config: { gameOptions: Record<string, unknown>; playerConf
 The lobby automatically:
 - Fetches game definition from `/games/definitions` endpoint
 - Renders game options (number inputs, selects, toggles)
-- Renders per-player configuration (name, AI toggle, color picker)
+- Renders per-player configuration (name, bot toggle, color picker)
 - Shows preset cards for quick setup
 - Validates player count against game limits
 
@@ -370,13 +370,13 @@ Supports three option types:
 
 ### PlayerConfigList
 
-Per-player configuration with AI toggle and custom options.
+Per-player configuration with bot toggle and custom options.
 
 ```vue
 <template>
   <PlayerConfigList
     :player-count="2"
-    :has-ai="true"
+    :has-bot="true"
     :player-options="gameDefinition.playerOptions"
     v-model="playerConfigs"
   />
@@ -385,7 +385,7 @@ Per-player configuration with AI toggle and custom options.
 
 Features:
 - Player name input
-- AI toggle with level selector (when game has AI)
+- bot toggle with level selector (when game has bot)
 - Dynamic rendering of per-player options (color picker, role select, etc.)
 - Shows taken options as disabled with visual indicator
 - Exclusive options render as radio buttons (exactly one player can be selected)

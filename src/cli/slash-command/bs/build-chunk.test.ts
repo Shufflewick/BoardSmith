@@ -755,7 +755,7 @@ describe('BUILD-09 — playtest', () => {
   it('documents the numbered click-by-click script with seat counts and dev-host affordances taught once', () => {
     const playtest = read('build/playtest.md');
     expect(playtest).toContain('npx boardsmith dev');
-    expect(playtest).toContain('--ai');
+    expect(playtest).toContain('--bot');
     expect(playtest).toMatch(/seat count/i);
     expect(playtest).toMatch(/taught once/i);
   });
@@ -1368,11 +1368,11 @@ describe('SKILLAUTO-05 — auto-advance', () => {
     expect(buildChunk).toMatch(/crash\/context-fallback resume/i);
   });
 
-  it('state-machine.md and build/close.md state the session auto-advances into the next chunk and the next logical step (generate-AI → final-acceptance)', () => {
+  it('state-machine.md and build/close.md state the session auto-advances into the next chunk and the next logical step (generate-bot → final-acceptance)', () => {
     const stateMachine = read('state-machine.md');
     const close = read('build/close.md');
     expect(stateMachine).toMatch(/auto-advance/i);
-    expect(stateMachine).toMatch(/generate-AI\s*(→|->)\s*final-acceptance/i);
+    expect(stateMachine).toMatch(/generate-bot\s*(→|->)\s*final-acceptance/i);
     expect(close).toMatch(/auto-advance/i);
   });
 

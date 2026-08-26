@@ -1223,7 +1223,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       const registeredClasses = Array.from(classRegistry.keys()).join(', ');
       throw new Error(
         `Unknown element class: "${json.className}"\n\n` +
-        `This error occurs when deserializing game state (e.g., after restart, undo, or AI move).\n\n` +
+        `This error occurs when deserializing game state (e.g., after restart, undo, or bot move).\n\n` +
         `Registered classes: ${registeredClasses || '(none)'}\n\n` +
         `To fix this, register the class in your Game constructor:\n` +
         `  this.registerElements([${json.className}, ...]);\n\n` +

@@ -25,8 +25,8 @@ export interface PendingActionCallbacks {
   save(): Promise<void>;
   /** Broadcast state updates to all clients */
   broadcast(): void;
-  /** Schedule an AI check (non-blocking) */
-  scheduleAICheck(): void;
+  /** Schedule a bot check (non-blocking) */
+  scheduleBotCheck(): void;
 }
 
 /**
@@ -350,7 +350,7 @@ export class PendingActionManager<G extends Game = Game> {
     if (actionResult.success) {
       // Route the completed pending action through the same recording funnel as
       // performAction so actionHistory is the single source of truth for what
-      // happened (replay, undo counts, and AI history all read it).
+      // happened (replay, undo counts, and bot history all read it).
       this.#runner.recordSerializedAction(serializedAction);
       this.#runner.game.continueFlowAfterPendingAction(actionResult);
       this.#storedState.actionHistory = this.#runner.actionHistory;
@@ -360,7 +360,7 @@ export class PendingActionManager<G extends Game = Game> {
       }
 
       this.#callbacks.broadcast();
-      this.#callbacks.scheduleAICheck();
+      this.#callbacks.scheduleBotCheck();
     }
 
     const flowState = this.#runner.getFlowState();

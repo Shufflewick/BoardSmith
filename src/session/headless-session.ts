@@ -9,7 +9,7 @@ import type { SnapshotSessionAdapters } from './snapshot-session-host.js';
  *
  * That is correct here and ONLY here: this is an in-process driver that
  * composes and submits in the same tick, so there is no interval for a round to
- * close in — the same standing the AI pump and the demo loop have
+ * close in — the same standing the bot pump and the demo loop have
  * (docs/simultaneous-and-interrupt-semantics.md §7). It is NOT a way to opt out
  * of the token: an explicitly supplied key is forwarded verbatim, which is how
  * `stale-submission.test.ts` submits a key that is deliberately not current.
@@ -32,7 +32,7 @@ type BroadcastMeta = Parameters<SnapshotSessionAdapters['broadcast']>[1];
  * throws exactly as postMessage would in the production iframe.
  *
  * Use this to run a game headlessly (no server, no browser) with seed control
- * and optional AI seats — e.g. for scripted simulation, agent-driven testing,
+ * and optional bot seats — e.g. for scripted simulation, agent-driven testing,
  * or reproducing a bug from a fixed seed.
  *
  * @example
@@ -43,7 +43,7 @@ type BroadcastMeta = Parameters<SnapshotSessionAdapters['broadcast']>[1];
  * const session = createHeadlessSession(
  *   gameDefinition,
  *   { playerCount: 2, seed: 'demo' },
- *   [{ seat: 2, level: 'easy' }], // seat 2 is AI-driven
+ *   [{ seat: 2, level: 'easy' }], // seat 2 is bot-driven
  * );
  *
  * await session.start();
@@ -63,25 +63,25 @@ type BroadcastMeta = Parameters<SnapshotSessionAdapters['broadcast']>[1];
 export function createHeadlessSession(
   def: GameDefinitionLike,
   gameOptions: { playerCount: number; seed?: string },
-  aiSeats: Array<{ seat: number; level?: string }> = [],
+  botSeats: Array<{ seat: number; level?: string }> = [],
 ) {
   const broadcasts: unknown[] = [];
   const metas: BroadcastMeta[] = [];
   // The roster is a LIVE list this harness owns, handed to the host through a
-  // GETTER — the same shape the platform DO supplies (`get aiSeats()` over
-  // `slots[].isBot` + `mindedSeats`). The positional `aiSeats` argument seeds it;
-  // it is not its identity, so `makeSeatAI` below can change it mid-game.
+  // GETTER — the same shape the platform DO supplies (`get botSeats()` over
+  // `slots[].isBot` + `mindedSeats`). The positional `botSeats` argument seeds it;
+  // it is not its identity, so `makeSeatBot` below can change it mid-game.
   //
   // Before this, the argument was passed straight through as a frozen array and
-  // "seat 2 became AI at move 7" was not expressible in the engine's own harness
+  // "seat 2 became bot at move 7" was not expressible in the engine's own harness
   // at all — which is why nothing had ever asserted that the engine plays a
   // converted seat, even though the pump re-reads the roster on every iteration
   // and always could.
-  const aiRoster: Array<{ seat: number; level?: string }> = [...aiSeats];
+  const botRoster: Array<{ seat: number; level?: string }> = [...botSeats];
   const host = new SnapshotSessionHost({
     playerCount: gameOptions.playerCount,
-    get aiSeats() {
-      return aiRoster;
+    get botSeats() {
+      return botRoster;
     },
     executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op),
     broadcast: (views, meta) => {
@@ -106,20 +106,20 @@ export function createHeadlessSession(
      */
     metas,
     /**
-     * Record on the ROSTER that `seat` is now AI-driven, exactly as the platform
+     * Record on the ROSTER that `seat` is now bot-driven, exactly as the platform
      * DO's `mindSeats` flips `slots[seat].isBot`.
      *
      * This is HALF of a conversion and deliberately does nothing on its own: the
      * roster is the adapter's, and the engine is told about the change by the
-     * `convertSeatToAI` op, which is also what wakes the pump. Flipping the
+     * `convertSeatToBot` op, which is also what wakes the pump. Flipping the
      * roster and never sending the op leaves the table parked — send the op.
      * Sending the op without flipping the roster is refused loudly.
      *
      * Idempotent: a seat already on the roster keeps its existing entry.
      */
-    makeSeatAI(seat: number, level?: string) {
-      if (aiRoster.some((s) => s.seat === seat)) return;
-      aiRoster.push({ seat, level });
+    makeSeatBot(seat: number, level?: string) {
+      if (botRoster.some((s) => s.seat === seat)) return;
+      botRoster.push({ seat, level });
     },
     async start() {
       await host.start();

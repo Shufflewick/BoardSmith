@@ -8,7 +8,7 @@ import type { GameDefinitionLike } from './stateless-ops.js';
  * Public-path tests for `createHeadlessSession` (boardsmith/session).
  *
  * Proves the three contract guarantees a headless simulation driver depends on:
- * seeded determinism, AI seats acting on their own, and a normal action op
+ * seeded determinism, bot seats acting on their own, and a normal action op
  * round-trip. All assertions run against the PUBLIC `./headless-session.js`
  * import — never the removed `testing/headless-harness.js` path.
  */
@@ -80,23 +80,23 @@ describe('createHeadlessSession (public path)', () => {
     expect(new Set(rollsA).size).toBeGreaterThan(1);
   });
 
-  it('drives AI seats without an explicit send() for that seat', async () => {
-    const opts = { playerCount: 2, seed: 'ai-seat-seed' };
+  it('drives bot seats without an explicit send() for that seat', async () => {
+    const opts = { playerCount: 2, seed: 'bot-seat-seed' };
     const session = createHeadlessSession(eachPlayerFixtureDefinition, opts, [{ seat: 2, level: 'easy' }]);
     await session.start();
 
     const broadcastsBefore = session.broadcasts.length;
 
-    // Only seat 1 is driven explicitly. The host's AI pump
-    // (SnapshotSessionHost.runAITurns) fires automatically after this action
-    // because seat 2 is due next and is registered as an AI seat.
+    // Only seat 1 is driven explicitly. The host's bot pump
+    // (SnapshotSessionHost.runBotTurns) fires automatically after this action
+    // because seat 2 is due next and is registered as a bot seat.
     const result = await session.send(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
     expect(result.success).toBe(true);
 
-    // Two broadcasts occurred: seat 1's action, then seat 2's automatic AI move.
+    // Two broadcasts occurred: seat 1's action, then seat 2's automatic bot move.
     expect(session.broadcasts.length).toBeGreaterThan(broadcastsBefore + 1);
 
-    // The 2-player eachPlayer loop rotates 1 -> 2(AI) -> 1, so the final
+    // The 2-player eachPlayer loop rotates 1 -> 2(bot) -> 1, so the final
     // broadcast shows play back on seat 1 without any session.send(2, ...) call.
     const lastBroadcast = session.broadcasts[session.broadcasts.length - 1] as Array<{
       flowState?: { currentPlayer?: number };

@@ -149,7 +149,7 @@ export function buildPickMetadata(
 
       // Resolve multiSelect (static or function-valued) via the SAME shared
       // helper enumeration uses, so the panel and MCTS never disagree
-      // (AI-01 / C.2). A concrete result emits base.multiSelect so the
+      // (bot-01 / C.2). A concrete result emits base.multiSelect so the
       // checkbox widget engages; undefined legitimately omits it.
       const resolvedChoiceMultiSelect = resolveMultiSelect(selection, ctx);
       if (resolvedChoiceMultiSelect !== undefined) {
@@ -199,7 +199,7 @@ export function buildPickMetadata(
 
       // Resolve multiSelect (static or function-valued) via the SAME shared
       // helper enumeration uses, so the panel and MCTS never disagree
-      // (AI-01 / C.2). A concrete result emits base.multiSelect so the
+      // (bot-01 / C.2). A concrete result emits base.multiSelect so the
       // checkbox widget engages; undefined legitimately omits it.
       const resolvedElementsMultiSelect = resolveMultiSelect(selection, ctx);
       if (resolvedElementsMultiSelect !== undefined) {

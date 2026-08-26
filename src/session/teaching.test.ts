@@ -23,7 +23,7 @@ import {
 import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
 import type { PlayerGameState, BroadcastAdapter } from './types.js';
-import type { AIConfig } from '../ai/index.js';
+import type { BotStrategy } from '../bot/index.js';
 
 // ============================================
 // Minimal test game: two players, choose from 3 options per turn.
@@ -180,7 +180,7 @@ describe('teaching state — requestHint / clearHint', () => {
     // Fire two concurrent requests — second must be rejected loudly
     const first = hint.requestHint(1);
     await expect(hint.requestHint(1)).rejects.toThrow('Hint already in progress for seat 1');
-    // Let the first finish (may succeed or fail depending on AI availability)
+    // Let the first finish (may succeed or fail depending on bot availability)
     await first.catch(() => {});
   });
 
@@ -326,9 +326,9 @@ describe('teaching state — heatmap', () => {
   // The hint is cleared as stale on each action; the heatmap is instead
   // recomputed for whoever is now on turn and cleared for seats that are not.
   it('clears a visible heatmap off-turn and recomputes it when the seat is on turn again', async () => {
-    // botAIConfig with hintTargetFromMove so 'pick' choices yield cell refs →
+    // botStrategy with hintTargetFromMove so 'pick' choices yield cell refs →
     // non-empty heatmap entries (the default makeSession() game produces none).
-    const heatmapAI: AIConfig = {
+    const heatmapBot: BotStrategy = {
       objectives: () => ({ moves: { checker: () => 0.5, weight: 1 } }),
       hintTargetFromMove: (move) => {
         const opt = (move.args as { option?: string }).option;
@@ -341,7 +341,7 @@ describe('teaching state — heatmap', () => {
       playerCount: 2,
       playerNames: ['Alice', 'Bob'],
       seed: 'test',
-      botAIConfig: heatmapAI,
+      botStrategy: heatmapBot,
     });
     const captured: CapturedState[] = [];
     session.setBroadcaster(makeMockBroadcaster([{ playerSeat: 1, isSpectator: false }], captured));
@@ -443,7 +443,7 @@ describe('demo mode — startDemo / stopDemo / isDemoRunning', () => {
       narrator: (action, player) => `Seat ${player}: ${action}`,
     });
 
-    // Wait for at least one AI move to be announced
+    // Wait for at least one bot move to be announced
     await new Promise(resolve => setTimeout(resolve, 800));
 
     (session as unknown as DemoSession).stopDemo();
@@ -457,8 +457,8 @@ describe('demo mode — startDemo / stopDemo / isDemoRunning', () => {
     }
   });
 
-  it('stopDemo restores the original AI controller and clears narration', () => {
-    // Session created WITHOUT AI config — aiController is undefined
+  it('stopDemo restores the original bot controller and clears narration', () => {
+    // Session created WITHOUT bot config — botController is undefined
     const session = makeSession();
     const captured: CapturedState[] = [];
     const broadcaster = makeMockBroadcaster(
@@ -467,11 +467,11 @@ describe('demo mode — startDemo / stopDemo / isDemoRunning', () => {
     );
     session.setBroadcaster(broadcaster);
 
-    // Start demo (sets a demo AI controller)
+    // Start demo (sets a demo bot controller)
     (session as unknown as DemoSession).startDemo({ delay: 0 });
     expect((session as unknown as DemoSession).isDemoRunning).toBe(true);
 
-    // Stop demo — should restore the original (undefined) AI controller
+    // Stop demo — should restore the original (undefined) bot controller
     (session as unknown as DemoSession).stopDemo();
     expect((session as unknown as DemoSession).isDemoRunning).toBe(false);
 
@@ -486,7 +486,7 @@ describe('demo mode — startDemo / stopDemo / isDemoRunning', () => {
 // ============================================
 
 describe('demo mode — double-startDemo idempotency (WR-01)', () => {
-  it('second startDemo() call is a no-op and does not corrupt #savedAIController', () => {
+  it('second startDemo() call is a no-op and does not corrupt #savedBotController', () => {
     const session = makeSession();
     const demo = session as unknown as DemoSession;
 
@@ -495,7 +495,7 @@ describe('demo mode — double-startDemo idempotency (WR-01)', () => {
     expect(demo.isDemoRunning).toBe(true);
 
     // Second call must be a no-op. If it ran, it would save the demo controller
-    // as #savedAIController, then stopDemo() would restore the wrong controller.
+    // as #savedBotController, then stopDemo() would restore the wrong controller.
     demo.startDemo({ delay: 0 });
 
     // stopDemo must leave the session NOT in demo mode.
@@ -679,7 +679,7 @@ describe('demo mode — default narrator formats object args (WR-06)', () => {
 
     // Use a custom narrator that explicitly passes an object as an arg to test
     // the default formatter path — supply a custom narrator that mimics the
-    // default but receives args from an actual AI move.
+    // default but receives args from an actual bot move.
     // Instead, verify the default narrator wouldn't produce "[object Object]":
     // inject a synthetic narrator check by mocking at the closure level.
     let observedNarration: string | undefined;
@@ -699,7 +699,7 @@ describe('demo mode — default narrator formats object args (WR-06)', () => {
       },
     });
 
-    // Wait for at least one AI move
+    // Wait for at least one bot move
     await new Promise(resolve => setTimeout(resolve, 800));
     (session as unknown as DemoSession).stopDemo();
 

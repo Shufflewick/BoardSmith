@@ -279,14 +279,14 @@ describe("#18 order-entry sessions (hostOptions.randomness: 'forbidden')", () =>
     expect(await play(['move', 'note'])).toBe(await play(['note', 'move']));
   });
 
-  it('refuses an AI turn up front — bot playouts consume randomness', async () => {
+  it('refuses a bot turn up front — bot playouts consume randomness', async () => {
     const s = statelessSession(unfencedScumDefinition, soloOptions, forbidden);
     expect((await s.send({ type: 'start' })).success).toBe(true);
 
-    const ai = await s.send({ type: 'aiTurn', seats: [{ seat: 1, level: 'easy' }] } as Op);
-    expect(ai.success).toBe(false);
-    expect(ai.error).toMatch(/order-entry session/);
-    expect(ai.error).toMatch(/randomness/);
+    const bot = await s.send({ type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] } as Op);
+    expect(bot.success).toBe(false);
+    expect(bot.error).toMatch(/order-entry session/);
+    expect(bot.error).toMatch(/randomness/);
   });
 
   it('refuses a draw made in the GAME CONSTRUCTOR, before start() returns', async () => {

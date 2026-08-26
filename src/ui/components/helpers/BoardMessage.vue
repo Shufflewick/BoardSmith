@@ -60,7 +60,7 @@ withDefaults(
      * - `'default'` (default): pill chip centered in the board — the turn-prompt form.
      * - `'annotation'`: left-aligned prose card (--bsg-r-md, --bsg-shadow, caret)
      *   for tutorial annotation bubbles. Requires `anchorStyle` to position the card.
-     * - `'narration'`: centered card anchored top of the board area for AI demo
+     * - `'narration'`: centered card anchored top of the board area for bot demo
      *   pre-move announcements (z-10, --bsg-surface-3, --bsg-r-md card shape).
      *   Renders text as plain interpolation only (T-107-08).
      */
@@ -204,9 +204,9 @@ withDefaults(
   position: relative; /* anchors the caret pseudo-element / span */
 }
 
-/* ── Narration variant: centered AI demo announcement card ────────────────── */
+/* ── Narration variant: centered bot demo announcement card ────────────────── */
 /*
- * Displays the pre-move announcement during the AI demo (AI-02). Sits at the
+ * Displays the pre-move announcement during the bot demo (bot-02). Sits at the
  * top of the board area, horizontally centered, above turn-prompt (z-5) but
  * below heatmap (z-15) and tutorial ring (z-20).
  *

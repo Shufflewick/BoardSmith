@@ -1,0 +1,287 @@
+import type { Game, FlowState, ElementRef, GamePhase } from '../engine/index.js';
+
+/**
+ * Configuration options for the MCTS bot
+ */
+export interface BotConfig {
+  /**
+   * CEILING on MCTS iterations (higher = stronger but slower). Default: 1000.
+   *
+   * Not a guarantee: `timeout` can cut the search short, in which case fewer
+   * iterations actually run. Pair with `timeout: Infinity` when you need
+   * exactly this many (see `seed`).
+   */
+  iterations: number;
+  /** Maximum playout depth before evaluating position. Default: 50 */
+  playoutDepth: number;
+  /**
+   * Random seed for reproducible behavior.
+   *
+   * A seed alone is NOT enough for reproducibility: `timeout` is wall-clock, so
+   * a seeded search still returns different moves on different machines, or
+   * under different load, whenever it runs long enough to be cut short. For a
+   * genuinely deterministic search (tests, tactical fixtures, benchmarks) set
+   * `timeout: Infinity` as well, so the run is bounded only by `iterations`.
+   */
+  seed?: string;
+  /** Run async to yield to event loop (prevents UI freezing). Default: true */
+  async?: boolean;
+  /**
+   * Wall-clock ceiling in milliseconds; the search returns the best move found
+   * so far once it is hit. Default: 2000.
+   *
+   * This is a responsiveness failsafe, and it OVERRIDES `iterations` — a slow
+   * game can have most of its requested iterations silently cut. Pass
+   * `Infinity` to disable it and make the search depend only on `iterations`.
+   */
+  timeout?: number;
+  /** Enable transposition table caching for position evaluations. Default: true */
+  useTranspositionTable?: boolean;
+  /** Number of parallel ensemble searches. Default: 1 */
+  parallel?: number;
+  /** Enable RAVE (Rapid Action Value Estimation) for faster move learning. Default: true */
+  useRAVE?: boolean;
+  /** RAVE beta decay constant - higher values trust RAVE longer. Default: 500 */
+  raveK?: number;
+  /**
+   * Static UCT exploration constant override.
+   * Default: Math.sqrt(2) ≈ 1.41, theoretically optimal for minimax.
+   * Higher values (e.g., 2.0) favor exploration - better for early game.
+   * Lower values (e.g., 0.5) favor exploitation - better for late game.
+   * Typical range: 0.5 (very exploitative) to 2.0 (very explorative).
+   */
+  uctC?: number;
+  /** Enable Proof Number Search for detecting forced wins/losses. Default: true */
+  usePNS?: boolean;
+  /** Weight for proof number ranking in UCB formula (0-1). Default: 0.5 */
+  pnWeight?: number;
+  /** Enable debug logging for proof number statistics. Default: false */
+  debug?: boolean;
+}
+
+/**
+ * A move the bot can make
+ */
+export interface BotMove {
+  /** The action name to perform */
+  action: string;
+  /** The arguments for the action */
+  args: Record<string, unknown>;
+}
+
+/**
+ * Per-candidate evaluation stats from a completed MCTS search.
+ * Returned by MCTSBot.playWithStats() for hint + heatmap features.
+ */
+export interface BotMoveStats {
+  /** The candidate move */
+  move: BotMove;
+  /** Visit count for this child node — proportional to confidence */
+  visits: number;
+  /** Normalized win-rate [0, 1] — 1.0 = certain win, 0.0 = certain loss */
+  value: number;
+}
+
+/**
+ * Internal node in the MCTS search tree
+ *
+ * Uses path-based state management: nodes track the number of commands
+ * executed to reach them from their parent, enabling efficient undo-based
+ * state rollback instead of full snapshot restoration.
+ */
+export interface MCTSNode {
+  /** Flow state at this node (small, kept as snapshot) */
+  flowState: FlowState;
+  /**
+   * `searchGame.phase` captured at this node's creation (v4.8-MCTS-UNDO).
+   * `game.finish()` / `continueFlow`'s terminal-completion path set `phase`
+   * as a plain property mutation, OUTSIDE the command system that
+   * `undoCommands` reverts -- so it is captured per-node here and resynced
+   * to the root node's value after every `backpropagateWithUndo` call
+   * (see `restoreNodeBookkeeping`), instead of leaking forward across
+   * search iterations.
+   */
+  phase: GamePhase;
+  /**
+   * `searchGame.settings.winners` captured at this node's creation. Same
+   * rationale as `phase` -- `game.finish()` sets it as a plain property.
+   */
+  winners: number[] | undefined;
+  /** Parent node (null for root) */
+  parent: MCTSNode | null;
+  /** Move that led to this node from parent */
+  parentMove: BotMove | null;
+  /** Number of commands executed to reach this state from parent */
+  commandCount: number;
+  /** Child nodes that have been explored */
+  children: MCTSNode[];
+  /** All legal moves at this position (cached, enumerated once per node) */
+  allMoves: BotMove[];
+  /** Moves that haven't been tried yet (subset of allMoves) */
+  untriedMoves: BotMove[];
+  /** Number of times this node has been visited */
+  visits: number;
+  /** Cumulative value (wins) from this node */
+  value: number;
+  /** Which player is to move at this node */
+  currentPlayer: number;
+  /** Leaves needed to prove this subtree is a win (lower = easier to prove win) */
+  proofNumber: number;
+  /** Leaves needed to disprove this subtree (lower = easier to prove loss) */
+  disproofNumber: number;
+  /** True if this subtree is solved as a win */
+  isProven: boolean;
+  /** True if this subtree is solved as a loss/draw */
+  isDisproven: boolean;
+}
+
+/**
+ * An objective that guides bot decision-making during playouts
+ */
+export interface Objective {
+  /**
+   * Evaluate how well this objective is achieved.
+   * Returns 0.0 to 1.0 where 0=not achieved, 1=fully achieved,
+   * values between for partial achievement.
+   */
+  checker: (game: Game, playerIndex: number) => number;
+  /** Weight for this objective (positive = good for player, negative = bad) */
+  weight: number;
+}
+
+/**
+ * Result from threat response analysis
+ */
+export interface ThreatResponse {
+  /** Moves that address the threat */
+  moves: BotMove[];
+  /** If true, one of these moves MUST be taken (opponent about to win) */
+  urgent: boolean;
+}
+
+/**
+ * bot configuration that can be attached to a game definition
+ */
+export interface BotStrategy {
+  /**
+   * Optional objectives function to guide bot decisions.
+   * Returns objectives that give partial credit during playouts.
+   */
+  objectives?: (game: Game, playerIndex: number) => Record<string, Objective>;
+
+  /**
+   * Optional function to identify threat response moves.
+   * When opponent has immediate threats, returns moves that address the threat.
+   *
+   * Returns { moves, urgent }:
+   * - moves: Array of moves that block/address the threat
+   * - urgent: If true, opponent is about to win and we MUST pick one of these moves
+   *
+   * When urgent=false, moves are prioritized for exploration but MCTS still evaluates all options.
+   * When urgent=true, MCTS only considers these moves (forces defensive play).
+   *
+   * @param game - Current game state
+   * @param playerIndex - Which player the bot is (1-indexed position)
+   * @param availableMoves - All legal moves at this position
+   * @returns ThreatResponse with moves and urgency flag
+   */
+  threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
+
+  /**
+   * Optional function for smart move selection during MCTS playouts.
+   * Instead of random move selection, use game-specific heuristics.
+   *
+   * For connection games like Hex, this enables path-based strategy:
+   * - Prefer moves that shorten own winning path
+   * - Prefer moves that lengthen opponent's path
+   * - Build coherent connected structures
+   *
+   * @param game - Current game state
+   * @param playerIndex - Which player is moving (1-indexed position)
+   * @param availableMoves - Legal moves to choose from
+   * @param rng - Random number generator (0-1) for weighted selection
+   * @returns Selected move (should use weighted-random, not deterministic)
+   */
+  playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
+
+  /**
+   * Optional function to order moves by heuristic value for exploration.
+   * Returns moves sorted by priority (highest first) to explore promising moves early.
+   * Unlike threatResponseMoves (which forces specific moves), this is soft ordering:
+   * MCTS still explores all moves, just in a better order.
+   *
+   * Typical ordering heuristics:
+   * - Moves near opponent's recent pieces (contest territory)
+   * - Moves adjacent to own stones (connectivity)
+   * - Moves in central regions (early game)
+   *
+   * @param game - Current game state
+   * @param playerIndex - Which player the bot is (1-indexed position)
+   * @param moves - Available moves to order
+   * @returns Moves sorted by priority (explore first → last)
+   */
+  moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
+
+  /**
+   * Optional function to map the chosen move to its target element for hint and
+   * heatmap anchoring. Return an `ElementRef` (id/notation/name) identifying the
+   * destination cell so the overlay can highlight the right board element.
+   *
+   * Defaults to common destination arg-name extraction at the session layer
+   * (tries `to`, `destination`, `target`, `square`, `cell`, `position` in order).
+   * Provide this override when the game uses non-standard arg names.
+   *
+   * @param move - The chosen move from the MCTS search
+   * @returns The target element reference, or `undefined` to fall back to session-layer extraction
+   */
+  hintTargetFromMove?: (move: BotMove) => ElementRef | undefined;
+
+  /**
+   * Optional function for dynamic UCT exploration constant based on game state.
+   * Called once per move selection (not per tree node) for performance.
+   *
+   * Default: Math.sqrt(2) ≈ 1.41, theoretically optimal for minimax.
+   * Higher values (e.g., 1.8-2.0) favor exploration - better for early game.
+   * Lower values (e.g., 0.8-1.0) favor exploitation - better for late game.
+   *
+   * Example phase-based tuning:
+   * - Early game (0-30% filled): C=1.8 (explore diverse strategies)
+   * - Mid game (30-70% filled): C=sqrt(2) (balanced)
+   * - Late game (70%+ filled): C=1.0 (focus on winning lines)
+   *
+   * @param game - Current game state
+   * @param playerIndex - Which player the bot is (1-indexed position)
+   * @returns UCT exploration constant (typical range: 0.5 to 2.0)
+   */
+  uctConstant?: (game: Game, playerIndex: number) => number;
+}
+
+/**
+ * Default bot configuration
+ */
+export const DEFAULT_CONFIG: BotConfig = {
+  iterations: 300,
+  playoutDepth: 3, // Simulate 3 random moves ahead before evaluating
+  async: true,
+  timeout: 2000,
+};
+
+/**
+ * Preset difficulty levels
+ *
+ * With objectives-based evaluation:
+ * - playoutDepth controls how many random moves to simulate before evaluating
+ * - Higher playoutDepth helps discover forcing sequences but takes longer
+ * - Higher iterations explore more of the search space
+ * - Timeout acts as safety net for large branching factors
+ */
+export const DIFFICULTY_PRESETS: Record<string, Partial<BotConfig>> = {
+  easy: { iterations: 100, playoutDepth: 2, timeout: 1000 },
+  medium: { iterations: 300, playoutDepth: 3, timeout: 1500 },
+  hard: { iterations: 500, playoutDepth: 4, timeout: 2000, parallel: 2 },
+};
+
+/**
+ * Difficulty level type
+ */
+export type DifficultyLevel = keyof typeof DIFFICULTY_PRESETS;

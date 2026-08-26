@@ -7,7 +7,7 @@ import type { ElementContext, ElementClass, ElementFinder, ElementJSON } from '.
  * Seat liveness, as the engine understands it.
  *
  * This is the ONLY seat-state vocabulary the engine acts on — `TurnOrder.ACTIVE_ONLY`
- * filters on it, and hosts/AI controllers can read it without knowing a game's rules.
+ * filters on it, and hosts/bot controllers can read it without knowing a game's rules.
  * Anything finer-grained (folded, stunned, passed-this-round) is game state and
  * belongs on your own `Player` subclass; do not overload these three.
  *

@@ -40,7 +40,7 @@ This document provides an overview of the BoardSmith package architecture and ho
 │       ├──────────────────┬──────────────────┐                               │
 │       ▼                  ▼                  ▼                               │
 │  ┌─────────┐        ┌─────────┐        ┌─────────┐                          │
-│  │   ai    │        │ session │        │ testing │                          │
+│  │   bot   │        │ session │        │ testing │                          │
 │  └────┬────┘        └────┬────┘        └─────────┘                          │
 │       │                  │              - Test fixtures                     │
 │  MCTS bot                │              - Assertions                        │
@@ -49,10 +49,10 @@ This document provides an overview of the BoardSmith package architecture and ho
 │       │                  │                                                  │
 │       ▼                  │                                                  │
 │  ┌────────────┐          │  Game session management                         │
-│  │ ai-trainer │          │  - GameSession (create, performAction)           │
+│  │ bot-trainer│          │  - GameSession (create, performAction)           │
 │  └────────────┘          │  - Storage adapters                              │
 │  - Self-play training    │  - Broadcast adapters                            │
-│  - Feature generation    │  - AI controller                                 │
+│  - Feature generation    │  - Bot controller                                 │
 │  - Code generation       │  - Lobby system                                  │
 │                          │                                                  │
 │                          ├──────────────────┐                              │
@@ -65,7 +65,7 @@ This document provides an overview of the BoardSmith package architecture and ho
 │                     - build                 │                              │
 │                     - test          client connects over WebSocket to a    │
 │                     - validate      host PROVIDED BY THE DEPLOYMENT         │
-│                     - evolve-ai     PLATFORM — BoardSmith ships no server   │
+│                     - evolve-bot    PLATFORM — BoardSmith ships no server   │
 │                     - publish       or worker module (see Runtime          │
 │                                     Isolation below).                       │
 │                                             │                              │
@@ -244,8 +244,8 @@ the deployment platform that hosts the session (see Runtime Isolation below).
 | `session` | Session management | `GameSession`, adapter interfaces |
 | `client` | Browser SDK | `MeepleClient`, `GameConnection` |
 | `ui` | Vue components | `GameShell`, composables |
-| `ai` | MCTS bot | `createBot`, `MCTSBot` |
-| `ai-trainer` | AI training | `trainAI`, `introspectGame` |
+| `bot` | MCTS bot | `createBot`, `MCTSBot` |
+| `bot-trainer` | Bot training | `trainBot`, `introspectGame` |
 | `cli` | Dev tools | Commands (init, dev, build, etc.) |
 | `testing` | Test utilities | `createTestGame`, assertions |
 | `eslint-plugin` | Linting rules | Sandbox security rules |

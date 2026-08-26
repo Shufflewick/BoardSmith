@@ -477,7 +477,7 @@ onUnmounted(() => {
         </header>
 
         <p class="lobby__hint">
-          This game is in progress — pick an open seat to join. Open seats are played by AI
+          This game is in progress — pick an open seat to join. Open seats are played by bot
           until someone takes them.
         </p>
 
@@ -649,7 +649,7 @@ onUnmounted(() => {
                     :class="seat.connected ? 'is-online' : 'is-offline'"
                   ></span>
                   {{ seat.name || `Seat ${seat.seat}` }}
-                  <span v-if="cfg.aiSeats.includes(seat.seat)" class="seat-switcher-menu__ai">AI</span>
+                  <span v-if="cfg.botSeats.includes(seat.seat)" class="seat-switcher-menu__ai">bot</span>
                   <span v-if="seat.seat === mySeat" class="seat-switcher-menu__current-label"> (you)</span>
                 </button>
                 <div class="seat-switcher-menu__sep"></div>
@@ -758,12 +758,12 @@ onUnmounted(() => {
               <dd>{{ cfg.playerCount }}</dd>
             </div>
             <div class="table-setup__row">
-              <dt>AI seats</dt>
-              <dd>{{ cfg.aiSeats.length ? cfg.aiSeats.join(', ') : 'none' }}</dd>
+              <dt>bot seats</dt>
+              <dd>{{ cfg.botSeats.length ? cfg.botSeats.join(', ') : 'none' }}</dd>
             </div>
             <div class="table-setup__row">
-              <dt>AI level</dt>
-              <dd>{{ cfg.aiLevel || '—' }}</dd>
+              <dt>bot level</dt>
+              <dd>{{ cfg.botLevel || '—' }}</dd>
             </div>
             <template v-if="cfg.gameOptions.length">
               <div class="table-setup__group-header">Game options</div>

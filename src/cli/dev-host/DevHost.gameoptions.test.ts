@@ -77,8 +77,8 @@ const TEST_CONFIG: DevHostConfig = {
   minPlayers: 2,
   maxPlayers: 2,
   playerCount: 2,
-  aiSeats: [],
-  aiLevel: '',
+  botSeats: [],
+  botLevel: '',
   gameOptions: [
     {
       id: 'difficulty',

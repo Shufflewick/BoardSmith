@@ -288,7 +288,7 @@ export type GameOptions = {
    * Tutorial definition (static config, never serialized).
    *
    * Threaded un-serialized from `GameDefinition.tutorial` via
-   * `GameSession.create()`. Mirrors how `ai` / `_actions` / flow definitions
+   * `GameSession.create()`. Mirrors how `bot` / `_actions` / flow definitions
    * live on the instance. Stored in `Game.tutorialDefinition` (listed in
    * `unserializableAttributes`).
    */
@@ -2290,7 +2290,7 @@ export class Game<
   // **Anti-patterns to avoid:**
   //
   // 1. **Don't cache player references** - Player objects may be recreated during
-  //    state restoration (undo, redo, AI simulation). Always query fresh:
+  //    state restoration (undo, redo, bot simulation). Always query fresh:
   //      // WRONG: const player = game.getPlayer(1); ... later use player
   //      // RIGHT: always call game.getPlayer(1) when you need it
   //

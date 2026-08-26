@@ -22,7 +22,7 @@ subagents inside a run.
 Dispatch with the **Agent tool** — one agent per dispatch, general-purpose, full tool access,
 running in the game project directory. The subagent is told to **read the pipeline's own
 instructions and follow them verbatim**: `${CLAUDE_SKILL_DIR}/../bs-build-chunk/SKILL.md` for an
-ordinary chunk, `${CLAUDE_SKILL_DIR}/../bs-build-ai/SKILL.md` for the AI-opponent chunk,
+ordinary chunk, `${CLAUDE_SKILL_DIR}/../bs-build-bot/SKILL.md` for the bot-opponent chunk,
 `${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md` for a sketch reshape. Hand it the resolved
 absolute path — the orchestrator has `${CLAUDE_SKILL_DIR}` expanded, the subagent does not.
 

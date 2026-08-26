@@ -125,10 +125,10 @@ export interface DevHostConfig {
   maxPlayers: number;
   /** Initial player count (from `--players`). */
   playerCount: number;
-  /** Initial AI seats (1-indexed) from `--ai`. */
-  aiSeats: number[];
-  /** Initial AI difficulty (from `--ai-level`). */
-  aiLevel: string;
+  /** Initial bot seats (1-indexed) from `--bot`. */
+  botSeats: number[];
+  /** Initial bot difficulty (from `--bot-level`). */
+  botLevel: string;
   /** Game-level option definitions (object-keyed → flattened to a list). */
   gameOptions: DevOptionDef[];
   /** Per-player option definitions. */

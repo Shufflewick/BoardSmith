@@ -2,7 +2,7 @@
  * Install BoardSmith Agent Skills for Claude Code
  *
  * This installs the bs- skill family (bs-create-game, bs-ingest-rules, bs-build-game,
- * bs-build-chunk, bs-check-status, bs-insert-chunk, bs-build-ai, bs-verify-game) globally so
+ * bs-build-chunk, bs-check-status, bs-insert-chunk, bs-build-bot, bs-verify-game) globally so
  * users can design and build BoardSmith games directly within Claude Code conversations.
  */
 
@@ -34,7 +34,7 @@ const SKILL_ENTRY_POINTS: Array<{ source: string; skillName: string }> = [
   { source: join('bs', 'build-chunk.md'), skillName: 'bs-build-chunk' },
   { source: join('bs', 'check-status.md'), skillName: 'bs-check-status' },
   { source: join('bs', 'insert-chunk.md'), skillName: 'bs-insert-chunk' },
-  { source: join('bs', 'build-ai.md'), skillName: 'bs-build-ai' },
+  { source: join('bs', 'build-bot.md'), skillName: 'bs-build-bot' },
   { source: join('bs', 'verify-game.md'), skillName: 'bs-verify-game' },
 ];
 
@@ -44,12 +44,12 @@ const SKILL_ENTRY_POINTS: Array<{ source: string; skillName: string }> = [
  *
  * Without this, a machine that installed an earlier version keeps the retired directory forever:
  * `fs.cp` only merges, and the pre-copy clean only removes paths in `SKILL_ENTRY_POINTS`. The
- * designer would then see BOTH `/bs-generate-ai` and `/bs-build-ai` offered — one of them a stale
+ * designer would then see BOTH `/bs-generate-bot` and `/bs-build-bot` offered — one of them a stale
  * copy whose prose predates the rename — and picking the wrong one is the easy path, not the hard
  * one. Every entry here must be `bs-`-prefixed, for the same collision-safety reason `ownedPaths`
  * is (never a generic top-level name a user's unrelated skill could share).
  */
-const RETIRED_SKILL_NAMES = ['bs-generate-ai'];
+const RETIRED_SKILL_NAMES = ['bs-generate-bot'];
 
 /**
  * The single source of truth for "what skills does this installer ship" — derived from
@@ -299,7 +299,7 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log(chalk.cyan('  bs-build-chunk') + chalk.gray('   - Build, test, audit, and playtest one chunk at a time'));
   console.log(chalk.cyan('  bs-check-status') + chalk.gray('  - Report sketch/chunk progress and next steps'));
   console.log(chalk.cyan('  bs-insert-chunk') + chalk.gray('  - Insert a new chunk into an existing sketch'));
-  console.log(chalk.cyan('  bs-build-ai') + chalk.gray('      - Generate a computer opponent for the finished game'));
+  console.log(chalk.cyan('  bs-build-bot') + chalk.gray('      - Generate a computer opponent for the finished game'));
   console.log(chalk.cyan('  bs-verify-game') + chalk.gray('   - Re-verify an existing game against its archived rulebook source'));
   console.log('');
   console.log(chalk.gray('Each skill reads from a shared reference tree (build/, ingest/,'));

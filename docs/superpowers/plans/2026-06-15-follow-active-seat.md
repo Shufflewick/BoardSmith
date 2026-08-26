@@ -1,5 +1,12 @@
 # Follow Active Seat (dev-host) Implementation Plan
 
+> **ARCHIVED, PRE-RENAME (2026-06-15).** This plan is a record of work already
+> done, and its code snippets, identifiers and `git commit` lines are quoted as
+> they were on the day. The automaton has since been renamed from AI to BOT
+> everywhere (ShufflewickPub #28, engine contract r16), so `aiSeats` is now
+> `botSeats`, `aiLevel` is `botLevel`, `runAITurns()` is `runBotTurns()`, and
+> `aiTurn` is `botTurn`. Read the names below as history, never as current API.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a runtime "follow active seat" toggle to the `boardsmith dev` multiplayer host so one client (the *follower*) controls whichever seat is currently awaiting input, pausing AI — letting a browser-automation agent drive a whole game solo.

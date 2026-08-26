@@ -7,7 +7,7 @@
  *
  * These helpers are the single source of truth for collapsing those two
  * representations into a straight answer. Every consumer (the engine, the
- * session host, the AI controller, the MCTS bot, debug tooling) routes through
+ * session host, the bot controller, the MCTS bot, debug tooling) routes through
  * here instead of re-deriving the `awaitingPlayers ?? currentPlayer` branch, so
  * the simultaneous-vs-sequential invariant lives in exactly one place.
  *

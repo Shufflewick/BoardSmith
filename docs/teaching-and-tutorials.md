@@ -1,6 +1,6 @@
 # Teaching & Tutorials
 
-This guide is the single authoring reference for BoardSmith's teaching primitives. It covers how to write a tutorial, author predicate triggers that auto-advance steps, verify your tutorial in CI, surface AI-powered hints and a narrated AI-vs-AI demo, add per-action help text, and lock down teaching features for competitive sessions.
+This guide is the single authoring reference for BoardSmith's teaching primitives. It covers how to write a tutorial, author predicate triggers that auto-advance steps, verify your tutorial in CI, surface bot-powered hints and a narrated bot-vs-bot demo, add per-action help text, and lock down teaching features for competitive sessions.
 
 Two games are used throughout as side-by-side worked examples: **checkers** (grid game, notation anchors) and **go-fish** (card game, name anchors). Reading both examples together reveals the parity contract every UI must honor.
 
@@ -350,7 +350,7 @@ Steps that auto-advance instantly (because their `advanceWhen` is already true w
 
 ---
 
-## 4. AI Teaching
+## 4. Bot Teaching
 
 ### Move hints
 
@@ -361,7 +361,7 @@ Call `GameSession.requestHint(seat)` to fetch a move suggestion from an ephemera
 async requestHint(seat: number): Promise<void>
 ```
 
-The hint target is derived via the game's `hintTargetFromMove` hook in `GameDefinition.ai`. The hook receives the bot's suggested `BotMove` and returns an `ElementRef` (or `undefined` for a floating bubble):
+The hint target is derived via the game's `hintTargetFromMove` hook in `GameDefinition.bot`. The hook receives the bot's suggested `BotMove` and returns an `ElementRef` (or `undefined` for a floating bubble):
 
 ```typescript
 // Checkers: targets the destination square by notation
@@ -372,7 +372,7 @@ hintTargetFromMove: (move) => {
 },
 
 // Go Fish: targets the suggested rank card-group by name
-// ~/BoardSmithGames/go-fish/src/rules/ai.ts
+// ~/BoardSmithGames/go-fish/src/rules/bot.ts
 export function getGoFishHintTarget(move: BotMove): { name: string } | undefined {
   const rank = move.args?.rank;
   return rank ? { name: String(rank) } : undefined;
@@ -383,9 +383,9 @@ export function getGoFishHintTarget(move: BotMove): { name: string } | undefined
 
 For the hint overlay to anchor to the right element, that element must carry `data-bs-el-name` (or `data-bs-el-notation` / `data-bs-el-id`) in the DOM. See [Section 7: Parity](#7-parity-checkers-vs-go-fish) for how this works in practice.
 
-### AI-vs-AI demo
+### bot-vs-bot demo
 
-Call `GameSession.startDemo()` to enter demo mode: all seats are AI-controlled, and each move is announced (narration text broadcast) before it executes. Call `GameSession.stopDemo()` to restore the original AI controller:
+Call `GameSession.startDemo()` to enter demo mode: all seats are bot-controlled, and each move is announced (narration text broadcast) before it executes. Call `GameSession.stopDemo()` to restore the original bot controller:
 
 ```typescript
 // src/session/game-session.ts
@@ -399,9 +399,9 @@ stopDemo(): void
 
 The default narrator formats: `"PlayerName: actionName destination"` — it uses a destination-extraction heuristic (`describeMoveDestination`) rather than dumping JSON. Supply a custom `narrator` for games with rich arg types (objects, nested references) where that heuristic cannot produce a readable move description.
 
-Internally, `startDemo` saves the current `AIController`, builds an all-seats AI controller, installs an `onBeforeMove` hook that sets `#narrationText` and broadcasts before each move, then starts the AI loop. `stopDemo` restores the original controller and clears the narration hook.
+Internally, `startDemo` saves the current `BotController`, builds an all-seats bot controller, installs an `onBeforeMove` hook that sets `#narrationText` and broadcasts before each move, then starts the bot loop. `stopDemo` restores the original controller and clears the narration hook.
 
-**Caveat — AI-seat gating:** The demo affordance requires an AI seat to be present. In the `boardsmith dev` host, the "Follow-active-seat" feature hands control of whichever seat is active to the dev window, removing that seat's AI presence. Driving a seat with Follow-active-seat therefore prevents the demo from running for that seat. This is a dev-host testing caveat, not a production limitation.
+**Caveat — bot-seat gating:** The demo affordance requires an bot seat to be present. In the `boardsmith dev` host, the "Follow-active-seat" feature hands control of whichever seat is active to the dev window, removing that seat's bot presence. Driving a seat with Follow-active-seat therefore prevents the demo from running for that seat. This is a dev-host testing caveat, not a production limitation.
 
 ### Evaluation heatmap
 
@@ -414,7 +414,7 @@ async setHeatmapVisible(seat: number, visible: boolean): Promise<void>
 
 **The heatmap is BOARD-ONLY.** It shades grid cells via `data-bs-el-*` anchors. A gridless card game (like go-fish) has no board cells to shade — the heatmap entries would produce no visible highlights because there are no matching DOM elements. Do not attempt to use the heatmap for move quality visualization in card games; treat it as a grid-game feature only. A card-game move-quality visualization is a deferred future idea.
 
-**Known cosmetic quirk:** The "Show move quality" toggle in the teaching UI is gated on `showHint` (AI present), not on board presence. This means the toggle currently appears for gridless games when the session is unlocked. This is a pre-existing substrate quirk to be fixed in a future release. For now, the toggle appears but the heatmap overlay renders nothing meaningful.
+**Known cosmetic quirk:** The "Show move quality" toggle in the teaching UI is gated on `showHint` (bot present), not on board presence. This means the toggle currently appears for gridless games when the session is unlocked. This is a pre-existing substrate quirk to be fixed in a future release. For now, the toggle appears but the heatmap overlay renders nothing meaningful.
 
 ---
 
@@ -448,7 +448,7 @@ Action.create('ask')
 
 ### GameSessionOptions.teachingDisabled
 
-Set `teachingDisabled: true` when creating a `GameSession` to lock out the AI teaching features for competitive or restricted sessions:
+Set `teachingDisabled: true` when creating a `GameSession` to lock out the bot-driven teaching features for competitive or restricted sessions:
 
 ```typescript
 // src/session/game-session.ts
@@ -460,7 +460,7 @@ When `teachingDisabled` is `true`, calling any of the following throws immediate
 
 - `requestHint(seat)` — move hint
 - `setHeatmapVisible(seat, visible)` — evaluation heatmap
-- `startDemo(options?)` — AI-vs-AI demo
+- `startDemo(options?)` — bot-vs-bot demo
 - `startTutorial(seat)` — tutorial
 
 `exitTutorial(seat)` and per-action `.help()` text are **never** gated by `teachingDisabled`.
@@ -608,7 +608,7 @@ The rank group carries `data-bs-el-name` with the rank string (e.g. `'7'`). The 
 
 ### Axis 3: Hint target
 
-Both games implement `hintTargetFromMove` in their `GameDefinition.ai` block. The hook returns an `ElementRef` that the hint overlay uses to anchor its ring:
+Both games implement `hintTargetFromMove` in their `GameDefinition.bot` block. The hook returns an `ElementRef` that the hint overlay uses to anchor its ring:
 
 | Game | Hook return | Anchors to |
 |---|---|---|
@@ -622,7 +622,7 @@ hintTargetFromMove: (move) => {
   return dest?.toNotation ? { notation: dest.toNotation } : undefined;
 },
 
-// Go Fish: ~/BoardSmithGames/go-fish/src/rules/ai.ts (wired via index.ts)
+// Go Fish: ~/BoardSmithGames/go-fish/src/rules/bot.ts (wired via index.ts)
 export function getGoFishHintTarget(move: BotMove): { name: string } | undefined {
   const rank = move.args?.rank;
   return rank ? { name: String(rank) } : undefined;

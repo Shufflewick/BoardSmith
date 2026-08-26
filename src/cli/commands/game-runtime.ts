@@ -33,8 +33,8 @@ export const cliMonorepoRoot = resolve(__dirname, '..', '..', '..');
  */
 export const BOARDSMITH_PACKAGE_DIRS: Record<string, string> = {
   'boardsmith': 'engine',
-  'boardsmith/ai': 'ai',
-  'boardsmith/ai-trainer': 'ai-trainer',
+  'boardsmith/bot': 'bot',
+  'boardsmith/bot-trainer': 'bot-trainer',
   'boardsmith/client': 'client',
   'boardsmith/runtime': 'runtime',
   'boardsmith/session': 'session',

@@ -5,7 +5,7 @@
  * F16 (LEGITIMATE per 131-FINDINGS-VERIFICATION.md): `StoredGameState` has
  * no field for either value, so `restore()`'s constructor call passes
  * `undefined` for both, silently re-enabling teaching features (hints,
- * heatmaps, AI-vs-AI demo) after any process restart or cold restore —
+ * heatmaps, bot-vs-bot demo) after any process restart or cold restore —
  * a LOCK-01 anti-cheat regression.
  *
  * Uses the `restore-snapshot-authoritative.test.ts` async

@@ -31,7 +31,7 @@
         "count": 2
       }
     },
-    "src/ai-trainer/analyzer.ts": {
+    "src/bot-trainer/analyzer.ts": {
       "complexity_high": {
         "count": 1
       },
@@ -39,7 +39,7 @@
         "count": 1
       }
     },
-    "src/ai-trainer/benchmark.ts": {
+    "src/bot-trainer/benchmark.ts": {
       "complexity_critical": {
         "count": 1
       },
@@ -50,7 +50,7 @@
         "count": 1
       }
     },
-    "src/ai-trainer/code-generator.ts": {
+    "src/bot-trainer/code-generator.ts": {
       "complexity_critical": {
         "count": 1
       },
@@ -64,7 +64,7 @@
         "count": 1
       }
     },
-    "src/ai-trainer/feature-generator.ts": {
+    "src/bot-trainer/feature-generator.ts": {
       "complexity_critical": {
         "count": 1
       },
@@ -72,7 +72,7 @@
         "count": 1
       }
     },
-    "src/ai-trainer/feature-templates.ts": {
+    "src/bot-trainer/feature-templates.ts": {
       "complexity_critical": {
         "count": 1
       },
@@ -92,7 +92,7 @@
         "count": 4
       }
     },
-    "src/ai-trainer/introspector.ts": {
+    "src/bot-trainer/introspector.ts": {
       "complexity_critical": {
         "count": 1
       },
@@ -112,12 +112,12 @@
         "count": 1
       }
     },
-    "src/ai-trainer/weight-evolver.ts": {
+    "src/bot-trainer/weight-evolver.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/ai/mcts-bot.ts": {
+    "src/bot/mcts-bot.ts": {
       "complexity_critical": {
         "count": 1
       },
@@ -194,7 +194,7 @@
         "count": 1
       }
     },
-    "src/cli/commands/evolve-ai-weights.ts": {
+    "src/cli/commands/evolve-bot-weights.ts": {
       "complexity_high": {
         "count": 1
       },
@@ -536,7 +536,7 @@
         "count": 6
       },
       "crap_moderate": {
-        "count": 8
+        "count": 7
       }
     },
     "src/engine/tutorial/progress.ts": {
@@ -599,7 +599,7 @@
         "count": 4
       }
     },
-    "src/session/ai-controller.ts": {
+    "src/session/bot-controller.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -1037,54 +1037,50 @@
   "target_keys": [
     "src/contract/fingerprint.ts:dead code",
     "src/engine/element/game.ts:circular dependency",
-    "src/engine/action/action.ts:circular dependency",
     "src/cli/commands/doctor.ts:dead code",
-    "src/engine/utils/enumerate-moves.ts:circular dependency",
+    "src/engine/action/action.ts:circular dependency",
     "src/ui/composables/useActionController.ts:complexity",
     "src/session/game-session.ts:complexity",
     "src/engine/tutorial/progress.ts:complexity",
     "src/session/stateless-ops.ts:complexity",
     "src/session/pick-handler.ts:complexity",
     "src/engine/element/game-element.ts:complexity",
-    "src/engine/element/action-metadata.ts:circular dependency",
     "src/client/vue.ts:dead code",
     "src/cli/commands/drift-check.ts:complexity",
+    "src/session/snapshot-session-host.ts:complexity",
     "src/cli/lib/config.ts:dead code",
-    "src/ai/mcts-bot.ts:complexity",
-    "src/ai-trainer/benchmark.ts:complexity",
-    "src/cli/commands/chunk-provenance.ts:complexity",
+    "src/bot-trainer/benchmark.ts:complexity",
     "src/cli/commands/publish.ts:complexity",
+    "src/cli/commands/chunk-provenance.ts:complexity",
     "src/ui/composables/useFlyingElements.ts:complexity",
     "src/ui/components/GameShell.vue:complexity",
-    "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/cli/commands/ingest-archive.ts:complexity",
     "src/cli/commands/verify-example-replay.ts:complexity",
+    "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/cli/commands/verify-derive-check.ts:circular dependency",
     "src/cli/commands/verify-run.ts:complexity",
-    "src/ai-trainer/feature-generator.ts:complexity",
+    "src/bot/mcts-bot.ts:complexity",
+    "src/bot-trainer/feature-generator.ts:complexity",
     "src/cli/commands/verify-classify.ts:complexity",
     "src/session/pending-action-manager.ts:complexity",
-    "src/ai-trainer/feature-templates.ts:complexity",
+    "src/bot-trainer/feature-templates.ts:complexity",
     "src/engine/tutorial/gate.ts:circular dependency",
     "src/cli/commands/dev.ts:complexity",
-    "src/session/snapshot-session-host.ts:complexity",
     "src/cli/commands/example-test-emit.ts:complexity",
     "src/testing/debug.ts:complexity",
     "src/ui/components/auto-ui/auto-ui-helpers.ts:complexity",
     "src/cli/commands/lint.ts:complexity",
+    "src/bot-trainer/introspector.ts:complexity",
     "src/testing/simulate-action.ts:complexity",
-    "src/ai-trainer/introspector.ts:complexity",
     "src/engine/element/volatile-state.ts:circular dependency",
     "src/testing/dom-leak.ts:complexity",
-    "src/engine/utils/resolve-multiselect.ts:circular dependency",
     "src/cli/commands/verify-enumerate.ts:complexity",
     "src/cli/lib/asset-scan.ts:complexity",
     "src/cli/commands/trace-check.ts:complexity",
     "src/testing/random-simulation.ts:complexity",
-    "src/engine/utils/dev-state.ts:circular dependency",
-    "src/cli/commands/evolve-ai-weights.ts:complexity",
     "src/session/lobby-manager.ts:complexity",
-    "src/ai-trainer/code-generator.ts:complexity",
+    "src/cli/commands/evolve-bot-weights.ts:complexity",
+    "src/bot-trainer/code-generator.ts:complexity",
     "src/ui/components/dice/Die3D.vue:complexity"
   ]
 }

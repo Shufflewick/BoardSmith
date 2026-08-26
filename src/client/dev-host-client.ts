@@ -65,9 +65,9 @@ export interface DevHostClient {
   readonly opened: Promise<void>;
   /** Identify this connection to the host — the FIRST client to do so auto-seats and starts the game. */
   hello(): void;
-  /** Take over an open/AI seat (works mid-game). */
+  /** Take over an open/bot seat (works mid-game). */
   join(seat: number, opts?: { name?: string; color?: string }): void;
-  /** Give up the currently held seat — it reverts to AI. */
+  /** Give up the currently held seat — it reverts to bot. */
   leave(): void;
   /** Restart the game with the same seats and a fresh seed. */
   restart(): void;

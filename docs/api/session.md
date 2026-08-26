@@ -4,14 +4,14 @@
 
 ## When to Use
 
-Import from `boardsmith/session` when managing game sessions, handling AI opponents, or building multiplayer infrastructure. This package provides a unified API for game state management across different platforms.
+Import from `boardsmith/session` when managing game sessions, handling bot opponents, or building multiplayer infrastructure. This package provides a unified API for game state management across different platforms.
 
 ## Usage
 
 ```typescript
 import {
   GameSession,
-  AIController,
+  BotController,
   DevCheckpointManager,
   generateGameId,
   type GameDefinition,
@@ -24,7 +24,7 @@ import {
 ### Core Classes
 
 - `GameSession` - Main session manager for game state
-- `AIController` - Manages AI player turns
+- `BotController` - Manages bot player turns
 - `DevCheckpointManager` - Manages dev state checkpoints for HMR recovery
 
 ### Utilities
@@ -51,7 +51,7 @@ import {
 - `PlayerGameState` - Player-specific state view
 - `SessionInfo` - Session metadata
 - `StateUpdate` - State update message
-- `AIConfig` - AI player configuration
+- `BotStrategy` - bot player configuration
 - `StorageAdapter` - Storage backend interface
 - `BroadcastAdapter` - WebSocket broadcast interface
 - `CreateGameRequest` - Create game request
@@ -115,7 +115,7 @@ if (result.success) {
 }
 ```
 
-### Adding AI Opponents
+### Adding bot Opponents
 
 ```typescript
 import { GameSession } from 'boardsmith/session';
@@ -126,16 +126,16 @@ const session = GameSession.create({
   GameClass: MyGame,
   playerCount: 2,
   playerNames: ['Human', 'Bot'],
-  aiConfig: {
-    players: [1], // Player 1 is AI
+  botSeatConfig: {
+    players: [1], // Player 1 is bot
     level: 'hard',
   },
 });
 
-// AI moves are handled automatically when it's the AI's turn.
-// Player 1 is AI here, so the human plays seat 2.
+// bot moves are handled automatically when it's the bot's turn.
+// Player 1 is bot here, so the human plays seat 2.
 const result = await session.performAction('move', 2, { from: 'a1', to: 'b2' });
-// After the human moves, AI will automatically play
+// After the human moves, bot will automatically play
 ```
 
 ### Implementing Storage Adapter
@@ -213,4 +213,4 @@ session.setBroadcaster(new WebSocketBroadcaster(connections));
 ## See Also
 
 - [boardsmith/client](./client.md) - Browser client SDK
-- [boardsmith/ai](./ai.md) - AI opponent system
+- [boardsmith/bot](./bot.md) - bot opponent system

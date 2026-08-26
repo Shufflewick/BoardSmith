@@ -13,7 +13,7 @@
  * - Action execution
  * - State queries
  * - Broadcasting
- * - AI scheduling
+ * - bot scheduling
  */
 
 import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction, GameOptions, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
@@ -33,7 +33,7 @@ import {
   type StateUpdate,
   type StorageAdapter,
   type BroadcastAdapter,
-  type AIConfig,
+  type BotSeatConfig,
   type LobbyState,
   type LobbySlot,
   type LobbyInfo,
@@ -44,9 +44,9 @@ import {
   type PickChoicesResponse,
 } from './types.js';
 import { buildPlayerState, buildSingleActionMetadata, serializeFlowDebugInfo, serializePendingActionState } from './utils.js';
-import { AIController } from './ai-controller.js';
-import type { AIConfig as BotAIConfig, BotMove, BotMoveStats } from '../ai/index.js';
-import { createBot, parseAILevel } from '../ai/index.js';
+import { BotController } from './bot-controller.js';
+import type { BotStrategy, BotMove, BotMoveStats } from '../bot/index.js';
+import { createBot, parseBotLevel } from '../bot/index.js';
 import type { ElementRef } from './types.js';
 import { LobbyManager, type LobbyManagerCallbacks } from './lobby-manager.js';
 import { PickHandler } from './pick-handler.js';
@@ -60,7 +60,7 @@ import { autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 
 /**
  * Consecutive persistence-save failures before `persistenceHealthy` flips
- * false (ERR-03). Mirrors `#aiConsecutiveFailures >= 3`'s give-up threshold
+ * false (ERR-03). Mirrors `#botConsecutiveFailures >= 3`'s give-up threshold
  * so both circuit breakers escalate at the same count.
  */
 const PERSISTENCE_UNHEALTHY_THRESHOLD = 3;
@@ -89,7 +89,7 @@ export interface GameSessionOptions<G extends Game = Game> {
   playerIds?: string[];
   seed?: string;
   storage?: StorageAdapter;
-  aiConfig?: AIConfig;
+  botSeats?: BotSeatConfig;
   /** Game-specific options (boardSize, targetScore, etc.) */
   gameOptions?: Record<string, unknown>;
   /** Display name for lobby UI */
@@ -104,8 +104,8 @@ export interface GameSessionOptions<G extends Game = Game> {
   playerOptionsDefinitions?: Record<string, PlayerOptionDefinition>;
   /** Game options definitions (for host to modify in lobby) */
   gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
-  /** AI configuration (objectives and threat response hooks) from game definition */
-  botAIConfig?: BotAIConfig;
+  /** bot configuration (objectives and threat response hooks) from game definition */
+  botStrategy?: BotStrategy;
   /** Minimum number of players allowed (for lobby slot management) */
   minPlayers?: number;
   /** Maximum number of players allowed (for lobby slot management) */
@@ -115,7 +115,7 @@ export interface GameSessionOptions<G extends Game = Game> {
    *
    * Passed un-serialized into `GameOptions.tutorial` so the engine stores it
    * as `Game.tutorialDefinition` (in `unserializableAttributes`). Mirrors how
-   * `botAIConfig` reaches `AIController` without touching the serialized state.
+   * `botStrategy` reaches `BotController` without touching the serialized state.
    */
   tutorial?: TutorialDefinition;
   /**
@@ -212,7 +212,7 @@ export type { UndoResult, ElementDiff } from './state-history.js';
  * - Action processing
  * - State management
  * - Broadcasting to connected clients
- * - AI player integration (optional)
+ * - bot player integration (optional)
  *
  * @example
  * ```typescript
@@ -222,7 +222,7 @@ export type { UndoResult, ElementDiff } from './state-history.js';
  *   GameClass: CheckersGame,
  *   playerCount: 2,
  *   playerNames: ['Alice', 'Bob'],
- *   aiConfig: { players: [1], level: 'medium' },
+ *   botSeats: { players: [1], level: 'medium' },
  * });
  *
  * // Set up broadcasting
@@ -258,7 +258,7 @@ function buildColorLabelMap(
  * Deliberately omits `performAction` (and every other mutating member) so that
  * `session.runner.performAction(...)` — a lookalike wrong path beside
  * `session.performAction(...)` that silently skips persistence/broadcast/
- * checkpoints/tutorials/AI scheduling (SESS-01/F29) — is unreachable both at
+ * checkpoints/tutorials/bot scheduling (SESS-01/F29) — is unreachable both at
  * the type level (no such member in this interface) and at runtime (the
  * object built by {@link buildRunnerFacade} genuinely has no `performAction`
  * key, so untyped/JS callers get a `TypeError: ... is not a function` instead
@@ -308,7 +308,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   readonly #storedState: StoredGameState;
   #GameClass: GameClass<G>;
   readonly #storage?: StorageAdapter;
-  #aiController?: AIController<G>;  // Mutable for dynamic AI slot changes
+  #botController?: BotController<G>;  // Mutable for dynamic bot slot changes
   #broadcaster?: BroadcastAdapter<TSession>;
   #displayName?: string;
   /** Lobby manager for games with lobby flow */
@@ -331,8 +331,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   readonly #tutorialDefinition?: TutorialDefinition;
   /** Dev checkpoint manager for fast HMR recovery (dev only) */
   #checkpointManager?: DevCheckpointManager<G>;
-  /** Circuit breaker: consecutive AI failures before giving up */
-  #aiConsecutiveFailures = 0;
+  /** Circuit breaker: consecutive bot failures before giving up */
+  #botConsecutiveFailures = 0;
   /** Injectable persistence-failure hook (ERR-03). Never rethrown — see #persistSafely. */
   #onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void;
   /** Most recent sanitized persistence failure, or null if none has occurred yet. */
@@ -340,11 +340,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   /** Circuit breaker: consecutive persistence-save failures before persistenceHealthy flips false. */
   #persistenceConsecutiveFailures = 0;
   /**
-   * Bot AI config (objectives, hintTargetFromMove) kept on the session so
+   * Bot bot config (objectives, hintTargetFromMove) kept on the session so
    * ephemeral bots for requestHint() and setHeatmapVisible() can use the
-   * same game-specific extraction hook as the main AIController.
+   * same game-specific extraction hook as the main BotController.
    */
-  #botAIConfig?: BotAIConfig;
+  #botStrategy?: BotStrategy;
 
   // ============================================
   // Transient teaching state (Phase 107)
@@ -369,12 +369,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #hint = new Map<number, { annotation: Annotation }>();
   /** Per-seat evaluation heatmap. Set by setHeatmapVisible(), cleared on undo. */
   #heatmap = new Map<number, { visible: boolean; entries: HeatmapEntry[] }>();
-  /** Narration text for the current AI demo move (between onBeforeMove and broadcast). */
+  /** Narration text for the current bot demo move (between onBeforeMove and broadcast). */
   #narrationText: string | null = null;
-  /** True while a demo (all-seats AI with narration) is running. */
+  /** True while a demo (all-seats bot with narration) is running. */
   #demoMode = false;
-  /** Saved AIController replaced by startDemo(); restored by stopDemo(). */
-  #savedAIController?: AIController<G>;
+  /** Saved BotController replaced by startDemo(); restored by stopDemo(). */
+  #savedBotController?: BotController<G>;
   /** Delay (ms) between narration announcement and move execution in demo mode. */
   #demoDelay = 1200;
   /** Narration hook closure used as onBeforeMove in demo mode. Cleared by stopDemo(). */
@@ -399,12 +399,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     storedState: StoredGameState,
     GameClass: GameClass<G>,
     storage?: StorageAdapter,
-    aiController?: AIController<G>,
+    botController?: BotController<G>,
     displayName?: string,
     lobbyManager?: LobbyManager<TSession>,
     pickHandler?: PickHandler<G>,
     pendingActionManager?: PendingActionManager<G>,
-    botAIConfig?: BotAIConfig,
+    botStrategy?: BotStrategy,
     teachingDisabled?: boolean,
     onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void,
     debugEnabled?: boolean
@@ -414,11 +414,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#storedState = storedState;
     this.#GameClass = GameClass;
     this.#storage = storage;
-    this.#aiController = aiController;
+    this.#botController = botController;
     this.#debugEnabled = debugEnabled ?? false;
     this.#displayName = displayName;
     this.#lobbyManager = lobbyManager;
-    this.#botAIConfig = botAIConfig;
+    this.#botStrategy = botStrategy;
     this.#teachingDisabled = teachingDisabled ?? false;
     this.#onPersistenceError = onPersistenceError;
     // Capture the tutorial definition from the initial runner so replaceRunner
@@ -436,7 +436,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       {
         save: () => this.#save(),
         broadcast: () => this.broadcast(),
-        scheduleAICheck: () => this.#scheduleAICheck(),
+        scheduleBotCheck: () => this.#scheduleBotCheck(),
       },
       this.#debugEnabled
     );
@@ -499,7 +499,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    *
    * Both factory paths need identical behavior when the lobby transitions to
    * playing (recreate the runner from the current slots, sync player names/colors,
-   * schedule AI) and when the AI config changes. Keeping a single implementation
+   * schedule bot) and when the bot config changes. Keeping a single implementation
    * here is the source of truth so a fix to one path can never silently miss the other.
    *
    * `getSession` defers the GameSession reference because the session is constructed
@@ -508,10 +508,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   static #buildLobbyCallbacks<G extends Game>(params: {
     GameClass: GameClass<G>;
     storedState: StoredGameState;
-    botAIConfig: BotAIConfig | undefined;
+    botStrategy: BotStrategy | undefined;
     getSession: () => GameSession<G>;
   }): LobbyManagerCallbacks {
-    const { GameClass, storedState, botAIConfig, getSession } = params;
+    const { GameClass, storedState, botStrategy, getSession } = params;
     return {
       onGameStart: () => {
         const session = getSession();
@@ -520,8 +520,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         // This allows games to access player options via options.playerConfigs[seat-1]
         const playerConfigs = storedState.lobbySlots?.map(slot => ({
           name: slot.name,
-          isBot: slot.status === 'ai',
-          aiLevel: slot.aiLevel,
+          isBot: slot.status === 'bot',
+          botLevel: slot.botLevel,
           ...slot.playerOptions,
         }));
 
@@ -599,29 +599,29 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         // #save / restore reads the correct started state.
         storedState.snapshot = session.#runner.getSnapshot();
 
-        // Trigger AI check when game starts
-        if (session.#aiController?.hasAIPlayers()) {
-          session.#scheduleAICheck();
+        // Trigger bot check when game starts
+        if (session.#botController?.hasBotPlayers()) {
+          session.#scheduleBotCheck();
         }
       },
-      onAIConfigChanged: (aiSlots: LobbySlot[]) => {
+      onBotStrategyChanged: (botSlots: LobbySlot[]) => {
         const session = getSession();
-        if (aiSlots.length === 0) {
-          storedState.aiConfig = undefined;
-          session.#aiController = undefined;
+        if (botSlots.length === 0) {
+          storedState.botSeats = undefined;
+          session.#botController = undefined;
         } else {
-          const aiPlayers = aiSlots.map(s => s.seat);
-          const aiLevel = aiSlots[0].aiLevel || 'medium';
-          storedState.aiConfig = {
-            players: aiPlayers,
-            level: aiLevel as 'easy' | 'medium' | 'hard',
+          const botPlayers = botSlots.map(s => s.seat);
+          const botLevel = botSlots[0].botLevel || 'medium';
+          storedState.botSeats = {
+            players: botPlayers,
+            level: botLevel as 'easy' | 'medium' | 'hard',
           };
-          session.#aiController = new AIController(
+          session.#botController = new BotController(
             GameClass,
             storedState.gameType,
             storedState.playerCount,
-            storedState.aiConfig,
-            botAIConfig
+            storedState.botSeats,
+            botStrategy
           );
         }
       },
@@ -640,7 +640,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       playerIds,
       seed,
       storage,
-      aiConfig,
+      botSeats,
       gameOptions: customGameOptions,
       displayName,
       playerConfigs,
@@ -648,7 +648,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       useLobby,
       playerOptionsDefinitions,
       gameOptionsDefinitions,
-      botAIConfig,
+      botStrategy,
       minPlayers,
       maxPlayers,
       tutorial,
@@ -685,7 +685,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       ...(extractedColors ? { colors: extractedColors } : {}),
       ...(colorLabels ? { colorLabels } : {}),
       // Thread tutorial definition un-serialized into the game constructor
-      // (mirrors how aiConfig/botAIConfig reach AIController). The engine stores
+      // (mirrors how botStrategy/botStrategy reach BotController). The engine stores
       // it as Game.tutorialDefinition (in unserializableAttributes) so gate
       // evaluation can reach the definition without a session-layer round-trip.
       ...(tutorial ? { tutorial } : {}),
@@ -709,27 +709,27 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         const seat = i + 1; // 1-indexed seats
         const isCreator = seat === 1; // Seat 1 is always the creator
 
-        // Extract player options (everything except name, isBot, aiLevel)
+        // Extract player options (everything except name, isBot, botLevel)
         const playerOptions: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(config)) {
-          if (!['name', 'isBot', 'aiLevel'].includes(key)) {
+          if (!['name', 'isBot', 'botLevel'].includes(key)) {
             playerOptions[key] = value;
           }
         }
 
         return {
           seat,
-          status: isBot ? 'ai' : (isCreator ? 'claimed' : 'open'),
+          status: isBot ? 'bot' : (isCreator ? 'claimed' : 'open'),
           name: config.name ?? (isBot ? 'Bot' : `Player ${seat}`),
           playerId: isCreator ? creatorId : undefined,
-          aiLevel: isBot ? (config.aiLevel ?? 'medium') : undefined,
+          botLevel: isBot ? (config.botLevel ?? 'medium') : undefined,
           playerOptions: Object.keys(playerOptions).length > 0 ? playerOptions : undefined,
-          // AI is always ready, humans start not ready
+          // bot is always ready, humans start not ready
           ready: isBot ? true : false,
         } as LobbySlot;
       });
 
-      // Initialize default player options for all non-open slots (host + AI)
+      // Initialize default player options for all non-open slots (host + bot)
       // Merge with existing preset options so preset values (e.g., color from preset config) take precedence
       if (playerOptionsDefinitions) {
         for (const slot of lobbySlots) {
@@ -756,7 +756,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const colors = runner.game.settings.colors as string[] | undefined;
 
     // Initialize default colors for all non-open slots
-    // This ensures host and pre-configured AI slots have colors from the start
+    // This ensures host and pre-configured bot slots have colors from the start
     // Track already-assigned colors to avoid duplicates
     if (colorSelectionEnabled && colors && lobbySlots) {
       const takenColors = new Set<string>();
@@ -781,7 +781,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       }
     }
 
-    // For non-lobby games (e.g., --ai mode), apply default colors directly to players.
+    // For non-lobby games (e.g., --bot mode), apply default colors directly to players.
     // Lobby games apply colors later via the onGameStart callback.
     if (!useLobby && colorSelectionEnabled && colors) {
       for (let i = 0; i < playerCount; i++) {
@@ -808,7 +808,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // when a lobby game transitions to playing (onGameStart recreates the runner).
       snapshot: runner.getSnapshot(),
       createdAt: Date.now(),
-      aiConfig,
+      botSeats,
       teachingDisabled,
       displayName,
       gameOptions: customGameOptions,
@@ -823,8 +823,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       maxPlayers,
     };
 
-    const aiController = aiConfig
-      ? new AIController(GameClass, gameType, playerCount, aiConfig, botAIConfig)
+    const botController = botSeats
+      ? new BotController(GameClass, gameType, playerCount, botSeats, botStrategy)
       : undefined;
 
     // Create lobby manager if using lobby flow
@@ -834,7 +834,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       const callbacks = GameSession.#buildLobbyCallbacks<G>({
         GameClass,
         storedState,
-        botAIConfig,
+        botStrategy,
         getSession: () => session,
       });
       lobbyManager = new LobbyManager(storedState, storage, callbacks, displayName);
@@ -843,7 +843,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Explicit annotation breaks the type-inference cycle: the lobby callbacks
     // capture `getSession: () => session` above, so `session` must have a known
     // type independent of its own initializer.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager, undefined, undefined, botAIConfig, teachingDisabled, onPersistenceError, debugEnabled);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, botController, displayName, lobbyManager, undefined, undefined, botStrategy, teachingDisabled, onPersistenceError, debugEnabled);
 
     // Persist initial state (fire-and-forget to keep create synchronous).
     // Routed through #persistSafely (same funnel as every other save site) so
@@ -853,9 +853,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       void session.#persistSafely(() => storage.save(storedState));
     }
 
-    // Only trigger AI if game is playing (not waiting for players)
-    if (lobbyState !== 'waiting' && aiController?.hasAIPlayers()) {
-      session.#scheduleAICheck();
+    // Only trigger bot if game is playing (not waiting for players)
+    if (lobbyState !== 'waiting' && botController?.hasBotPlayers()) {
+      session.#scheduleBotCheck();
     }
 
     return session;
@@ -868,7 +868,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     storedState: StoredGameState,
     GameClass: GameClass<G>,
     storage?: StorageAdapter,
-    botAIConfig?: BotAIConfig,
+    botStrategy?: BotStrategy,
     tutorial?: TutorialDefinition,
     onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void,
     /**
@@ -913,8 +913,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Also mirrors replaceRunner's guard so #tutorialDefinition stays live after restore.
     if (tutorial) runner.game.tutorialDefinition = tutorial;
 
-    const aiController = storedState.aiConfig
-      ? new AIController(GameClass, storedState.gameType, storedState.playerCount, storedState.aiConfig, botAIConfig)
+    const botController = storedState.botSeats
+      ? new BotController(GameClass, storedState.gameType, storedState.playerCount, storedState.botSeats, botStrategy)
       : undefined;
 
     // Create lobby manager if stored state has lobby slots
@@ -924,7 +924,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       const callbacks = GameSession.#buildLobbyCallbacks<G>({
         GameClass,
         storedState,
-        botAIConfig,
+        botStrategy,
         getSession: () => session,
       });
       lobbyManager = new LobbyManager(storedState, storage, callbacks);
@@ -932,7 +932,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Explicit annotation breaks the type-inference cycle with the lobby
     // callbacks' `getSession: () => session` capture above.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, storedState.displayName, lobbyManager, undefined, undefined, botAIConfig, storedState.teachingDisabled, onPersistenceError);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, botController, storedState.displayName, lobbyManager, undefined, undefined, botStrategy, storedState.teachingDisabled, onPersistenceError);
     return session;
   }
 
@@ -956,7 +956,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * present, at the type level or at runtime, so it cannot be used as a
    * lookalike wrong path for `session.performAction()` (SESS-01/F29). All
    * writes must go through `session.performAction()`, which additionally
-   * handles persistence/broadcast/checkpoints/tutorials/AI scheduling.
+   * handles persistence/broadcast/checkpoints/tutorials/bot scheduling.
    */
   get runner(): ReadOnlyRunnerFacade<G> {
     return this.#runnerFacade;
@@ -1125,8 +1125,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    *  3. `undefined` — hint shows a floating bubble with no highlight ring
    */
   #extractMoveTarget(move: BotMove): ElementRef | undefined {
-    if (this.#botAIConfig?.hintTargetFromMove) {
-      return this.#botAIConfig.hintTargetFromMove(move);
+    if (this.#botStrategy?.hintTargetFromMove) {
+      return this.#botStrategy.hintTargetFromMove(move);
     }
     const DEST_ARGS = ['to', 'destination', 'target', 'square', 'cell', 'position'] as const;
     for (const key of DEST_ARGS) {
@@ -1166,7 +1166,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     }
     this.#hintThinking.add(seat);
     try {
-      const difficulty = parseAILevel(this.#storedState.aiConfig?.level ?? 'medium');
+      const difficulty = parseBotLevel(this.#storedState.botSeats?.level ?? 'medium');
       const bot = createBot(
         this.#runner.game,
         this.#GameClass,
@@ -1174,7 +1174,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         seat,
         this.#storedState.actionHistory,
         difficulty,
-        this.#botAIConfig
+        this.#botStrategy
       );
       // Use play() (not playWithStats()) so parallel mode is honoured for
       // 'hard' difficulty. playWithStats() forces single-mode search and the
@@ -1242,7 +1242,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    *
    * When `visible = false`: clears entries and broadcasts.
    *
-   * Concurrent recompute attempts are skipped (not queued) — the AI search
+   * Concurrent recompute attempts are skipped (not queued) — the bot search
    * is expensive and concurrent searches serve no purpose.
    */
   async setHeatmapVisible(seat: number, visible: boolean): Promise<void> {
@@ -1255,10 +1255,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return;
     }
 
-    // Fail-loud if a recompute is already in progress or the AI is thinking.
+    // Fail-loud if a recompute is already in progress or the bot is thinking.
     // Consistent with requestHint() which also throws on concurrent access.
     // The caller (platform bridge) catches this and surfaces a "Busy" toast.
-    if (this.#heatmapUpdating || this.#aiController?.isThinking()) {
+    if (this.#heatmapUpdating || this.#botController?.isThinking()) {
       throw new Error('Heatmap evaluation is already in progress — please wait.');
     }
     this.#heatmapUpdating = true;
@@ -1277,7 +1277,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * (per-turn recompute) so both paths produce identical entries.
    */
   async #computeHeatmapEntries(seat: number): Promise<HeatmapEntry[]> {
-    const difficulty = parseAILevel(this.#storedState.aiConfig?.level ?? 'medium');
+    const difficulty = parseBotLevel(this.#storedState.botSeats?.level ?? 'medium');
     const bot = createBot(
       this.#runner.game,
       this.#GameClass,
@@ -1285,7 +1285,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       seat,
       this.#storedState.actionHistory,
       difficulty,
-      this.#botAIConfig
+      this.#botStrategy
     );
     const { stats } = await bot.playWithStats();
     return this.#buildHeatmapEntries(stats);
@@ -1297,7 +1297,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * heatmap is still toggled on. Called from performAction so "Show move quality"
    * tracks the live position instead of freezing where it was first enabled
    * (symmetric with the per-action hint clear). Skips work when no heatmap is
-   * visible or a recompute/AI search is already in flight.
+   * visible or a recompute/bot search is already in flight.
    */
   async #refreshVisibleHeatmaps(): Promise<void> {
     if (this.#heatmap.size === 0) return;
@@ -1308,7 +1308,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       if (canSeatAct(flowState, seat)) {
         // It's this seat's turn — recompute fresh entries (guard against an
         // overlapping search; the next action will refresh if we skip here).
-        if (this.#heatmapUpdating || this.#aiController?.isThinking()) continue;
+        if (this.#heatmapUpdating || this.#botController?.isThinking()) continue;
         this.#heatmapUpdating = true;
         try {
           const entries = await this.#computeHeatmapEntries(seat);
@@ -1331,18 +1331,18 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   // ============================================
 
   /**
-   * Whether a demo (narrated AI-vs-AI) is currently running.
+   * Whether a demo (narrated bot-vs-bot) is currently running.
    */
   get isDemoRunning(): boolean {
     return this.#demoMode;
   }
 
   /**
-   * Start an AI-vs-AI demo: all seats are AI-controlled; each move is announced
+   * Start a bot-vs-bot demo: all seats are bot-controlled; each move is announced
    * (narration text set and broadcast) before it executes, paced by `delay` ms.
    *
-   * The demo reuses the existing all-seats AI mechanism — no new bot or training.
-   * Call `stopDemo()` to restore the original AI controller.
+   * The demo reuses the existing all-seats bot mechanism — no new bot or training.
+   * Call `stopDemo()` to restore the original bot controller.
    *
    * @param options.narrator - Optional custom text formatter (action, player, args) → string.
    *   Defaults to `"PlayerName: actionName key=value ..."`. Object/array arg values are
@@ -1359,26 +1359,26 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       throw new Error('Teaching features are disabled for this session.');
     }
     // Idempotency guard: a second call before stopDemo() would overwrite
-    // #savedAIController with the demo controller, making stopDemo() unable to
+    // #savedBotController with the demo controller, making stopDemo() unable to
     // restore the original. Return early to prevent that corruption.
     if (this.#demoMode) return;
 
     // Save the current controller (may be undefined for human-only games).
-    this.#savedAIController = this.#aiController;
+    this.#savedBotController = this.#botController;
     this.#demoDelay = options?.delay ?? 1200;
 
-    // Build an all-seats AI controller using the existing AI level (or 'medium' default).
-    const aiLevel = this.#storedState.aiConfig?.level ?? 'medium';
+    // Build an all-seats bot controller using the existing bot level (or 'medium' default).
+    const botLevel = this.#storedState.botSeats?.level ?? 'medium';
     const allPlayers = Array.from(
       { length: this.#storedState.playerCount },
       (_, i) => i + 1
     );
-    this.#aiController = new AIController(
+    this.#botController = new BotController(
       this.#GameClass,
       this.#storedState.gameType,
       this.#storedState.playerCount,
-      { players: allPlayers, level: aiLevel },
-      this.#botAIConfig
+      { players: allPlayers, level: botLevel },
+      this.#botStrategy
     );
 
     // Build the narration closure.
@@ -1411,18 +1411,18 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     this.#demoMode = true;
     // Broadcast immediately so all connected clients (including other windows)
-    // see isDemoRunning=true before the first AI move fires (WR-04).
+    // see isDemoRunning=true before the first bot move fires (WR-04).
     this.broadcast();
-    this.#scheduleAICheck();
+    this.#scheduleBotCheck();
   }
 
   /**
-   * Stop the AI-vs-AI demo. Restores the original AI controller, clears the
+   * Stop the bot-vs-bot demo. Restores the original bot controller, clears the
    * narration hook and narration text, and broadcasts the cleared state.
    */
   stopDemo(): void {
-    this.#aiController = this.#savedAIController;
-    this.#savedAIController = undefined;
+    this.#botController = this.#savedBotController;
+    this.#savedBotController = undefined;
     this.#onBeforeMove = undefined;
     this.#narrationText = null;
     this.#demoMode = false;
@@ -1506,11 +1506,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Refresh any visible "Show move quality" heatmaps for the new position
     // (recompute for whoever is on move, clear stale chips for the rest) before
-    // the AI is scheduled, so the recompute runs while no AI search is active.
+    // the bot is scheduled, so the recompute runs while no bot search is active.
     await this.#refreshVisibleHeatmaps();
 
-    // Check if AI should respond
-    this.#scheduleAICheck();
+    // Check if bot should respond
+    this.#scheduleBotCheck();
 
     // Build followUp with metadata if present
     const followUp = result.flowState?.followUp;
@@ -1883,12 +1883,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     };
 
     // Reconstruct playerConfigs from lobbySlots so constructor-time logic
-    // (e.g. setting up AI flags, roles) runs correctly in clones/replays
+    // (e.g. setting up bot flags, roles) runs correctly in clones/replays
     if (this.#storedState.lobbySlots && this.#storedState.lobbyState === 'playing') {
       options.playerConfigs = this.#storedState.lobbySlots.map(slot => ({
         name: slot.name,
-        isBot: slot.status === 'ai',
-        aiLevel: slot.aiLevel,
+        isBot: slot.status === 'bot',
+        botLevel: slot.botLevel,
         ...slot.playerOptions,
       }));
     }
@@ -2166,7 +2166,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   /**
    * `false` once `PERSISTENCE_UNHEALTHY_THRESHOLD` consecutive saves have
    * failed; recovers to `true` on the very next successful save. Mirrors the
-   * `#aiConsecutiveFailures >= 3` circuit-breaker shape so both subsystems
+   * `#botConsecutiveFailures >= 3` circuit-breaker shape so both subsystems
    * escalate at the same threshold.
    *
    * Best-effort under concurrent callers (WR-01): `#persistenceConsecutiveFailures`
@@ -2174,7 +2174,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * queue, so if two `#persistSafely` calls are ever in flight concurrently for
    * the same session, a failing save's increment can be raced by an overlapping
    * successful save's reset (or vice versa). Every known call site (create()'s
-   * initial save, #save()'s direct-action/tutorial/AI-turn paths) awaits
+   * initial save, #save()'s direct-action/tutorial/bot-turn paths) awaits
    * `#persistSafely` sequentially, so this is a documented limitation rather
    * than an observed bug — not exact under a hypothetical host that overlaps
    * saves for the same session.
@@ -2192,9 +2192,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * — itself guarded so a throwing hook can never crash gameplay (T-126-06).
    *
    * This is the single funnel every GameSession save path (create()'s
-   * initial save, #save()'s direct-action/tutorial/AI-turn paths) is routed
+   * initial save, #save()'s direct-action/tutorial/bot-turn paths) is routed
    * through, so a storage outage is always observable and never misclassified
-   * as an unrelated failure (e.g. the AI circuit breaker — Pitfall 2 / T-126-04).
+   * as an unrelated failure (e.g. the bot circuit breaker — Pitfall 2 / T-126-04).
    */
   // NOTE (WR-01): no serialization guard around the counter increment/reset —
   // see the `persistenceHealthy` doc comment for the concurrency caveat.
@@ -2232,13 +2232,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * at the exact moment of persistence, guarantees the saved snapshot can never
    * drift from the live runner state.
    *
-   * This is the single funnel for every GameSession save path (direct actions, AI
+   * This is the single funnel for every GameSession save path (direct actions, bot
    * moves, pending/selection steps, undo, rewind), so no caller can persist a
    * stale or snapshot-less stored state. No-ops without a storage adapter (there
    * is nothing to restore from when state is never persisted).
    *
    * Never throws (ERR-03) — routed through #persistSafely so a save failure on
-   * ANY caller (including the AI-turn path inside #checkAITurn's try/catch)
+   * ANY caller (including the bot-turn path inside #checkBotTurn's try/catch)
    * cannot propagate and be misclassified as an unrelated failure.
    */
   async #save(): Promise<void> {
@@ -2257,7 +2257,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    */
   broadcast(): void {
     // Refresh the runner's per-action undo checkpoint on every state change.
-    // broadcast() is the universal post-mutation funnel (human actions, AI moves,
+    // broadcast() is the universal post-mutation funnel (human actions, bot moves,
     // pending selection steps, and cancels all broadcast), so this keeps
     // StateHistory.undoToTurnStart's authoritative checkpoints current even
     // though the stateful session persists only actionHistory. Runs before the
@@ -2318,42 +2318,42 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   // ============================================
-  // AI Integration
+  // Bot Integration
   // ============================================
 
   /**
-   * Schedule an AI check (non-blocking)
+   * Schedule a bot check (non-blocking)
    */
-  #scheduleAICheck(): void {
-    if (!this.#aiController?.hasAIPlayers()) return;
+  #scheduleBotCheck(): void {
+    if (!this.#botController?.hasBotPlayers()) return;
 
     // Use setImmediate/setTimeout to avoid blocking
     const schedule = typeof setImmediate !== 'undefined'
       ? setImmediate
       : (fn: () => void) => setTimeout(fn, 0);
 
-    schedule(() => this.#checkAITurn());
+    schedule(() => this.#checkBotTurn());
   }
 
   /**
-   * Check if AI should play and execute move.
+   * Check if bot should play and execute move.
    * Uses a circuit breaker to stop retrying after repeated failures,
-   * preventing infinite loops when the AI can't clone the game state.
+   * preventing infinite loops when the bot can't clone the game state.
    */
-  async #checkAITurn(): Promise<void> {
-    if (!this.#aiController) return;
+  async #checkBotTurn(): Promise<void> {
+    if (!this.#botController) return;
 
     let move: { action: string; player: number; args: Record<string, unknown> } | null = null;
 
     try {
-      move = await this.#aiController.checkAndPlay(
+      move = await this.#botController.checkAndPlay(
         this.#runner,
         this.#storedState.actionHistory,
         async (action, player, args) => {
           const result = this.#runner.performAction(action, player, args);
           if (result.success) {
             this.#storedState.actionHistory = this.#runner.actionHistory;
-            // Auto-advance tutorial for all running seats after an AI action.
+            // Auto-advance tutorial for all running seats after a bot action.
             // Mirrors the post-action pump in performAction — opponent moves must
             // trigger advanceWhen evaluation for every learner seat (CR-02).
             const game = this.#runner.game;
@@ -2365,9 +2365,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               }
             }
             // Persistence failures here are routed through #persistSafely (via
-            // #save) and NEVER thrown, so a storage outage during an AI turn
+            // #save) and NEVER thrown, so a storage outage during a bot turn
             // counts against #persistenceConsecutiveFailures — never against
-            // #aiConsecutiveFailures below (Pitfall 2 / T-126-04 regression fix).
+            // #botConsecutiveFailures below (Pitfall 2 / T-126-04 regression fix).
             await this.#save();
             // Clear narration after the move executes so the announcement is
             // transient (shown during the delay, gone after the move lands).
@@ -2378,37 +2378,37 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
           }
           return false;
         },
-        // Demo narration hook: undefined outside demo mode (no-op to standard AI turns).
+        // Demo narration hook: undefined outside demo mode (no-op to standard bot turns).
         this.#onBeforeMove
       );
     } catch (error) {
-      // AI threw (e.g., failed to clone game for MCTS search)
+      // bot threw (e.g., failed to clone game for MCTS search)
       const flowState = this.#runner.getFlowState();
       if (flowState?.awaitingInput && !flowState.complete) {
-        this.#aiConsecutiveFailures++;
-        if (this.#aiConsecutiveFailures >= 3) {
+        this.#botConsecutiveFailures++;
+        if (this.#botConsecutiveFailures >= 3) {
           console.error(
-            `[AI] Giving up after ${this.#aiConsecutiveFailures} consecutive failures. ` +
+            `[bot] Giving up after ${this.#botConsecutiveFailures} consecutive failures. ` +
             `The game may have non-deterministic flow logic (e.g., an execute block that ` +
             `completes the game during replay). Last error: ${error instanceof Error ? error.message : error}`
           );
           return;
         }
-        this.#scheduleAICheck();
+        this.#scheduleBotCheck();
       }
       return;
     }
 
-    // If AI made a move, reset failure counter and check again
+    // If bot made a move, reset failure counter and check again
     if (move) {
-      this.#aiConsecutiveFailures = 0;
-      this.#scheduleAICheck();
+      this.#botConsecutiveFailures = 0;
+      this.#scheduleBotCheck();
     } else {
       // Even if no move was made (e.g., turn changed during delay, or blocked by #thinking),
-      // we should still check if another AI player needs to act
+      // we should still check if another bot player needs to act
       const flowState = this.#runner.getFlowState();
       if (flowState?.awaitingInput && !flowState.complete) {
-        this.#scheduleAICheck();
+        this.#scheduleBotCheck();
       }
     }
   }
@@ -2549,7 +2549,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
-   * Remove a player slot (host only, slot must be open or AI)
+   * Remove a player slot (host only, slot must be open or bot)
    *
    * @param playerId Must be the creator's ID
    * @param seat Seat of the slot to remove
@@ -2566,24 +2566,24 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
-   * Toggle a slot between open and AI (host only)
+   * Toggle a slot between open and bot (host only)
    *
    * @param playerId Must be the creator's ID
    * @param seat Seat of the slot to modify
-   * @param isBot Whether to make this an AI slot
-   * @param aiLevel AI difficulty level (if isBot is true)
+   * @param isBot Whether to make this a bot slot
+   * @param botLevel bot difficulty level (if isBot is true)
    * @returns Result with updated lobby info
    */
-  async setSlotAI(
+  async setSlotBot(
     playerId: string,
     seat: number,
     isBot: boolean,
-    aiLevel: string = 'medium'
+    botLevel: string = 'medium'
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#lobbyManager) {
       return { success: false, error: 'Game does not have a lobby' };
     }
-    const result = await this.#lobbyManager.setSlotAI(playerId, seat, isBot, aiLevel);
+    const result = await this.#lobbyManager.setSlotBot(playerId, seat, isBot, botLevel);
     // If game started, also broadcast initial game state
     if (result.success && result.gameStarted) {
       this.broadcast();

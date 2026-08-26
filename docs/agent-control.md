@@ -1,6 +1,6 @@
 # Agent Control: Driving a Game Headlessly
 
-This guide is for AI agents (and developers writing bots, tree-search AI, or
+This guide is for bot agents (and developers writing bots, tree-search bot, or
 CI harnesses) that need to drive a BoardSmith game **without a browser** —
 no DOM, no WebSocket, no UI. Everything here runs in-process against a
 `Game` instance.

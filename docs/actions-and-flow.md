@@ -586,7 +586,7 @@ dispatches it. Tutorials can suppress auto-fill per step instead, when the point
 is for the learner to perform the click — see
 [Teaching & Tutorials](./teaching-and-tutorials.md) for `suppressAutoFill`.
 
-Note that auto-fill is a **human-UI** behaviour. An AI seat plays a sole legal
+Note that auto-fill is a **human-UI** behaviour. An bot seat plays a sole legal
 move regardless.
 
 ### Action Options

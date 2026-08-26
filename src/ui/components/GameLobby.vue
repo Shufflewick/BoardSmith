@@ -12,7 +12,7 @@ import { ref, onMounted } from 'vue';
 interface PlayerConfig {
   name: string;
   isBot: boolean;
-  aiLevel: string;
+  botLevel: string;
   [key: string]: unknown;
 }
 
@@ -34,8 +34,8 @@ const props = defineProps<{
   displayName: string;
   /** API base URL (optional, defaults to same origin with port 8787) */
   apiUrl?: string;
-  /** Player positions that should be AI by default (1-indexed). E.g., [2] makes player 2 AI */
-  defaultAIPlayers?: number[];
+  /** Player positions that should be bot by default (1-indexed). E.g., [2] makes player 2 bot */
+  defaultBotPlayers?: number[];
 }>();
 
 const joinGameId = defineModel<string>('joinGameId', { required: true });
@@ -86,13 +86,13 @@ onMounted(async () => {
 // Handle create game - just use defaults, host will configure in waiting room
 function handleCreate() {
   const minPlayers = definition.value?.minPlayers ?? 2;
-  const defaultAI = props.defaultAIPlayers || [];
+  const defaultBot = props.defaultBotPlayers || [];
 
-  // Create with minimum players, applying default AI settings
+  // Create with minimum players, applying default bot settings
   const playerConfigs: PlayerConfig[] = Array.from({ length: minPlayers }, (_, i) => ({
-    name: defaultAI.includes(i) ? 'Bot' : `Player ${i + 1}`,
-    isBot: defaultAI.includes(i),
-    aiLevel: 'medium',
+    name: defaultBot.includes(i) ? 'Bot' : `Player ${i + 1}`,
+    isBot: defaultBot.includes(i),
+    botLevel: 'medium',
   }));
 
   emit('create', {

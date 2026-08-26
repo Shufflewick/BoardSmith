@@ -3,9 +3,9 @@ import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
 import {
   DevFlagError,
   parsePositiveInt,
-  parseAiSeats,
+  parseBotSeats,
   resolveEffectivePlayerCount,
-  validateAiSeats,
+  validateBotSeats,
   resolveHost,
   multiplayerBannerLine,
   formatUnknownKeyWarnings,
@@ -49,23 +49,23 @@ describe('parsePositiveInt (CLIX-06: fail-fast numeric flags)', () => {
   });
 });
 
-describe('parseAiSeats (CLIX-06: fail-fast --ai parsing, no silent filtering)', () => {
-  it('throws an actionable DevFlagError on a non-numeric --ai value instead of silently dropping it', () => {
-    expect(() => parseAiSeats(['abc'])).toThrow(DevFlagError);
-    expect(() => parseAiSeats(['abc'])).toThrow(/--ai/);
+describe('parseBotSeats (CLIX-06: fail-fast --bot parsing, no silent filtering)', () => {
+  it('throws an actionable DevFlagError on a non-numeric --bot value instead of silently dropping it', () => {
+    expect(() => parseBotSeats(['abc'])).toThrow(DevFlagError);
+    expect(() => parseBotSeats(['abc'])).toThrow(/--bot/);
   });
 
   it('throws when any comma-separated entry is non-numeric', () => {
-    expect(() => parseAiSeats(['1,abc,3'])).toThrow(DevFlagError);
+    expect(() => parseBotSeats(['1,abc,3'])).toThrow(DevFlagError);
   });
 
-  it('parses comma-separated and repeated --ai flags into a flat seat list', () => {
-    expect(parseAiSeats(['1,2'])).toEqual([1, 2]);
-    expect(parseAiSeats(['1', '2'])).toEqual([1, 2]);
+  it('parses comma-separated and repeated --bot flags into a flat seat list', () => {
+    expect(parseBotSeats(['1,2'])).toEqual([1, 2]);
+    expect(parseBotSeats(['1', '2'])).toEqual([1, 2]);
   });
 
-  it('returns an empty list when --ai was not passed', () => {
-    expect(parseAiSeats(undefined)).toEqual([]);
+  it('returns an empty list when --bot was not passed', () => {
+    expect(parseBotSeats(undefined)).toEqual([]);
   });
 });
 
@@ -85,17 +85,17 @@ describe('resolveEffectivePlayerCount (CLIX-06: error, not clamp, on out-of-rang
   });
 });
 
-describe('validateAiSeats (CLIX-06/F34: validated against the effective post-resolution count)', () => {
-  it('accepts AI seats within the effective player count', () => {
-    expect(() => validateAiSeats([1, 2], 2)).not.toThrow();
+describe('validateBotSeats (CLIX-06/F34: validated against the effective post-resolution count)', () => {
+  it('accepts bot seats within the effective player count', () => {
+    expect(() => validateBotSeats([1, 2], 2)).not.toThrow();
   });
 
-  it('rejects AI seats beyond the effective (not a stale raw) player count', () => {
+  it('rejects bot seats beyond the effective (not a stale raw) player count', () => {
     // Pitfall 3 regression: a seat that would have passed against a raw
     // pre-clamp playerCount must still be rejected once validated against
     // the effective (post-resolution) count.
-    expect(() => validateAiSeats([5], 2)).toThrow(DevFlagError);
-    expect(() => validateAiSeats([5], 2)).toThrow(/1 to 2/);
+    expect(() => validateBotSeats([5], 2)).toThrow(DevFlagError);
+    expect(() => validateBotSeats([5], 2)).toThrow(/1 to 2/);
   });
 });
 
@@ -127,7 +127,7 @@ describe('resolveHost (CLIX-04: default 127.0.0.1, --lan/--host 0.0.0.0 opts int
   it('errors when --lan and --host are combined instead of silently dropping --lan (WR-04)', () => {
     // Pre-fix, `--lan --host 127.0.0.1` bound local-only and dropped the
     // security-relevant --lan without any notice — the same silent-ignore
-    // class of defect this phase removed from --ai/--players.
+    // class of defect this phase removed from --bot/--players.
     expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(DevFlagError);
     expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(/--lan/);
     expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(/--host/);
