@@ -401,7 +401,7 @@ The default narrator formats: `"PlayerName: actionName destination"` — it uses
 
 Internally, `startDemo` saves the current `BotController`, builds an all-seats bot controller, installs an `onBeforeMove` hook that sets `#narrationText` and broadcasts before each move, then starts the bot loop. `stopDemo` restores the original controller and clears the narration hook.
 
-**Caveat — bot-seat gating:** The demo affordance requires an bot seat to be present. In the `boardsmith dev` host, the "Follow-active-seat" feature hands control of whichever seat is active to the dev window, removing that seat's bot presence. Driving a seat with Follow-active-seat therefore prevents the demo from running for that seat. This is a dev-host testing caveat, not a production limitation.
+**Caveat — bot-seat gating:** The demo affordance requires a bot seat to be present. In the `boardsmith dev` host, the "Follow-active-seat" feature hands control of whichever seat is active to the dev window, removing that seat's bot presence. Driving a seat with Follow-active-seat therefore prevents the demo from running for that seat. This is a dev-host testing caveat, not a production limitation.
 
 ### Evaluation heatmap
 

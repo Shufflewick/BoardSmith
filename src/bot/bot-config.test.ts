@@ -16,28 +16,30 @@ describe('parseBotLevel', () => {
     expect(parseBotLevel('1')).toBe(1);
   });
 
-  it('falls back to medium for an unrecognised name', () => {
-    expect(parseBotLevel('impossible')).toBe('medium');
-    expect(parseBotLevel('')).toBe('medium');
+  it('rejects an unrecognised name instead of quietly playing at medium', () => {
+    // `expert` is the one people actually type: it reads like a fourth preset
+    // and used to degrade to medium without a word.
+    expect(() => parseBotLevel('expert')).toThrow(/expert/);
+    expect(() => parseBotLevel('expert')).toThrow(/easy, medium, hard/);
+    expect(() => parseBotLevel('impossible')).toThrow();
+    expect(() => parseBotLevel('')).toThrow();
   });
 
-  it('falls back to medium rather than accepting a nonsensical iteration count', () => {
-    expect(parseBotLevel('0')).toBe('medium');
-    expect(parseBotLevel('-50')).toBe('medium');
+  it('rejects a nonsensical iteration count rather than substituting a preset', () => {
+    expect(() => parseBotLevel('0')).toThrow();
+    expect(() => parseBotLevel('-50')).toThrow();
   });
 
-  it('accepts a numeric string with trailing text as its leading number', () => {
-    // parseInt semantics: '500x' is a typo'd count, not a preset name, and
-    // 500 is the reading closest to what was typed.
-    expect(parseBotLevel('500x')).toBe(500);
+  it('rejects a numeric string with trailing text rather than guessing a count', () => {
+    expect(() => parseBotLevel('500x')).toThrow();
   });
 
-  it('is case sensitive — an unknown casing falls back rather than guessing', () => {
-    expect(parseBotLevel('HARD')).toBe('medium');
+  it('is case sensitive — an unknown casing is an error, not a guess', () => {
+    expect(() => parseBotLevel('HARD')).toThrow(/HARD/);
   });
 
   it('returns something every preset lookup or bot constructor can consume', () => {
-    for (const level of ['easy', 'hard', '750', 'nonsense']) {
+    for (const level of ['easy', 'hard', '750']) {
       const parsed = parseBotLevel(level);
       const usable = typeof parsed === 'number' ? parsed > 0 : parsed in DIFFICULTY_PRESETS;
       expect(usable).toBe(true);
@@ -113,6 +115,8 @@ describe('DIFFICULTY_PRESETS', () => {
   });
 
   it('every preset name parseBotLevel can return is a real preset', () => {
-    expect(DIFFICULTY_PRESETS[parseBotLevel('unknown') as string]).toBeDefined();
+    for (const name of Object.keys(DIFFICULTY_PRESETS)) {
+      expect(DIFFICULTY_PRESETS[parseBotLevel(name) as string]).toBeDefined();
+    }
   });
 });

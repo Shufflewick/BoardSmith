@@ -340,7 +340,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   /** Circuit breaker: consecutive persistence-save failures before persistenceHealthy flips false. */
   #persistenceConsecutiveFailures = 0;
   /**
-   * Bot bot config (objectives, hintTargetFromMove) kept on the session so
+   * Bot strategy config (objectives, hintTargetFromMove) kept on the session so
    * ephemeral bots for requestHint() and setHeatmapVisible() can use the
    * same game-specific extraction hook as the main BotController.
    */

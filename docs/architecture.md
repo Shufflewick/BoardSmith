@@ -65,9 +65,9 @@ This document provides an overview of the BoardSmith package architecture and ho
 │                     - build                 │                              │
 │                     - test          client connects over WebSocket to a    │
 │                     - validate      host PROVIDED BY THE DEPLOYMENT         │
-│                     - evolve-bot    PLATFORM — BoardSmith ships no server   │
-│                     - publish       or worker module (see Runtime          │
-│                                     Isolation below).                       │
+│                     - publish       PLATFORM — BoardSmith ships no server   │
+│                     - evolve-bot-   or worker module (see Runtime          │
+│                       weights       Isolation below).                       │
 │                                             │                              │
 │                                             ▼                              │
 │                                        ┌─────────┐                         │
@@ -245,10 +245,23 @@ the deployment platform that hosts the session (see Runtime Isolation below).
 | `client` | Browser SDK | `MeepleClient`, `GameConnection` |
 | `ui` | Vue components | `GameShell`, composables |
 | `bot` | MCTS bot | `createBot`, `MCTSBot` |
-| `bot-trainer` | Bot training | `trainBot`, `introspectGame` |
+| `bot-trainer` | Bot training | `introspectGame`, `generateBotCode`, `WeightEvolver` |
 | `cli` | Dev tools | Commands (init, dev, build, etc.) |
 | `testing` | Test utilities | `createTestGame`, assertions |
 | `eslint-plugin` | Linting rules | Sandbox security rules |
+
+## Element Residency: Snapshot Mode vs World Mode
+
+Every flow above assumes **snapshot mode** — the whole element tree resident,
+serialized whole and restored whole. That is what every published board game
+uses.
+
+The engine also has **world mode** (contract r17) for worlds too large to hold
+in memory: `enableWorldMode`, `definePartition`, `adoptSubtree`, `evictSubtree`,
+`touchedPartitions`, `clearTouchedPartitions`. Only the named partitions are
+resident, the rest are absent from the tree, and the engine reports which
+partitions a move dirtied so the platform can checkpoint just those. See
+[Core Concepts — Snapshot Mode and World Mode](./core-concepts.md#snapshot-mode-and-world-mode).
 
 ## Runtime Isolation & the "Sandbox"
 

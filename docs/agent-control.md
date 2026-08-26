@@ -488,7 +488,11 @@ Both `GameSession` and the dev host's `SnapshotSessionHost` surface storage
 failures as **observable state**, not just a console log an agent can't see:
 
 ```typescript
-const session = GameSession.create(GameClass, storage, {
+const session = GameSession.create({
+  GameClass,
+  gameType: 'my-game',
+  playerCount: 2,
+  storage,
   onPersistenceError: (error, consecutiveFailures, healthy) => {
     // error: { message, timestamp } — message never contains a stack trace
     // consecutiveFailures: running count since the last successful save

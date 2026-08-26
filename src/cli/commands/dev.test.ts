@@ -6,6 +6,7 @@ import {
   parseBotSeats,
   resolveEffectivePlayerCount,
   validateBotSeats,
+  validateBotLevel,
   resolveHost,
   multiplayerBannerLine,
   formatUnknownKeyWarnings,
@@ -46,6 +47,27 @@ describe('parsePositiveInt (CLIX-06: fail-fast numeric flags)', () => {
   it('returns the parsed integer for valid input', () => {
     expect(parsePositiveInt('players', '3')).toBe(3);
     expect(parsePositiveInt('port', '5173')).toBe(5173);
+  });
+});
+
+describe('validateBotLevel (--bot-level names a real preset or a real count)', () => {
+  it.each(['easy', 'medium', 'hard'])('accepts the preset %s', (level) => {
+    expect(() => validateBotLevel(level)).not.toThrow();
+  });
+
+  it('accepts an explicit iteration count', () => {
+    expect(() => validateBotLevel('750')).not.toThrow();
+  });
+
+  it('rejects expert, which reads like a preset but never was one', () => {
+    expect(() => validateBotLevel('expert')).toThrow(DevFlagError);
+    expect(() => validateBotLevel('expert')).toThrow(/--bot-level/);
+    expect(() => validateBotLevel('expert')).toThrow(/easy, medium, hard/);
+  });
+
+  it('rejects a nonsensical count rather than starting at some other strength', () => {
+    expect(() => validateBotLevel('0')).toThrow(DevFlagError);
+    expect(() => validateBotLevel('-5')).toThrow(DevFlagError);
   });
 });
 

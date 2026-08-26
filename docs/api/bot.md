@@ -6,7 +6,7 @@
 
 Import from `boardsmith/bot` when adding bot opponents to your game. This package provides a Monte Carlo Tree Search (MCTS) bot that can play any BoardSmith game with configurable difficulty levels.
 
-For the conceptual guide — how to write objectives, tune difficulty, and debug a bot that plays badly — see [bot System](../bot-system.md). This page is the API surface only.
+For the conceptual guide — how to write objectives, tune difficulty, and debug a bot that plays badly — see [Bot System](../bot-system.md). This page is the API surface only.
 
 ## Usage
 
@@ -53,7 +53,7 @@ const game = new CheckersGame({
   playerNames: ['Human', 'bot'],
 });
 
-// Create an bot bot for seat 2 (seats are 1-indexed), medium difficulty
+// Create a bot for seat 2 (seats are 1-indexed), medium difficulty
 const bot = createBot(
   game,
   CheckersGame,
@@ -212,6 +212,6 @@ The bot automatically handles:
 
 ## See Also
 
-- [bot System Guide](../bot-system.md) - Detailed bot system documentation
+- [Bot System Guide](../bot-system.md) - Detailed bot system documentation
 - [boardsmith/bot-trainer](./bot-trainer.md) - Train and improve bot weights
 - [boardsmith/session](./session.md) - Using bot with GameSession

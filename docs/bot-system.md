@@ -30,8 +30,8 @@ The easiest way to add bot players is via the CLI:
 # Player 1 is a bot (medium difficulty)
 boardsmith dev --bot 1
 
-# Players 0 and 2 are bots
-boardsmith dev --bot 0 2
+# Players 1 and 3 are bots
+boardsmith dev --bot 1 3
 
 # Set difficulty level
 boardsmith dev --bot 1 --bot-level hard
@@ -42,13 +42,13 @@ boardsmith dev --bot 1 --bot-level 50
 
 ### Difficulty Levels
 
-| Level | Iterations | Playout Depth | Timeout |
-|-------|-----------|---------------|---------|
-| easy | 3 | 3 | 1000ms |
-| medium | 5 | 4 | 1500ms |
-| hard | 8 | 5 | 2000ms |
+| Level | Iterations | Playout Depth | Timeout | Parallel |
+|-------|-----------|---------------|---------|----------|
+| easy | 100 | 2 | 1000ms | - |
+| medium | 300 | 3 | 1500ms | - |
+| hard | 500 | 4 | 2000ms | 2 |
 
-Note: Iterations are kept low because game operations can be slow (~18ms per move). The timeout ensures responsive behavior.
+Seat numbers are 1-indexed everywhere: `--bot 1` makes the first seat a bot, and `--bot 0` is rejected.
 
 ### Programmatic Usage
 
@@ -61,7 +61,7 @@ const bot = createBot(
   game,                    // Game instance
   MyGame,                  // Game class constructor
   'my-game',               // Game type identifier
-  1,                       // Player index (0-based)
+  1,                       // Player position (1-indexed)
   actionHistory,           // History of actions taken so far
   'hard'                   // Difficulty level or iteration count
 );
@@ -84,7 +84,7 @@ For games where win/loss isn't sufficient guidance, you can define objectives th
 import type { BotStrategy } from 'boardsmith/bot';
 import type { Game } from 'boardsmith';
 
-const botSeatConfig: BotStrategy = {
+const myGameBotStrategy: BotStrategy = {
   objectives: (game: Game, playerIndex: number) => ({
     // Positive weight = good for the player
     controlCenter: {
@@ -118,7 +118,7 @@ const botSeatConfig: BotStrategy = {
 };
 
 // Use with createBot
-const bot = createBot(game, MyGame, 'my-game', 1, [], 'medium', botSeatConfig);
+const bot = createBot(game, MyGame, 'my-game', 1, [], 'medium', myGameBotStrategy);
 ```
 
 ### Objective Evaluation
@@ -188,24 +188,24 @@ const session = GameSession.create({
   gameType: 'my-game',
   playerCount: 2,
   playerNames: ['You', 'Computer'],
-  botSeatConfig: { players: [1], level: 'hard' }, // Player 1 is bot at 'hard' level
-  botStrategy: myGameBotStrategy,                // Optional custom objectives
+  botSeats: { players: [1], level: 'hard' },  // Player 1 is a bot at 'hard' level
+  botStrategy: myGameBotStrategy,             // Optional custom objectives
 });
 
 // bot will automatically play when it's player 1's turn
 ```
 
-> `botSeatConfig` declares which seats are bot (`players`) and the difficulty (`level`).
+> `botSeats` declares which seats are bots (`players`) and the difficulty (`level`).
 > The game's custom objectives/threat hooks go in `botStrategy`.
 
 ## BotConfig Options
 
 ```typescript
 interface BotConfig {
-  /** Number of MCTS iterations (higher = stronger but slower). Default: 100 */
+  /** Number of MCTS iterations (higher = stronger but slower). Default: 300 */
   iterations: number;
 
-  /** Maximum playout depth before evaluating position. Default: 5 */
+  /** Maximum playout depth before evaluating position. Default: 3 */
   playoutDepth: number;
 
   /** Random seed for reproducible behavior */
@@ -216,6 +216,9 @@ interface BotConfig {
 
   /** Maximum time in milliseconds before returning best move found. Default: 2000 */
   timeout?: number;
+
+  /** Number of parallel ensemble searches. Default: 1 */
+  parallel?: number;
 }
 ```
 
@@ -249,7 +252,7 @@ function createBot<G extends Game>(
   playerIndex: number,
   actionHistory?: SerializedAction[],
   difficulty?: DifficultyLevel | number,
-  botSeatConfig?: BotStrategy
+  botStrategy?: BotStrategy
 ): MCTSBot<G>
 ```
 
@@ -267,7 +270,7 @@ Returns the best move found after running MCTS iterations.
 function parseBotLevel(level: string): DifficultyLevel | number
 ```
 
-Parse an bot level string (e.g., from CLI arguments).
+Parse a bot level string (e.g., from CLI arguments).
 
 ## Related Documentation
 

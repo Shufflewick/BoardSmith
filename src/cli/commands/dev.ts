@@ -14,6 +14,7 @@ import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
 import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
+import { parseBotLevel } from '../../bot/index.js';
 
 /** executeOp bundled from the SAME module graph as the rules (one engine). */
 type RuntimeExecuteOp = (
@@ -91,6 +92,20 @@ export function parseSeedFile(path: string): GameStateSnapshot {
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new DevFlagError(`Error: --seed file at ${path} is not valid JSON: ${reason}`);
+  }
+}
+
+/**
+ * Fail-fast `--bot-level` validator. The level names a difficulty preset or an
+ * explicit iteration count; anything else is a typo, and a session that quietly
+ * downgrades to medium hides it for every move of every game.
+ */
+export function validateBotLevel(level: string): void {
+  try {
+    parseBotLevel(level);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new DevFlagError(`Error: --bot-level is invalid. ${reason}`);
   }
 }
 
@@ -604,6 +619,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   }
 
   const botLevel = options.botLevel ?? 'medium';
+  validateBotLevel(botLevel);
   // Single source of truth for the teaching lockout — passed into both the server
   // (MultiplayerHost → createDevSession adapters) and the client (buildDevConfig →
   // DevHost.vue init postMessage → GameShell).

@@ -24,7 +24,7 @@ export interface CodeGeneratorOptions {
 }
 
 /**
- * Generate an bot.ts file from training results
+ * Generate a bot.ts file from training results
  */
 export function generateBotCode(
   result: TrainingResult,

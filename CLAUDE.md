@@ -39,7 +39,7 @@ Every design decision should guide developers and users toward correct behavior 
 
 # Modules
 
-- **engine** - Core game rules: elements (cards, pieces, dice, grids), flow control, actions, and state-authoritative snapshots/checkpoints (NOT event sourcing — state is restored whole, never replayed).
+- **engine** - Core game rules: elements (cards, pieces, dice, grids), flow control, actions, and state-authoritative snapshots/checkpoints (NOT event sourcing — state is restored whole, never replayed). Also carries world mode (r17), an opt-in residency model where only named partitions are resident and the engine reports which a move dirtied — see docs/core-concepts.md.
 - **session** - Game lifecycle management: player handling, action validation, checkpoints, undo, and storage/broadcast adapters.
 - **ui** - Vue 3 components: GameShell, AutoUI, drag-drop, animations (FLIP, flying elements), action panels, and theming.
 - **types** - Shared protocol types for WebSocket messages, lobby state, and action requests.

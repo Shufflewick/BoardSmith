@@ -352,6 +352,54 @@ Each player receives a filtered view of the game state:
   `contentsVisibleToOwner()`
 - Server-side information is stripped
 
+## Snapshot Mode and World Mode
+
+Everything above describes **snapshot mode**: the whole element tree is
+resident in memory, `createSnapshot` writes all of it, and a restore rebuilds
+all of it. Every published board game runs this way, and nothing in this
+section changes that.
+
+**World mode** (engine contract r17) is the other residency model, for a world
+too large to hold at once. The platform keeps only the partitions a command
+names resident; every other partition is *absent* from the element tree — not
+stubbed, not lazily loaded, absent. `atId`, `all()` and `toJSON` therefore cost
+O(resident) rather than O(world), with no change to how traversal or actions
+behave.
+
+```typescript
+game.enableWorldMode();          // one-way switch; do it before serializing
+game.definePartition(regionId);  // this subtree loads/checkpoints/evicts as a unit
+
+// hydrate a partition the platform has in storage
+const region = game.adoptSubtree(parentId, storedRegionJson);
+
+// after a command runs, ask which partitions its moves dirtied
+const dirty = game.touchedPartitions;   // both endpoints of every cross-partition move
+game.clearTouchedPartitions();          // once the checkpoint is written
+
+game.evictSubtree(regionId);     // residency change, not a game move: no onExit fires
+```
+
+Three things to know before using it:
+
+- **The switch is one-way and must come first.** World mode writes element
+  references in attributes as `{ __elementId }` instead of a positional branch
+  path, because absence shifts every later sibling index. A tree that emitted
+  branch refs and then switched would carry both formats, and the branch half
+  would resolve against whatever happened to be resident. `enableWorldMode()`
+  has no counterpart, and world-mode calls throw in snapshot mode rather than
+  quietly working.
+- **A partition's `Space` handlers belong in its own constructor.** `adoptSubtree`
+  runs the grafted class's constructor; it has no earlier incarnation to
+  re-capture `onEnter`/`onExit` from. A handler registered in the `Game`
+  constructor for a partition that was not resident at construction time
+  attaches to nothing and is silently lost.
+- **The engine tracks touches, not contents.** It stores no partition names and
+  no partition contents — the platform already knows what it hydrated. What the
+  platform cannot see is which partitions a *move* dirtied, so that is the one
+  half `touchedPartitions` supplies. Union it with the partitions you hydrated
+  to get the checkpoint's dirty set.
+
 ## Game Lifecycle
 
 ```

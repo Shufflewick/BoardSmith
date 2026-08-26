@@ -65,11 +65,11 @@ other devices on your network join.
 boardsmith dev --players 3
 
 # Add bot opponents (player positions are 1-indexed)
-boardsmith dev --bot 2              # Player 2 is bot
-boardsmith dev --bot 1 3            # Players 1 and 3 are bot
+boardsmith dev --bot 2              # Player 2 is a bot
+boardsmith dev --bot 1 3            # Players 1 and 3 are bots
 
 # Set bot difficulty
-boardsmith dev --bot 2 --bot-level hard    # easy, medium, hard, expert
+boardsmith dev --bot 2 --bot-level hard    # easy, medium, hard, or an iteration count
 
 # Custom port
 boardsmith dev --port 3000

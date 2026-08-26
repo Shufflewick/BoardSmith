@@ -127,13 +127,13 @@ const session = GameSession.create({
   playerCount: 2,
   playerNames: ['Human', 'Bot'],
   botSeatConfig: {
-    players: [1], // Player 1 is bot
+    players: [1], // Player 1 is a bot
     level: 'hard',
   },
 });
 
 // bot moves are handled automatically when it's the bot's turn.
-// Player 1 is bot here, so the human plays seat 2.
+// Player 1 is a bot here, so the human plays seat 2.
 const result = await session.performAction('move', 2, { from: 'a1', to: 'b2' });
 // After the human moves, bot will automatically play
 ```

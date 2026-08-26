@@ -962,7 +962,7 @@ const { isFlying } = flyOnAppear({
 
 ### useActionAnimations
 
-Declarative animations triggered by action execution. Captures element positions before actions execute and animates to the new position after the DOM updates. Integrates with `actionController.registerBeforeAutoExecute()`.
+Declarative animations triggered by action execution. Captures element positions before actions execute and animates to the new position after the DOM updates. Integrates with `actionController.setBeforeAutoExecute()`, which returns an unregister function.
 
 **Key Feature: Flip-in-Place Auto-Detection**
 
@@ -998,7 +998,9 @@ const actionAnimations = useActionAnimations({
 // Register with actionController (in GameTable setup)
 function setupAnimations(actionController, gameView) {
   gameViewRef.value = gameView;
-  actionController.registerBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
+  // Returns an unregister function. Called inside setup(), the hook is also
+  // unregistered automatically when the component's effect scope disposes.
+  return actionController.setBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
 }
 ```
 

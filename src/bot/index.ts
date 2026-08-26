@@ -68,7 +68,11 @@ export function createBot<G extends Game>(
 }
 
 /**
- * Parse bot level from string (CLI argument)
+ * Parse bot level from string (CLI argument).
+ *
+ * Accepts a preset name or a positive whole iteration count. Anything else
+ * throws: a level nobody recognises is a typo, and quietly playing at medium
+ * hides it for the whole session.
  */
 export function parseBotLevel(level: string): DifficultyLevel | number {
   // Check if it's a preset name
@@ -76,12 +80,13 @@ export function parseBotLevel(level: string): DifficultyLevel | number {
     return level as DifficultyLevel;
   }
 
-  // Try to parse as number
-  const num = parseInt(level, 10);
-  if (!isNaN(num) && num > 0) {
-    return num;
+  // Try to parse as an explicit iteration count
+  if (/^\d+$/.test(level) && Number(level) > 0) {
+    return Number(level);
   }
 
-  // Default to medium
-  return 'medium';
+  const presets = Object.keys(DIFFICULTY_PRESETS).join(', ');
+  throw new Error(
+    `Unknown bot level "${level}". Use one of: ${presets}, or a positive iteration count such as 750.`
+  );
 }

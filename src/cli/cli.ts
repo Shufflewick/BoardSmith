@@ -85,7 +85,7 @@ program
   .option('--lan', 'Shorthand for --host 0.0.0.0 -- serves to your whole network (cannot be combined with --host)')
   .option('--players <count>', 'Initial number of players (default: the game\'s minPlayers)')
   .option('--bot <players...>', 'Player positions to be bot (e.g., --bot 1 or --bot 2 4)')
-  .option('--bot-level <level>', 'bot difficulty: easy, medium, hard, expert, or iteration count', 'medium')
+  .option('--bot-level <level>', 'Bot difficulty: easy, medium, hard, or an explicit iteration count', 'medium')
   .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard rounds=5)')
   .option('--preset <name>', 'Apply a declared preset\'s whole bundle of game option values (and player count, if the preset declares one)')
   .option('--lock-teaching', 'Disable bot hint, move-quality heatmap, bot-vs-bot demo, and tutorial (action help stays enabled)')

@@ -219,5 +219,5 @@ console.log(`State space: ~10^${complexity.stateSpaceExponent}`);
 
 ## See Also
 
-- [bot System Guide](../bot-system.md) - bot system overview
+- [Bot System Guide](../bot-system.md) - Bot system overview
 - [boardsmith/bot](./bot.md) - Using trained bot in games
