@@ -182,7 +182,7 @@ describe('dynamic (function-valued) multiSelect enumeration', () => {
       seed: 'multiselect-bot-test',
     });
 
-    const move = await bot.play();
+    const move = (await bot.play())!;
     expect(move.action).toBe('pick');
     expect(Array.isArray(move.args.items)).toBe(true);
     expect((move.args.items as unknown[]).length).toBe(2);
@@ -246,7 +246,7 @@ describe('dynamic (function-valued) multiSelect enumeration', () => {
       playoutDepth: 1,
       seed: 'multiselect-variable-test',
     });
-    const move = await bot.play();
+    const move = (await bot.play())!;
     expect(move.action).toBe('pick');
     const size = (move.args.items as unknown[]).length;
     expect(size).toBeGreaterThanOrEqual(1);

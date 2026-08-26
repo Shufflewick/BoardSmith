@@ -30,9 +30,14 @@ export {
   PersistentMap,
   DEFAULT_COLOR_PALETTE,
   RandomnessForbiddenError,
+  GAME_ROOT_FIELD_AUDIENCE,
+  GAME_SELF_SERIALIZED_FIELDS,
+  isEngineRootField,
+  engineRootFieldAudience,
 } from './element/index.js';
 
 export type {
+  GameRootFieldAudience,
   ElementClass,
   ElementContext,
   ElementTree,

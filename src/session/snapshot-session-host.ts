@@ -890,6 +890,19 @@ export class SnapshotSessionHost {
           );
           break;
         }
+        // #29: `botMoved: false` covers both "no bot seat was due" (ordinary,
+        // the pump is finished) and "a bot seat was due and could not act".
+        // The second used to be an exception that never got this far — it
+        // escaped executeOp and the seat silently never moved, holding open
+        // every simultaneous step at the table. Say it out loud.
+        if (res.botStalled) {
+          console.error(
+            `[SnapshotSessionHost] bot seat ${res.botStalled.seat} is STALLED: ${res.botStalled.reason} ` +
+              `The rest of the table can still act, but any step waiting on this seat will not close ` +
+              `until a human takes it.`,
+          );
+          break;
+        }
         if (!res.botMoved) break;
         moves++;
         await this.apply(res);

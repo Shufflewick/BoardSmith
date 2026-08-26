@@ -119,21 +119,21 @@ describe('createBot', () => {
   });
 
   it('returns a legal move for the seat it plays', async () => {
-    const move = await botFor(newRunner()).play();
+    const move = (await botFor(newRunner()).play())!;
     expect(move.action).toBe('take');
     expect([1, 2, 3]).toContain(move.args.value);
   });
 
   it('produces a move the engine actually accepts', async () => {
     const runner = newRunner();
-    const move = await botFor(runner).play();
+    const move = (await botFor(runner).play())!;
     expect(runner.performAction(move.action, 1, move.args).success).toBe(true);
   });
 
   it('plays for the seat it was given, not always the first', async () => {
     const runner = newRunner();
     runner.performAction('take', 1, { value: 1 });
-    const move = await botFor(runner, 2).play();
+    const move = (await botFor(runner, 2).play())!;
     expect(runner.performAction(move.action, 2, move.args).success).toBe(true);
     expect(runner.game.scores[2]).toBeGreaterThan(0);
   });
@@ -150,7 +150,7 @@ describe('createBot', () => {
       objectives: () => [{ id: 'lead', weight: 1, checker: () => true }],
     });
     expect(bot).toBeInstanceOf(MCTSBot);
-    expect((await bot.play()).action).toBe('take');
+    expect((await bot.play())!.action).toBe('take');
   });
 
   it('takes the winning move when the game is one move from over', async () => {
@@ -162,7 +162,7 @@ describe('createBot', () => {
     runner.performAction('take', 2, { value: 1 });
     expect(runner.game.scores[1]).toBe(3);
 
-    const move = await deterministic(botFor(runner, 1, 200)).play();
+    const move = (await deterministic(botFor(runner, 1, 200)).play())!;
     runner.performAction(move.action, 1, move.args);
 
     expect(runner.game.isFinished()).toBe(true);

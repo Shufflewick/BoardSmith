@@ -72,10 +72,12 @@ describe('MCTSBot.playWithStats() — checkers integration', () => {
 
     const { move } = await bot.playWithStats();
 
+    // Checkers is perfect-information, so the bot always has a searchable move.
+    expect(move).not.toBeNull();
     // Checkers move args contain { from: <id>, to: <id> }.
     // The 'to' field is used by the session layer as the hint/heatmap anchor.
-    expect(move.args).toHaveProperty('to');
-    expect(move.args.to).toBeDefined();
+    expect(move!.args).toHaveProperty('to');
+    expect(move!.args.to).toBeDefined();
   });
 
   it('all stats values are within [0, 1]', async () => {

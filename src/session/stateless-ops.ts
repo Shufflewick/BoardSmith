@@ -25,6 +25,7 @@ import {
   type RandomnessPolicy,
 } from '../runtime/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
+import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
 import { PickHandler } from './pick-handler.js';
 import {
@@ -219,6 +220,16 @@ export interface OpResult {
   multiSelect?: { min: number; max?: number };
   botMoved?: boolean;
   botPlayer?: number;
+  /**
+   * A bot seat that was due but could not move (#29).
+   *
+   * `botMoved` is false for both "no bot seat was due" and "a bot seat was due
+   * and could not act", and those need telling apart: the second is a stalled
+   * seat a host should report, and it used to be an exception that escaped
+   * executeOp and locked the whole table instead. Present only in the second
+   * case.
+   */
+  botStalled?: { seat: number; reason: string };
   /**
    * The seat a `convertSeatToBot` op converted — the engine's ACKNOWLEDGEMENT
    * that it saw the conversion, as opposed to a roster mutation it may or may
@@ -762,7 +773,34 @@ async function handleBotTurn(
     def.bot,
   );
 
-  const move = await bot.play();
+  // #29: this used to be an unguarded `await bot.play()` whose throw escaped
+  // executeOp entirely — the dev host logged it, the covered seat never acted,
+  // and a simultaneousActionStep could not close its round, so the whole table
+  // waited forever. Bot cover is not opt-in (a page reload in dev is a
+  // disconnect), so a hidden-information game reached this in ordinary
+  // playtesting with no bot flag anywhere.
+  //
+  // Both outcomes are now this seat's problem alone: `null` means the bot found
+  // nothing it could search from its own redacted view, and a throw means the
+  // bot itself is broken. Either way the seat is reported as not due, which
+  // stalls one seat instead of locking the session.
+  let move: BotMove | null;
+  try {
+    move = await bot.play();
+  } catch (error) {
+    console.error(`[BoardSmith] Bot for seat ${botPlayer} failed to choose a move:`, error);
+    return { ...notDue, botStalled: { seat: botPlayer, reason: 'The bot failed while choosing a move.' } };
+  }
+  if (!move) {
+    return {
+      ...notDue,
+      botStalled: {
+        seat: botPlayer,
+        reason: bot.lastStallReason ?? 'The bot had no move it could search from this seat\'s view.',
+      },
+    };
+  }
+
   const actionResult = runner.performAction(move.action, botPlayer, move.args);
 
   if (!actionResult.success) {
@@ -830,6 +868,14 @@ async function handleHint(
   );
 
   const move = await bot.play();
+  if (!move) {
+    // Nothing searchable from this seat's own view (#29) — there is no hint to
+    // give, and saying so beats highlighting an arbitrary square.
+    return errorResult(
+      bot.lastStallReason ?? 'No hint is available: the bot found no move it could evaluate from this seat\'s view.',
+      'bundle',
+    );
+  }
 
   // Extract the board highlight target using the same priority chain as
   // GameSession.#extractMoveTarget(): hintTargetFromMove first, then DEST_ARGS fallback.
@@ -1001,6 +1047,13 @@ async function handleBotSuggest(
   );
 
   const move = await bot.play();
+  if (!move) {
+    // The demo has nothing to show for this seat (#29).
+    return errorResult(
+      bot.lastStallReason ?? 'The demo bot found no move it could evaluate from this seat\'s view.',
+      'bundle',
+    );
+  }
 
   // Return the preview — snapshot is NOT mutated (read-only, per READ_ONLY_OP_TYPES).
   // Per RESEARCH Pitfall 8: the stateEnvelope playerViews are discarded by the demo

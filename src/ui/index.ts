@@ -92,6 +92,17 @@ export {
   type BoardTarget,
 } from './composables/useBoardInteraction.js';
 
+// The bridge that keeps a custom board's selection in step with the action
+// controller's fill -> fetchChoicesForPick -> snapshotVersion++ -> currentChoices
+// chain. GameShell calls it internally, so a game built on the shell gets it for
+// free; a game that mounts its board directly — in a test, or without the whole
+// shell — had no way in (#30), which also made BoardSmith's own recommended
+// keyboard-integration test shape unreproducible from a game project.
+export {
+  useBoardActionBridge,
+  type BoardActionBridgeOptions,
+} from './composables/useBoardActionBridge.js';
+
 // Drag-and-drop composable for custom UIs
 export {
   useDragDrop,

@@ -1228,6 +1228,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // 'hard' difficulty. playWithStats() forces single-mode search and the
       // returned stats are unused here — the hint only needs the best move (WR-05).
       const move = await bot.play();
+      // No searchable move from this seat's own view (#29) — there is no hint
+      // to give, and the seat simply keeps whatever hint state it had.
+      if (!move) return;
       const ref = this.#extractMoveTarget(move);
       const target = ref ? { kind: 'element' as const, ref } : undefined;
       const annotation: Annotation = { text: describeMoveForHint(move.args), ...(target ? { target } : {}) };

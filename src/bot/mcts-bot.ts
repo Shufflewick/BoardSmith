@@ -103,10 +103,29 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Run MCTS and return the best move.
-   * Routes to parallel or single mode based on config.
+   * Why the last {@link play} returned `null`, or `undefined` when it returned
+   * a move. Read this to report a stalled seat rather than infer one (#29).
    */
-  async play(): Promise<BotMove> {
+  lastStallReason?: string;
+
+  /**
+   * Run MCTS and return the best move, or `null` when this bot's own
+   * information state offers nothing to search.
+   *
+   * `null` is NOT an error (#29). The search sandbox is built from this seat's
+   * REDACTED payload — which is right, a bot must search what it can actually
+   * know — so per-seat redaction can empty the very choice list the seat's only
+   * action draws from, while the authoritative game offers that seat a full move
+   * list. Throwing there escaped through `handleBotTurn` and `executeOp`, the
+   * dev host logged it and returned, the covered seat never acted, and a
+   * simultaneous step could not close its round: one seat's blind spot locked
+   * the whole table. A `null` stalls that seat alone, and {@link lastStallReason}
+   * says why so the host can report it.
+   *
+   * The underlying gap — that a bot cannot search a state it cannot see —
+   * is #19/#31, and this does not close it.
+   */
+  async play(): Promise<BotMove | null> {
     if (this.config.parallel && this.config.parallel > 1) {
       return this.playParallel();
     }
@@ -123,9 +142,10 @@ export class MCTSBot<G extends Game = Game> {
    * Stats are captured from root.children BEFORE the post-search cleanup discards
    * the tree, so callers always receive a valid (possibly empty) stats array.
    */
-  async playWithStats(): Promise<{ move: BotMove; stats: BotMoveStats[] }> {
+  async playWithStats(): Promise<{ move: BotMove | null; stats: BotMoveStats[] }> {
     // Force single-mode search — parallel mode loses per-child stats.
     const { move, root } = await this.runSearch();
+    if (!move || !root) return { move: null, stats: [] };
     const stats: BotMoveStats[] = root.children.map(child => ({
       move: child.parentMove!,
       visits: child.visits,
@@ -141,7 +161,7 @@ export class MCTSBot<G extends Game = Game> {
    * This provides diversity benefit: each search explores different
    * parts of the game tree due to randomization, reducing blind spots.
    */
-  private async playParallel(): Promise<BotMove> {
+  private async playParallel(): Promise<BotMove | null> {
     const parallelCount = this.config.parallel!;
     const iterationsPerSearch = Math.floor(this.config.iterations / parallelCount);
 
@@ -176,6 +196,12 @@ export class MCTSBot<G extends Game = Game> {
 
       // Run single search (playSingle is private, so use play with parallel: 1)
       const move = await subBot.play();
+      if (!move) {
+        // Every sub-search sees the same information state, so one finding
+        // nothing means they all will. Report the stall rather than voting.
+        this.lastStallReason = subBot.lastStallReason;
+        return null;
+      }
 
       // Tally vote for this move
       const key = JSON.stringify(move);
@@ -211,7 +237,7 @@ export class MCTSBot<G extends Game = Game> {
    * snapshot fields — callers can safely read root.children after this returns.
    * Called by both play() and playWithStats().
    */
-  private async runSearch(): Promise<{ move: BotMove; root: MCTSNode }> {
+  private async runSearch(): Promise<{ move: BotMove | null; root: MCTSNode | null }> {
     // Turn-legality checks read only structural flow state (awaitingInput /
     // currentPlayer / awaitingPlayers), never opponent hidden attributes, so
     // checking them against the live `this.game` before the redacted clone
@@ -248,8 +274,15 @@ export class MCTSBot<G extends Game = Game> {
     // Get ALL available moves first (without sampling) for threat response analysis
     const allMoves = this.enumerateAllMoves(this.searchGame, flowState);
     if (allMoves.length === 0) {
-      throw new Error('No available moves');
+      // See play()'s doc comment: a stall for this seat, not a session lock.
+      this.lastStallReason =
+        `Seat ${this.playerIndex} has no move it can search from its own information state. ` +
+        `The authoritative game may well offer this seat moves — per-seat redaction can empty ` +
+        `the choice list the seat's only action draws from, and the bot searches the redacted ` +
+        `view by design. This seat is stalled; the rest of the table is not.`;
+      return { move: null, root: null };
     }
+    this.lastStallReason = undefined;
 
     // If only one move, skip MCTS search entirely.
     // Return a minimal root with no children — playWithStats() callers get empty stats,

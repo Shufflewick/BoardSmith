@@ -277,6 +277,15 @@ async function runBenchmarkGame<G extends Game>(
       let args: Record<string, unknown>;
       try {
         const move = await bot.play();
+        if (!move) {
+          // The bot found nothing searchable from this seat's view (#29). In a
+          // live game that stalls one seat; in a benchmark the game cannot
+          // proceed, and a game that cannot proceed is not a draw (#37).
+          return incomplete(
+            `The ${isTrainedSeat ? 'trained' : 'baseline'} bot had no searchable move for seat ` +
+            `${currentPlayer}: ${bot.lastStallReason ?? 'no reason recorded'}`
+          );
+        }
         action = move.action;
         args = move.args;
       } catch (error) {

@@ -105,7 +105,7 @@ describe('MCTS element-tree rollback (F-01)', () => {
       async: false,
     });
 
-    const move = await bot.play();
+    const move = (await bot.play())!;
     expect(move.action).toBe('draw');
     // Live game untouched by the search.
     expect(game.deck.all(Piece).length).toBe(3);

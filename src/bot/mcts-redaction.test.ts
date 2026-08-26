@@ -182,7 +182,7 @@ describe('MCTSBot redaction (bot-02 / T-159-06)', () => {
     for (const secretValue of secretValues) {
       const game = createHiddenInfoGame(secretValue, `exploit-${secretValue}`);
       const bot = makeBot(game, `exploit-${secretValue}`);
-      const move = await bot.play();
+      const move = (await bot.play())!;
       results.push(move.args.guessedValue === secretValue);
     }
     // Not asserted -- this is the pre-fix ground truth, captured for the
@@ -197,7 +197,7 @@ describe('MCTSBot redaction (bot-02 / T-159-06)', () => {
     for (const secretValue of secretValues) {
       const game = createHiddenInfoGame(secretValue, `nonexploit-${secretValue}`);
       const bot = makeBot(game, `nonexploit-${secretValue}`);
-      const move = await bot.play();
+      const move = (await bot.play())!;
       matches.push(move.args.guessedValue === secretValue);
     }
     // Pre-fix: the bot's redacted-free clone sees the true value and always
@@ -225,7 +225,7 @@ describe('MCTSBot redaction (bot-02 / T-159-06)', () => {
           const seed = `adversarial-${guesserSeat}-${secretValue}-${suffix}`;
           const game = createHiddenInfoGame(secretValue, seed, guesserSeat);
           const bot = makeBot(game, seed, guesserSeat);
-          const move = await bot.play();
+          const move = (await bot.play())!;
           matches.push(move.args.guessedValue === secretValue);
         }
       }

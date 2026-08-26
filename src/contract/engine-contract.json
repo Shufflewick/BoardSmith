@@ -1,7 +1,7 @@
 {
-  "revision": 19,
+  "revision": 20,
   "bundleProtocol": 1,
-  "surfaceHash": "304b3829682dd75e",
+  "surfaceHash": "1ece3a23909d425b",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -155,6 +155,14 @@
       "surfaceHash": "304b3829682dd75e",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r18: fail-loud authoring errors — ReservedAttributeError, ConditionEvaluationError and PlayerFacingError are exported; a crashing condition, an unknown flow action and detected tree corruption now throw; a failed execute() rolls back and its raw message no longer reaches players (a PlayerFacingError's does)."
+    },
+    {
+      "revision": 20,
+      "date": "2026-08-26",
+      "bundleProtocol": 1,
+      "surfaceHash": "1ece3a23909d425b",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "r19: isEngineRootField / engineRootFieldAudience / GAME_ROOT_FIELD_AUDIENCE are exported so a game can defer to the engine's root-field audiences; enumerateLegalMoves throws on a bad seat instead of returning []; MCTSBot.play resolves to null (with lastStallReason) when a seat's own information state offers no searchable move, instead of throwing and locking the table."
     }
   ]
 }

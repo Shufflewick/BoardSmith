@@ -593,6 +593,40 @@ export const GAME_ROOT_FIELD_AUDIENCE: Record<string, 'public' | 'seat-scoped' |
   tutorialProgress: 'seat-scoped',
 };
 
+/** What the engine has decided about one of its own root fields. */
+export type GameRootFieldAudience = (typeof GAME_ROOT_FIELD_AUDIENCE)[string];
+
+/**
+ * Is `key` a root field the ENGINE owns?
+ *
+ * This is the question a game asks while walking its own outgoing root
+ * attribute bag in `static playerView` (#32): every key is either the game's,
+ * which it must classify and redact itself, or the engine's, which it must pass
+ * through untouched because the engine has already declared that field's
+ * audience and narrows the seat-scoped ones inside `toJSONForPlayer`.
+ *
+ * Games used to hand-keep a mirror of this table, reconciled by hand on every
+ * engine bump, because the constant was exported from its module but reached no
+ * barrel. Deferring to the engine means a field the engine adds and classifies
+ * is handled downstream automatically, rather than becoming a build break in
+ * every project that redacts its root.
+ *
+ * Prefer this over reading {@link GAME_ROOT_FIELD_AUDIENCE} directly: it does
+ * not commit a caller to the table's shape, so the engine stays free to
+ * reclassify a field.
+ */
+export function isEngineRootField(key: string): boolean {
+  return Object.hasOwn(GAME_ROOT_FIELD_AUDIENCE, key);
+}
+
+/**
+ * What the engine has decided about `key`, or `undefined` when the field is not
+ * the engine's — see {@link isEngineRootField}.
+ */
+export function engineRootFieldAudience(key: string): GameRootFieldAudience | undefined {
+  return Object.hasOwn(GAME_ROOT_FIELD_AUDIENCE, key) ? GAME_ROOT_FIELD_AUDIENCE[key] : undefined;
+}
+
 /**
  * Base Game class. The root of the element tree and container for all game state.
  *

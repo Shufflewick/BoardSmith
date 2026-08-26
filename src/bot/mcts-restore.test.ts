@@ -143,7 +143,7 @@ describe('MCTSBot restoreGame with execute block', () => {
       { iterations: 1, playoutDepth: 1, async: false }
     );
 
-    const move = await bot.play();
+    const move = (await bot.play())!;
     expect(move.action).toBe('play');
     expect(['a', 'b', 'c']).toContain(move.args.option);
   });

@@ -8,7 +8,18 @@ export { Die } from './die.js';
 export { DicePool } from './dice-pool.js';
 export { Grid, GridCell } from './grid.js';
 export { HexGrid, HexCell } from './hex-grid.js';
-export { Game, PersistentMap, DEFAULT_COLOR_PALETTE, RandomnessForbiddenError } from './game.js';
+export {
+  Game,
+  PersistentMap,
+  DEFAULT_COLOR_PALETTE,
+  RandomnessForbiddenError,
+  // The engine's own root-field audience table, and the two accessors a game
+  // uses to defer to it rather than hand-keep a mirror (#32).
+  GAME_ROOT_FIELD_AUDIENCE,
+  GAME_SELF_SERIALIZED_FIELDS,
+  isEngineRootField,
+  engineRootFieldAudience,
+} from './game.js';
 export { ElementCollection } from './element-collection.js';
 
 export type {
@@ -22,6 +33,7 @@ export type {
   ImageRef,
 } from './types.js';
 
+export type { GameRootFieldAudience } from './game.js';
 export type { GameOptions, RandomnessPolicy, GamePhase, PlayerViewFunction, AnimationEvent, ActionSpaceView, ActionSchemaView, ArgTemplate } from './game.js';
 export type { ElementLayout } from './grid.js';
 export type { HexOrientation, HexCoordSystem } from './hex-grid.js';

@@ -35,8 +35,13 @@ import { devWarn } from '../../utils/dev.js';
  * element objects (not serialized IDs). Callers that need wire IDs should
  * convert via `serializeValue` from the engine utilities.
  *
+ * Throws rather than returning `[]` for a bad seat, a non-numeric seat, or a
+ * game with no flow state (#26) — an empty enumeration must only ever mean
+ * "this seat genuinely has nothing to do", because that is the state a caller
+ * acts on by stopping.
+ *
  * @param game - Live game instance (must have a flow state with awaitingInput)
- * @param seat - 1-indexed seat number to enumerate moves for
+ * @param seat - 1-indexed seat NUMBER (`player.seat`), not a `Player` object
  * @param options.maxPerAction - When provided, truncates results to this many
  *   moves per action name. Default: unlimited (full enumeration).
  *
@@ -48,12 +53,41 @@ export function enumerateLegalMoves(
   seat: number,
   options?: { maxPerAction?: number },
 ): Array<{ action: string; args: Record<string, unknown> }> {
+  // Every refusal below is a THROW, never an empty array (#26). "This seat has
+  // no legal moves" is the one answer that stops a bot pump and wedges a
+  // simultaneous round for every seat at the table, so it must never also be
+  // how a bad argument or an unstarted game reports itself. A `Player` object
+  // handed in where a seat number belongs used to match nothing and come back
+  // as `[]`, indistinguishable from a correctly built game with nothing to do.
+  if (typeof seat !== 'number' || !Number.isInteger(seat)) {
+    throw new TypeError(
+      `enumerateLegalMoves expects a seat number, got ${typeof seat === 'object' ? 'an object' : typeof seat}. ` +
+      `Seats are 1-indexed integers — pass player.seat, not the Player itself.`
+    );
+  }
+  if (seat < 1) {
+    throw new RangeError(
+      `enumerateLegalMoves: seat ${seat} is out of range. Seats are 1-indexed, so the first seat is 1.`
+    );
+  }
+
   const flowState = game.getFlowState();
-  if (!flowState) return [];
+  if (!flowState) {
+    throw new Error(
+      'enumerateLegalMoves: the game has no flow state, so there is nothing to enumerate. ' +
+      'Start the game (GameRunner#start, or game.startFlow()) before asking for legal moves.'
+    );
+  }
+
+  const player = game.getPlayer(seat);
+  if (!player) {
+    throw new RangeError(
+      `enumerateLegalMoves: there is no seat ${seat} in this game (it has ${game.players.length}). ` +
+      `Seats are 1-indexed.`
+    );
+  }
 
   const actionNames = availableActionsForSeat(flowState, seat);
-  const player = game.getPlayer(seat);
-  if (!player) return [];
 
   const result: Array<{ action: string; args: Record<string, unknown> }> = [];
 

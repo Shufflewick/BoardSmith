@@ -125,8 +125,14 @@ export class BotController<G extends Game = Game> {
         this.#botStrategy
       );
 
-      // Get the bot's move
+      // Get the bot's move. `null` means this seat has nothing it can search
+      // from its own information state (#29) — a stall for this seat, not an
+      // error for the table. Report it and leave the seat unmoved.
       const move = await bot.play();
+      if (!move) {
+        console.warn(`[BoardSmith] Bot for seat ${botPlayer} did not move: ${bot.lastStallReason}`);
+        return null;
+      }
 
       // Announce the move before it executes (optional narration seam)
       if (onBeforeMove) await onBeforeMove(move.action, botPlayer, move.args);
