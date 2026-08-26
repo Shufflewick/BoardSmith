@@ -3,6 +3,13 @@
 > Adversarial UI/UX audit of the **standard BoardSmith chrome** (not individual games) and the **ShufflewickPub** host skin. Approach: **greenfield-ideal first, then map back** to current code.
 > Generated 2026-06-22 by a 48-agent adversarial workflow (20 critics × red-team verification × synthesis). **Analysis only — no code changes.**
 
+> **ARCHIVED, PRE-RENAME (2026-06-22).** This spec is an audit of the code as it
+> stood on the day, and its identifiers, file paths and line-number citations are
+> quoted as they were then. The automaton has since been renamed from AI to BOT
+> everywhere (ShufflewickPub #28, engine contract r16), so `aiSeats` is now
+> `botSeats`, `aiLevel` is `botLevel`, and the `--ai`/`--ai-level` dev flags are
+> `--bot`/`--bot-level`. Read the names below as history, never as current API.
+
 ## Status & Scope
 
 - **Deliverable:** this spec + prioritized roadmap. Generating candidate UI mockups for review is the explicit next step.
