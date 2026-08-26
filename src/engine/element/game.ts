@@ -264,6 +264,20 @@ function isPlayerJSON(child: { attributes?: Record<string, unknown> }): boolean 
   return child.attributes?.$type === 'player';
 }
 
+/** Every element id carried by a serialized subtree, for `adoptSubtree`. */
+function collectJsonIds(json: ElementJSON, into: number[]): void {
+  into.push(json.id);
+  if (json.children) {
+    for (const child of json.children) collectJsonIds(child, into);
+  }
+}
+
+/** Every element id currently in a live subtree, for `adoptSubtree`. */
+function collectResidentIds(element: GameElement, into: Set<number>): void {
+  into.add(element._t.id);
+  for (const child of element._t.children) collectResidentIds(child, into);
+}
+
 /**
  * Options for creating a new game
  */
@@ -1063,6 +1077,235 @@ export class Game<
    */
   getElementClass(className: string): ElementClass | undefined {
     return this._ctx.classRegistry.get(className);
+  }
+
+  // ============================================
+  // World mode: partition residency (#35 item 2)
+  // ============================================
+
+  /**
+   * Switch this game into WORLD MODE.
+   *
+   * A world is too large to hold in memory at once, so the platform keeps only
+   * the partitions a command names resident and every other partition is
+   * ABSENT from the element tree — not stubbed, not lazy, absent. That leaves
+   * `atId`, `all()` and `toJSON` costing O(resident) with no change to
+   * traversal, and it is the whole point of the mode.
+   *
+   * The one behaviour it changes is reference serialization: an element
+   * reference in an attribute is written as `{ __elementId }`, because branch
+   * paths are positional and absence shifts every later sibling index. Call
+   * this BEFORE serializing anything you intend to adopt back.
+   *
+   * There is deliberately no way back out. A tree that has emitted id refs and
+   * then starts emitting branch refs would carry both formats, and the branch
+   * half would resolve against whatever happened to be resident.
+   *
+   * Snapshot mode — every published board game — is untouched by all of this.
+   */
+  enableWorldMode(): void {
+    this._ctx._worldMode = true;
+  }
+
+  /** True once {@link enableWorldMode} has been called. */
+  get worldMode(): boolean {
+    return this._ctx._worldMode === true;
+  }
+
+  /**
+   * Declare a resident element a PARTITION ROOT: a subtree the platform loads,
+   * checkpoints and evicts as one unit.
+   *
+   * The engine keeps no partition contents and no partition names — the
+   * platform already knows what it hydrated. All the engine owes it is the
+   * other half of the dirty set, the partitions a MOVE touched, which the
+   * platform cannot see. Registering a root is what makes those moves
+   * attributable.
+   *
+   * {@link adoptSubtree} calls this for every graft, so the explicit call is
+   * for world genesis: the run that builds a world in memory before any of it
+   * has been through storage.
+   */
+  definePartition(id: number): void {
+    this._requireWorldMode('definePartition');
+    const element = this.getElementById(id);
+    if (!element) {
+      throw new Error(
+        `Cannot define partition ${id}: no element with that id is resident. ` +
+          `Hydrate the partition (Game#adoptSubtree) before declaring it a partition root.`
+      );
+    }
+    if (element === (this as unknown as GameElement)) {
+      throw new Error(
+        `Cannot define the game root (id ${id}) as a partition: a partition is a subtree ` +
+          `that can be evicted, and evicting the game would evict the world.`
+      );
+    }
+    if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Set<number>();
+    this._ctx._partitionRoots.add(id);
+  }
+
+  /**
+   * The partition roots whose subtree has been physically re-parented since
+   * the last {@link clearTouchedPartitions}.
+   *
+   * BOTH endpoints of every move are in here, source and destination, because
+   * a cross-partition move dirties a destination the command's reads never
+   * hydrated. Combine it with the partitions the platform hydrated to get the
+   * checkpoint's dirty set.
+   */
+  get touchedPartitions(): ReadonlySet<number> {
+    if (!this._ctx._touchedPartitions) this._ctx._touchedPartitions = new Set<number>();
+    return this._ctx._touchedPartitions;
+  }
+
+  /** Forget every move-touch. Called by the platform after a checkpoint. */
+  clearTouchedPartitions(): void {
+    this._ctx._touchedPartitions = new Set<number>();
+  }
+
+  /**
+   * Graft one serialized subtree into the resident tree, under `parentId`.
+   *
+   * This is the same restore path a snapshot uses (`GameElement.fromJSON`),
+   * pointed at a found parent instead of at the game root, so an adopted
+   * element is indistinguishable from one that was never evicted.
+   *
+   * Two passes that bracket `loadSerializedState`'s rebuild are deliberately
+   * NOT repeated here:
+   *
+   * - **Space `onEnter`/`onExit` re-binding.** `loadSerializedState` captures
+   *   handlers off the constructor-built tree before discarding it, because
+   *   that tree is the only place those closures exist. An adoption discards
+   *   nothing: the subtree is new to this process and has no earlier
+   *   incarnation to capture from, so there is nothing a re-bind pass could
+   *   recover. The handlers of a grafted Space come from ITS OWN class
+   *   constructor, which `fromJSON` runs — so in world mode a Space that needs
+   *   `onEnter`/`onExit` must register them in its own constructor, never in
+   *   the Game constructor. A Game-constructor handler for a partition that is
+   *   not resident at construction time has nothing to attach to and is
+   *   silent game-logic loss.
+   * - **`resolveElementReferences(this)` over the whole game.** Run over the
+   *   GRAFTED SUBTREE only. Whole-game resolution is the O(world) pass this
+   *   mode exists to remove, and every attribute outside the graft already
+   *   holds live objects. References pointing OUT of the graft into a
+   *   partition that is not resident stay as `{ __elementId }` ref objects
+   *   rather than becoming `undefined`, so they survive to the next
+   *   checkpoint (see `GameElement.deserializeValue`).
+   *
+   * @returns the grafted subtree's root, now a partition root.
+   */
+  adoptSubtree(parentId: number, json: ElementJSON): GameElement {
+    this._requireWorldMode('adoptSubtree');
+
+    const parent = this.getElementById(parentId);
+    if (!parent) {
+      throw new Error(
+        `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}: ` +
+          `no element with that id is resident. Hydrate the parent's partition first — a graft ` +
+          `needs its attachment point in the tree.`
+      );
+    }
+
+    // Ids arriving from storage were minted by an earlier run of the id
+    // counter, which is a bare `_ctx.sequence++` with no registry behind it.
+    // Two consequences, and both are corruption:
+    //   - a resident id repeated by the incoming subtree makes `atId` return
+    //     whichever copy the DFS reaches first;
+    //   - a counter left below the adopted ids makes the next `create()` mint
+    //     one that collides.
+    const adoptedIds: number[] = [];
+    collectJsonIds(json, adoptedIds);
+
+    const resident = new Set<number>();
+    collectResidentIds(this as unknown as GameElement, resident);
+    collectResidentIds(this.pile, resident);
+    const clash = adoptedIds.find((id) => resident.has(id));
+    if (clash !== undefined) {
+      throw new Error(
+        `Cannot adopt partition "${json.name ?? json.className}": element id ${clash} is already ` +
+          `resident in this game. A partition may only be adopted once — evict the resident copy ` +
+          `(Game#evictSubtree) before adopting it again.`
+      );
+    }
+
+    const maxAdoptedId = Math.max(...adoptedIds);
+    if (this._ctx.sequence <= maxAdoptedId) {
+      this._ctx.sequence = maxAdoptedId + 1;
+    }
+
+    const element = GameElement.fromJSON(json, this._ctx, this._ctx.classRegistry);
+    element._t.parent = parent;
+    element.game = this;
+    parent._t.children.push(element);
+
+    element.resolveElementReferences(this);
+
+    if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Set<number>();
+    this._ctx._partitionRoots.add(element._t.id);
+
+    return element;
+  }
+
+  /**
+   * Detach a subtree from the resident tree.
+   *
+   * The subtree simply stops being in the tree, so nothing after this pays to
+   * traverse it. Deliberately NOT routed through `moveToInternal`: eviction is
+   * a residency change, not a game move, and firing a Space's `onExit` for it
+   * would run game logic for an event that did not happen in the world.
+   *
+   * A move-touch already recorded against this partition is kept. The
+   * partition was dirtied while it was resident; dropping the mark because it
+   * left memory would lose a checkpoint.
+   */
+  evictSubtree(id: number): void {
+    this._requireWorldMode('evictSubtree');
+
+    if (id === this._t.id) {
+      throw new Error(
+        `Cannot evict the game root (id ${id}): it is the tree every partition hangs from. ` +
+          `Evict the individual partitions instead.`
+      );
+    }
+
+    const element = this.getElementById(id);
+    if (!element) {
+      throw new Error(
+        `Cannot evict partition ${id}: no element with that id is resident. It was either never ` +
+          `hydrated or has already been evicted.`
+      );
+    }
+
+    const parent = element._t.parent;
+    if (!parent) {
+      throw new Error(
+        `Cannot evict element ${id} ("${element.name ?? element.constructor.name}"): it has no ` +
+          `parent, so it is not attached to the resident tree.`
+      );
+    }
+
+    const index = parent._t.children.indexOf(element);
+    parent._t.children.splice(index, 1);
+    element._t.parent = undefined;
+
+    this._ctx._partitionRoots?.delete(id);
+  }
+
+  /**
+   * World-mode operations are refused in snapshot mode rather than quietly
+   * working, because a subtree serialized outside world mode carries
+   * positional branch refs and grafting it into a partial tree resolves them
+   * to the wrong elements.
+   */
+  private _requireWorldMode(method: string): void {
+    if (this._ctx._worldMode) return;
+    throw new Error(
+      `Game#${method}() is world mode only, and this game is in snapshot mode. ` +
+        `Call game.enableWorldMode() before serializing anything you intend to adopt: ` +
+        `snapshot mode records element references as positional branch paths, which resolve ` +
+        `to the wrong element once a partition is not resident.`
+    );
   }
 
   // ============================================

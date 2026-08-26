@@ -1,7 +1,7 @@
 {
-  "revision": 16,
+  "revision": 17,
   "bundleProtocol": 1,
-  "surfaceHash": "a784c64a27bcb0e1",
+  "surfaceHash": "e1b57cd06ab9dc45",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -131,6 +131,14 @@
       "surfaceHash": "a784c64a27bcb0e1",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "The automaton is a BOT, not an AI, across the whole engine surface (ShufflewickPub #28). adapters.aiSeats -> botSeats; the aiTurn/aiSuggest ops -> botTurn/botSuggest; playerOptions.aiLevel -> botLevel; the gameDefinition/manifest 'ai' block -> 'bot'; the boardsmith/ai and boardsmith/ai-trainer subpaths -> boardsmith/bot and boardsmith/bot-trainer; the --ai and --ai-level dev flags -> --bot and --bot-level; SlotStatus 'ai' -> 'bot'; AIController -> BotController. Three types that were all spelled AIConfig were disambiguated first: the game's strategy hooks are BotStrategy, which seats are bots is BotSeatConfig, and the alias that existed only to tell them apart is gone. RENAMES, so this is a BREAKING surface change: every consumer and every published bundle must be rebuilt against it."
+    },
+    {
+      "revision": 17,
+      "date": "2026-08-26",
+      "bundleProtocol": 1,
+      "surfaceHash": "e1b57cd06ab9dc45",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "World mode, step one (ShufflewickPub #35 item 2): Game gains enableWorldMode/worldMode, definePartition, adoptSubtree, evictSubtree, touchedPartitions and clearTouchedPartitions, so a resident engine can hold only the partitions a command names and pay O(room) per action instead of O(world). ADDITIONS ONLY -- nothing removed or renamed, and snapshot mode (every published board game) is behaviourally unchanged. World mode changes exactly one thing when it is switched on: an element reference in an attribute serializes as { __elementId } instead of the positional { __elementRef: branch }, because a non-resident partition shifts every later sibling index and a branch path recorded against the full world resolves against a partial one to a DIFFERENT element. In world mode an __elementId that cannot resolve is kept verbatim rather than becoming undefined, so a reference into a non-resident partition survives the next checkpoint. moveToInternal -- the one shared re-parent path -- now marks BOTH endpoints' partitions after its existing throws, so a rejected move marks nothing and a cross-partition move still reports the destination the command never read."
     }
   ]
 }

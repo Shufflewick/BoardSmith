@@ -66,6 +66,32 @@ export type ElementContext = {
    * (the seed name is removed from this set on override). Not public API.
    */
   _builtinSeededNames?: Set<string>;
+  /**
+   * Internal: true once `Game#enableWorldMode()` has been called. World mode
+   * changes exactly one thing about the element tree's behaviour: an element
+   * reference held in an attribute serializes as `{ __elementId }` rather than
+   * as the positional `{ __elementRef: branch }`, because in a world the
+   * partitions that are not resident are ABSENT from the tree and every branch
+   * index after them has shifted. One-way: a tree that has emitted id refs
+   * must never start emitting branch refs again. Not public API — read it
+   * through `Game#worldMode`.
+   */
+  _worldMode?: boolean;
+  /**
+   * Internal: ids of the elements the platform has declared partition roots
+   * (`Game#definePartition`, which `Game#adoptSubtree` calls for every graft).
+   * Absent in snapshot mode, which is what keeps the marking in
+   * `moveToInternal` free for every published board game. Not public API.
+   */
+  _partitionRoots?: Set<number>;
+  /**
+   * Internal: partition roots whose subtree has been physically re-parented
+   * since the last `Game#clearTouchedPartitions()`. This is the half of the
+   * platform's dirty set the platform cannot compute for itself, because it
+   * never sees a move. Not public API — read it through
+   * `Game#touchedPartitions`.
+   */
+  _touchedPartitions?: Set<number>;
 };
 
 /**

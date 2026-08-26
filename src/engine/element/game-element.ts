@@ -156,6 +156,25 @@ function recordQueriedClassIfActive(ctx: ElementContext, classNameOrFinder: unkn
  * @typeParam G - The Game subclass type
  * @typeParam P - The Player subclass type
  */
+/**
+ * Record the partition `from` belongs to: the nearest ancestor-or-self that
+ * the platform declared a partition root. An element in no partition marks
+ * nothing, which is what keeps the game's own non-partitioned core out of the
+ * dirty set.
+ */
+function markNearestPartition(
+  from: GameElement,
+  roots: Set<number>,
+  touched: Set<number>,
+): void {
+  for (let el: GameElement | undefined = from; el; el = el._t.parent) {
+    if (roots.has(el._t.id)) {
+      touched.add(el._t.id);
+      return;
+    }
+  }
+}
+
 export class GameElement<G extends Game = any, P extends Player = any> {
   /** Element name for identification and queries */
   name?: string;
@@ -557,6 +576,27 @@ export class GameElement<G extends Game = any, P extends Player = any> {
         `this Space is sealed (append-only) and does not allow elements to be removed from it. ` +
         `Elements may still be added to a sealed Space.`
       );
+    }
+
+    // World mode (#35 item 2): mark BOTH endpoints' partitions. A
+    // cross-partition move dirties a destination this command's reads never
+    // hydrated — the room a thrown object lands in — so marking the source
+    // alone loses it. Placed AFTER every throw above, so a REJECTED move
+    // marks nothing, and BEFORE the splice, so the source walk still sees the
+    // pre-move parent chain. In snapshot mode there are no partitions at all
+    // and this costs one undefined check.
+    const partitionRoots = this._ctx?._partitionRoots;
+    if (partitionRoots && partitionRoots.size > 0) {
+      let touched = this._ctx._touchedPartitions;
+      if (!touched) {
+        touched = new Set<number>();
+        this._ctx._touchedPartitions = touched;
+      }
+      // Walking from `this` rather than from `oldParent` also covers the case
+      // where `this` IS a partition root: a whole partition that changes
+      // parent has dirtied itself.
+      markNearestPartition(this, partitionRoots, touched);
+      markNearestPartition(destination, partitionRoots, touched);
     }
 
     // Remove from current parent
@@ -1031,7 +1071,16 @@ export class GameElement<G extends Game = any, P extends Player = any> {
           name: player.name,
         };
       }
-      // Serialize regular element references as branch paths
+      // World mode serializes by id, snapshot mode by branch path.
+      //
+      // A branch is `parent._t.children.indexOf(child)` joined from the root,
+      // so every index is a position among the siblings that are PRESENT. In a
+      // world the non-resident partitions are absent, so a path recorded
+      // against the full world resolves against a partial one to a different
+      // element, silently. Ids do not move.
+      if (this._ctx?._worldMode) {
+        return { __elementId: value.id };
+      }
       return { __elementRef: value.branch() };
     }
 
@@ -1155,7 +1204,16 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // Handle element reference by ID
     if (typeof value === 'object' && value !== null && '__elementId' in value) {
       const ref = value as { __elementId: number };
-      return game.getElementById(ref.__elementId);
+      const resolved = game.getElementById(ref.__elementId);
+      // In world mode an unresolvable id is NORMAL, not a fault: it points
+      // into a partition that is not resident. Returning `undefined` would
+      // erase the id, and the next checkpoint of this partition would write
+      // the attribute away for good. Keeping the ref verbatim is lossless —
+      // it re-serializes to the same `{ __elementId }` — and a game that
+      // reads the attribute sees a ref object rather than an element, which
+      // is the author's signal that the command did not hydrate what it used.
+      if (!resolved && game._ctx._worldMode) return value;
+      return resolved;
     }
 
     // Handle player reference (stored as 1-indexed position)
