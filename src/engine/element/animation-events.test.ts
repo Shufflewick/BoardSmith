@@ -54,12 +54,18 @@ describe('animate - pure data events', () => {
     expect(events[2].id).toBe(3);
   });
 
-  it('should include a timestamp on each event', () => {
+  it('carries no timestamp — ordering is the monotonic id, not a clock (#54)', () => {
+    // A clock reading in engine-owned state makes two runs of the same seed
+    // produce byte-different output. `id` is the ordering key, and it always was.
     game.animate('score', { points: 10 });
+    game.animate('score', { points: 20 });
 
     const events = game.pendingAnimationEvents;
-    expect(typeof events[0].timestamp).toBe('number');
-    expect(events[0].timestamp).toBeGreaterThan(0);
+    expect(events).toHaveLength(2);
+    for (const event of events) {
+      expect(event).not.toHaveProperty('timestamp');
+    }
+    expect(events[1].id).toBeGreaterThan(events[0].id);
   });
 
   it('should contain exactly the data passed, with no extra mutation metadata', () => {

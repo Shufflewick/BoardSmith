@@ -1,10 +1,6 @@
 import type { Game } from '../element/game.js';
 import type { Player } from '../player/player.js';
 import type { ActionContext } from './types.js';
-import { isDevMode, devWarn } from '../../utils/dev.js';
-
-// Re-export for backwards compatibility during transition
-export { isDevMode, devWarn };
 
 /**
  * Wrap a filter function to provide helpful error messages when it crashes

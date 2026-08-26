@@ -116,7 +116,14 @@ export function deserializeValue(
 }
 
 /**
- * Serialize an action with its arguments
+ * Serialize an action with its arguments.
+ *
+ * Deliberately stamps NO timestamp (#54). This entry goes straight into
+ * `actionHistory`, which is engine-owned state that a snapshot serializes and a
+ * replay compares: a clock reading here makes two runs of the same seed produce
+ * byte-different output, which is the non-determinism the engine's own lint
+ * rules forbid game code from introducing. Wall-clock time is stamped at the
+ * session boundary instead — see `GameSession`.
  */
 export function serializeAction(
   actionName: string,
@@ -130,7 +137,6 @@ export function serializeAction(
     name: actionName,
     player: player.seat,
     args: serializeValue(args, game, options) as Record<string, unknown>,
-    timestamp: Date.now(),
   };
 
   // Only include undoable if explicitly false (default is true)

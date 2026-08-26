@@ -246,6 +246,15 @@ export interface StoredGameState {
   seed?: string;
   actionHistory: SerializedAction[];
   /**
+   * Wall-clock time each `actionHistory` entry was recorded, parallel to it by
+   * index. SESSION-owned, and deliberately kept out of the entries themselves
+   * (#54): `actionHistory` is the engine's array, and a clock reading inside it
+   * makes two runs of the same seed produce byte-different snapshots. Arrival
+   * time is a session-level fact, so the session stores it on the side and
+   * merges it back in `GameSession.getHistory()`.
+   */
+  actionTimestamps?: number[];
+  /**
    * Authoritative game-state snapshot — the SINGLE source of truth that
    * {@link StoredGameState} reconstructs from on cold restore.
    *

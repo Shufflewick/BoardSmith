@@ -21,7 +21,8 @@ import type {
   AnnotatedChoice,
   OnSelectContext,
 } from './types.js';
-import { isDevMode, devWarn, wrapFilterWithHelpfulErrors } from './helpers.js';
+import { wrapFilterWithHelpfulErrors } from './helpers.js';
+import { isDevMode, devWarn } from '../../utils/dev.js';
 import { Action } from './action-builder.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 

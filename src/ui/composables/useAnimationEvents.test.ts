@@ -20,7 +20,7 @@ function createEvent(
   type: string,
   data: Record<string, unknown> = {}
 ): AnimationEvent {
-  return { id, type, data, timestamp: Date.now() };
+  return { id, type, data };
 }
 
 /**

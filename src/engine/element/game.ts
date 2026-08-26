@@ -350,8 +350,6 @@ export interface AnimationEvent {
   type: string;
   /** Event-specific data payload (must be JSON-serializable) */
   data: Record<string, unknown>;
-  /** Timestamp when event was emitted */
-  timestamp: number;
   /** Optional group ID for batching related events */
   group?: string;
 }
@@ -3324,7 +3322,6 @@ export class Game<
       id: this._animationEventSeq,
       type: eventType,
       data,
-      timestamp: Date.now(),
     });
   }
 

@@ -412,6 +412,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#runner = runner;
     this.#runnerFacade = buildRunnerFacade(this.#runner);
     this.#storedState = storedState;
+    // The stored state's history is a VIEW of the runner's array, never a copy
+    // (#48). Established here so it holds from the session's first instant, and
+    // re-established by #adoptRunner on every later runner swap.
+    this.#storedState.actionHistory = this.#runner.actionHistory;
+    this.#stampNewHistoryEntries();
     this.#GameClass = GameClass;
     this.#storage = storage;
     this.#botController = botController;
@@ -448,8 +453,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       () => this.#runner,
       {
         replaceRunner: (newRunner) => {
-          this.#runner = newRunner;
-          this.#runnerFacade = buildRunnerFacade(this.#runner);
+          this.#adoptRunner(newRunner);
           // Re-supply tutorial definition: fromCheckpoint creates a runner
           // without it (tutorial is excluded from snapshot.gameOptions so it
           // is not persisted — it must be re-threaded by the session layer).
@@ -559,8 +563,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
           newRunner.start();
 
           // Replace the session's runner
-          session.#runner = newRunner;
-          session.#runnerFacade = buildRunnerFacade(session.#runner);
+          session.#adoptRunner(newRunner);
           session.#pickHandler = new PickHandler(newRunner, currentSlotCount);
           session.#pendingActionManager.updateRunner(newRunner);
 
@@ -958,6 +961,44 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * writes must go through `session.performAction()`, which additionally
    * handles persistence/broadcast/checkpoints/tutorials/bot scheduling.
    */
+  /**
+   * Point the session at `newRunner` — the ONE place that swaps a runner in.
+   *
+   * Every reference that has to move when the runner is replaced moves here:
+   * the runner itself, the read-only facade built from it, and
+   * `#storedState.actionHistory`, which is a VIEW of `runner.actionHistory`
+   * and never a copy (#48). Before this existed, five call sites each moved
+   * some subset, so whether `getHistory()` served the live array or a detached
+   * copy depended on which path had run last.
+   */
+  #adoptRunner(newRunner: GameRunner<G>): void {
+    this.#runner = newRunner;
+    this.#runnerFacade = buildRunnerFacade(newRunner);
+    this.#storedState.actionHistory = newRunner.actionHistory;
+    this.#stampNewHistoryEntries();
+  }
+
+  /**
+   * Record the wall-clock arrival time of any history entry the session has not
+   * yet stamped, in the parallel `#storedState.actionTimestamps` array.
+   *
+   * The stamp goes BESIDE the entry, never on it (#54). `actionHistory` is the
+   * engine's own array and goes straight into snapshots; a clock reading in
+   * there makes two runs of the same seed produce byte-different output,
+   * defeating the replay and snapshot-equality checks a seeded engine exists to
+   * support. Arrival time is a session-level fact, so the session keeps it.
+   *
+   * Idempotent, and truncating: an undo that shortens history drops the stamps
+   * for the entries that went with it.
+   */
+  #stampNewHistoryEntries(): void {
+    const history = this.#storedState.actionHistory;
+    const stamps = (this.#storedState.actionTimestamps ??= []);
+    if (stamps.length > history.length) stamps.length = history.length;
+    const now = Date.now();
+    while (stamps.length < history.length) stamps.push(now);
+  }
+
   get runner(): ReadOnlyRunnerFacade<G> {
     return this.#runnerFacade;
   }
@@ -1068,8 +1109,15 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Get action history
    */
   getHistory(): { actionHistory: SerializedAction[]; createdAt: number } {
+    // A projection, not the engine's array: the entries are copies carrying the
+    // session's `timestamp` merged in from `actionTimestamps` (#54), so a caller
+    // reading history can neither see a half-owned alias nor write through it
+    // into engine state (#48).
+    const stamps = this.#storedState.actionTimestamps ?? [];
     return {
-      actionHistory: this.#storedState.actionHistory,
+      actionHistory: this.#storedState.actionHistory.map((entry, i) =>
+        stamps[i] === undefined ? { ...entry } : { ...entry, timestamp: stamps[i] }
+      ),
       createdAt: this.#storedState.createdAt,
     };
   }
@@ -1464,8 +1512,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return { success: false, error: result.error, errorCode };
     }
 
-    // Update stored action history
-    this.#storedState.actionHistory = this.#runner.actionHistory;
+    // Stamp arrival time on whatever the action just appended. The stored
+    // state's history is already a view of the runner's array (#48), so there
+    // is nothing to re-point here.
+    this.#stampNewHistoryEntries();
 
     // Create checkpoint if at interval (dev mode only)
     const actionIndex = this.#storedState.actionHistory.length;
@@ -1565,8 +1615,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       try {
         const newRunner = this.#reloadWithDevTransfer(definition);
         if (newRunner) {
-          this.#runner = newRunner;
-          this.#runnerFacade = buildRunnerFacade(this.#runner);
+          this.#adoptRunner(newRunner);
           this.#GameClass = definition.gameClass as GameClass<G>;
           this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
           this.#pendingActionManager.updateRunner(newRunner);
@@ -1586,8 +1635,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const newRunner = this.#reloadWithReplay(definition);
 
     // Replace the current runner and game class
-    this.#runner = newRunner;
-    this.#runnerFacade = buildRunnerFacade(this.#runner);
+    this.#adoptRunner(newRunner);
     this.#GameClass = definition.gameClass as GameClass<G>;
 
     // Update handlers with new runner reference
