@@ -351,6 +351,15 @@ export interface AnimationEvent {
   type: string;
   /** Event-specific data payload (must be JSON-serializable) */
   data: Record<string, unknown>;
+  /**
+   * Seats allowed to receive this event. Absent means everyone, exactly like
+   * `MessageEntry.to` (#23).
+   *
+   * Enforced SERVER-SIDE, in `toJSONForPlayer` — a non-audience seat's payload
+   * never carries the event at all. This is not a UI filter, and a client
+   * cannot opt out of it.
+   */
+  to?: number[];
   /** Optional group ID for batching related events */
   group?: string;
 }
@@ -503,6 +512,33 @@ export interface MessageEntry {
   data?: Record<string, unknown>;
   /** Seats allowed to receive this line. Absent means everyone. */
   to?: number[];
+  /**
+   * The game's own classification of this line, carried through to the client
+   * so the log can render it distinctly (#21).
+   *
+   * Deliberately an OPEN string rather than a fixed union: the games that need
+   * this have their own taxonomies, recorded as rules rather than decoration
+   * (`notice` / `alert` / `event` / `advancement` / `shout` / `mail` ...), and
+   * an engine-side list could only ever be a guess at them. `GameHistory`
+   * renders it as a `log-type-<value>` class, styles a few well-known names,
+   * and leaves the rest for a game's own CSS.
+   *
+   * Absent means unclassified — the log renders it in its default style.
+   */
+  type?: string;
+}
+
+/** Optional per-line settings for `Game.message` / `Game.messageTo`. */
+export interface MessageOptions {
+  /** The game's classification for this line — see `MessageEntry.type`. */
+  type?: string;
+}
+
+/** One formatted log line as the client receives it. */
+export interface FormattedMessage {
+  text: string;
+  /** Present only when the game classified the line — see `MessageEntry.type`. */
+  type?: string;
 }
 
 /**
@@ -3198,8 +3234,8 @@ export class Game<
    *   })
    * ```
    */
-  message(text: string, data?: Record<string, unknown>): void {
-    this.addMessageInternal(text, data);
+  message(text: string, data?: Record<string, unknown>, options?: MessageOptions): void {
+    this.addMessageInternal(text, data, undefined, options?.type);
   }
 
   /**
@@ -3245,37 +3281,29 @@ export class Game<
     audience: P | number | Array<P | number>,
     text: string,
     data?: Record<string, unknown>,
+    options?: MessageOptions,
   ): void {
-    const list = Array.isArray(audience) ? audience : [audience];
-    const seats = list.map((a) => (typeof a === 'number' ? a : a.seat));
-
-    // Fail loud rather than write a message nobody can ever read. An empty
-    // audience is always a bug at the call site (a filter that matched nothing,
-    // an undefined player), and silently dropping it would lose game history
-    // with no signal anywhere.
-    if (seats.length === 0) {
-      throw new Error(
-        `messageTo() was given an empty audience for "${text}" — no seat would ever ` +
-          `receive it. Pass at least one player/seat, or use message() if it is public.`,
-      );
-    }
-    for (const seat of seats) {
-      if (!Number.isInteger(seat) || seat < 0) {
-        throw new Error(
-          `messageTo() received an invalid seat (${JSON.stringify(seat)}) for "${text}". ` +
-            `Pass a Player or a non-negative seat number.`,
-        );
-      }
-    }
-
-    this.addMessageInternal(text, data, seats);
+    // Fail loud rather than write a message nobody can ever read — see
+    // `resolveAudience`, shared with `animateTo` so both channels agree.
+    const seats = this.resolveAudience(audience, `messageTo("${text}")`);
+    this.addMessageInternal(text, data, seats, options?.type);
   }
 
   /**
    * Internal method to add a message (called by command executor)
    */
-  addMessageInternal(text: string, data?: Record<string, unknown>, to?: number[]): void {
-    this.messages.push(to ? { text, data, to } : { text, data });
+  addMessageInternal(
+    text: string,
+    data?: Record<string, unknown>,
+    to?: number[],
+    type?: string,
+  ): void {
+    this.messages.push({
+      text,
+      data,
+      ...(to ? { to } : {}),
+      ...(type !== undefined ? { type } : {}),
+    });
   }
 
   /**
@@ -3301,20 +3329,33 @@ export class Game<
    *   a caller that wants it should be explicit about reading the truth.
    */
   getFormattedMessages(seat?: number | null): string[] {
+    return this.getFormattedMessageEntries(seat).map((m) => m.text);
+  }
+
+  /**
+   * The same seat-filtered, template-substituted log as
+   * {@link getFormattedMessages}, but keeping each line's `type` (#21).
+   *
+   * This is what `createPlayerView` puts on the wire, so a game's own
+   * classification survives the trip to `GameHistory` instead of being
+   * flattened away at the last hop.
+   */
+  getFormattedMessageEntries(seat?: number | null): FormattedMessage[] {
     return this.messages
       .filter((m) => this.canSeeMessage(m, seat))
-      .map(({ text, data }) => {
-        if (!data) return text;
+      .map(({ text, data, type }) => {
         let processed = text;
-        for (const [key, value] of Object.entries(data)) {
-          const replacement = value instanceof GameElement
-            ? value.toString()
-            : value instanceof Player
-              ? (value.name ?? `Player ${value.seat}`)
-              : String(value);
-          processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), replacement);
+        if (data) {
+          for (const [key, value] of Object.entries(data)) {
+            const replacement = value instanceof GameElement
+              ? value.toString()
+              : value instanceof Player
+                ? (value.name ?? `Player ${value.seat}`)
+                : String(value);
+            processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), replacement);
+          }
         }
-        return processed;
+        return type === undefined ? { text: processed } : { text: processed, type };
       });
   }
 
@@ -3354,15 +3395,82 @@ export class Game<
   }
 
   /**
+   * Emit an animation event that ONLY the given seats may receive.
+   *
+   * The audience counterpart to {@link messageTo} (#23). `animate()` puts its
+   * event in the game-wide buffer, which is serialized into EVERY seat's
+   * payload until the dispatch that produced it drains — so a game whose every
+   * line is per-seat private had no equivalent channel for animation, and the
+   * only defence was keeping the payload deliberately uninformative.
+   *
+   * As with `messageTo`, the audience is enforced where the payload is built,
+   * not in the UI: a non-audience seat's `toJSONForPlayer` carries no trace of
+   * the event. The authoritative `toJSON()` keeps it, so it survives a restore
+   * with its audience intact.
+   *
+   * @param audience - Seat(s) allowed to see this event: a Player, a seat
+   *   number, or an array of either.
+   * @param type - Event type identifier, same as `animate()`
+   * @param data - Event-specific data payload (must be JSON-serializable)
+   *
+   * @example
+   * ```typescript
+   * // Only the two combatants see the exchange play out.
+   * game.animateTo([attacker, defender], 'combat-exchange', { damage: 3 });
+   * ```
+   */
+  animateTo(
+    audience: P | number | Array<P | number>,
+    type: string,
+    data: Record<string, unknown>,
+  ): void {
+    const seats = this.resolveAudience(audience, `animateTo("${type}")`);
+    this.execute({ type: 'ANIMATE', eventType: type, data, to: seats });
+  }
+
+  /**
+   * Turn a Player/seat audience into a validated seat list.
+   *
+   * Shared by `messageTo` and `animateTo` so the two channels agree on what an
+   * audience is and refuse the same things — an empty audience is always a bug
+   * at the call site (a filter that matched nothing, an undefined player), and
+   * silently dropping the emission would lose it with no signal anywhere.
+   */
+  private resolveAudience(
+    audience: P | number | Array<P | number>,
+    what: string,
+  ): number[] {
+    const list = Array.isArray(audience) ? audience : [audience];
+    const seats = list.map((a) => (typeof a === 'number' ? a : a.seat));
+
+    if (seats.length === 0) {
+      throw new Error(
+        `${what} was given an empty audience — no seat would ever receive it. ` +
+          `Pass at least one player/seat, or use the public form if it is not private.`,
+      );
+    }
+    for (const seat of seats) {
+      if (!Number.isInteger(seat) || seat < 0) {
+        throw new Error(
+          `${what} received an invalid seat (${JSON.stringify(seat)}). ` +
+            `Pass a Player or a non-negative seat number.`,
+        );
+      }
+    }
+    return seats;
+  }
+
+  /**
    * Push an animation event to the buffer.
    * @internal Called by command executor -- do not call directly from game code.
    */
-  pushAnimationEvent(eventType: string, data: Record<string, unknown>): void {
+  pushAnimationEvent(eventType: string, data: Record<string, unknown>, to?: number[]): void {
     this._animationEventSeq++;
     this._animationEvents.push({
       id: this._animationEventSeq,
       type: eventType,
       data,
+      ...(to ? { to } : {}),
     });
   }
 
@@ -3795,6 +3903,24 @@ export class Game<
         ...view.attributes,
         tutorialProgress: this.serializeValue(scoped, 'tutorialProgress'),
       };
+    }
+
+    // #23: enforce `animateTo`'s audience here, the same boundary the message
+    // log's is enforced at. The buffer is game-wide and rides in `toJSON()`, so
+    // without this every seat's payload carried every seat's private events
+    // until the dispatch that produced them drained. Ids are left untouched, so
+    // a client's monotonic watermark still advances correctly across the gaps.
+    if (view.animationEvents) {
+      const visible = view.animationEvents.filter(
+        (event) => !event.to || (playerSeat !== null && event.to.includes(playerSeat)),
+      );
+      if (visible.length === view.animationEvents.length) {
+        // Nothing withheld — leave the array as it is.
+      } else if (visible.length === 0) {
+        delete view.animationEvents;
+      } else {
+        view.animationEvents = visible;
+      }
     }
 
     return view;

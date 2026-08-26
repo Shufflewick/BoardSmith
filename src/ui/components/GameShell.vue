@@ -771,6 +771,48 @@ const actionArgs = computed(() => actionController.currentArgs.value);
 // `buildPlayerState`/`getFormattedMessages`, do not reintroduce a second source.
 const gameMessages = computed(() => state.value?.state?.messages ?? []);
 
+// ── Unread log entries at the compact tier (#22) ───────────────────────────
+//
+// Below the compact breakpoint the players panel and the log collapse behind a
+// single icon-only chevron. It rendered identically whether the log held zero
+// entries or two hundred, and identically whether they were new since the
+// player last looked. A player who takes damage at a round boundary sees their
+// health fall and has no on-screen cue that an explanation exists, let alone
+// that it is new.
+//
+// The count is derived from the log the shell already renders, never supplied
+// by a game — a game-supplied number would be a second definition of "how much
+// log is there".
+
+/** How many entries had been written when the player last had the log open. */
+const logReadWatermark = ref(0);
+
+const unreadLogCount = computed(() =>
+  Math.max(0, gameMessages.value.length - logReadWatermark.value)
+);
+
+/**
+ * Opening the log marks it read; so does new activity arriving while it is
+ * already open, which is the case that would otherwise show a badge behind a
+ * panel the player is looking at.
+ */
+watch(
+  [mobileExpanded, () => gameMessages.value.length],
+  ([expanded, length]) => {
+    if (expanded) logReadWatermark.value = length;
+  },
+  { immediate: true }
+);
+
+/** The toggle's label, carrying the unread count for screen readers too. */
+const mobileToggleLabel = computed(() => {
+  if (mobileExpanded.value) return 'Hide players and log';
+  const unread = unreadLogCount.value;
+  return unread > 0
+    ? `Show players and log, ${unread} new`
+    : 'Show players and log';
+});
+
 // Computed properties derived from game view
 const players = computed(() => state.value?.state.players || []);
 const myPlayer = computed(() => players.value.find(p => p.seat === playerSeat.value));
@@ -2351,12 +2393,21 @@ if ((import.meta as any).hot) {
               class="mobile-strip__toggle"
               type="button"
               :aria-expanded="mobileExpanded"
-              :aria-label="mobileExpanded ? 'Hide players and log' : 'Show players and log'"
+              :aria-label="mobileToggleLabel"
               @click="mobileExpanded = !mobileExpanded"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
+              <!-- Unread badge (#22). aria-hidden because the count is already
+                   in the button's own label — announcing it twice is worse than
+                   once. Capped at 99+ so the badge cannot grow the control. -->
+              <span
+                v-if="unreadLogCount > 0"
+                class="mobile-strip__unread"
+                data-bs-unread
+                aria-hidden="true"
+              >{{ unreadLogCount > 99 ? '99+' : unreadLogCount }}</span>
             </button>
           </div>
 
@@ -3178,10 +3229,33 @@ if ((import.meta as any).hot) {
     text-overflow: ellipsis;
     min-width: 0;
   }
+  .mobile-strip__unread {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    /* Accent on the page background rather than white on accent: the accent is
+       a mid-tone in both themes, so white text on it does not carry. */
+    background: var(--bsg-accent);
+    color: var(--bsg-bg);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+
   .mobile-strip__toggle {
     flex: none;
     display: grid;
     place-items: center;
+    position: relative;
     width: 32px;
     height: 32px;
     border-radius: var(--bsg-r-sm);

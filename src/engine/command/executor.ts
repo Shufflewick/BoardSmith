@@ -345,7 +345,7 @@ function executeTrackRemoveLast(game: Game, command: TrackRemoveLastCommand): Co
 }
 
 function executeAnimate(game: Game, command: AnimateCommand): CommandResult {
-  game.pushAnimationEvent(command.eventType, command.data);
+  game.pushAnimationEvent(command.eventType, command.data, command.to);
   return { success: true };
 }
 

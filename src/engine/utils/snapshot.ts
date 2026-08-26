@@ -527,7 +527,9 @@ export function createPlayerView(
     } : undefined,
     // Seat-scoped: `messageTo()` messages addressed to other seats are withheld
     // here, not hidden in the UI — this is the payload the client receives.
-    messages: game.getFormattedMessages(playerPosition).map(text => ({ text })),
+    // Keeps each line's game-supplied `type` (#21) — flattening to `{ text }`
+    // here was the last hop that dropped it.
+    messages: game.getFormattedMessageEntries(playerPosition),
     phase: game.phase,
     complete: flowState?.complete ?? false,
     winners: flowState?.complete ? game.getWinners().map(p => p.seat) : undefined,

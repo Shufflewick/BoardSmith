@@ -253,6 +253,11 @@ export interface AnimateCommand extends BaseCommand {
   eventType: string;
   /** Event-specific data payload (must be JSON-serializable) */
   data: Record<string, unknown>;
+  /**
+   * Seats allowed to receive this event (#23). Absent means everyone. Set by
+   * `Game.animateTo`; `Game.animate` leaves it absent.
+   */
+  to?: number[];
 }
 
 /**

@@ -5,12 +5,29 @@ interface GameMessage {
   id: number;
   text: string;
   timestamp: Date;
-  type?: 'action' | 'system' | 'error';
+  /**
+   * The game's own classification of this line (#21), or `'action'` when the
+   * game did not classify it.
+   *
+   * An OPEN string, not a fixed union: the taxonomy belongs to the game
+   * ('notice', 'alert', 'event', 'advancement', 'shout', 'mail', ...), and this
+   * component only guarantees to put it on the element so CSS can reach it.
+   */
+  type: string;
 }
 
 interface GameHistoryProps {
   /** Array of messages from game state */
   messages: Array<string | { text: string; type?: string }>;
+}
+
+/**
+ * The class a line's type becomes. Namespaced so a game's own type name can
+ * never collide with this component's layout classes, and slugified so an
+ * arbitrary game-supplied string is always a usable class name.
+ */
+function typeClass(type: string): string {
+  return `log-type-${type.replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}`;
 }
 
 const props = defineProps<GameHistoryProps>();
@@ -31,9 +48,7 @@ watch(
       for (let i = lastProcessedSourceIndex; i < newMessages.length; i++) {
         const msg = newMessages[i];
         const text = typeof msg === 'string' ? msg : msg.text;
-        const type = typeof msg === 'object' && msg.type
-          ? (msg.type as 'action' | 'system' | 'error')
-          : 'action';
+        const type = typeof msg === 'object' && msg.type ? msg.type : 'action';
 
         if (text) {
           processedMessages.value.push({
@@ -229,7 +244,7 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
         v-for="msg in processedMessages"
         :key="msg.id"
         class="message"
-        :class="msg.type"
+        :class="[msg.type, typeClass(msg.type)]"
       >
         <span class="timestamp">{{ formatTime(msg.timestamp) }}</span>
         <span class="text">{{ msg.text }}</span>
@@ -346,7 +361,12 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
   color: var(--bsg-ink-2);
 }
 
-.message.error .text {
+/* Built-in emphasis for the few type names the shell itself understands. A
+   game's own taxonomy reaches CSS through the namespaced `.log-type-<name>`
+   class on the same element, so it can style its own without patching this. */
+.message.error .text,
+.message.log-type-error .text,
+.message.log-type-alert .text {
   color: var(--bsg-danger);
 }
 
@@ -364,8 +384,13 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
   line-height: 1.4;
 }
 
-.message.system .text {
+.message.system .text,
+.message.log-type-system .text {
   color: var(--bsg-ink);
+}
+
+.message.log-type-notice .text {
+  color: var(--bsg-ink-3);
 }
 
 .no-messages {

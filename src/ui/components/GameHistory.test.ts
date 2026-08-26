@@ -162,3 +162,48 @@ describe('GameHistory', () => {
   });
 
 });
+
+describe('per-line type reaches the DOM (#21)', () => {
+  it('puts a game-supplied type on the entry as a namespaced class', async () => {
+    const wrapper = mount(GameHistory, {
+      props: {
+        messages: [
+          { text: 'The day leaves you 4 hungrier.', type: 'notice' },
+          { text: 'You do not get up again.', type: 'alert' },
+        ],
+      },
+    });
+    await nextTick();
+
+    const entries = wrapper.findAll('.message');
+    expect(entries).toHaveLength(2);
+    expect(entries[0].classes()).toContain('log-type-notice');
+    expect(entries[1].classes()).toContain('log-type-alert');
+    // Two lines that used to render identically now do not.
+    expect(entries[0].classes()).not.toContain('log-type-alert');
+  });
+
+  it('accepts a taxonomy the shell has never heard of', async () => {
+    const wrapper = mount(GameHistory, {
+      props: { messages: [{ text: 'A shout goes up.', type: 'shout' }] },
+    });
+    await nextTick();
+    expect(wrapper.find('.message').classes()).toContain('log-type-shout');
+  });
+
+  it('slugifies a type so an arbitrary string is still a usable class', async () => {
+    const wrapper = mount(GameHistory, {
+      props: { messages: [{ text: 'Mail arrives.', type: 'Clan Mail' }] },
+    });
+    await nextTick();
+    expect(wrapper.find('.message').classes()).toContain('log-type-clan-mail');
+  });
+
+  it('falls back to action for an unclassified line', async () => {
+    const wrapper = mount(GameHistory, {
+      props: { messages: ['Round 4.'] },
+    });
+    await nextTick();
+    expect(wrapper.find('.message').classes()).toContain('log-type-action');
+  });
+});

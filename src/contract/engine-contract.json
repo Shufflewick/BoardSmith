@@ -1,7 +1,7 @@
 {
-  "revision": 20,
+  "revision": 21,
   "bundleProtocol": 1,
-  "surfaceHash": "1ece3a23909d425b",
+  "surfaceHash": "86ce199cd47f2874",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -163,6 +163,14 @@
       "surfaceHash": "1ece3a23909d425b",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r19: isEngineRootField / engineRootFieldAudience / GAME_ROOT_FIELD_AUDIENCE are exported so a game can defer to the engine's root-field audiences; enumerateLegalMoves throws on a bad seat instead of returning []; MCTSBot.play resolves to null (with lastStallReason) when a seat's own information state offers no searchable move, instead of throwing and locking the table."
+    },
+    {
+      "revision": 21,
+      "date": "2026-08-26",
+      "bundleProtocol": 1,
+      "surfaceHash": "86ce199cd47f2874",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "r20: message() and messageTo() take a game-supplied per-line type that survives to the client, so a log can classify its own entries; animateTo() gives animation events the same server-enforced audience messageTo() has."
     }
   ]
 }

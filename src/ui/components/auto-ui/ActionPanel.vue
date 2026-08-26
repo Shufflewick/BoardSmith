@@ -13,7 +13,7 @@
  * Requires: ActionPanel must be used inside a GameShell context where the
  * action controller is provided via inject('actionController').
  */
-import { ref, computed, watch, inject } from 'vue';
+import { ref, computed, watch, inject, nextTick } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import { resolveMultiSelectConfig } from '../../composables/actionControllerHelpers.js';
@@ -206,6 +206,91 @@ const currentActionMeta = computed(() => {
 
 // Current pick - delegates to controller (required)
 const currentPick = computed(() => actionController.currentPick.value);
+
+// ── Keyboard focus across step transitions (#27) ───────────────────────────
+//
+// The Action Panel replaces the control the player is standing on at every step
+// of a chained action: the action button becomes the first selection's list,
+// each list becomes the next selection's, and the last becomes the idle list
+// again. A removed node cannot hold focus, so each of those transitions dropped
+// `document.activeElement` back to `document.body` — no position in the tab
+// order, nothing announced, and a tab-in from the top of the document required
+// for every selection. Six selections meant seven strandings.
+//
+// The repair is deliberately narrow: focus is placed ONLY when it has actually
+// been stranded, so a player who tabbed somewhere else on purpose is never
+// yanked back into the Action Panel.
+
+/** The panel root, so focus can be searched for and scoped within it. */
+const panelRoot = ref<HTMLElement | null>(null);
+
+/**
+ * Identity of the step being rendered. Changes exactly when the Action Panel
+ * swaps its controls out: opening an action, advancing a selection, and
+ * returning to idle.
+ */
+const stepIdentity = computed(() => {
+  const action = currentAction.value ?? '(idle)';
+  const pick = currentPick.value?.name ?? '(none)';
+  const accumulated = repeatingState.value?.accumulated.length ?? 0;
+  return `${action}/${pick}/${accumulated}`;
+});
+
+/** Focus is stranded when it is nowhere, on the body, or on a removed node. */
+function focusIsStranded(): boolean {
+  const active = document.activeElement;
+  return !active || active === document.body || !active.isConnected;
+}
+
+const FOCUSABLE =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/** The first control in `scope` a keyboard user can actually operate. */
+function firstOperableIn(scope: HTMLElement): HTMLElement | null {
+  const candidates = scope.querySelectorAll<HTMLElement>(FOCUSABLE);
+  for (const candidate of candidates) {
+    if (candidate.hasAttribute('disabled')) continue;
+    // `aria-disabled` controls stay focusable on purpose (see v-disabled-reason:
+    // a natively-disabled button cannot be reached by keyboard, which takes its
+    // refusal reason with it), but they are a poor landing spot when anything
+    // else is offered.
+    if (candidate.getAttribute('aria-disabled') === 'true') continue;
+    return candidate;
+  }
+  // Nothing enabled: an aria-disabled control still beats the body, because it
+  // holds a place in the tab order and can announce why it is refused.
+  for (const candidate of candidates) {
+    if (!candidate.hasAttribute('disabled')) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Where focus should land for the step now rendered.
+ *
+ * The step's OWN controls come first — the choices for this selection, or the
+ * action buttons when idle. That is where a mouse user's attention already is,
+ * and it is the only landing spot where pressing Enter does what the player
+ * came to do. Falling straight to the panel's first focusable node would put
+ * them on the cancel button, one keystroke from abandoning the action.
+ */
+function focusTargetFor(root: HTMLElement): HTMLElement | null {
+  const step = root.querySelector<HTMLElement>('.selection-input, .action-buttons');
+  return (step && firstOperableIn(step)) ?? firstOperableIn(root);
+}
+
+watch(stepIdentity, async () => {
+  // Wait for the swap to actually land in the DOM before looking for a target.
+  await nextTick();
+  if (!focusIsStranded()) return;
+  const root = panelRoot.value;
+  if (!root || !root.isConnected) return;
+  const target = focusTargetFor(root);
+  // Focusing the container itself would be worse than the body — it is not
+  // operable and announces nothing. Better to leave the player where they are.
+  target?.focus();
+});
+
 
 // Note: Auto-fill is handled by the controller's internal watch
 
@@ -875,7 +960,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   </div>
 
   <!-- Normal action panel content, gated on showActionPanel -->
-  <div class="action-panel" data-bs-panel v-else-if="showActionPanel">
+  <div ref="panelRoot" class="action-panel" data-bs-panel v-else-if="showActionPanel">
     <!-- No action being configured -->
     <!-- Key forces re-render when available actions change -->
     <div v-if="!currentAction" class="action-buttons" :key="availableActions.join(',')">
