@@ -3,8 +3,15 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { PlatformTarget } from './publish-api.js';
 
-const CONFIG_DIR = join(homedir(), '.boardsmith');
-const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
+/** Resolved per call rather than at module load, so the config a process reads
+ * is always the one belonging to the home directory it is running under. */
+function configDir(): string {
+  return join(homedir(), '.boardsmith');
+}
+
+function configFile(): string {
+  return join(configDir(), 'config.json');
+}
 
 interface GlobalConfig {
   /** API keys are per platform target — dev/test/prod are separate deployments
@@ -14,32 +21,18 @@ interface GlobalConfig {
 }
 
 export function readGlobalConfig(): GlobalConfig {
-  if (!existsSync(CONFIG_FILE)) return {};
+  const file = configFile();
+  if (!existsSync(file)) return {};
   try {
-    const parsed = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'));
-    return migrateLegacyApiKey(parsed);
+    return JSON.parse(readFileSync(file, 'utf-8')) as GlobalConfig;
   } catch {
     return {};
   }
 }
 
-/** One-time migration: the pre-taxonomy config stored a single `apiKey`,
- * which was only ever used for --test publishes. Move it to apiKeys.test and
- * rewrite the file so the legacy field disappears. */
-function migrateLegacyApiKey(parsed: GlobalConfig & { apiKey?: string }): GlobalConfig {
-  if (parsed.apiKey === undefined) return parsed;
-  const { apiKey, ...rest } = parsed;
-  const migrated: GlobalConfig = {
-    ...rest,
-    apiKeys: { test: apiKey, ...rest.apiKeys },
-  };
-  writeGlobalConfig(migrated);
-  return migrated;
-}
-
 export function writeGlobalConfig(config: GlobalConfig): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n');
+  mkdirSync(configDir(), { recursive: true });
+  writeFileSync(configFile(), JSON.stringify(config, null, 2) + '\n');
 }
 
 export function getApiKey(target: PlatformTarget): string | undefined {
@@ -50,4 +43,16 @@ export function saveApiKey(target: PlatformTarget, apiKey: string): void {
   const config = readGlobalConfig();
   config.apiKeys = { ...config.apiKeys, [target]: apiKey };
   writeGlobalConfig(config);
+}
+
+/** True when the config still carries the single pre-taxonomy `apiKey` field,
+ * which no target reads. `publish` uses this to say why a key that is visibly
+ * in the file is not being used, instead of silently claiming there is none. */
+export function hasLegacyApiKeyField(): boolean {
+  return 'apiKey' in (readGlobalConfig() as Record<string, unknown>);
+}
+
+/** The config file a `boardsmith publish --api-key` writes to, for error messages. */
+export function globalConfigPath(): string {
+  return configFile();
 }

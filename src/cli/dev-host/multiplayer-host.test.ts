@@ -61,6 +61,7 @@ function makeAltHost() {
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: 2,
+    maxPlayers: altDef.maxPlayers,
     makeSeed: () => 'alt',
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(altDef, gameOptions, snap, pend, op, hostOptions),
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
@@ -84,6 +85,7 @@ function makeHost(opts: { designatedBotSeats?: number[] } = {}) {
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: 1,
+    maxPlayers: def.maxPlayers,
     makeSeed: () => 'mp',
     designatedBotSeats: opts.designatedBotSeats,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
@@ -179,6 +181,7 @@ describe('MultiplayerHost (always-live)', () => {
     const host = new MultiplayerHost({
       playerCount: 2,
       minPlayers: 1,
+      maxPlayers: def.maxPlayers,
       makeSeed: () => 'mp',
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
         if (op.type === 'start') startOps++;
@@ -222,6 +225,7 @@ describe('MultiplayerHost — player configs', () => {
     const host = new MultiplayerHost({
       playerCount: 2,
       minPlayers: 2,
+      maxPlayers: def.maxPlayers,
       makeSeed: () => 'mp',
       botLevel: 'hard',
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
@@ -252,6 +256,7 @@ describe('MultiplayerHost — seat stability on reconnect', () => {
     const host = new MultiplayerHost({
       playerCount: 2,
       minPlayers: 2,
+      maxPlayers: def.maxPlayers,
       makeSeed: () => 'mp',
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
         if (op.type === 'start' && failNextStart) {
@@ -437,6 +442,7 @@ function makeLockedHost() {
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: 1,
+    maxPlayers: def.maxPlayers,
     makeSeed: () => 'locked',
     teachingDisabled: true,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
@@ -631,6 +637,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
     const host = new MultiplayerHost({
       playerCount: 2,
       minPlayers: 2,
+      maxPlayers: def.maxPlayers,
       makeSeed: () => `seed-${seedCounter++}`,
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
         if (op.type === 'start') seeds.push((gameOptions as { seed?: string }).seed ?? '');
@@ -694,6 +701,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
     const host = new MultiplayerHost({
       playerCount: 2,
       minPlayers: 2,
+      maxPlayers: def.maxPlayers,
       makeSeed: () => 'never-started',
       executeOp: (gameOptions, snap, pend, op, hostOptions) =>
         executeOp(altDef, gameOptions, snap, pend, op, hostOptions),

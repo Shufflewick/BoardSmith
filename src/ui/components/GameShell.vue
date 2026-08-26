@@ -1638,16 +1638,18 @@ function disconnectFromLobby() {
   }
 }
 
-// Decide whether a getLobby() failure means "no lobby — try the legacy
-// direct join" vs. a real error to surface. Mirrored in
+// Decide whether a getLobby() failure means "this game is already in progress
+// — join it directly" vs. a real error to surface. Mirrored in
 // GameShell.join-fallthrough.test.ts — keep the two in sync.
-// Fall through only when the server answered: HTTP 404 (no lobby support)
-// or MeepleClientError (server-reported game/lobby state error). Network
-// failures and 5xx must reach the user instead of silently degrading.
+//
+// Fall through ONLY on MeepleClientError: the server answered, and what it
+// answered is a game/lobby state error. An HTTP 404 does NOT fall through
+// (#63) — it used to, on the theory that the server might be an old-style one
+// without a lobby endpoint, which is a backward-compatibility branch this
+// library does not keep, and which swallowed the far more common cause of a
+// 404: a mistyped game code. Network failures and 5xx never fell through.
 function shouldFallThroughToDirectJoin(e: unknown): boolean {
-  const is404 = e instanceof Error && /HTTP 404/.test(e.message);
-  const isClientErr = e instanceof MeepleClientError;
-  return is404 || isClientErr;
+  return e instanceof MeepleClientError;
 }
 
 async function joinGame() {
@@ -1717,14 +1719,17 @@ async function joinGame() {
       }
       // Game already started - fall through to direct join
     } catch (e) {
+      if (e instanceof Error && /HTTP 404/.test(e.message)) {
+        throw new Error(`No game found with code "${gid}". Check the code and try again.`);
+      }
       if (!shouldFallThroughToDirectJoin(e)) {
         throw e;
       }
-      // No lobby (404) or server-reported lobby/game-state error — the game
-      // might be old-style without lobby, so try the legacy direct join.
+      // The server answered with a lobby/game-state error — most often "this
+      // game is already in progress", which is exactly what a direct join is for.
     }
 
-    // Direct join (legacy flow or game already playing)
+    // Direct join (the game is already playing)
     const stateResult = await client.getGameState(gid, 1);
 
     if (stateResult) {

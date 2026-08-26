@@ -1206,5 +1206,3 @@ export function useFlyingElements(
   };
 }
 
-// Re-export legacy types for backwards compatibility
-export type { FlyingCard as FlyingCardsReturn };

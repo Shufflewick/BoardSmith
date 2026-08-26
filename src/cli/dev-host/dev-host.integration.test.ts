@@ -98,6 +98,7 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     host = new MultiplayerHost({
       playerCount: 2,
       minPlayers: 1,
+      maxPlayers: gameDef.maxPlayers,
       makeSeed: () => 'dev-host-integration',
       executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
         executeOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),
@@ -354,6 +355,7 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
       staleHost = new MultiplayerHost({
         playerCount: 2,
         minPlayers: 1,
+        maxPlayers: gameDef.maxPlayers,
         makeSeed: () => 'stale-close',
         executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
           executeOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),

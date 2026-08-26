@@ -100,10 +100,11 @@ export interface MultiplayerHostOptions {
    * `configure` preset/gameOptions `playerCount` against the game's real
    * [minPlayers, maxPlayers] range BEFORE resizing/starting — otherwise a
    * 6-player preset on a 2–4 game is accepted and blows up in the engine.
-   * Optional for backward-compat construction; when absent, only the
-   * positive-integer check applies.
+   * Required: a host that does not know the ceiling cannot enforce it, and the
+   * check silently degrading to "any positive integer" is the bug this exists
+   * to catch.
    */
-  maxPlayers?: number;
+  maxPlayers: number;
   /** Default bot level for unclaimed (bot) seats when the game starts. */
   botLevel?: string;
   /**
@@ -430,11 +431,10 @@ export class MultiplayerHost {
       // out-of-range preset (e.g. a 6-player preset on a 2–4 game) is rejected
       // here with an actionable message rather than blowing up in the engine.
       const max = this.opts.maxPlayers;
-      if (newPlayerCount < this.opts.minPlayers || (max !== undefined && newPlayerCount > max)) {
-        const range = max !== undefined ? `${this.opts.minPlayers}–${max}` : `at least ${this.opts.minPlayers}`;
+      if (newPlayerCount < this.opts.minPlayers || newPlayerCount > max) {
         this.send(clientId, {
           type: 'error',
-          message: `Preset/configure playerCount ${newPlayerCount} is out of range for this game (must be ${range}).`,
+          message: `Preset/configure playerCount ${newPlayerCount} is out of range for this game (must be ${this.opts.minPlayers}–${max}).`,
         });
         return;
       }

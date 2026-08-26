@@ -8,8 +8,6 @@ import {
   DESIGN_LEDGERS,
   RULEBOOK_DIR,
   SCRATCH_DIR,
-  designDir,
-  scratchDir,
 } from '../lib/project-paths.js';
 
 /**
@@ -328,5 +326,3 @@ function printReport(result: DoctorResult, fixed: boolean): void {
   }
 }
 
-/** Where `doctor` puts things — re-exported so callers do not re-derive the layout. */
-export { designDir, scratchDir };

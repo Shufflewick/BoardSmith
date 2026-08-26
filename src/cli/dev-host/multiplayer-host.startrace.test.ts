@@ -73,6 +73,7 @@ function makeRaceHost(gate: { promise: Promise<void> } | null) {
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: 2,
+    maxPlayers: raceDef.maxPlayers,
     makeSeed: () => 'race',
     executeOp: async (
       gameOptions: { playerCount: number; [key: string]: unknown },

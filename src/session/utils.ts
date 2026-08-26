@@ -100,19 +100,6 @@ export function serializePendingActionState(s: PendingActionState): SerializedPe
 }
 
 /**
- * Restore a `PendingActionState` from its JSON-safe wire shape (inverse of
- * `serializePendingActionState()`) — the `number[]` form of `onSelectFired`
- * becomes a `Set<number>` again so engine code (`processSelectionStep` etc.)
- * can use `Set` membership checks.
- */
-export function deserializePendingActionState(s: SerializedPendingActionState): PendingActionState {
-  return {
-    ...s,
-    onSelectFired: s.onSelectFired ? new Set(s.onSelectFired) : undefined,
-  };
-}
-
-/**
  * Build metadata for a single action by name.
  * Used for followUp actions that aren't in the current available actions.
  * Does NOT check the action's condition (followUp actions bypass conditions).

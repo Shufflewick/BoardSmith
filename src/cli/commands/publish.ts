@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import ora from 'ora';
-import { getApiKey, saveApiKey } from '../lib/config.js';
+import { getApiKey, saveApiKey, hasLegacyApiKeyField, globalConfigPath } from '../lib/config.js';
 import { readDistDir, createZip } from '../lib/zip.js';
 import {
   getPlatformUrl,
@@ -60,6 +60,12 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     apiKey = getApiKey(target);
     if (!apiKey) {
       console.error(chalk.red(`No API key configured for the ${target} platform.`));
+      if (hasLegacyApiKeyField()) {
+        console.error(chalk.dim(
+          `${globalConfigPath()} still holds a single "apiKey" from before dev/test/prod had ` +
+          `separate key stores. It is not read for any target — save the key against the one you want.`
+        ));
+      }
       console.error(chalk.dim(`Run: boardsmith publish${target === 'prod' ? '' : ` --${target}`} --api-key spk_YOUR_KEY`));
       process.exit(1);
     }

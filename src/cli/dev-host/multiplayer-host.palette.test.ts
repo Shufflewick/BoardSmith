@@ -40,6 +40,7 @@ describe('MultiplayerHost — declared color palette reaches per-seat color (D16
     const host = new MultiplayerHost({
       playerCount: 2,
       minPlayers: 1,
+      maxPlayers: def.maxPlayers,
       makeSeed: () => 'palette',
       colorPalette: [
         { value: '#123456', label: 'Custom One' },
@@ -67,6 +68,7 @@ describe('MultiplayerHost — declared color palette reaches per-seat color (D16
     const host = new MultiplayerHost({
       playerCount: 1,
       minPlayers: 1,
+      maxPlayers: def.maxPlayers,
       makeSeed: () => 'palette-adversarial',
       colorPalette: [{ value: NON_DEFAULT_HEX, label: 'Weird' }],
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
@@ -90,6 +92,7 @@ describe('MultiplayerHost — declared color palette reaches per-seat color (D16
     const host = new MultiplayerHost({
       playerCount: 2,
       minPlayers: 1,
+      maxPlayers: def.maxPlayers,
       makeSeed: () => 'palette-view',
       colorPalette: [
         { value: '#123456', label: 'Custom One' },
