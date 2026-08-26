@@ -84,6 +84,47 @@ git worktree remove /tmp/bs-baseline
 Generating from a clean `main` worktree is the point: a baseline taken from a
 dirty tree bakes in the very findings the gate is supposed to catch.
 
+## A `duplicate_exports` key can fail while already being baselined
+
+Recognise this one before you go hunting for new duplication, because the
+finding looks new and is not.
+
+A `duplicate_exports` baseline key is the exported name followed by **every
+file that exports it**:
+
+```
+ActionResult|src/client/types.ts|src/engine/action/types.ts|src/session/game-session.ts|src/ui/composables/useActionControllerTypes.ts
+```
+
+The two sides of the comparison are built differently. The baseline is saved by
+`fallow dead-code --save-baseline` over the WHOLE repository, so its key lists
+all of the exporting files. `fallow audit` is scoped to the files changed since
+the base branch, so its key lists only the exporting files **that the branch
+happens to touch**. A branch touching some of them therefore produces a strict
+SUBSET key, which matches nothing, and already-accepted debt is reported as a
+fresh failure.
+
+It surfaced on the AI-to-Bot rename (issue #28), which dragged four such files
+into scope at once and failed on `ActionResult`, `FollowUpAction`, `Player` and
+`RefWithRole` — each already baselined under a longer list.
+
+How to tell it apart from real duplication, in one step: compare the finding's
+file list against the baselined entry for the same name. If the finding's list
+is a subset, the branch did not add an export; it only brought fewer of the
+existing ones into scope. A subset means strictly LESS duplication than what is
+already accepted.
+
+The fix is to append the scoped key alongside the full one. Both spellings of
+the same debt then live in the baseline, which is why the file can hold two
+entries for one name. This is recording the debt in the only vocabulary the key
+format has, not widening the exemption: a genuinely new exporting file produces
+a key that is not a subset of anything, and still fails.
+
+Do not reach for `fallow-ignore` comments here, and do not regenerate the
+baseline hoping to clear it — a full-repo run reproduces the long keys and
+changes nothing. The durable fix belongs in fallow itself: match a finding whose
+file list is a subset of a baselined entry with the same name.
+
 ## The backlog is real and is not cancelled by this
 
 48 dead exports, 222 dead types, 4 remaining cycles and 293 over-threshold
