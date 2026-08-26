@@ -462,7 +462,7 @@ import { gameDefinition } from '../src/rules/game.js'; // your game's exported G
 const session = createHeadlessSession(
   gameDefinition,
   { playerCount: 2, seed: 'ci-seed-1' },
-  [{ seat: 2, level: 'easy' }], // optional AI seats
+  [{ seat: 2, level: 'easy' }], // optional bot seats
 );
 
 await session.start();

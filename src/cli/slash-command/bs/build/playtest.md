@@ -79,7 +79,7 @@ of the script, in one place, not repeated per numbered step — the literal comm
 npx boardsmith dev                    # opens your browser, seats you as seat 1
 npx boardsmith dev --players <count>  # states the seat count for this chunk; open one more
                                        # browser tab per additional seat
-npx boardsmith dev --ai 1,2           # AI fills seats 1-2 so one human can solo-test a
+npx boardsmith dev --bot 1,2           # bot fills seats 1-2 so one human can solo-test a
                                        # multi-seat chunk
 ```
 

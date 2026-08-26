@@ -377,7 +377,7 @@ Each player receives a filtered view of the game state:
 
 Games export a `gameDefinition` object that describes the game to the framework. This metadata enables:
 - Game registration and identification
-- AI configuration
+- bot configuration
 - Quick-start presets
 
 Lobby configuration (game options, player options, color palettes) is defined in `boardsmith.json`, not in the game definition. This ensures a single source of truth that both the dev server and the platform read from.
@@ -392,8 +392,8 @@ export const gameDefinition = {
   displayName: 'My Game',
   minPlayers: 2,
   maxPlayers: 4,
-  ai: {
-    objectives: getMyGameObjectives,  // Optional AI support
+  bot: {
+    objectives: getMyGameObjectives,  // Optional bot support
   },
   presets: [ /* ... */ ],             // Optional quick-start presets
 };
@@ -515,12 +515,12 @@ presets: [
     ],
   },
   {
-    name: 'vs AI',
-    description: 'Play against AI',
+    name: 'vs bot',
+    description: 'Play against bot',
     options: { boardSize: 9 },
     players: [
-      { isAI: false, color: '#e74c3c' },
-      { isAI: true, aiLevel: 'medium', color: '#3498db' },
+      { isBot: false, color: '#e74c3c' },
+      { isBot: true, botLevel: 'medium', color: '#3498db' },
     ],
   },
 ]
@@ -537,8 +537,8 @@ export interface CreateGameRequest {
   playerNames?: string[];
   gameOptions?: Record<string, unknown>;    // From gameOptions
   playerConfigs?: PlayerConfig[];           // From playerOptions
-  aiPlayers?: number[];
-  aiLevel?: string;
+  botPlayers?: number[];
+  botLevel?: string;
 }
 
 // In your game

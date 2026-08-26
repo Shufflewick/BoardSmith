@@ -11,9 +11,9 @@ This folder contains documentation for the BoardSmith game framework.
 | [Actions & Flow](./actions-and-flow.md) | Action builder API and declarative flow system |
 | [Dice & Scoring](./dice-and-scoring.md) | Dice elements, 3D rendering, abilities, and scoring tracks |
 | [UI Components](./ui-components.md) | Vue components and composables |
-| [AI System](./ai-system.md) | MCTS bot and AI integration |
+| [bot System](./bot-system.md) | MCTS bot and bot integration |
 | [Game Examples](./game-examples.md) | Analysis of example games with patterns |
-| [Teaching & Tutorials](./teaching-and-tutorials.md) | Tutorial authoring, AI hints, narrated demo, heatmap, action help, and host lockout |
+| [Teaching & Tutorials](./teaching-and-tutorials.md) | Tutorial authoring, bot hints, narrated demo, heatmap, action help, and host lockout |
 | [Agent Control](./agent-control.md) | Driving a game headlessly: action-space introspection, move enumeration, undo/checkpoint/time-travel, determinism & seeding, scriptable dev host (WS), structured errors |
 | [Migration Guide](./migration-guide.md) | Breaking changes by version, with before→after upgrade steps |
 | [State Size](./state-size.md) | Why saved state is tree size × action count, the `checkpoints` retention policy, and how to assert your budget in CI |
@@ -21,7 +21,7 @@ This folder contains documentation for the BoardSmith game framework.
 
 ## For LLMs
 
-If you're an AI assistant reading this codebase:
+If you're an bot assistant reading this codebase:
 
 1. **Start with** [`core-concepts.md`](./core-concepts.md), then [`agent-control.md`](./agent-control.md) for driving a game headlessly
 2. **Simplest example**: Hex - minimal but complete game
@@ -30,5 +30,5 @@ If you're an AI assistant reading this codebase:
 ## Quick Links
 
 - **CLI**: `boardsmith init`, `boardsmith dev`, `boardsmith test`, `boardsmith simulate`
-- **Key packages**: `boardsmith`, `boardsmith/ui`, `boardsmith/ai`, `boardsmith/client`
+- **Key packages**: `boardsmith`, `boardsmith/ui`, `boardsmith/bot`, `boardsmith/client`
 - **Example games**: Hex, Go Fish, Checkers, Cribbage

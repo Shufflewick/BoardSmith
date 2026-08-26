@@ -5,7 +5,7 @@
  * against a scratch temp directory with `skipLink: true`, then asserts the full installed
  * layout, that every SKILL.md entry-point relative reference resolves to a real file, that
  * no `.test.ts` leaks into the installed tree, that no design-game residue remains, and that
- * `bs-build-ai` (not `generate-ai`/`bs-generate-ai`) is present with its 5 AI hooks.
+ * `bs-build-bot` (not `generate-bot`/`bs-generate-bot`) is present with its 5 bot hooks.
  *
  * `skipLink: true` is MANDATORY here — Plan 02 added it specifically so this test never runs
  * the `npm link --force` step and never leaves a global side-effect. The install only ever
@@ -234,10 +234,10 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
   });
 
   describe('DIST-02', () => {
-    it('bs-build-ai renamed and repositioned: generate-ai/ and bs-generate-ai/ absent, bs-build-ai/SKILL.md present with all 5 hooks', () => {
-      expect(existsSync(join(skillsRoot, 'generate-ai'))).toBe(false);
-      expect(existsSync(join(skillsRoot, 'bs-generate-ai'))).toBe(false);
-      const body = readFileSync(join(skillsRoot, 'bs-build-ai', 'SKILL.md'), 'utf-8');
+    it('bs-build-bot renamed and repositioned: generate-bot/ and bs-generate-bot/ absent, bs-build-bot/SKILL.md present with all 5 hooks', () => {
+      expect(existsSync(join(skillsRoot, 'generate-bot'))).toBe(false);
+      expect(existsSync(join(skillsRoot, 'bs-generate-bot'))).toBe(false);
+      const body = readFileSync(join(skillsRoot, 'bs-build-bot', 'SKILL.md'), 'utf-8');
       for (const hook of [
         'objectives',
         'threatResponseMoves',
@@ -313,12 +313,12 @@ describe('installClaudeCommand — bs- skill handoff contract (no Skill-tool sel
 });
 
 /**
- * Issue #16: `bs-generate-ai` was renamed to `bs-build-ai`. A machine that installed the earlier
+ * Issue #16: `bs-generate-bot` was renamed to `bs-build-bot`. A machine that installed the earlier
  * version has the retired directory on disk, and neither `fs.cp` nor the owned-path pre-clean
- * would have removed it — leaving the designer two AI skills, one stale. The installer retires it
+ * would have removed it — leaving the designer two bot skills, one stale. The installer retires it
  * explicitly, on a plain install (no `--force`) and on uninstall.
  */
-describe('installClaudeCommand — retires bs-generate-ai (issue #16)', () => {
+describe('installClaudeCommand — retires bs-generate-bot (issue #16)', () => {
   let tempDir: string;
   let origCwd: string;
   let skillsRoot: string;
@@ -336,22 +336,22 @@ describe('installClaudeCommand — retires bs-generate-ai (issue #16)', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('a plain reinstall (no --force) deletes a leftover bs-generate-ai/ install', async () => {
+  it('a plain reinstall (no --force) deletes a leftover bs-generate-bot/ install', async () => {
     // Simulate the pre-rename install: a complete current tree PLUS the retired skill dir.
-    const retired = join(skillsRoot, 'bs-generate-ai');
+    const retired = join(skillsRoot, 'bs-generate-bot');
     mkdirSync(retired, { recursive: true });
-    writeFileSync(join(retired, 'SKILL.md'), '---\nname: bs-generate-ai\n---\nstale copy');
+    writeFileSync(join(retired, 'SKILL.md'), '---\nname: bs-generate-bot\n---\nstale copy');
     expect(existsSync(join(retired, 'SKILL.md'))).toBe(true);
 
     // No force: the retired dir must make this read as "not a current install" so the copy runs.
     await installClaudeCommand({ local: true, skipLink: true });
 
     expect(existsSync(retired)).toBe(false);
-    expect(existsSync(join(skillsRoot, 'bs-build-ai', 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(skillsRoot, 'bs-build-bot', 'SKILL.md'))).toBe(true);
   });
 
-  it('uninstall removes a leftover bs-generate-ai/ too', async () => {
-    const retired = join(skillsRoot, 'bs-generate-ai');
+  it('uninstall removes a leftover bs-generate-bot/ too', async () => {
+    const retired = join(skillsRoot, 'bs-generate-bot');
     mkdirSync(retired, { recursive: true });
     writeFileSync(join(retired, 'SKILL.md'), 'stale copy');
 

@@ -43,13 +43,13 @@
       "types": "./src/eslint-plugin/index.ts",
       "import": "./src/eslint-plugin/index.ts"
     },
-    "./ai": {
-      "types": "./src/ai/index.ts",
-      "import": "./src/ai/index.ts"
+    "./bot": {
+      "types": "./src/bot/index.ts",
+      "import": "./src/bot/index.ts"
     },
-    "./ai-trainer": {
-      "types": "./src/ai-trainer/index.ts",
-      "import": "./src/ai-trainer/index.ts"
+    "./bot-trainer": {
+      "types": "./src/bot-trainer/index.ts",
+      "import": "./src/bot-trainer/index.ts"
     },
     "./client": {
       "types": "./src/client/index.ts",

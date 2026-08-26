@@ -5,7 +5,7 @@ import type { Rule } from 'eslint';
  * and `GameElement[].includes(element)`, in favor of comparing `.id`.
  *
  * Rationale: GameElement instances may be wrapped in reactive proxies or
- * re-created via clone/restore (snapshots, replay, AI simulation). Two
+ * re-created via clone/restore (snapshots, replay, bot simulation). Two
  * references to "the same" game element are not guaranteed to be `===`
  * across those boundaries, but `.id` is stable. Comparing elements
  * directly with `===`/`!==` (or via `Array.prototype.includes`, which uses

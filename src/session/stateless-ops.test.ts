@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
-import type { AIConfig } from '../ai/types.js';
+import type { BotStrategy } from '../bot/types.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { ErrorCode } from '../types/protocol.js';
@@ -656,50 +656,50 @@ describe('executeOp', () => {
     });
   });
 
-  // ── aiTurn ────────────────────────────────────────────────────────────────
+  // ── botTurn ────────────────────────────────────────────────────────────────
 
-  describe('aiTurn', () => {
-    it('returns aiMoved:true when a flagged AI seat is due to act', async () => {
+  describe('botTurn', () => {
+    it('returns botMoved:true when a flagged bot seat is due to act', async () => {
       const startResult = await startGame(simpleGameDef, simpleGameOptions);
       expect(startResult.success).toBe(true);
 
-      // Player 1 is the current player; flag seat 1 as AI.
-      const aiResult = await executeOp(
+      // Player 1 is the current player; flag seat 1 as bot.
+      const botResult = await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
-        { type: 'aiTurn', seats: [{ seat: 1, level: 'easy' }] },
+        { type: 'botTurn', seats: [{ seat: 1, level: 'easy' }] },
       );
 
-      expect(aiResult.success).toBe(true);
-      expect(aiResult.aiMoved).toBe(true);
-      expect(aiResult.aiPlayer).toBe(1);
+      expect(botResult.success).toBe(true);
+      expect(botResult.botMoved).toBe(true);
+      expect(botResult.botPlayer).toBe(1);
     });
 
-    it('returns aiMoved:false when no flagged AI seat is currently due', async () => {
+    it('returns botMoved:false when no flagged bot seat is currently due', async () => {
       const startResult = await startGame(simpleGameDef, simpleGameOptions);
       expect(startResult.success).toBe(true);
 
       // Seat 2 is flagged but player 1 is due to act — bot should not move.
-      const aiResult = await executeOp(
+      const botResult = await executeOp(
         simpleGameDef,
         simpleGameOptions,
         startResult.snapshot,
         null,
-        { type: 'aiTurn', seats: [{ seat: 2, level: 'easy' }] },
+        { type: 'botTurn', seats: [{ seat: 2, level: 'easy' }] },
       );
 
-      expect(aiResult.success).toBe(true);
-      expect(aiResult.aiMoved).toBe(false);
+      expect(botResult.success).toBe(true);
+      expect(botResult.botMoved).toBe(false);
     });
 
-    // Regression: aiTurn used to build its bot WITHOUT def.ai, so every bot turn
+    // Regression: botTurn used to build its bot WITHOUT def.bot, so every bot turn
     // in production ran a hookless generic search. Games that use moveOrdering to
     // keep concede-style actions out of the search (chess drops resign / offer
     // draw) had that filter silently ignored, and at low iteration budgets the
     // bot picked them — chess bots resigned on move one.
-    it("applies the game definition's AI hooks to the bot's move choice", async () => {
+    it("applies the game definition's bot hooks to the bot's move choice", async () => {
       class ConcedeGame extends Game<ConcedeGame, Player> {
         constructor(options: GameOptions) {
           super(options);
@@ -723,27 +723,27 @@ describe('executeOp', () => {
       const moveOrdering = vi.fn((_game, _playerIndex, moves: Array<{ action: string }>) =>
         moves.filter((m) => m.action !== 'concede'),
       );
-      const concedeDef: GameDefinitionLike & { ai?: AIConfig } = {
+      const concedeDef: GameDefinitionLike & { bot?: BotStrategy } = {
         gameClass: ConcedeGame as new (...args: unknown[]) => unknown,
         gameType: 'concede-game',
         minPlayers: 1,
         maxPlayers: 2,
-        ai: { moveOrdering } as unknown as AIConfig,
+        bot: { moveOrdering } as unknown as BotStrategy,
       };
       const concedeOptions = { playerCount: 2, seed: 'concede-seed' };
 
       const startResult = await executeOp(concedeDef, concedeOptions, null, null, { type: 'start' });
       expect(startResult.success).toBe(true);
 
-      const aiResult = await executeOp(concedeDef, concedeOptions, startResult.snapshot, null, {
-        type: 'aiTurn',
+      const botResult = await executeOp(concedeDef, concedeOptions, startResult.snapshot, null, {
+        type: 'botTurn',
         seats: [{ seat: 1, level: 'easy' }],
       });
 
-      expect(aiResult.success).toBe(true);
-      expect(aiResult.aiMoved).toBe(true);
+      expect(botResult.success).toBe(true);
+      expect(botResult.botMoved).toBe(true);
       expect(moveOrdering).toHaveBeenCalled();
-      const history = (aiResult.snapshot as { actionHistory: Array<{ name: string }> }).actionHistory;
+      const history = (botResult.snapshot as { actionHistory: Array<{ name: string }> }).actionHistory;
       expect(history.map((a) => a.name)).not.toContain('concede');
     });
   });
@@ -962,10 +962,10 @@ describe('executeOp', () => {
     }
 
     interface BotGameDefinitionLike extends GameDefinitionLike {
-      ai?: AIConfig;
+      bot?: BotStrategy;
     }
 
-    const botGameAI: AIConfig = {
+    const botGameBotDef: BotStrategy = {
       objectives: (_game, _playerIndex) => ({
         moves: {
           checker: (game) => Math.min(1, (game as BotGame).moveCount / 20),
@@ -986,7 +986,7 @@ describe('executeOp', () => {
       gameType: 'bot-game',
       minPlayers: 1,
       maxPlayers: 2,
-      ai: botGameAI,
+      bot: botGameBotDef,
     };
 
     const botGameOptions = { playerCount: 2, seed: 'bot-seed' };
@@ -1021,17 +1021,17 @@ describe('executeOp', () => {
       expect(res.error).toMatch(/not awaiting input/i);
     });
 
-    // ── hint: fail-loud — no AI config ────────────────────────────────────
+    // ── hint: fail-loud — no bot config ────────────────────────────────────
 
-    it('hint returns a protocol error when no AI config is on the definition', async () => {
+    it('hint returns a protocol error when no bot config is on the definition', async () => {
       const snapshot = await startBotGame();
-      // Explicitly exclude `ai` so the def has no AI config.
-      const { ai: _ai, ...noAiDef } = botGameDef;
-      const res = await executeOp(noAiDef, botGameOptions, snapshot, null, { type: 'hint', seat: 1 });
+      // Explicitly exclude `bot` so the def has no bot config.
+      const { bot: _bot, ...noBotDef } = botGameDef;
+      const res = await executeOp(noBotDef, botGameOptions, snapshot, null, { type: 'hint', seat: 1 });
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
-      expect(res.error).toMatch(/No AI configuration/i);
+      expect(res.error).toMatch(/No bot configuration/i);
     });
 
     // ── heatmapToggle visible=true: success path ───────────────────────────
@@ -1056,11 +1056,11 @@ describe('executeOp', () => {
     // ── heatmapToggle visible=false: short-circuit — no bot call ──────────
 
     it('heatmapToggle visible=false returns empty entries without running MCTS', async () => {
-      // Use a def with NO ai config — if the bot were constructed it would error.
-      // visible=false must short-circuit BEFORE checking for ai config.
-      const { ai: _ai, ...noAiDef } = botGameDef;
+      // Use a def with NO bot config — if the bot were constructed it would error.
+      // visible=false must short-circuit BEFORE checking for bot config.
+      const { bot: _bot, ...noBotDef } = botGameDef;
       const snapshot = await startBotGame();
-      const res = await executeOp(noAiDef, botGameOptions, snapshot, null, {
+      const res = await executeOp(noBotDef, botGameOptions, snapshot, null, {
         type: 'heatmapToggle', seat: 1, visible: false,
       });
 
@@ -1132,18 +1132,18 @@ describe('executeOp', () => {
       }
     }
 
-    const lockBotAI: AIConfig = {
+    const lockBot: BotStrategy = {
       objectives: (_game, _playerIndex) => ({
         moves: { checker: () => 0.5, weight: 1 },
       }),
     };
 
-    const lockBotDef: GameDefinitionLike & { ai?: AIConfig; tutorial?: TutorialDefinition } = {
+    const lockBotDef: GameDefinitionLike & { bot?: BotStrategy; tutorial?: TutorialDefinition } = {
       gameClass: LockBotGame as new (...args: unknown[]) => unknown,
       gameType: 'lock-bot',
       minPlayers: 1,
       maxPlayers: 2,
-      ai: lockBotAI,
+      bot: lockBot,
       tutorial: {
         steps: [{ id: 'step-1', gate: { action: 'move' }, content: [{ text: 'Make a move.' }] }],
       },
@@ -1266,16 +1266,16 @@ describe('executeOp', () => {
 
   });
 
-  // ── aiSuggest op (Plan 110-03) ────────────────────────────────────────────
+  // ── botSuggest op (Plan 110-03) ────────────────────────────────────────────
   //
   // Read-only preview: runs MCTS and returns suggestedAction/suggestedArgs
   // WITHOUT mutating the snapshot. Used by runDemoLoop in SnapshotSessionHost.
 
-  describe('aiSuggest op', () => {
+  describe('botSuggest op', () => {
 
-    // Local BotGame fixture: player 1 chooses direction ['left','right'] with AI.
+    // Local BotGame fixture: player 1 chooses direction ['left','right'] with bot.
     // Re-declared here because botGameDef is scoped to 'hint + heatmapToggle' describe.
-    class AISuggestBotGame extends Game<AISuggestBotGame, Player> {
+    class BotSuggestGame extends Game<BotSuggestGame, Player> {
       moveCount = 0;
       constructor(options: GameOptions) {
         super(options);
@@ -1293,12 +1293,12 @@ describe('executeOp', () => {
       }
     }
 
-    interface AISuggestBotGameDef extends GameDefinitionLike { ai?: AIConfig; }
+    interface BotSuggestGameDef extends GameDefinitionLike { bot?: BotStrategy; }
 
-    const aiSuggestAI: AIConfig = {
+    const botSuggestFn: BotStrategy = {
       objectives: (_game, _playerIndex) => ({
         moves: {
-          checker: (game) => Math.min(1, (game as AISuggestBotGame).moveCount / 20),
+          checker: (game) => Math.min(1, (game as BotSuggestGame).moveCount / 20),
           weight: 1,
         },
       }),
@@ -1308,28 +1308,28 @@ describe('executeOp', () => {
       },
     };
 
-    const aiSuggestGameDef: AISuggestBotGameDef = {
-      gameClass: AISuggestBotGame as new (...args: unknown[]) => unknown,
-      gameType: 'ai-suggest-game',
+    const botSuggestGameDef: BotSuggestGameDef = {
+      gameClass: BotSuggestGame as new (...args: unknown[]) => unknown,
+      gameType: 'bot-suggest-game',
       minPlayers: 1,
       maxPlayers: 2,
-      ai: aiSuggestAI,
+      bot: botSuggestFn,
     };
 
-    const aiSuggestOpts = { playerCount: 2, seed: 'ai-suggest-seed' };
+    const botSuggestOpts = { playerCount: 2, seed: 'bot-suggest-seed' };
 
-    async function startAISuggestGame() {
-      const res = await executeOp(aiSuggestGameDef, aiSuggestOpts, null, null, { type: 'start' });
+    async function startBotSuggestGame() {
+      const res = await executeOp(botSuggestGameDef, botSuggestOpts, null, null, { type: 'start' });
       if (!res.success) throw new Error('start failed');
       return res.snapshot;
     }
 
     // ── success path ──────────────────────────────────────────────────────
 
-    it('aiSuggest returns success with suggestedAction + suggestedArgs + aiPlayer, snapshot unchanged', async () => {
-      const snapshot = await startAISuggestGame();
-      const res = await executeOp(aiSuggestGameDef, aiSuggestOpts, snapshot, null, {
-        type: 'aiSuggest',
+    it('botSuggest returns success with suggestedAction + suggestedArgs + botPlayer, snapshot unchanged', async () => {
+      const snapshot = await startBotSuggestGame();
+      const res = await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
+        type: 'botSuggest',
         seats: [{ seat: 1 }],
       });
 
@@ -1337,7 +1337,7 @@ describe('executeOp', () => {
       expect(res.suggestedAction).toBeDefined();
       expect(typeof res.suggestedAction).toBe('string');
       expect(res.suggestedArgs).toBeDefined();
-      expect(res.aiPlayer).toBe(1);
+      expect(res.botPlayer).toBe(1);
 
       // Read-only: no action was executed — actionHistory is still empty.
       // (MCTS simulation may update internal flow counters on the runner, but
@@ -1354,11 +1354,11 @@ describe('executeOp', () => {
 
     // ── fail-loud: no actable seat ────────────────────────────────────────
 
-    it('aiSuggest returns a protocol error when no seat among the given seats is awaiting input', async () => {
-      const snapshot = await startAISuggestGame();
+    it('botSuggest returns a protocol error when no seat among the given seats is awaiting input', async () => {
+      const snapshot = await startBotSuggestGame();
       // Seat 2 never acts — only seat 1 does
-      const res = await executeOp(aiSuggestGameDef, aiSuggestOpts, snapshot, null, {
-        type: 'aiSuggest',
+      const res = await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
+        type: 'botSuggest',
         seats: [{ seat: 2 }],
       });
 
@@ -1367,26 +1367,26 @@ describe('executeOp', () => {
       expect(res.error).toBeDefined();
     });
 
-    // ── fail-loud: no AI config ───────────────────────────────────────────
+    // ── fail-loud: no bot config ───────────────────────────────────────────
 
-    it('aiSuggest returns a protocol error when no AI config is on the definition', async () => {
-      const { ai: _ai, ...noAiDef } = aiSuggestGameDef;
-      const snapshot = await startAISuggestGame();
-      const res = await executeOp(noAiDef, aiSuggestOpts, snapshot, null, {
-        type: 'aiSuggest',
+    it('botSuggest returns a protocol error when no bot config is on the definition', async () => {
+      const { bot: _bot, ...noBotDef } = botSuggestGameDef;
+      const snapshot = await startBotSuggestGame();
+      const res = await executeOp(noBotDef, botSuggestOpts, snapshot, null, {
+        type: 'botSuggest',
         seats: [{ seat: 1 }],
       });
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
-      expect(res.error).toMatch(/No AI configuration/i);
+      expect(res.error).toMatch(/No bot configuration/i);
     });
 
     // ── read-only classification ──────────────────────────────────────────
 
-    it('aiSuggest is in READ_ONLY_OP_TYPES', async () => {
+    it('botSuggest is in READ_ONLY_OP_TYPES', async () => {
       const { READ_ONLY_OP_TYPES } = await import('./stateless-ops.js');
-      expect(READ_ONLY_OP_TYPES.has('aiSuggest')).toBe(true);
+      expect(READ_ONLY_OP_TYPES.has('botSuggest')).toBe(true);
     });
 
   });

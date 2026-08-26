@@ -10,21 +10,21 @@
  *
  *   const showHintProp = computed<boolean | undefined>(() => {
  *     // Production lobby path — unchanged
- *     if (lobbyInfo.value?.slots?.some(s => s.aiLevel != null)) return true;
- *     // Dev-host path: SnapshotSessionHost injects hasAIPlayers into broadcast state
- *     if ((state.value?.state as any)?.hasAIPlayers) return true;
+ *     if (lobbyInfo.value?.slots?.some(s => s.botLevel != null)) return true;
+ *     // Dev-host path: SnapshotSessionHost injects hasBotPlayers into broadcast state
+ *     if ((state.value?.state as any)?.hasBotPlayers) return true;
  *     return undefined;
  *   });
  *
- * INVARIANT (RESEARCH Pitfall 5): The `hasAIPlayers` branch must NOT fire in
+ * INVARIANT (RESEARCH Pitfall 5): The `hasBotPlayers` branch must NOT fire in
  * production because GameSession never sets that field. The test proves this
- * by checking the production-no-AI case explicitly.
+ * by checking the production-no-bot case explicitly.
  *
  * Behaviors under test:
- *   SH-1: Both lobbyInfo absent AND state.hasAIPlayers absent → undefined (production no-AI)
- *   SH-2: state.hasAIPlayers = true, lobbyInfo = null → true (dev-host path)
- *   SH-3: lobbyInfo.slots has an AI slot, state.hasAIPlayers absent → true (production lobby)
- *   SH-4: Both lobbyInfo AI slot AND state.hasAIPlayers → true (belt-and-suspenders)
+ *   SH-1: Both lobbyInfo absent AND state.hasBotPlayers absent → undefined (production no-bot)
+ *   SH-2: state.hasBotPlayers = true, lobbyInfo = null → true (dev-host path)
+ *   SH-3: lobbyInfo.slots has a bot slot, state.hasBotPlayers absent → true (production lobby)
+ *   SH-4: Both lobbyInfo bot slot AND state.hasBotPlayers → true (belt-and-suspenders)
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -33,13 +33,13 @@ import { ref, computed, watch, nextTick } from 'vue';
 // ── Minimal LobbyInfo-like shape ─────────────────────────────────────────────
 // Only the fields that showHintProp reads are required.
 
-interface SlotLike { aiLevel?: string | null }
+interface SlotLike { botLevel?: string | null }
 interface LobbyInfoLike { slots?: SlotLike[] }
 
 // ── Minimal PlayerGameState shape ────────────────────────────────────────────
-// Only the `hasAIPlayers` field is needed.
+// Only the `hasBotPlayers` field is needed.
 
-interface StateLike { state?: { hasAIPlayers?: boolean } }
+interface StateLike { state?: { hasBotPlayers?: boolean } }
 
 // ── Harness: mirrors the exact showHintProp production wiring ─────────────────
 // These refs mirror the shape of lobbyInfo and state in GameShell.vue.
@@ -55,9 +55,9 @@ function buildHarness(
   // ── Production showHintProp wiring (mirrors GameShell.vue exactly) ────────
   const showHintProp = computed<boolean | undefined>(() => {
     // Production lobby path — unchanged
-    if (lobbyInfo.value?.slots?.some(s => s.aiLevel != null)) return true;
-    // Dev-host path: SnapshotSessionHost injects hasAIPlayers into broadcast state
-    if ((state.value?.state as any)?.hasAIPlayers) return true;
+    if (lobbyInfo.value?.slots?.some(s => s.botLevel != null)) return true;
+    // Dev-host path: SnapshotSessionHost injects hasBotPlayers into broadcast state
+    if ((state.value?.state as any)?.hasBotPlayers) return true;
     return undefined;
   });
 
@@ -68,46 +68,46 @@ function buildHarness(
 
 describe('GameShell — showHintProp computed', () => {
 
-  it('SH-1: returns undefined when BOTH lobbyInfo and state.hasAIPlayers are absent', () => {
+  it('SH-1: returns undefined when BOTH lobbyInfo and state.hasBotPlayers are absent', () => {
     const { showHintProp } = buildHarness(null, null);
     expect(showHintProp.value).toBeUndefined();
   });
 
-  it('SH-1b: returns undefined when lobbyInfo has no AI slots and state has no hasAIPlayers', () => {
+  it('SH-1b: returns undefined when lobbyInfo has no bot slots and state has no hasBotPlayers', () => {
     const { showHintProp } = buildHarness(
-      { slots: [{ aiLevel: null }, { aiLevel: null }] },  // all human
+      { slots: [{ botLevel: null }, { botLevel: null }] },  // all human
       { state: {} },
     );
     expect(showHintProp.value).toBeUndefined();
   });
 
-  it('SH-2: returns true when state.hasAIPlayers is true and lobbyInfo is null (dev-host path)', () => {
+  it('SH-2: returns true when state.hasBotPlayers is true and lobbyInfo is null (dev-host path)', () => {
     const { showHintProp } = buildHarness(
       null,
-      { state: { hasAIPlayers: true } },
+      { state: { hasBotPlayers: true } },
     );
     expect(showHintProp.value).toBe(true);
   });
 
-  it('SH-2b: returns true when state.hasAIPlayers is true and lobbyInfo has no AI slots', () => {
+  it('SH-2b: returns true when state.hasBotPlayers is true and lobbyInfo has no bot slots', () => {
     const { showHintProp } = buildHarness(
-      { slots: [{ aiLevel: null }] },
-      { state: { hasAIPlayers: true } },
+      { slots: [{ botLevel: null }] },
+      { state: { hasBotPlayers: true } },
     );
     expect(showHintProp.value).toBe(true);
   });
 
-  it('SH-3: returns true when lobbyInfo has an AI slot and state.hasAIPlayers is absent (production lobby path)', () => {
+  it('SH-3: returns true when lobbyInfo has a bot slot and state.hasBotPlayers is absent (production lobby path)', () => {
     const { showHintProp } = buildHarness(
-      { slots: [{ aiLevel: null }, { aiLevel: 'medium' }] },
+      { slots: [{ botLevel: null }, { botLevel: 'medium' }] },
       { state: {} },
     );
     expect(showHintProp.value).toBe(true);
   });
 
-  it('SH-3b: returns true when all lobbyInfo slots have AI levels', () => {
+  it('SH-3b: returns true when all lobbyInfo slots have bot levels', () => {
     const { showHintProp } = buildHarness(
-      { slots: [{ aiLevel: 'easy' }, { aiLevel: 'hard' }] },
+      { slots: [{ botLevel: 'easy' }, { botLevel: 'hard' }] },
       null,
     );
     expect(showHintProp.value).toBe(true);
@@ -115,8 +115,8 @@ describe('GameShell — showHintProp computed', () => {
 
   it('SH-4: returns true when both paths are active (belt-and-suspenders)', () => {
     const { showHintProp } = buildHarness(
-      { slots: [{ aiLevel: 'medium' }] },
-      { state: { hasAIPlayers: true } },
+      { slots: [{ botLevel: 'medium' }] },
+      { state: { hasBotPlayers: true } },
     );
     expect(showHintProp.value).toBe(true);
   });
@@ -435,7 +435,7 @@ describe('GameShell — dev-mode board sizing 0×0 console.error (UIX-03)', () =
       await nextTick();
       await vi.advanceTimersByTimeAsync(SETTLE_MS);
 
-      // Two more broadcasts while still collapsed (e.g. an AI-vs-AI dev game)
+      // Two more broadcasts while still collapsed (e.g. a bot-vs-bot dev game)
       // must NOT re-log — one report per session for a structural CSS bug.
       gameView.value = { children: [1] };
       await nextTick();

@@ -39,7 +39,7 @@ describe('deriveManifest', () => {
       name: 'fixture',
       world: { resolveAction: { name: 'resolveRound', args: { scope: 'all' } }, enrolAction: { name: 'enrol' } },
       persistence: true,
-      ai: true,
+      bot: true,
       joinInProgress: true,
       asyncPlay: true,
       idleAction: { name: 'pass' },
@@ -50,7 +50,7 @@ describe('deriveManifest', () => {
 
     expect(manifest.world).toEqual(config.world);
     expect(manifest.persistence).toBe(true);
-    expect(manifest.ai).toBe(true);
+    expect(manifest.bot).toBe(true);
     expect(manifest.joinInProgress).toBe(true);
     expect(manifest.asyncPlay).toBe(true);
     expect(manifest.idleAction).toEqual({ name: 'pass' });
@@ -143,7 +143,7 @@ describe('deriveManifest', () => {
 });
 
 // WR-02 regression: `.boardsmith` is a SHARED directory (pack tarballs,
-// evolve-ai-weights' rules-bundle.mjs fallback, a running dev server's runtime
+// evolve-bot-weights' rules-bundle.mjs fallback, a running dev server's runtime
 // bundle). build's temp-dir cleanup must only ever remove a build-owned
 // subdirectory, never the shared parent.
 describe('build temp-dir scoping (WR-02)', () => {

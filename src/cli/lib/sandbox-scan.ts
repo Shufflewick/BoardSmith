@@ -42,7 +42,7 @@ const SECURITY_RULES: Linter.RulesRecord = {
  * Determinism rules — enforced only for code that runs inside the executor
  * sandbox: the rules bundle (built from `src/rules`) and any shared modules it
  * imports. The executor must be deterministic and synchronous so games can be
- * replayed for undo and explored by the MCTS AI, and because Workers freeze the
+ * replayed for undo and explored by the MCTS bot, and because Workers freeze the
  * clock during sync execution (so timers never fire there anyway).
  *
  * These are deliberately NOT applied to `src/ui`: the UI bundle runs in the

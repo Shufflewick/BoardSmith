@@ -1,6 +1,6 @@
 # Getting Started with BoardSmith
 
-BoardSmith is a TypeScript framework for building turn-based board and card games with built-in multiplayer support, AI opponents, and automatic UI generation.
+BoardSmith is a TypeScript framework for building turn-based board and card games with built-in multiplayer support, bot opponents, and automatic UI generation.
 
 ## Prerequisites
 
@@ -53,7 +53,7 @@ boardsmith dev
 This starts a Vite dev server (default port 5173) that also hosts the game's
 WebSocket multiplayer host on the same port, and opens one browser tab. Each
 browser tab is a real player — open more tabs to fill more seats (open seats
-play as AI until claimed).
+play as bot until claimed).
 
 By default the server binds to `127.0.0.1` (local-only). Pass `--lan` to let
 other devices on your network join.
@@ -64,12 +64,12 @@ other devices on your network join.
 # Specify number of players
 boardsmith dev --players 3
 
-# Add AI opponents (player positions are 1-indexed)
-boardsmith dev --ai 2              # Player 2 is AI
-boardsmith dev --ai 1 3            # Players 1 and 3 are AI
+# Add bot opponents (player positions are 1-indexed)
+boardsmith dev --bot 2              # Player 2 is bot
+boardsmith dev --bot 1 3            # Players 1 and 3 are bot
 
-# Set AI difficulty
-boardsmith dev --ai 2 --ai-level hard    # easy, medium, hard, expert
+# Set bot difficulty
+boardsmith dev --bot 2 --bot-level hard    # easy, medium, hard, expert
 
 # Custom port
 boardsmith dev --port 3000
@@ -77,7 +77,7 @@ boardsmith dev --port 3000
 # Serve to your whole network so other computers can join
 boardsmith dev --lan               # shorthand for --host 0.0.0.0
 
-# Disable teaching aids (AI hint, move heatmap, AI-vs-AI demo, tutorial)
+# Disable teaching aids (bot hint, move heatmap, bot-vs-bot demo, tutorial)
 boardsmith dev --lock-teaching
 
 # Don't auto-launch a browser tab (for scripts/CI driving the dev host,

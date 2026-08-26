@@ -211,13 +211,13 @@ function checkBlockKeys(
 
 /**
  * Shape checks for the blocks the PUBLISHING PLATFORM reads out of the built
- * manifest: `persistence`, `ai`, `joinInProgress`, `idleAction`,
+ * manifest: `persistence`, `bot`, `joinInProgress`, `idleAction`,
  * `roundDeadline` and `world`. They reach the platform untouched through
  * build.ts's `deriveManifest` config spread, so a malformed block is only
  * discovered at upload unless it is caught here.
  *
  * SHAPE only, deliberately — the platform's own POLICY (its hour bounds, and
- * its rule that `roundDeadline` needs either `ai: true` or an `idleAction`)
+ * its rule that `roundDeadline` needs either `bot: true` or an `idleAction`)
  * stays where it is enforced, `games/src/manifest-schema.ts`. Restating
  * platform policy here would give it two homes and one of them would drift.
  */
@@ -226,7 +226,7 @@ function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
 
   const booleans: Record<string, string> = {
     persistence: 'true when the game opts into the platform\'s cross-session key/value store',
-    ai: 'true when the bundle ships a gameDefinition.ai block',
+    bot: 'true when the bundle ships a gameDefinition.bot block',
     joinInProgress: 'true when a player may join a session already underway',
     asyncPlay: 'true when the game can be played asynchronously over hours or days',
   };
@@ -478,7 +478,7 @@ async function validateSecurity(cwd: string): Promise<ValidationResult> {
   // Delegate to the AST-based boardsmith ESLint plugin (single source of truth).
   // Scans ALL of src/ — rules, UI components (.vue), and shared helpers — because
   // a determinism violation anywhere reachable from game state breaks replays,
-  // undo, AI cloning, and multiplayer sync.
+  // undo, bot cloning, and multiplayer sync.
   const violations = scanSandboxViolations(cwd);
   const details = violations.map((v) => `${v.file}:${v.line}:${v.column} - ${v.message}`);
 

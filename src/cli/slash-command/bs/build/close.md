@@ -185,8 +185,8 @@ resolved the same session **auto-advances**: it rolls straight into the next chu
 entry first), and running `investigate → redteam` continuously, stopping at that chunk's `ask`
 gate (or, for a light-path next chunk, its `playtest` gate; or, for the mandated final-acceptance
 chunk, dispatch `build/final-acceptance.md`; or, when the sketch's next mandated step is
-`bs-build-ai`, auto-advance carries the same way into that chunk and on into the
-final-acceptance chunk that follows it — the generate-AI → final-acceptance progression is one
+`bs-build-bot`, auto-advance carries the same way into that chunk and on into the
+final-acceptance chunk that follows it — the generate-bot → final-acceptance progression is one
 continuous run, not two separately re-invoked sessions). The printed command exists **only** as
 the cold-resume/crash fallback for the case where a stop condition *does* fire at this boundary —
 the user said stop, context has crossed the 60% low-water mark, or an automated step is
@@ -207,7 +207,7 @@ and SKETCH.md reflects the (possibly updated) tail. By default **the same sessio
 into a fresh `{investigate, redteam, ask}` group for the proposed chunk (`state-machine.md`
 "Session Handoff Seams" → "Cross-chunk continuation"), stopping at its `ask` gate — or, if the
 sketch's `## Mandated Chunks` final-acceptance chunk is next, dispatches `build/final-acceptance.md`
-instead — carrying the same auto-advance through a `bs-build-ai` chunk into the
+instead — carrying the same auto-advance through a `bs-build-bot` chunk into the
 final-acceptance chunk that follows it. Only when a stop condition fires at the chunk boundary does
 the printed command's cold-resume/crash fallback come into play, picked up by a fresh
 `/bs-build-chunk` invocation. This file does not restate either downstream shape.

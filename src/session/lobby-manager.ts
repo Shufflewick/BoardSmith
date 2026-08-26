@@ -27,8 +27,8 @@ import type {
 export interface LobbyManagerCallbacks {
   /** Called when game transitions from waiting to playing */
   onGameStart: () => void;
-  /** Called to update AI config based on current slots */
-  onAIConfigChanged: (aiSlots: LobbySlot[]) => void;
+  /** Called to update bot config based on current slots */
+  onBotStrategyChanged: (botSlots: LobbySlot[]) => void;
 }
 
 // ============================================
@@ -117,9 +117,9 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     const rawSlots = this.#storedState.lobbySlots;
     const openSlots = rawSlots.filter(s => s.status === 'open').length;
 
-    // All ready = no open slots AND all filled slots are ready (AI always ready)
+    // All ready = no open slots AND all filled slots are ready (bot always ready)
     const allReady = openSlots === 0 &&
-      rawSlots.every(s => s.status === 'ai' || s.ready);
+      rawSlots.every(s => s.status === 'bot' || s.ready);
 
     const slots: LobbySlot[] = rawSlots.map(slot => {
       const isOwn = viewerPlayerId !== undefined && slot.playerId === viewerPlayerId;
@@ -196,8 +196,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
 
     const slot = this.#storedState.lobbySlots[arrayIndex];
 
-    if (slot.status === 'ai') {
-      return { success: false, error: 'This seat is reserved for AI' };
+    if (slot.status === 'bot') {
+      return { success: false, error: 'This seat is reserved for bot' };
     }
 
     if (slot.status === 'claimed' && slot.playerId !== playerId) {
@@ -397,8 +397,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Player not found in lobby' };
     }
 
-    if (slot.status === 'ai') {
-      return { success: false, error: 'Cannot change ready state for AI' };
+    if (slot.status === 'bot') {
+      return { success: false, error: 'Cannot change ready state for bot' };
     }
 
     slot.ready = ready;
@@ -469,7 +469,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   }
 
   /**
-   * Remove a player slot (host only, slot must be open or AI)
+   * Remove a player slot (host only, slot must be open or bot)
    *
    * @param playerId Must be the creator's ID
    * @param seat Seat of the slot to remove
@@ -538,19 +538,19 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   }
 
   /**
-   * Toggle a slot between open and AI (host only)
+   * Toggle a slot between open and bot (host only)
    *
    * @param playerId Must be the creator's ID
    * @param seat Seat of the slot to modify
-   * @param isAI Whether to make this an AI slot
-   * @param aiLevel AI difficulty level (if isAI is true)
+   * @param isBot Whether to make this a bot slot
+   * @param botLevel bot difficulty level (if isBot is true)
    * @returns Result with updated lobby info
    */
-  async setSlotAI(
+  async setSlotBot(
     playerId: string,
     seat: number,
-    isAI: boolean,
-    aiLevel: string = 'medium'
+    isBot: boolean,
+    botLevel: string = 'medium'
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo; gameStarted?: boolean }> {
     this.#validateSeat(seat);
 
@@ -568,7 +568,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
 
     // Seat is 1-indexed
     if (seat === 1) {
-      return { success: false, error: 'Cannot change the host slot to AI' };
+      return { success: false, error: 'Cannot change the host slot to bot' };
     }
 
     if (seat < 1 || seat > this.#storedState.lobbySlots.length) {
@@ -582,12 +582,12 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Cannot change a claimed slot - player must leave first' };
     }
 
-    if (isAI) {
-      slot.status = 'ai';
+    if (isBot) {
+      slot.status = 'bot';
       slot.name = 'Bot';
-      slot.aiLevel = aiLevel;
+      slot.botLevel = botLevel;
       slot.playerId = undefined;
-      slot.ready = true; // AI is always ready
+      slot.ready = true; // bot is always ready
 
       // Compute default player options (including color with deduplication)
       if (this.#storedState.playerOptionsDefinitions) {
@@ -612,14 +612,14 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     } else {
       slot.status = 'open';
       slot.name = `Player ${slot.seat}`;
-      slot.aiLevel = undefined;
+      slot.botLevel = undefined;
       slot.playerId = undefined;
       slot.ready = false;
       slot.playerOptions = undefined;
     }
 
-    // Update AI config if needed
-    this.updateAIConfig();
+    // Update bot config if needed
+    this.updateBotStrategy();
 
     // Check if all players are ready and start game
     const gameStarted = await this.checkAndStartGame();
@@ -1000,9 +1000,9 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     const slots = this.#storedState.lobbySlots;
     const openSlots = slots.filter(s => s.status === 'open').length;
 
-    // All ready = no open slots AND all humans are ready (AI is always ready)
+    // All ready = no open slots AND all humans are ready (bot is always ready)
     const allReady = openSlots === 0 &&
-      slots.every(s => s.status === 'ai' || s.ready);
+      slots.every(s => s.status === 'bot' || s.ready);
 
     if (allReady) {
       this.#storedState.lobbyState = 'playing';
@@ -1010,7 +1010,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       // Clear any pending disconnect timeouts since game is starting
       this.clearDisconnectTimeouts();
 
-      // Notify GameSession that game has started (for AI scheduling)
+      // Notify GameSession that game has started (for bot scheduling)
       this.#callbacks.onGameStart();
 
       return true;
@@ -1020,13 +1020,13 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   }
 
   /**
-   * Update AI config based on current lobby slots
+   * Update bot config based on current lobby slots
    */
-  updateAIConfig(): void {
+  updateBotStrategy(): void {
     if (!this.#storedState.lobbySlots) return;
 
-    const aiSlots = this.#storedState.lobbySlots.filter(s => s.status === 'ai');
-    this.#callbacks.onAIConfigChanged(aiSlots);
+    const botSlots = this.#storedState.lobbySlots.filter(s => s.status === 'bot');
+    this.#callbacks.onBotStrategyChanged(botSlots);
   }
 
   // ============================================

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * HintOverlay — single-annotation ring + bubble for AI move hints.
+ * HintOverlay — single-annotation ring + bubble for bot move hints.
  *
  * Renders via `<Teleport to="body">` as a `position:fixed; inset:0` layer.
  * Reuses the TutorialOverlay infrastructure (measure, ResizeObserver, scroll,
@@ -281,7 +281,7 @@ function ringStyle(ring: ResolvedRing): Record<string, string> {
       >
         <!--
           Non-color cue marker chip (WCAG 2.2 AA 1.4.1).
-          "i" glyph identifies this as an AI hint suggestion.
+          "i" glyph identifies this as a bot hint suggestion.
         -->
         <span class="bsg-tutorial-ring__chip" aria-hidden="true">i</span>
       </div>

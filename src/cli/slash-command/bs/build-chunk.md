@@ -453,7 +453,7 @@ checkpoint. From here, by default, **the same session auto-advances into the nex
 re-enters Step 2, routes to the next chunk's `investigate`, and runs continuously to that chunk's
 `ask` gate (a new chunk's first human-input gate), per `state-machine.md` "Session Handoff Seams" →
 "Cross-chunk continuation" (SKILLAUTO-04/05) — carrying the same auto-advance into the next logical
-step across chunk types, including the generate-AI → final-acceptance progression. The printed
+step across chunk types, including the generate-bot → final-acceptance progression. The printed
 `/bs-build-chunk` re-invocation is the crash/context-fallback resume, never the default stop: it
 only comes into play when a stop condition fires at this boundary — the user said stop, context has
 crossed the 60% low-water mark, or an automated step is stuck/unrecoverable.

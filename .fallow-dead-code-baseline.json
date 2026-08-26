@@ -8,8 +8,8 @@
     "src/cli/lib/__fixtures__/asset-scan/wrapped/src/ui/components/GameTable.vue"
   ],
   "unused_exports": [
-    "src/ai-trainer/feature-templates.ts:computeShortestPathLength",
-    "src/ai-trainer/introspector.ts:analyzeWinConditions",
+    "src/bot-trainer/feature-templates.ts:computeShortestPathLength",
+    "src/bot-trainer/introspector.ts:analyzeWinConditions",
     "src/cli/commands/dev.ts:parseSeedFile",
     "src/cli/commands/doctor.ts:designDir",
     "src/cli/commands/doctor.ts:scratchDir",
@@ -42,12 +42,8 @@
     "src/engine/action/action.ts:Action",
     "src/engine/element/game.ts:DEFAULT_COLOR_LABELS",
     "src/engine/element/typed-array-codec.ts:SUPPORTED_TYPED_ARRAYS",
-    "src/engine/flow/index.ts:stateAwareLoop",
-    "src/engine/utils/enumerate-moves.ts:combinationsOfSize",
-    "src/engine/utils/index.ts:combinationsOfSize",
     "src/engine/utils/index.ts:enumerateSelectionsCore",
     "src/engine/utils/index.ts:generateCombinations",
-    "src/engine/utils/index.ts:parseMultiSelect",
     "src/session/utils.ts:buildPickMetadata",
     "src/session/utils.ts:deserializePendingActionState",
     "src/ui/components/DebugPanel.vue:TreeNode",
@@ -58,7 +54,7 @@
     "src/ui/composables/useFLIP.ts:prefersReducedMotion"
   ],
   "unused_types": [
-    "src/ai-trainer/parallel-benchmark.ts:BenchmarkProgressCallback",
+    "src/bot-trainer/parallel-benchmark.ts:BenchmarkProgressCallback",
     "src/cli/commands/audit.ts:AuditOptions",
     "src/cli/commands/build-manifest.ts:ManifestEntry",
     "src/cli/commands/build-manifest.ts:ParsedManifest",
@@ -198,7 +194,7 @@
     "src/client/types.ts:SetReadyRequest",
     "src/client/types.ts:AddSlotRequest",
     "src/client/types.ts:RemoveSlotRequest",
-    "src/client/types.ts:SetSlotAIRequest",
+    "src/client/types.ts:SetSlotBotRequest",
     "src/client/types.ts:UpdateGameOptionsRequest",
     "src/client/types.ts:UpdatePlayerOptionsRequest",
     "src/client/vue.ts:UseGameOptions",
@@ -215,7 +211,6 @@
     "src/engine/element/game.ts:SeededRandom",
     "src/engine/element/index.ts:ImageRef",
     "src/engine/element/typed-array-codec.ts:SerializedTypedArray",
-    "src/engine/flow/index.ts:RepeatNodeConfig",
     "src/engine/utils/dev-state.ts:ValidationErrorType",
     "src/engine/utils/dev-state.ts:ValidationWarningType",
     "src/engine/utils/index.ts:ValidationErrorType",
@@ -282,17 +277,11 @@
     "src/ui/utils/color-contrast.ts:ContrastInk"
   ],
   "unused_dependencies": [],
-  "unused_dev_dependencies": [
-    "postcss-html"
-  ],
+  "unused_dev_dependencies": [],
   "circular_dependencies": [
     "src/cli/commands/verify-derive-check.ts->src/cli/commands/verify-enumerate.ts",
     "src/engine/action/action.ts->src/engine/tutorial/gate.ts",
-    "src/engine/element/action-metadata.ts->src/engine/element/game.ts->src/engine/element/index.ts->src/engine/index.ts->src/engine/utils/enumerate-moves.ts->src/engine/utils/resolve-multiselect.ts",
-    "src/engine/element/action-metadata.ts->src/engine/element/game.ts->src/engine/index.ts->src/engine/utils/dev-state.ts->src/engine/utils/enumerate-moves.ts->src/engine/utils/index.ts->src/engine/utils/resolve-multiselect.ts",
-    "src/engine/element/game.ts->src/engine/element/volatile-state.ts",
-    "src/engine/index.ts->src/engine/utils/enumerate-moves.ts->src/engine/utils/index.ts",
-    "src/engine/utils/enumerate-moves.ts->src/engine/utils/resolve-multiselect.ts"
+    "src/engine/element/game.ts->src/engine/element/volatile-state.ts"
   ],
   "unused_optional_dependencies": [],
   "unused_enum_members": [
@@ -311,7 +300,7 @@
     "src/types/protocol.ts:ErrorCode.REPLAY_FAILED"
   ],
   "unused_class_members": [
-    "src/ai-trainer/weight-evolver.ts:WeightEvolver.evolve",
+    "src/bot-trainer/weight-evolver.ts:WeightEvolver.evolve",
     "src/cli/commands/verify-enumerate.ts:QuoteVerifiedProvenance.covers",
     "src/client/client.ts:MeepleClient.findAndConnect",
     "src/client/client.ts:MeepleClient.setPlayerId",
@@ -534,7 +523,7 @@
     "src/session/lobby-manager.ts:LobbyManager.setReady",
     "src/session/lobby-manager.ts:LobbyManager.addSlot",
     "src/session/lobby-manager.ts:LobbyManager.removeSlot",
-    "src/session/lobby-manager.ts:LobbyManager.setSlotAI",
+    "src/session/lobby-manager.ts:LobbyManager.setSlotBot",
     "src/session/lobby-manager.ts:LobbyManager.setPlayerConnected",
     "src/session/lobby-manager.ts:LobbyManager.kickPlayer",
     "src/session/lobby-manager.ts:LobbyManager.updatePlayerOptions",
@@ -565,16 +554,20 @@
     "@boardsmith/cribbage-rules"
   ],
   "duplicate_exports": [
+    "ActionResult|src/client/types.ts|src/engine/action/types.ts|src/session/game-session.ts",
     "ActionResult|src/client/types.ts|src/engine/action/types.ts|src/session/game-session.ts|src/ui/composables/useActionControllerTypes.ts",
     "CheckpointPolicy|src/engine/utils/snapshot.ts|src/runtime/runner.ts",
     "ConnectionStatus|src/client/types.ts|src/ui/composables/liveRegionAnnouncer.ts",
     "ElementDiff|src/session/state-history.ts|src/session/utils.ts|src/ui/components/DebugPanel.vue",
     "ElementRef|src/engine/tutorial/types.ts|src/types/protocol.ts|src/ui/composables/useActionControllerTypes.ts|src/ui/composables/useBoardInteraction.ts",
+    "FollowUpAction|src/client/types.ts|src/engine/action/types.ts",
     "FollowUpAction|src/client/types.ts|src/engine/action/types.ts|src/ui/composables/useActionControllerTypes.ts",
     "GameElement|src/engine/element/game-element.ts|src/ui/components/auto-ui/AutoRenderer.vue|src/ui/types.ts",
     "MatchmakingStatus|src/client/types.ts|src/client/vue.ts",
     "Pick|src/ui/components/auto-ui/ActionPanel.vue|src/ui/types.ts",
     "Player|src/engine/player/player.ts|src/ui/components/GameOverCard.vue|src/ui/components/PlayersPanel.vue|src/ui/types.ts",
+    "Player|src/engine/player/player.ts|src/ui/components/PlayersPanel.vue",
+    "RefWithRole|src/engine/action/types.ts|src/types/protocol.ts",
     "RefWithRole|src/engine/action/types.ts|src/types/protocol.ts|src/ui/composables/useActionControllerTypes.ts",
     "UndoPolicy|src/engine/utils/snapshot.ts|src/runtime/runner.ts"
   ],

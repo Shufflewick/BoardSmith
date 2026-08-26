@@ -97,7 +97,7 @@ export class PickHandler<G extends Game = Game> {
     const manager = new PendingActionManager(this.#runner, storedState, undefined, {
       save: async () => {},
       broadcast: () => {},
-      scheduleAICheck: () => {},
+      scheduleBotCheck: () => {},
     });
 
     if (priorPendingState) {
@@ -143,7 +143,7 @@ export class PickHandler<G extends Game = Game> {
     const manager = new PendingActionManager(this.#runner, storedState, undefined, {
       save: async () => {},
       broadcast: () => {},
-      scheduleAICheck: () => {},
+      scheduleBotCheck: () => {},
     });
     manager.setPendingAction(playerPosition, deserializePendingState(priorPendingState));
     manager.cancelPendingAction(playerPosition);

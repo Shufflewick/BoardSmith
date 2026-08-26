@@ -7,7 +7,7 @@ pipeline request API, and a cost/shape recommendation — and states plainly
 what the Phase 168 proof-of-concept (plan 168-02) proves versus what is
 deferred.
 
-**C.2 (panel multi-select parity) is delivered by Phase 159 (AI-01), NOT by
+**C.2 (panel multi-select parity) is delivered by Phase 159 (bot-01), NOT by
 this phase.** This doc is scoped to C.1 only.
 
 ## Problem
@@ -236,7 +236,7 @@ fixture choice does not narrow the result.
 - A higher-level scenario DSL over raw snapshots — only worth building if
   raw-snapshot authoring proves too low-level in practice.
 
-**C.2 (panel multi-select) is delivered by Phase 159 (AI-01), not by this
+**C.2 (panel multi-select) is delivered by Phase 159 (bot-01), not by this
 phase or this PoC.** Any pipeline work that references "seed to state" for
 playtest purposes should not be conflated with C.2's separate concern
 (panel action-selection parity).

@@ -177,7 +177,7 @@ export class SeededRandom {
  * the basic next() functionality.
  *
  * The seed is required: this generator exists for deterministic, reproducible
- * randomness (replay, testing, AI cloning). Callers that want a fresh sequence
+ * randomness (replay, testing, bot cloning). Callers that want a fresh sequence
  * must generate and pass their own seed explicitly so it can be recorded.
  *
  * @param seed - String seed for reproducibility (required)

@@ -15,7 +15,7 @@
 
 /**
  * Cap on retained log entries — mirrors the naming/comment convention of
- * `MAX_AI_MOVES` (snapshot-session-host.ts:9) / `MAX_DEMO_MOVES`
+ * `MAX_BOT_MOVES` (snapshot-session-host.ts:9) / `MAX_DEMO_MOVES`
  * (snapshot-session-host.ts:105). Oldest entries are evicted FIFO once the
  * buffer is full (RESEARCH Open Question Q2).
  */

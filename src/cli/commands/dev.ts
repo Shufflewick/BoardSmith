@@ -34,8 +34,8 @@ interface DevOptions {
   lan?: boolean;
   /** Unset when `--players` is not passed (D14: defaults to the game's minPlayers, resolved once it's known). */
   players?: string;
-  ai?: string[];
-  aiLevel?: string;
+  bot?: string[];
+  botLevel?: string;
   lockTeaching?: boolean;
   /** Commander's negatable `--no-open` sets this to `false`; unset/true auto-opens. */
   open?: boolean;
@@ -73,7 +73,7 @@ export function parsePositiveInt(flagName: string, raw: string): number {
  * path and reason — on a missing file or invalid JSON; there is deliberately
  * NO silent fallback to a fresh start (CLAUDE.md hard rule: no fallbacks that
  * mask real problems). Pure (no process.exit) so it is directly unit-testable,
- * mirroring `parsePositiveInt`/`parseAiSeats`.
+ * mirroring `parsePositiveInt`/`parseBotSeats`.
  */
 export function parseSeedFile(path: string): GameStateSnapshot {
   if (!existsSync(path)) {
@@ -95,12 +95,12 @@ export function parseSeedFile(path: string): GameStateSnapshot {
 }
 
 /**
- * Fail-fast `--ai` seat parser (CLIX-06). Player positions are 1-indexed and
- * comma-separated per flag occurrence (`--ai 1,2` or repeated `--ai 1 --ai 2`).
+ * Fail-fast `--bot` seat parser (CLIX-06). Player positions are 1-indexed and
+ * comma-separated per flag occurrence (`--bot 1,2` or repeated `--bot 1 --bot 2`).
  * Unlike the old `.filter(n => !isNaN(n))` behavior, a non-numeric entry now
  * throws instead of being silently dropped.
  */
-export function parseAiSeats(raw: string[] | undefined): number[] {
+export function parseBotSeats(raw: string[] | undefined): number[] {
   if (!raw) return [];
   const seats: number[] = [];
   for (const group of raw) {
@@ -108,7 +108,7 @@ export function parseAiSeats(raw: string[] | undefined): number[] {
       const trimmed = part.trim();
       const value = Number(trimmed);
       if (!Number.isInteger(value)) {
-        throw new DevFlagError(`Error: --ai must be a comma-separated list of positive integers, got "${trimmed}"`);
+        throw new DevFlagError(`Error: --bot must be a comma-separated list of positive integers, got "${trimmed}"`);
       }
       seats.push(value);
     }
@@ -143,17 +143,17 @@ export function resolvePlayerCount(rawPlayers: string | undefined, minPlayers: n
 }
 
 /**
- * CLIX-06 / F34 (Pitfall 3): `--ai` seats must be validated against the
+ * CLIX-06 / F34 (Pitfall 3): `--bot` seats must be validated against the
  * EFFECTIVE (post-resolution) player count, not the raw pre-clamp CLI value —
  * call this only after `resolveEffectivePlayerCount` has run.
  */
-export function validateAiSeats(aiPlayers: number[], effectivePlayerCount: number): void {
-  const invalidAiPlayers = aiPlayers.filter(p => p < 1 || p > effectivePlayerCount);
-  if (invalidAiPlayers.length > 0) {
+export function validateBotSeats(botPlayers: number[], effectivePlayerCount: number): void {
+  const invalidBotPlayers = botPlayers.filter(p => p < 1 || p > effectivePlayerCount);
+  if (invalidBotPlayers.length > 0) {
     throw new DevFlagError(
-      `Error: Invalid AI player position(s): ${invalidAiPlayers.join(', ')}\n` +
+      `Error: Invalid bot player position(s): ${invalidBotPlayers.join(', ')}\n` +
         `Player positions are 1-indexed (1 to ${effectivePlayerCount}).\n` +
-        `Example: --ai 2 for a 2-player game means player 2 is AI.`,
+        `Example: --bot 2 for a 2-player game means player 2 is bot.`,
     );
   }
 }
@@ -167,7 +167,7 @@ export function validateAiSeats(aiPlayers: number[], effectivePlayerCount: numbe
  *
  * WR-04: combining `--lan` with an explicit `--host` ERRORS instead of
  * silently dropping one — silently ignoring a security-relevant flag is the
- * same class of defect this phase removed from `--ai`/`--players`.
+ * same class of defect this phase removed from `--bot`/`--players`.
  */
 /**
  * 138: whether `devCommand` should auto-launch a real browser tab at the dev
@@ -178,8 +178,8 @@ export function validateAiSeats(aiPlayers: number[], effectivePlayerCount: numbe
  * otherwise connect over WS as an uncontrolled extra player and win the
  * "first arrival auto-seats seat 1" race in MultiplayerHost.hello() before the
  * scripted client ever connects — starving the scripted client of its own
- * seat's turn (or, in a simultaneousActionStep, letting the AI auto-play the
- * seat the scripted client meant to occupy during the brief AI-seat window
+ * seat's turn (or, in a simultaneousActionStep, letting the bot auto-play the
+ * seat the scripted client meant to occupy during the brief bot-seat window
  * before it joins).
  */
 export function shouldOpenBrowser(options: { open?: boolean }): boolean {
@@ -307,7 +307,7 @@ export function resolveColorPalette(
  * D13/DEVHOST-01: parse repeatable `--game-option key=value` flags into a flat
  * record, splitting each entry on the FIRST "=" (a value may itself contain
  * "="). Fail-loud (T-161-03) on an entry missing "=" instead of silently
- * dropping it — matches the `parsePositiveInt`/`parseAiSeats` idiom.
+ * dropping it — matches the `parsePositiveInt`/`parseBotSeats` idiom.
  */
 export function parseGameOptionFlags(raw: string[] | undefined): Record<string, string> {
   if (!raw) return {};
@@ -536,8 +536,8 @@ function buildDevConfig(args: {
   minPlayers: number;
   maxPlayers: number;
   playerCount: number;
-  aiSeats: number[];
-  aiLevel: string;
+  botSeats: number[];
+  botLevel: string;
   colorPalette: Array<{ value: string; label: string }>;
   teachingDisabled: boolean;
 }): DevHostConfig {
@@ -551,8 +551,8 @@ function buildDevConfig(args: {
     minPlayers: args.minPlayers,
     maxPlayers: args.maxPlayers,
     playerCount: args.playerCount,
-    aiSeats: args.aiSeats,
-    aiLevel: args.aiLevel,
+    botSeats: args.botSeats,
+    botLevel: args.botLevel,
     gameOptions: optionRecordToList(gd.gameOptions),
     playerOptions: optionRecordToList(gd.playerOptions),
     // D13/DEVHOST-01: gameDefinition.presets, surfaced for the first time so a
@@ -583,10 +583,10 @@ function exitOnDevFlagError<T>(fn: () => T): T {
 }
 
 export async function devCommand(options: DevOptions): Promise<void> {
-  // Fail-fast on non-numeric --port/--players/--ai (CLIX-06) — actionable
+  // Fail-fast on non-numeric --port/--players/--bot (CLIX-06) — actionable
   // errors before any server work, matching simulate.ts's Number.isInteger idiom.
   const port = exitOnDevFlagError(() => parsePositiveInt('port', options.port));
-  const aiPlayers = exitOnDevFlagError(() => parseAiSeats(options.ai));
+  const botPlayers = exitOnDevFlagError(() => parseBotSeats(options.bot));
   // NOTE: --players is resolved AFTER gameDefinition loads (D14) — its default
   // is the game's minPlayers, not a literal, so it cannot be parsed this early.
 
@@ -603,7 +603,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     process.exit(1);
   }
 
-  const aiLevel = options.aiLevel ?? 'medium';
+  const botLevel = options.botLevel ?? 'medium';
   // Single source of truth for the teaching lockout — passed into both the server
   // (MultiplayerHost → createDevSession adapters) and the client (buildDevConfig →
   // DevHost.vue init postMessage → GameShell).
@@ -616,10 +616,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
     ? exitOnDevFlagError(() => parseSeedFile(resolve(process.cwd(), options.seed as string)))
     : undefined;
 
-  // NOTE: --ai seat validation is intentionally NOT done here (Pitfall 3 /
+  // NOTE: --bot seat validation is intentionally NOT done here (Pitfall 3 /
   // F34) — it must run against the EFFECTIVE post-resolution player count,
   // which is only known once gameDefinition's minPlayers/maxPlayers are
-  // loaded below. See the `validateAiSeats` call after `resolveEffectivePlayerCount`.
+  // loaded below. See the `validateBotSeats` call after `resolveEffectivePlayerCount`.
 
   const configPath = join(cwd, 'boardsmith.json');
   if (!existsSync(configPath)) {
@@ -744,20 +744,20 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const rawPlayers = options.players ?? (presetBundle?.playerCount !== undefined ? String(presetBundle.playerCount) : undefined);
 
   // CLIX-06 / F34 (Pitfall 3): out-of-range --players now ERRORS (naming the
-  // bound) instead of silently clamping, and --ai seats are validated against
+  // bound) instead of silently clamping, and --bot seats are validated against
   // this EFFECTIVE count, not the raw pre-clamp CLI value — both checks must
   // run here, after minPlayers/maxPlayers are known. D14: an UNSET --players
   // defaults to minPlayers instead of a hardcoded '2'.
   const effectivePlayerCount = exitOnDevFlagError(() => resolvePlayerCount(rawPlayers, minPlayers, maxPlayers));
-  exitOnDevFlagError(() => validateAiSeats(aiPlayers, effectivePlayerCount));
+  exitOnDevFlagError(() => validateBotSeats(botPlayers, effectivePlayerCount));
 
   const devConfig = buildDevConfig({
     gameDefinition,
     minPlayers,
     maxPlayers,
     playerCount: effectivePlayerCount,
-    aiSeats: aiPlayers,
-    aiLevel,
+    botSeats: botPlayers,
+    botLevel,
     colorPalette,
     teachingDisabled,
   });
@@ -869,9 +869,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
       // Required so buildPlayerState emits hasTutorial in all state broadcasts
       // and the startTutorial op can access it from def.tutorial.
       tutorial: gameDefinition.tutorial,
-      // Thread AI config (hintTargetFromMove + objectives) into the stateless executor.
+      // Thread bot config (hintTargetFromMove + objectives) into the stateless executor.
       // Required so hint/heatmapToggle ops can run MCTS and extract board targets.
-      ai: gameDefinition.ai,
+      bot: gameDefinition.bot,
     };
     // D13/DEVHOST-01: defaults, overlaid by the resolved --preset bundle, then
     // by --game-option flags (flag beats preset beats default) — replaces the
@@ -883,8 +883,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
       playerCount: effectivePlayerCount,
       minPlayers,
       maxPlayers,
-      aiLevel,
-      designatedAiSeats: aiPlayers,
+      botLevel,
+      designatedBotSeats: botPlayers,
       colorPalette,
       baseGameOptions,
       // D13/DEVHOST-01: lets a host `configure` wire message (Plan 03's
@@ -949,7 +949,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     }
 
     console.log(chalk.dim(`  ${multiplayerBannerLine(isNonLocal)}`));
-    console.log(chalk.cyan(`  Seats: ${effectivePlayerCount} (open seats play as AI${aiPlayers.length ? `; --ai ${aiPlayers.join(',')} pre-marked` : ''}, level ${aiLevel}).`));
+    console.log(chalk.cyan(`  Seats: ${effectivePlayerCount} (open seats play as bot${botPlayers.length ? `; --bot ${botPlayers.join(',')} pre-marked` : ''}, level ${botLevel}).`));
     if (teachingDisabled) {
       console.log(chalk.yellow(`  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
     }

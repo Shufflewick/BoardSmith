@@ -7,7 +7,7 @@
  */
 
 import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
-import type { AIConfig as BotAIConfig } from '../ai/index.js';
+import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
 import type {
@@ -82,8 +82,8 @@ export interface GameDefinition {
   minPlayers: number;
   maxPlayers: number;
   displayName?: string;
-  /** AI configuration (objectives and threat response hooks) */
-  ai?: BotAIConfig;
+  /** bot configuration (objectives and threat response hooks) */
+  bot?: BotStrategy;
   /** Game-level configurable options */
   gameOptions?: Record<string, GameOptionDefinition>;
   /** Per-player configurable options */
@@ -105,10 +105,10 @@ export interface GameDefinition {
   /**
    * Optional tutorial definition for this game.
    *
-   * Threaded un-serialized (like `ai`) from here into the engine via
+   * Threaded un-serialized (like `bot`) from here into the engine via
    * `GameSession.create()` → `GameOptions.tutorial` → `Game.tutorialDefinition`.
    * The definition is static config (step ids, gates, reserved content) and
-   * must NOT be serialized — mirrors the `_actions` / `ai` pattern.
+   * must NOT be serialized — mirrors the `_actions` / `bot` pattern.
    */
   tutorial?: TutorialDefinition;
   /**
@@ -205,8 +205,8 @@ export type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOptio
  */
 export interface PlayerConfig {
   name?: string;
-  isAI?: boolean;
-  aiLevel?: string;
+  isBot?: boolean;
+  botLevel?: string;
   /** Custom player options (color, role, etc.) */
   [key: string]: unknown;
 }
@@ -265,7 +265,7 @@ export interface StoredGameState {
    */
   snapshot?: GameStateSnapshot;
   createdAt: number;
-  aiConfig?: AIConfig;
+  botSeats?: BotSeatConfig;
   /**
    * Host anti-cheat lockout (LOCK-01), mirrored from `GameSessionOptions.teachingDisabled`
    * at `create()` time. Persisted (RST-02/F16) so it survives `GameSession.restore()` —
@@ -275,14 +275,14 @@ export interface StoredGameState {
   /**
    * Session display name, mirrored from `GameSessionOptions.displayName` at `create()`
    * time. Persisted (RST-02/F16) so it survives `GameSession.restore()`, mirroring
-   * `aiConfig`'s round-trip.
+   * `botSeats`'s round-trip.
    */
   displayName?: string;
   /** Game-specific options (for restart) */
   gameOptions?: Record<string, unknown>;
   /** Lobby state - 'waiting' until all players join, then 'playing' */
   lobbyState?: LobbyState;
-  /** Per-slot information for lobby (who claimed what, AI status, etc.) */
+  /** Per-slot information for lobby (who claimed what, bot status, etc.) */
   lobbySlots?: LobbySlot[];
   /** Creator's player ID */
   creatorId?: string;
@@ -588,7 +588,7 @@ export interface PlayerGameState {
    */
   heatmap?: { visible: boolean; entries: HeatmapEntry[] };
   /**
-   * Session-layer only, never serialized. Narration text for the current AI
+   * Session-layer only, never serialized. Narration text for the current bot
    * demo move. Present between the `onBeforeMove` hook firing and the move
    * broadcasting; `undefined` otherwise.
    *
@@ -596,7 +596,7 @@ export interface PlayerGameState {
    */
   narration?: { text: string };
   /**
-   * Session-layer only, never serialized. True while an AI-vs-AI demo is
+   * Session-layer only, never serialized. True while a bot-vs-bot demo is
    * running (startDemo() has been called and stopDemo() has not). Present in
    * broadcast state so all connected clients (including reconnecting windows
    * and second-window scenarios) derive this flag from session truth rather
@@ -740,13 +740,13 @@ export interface StateUpdate {
 }
 
 // ============================================
-// AI Types
+// Bot Types
 // ============================================
 
 /**
- * AI player configuration
+ * bot player configuration
  */
-export interface AIConfig {
+export interface BotSeatConfig {
   players: number[];
   level: string;
 }
@@ -784,8 +784,8 @@ export interface CreateGameRequest {
   playerNames?: string[];
   playerIds?: string[];
   seed?: string;
-  aiPlayers?: number[];
-  aiLevel?: string;
+  botPlayers?: number[];
+  botLevel?: string;
   /** Game-specific options (boardSize, targetScore, etc.) */
   gameOptions?: Record<string, unknown>;
   /** Per-player configurations (for lobby UI) */

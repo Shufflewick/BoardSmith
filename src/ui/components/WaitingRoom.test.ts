@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * WaitingRoom is the pre-game lobby: seats, readiness, AI slots, colours and
+ * WaitingRoom is the pre-game lobby: seats, readiness, bot slots, colours and
  * host-only controls. Everything it emits is an authority-checked op on the
  * host, so the UI must not offer a control the sender is not allowed to use —
  * a host-only button shown to a guest reads as a broken game.
@@ -112,27 +112,27 @@ describe('WaitingRoom', () => {
       expect(room().find('.host-badge').exists()).toBe(true);
     });
 
-    it('shows an AI slot with its difficulty', () => {
+    it('shows a bot slot with its difficulty', () => {
       const wrapper = room({
         lobby: lobby({
           slots: [
             slot({ seat: 1, status: 'claimed', name: 'Host', playerId: 'host-id' }),
-            slot({ seat: 2, status: 'ai', name: 'Bot', aiLevel: 'hard', ready: true }),
+            slot({ seat: 2, status: 'bot', name: 'Bot', botLevel: 'hard', ready: true }),
           ],
           openSlots: 0,
         }),
       });
-      expect(wrapper.text()).toContain('AI (hard)');
+      expect(wrapper.text()).toContain('bot (hard)');
     });
 
-    it('defaults an AI slot with no level to medium', () => {
+    it('defaults a bot slot with no level to medium', () => {
       const wrapper = room({
         lobby: lobby({
-          slots: [slot({ seat: 1, status: 'ai', name: 'Bot', ready: true })],
+          slots: [slot({ seat: 1, status: 'bot', name: 'Bot', ready: true })],
           openSlots: 0,
         }),
       });
-      expect(wrapper.text()).toContain('AI (medium)');
+      expect(wrapper.text()).toContain('bot (medium)');
     });
 
     it('shows another player readiness', () => {
@@ -186,40 +186,40 @@ describe('WaitingRoom', () => {
   });
 
   describe('host controls', () => {
-    it('lets the host turn an open slot into an AI', async () => {
+    it('lets the host turn an open slot into a bot', async () => {
       const wrapper = room();
-      await buttonWith(wrapper, 'Make AI')!.trigger('click');
-      expect(wrapper.emitted('set-slot-ai')![0]).toEqual([2, true, 'medium']);
+      await buttonWith(wrapper, 'Make bot')!.trigger('click');
+      expect(wrapper.emitted('set-slot-bot')![0]).toEqual([2, true, 'medium']);
     });
 
-    it('lets the host turn an AI slot back into an open one', async () => {
+    it('lets the host turn a bot slot back into an open one', async () => {
       const wrapper = room({
         lobby: lobby({
           slots: [
             slot({ seat: 1, status: 'claimed', name: 'Host', playerId: 'host-id' }),
-            slot({ seat: 2, status: 'ai', name: 'Bot', ready: true }),
+            slot({ seat: 2, status: 'bot', name: 'Bot', ready: true }),
           ],
           openSlots: 0,
         }),
       });
       await buttonWith(wrapper, 'Open')!.trigger('click');
-      expect(wrapper.emitted('set-slot-ai')![0]).toEqual([2, false]);
+      expect(wrapper.emitted('set-slot-bot')![0]).toEqual([2, false]);
     });
 
-    it('cycles AI difficulty easy → medium → hard → easy', async () => {
-      const withLevel = (aiLevel: string) => room({
+    it('cycles bot difficulty easy → medium → hard → easy', async () => {
+      const withLevel = (botLevel: string) => room({
         lobby: lobby({
           slots: [
             slot({ seat: 1, status: 'claimed', name: 'Host', playerId: 'host-id' }),
-            slot({ seat: 2, status: 'ai', name: 'Bot', aiLevel, ready: true }),
+            slot({ seat: 2, status: 'bot', name: 'Bot', botLevel, ready: true }),
           ],
           openSlots: 0,
         }),
       });
       for (const [from, to] of [['easy', 'medium'], ['medium', 'hard'], ['hard', 'easy']]) {
         const wrapper = withLevel(from);
-        await buttonWith(wrapper, `AI (${from})`)!.trigger('click');
-        expect(wrapper.emitted('set-slot-ai')![0]).toEqual([2, true, to]);
+        await buttonWith(wrapper, `bot (${from})`)!.trigger('click');
+        expect(wrapper.emitted('set-slot-bot')![0]).toEqual([2, true, to]);
       }
     });
 
@@ -291,7 +291,7 @@ describe('WaitingRoom', () => {
 
     it('offers no host-only controls', () => {
       const wrapper = guest();
-      for (const label of ['Make AI', 'Remove', '+ Add Player', 'Kick']) {
+      for (const label of ['Make bot', 'Remove', '+ Add Player', 'Kick']) {
         expect(buttonWith(wrapper, label), `guest was offered "${label}"`).toBeUndefined();
       }
     });

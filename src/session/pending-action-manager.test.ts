@@ -129,7 +129,7 @@ function createOptionalManager() {
   const callbacks = {
     save: vi.fn().mockResolvedValue(undefined),
     broadcast: vi.fn(),
-    scheduleAICheck: vi.fn(),
+    scheduleBotCheck: vi.fn(),
   };
 
   const manager = new PendingActionManager(runner, storedState, undefined, callbacks);
@@ -161,7 +161,7 @@ function createEquipManager() {
   const callbacks = {
     save: vi.fn().mockResolvedValue(undefined),
     broadcast: vi.fn(),
-    scheduleAICheck: vi.fn(),
+    scheduleBotCheck: vi.fn(),
   };
 
   const manager = new PendingActionManager(runner, storedState, undefined, callbacks);
@@ -193,7 +193,7 @@ function createManager() {
   const callbacks = {
     save: vi.fn().mockResolvedValue(undefined),
     broadcast: vi.fn(),
-    scheduleAICheck: vi.fn(),
+    scheduleBotCheck: vi.fn(),
   };
 
   const manager = new PendingActionManager(runner, storedState, undefined, callbacks);
@@ -315,7 +315,7 @@ describe('PendingActionManager', () => {
   });
 
   // F43: completed pending/multi-step selection actions must be appended to
-  // runner.actionHistory so replay, undo counts, and AI history see them.
+  // runner.actionHistory so replay, undo counts, and bot history see them.
   describe('F43: records completed multi-step actions in actionHistory', () => {
     it('appends a serialized entry (name, player, fully-collected args) after a multi-step action completes', async () => {
       const { manager, runner } = createManager();

@@ -56,7 +56,7 @@ import {
 import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
-import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
+import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
 import { packCommand } from './commands/pack.js';
 import { doctorCommand } from './commands/doctor.js';
 
@@ -84,11 +84,11 @@ program
   .option('--host <host>', 'Host to bind the server to (default: 127.0.0.1, local-only; pass 0.0.0.0 or --lan to serve to your whole network; cannot be combined with --lan)')
   .option('--lan', 'Shorthand for --host 0.0.0.0 -- serves to your whole network (cannot be combined with --host)')
   .option('--players <count>', 'Initial number of players (default: the game\'s minPlayers)')
-  .option('--ai <players...>', 'Player positions to be AI (e.g., --ai 1 or --ai 2 4)')
-  .option('--ai-level <level>', 'AI difficulty: easy, medium, hard, expert, or iteration count', 'medium')
+  .option('--bot <players...>', 'Player positions to be bot (e.g., --bot 1 or --bot 2 4)')
+  .option('--bot-level <level>', 'bot difficulty: easy, medium, hard, expert, or iteration count', 'medium')
   .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard rounds=5)')
   .option('--preset <name>', 'Apply a declared preset\'s whole bundle of game option values (and player count, if the preset declares one)')
-  .option('--lock-teaching', 'Disable AI hint, move-quality heatmap, AI-vs-AI demo, and tutorial (action help stays enabled)')
+  .option('--lock-teaching', 'Disable bot hint, move-quality heatmap, bot-vs-bot demo, and tutorial (action help stays enabled)')
   .option('--seed <file>', 'Seed the initial game state from a recorded GameStateSnapshot JSON file instead of a fresh start (FEAT-01)')
   .option('--no-open', 'Do not auto-launch a browser tab (use when driving the dev host from a script/CI, so an uncontrolled tab does not claim seat 1)')
   .action(devCommand);
@@ -173,16 +173,16 @@ program
   .option('--json', 'Output results as JSON')
   .action(simulateCommand);
 
-// AI Weight Evolution (new focused command)
+// Bot Weight Evolution (new focused command)
 program
-  .command('evolve-ai-weights')
-  .description('Optimize AI weights through evolutionary self-play (requires existing ai.ts)')
+  .command('evolve-bot-weights')
+  .description('Optimize bot weights through evolutionary self-play (requires existing bot.ts)')
   .option('--generations <count>', 'Evolution generations (default: 5)')
   .option('--population <count>', 'Population size per generation (default: 20)')
   .option('-m, --mcts <iterations>', 'MCTS iterations for benchmarking (default: 100)')
   .option('--workers <count>', 'Number of worker threads (default: CPU cores - 1)')
   .option('-v, --verbose', 'Show detailed progress')
-  .action(evolveAIWeightsCommand);
+  .action(evolveBotWeightsCommand);
 
 // Publishing
 program

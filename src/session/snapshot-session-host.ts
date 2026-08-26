@@ -8,7 +8,7 @@ import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionStat
 
 export type { Op, OpResult } from './stateless-ops.js';
 
-const MAX_AI_MOVES = 500;
+const MAX_BOT_MOVES = 500;
 
 /**
  * Consecutive persist() failures before `persistenceHealthy` flips false
@@ -67,7 +67,35 @@ export interface SnapshotSessionAdapters {
     playerViews: unknown[],
     meta: { isComplete: boolean; winners: number[]; isDraw: boolean; turnBoundary: TurnBoundary },
   ) => void;
-  aiSeats?: Array<{ seat: number; level?: string }>;
+  /**
+   * The seats a bot plays.
+   *
+   * NAMED `botSeats`, like every other bot-facing name in this engine. The
+   * automaton is a BOT, not an AI: it is a search algorithm, and calling it AI
+   * invites a reader to think of an LLM (ShufflewickPub issue #28).
+   *
+   * THE RENAME IS TOTAL -- there is no exempt name. That is worth recording,
+   * because for one commit it was not:
+   *
+   *   Commit 7659aa2d argued that three names should survive as WIRE SURFACE
+   *   rather than vocabulary -- `aiSeats` here, the `aiTurn`/`aiSuggest` ops,
+   *   and `playerOptions.aiLevel`. The reasoning was compatibility: `aiTurn` is
+   *   a bundle-protocol field seven archived engine revisions (r6-r9, r13-r15)
+   *   still speak, and `aiLevel` is declared in already-published manifests, so
+   *   renaming either forces a rebuild of every pinned game.
+   *
+   *   That was OVERRULED. BoardSmith and ShufflewickPub have no customers and
+   *   no published bundle anyone depends on, so "every pinned game must be
+   *   rebuilt" is a cost, not a blocker -- and half a rename is worse than
+   *   none, because the surviving `ai*` names read as an oversight and get
+   *   copied. Engine contract revision 16 therefore records the whole rename as
+   *   a BREAKING surface change and every consumer rebuilds against it.
+   *
+   * The corollary: there is no vocabulary boundary to defend any more. A
+   * translation point that reads `isBot` on one side and writes `aiSeats` on
+   * the other should not exist anywhere; if one appears, it is a regression.
+   */
+  botSeats?: Array<{ seat: number; level?: string }>;
   /**
    * When true, demoStart is rejected fail-loud and state.teachingDisabled is broadcast
    * as true to every seat. Set once at session creation; never toggled mid-session.
@@ -99,7 +127,7 @@ export interface SnapshotSessionAdapters {
    *
    * @param player - 1-based seat index of the acting player
    * @param action - action name (e.g. "playCard")
-   * @param args   - full action args from aiSuggest (may contain hidden data)
+   * @param args   - full action args from botSuggest (may contain hidden data)
    * @returns      a narration string safe to broadcast to all seats
    */
   narrateMove?: (player: number, action: string, args: Record<string, unknown>) => string;
@@ -127,13 +155,13 @@ export class SnapshotSessionHost {
   isComplete = false;
   winners: number[] = [];
   private pendingStates = new Map<number, Record<string, unknown>>();
-  private aiPumpRunning = false;
+  private botPumpRunning = false;
 
   /**
-   * Serialization chain for state-MUTATING op sequences (dev-host-ai-op-race #1
-   * fix). A human action/selection (executeOp → apply → trailing AI pump) and
-   * every externally-triggered runAITurns run to completion before the next
-   * begins. Without this, a human op arriving during the AI pump's think-time
+   * Serialization chain for state-MUTATING op sequences (dev-host-bot-op-race #1
+   * fix). A human action/selection (executeOp → apply → trailing bot pump) and
+   * every externally-triggered runBotTurns run to completion before the next
+   * begins. Without this, a human op arriving during the bot pump's think-time
    * reads the same base snapshot and last-write-wins silently clobbers the
    * other's move — the intermittent dev-host lost-update wedge. Read-only and
    * teaching ops stay off the chain (they never write the game snapshot).
@@ -289,14 +317,14 @@ export class SnapshotSessionHost {
    * Merge transient teaching state — plus the flow-debug/pending-action
    * introspection fields (FLOW-01/03) — into player views post-buildPlayerState.
    *
-   * Short-circuits when there is no transient state, no AI seats, no flow-debug
+   * Short-circuits when there is no transient state, no bot seats, no flow-debug
    * snapshot yet, and no pending action (identity return — the common case
    * before the very first executeOp/start). This mirrors the
    * GameSession.broadcast() injection pattern (game-session.ts:1925-1934).
    *
    * Per-seat: hint, heatmap, pendingAction (keyed strictly by seat = i+1; no
    * cross-seat leak — T-123-07). Game-wide: narration, isDemoRunning,
-   * hasAIPlayers, flowDebugInfo (public flow structure, safe for every seat
+   * hasBotPlayers, flowDebugInfo (public flow structure, safe for every seat
    * and spectator — T-123-08).
    */
   private mergeTransientState(playerViews: unknown[]): unknown[] {
@@ -307,14 +335,14 @@ export class SnapshotSessionHost {
     const hasTransient = this.transientTeachingState.size > 0
       || this.demoRunning
       || this.narrationText !== null
-      || (this.adapters.aiSeats?.length ?? 0) > 0
+      || (this.adapters.botSeats?.length ?? 0) > 0
       || (this.adapters.teachingDisabled ?? false)
       || this.lastFlowDebugInfo !== null
       || this.pendingStates.size > 0;
     if (!hasTransient) return playerViews;
 
     return (playerViews as Array<{ flowState: unknown; state: Record<string, unknown> } | null>).map((view, i) => {
-      // Guard: stub/empty views (e.g. from AI pump tests) pass through unchanged.
+      // Guard: stub/empty views (e.g. from bot pump tests) pass through unchanged.
       if (view == null || typeof view !== 'object' || !('state' in view)) return view;
       const seat = i + 1;
       const transient = this.transientTeachingState.get(seat);
@@ -339,7 +367,7 @@ export class SnapshotSessionHost {
           canStepBack: this.demoHistory.length > 0,
         };
       }
-      if (this.adapters.aiSeats?.length) state.hasAIPlayers = true;
+      if (this.adapters.botSeats?.length) state.hasBotPlayers = true;
       // Always inject teachingDisabled (true or false) so every broadcast carries the
       // authoritative session value regardless of other transient state (criterion 4).
       state.teachingDisabled = this.adapters.teachingDisabled ?? false;
@@ -473,11 +501,11 @@ export class SnapshotSessionHost {
         throw new Error('Teaching features are disabled for this session.');
       }
       if (!this.demoRunning) {
-        // Build allSeats from all player seats. If aiSeats is configured, use
+        // Build allSeats from all player seats. If botSeats is configured, use
         // the first seat's level as the difficulty for all seats.
         const allSeats = Array.from({ length: this.adapters.playerCount }, (_, i) => ({
           seat: i + 1,
-          level: this.adapters.aiSeats?.[0]?.level,
+          level: this.adapters.botSeats?.[0]?.level,
         }));
         // Reset playback controls for a fresh run.
         this.demoDelay = typeof op.delay === 'number' ? op.delay : 1200;
@@ -558,12 +586,12 @@ export class SnapshotSessionHost {
       };
     }
 
-    // convertSeatToAI: also a host lifecycle op — it needs the pump, which the
+    // convertSeatToBot: also a host lifecycle op — it needs the pump, which the
     // stateless executor does not have. Unlike the demo ops it is ENQUEUED on
-    // opChain, because it drives the AI pump and must not interleave with an
+    // opChain, because it drives the bot pump and must not interleave with an
     // in-flight human op reading the same base snapshot.
-    if (op.type === 'convertSeatToAI') {
-      return this.enqueue(() => this.applyConvertSeatToAI(op.seat));
+    if (op.type === 'convertSeatToBot') {
+      return this.enqueue(() => this.applyConvertSeatToBot(op.seat));
     }
 
     // Teaching ops (hint / heatmapToggle): compute annotation, store in
@@ -615,17 +643,17 @@ export class SnapshotSessionHost {
     }
 
     // Every state-MUTATING op sequence runs serialized on opChain. Its trailing
-    // AI pump is part of the SAME critical section (runAITurnsInner, not the
-    // public runAITurns), so a follow-up human op waits for the whole
-    // human-move → AI-moves sequence to finish rather than reading the same base
-    // snapshot mid-pump and last-write-wins clobbering it (dev-host-ai-op-race #1).
+    // bot pump is part of the SAME critical section (runBotTurnsInner, not the
+    // public runBotTurns), so a follow-up human op waits for the whole
+    // human-move → bot-moves sequence to finish rather than reading the same base
+    // snapshot mid-pump and last-write-wins clobbering it (dev-host-bot-op-race #1).
     return this.enqueue(() => this.applyMutatingOp(seat, op));
   }
 
   /**
    * The state-mutating tail of handleOp, always run inside the opChain critical
    * section (via enqueue). Executes the op, applies + broadcasts the result, and
-   * drives any AI turns the move handed off to — all before the next enqueued
+   * drives any bot turns the move handed off to — all before the next enqueued
    * mutation can begin.
    */
   private async applyMutatingOp(seat: number, op: Op): Promise<OpResult> {
@@ -666,17 +694,17 @@ export class SnapshotSessionHost {
 
     await this.apply(res, seat);
     const actionCompleted = op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete);
-    // A restore can land the game on an AI seat's turn, and nothing else will
+    // A restore can land the game on a bot seat's turn, and nothing else will
     // ever wake it: the pump is driven by ops, and the only op that would
-    // arrive is a human action the AI seat is not going to take. The table
+    // arrive is a human action the bot seat is not going to take. The table
     // just sits there. (Undo alone never showed this — it rewinds to the
-    // requesting seat's own turn start, so the pump would find no due AI seat
+    // requesting seat's own turn start, so the pump would find no due bot seat
     // anyway. A rewind can target ANY point, which is what made it reachable.)
     const restored = op.type === 'undo' || op.type === 'debugRewind';
     if (!this.isComplete && (actionCompleted || restored)) {
       // Already inside the critical section — drive the pump directly rather
       // than re-entering enqueue (which would deadlock on our own opChain link).
-      await this.runAITurnsInner();
+      await this.runBotTurnsInner();
     }
     // Keep any visible "Show move quality" heatmaps current as play proceeds:
     // recompute for the seat whose turn it now is, drop stale chips for the rest.
@@ -697,21 +725,21 @@ export class SnapshotSessionHost {
    * ## Why this exists at all
    *
    * The pump already honoured a mid-game conversion — it re-reads
-   * `this.adapters.aiSeats` on every iteration, so a roster that changed between
+   * `this.adapters.botSeats` on every iteration, so a roster that changed between
    * moves was picked up on the next turn. What was missing was that nothing
-   * DROVE the pump when the roster changed: `runAITurnsInner` runs only off
-   * `applyMutatingOp` or the public `runAITurns()`, so a conversion with no
+   * DROVE the pump when the roster changed: `runBotTurnsInner` runs only off
+   * `applyMutatingOp` or the public `runBotTurns()`, so a conversion with no
    * following op parked the table on a seat no human was going to play. Callers
-   * compensated by hand-calling `runAITurns()` after flipping their roster, and
+   * compensated by hand-calling `runBotTurns()` after flipping their roster, and
    * a caller that forgot did so silently. Here that is one call.
    *
    * ## What it deliberately does NOT do
    *
-   * It stores nothing. There is no seat→AI map on this host and nothing about
+   * It stores nothing. There is no seat→bot map on this host and nothing about
    * the conversion enters the snapshot: the roster is the ADAPTER's, and an
    * engine-side copy would fight the platform's roster on restore and would let
    * a caretaker bot act outside the single turn window it was authorized for
-   * (the platform's `aiSeats` getter legitimately reports `[]` for a minded seat
+   * (the platform's `botSeats` getter legitimately reports `[]` for a minded seat
    * outside its window — a cached copy would not).
    *
    * That is also why the roster, not this op, is the authority on whether the
@@ -721,10 +749,10 @@ export class SnapshotSessionHost {
    * wake — is what this op removes.
    *
    * Idempotent by construction: with no state to double-write, re-converting an
-   * already-converted seat is just another wake, and `aiPumpRunning` plus the
+   * already-converted seat is just another wake, and `botPumpRunning` plus the
    * opChain keep that from doubling any work.
    */
-  private async applyConvertSeatToAI(seat: number): Promise<OpResult> {
+  private async applyConvertSeatToBot(seat: number): Promise<OpResult> {
     const envelope = {
       snapshot: this.snapshot,
       pendingState: null,
@@ -739,26 +767,26 @@ export class SnapshotSessionHost {
         success: false,
         category: 'protocol',
         error:
-          `Cannot convert seat ${seat} to AI: the game is already complete, so no seat owes a move. ` +
+          `Cannot convert seat ${seat} to bot: the game is already complete, so no seat owes a move. ` +
           `Nothing further is required — release the seat instead of converting it.`,
       };
     }
-    if (!this.adapters.aiSeats?.some((s) => s.seat === seat)) {
+    if (!this.adapters.botSeats?.some((s) => s.seat === seat)) {
       return {
         ...envelope,
         success: false,
         category: 'protocol',
         error:
-          `Cannot convert seat ${seat} to AI: seat ${seat} is not reported as AI by the roster — ` +
-          `convert the roster first, then send this op. The roster (adapters.aiSeats) is the ` +
-          `authority on which seats a bot may play; this op only acknowledges the change and runs the AI.`,
+          `Cannot convert seat ${seat} to bot: seat ${seat} is not reported as bot by the roster — ` +
+          `convert the roster first, then send this op. The roster (adapters.botSeats) is the ` +
+          `authority on which seats a bot may play; this op only acknowledges the change and runs the bot.`,
       };
     }
-    // `runAITurnsInner`, not the public `runAITurns()`: we are ALREADY inside
-    // our own opChain link, and `runAITurns()` enqueues onto that same chain, so
+    // `runBotTurnsInner`, not the public `runBotTurns()`: we are ALREADY inside
+    // our own opChain link, and `runBotTurns()` enqueues onto that same chain, so
     // it would wait for a link that cannot settle until it returns — a deadlock.
     // `applyMutatingOp`'s trailing pump calls the inner one for the same reason.
-    await this.runAITurnsInner();
+    await this.runBotTurnsInner();
     return {
       // Re-read AFTER the pump: the bot's moves are the whole point, so the
       // caller must not be handed the pre-pump state as this op's answer.
@@ -824,58 +852,58 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * Public AI-pump entry. Serialized on opChain so an externally-triggered pump
+   * Public bot-pump entry. Serialized on opChain so an externally-triggered pump
    * (follow-mode toggle, seat release, game start — multiplayer-host.ts) can
    * never overlap an in-flight human op and clobber its snapshot. The trailing
-   * pump inside applyMutatingOp calls runAITurnsInner directly (already inside
+   * pump inside applyMutatingOp calls runBotTurnsInner directly (already inside
    * the critical section) to avoid re-entering the chain.
    */
-  async runAITurns(): Promise<void> {
-    await this.enqueue(() => this.runAITurnsInner());
+  async runBotTurns(): Promise<void> {
+    await this.enqueue(() => this.runBotTurnsInner());
   }
 
-  private async runAITurnsInner(): Promise<void> {
-    if (this.aiPumpRunning || !this.adapters.aiSeats?.length) return;
-    this.aiPumpRunning = true;
+  private async runBotTurnsInner(): Promise<void> {
+    if (this.botPumpRunning || !this.adapters.botSeats?.length) return;
+    this.botPumpRunning = true;
     try {
       let moves = 0;
       while (true) {
-        if (moves >= MAX_AI_MOVES) {
-          console.error('[SnapshotSessionHost] AI pump hit MAX_AI_MOVES cap (500); stopping to avoid runaway.');
+        if (moves >= MAX_BOT_MOVES) {
+          console.error('[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.');
           break;
         }
-        const res = await this.adapters.executeOp(this.snapshot, null, { type: 'aiTurn', seats: this.adapters.aiSeats });
-        // A FAILED AI turn is not the same as "no AI turn was due". Breaking on
-        // both without a word is how an AI seat silently stops driving the flow:
+        const res = await this.adapters.executeOp(this.snapshot, null, { type: 'botTurn', seats: this.adapters.botSeats });
+        // A FAILED bot turn is not the same as "no bot turn was due". Breaking on
+        // both without a word is how a bot seat silently stops driving the flow:
         // every seat waits on a bot that will never move again, with nothing in
         // the console on either side to say why. Fail loud — the bot produced a
         // move the engine rejected, which is a bug in the game's action
-        // definition, its AI hooks, or move enumeration, and the developer needs
+        // definition, its bot hooks, or move enumeration, and the developer needs
         // to see it the moment it happens.
         if (!res.success) {
           console.error(
-            `[SnapshotSessionHost] AI turn REJECTED for seat(s) ` +
-              `${this.adapters.aiSeats.map((s) => s.seat).join(', ')}: ${res.error ?? 'unknown error'}` +
-              `${res.errorCode ? ` (${res.errorCode})` : ''}. The AI cannot act, so the game will ` +
+            `[SnapshotSessionHost] bot turn REJECTED for seat(s) ` +
+              `${this.adapters.botSeats.map((s) => s.seat).join(', ')}: ${res.error ?? 'unknown error'}` +
+              `${res.errorCode ? ` (${res.errorCode})` : ''}. The bot cannot act, so the game will ` +
               `not advance past this step. Check the action's selections and the bot's move ` +
               `enumeration for this seat.`,
           );
           break;
         }
-        if (!res.aiMoved) break;
+        if (!res.botMoved) break;
         moves++;
         await this.apply(res);
         if (this.isComplete) break;
       }
     } finally {
-      this.aiPumpRunning = false;
+      this.botPumpRunning = false;
     }
   }
 
   /**
-   * Run the AI-vs-AI narrated demo loop.
+   * Run the bot-vs-bot narrated demo loop.
    *
-   * Each iteration: (1) preview the move via aiSuggest (read-only MCTS),
+   * Each iteration: (1) preview the move via botSuggest (read-only MCTS),
    * (2) inject narration and broadcast BEFORE the move executes, (3) wait the
    * configured delay, (4) execute the EXACT same move via the 'action' op —
    * never re-running MCTS to avoid the narrate/execute mismatch anti-pattern.
@@ -899,28 +927,28 @@ export class SnapshotSessionHost {
       while (!this.demoAbort && !this.isComplete && moves < this.MAX_DEMO_MOVES) {
         // Capture the snapshot fresh EACH iteration so a 'back' rewind (which restores
         // this.snapshot) is reflected — the re-suggest then runs from the restored
-        // position. aiSuggest and the execute op below use this same reference so a
+        // position. botSuggest and the execute op below use this same reference so a
         // concurrent human handleOp cannot desync narrate vs execute (WR-01).
         const iterSnapshot = this.snapshot;
 
         // Phase 1: Preview the move (read-only — no state mutation).
         const suggestRes = await this.adapters.executeOp(iterSnapshot, null, {
-          type: 'aiSuggest',
+          type: 'botSuggest',
           seats: allSeats,
         });
         if (!suggestRes.success || !suggestRes.suggestedAction) break;
 
-        // Check abort AFTER the async aiSuggest (Pitfall 1 — second check).
+        // Check abort AFTER the async botSuggest (Pitfall 1 — second check).
         if (this.demoAbort) break;
 
-        const { aiPlayer, suggestedAction, suggestedArgs = {} } = suggestRes;
-        if (!aiPlayer) break;
+        const { botPlayer, suggestedAction, suggestedArgs = {} } = suggestRes;
+        if (!botPlayer) break;
 
         // Phase 2: Narrate BEFORE executing (mirrors onBeforeMove semantics).
         // The announcement broadcast fires so clients see the move description
         // BEFORE the game state changes — this is the teaching signal. It stays
         // visible during the pace/pause below so the learner can read it.
-        this.narrationText = this.buildNarration(aiPlayer, suggestedAction, suggestedArgs as Record<string, unknown>);
+        this.narrationText = this.buildNarration(botPlayer, suggestedAction, suggestedArgs as Record<string, unknown>);
         this.broadcastCurrent(); // announcement broadcast (isDemoRunning + narration)
 
         // Phase 3: Pace (speed delay), park (paused), or release-one (step). The
@@ -949,16 +977,16 @@ export class SnapshotSessionHost {
         });
 
         // Phase 4: Execute the EXACT same move via 'action' op.
-        // ANTI-PATTERN AVOIDED: Do NOT re-run aiSuggest/aiTurn here — a second
+        // ANTI-PATTERN AVOIDED: Do NOT re-run botSuggest/botTurn here — a second
         // MCTS call could produce a different move, making the narration a lie
         // (RESEARCH: "narrate/execute mismatch" anti-pattern).
         // WR-01: use iterSnapshot (captured at iteration start) to match the
-        // snapshot that aiSuggest used — prevents state desync under concurrent ops.
+        // snapshot that botSuggest used — prevents state desync under concurrent ops.
         this.narrationText = null;
         const execRes = await this.adapters.executeOp(iterSnapshot, null, {
           type: 'action',
           actionName: suggestedAction,
-          player: aiPlayer,
+          player: botPlayer,
           args: suggestedArgs as Record<string, unknown>,
           // A SERVER-COMPOSED op acting NOW: the demo bot chose this move from
           // `iterSnapshot` in this same iteration, so the boundary it was
@@ -973,13 +1001,13 @@ export class SnapshotSessionHost {
         if (!execRes.success) { this.demoHistory.pop(); break; } // fail-clean: undo the history push
 
         // Clear the acting seat's hint (mirrors performAction hint.delete(player)).
-        const seatTransient = this.transientTeachingState.get(aiPlayer);
+        const seatTransient = this.transientTeachingState.get(botPlayer);
         if (seatTransient?.hint) {
           const { hint: _h, ...rest } = seatTransient;
           if (Object.keys(rest).length > 0) {
-            this.transientTeachingState.set(aiPlayer, rest);
+            this.transientTeachingState.set(botPlayer, rest);
           } else {
-            this.transientTeachingState.delete(aiPlayer);
+            this.transientTeachingState.delete(botPlayer);
           }
         }
 
@@ -991,13 +1019,13 @@ export class SnapshotSessionHost {
         // has executed (demoPaused stays true; the next gate parks).
         // (demoStepConsume was already cleared inside the gate.)
 
-        // Early-exit check after apply: avoid a wasted aiSuggest MCTS run when
+        // Early-exit check after apply: avoid a wasted botSuggest MCTS run when
         // the game just finished (RESEARCH Pitfall 2).
         if (this.isComplete) break;
       }
     } finally {
       // Always clean up — no leaked state regardless of how the loop exited
-      // (stop, game-over, cap hit, error, or aiSuggest failure).
+      // (stop, game-over, cap hit, error, or botSuggest failure).
       // This is the last line of defence for the CLAUDE.md timer-leak rule:
       // demoRunning=false is broadcast so every client sees isDemoRunning=false.
       this.demoRunning = false;

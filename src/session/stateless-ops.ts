@@ -24,7 +24,7 @@ import {
   type UndoPolicy,
   type RandomnessPolicy,
 } from '../runtime/index.js';
-import { createBot, parseAILevel } from '../ai/index.js';
+import { createBot, parseBotLevel } from '../bot/index.js';
 import { describeMoveForHint } from './move-summary.js';
 import { PickHandler } from './pick-handler.js';
 import {
@@ -88,7 +88,7 @@ export type Op =
     }
   | { type: 'cancelAction'; player: number }
   | { type: 'undo'; player: number }
-  | { type: 'aiTurn'; seats: Array<{ seat: number; level?: string }> }
+  | { type: 'botTurn'; seats: Array<{ seat: number; level?: string }> }
   // Debug ops (dev-only; the debug panel issues these over the platform bridge).
   // Read-only ops report state without mutating; the rest edit state like a move.
   | { type: 'debugHistory' }
@@ -107,9 +107,9 @@ export type Op =
   | { type: 'exitTutorial'; player: number }
   | { type: 'hint'; seat: number }
   | { type: 'heatmapToggle'; seat: number; visible: boolean }
-  // aiSuggest: read-only preview — runs MCTS and returns the suggested move WITHOUT
+  // botSuggest: read-only preview — runs MCTS and returns the suggested move WITHOUT
   // mutating the snapshot. Consumed by runDemoLoop in SnapshotSessionHost.
-  | { type: 'aiSuggest'; seats: Array<{ seat: number; level?: string }> }
+  | { type: 'botSuggest'; seats: Array<{ seat: number; level?: string }> }
   // demoStart / demoStop are host lifecycle ops handled by SnapshotSessionHost.handleOp
   // directly (they need the broadcast adapter + cancellable async lifetime that the
   // stateless executor does not have). They are in the Op union for type-safety when
@@ -122,26 +122,26 @@ export type Op =
   // demoStart/demoStop — handled in SnapshotSessionHost.handleOp, never in executeOp.
   | { type: 'demoControl'; control: 'pause' | 'play' | 'step' | 'back'; delay?: number }
   /**
-   * convertSeatToAI: a seat is now played by a bot. A host lifecycle op like the
+   * convertSeatToBot: a seat is now played by a bot. A host lifecycle op like the
    * demo family — handled in `SnapshotSessionHost.handleOp`, never in executeOp.
    *
    * It exists so a conversion is an EVENT THE ENGINE ACKNOWLEDGES AND ACTS ON,
    * replacing "mutate a config object and hope the host re-reads it". The re-read
-   * always worked — `runAITurnsInner` re-reads `adapters.aiSeats` on every
+   * always worked — `runBotTurnsInner` re-reads `adapters.botSeats` on every
    * iteration — but nothing woke the pump when the roster changed with no other
    * op in flight, so a table converted between moves just sat there; and with no
    * op to send, no engine test could express a conversion at all.
    *
    * **It deliberately carries NO level, and must never grow one.** The roster
-   * stays the ADAPTER's: a seat's level comes from `adapters.aiSeats` at the
+   * stays the ADAPTER's: a seat's level comes from `adapters.botSeats` at the
    * moment the pump reads it, which is also where the platform's caretaker
    * one-window authorization lives. A `level` here would have nowhere to go
-   * without the host keeping a seat→AI copy that fights the DO's roster on
+   * without the host keeping a seat→bot copy that fights the DO's roster on
    * restore and would let a caretaker bot act outside the window it was
    * authorized for. Set the level on the roster; this op says only "the roster
    * changed — acknowledge it and go".
    */
-  | { type: 'convertSeatToAI'; seat: number };
+  | { type: 'convertSeatToBot'; seat: number };
 
 /** The op types that carry a player's intent, and therefore a boundary key. */
 export type SubmissionOpType = Extract<Op, BoundaryStamped>['type'];
@@ -171,8 +171,8 @@ export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
   'debugStateDiff',
   'debugActionTraces',
   'debugFlowState',
-  // aiSuggest is read-only: runs MCTS to preview a move but does NOT mutate the snapshot.
-  'aiSuggest',
+  // botSuggest is read-only: runs MCTS to preview a move but does NOT mutate the snapshot.
+  'botSuggest',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -217,12 +217,12 @@ export interface OpResult {
   choices?: unknown[];
   validElements?: unknown[];
   multiSelect?: { min: number; max?: number };
-  aiMoved?: boolean;
-  aiPlayer?: number;
+  botMoved?: boolean;
+  botPlayer?: number;
   /**
-   * The seat a `convertSeatToAI` op converted — the engine's ACKNOWLEDGEMENT
+   * The seat a `convertSeatToBot` op converted — the engine's ACKNOWLEDGEMENT
    * that it saw the conversion, as opposed to a roster mutation it may or may
-   * not have noticed. Present only on a successful `convertSeatToAI`.
+   * not have noticed. Present only on a successful `convertSeatToBot`.
    *
    * It is an echo, not a record: the host stores nothing about the conversion
    * and the snapshot carries nothing about it. The roster remains the adapter's.
@@ -234,7 +234,7 @@ export interface OpResult {
   hintAnnotation?: { seat: number; annotation: Annotation };
   heatmapUpdate?: { seat: number; visible: boolean; entries: HeatmapEntry[] };
 
-  // aiSuggest result — the previewed move (read-only; snapshot is NOT mutated).
+  // botSuggest result — the previewed move (read-only; snapshot is NOT mutated).
   // Consumed by runDemoLoop in SnapshotSessionHost (never by executeOp).
   suggestedAction?: string;
   suggestedArgs?: Record<string, unknown>;
@@ -280,16 +280,16 @@ export interface GameDefinitionLike {
    */
   tutorial?: TutorialDefinition;
   /**
-   * Optional AI configuration — passed to `createBot` by EVERY op that builds a
-   * bot: aiTurn, aiSuggest, hint, and heatmapToggle. Provides the MCTS hooks
+   * Optional bot configuration — passed to `createBot` by EVERY op that builds a
+   * bot: botTurn, botSuggest, hint, and heatmapToggle. Provides the MCTS hooks
    * (`objectives`, `moveOrdering`, `playoutPolicy`, `threatResponseMoves`,
    * `uctConstant`) plus `hintTargetFromMove` for per-game board-highlight
    * extraction. A bot built without it searches with generic defaults, so any op
    * that skips it plays a materially different (and worse) game than the one the
    * game author configured. When absent entirely, hint/heatmap ops return a
-   * protocol error (fail-loud: no AI config → no hint available).
+   * protocol error (fail-loud: no bot config → no hint available).
    */
-  ai?: import('../ai/types.js').AIConfig;
+  bot?: import('../bot/types.js').BotStrategy;
   /**
    * Optional per-action undo checkpoint retention policy — threaded into EVERY
    * runner this module builds (fresh, restored, and checkpoint-restored alike).
@@ -330,7 +330,7 @@ type RunnerDef = GameDefinitionLike & { readonly randomness: RandomnessPolicy };
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-type AIFlowState = {
+type BotFlowState = {
   awaitingInput?: boolean;
   complete?: boolean;
   currentPlayer?: number;
@@ -447,11 +447,11 @@ function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Op): OpRe
   return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol');
 }
 
-function selectDueAISeat(
-  flowState: AIFlowState,
-  aiSeats: Set<number>,
+function selectDueBotSeat(
+  flowState: BotFlowState,
+  botSeats: Set<number>,
 ): number | undefined {
-  return dueSeats(flowState).find(seat => aiSeats.has(seat));
+  return dueSeats(flowState).find(seat => botSeats.has(seat));
 }
 
 // ---------------------------------------------------------------------------
@@ -657,7 +657,7 @@ function handleUndo(
     );
   }
 
-  const flowState = runner.getFlowState() as AIFlowState | undefined;
+  const flowState = runner.getFlowState() as BotFlowState | undefined;
 
   // Awaiting-aware eligibility (D4/SIM-02): sequential steps keep the EXACT
   // `currentPlayer` contract; a simultaneous step allows any seat that is
@@ -720,33 +720,33 @@ function handleUndo(
   };
 }
 
-async function handleAITurn(
+async function handleBotTurn(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
-  op: Extract<Op, { type: 'aiTurn' }>,
+  op: Extract<Op, { type: 'botTurn' }>,
 ): Promise<OpResult> {
   const runner = runnerFromSnapshot(snapshot, def);
 
-  const flowState = runner.getFlowState() as AIFlowState | undefined;
+  const flowState = runner.getFlowState() as BotFlowState | undefined;
 
   const notDue: OpResult = {
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
-    aiMoved: false,
+    botMoved: false,
   };
 
   if (!flowState?.awaitingInput || flowState.complete) {
     return notDue;
   }
 
-  const aiPlayer = selectDueAISeat(flowState, new Set(op.seats.map((s) => s.seat)));
-  if (aiPlayer === undefined) {
+  const botPlayer = selectDueBotSeat(flowState, new Set(op.seats.map((s) => s.seat)));
+  if (botPlayer === undefined) {
     return notDue;
   }
 
-  const seatLevel = op.seats.find((s) => s.seat === aiPlayer)?.level;
-  // `def.ai` MUST be threaded through — it carries the game's MCTS hooks
+  const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;
+  // `def.bot` MUST be threaded through — it carries the game's MCTS hooks
   // (objectives, moveOrdering, playoutPolicy, threatResponseMoves, uctConstant).
   // Omitting it silently downgrades every bot turn to a hookless generic search
   // that treats concede-style actions (resign / offer draw) as ordinary moves and,
@@ -756,17 +756,17 @@ async function handleAITurn(
     runner.game as Game,
     def.gameClass as GameRunnerOptions<never>['GameClass'],
     def.gameType,
-    aiPlayer,
+    botPlayer,
     runner.actionHistory,
-    parseAILevel(seatLevel ?? 'medium'),
-    def.ai,
+    parseBotLevel(seatLevel ?? 'medium'),
+    def.bot,
   );
 
   const move = await bot.play();
-  const actionResult = runner.performAction(move.action, aiPlayer, move.args);
+  const actionResult = runner.performAction(move.action, botPlayer, move.args);
 
   if (!actionResult.success) {
-    return errorResult(actionResult.error ?? 'AI action failed', 'bundle', actionResult.errorCode);
+    return errorResult(actionResult.error ?? 'bot action failed', 'bundle', actionResult.errorCode);
   }
 
   return {
@@ -775,8 +775,8 @@ async function handleAITurn(
     // stateEnvelope() re-reads flowState from the runner; actionResult.flowState
     // is the authoritative value returned by performAction — override with it.
     flowState: actionResult.flowState,
-    aiMoved: true,
-    aiPlayer,
+    botMoved: true,
+    botPlayer,
   };
 }
 
@@ -799,9 +799,9 @@ async function handleHint(
   if (teachingDisabled) {
     return errorResult('Teaching features are disabled for this session.', 'protocol');
   }
-  // Fail-loud: no AI config means hint is impossible.
-  if (!def.ai?.objectives) {
-    return errorResult('No AI configuration on this game — hint is unavailable.', 'protocol');
+  // Fail-loud: no bot config means hint is impossible.
+  if (!def.bot?.objectives) {
+    return errorResult('No bot configuration on this game — hint is unavailable.', 'protocol');
   }
   // Fail-loud: seat out of range.
   if (op.seat < 1 || op.seat > gameOptions.playerCount) {
@@ -812,7 +812,7 @@ async function handleHint(
   }
 
   const runner = runnerFromSnapshot(snapshot, def);
-  const flowState = runner.getFlowState() as AIFlowState;
+  const flowState = runner.getFlowState() as BotFlowState;
 
   // Fail-loud: seat not awaiting input (per-spec: hint only when the seat can act).
   if (!canSeatAct(flowState as unknown as FlowState, op.seat)) {
@@ -825,8 +825,8 @@ async function handleHint(
     def.gameType,
     op.seat,
     runner.actionHistory,
-    parseAILevel('medium'),
-    def.ai,
+    parseBotLevel('medium'),
+    def.bot,
   );
 
   const move = await bot.play();
@@ -834,8 +834,8 @@ async function handleHint(
   // Extract the board highlight target using the same priority chain as
   // GameSession.#extractMoveTarget(): hintTargetFromMove first, then DEST_ARGS fallback.
   let target: import('../engine/index.js').ElementRef | undefined;
-  if (def.ai.hintTargetFromMove) {
-    target = def.ai.hintTargetFromMove(move);
+  if (def.bot.hintTargetFromMove) {
+    target = def.bot.hintTargetFromMove(move);
   } else {
     for (const key of DEST_ARGS) {
       const val = (move.args as Record<string, unknown>)[key];
@@ -892,12 +892,12 @@ async function handleHeatmapToggle(
   }
 
   // visible=true: compute heatmap entries via bot.playWithStats().
-  // Fail-loud: no AI config means heatmap is impossible.
-  if (!def.ai?.objectives) {
-    return errorResult('No AI configuration on this game — heatmap is unavailable.', 'protocol');
+  // Fail-loud: no bot config means heatmap is impossible.
+  if (!def.bot?.objectives) {
+    return errorResult('No bot configuration on this game — heatmap is unavailable.', 'protocol');
   }
 
-  const flowState = runner.getFlowState() as AIFlowState;
+  const flowState = runner.getFlowState() as BotFlowState;
   if (!canSeatAct(flowState as unknown as FlowState, op.seat)) {
     return errorResult(`Cannot show heatmap: seat ${op.seat} is not awaiting input`, 'protocol');
   }
@@ -908,8 +908,8 @@ async function handleHeatmapToggle(
     def.gameType,
     op.seat,
     runner.actionHistory,
-    parseAILevel('medium'),
-    def.ai,
+    parseBotLevel('medium'),
+    def.bot,
   );
 
   const { stats } = await bot.playWithStats();
@@ -920,8 +920,8 @@ async function handleHeatmapToggle(
   for (const stat of stats) {
     // Extract the cell ref from the move using the same priority chain as hint.
     let ref: import('../engine/index.js').ElementRef | undefined;
-    if (def.ai.hintTargetFromMove) {
-      ref = def.ai.hintTargetFromMove(stat.move);
+    if (def.bot.hintTargetFromMove) {
+      ref = def.bot.hintTargetFromMove(stat.move);
     } else {
       for (const key of DEST_ARGS) {
         const val = (stat.move.args as Record<string, unknown>)[key];
@@ -952,63 +952,63 @@ async function handleHeatmapToggle(
 }
 
 // ---------------------------------------------------------------------------
-// aiSuggest op handler (read-only preview)
+// botSuggest op handler (read-only preview)
 // ---------------------------------------------------------------------------
 
 /**
- * Run MCTS to preview the move an AI seat would make WITHOUT mutating the
+ * Run MCTS to preview the move a bot seat would make WITHOUT mutating the
  * snapshot. The demo loop calls this to narrate the move before executing it
  * via the existing `action` op — never re-running MCTS for the execute step
  * (which would risk a narrate/execute mismatch if MCTS is non-deterministic).
  *
- * Mirrors handleAITurn's bot construction but stops short of performAction.
+ * Mirrors handleBotTurn's bot construction but stops short of performAction.
  * Returns the snapshot unchanged; only `suggestedAction`, `suggestedArgs`,
- * and `aiPlayer` are set beyond the standard stateEnvelope fields.
+ * and `botPlayer` are set beyond the standard stateEnvelope fields.
  */
-async function handleAISuggest(
+async function handleBotSuggest(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
-  op: Extract<Op, { type: 'aiSuggest' }>,
+  op: Extract<Op, { type: 'botSuggest' }>,
 ): Promise<OpResult> {
-  // Fail-loud: no AI config means suggestion is impossible.
-  if (!def.ai?.objectives) {
-    return errorResult('No AI configuration on this game — aiSuggest is unavailable.', 'protocol');
+  // Fail-loud: no bot config means suggestion is impossible.
+  if (!def.bot?.objectives) {
+    return errorResult('No bot configuration on this game — botSuggest is unavailable.', 'protocol');
   }
 
   const runner = runnerFromSnapshot(snapshot, def);
-  const flowState = runner.getFlowState() as AIFlowState | undefined;
+  const flowState = runner.getFlowState() as BotFlowState | undefined;
 
   // Find the seat currently awaiting input among the given seats.
-  const aiSeatSet = new Set(op.seats.map((s) => s.seat));
-  const aiPlayer = selectDueAISeat(flowState ?? {}, aiSeatSet);
-  if (aiPlayer === undefined) {
+  const botSeatSet = new Set(op.seats.map((s) => s.seat));
+  const botPlayer = selectDueBotSeat(flowState ?? {}, botSeatSet);
+  if (botPlayer === undefined) {
     return errorResult(
       'No seat among the given seats is currently awaiting input.',
       'protocol',
     );
   }
 
-  const seatLevel = op.seats.find((s) => s.seat === aiPlayer)?.level;
+  const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;
   const bot = createBot(
     runner.game as Game,
     def.gameClass as GameRunnerOptions<never>['GameClass'],
     def.gameType,
-    aiPlayer,
+    botPlayer,
     runner.actionHistory,
-    parseAILevel(seatLevel ?? 'medium'),
-    def.ai,
+    parseBotLevel(seatLevel ?? 'medium'),
+    def.bot,
   );
 
   const move = await bot.play();
 
   // Return the preview — snapshot is NOT mutated (read-only, per READ_ONLY_OP_TYPES).
   // Per RESEARCH Pitfall 8: the stateEnvelope playerViews are discarded by the demo
-  // loop (it reads only aiPlayer/suggestedAction/suggestedArgs). Acceptable for Phase 110.
+  // loop (it reads only botPlayer/suggestedAction/suggestedArgs). Acceptable for Phase 110.
   return {
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
-    aiPlayer,
+    botPlayer,
     suggestedAction: move.action,
     suggestedArgs: move.args as Record<string, unknown>,
   };
@@ -1349,18 +1349,18 @@ export async function executeOp(
         return handleCancelAction(def, gameOptions, snap, pendingState, op);
       case 'undo':
         return handleUndo(def, gameOptions, snap, op);
-      case 'aiTurn':
+      case 'botTurn':
         // Refused up front, not left to throw from inside the search: an MCTS
         // playout draws thousands of times, and an order-entry session has no
         // bot seats to begin with. Naming the mode is what makes it fixable.
         if (randomness === 'forbidden') {
           return errorResult(
-            'AI turns are unavailable in an order-entry session: bot playouts ' +
+            'bot turns are unavailable in an order-entry session: bot playouts ' +
             'consume randomness, which this session forbids.',
             'protocol',
           );
         }
-        return handleAITurn(def, gameOptions, snap, op);
+        return handleBotTurn(def, gameOptions, snap, op);
       case 'debugHistory':
         return handleDebugHistory(def, gameOptions, snap);
       case 'debugStateAt':
@@ -1395,8 +1395,8 @@ export async function executeOp(
         return handleHint(def, gameOptions, snap, op, teachingDisabled);
       case 'heatmapToggle':
         return handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
-      case 'aiSuggest':
-        return handleAISuggest(def, gameOptions, snap, op);
+      case 'botSuggest':
+        return handleBotSuggest(def, gameOptions, snap, op);
       case 'startTutorial': {
         // Fail-loud: teaching features locked out by the host (via
         // hostOptions — deliberately NOT gameOptions, see WR-04/D-01 above).
@@ -1447,7 +1447,7 @@ export async function executeOp(
       }
     }
     // Fallback for host-only ops (demoStart / demoStop / demoControl /
-    // convertSeatToAI) that are intercepted by SnapshotSessionHost.handleOp
+    // convertSeatToBot) that are intercepted by SnapshotSessionHost.handleOp
     // before reaching this function. If they somehow reach executeOp, fail loud
     // rather than silently returning undefined. This branch also satisfies
     // TypeScript's return-completeness check now that those ops are in the Op

@@ -95,7 +95,7 @@ describe('WF-02 — one fresh subagent per chunk, dispatched sequentially', () =
   it('the subagent runs the pipeline by READING the sibling SKILL.md, never a re-dispatch', () => {
     const dispatch = read('orchestrate/chunk-dispatch.md');
     expect(dispatch).toContain('bs-build-chunk/SKILL.md');
-    expect(dispatch).toContain('bs-build-ai/SKILL.md');
+    expect(dispatch).toContain('bs-build-bot/SKILL.md');
     expect(dispatch).toContain('bs-insert-chunk/SKILL.md');
     expect(flat(dispatch)).toMatch(/Reading the sibling instructions is the only sanctioned handoff/i);
   });
@@ -376,16 +376,16 @@ describe('WF-06 — a run resumes cleanly after a /clear or a crash', () => {
   });
 });
 
-describe('WF-07 — the run ends with the AI opponent and final acceptance', () => {
-  it('build-game.md dispatches the AI chunk against bs-build-ai', () => {
+describe('WF-07 — the run ends with the bot opponent and final acceptance', () => {
+  it('build-game.md dispatches the bot chunk against bs-build-bot', () => {
     const skill = read('build-game.md');
-    expect(skill).toContain('bs-build-ai/SKILL.md');
+    expect(skill).toContain('bs-build-bot/SKILL.md');
     expect(flat(skill)).toMatch(/after game-end\/scoring is verified/i);
   });
 
-  it('build-game.md offers to insert an AI chunk when the sketch has none', () => {
+  it('build-game.md offers to insert a bot chunk when the sketch has none', () => {
     const skill = flat(read('build-game.md'));
-    expect(skill).toMatch(/If the sketch has \*\*no\*\* AI-opponent chunk/i);
+    expect(skill).toMatch(/If the sketch has \*\*no\*\* bot-opponent chunk/i);
     expect(skill).toMatch(/never edit the ordered chunk list by\s*hand/i);
   });
 
@@ -395,12 +395,12 @@ describe('WF-07 — the run ends with the AI opponent and final acceptance', () 
     expect(skill).toMatch(/there is no next command to print/i);
   });
 
-  it('build-ai.md is the renamed skill and honours orchestrated mode', () => {
-    const buildAi = read('build-ai.md');
-    expect(buildAi).toMatch(/^---\nname: bs-build-ai\n/);
-    expect(flat(buildAi)).toMatch(/Orchestrated Mode \(dispatched, not typed\)/i);
-    expect(flat(buildAi)).toMatch(/never ask a question, never wait for\s*approval/i);
-    expect(buildAi).not.toContain('name: bs-generate-ai');
+  it('build-bot.md is the renamed skill and honours orchestrated mode', () => {
+    const buildBot = read('build-bot.md');
+    expect(buildBot).toMatch(/^---\nname: bs-build-bot\n/);
+    expect(flat(buildBot)).toMatch(/Orchestrated Mode \(dispatched, not typed\)/i);
+    expect(flat(buildBot)).toMatch(/never ask a question, never wait for\s*approval/i);
+    expect(buildBot).not.toContain('name: bs-generate-bot');
   });
 });
 
@@ -440,11 +440,11 @@ describe('WF-09 — state-machine.md owns the orchestrated-run rules once', () =
     expect(stateMachine).toContain('QUESTIONS.md  FILINGS.md  RUN.md');
   });
 
-  it('lists bs-build-game and bs-build-ai in the skill roster, and no bs-generate-ai anywhere', () => {
+  it('lists bs-build-game and bs-build-bot in the skill roster, and no bs-generate-bot anywhere', () => {
     const stateMachine = read('state-machine.md');
     expect(stateMachine).toContain('`bs-build-game`');
-    expect(stateMachine).toContain('`bs-build-ai`');
-    expect(stateMachine).not.toContain('bs-generate-ai');
+    expect(stateMachine).toContain('`bs-build-bot`');
+    expect(stateMachine).not.toContain('bs-generate-bot');
   });
 
   it('keeps the how-never-what boundary: relaying an answer is not deciding it', () => {

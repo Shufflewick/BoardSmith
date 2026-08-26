@@ -107,7 +107,7 @@
     "paths": {
       "x-convex-sink": false,
       "type": "object",
-      "description": "Optional overrides for the rules/ui source directories (paths.rules, paths.ui). Read by dev.ts, simulate.ts, evolve-ai-weights.ts.",
+      "description": "Optional overrides for the rules/ui source directories (paths.rules, paths.ui). Read by dev.ts, simulate.ts, evolve-bot-weights.ts.",
       "additionalProperties": false,
       "properties": {
         "rules": {
@@ -143,10 +143,10 @@
       "type": "boolean",
       "description": "Opt in to the platform's cross-session key/value store. Absent or false means the platform issues no persistence read at game start and no commit at game over. Consumed by the platform (manifest-schema.ts `persistence`)."
     },
-    "ai": {
+    "bot": {
       "x-convex-sink": false,
       "type": "boolean",
-      "description": "Does this bundle ship an AI (a gameDefinition.ai block)? Lets the platform hand an expired seat to a caretaker bot. Consumed by the platform (manifest-schema.ts `ai`)."
+      "description": "Does this bundle ship a bot (a gameDefinition.bot block)? Lets the platform hand an expired seat to a caretaker bot. Consumed by the platform (manifest-schema.ts `bot`)."
     },
     "joinInProgress": {
       "x-convex-sink": false,
@@ -161,7 +161,7 @@
     "idleAction": {
       "x-convex-sink": false,
       "$ref": "#/definitions/namedAction",
-      "description": "The action the platform submits on behalf of a seat whose round deadline expired, for a game that ships no AI. Required by the platform alongside `roundDeadline` when `ai` is not true. Consumed by the platform (manifest-schema.ts `idleAction`)."
+      "description": "The action the platform submits on behalf of a seat whose round deadline expired, for a game that ships no bot. Required by the platform alongside `roundDeadline` when `bot` is not true. Consumed by the platform (manifest-schema.ts `idleAction`)."
     },
     "roundDeadline": {
       "x-convex-sink": true,
@@ -187,10 +187,10 @@
         },
         "mindingSafe": {
           "type": "boolean",
-          "description": "The author's explicit acknowledgement that a caretaker bot may play an absent player's seat in THIS game. The platform requires it when `ai: true` resolves an expiry."
+          "description": "The author's explicit acknowledgement that a caretaker bot may play an absent player's seat in THIS game. The platform requires it when `bot: true` resolves an expiry."
         }
       },
-      "description": "How long one round may sit before the platform intervenes. Consumed by the platform (manifest-schema.ts `roundDeadline`), which also enforces its own hour bounds and requires either `ai: true` or an `idleAction` alongside it."
+      "description": "How long one round may sit before the platform intervenes. Consumed by the platform (manifest-schema.ts `roundDeadline`), which also enforces its own hour bounds and requires either `bot: true` or an `idleAction` alongside it."
     },
     "world": {
       "x-convex-sink": false,

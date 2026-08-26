@@ -1,6 +1,6 @@
 # BS Skills — State-Machine Authority Rules
 
-Every `bs-` skill (`bs-ingest-rules`, `bs-build-game`, `bs-build-chunk`, `bs-check-status`, `bs-insert-chunk`, `bs-build-ai`) cites this file rather than restating its rules. If you are authoring or extending a `bs-` skill, link to the relevant section below instead of copying rule text.
+Every `bs-` skill (`bs-ingest-rules`, `bs-build-game`, `bs-build-chunk`, `bs-check-status`, `bs-insert-chunk`, `bs-build-bot`) cites this file rather than restating its rules. If you are authoring or extending a `bs-` skill, link to the relevant section below instead of copying rule text.
 
 ## Project Layout — Where Every Path in This Protocol Lives
 
@@ -248,7 +248,7 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
   - Worked example — bare release: `Session Lock: none` → leading token `none` → **RELEASED**.
   - Worked example — a real shipped project's cleanly-closed value (verbatim, from a game
     built with this pipeline): `Session Lock: (none — final-acceptance closed 2026-07-20; sketch complete except
-    ai-opponent, deferred on BSR-12)` → outer parens stripped → leading token `none` (the em dash
+    bot-opponent, deferred on BSR-12)` → outer parens stripped → leading token `none` (the em dash
     ends the token) → **RELEASED**, despite carrying no parseable ISO timestamp and none of the
     lock grammar below — this parenthetical is commentary, not a lock.
   - Worked example — a real lock: `Session Lock: "movement @ session-f3a1 — locked at
@@ -407,8 +407,8 @@ continuously, stopping at that next chunk's `ask` approval gate — a new chunk'
 gate. (A light-path next chunk has no `ask`; it continues to that chunk's `playtest` gate, its first
 human gate, instead. The mandated final-acceptance chunk dispatches `build/final-acceptance.md` per
 "Final-acceptance chunk exception" below.) Auto-advance is not limited to ordinary chunk-to-chunk
-continuation: it carries into the next LOGICAL step across chunk types, including the **generate-AI
-→ final-acceptance** progression — once a sketch's `bs-build-ai` chunk closes, the same session
+continuation: it carries into the next LOGICAL step across chunk types, including the **generate-bot
+→ final-acceptance** progression — once a sketch's `bs-build-bot` chunk closes, the same session
 auto-advances into the final-acceptance chunk that follows it exactly as it would any other next
 chunk, rather than stopping to let the human re-invoke between them. This is what makes the router a
 **loop over chunks** bounded by human gates, context, and stuck-state — not a one-shot that halts

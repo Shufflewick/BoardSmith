@@ -126,8 +126,8 @@ function liveEngineOf(game: unknown): LiveFlowEngine {
 async function driveFixture(def: GameDefinitionLike) {
   const playerCount = def.minPlayers ?? 2;
   const seats = Array.from({ length: playerCount }, (_, i) => ({ seat: i + 1, level: 'easy' }));
-  // aiSeats is deliberately EMPTY: an AI roster makes the host's pump run the
-  // whole game (minutes, for the MCTS fixtures). Sending `aiTurn` by hand plays
+  // botSeats is deliberately EMPTY: a bot roster makes the host's pump run the
+  // whole game (minutes, for the MCTS fixtures). Sending `botTurn` by hand plays
   // exactly one due seat per call, which is the bounded "several steps" this
   // test needs.
   const session = createHeadlessSession(def, { playerCount, seed: 'flow-state-clone' }, []);
@@ -136,7 +136,7 @@ async function driveFixture(def: GameDefinitionLike) {
   for (let i = 0; i < STEPS; i++) {
     const flowState = session.host.flowState as FlowState | null;
     if (!flowState || flowState.complete) break;
-    const result = await session.host.handleOp(1, { type: 'aiTurn', seats });
+    const result = await session.host.handleOp(1, { type: 'botTurn', seats });
     if (!result.success) break;
     steps++;
   }

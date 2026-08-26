@@ -1,0 +1,1530 @@
+import type {
+  Game,
+  GameOptions,
+  Player,
+  FlowState,
+  SerializedAction,
+  ActionDefinition,
+  Selection,
+  GameStateSnapshot,
+} from '../engine/index.js';
+import { createSnapshot, canSeatAct } from '../engine/index.js';
+import { enumerateSelectionsCore } from '../engine/utils/enumerate-moves.js';
+import type { BotConfig, BotMove, BotMoveStats, MCTSNode, BotStrategy, Objective, ThreatResponse } from './types.js';
+import { DEFAULT_CONFIG } from './types.js';
+import { SeededRandom } from '../utils/random.js';
+
+/** Game class constructor type */
+type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
+
+/**
+ * MCTS (Monte-Carlo Tree Search) Bot
+ *
+ * Implements the UCT algorithm for game-agnostic bot:
+ * 1. SELECT: Walk tree using UCT formula to find promising leaf
+ * 2. EXPAND: Try one unexplored action from that leaf
+ * 3. PLAYOUT: Random moves until game ends (up to playoutDepth)
+ * 4. BACKPROPAGATE: Update win counts up the tree
+ *
+ * Uses incremental state management: maintains a single game instance
+ * and applies/undoes moves as it traverses the tree, rather than
+ * reconstructing game state from snapshots at each node.
+ */
+export class MCTSBot<G extends Game = Game> {
+  private game: G;
+  private GameClass: GameClass<G>;
+  private gameType: string;
+  private playerIndex: number;
+  private config: BotConfig;
+  private objectives?: (game: Game, playerIndex: number) => Record<string, Objective>;
+  private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
+  private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
+  private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
+  private uctConstant?: (game: Game, playerIndex: number) => number;
+  private rng: SeededRandom;
+  private actionHistory: SerializedAction[];
+  private seed?: string;
+  /** Cached UCT exploration constant (computed once per move in playSingle) */
+  private cachedUctC: number = Math.sqrt(2);
+  /** Warn at most once per bot about a truncated seeded search (see below). */
+  private warnedSeededTruncation = false;
+
+  /** Live game instance used during search (cloned from original) */
+  private searchGame: G | null = null;
+  /** Command history length at root node (for undo calculations) */
+  private rootCommandCount: number = 0;
+  /** Root snapshot for fallback recovery */
+  private rootSnapshot: GameStateSnapshot | null = null;
+  /**
+   * T-159-07 (bot-02): pre-reveal baseline clone of searchGame, captured the
+   * moment a fresh simultaneous step begins (before any co-decider's action
+   * mutates the shared searchGame). `resumeSimultaneousAction` applies each
+   * co-decider's action to the LIVE game immediately (no deferred reveal),
+   * so without this baseline a later co-decider's move enumeration would
+   * read an earlier co-decider's already-committed effects. All co-decider
+   * enumeration within one simultaneous step reads from this frozen clone
+   * instead of the mutating searchGame. Cleared once the step fully
+   * resolves (no awaitingPlayers left) so it never leaks into unrelated
+   * future steps.
+   */
+  private simultaneousBaseline?: G;
+  /** Transposition table for caching position evaluations */
+  private transpositionTable: Map<string, { value: number; visits: number }> = new Map();
+  /** RAVE table for move value estimation across all playouts */
+  private raveTable: Map<string, { visits: number; value: number }> = new Map();
+
+  constructor(
+    game: G,
+    GameClass: GameClass<G>,
+    gameType: string,
+    playerIndex: number,
+    actionHistory: SerializedAction[] = [],
+    config: Partial<BotConfig> = {},
+    botStrategy?: BotStrategy
+  ) {
+    this.game = game;
+    this.GameClass = GameClass;
+    this.gameType = gameType;
+    this.playerIndex = playerIndex;
+    this.actionHistory = actionHistory;
+    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.objectives = botStrategy?.objectives;
+    this.threatResponseMoves = botStrategy?.threatResponseMoves;
+    this.playoutPolicy = botStrategy?.playoutPolicy;
+    this.moveOrdering = botStrategy?.moveOrdering;
+    this.uctConstant = botStrategy?.uctConstant;
+    this.seed = this.config.seed;
+    this.rng = new SeededRandom(this.config.seed ?? Math.random().toString(36).substring(2));
+  }
+
+  // ============================================================================
+  // SECTION: Core Algorithm
+  // Purpose: Main MCTS loop implementing SELECT, EXPAND, PLAYOUT, BACKPROPAGATE
+  // ============================================================================
+
+  /**
+   * Run MCTS and return the best move.
+   * Routes to parallel or single mode based on config.
+   */
+  async play(): Promise<BotMove> {
+    if (this.config.parallel && this.config.parallel > 1) {
+      return this.playParallel();
+    }
+    return (await this.runSearch()).move;
+  }
+
+  /**
+   * Run MCTS and return the best move together with per-candidate evaluation stats.
+   *
+   * Always runs a single-mode search regardless of the `parallel` config value.
+   * Parallel ensemble searches aggregate by vote count across independent trees,
+   * which loses per-child stats — forcing single mode is intentional.
+   *
+   * Stats are captured from root.children BEFORE the post-search cleanup discards
+   * the tree, so callers always receive a valid (possibly empty) stats array.
+   */
+  async playWithStats(): Promise<{ move: BotMove; stats: BotMoveStats[] }> {
+    // Force single-mode search — parallel mode loses per-child stats.
+    const { move, root } = await this.runSearch();
+    const stats: BotMoveStats[] = root.children.map(child => ({
+      move: child.parentMove!,
+      visits: child.visits,
+      value: child.visits > 0 ? child.value / child.visits : 0,
+    }));
+    return { move, stats };
+  }
+
+  /**
+   * Run multiple independent MCTS searches with different seeds,
+   * then aggregate results by voting on the best move.
+   *
+   * This provides diversity benefit: each search explores different
+   * parts of the game tree due to randomization, reducing blind spots.
+   */
+  private async playParallel(): Promise<BotMove> {
+    const parallelCount = this.config.parallel!;
+    const iterationsPerSearch = Math.floor(this.config.iterations / parallelCount);
+
+    // Track votes for each unique move
+    const moveVotes = new Map<string, { count: number; move: BotMove }>();
+
+    for (let i = 0; i < parallelCount; i++) {
+      // Create sub-bot with unique seed for diversity
+      const subConfig: Partial<BotConfig> = {
+        ...this.config,
+        seed: `${this.seed ?? 'default'}-parallel-${i}`,
+        iterations: iterationsPerSearch,
+        parallel: 1, // Prevent recursion
+      };
+
+      // Create sub-bot sharing same game instance (read-only root state is fine)
+      const subBot = new MCTSBot(
+        this.game,
+        this.GameClass,
+        this.gameType,
+        this.playerIndex,
+        this.actionHistory,
+        subConfig,
+        {
+          objectives: this.objectives,
+          threatResponseMoves: this.threatResponseMoves,
+          playoutPolicy: this.playoutPolicy,
+          moveOrdering: this.moveOrdering,
+          uctConstant: this.uctConstant,
+        }
+      );
+
+      // Run single search (playSingle is private, so use play with parallel: 1)
+      const move = await subBot.play();
+
+      // Tally vote for this move
+      const key = JSON.stringify(move);
+      const existing = moveVotes.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        moveVotes.set(key, { count: 1, move });
+      }
+    }
+
+    // Return move with most votes
+    let best: BotMove | null = null;
+    let bestCount = 0;
+    for (const { count, move } of moveVotes.values()) {
+      if (count > bestCount) {
+        bestCount = count;
+        best = move;
+      }
+    }
+
+    // Safety: if somehow no votes, fall back to single search
+    if (!best) {
+      return (await this.runSearch()).move;
+    }
+
+    return best;
+  }
+
+  /**
+   * Run a single MCTS search and return the best move together with the root node.
+   * The root node reference is returned BEFORE cleanup nulls the bot's own
+   * snapshot fields — callers can safely read root.children after this returns.
+   * Called by both play() and playWithStats().
+   */
+  private async runSearch(): Promise<{ move: BotMove; root: MCTSNode }> {
+    // Turn-legality checks read only structural flow state (awaitingInput /
+    // currentPlayer / awaitingPlayers), never opponent hidden attributes, so
+    // checking them against the live `this.game` before the redacted clone
+    // exists is safe.
+    const liveFlowState = this.game.getFlowState();
+    if (!liveFlowState?.awaitingInput) {
+      throw new Error('Game is not awaiting input');
+    }
+
+    // Check if this is our turn (either currentPlayer matches or we're in awaitingPlayers)
+    if (!this.canBotAct(liveFlowState)) {
+      throw new Error(`Not bot's turn (player ${this.playerIndex})`);
+    }
+
+    // CR-01 (159): build the redacted search sandbox FIRST, then enumerate/
+    // threat-check/UCT-weight from it -- never from `this.game` (full truth).
+    // `enumerateAllMoves` -> `getSelectionChoices` and the game-supplied
+    // `threatResponseMoves`/`uctConstant` hooks can read arbitrary game state;
+    // running them against `this.game` would leak opponents' hidden info into
+    // the bot's ROOT decision even though the search tree below it was
+    // redacted. Doing this unconditionally (including the allMoves.length===1
+    // fast path below) closes that leak for every code path, not just the
+    // full-search one. For perfect-information games (no hidden zones) the
+    // redacted view is byte-identical to the full view, so this is a no-op.
+    this.rootSnapshot = this.captureSnapshot();
+    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
+    const flowState = this.searchGame.getFlowState() ?? liveFlowState;
+
+    // Cache UCT constant once per move (not per selectChild call)
+    this.cachedUctC = this.uctConstant?.(this.searchGame, this.playerIndex)
+      ?? this.config.uctC
+      ?? Math.sqrt(2);
+
+    // Get ALL available moves first (without sampling) for threat response analysis
+    const allMoves = this.enumerateAllMoves(this.searchGame, flowState);
+    if (allMoves.length === 0) {
+      throw new Error('No available moves');
+    }
+
+    // If only one move, skip MCTS search entirely.
+    // Return a minimal root with no children — playWithStats() callers get empty stats,
+    // which is correct: there is nothing meaningful to evaluate for a forced move.
+    if (allMoves.length === 1) {
+      const root = this.createNode(flowState, null, null, allMoves, 0);
+      return { move: allMoves[0], root };
+    }
+
+    // Check for threats BEFORE sampling - this is critical!
+    // The threat response needs to see ALL possible moves to find blocking cells
+    let moves: BotMove[];
+
+    if (this.threatResponseMoves) {
+      const threatResponse = this.threatResponseMoves(this.searchGame, this.playerIndex, allMoves);
+      if (threatResponse.moves.length > 0) {
+        // FORCE blocking when threat is detected - no half measures!
+        // If threat response finds blocking moves, the bot MUST use them
+        moves = threatResponse.moves;
+      } else {
+        // No threat - sample normally
+        moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
+      }
+    } else {
+      // No threat response configured - sample normally
+      moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
+    }
+
+    // Clear transposition table and RAVE table for fresh search
+    this.transpositionTable.clear();
+    this.raveTable.clear();
+
+    // rootCommandCount tracks the command baseline on `searchGame` (built
+    // above) for undo -- recomputed here since threat-response/sampling ran
+    // between the clone and this point but never mutated `searchGame`.
+    this.rootCommandCount = this.searchGame.commandHistory.length;
+
+    // Create root node with moves (blocking-only when threatened, sampled otherwise)
+    const root = this.createNode(
+      flowState,
+      null,
+      null,
+      moves,
+      0 // root has 0 commands from parent
+    );
+
+    // Run MCTS iterations with timeout failsafe
+    const startTime = Date.now();
+    const timeout = this.config.timeout ?? 2000;
+    // Track truncation so a SEEDED search can tell the caller its result was
+    // not actually reproducible (see warnIfSeededSearchWasTruncated).
+    let completedIterations = 0;
+
+    for (let i = 0; i < this.config.iterations; i++) {
+      // Check timeout before each iteration
+      if (Date.now() - startTime > timeout) {
+        break;
+      }
+      completedIterations = i + 1;
+
+      // SELECT: Walk down tree, applying moves to searchGame, collecting tree moves for RAVE
+      const { leaf, treeMoves } = this.selectWithPath(root);
+
+      // EXPAND: Try one unexplored move, creating child
+      const child = this.expandIncremental(leaf);
+
+      // Add expanded move to treeMoves for RAVE if expansion created a new node
+      if (child !== leaf && child.parentMove) {
+        treeMoves.push({ move: child.parentMove, player: leaf.currentPlayer });
+      }
+
+      // PLAYOUT: Random simulation from current state, collect playout moves for RAVE
+      const { score, playoutMoves } = this.playoutIncremental(child);
+
+      // BACKPROPAGATE: Update stats, RAVE table, and undo back to root
+      this.backpropagateWithUndo(child, score, playoutMoves, treeMoves);
+
+      // Yield to the event loop in async mode (every iteration). Prefer the
+      // Scheduler API when present: inside a Cloudflare Worker, Date.now() is
+      // frozen during synchronous execution and is NOT advanced by setTimeout(0),
+      // so the timeout failsafe above can never fire -- a heavy search then runs
+      // its full iteration budget and blows the Worker's CPU limit. Awaiting
+      // scheduler.wait(0) advances the clock by the real elapsed time (including
+      // CPU spent since the last yield), which lets the timeout bound each move
+      // as intended. Outside Workers (e.g. Node) the clock advances normally, so
+      // the setImmediate/setTimeout fallback works there.
+      if (this.config.async) {
+        const sched = (globalThis as { scheduler?: { wait?: (ms: number) => Promise<void> } }).scheduler;
+        if (sched?.wait) {
+          await sched.wait(0);
+        } else {
+          const schedule = typeof setImmediate !== 'undefined'
+            ? setImmediate
+            : (fn: () => void) => setTimeout(fn, 0);
+          await new Promise(resolve => schedule(resolve));
+        }
+      }
+    }
+
+    this.warnIfSeededSearchWasTruncated(completedIterations, timeout);
+
+    // Cleanup search state — null the bot's own snapshot fields.
+    // The local `root` reference is returned to callers so they can read
+    // root.children AFTER this point (cleanup only nulls instance fields).
+    this.searchGame = null;
+    this.rootSnapshot = null;
+
+    // Select best child (most visits for robustness)
+    if (root.children.length === 0) {
+      // No children explored, pick random from initial moves
+      return { move: this.rng.pick(moves), root };
+    }
+
+    // Debug logging for proof number analysis
+    if (this.config.debug) {
+      const proven = root.children.filter(c => c.isProven).length;
+      const disproven = root.children.filter(c => c.isDisproven).length;
+      const unknown = root.children.length - proven - disproven;
+      console.log(`[MCTS] Move selection: ${proven} proven, ${disproven} disproven, ${unknown} unknown of ${root.children.length} children`);
+    }
+
+    // When PNS is enabled, use proof status in final move selection
+    if (this.config.usePNS !== false) {
+      // Look for proven win (guaranteed victory) - require visits >= 5 to trust proof status
+      const provenWin = root.children.find(c => c.isProven && c.visits >= 5);
+      if (provenWin) {
+        if (this.config.debug) {
+          console.log(`[MCTS] Selecting proven win!`);
+        }
+        return { move: provenWin.parentMove!, root };
+      }
+
+      // Check if all children are disproven (all moves lead to loss)
+      const allDisproven = root.children.every(c => c.isDisproven && c.visits >= 5);
+      if (allDisproven) {
+        // Select most-visited to delay loss (might find opponent mistake)
+        const best = root.children.reduce((a, b) => a.visits > b.visits ? a : b);
+        return { move: best.parentMove!, root };
+      }
+
+      // Filter out disproven children (known losses) for final selection
+      const validChildren = root.children.filter(c => !c.isDisproven || c.visits < 5);
+      if (validChildren.length > 0) {
+        const best = validChildren.reduce((a, b) => a.visits > b.visits ? a : b);
+        return { move: best.parentMove!, root };
+      }
+    }
+
+    // Fall back to most visits (standard MCTS selection)
+    const best = root.children.reduce((a, b) =>
+      a.visits > b.visits ? a : b
+    );
+
+    return { move: best.parentMove!, root };
+  }
+
+  // ============================================================================
+  // SECTION: Tree Operations
+  // Purpose: SELECT and EXPAND phases - navigate and grow the search tree
+  // ============================================================================
+
+  /**
+   * SELECTION with path tracking: Walk down tree using UCT, applying moves to searchGame.
+   * After this completes, searchGame is positioned at the returned leaf node's state.
+   * Returns the leaf node and the tree moves traversed (for RAVE).
+   */
+  private selectWithPath(node: MCTSNode): { leaf: MCTSNode; treeMoves: Array<{ move: BotMove; player: number }> } {
+    const treeMoves: Array<{ move: BotMove; player: number }> = [];
+
+    while (node.untriedMoves.length === 0 && node.children.length > 0) {
+      const child = this.selectChild(node);
+      // Track tree path move for RAVE (player is from parent node where move was made)
+      if (child.parentMove) {
+        treeMoves.push({ move: child.parentMove, player: node.currentPlayer });
+      }
+      // Apply the child's move to searchGame to descend
+      this.applyMoveToSearchGame(child);
+      node = child;
+    }
+    return { leaf: node, treeMoves };
+  }
+
+  /**
+   * Select the most promising child node using UCT-RAVE-PN formula.
+   * Blends UCT (tree statistics) with RAVE (global move statistics):
+   *   score = (1 - beta) * UCT + beta * RAVE
+   *   beta = sqrt(k / (3*visits + k))  // decreases as visits increase
+   *
+   * When PNS is enabled, also blends proof number ranking:
+   *   finalScore = (1 - pnWeight) * uctRaveScore + pnWeight * pnRank
+   *
+   * Early in search, beta is high so RAVE dominates (fast learning from all playouts).
+   * As visits accumulate, beta decreases so UCT dominates (accurate tree statistics).
+   */
+  private selectChild(node: MCTSNode): MCTSNode {
+    const C = this.cachedUctC; // Exploration constant (cached per move)
+    const k = this.config.raveK ?? 500; // RAVE decay constant
+    const usePNS = this.config.usePNS !== false;
+    const pnWeight = this.config.pnWeight ?? 0.5;
+    const isBotTurn = node.currentPlayer === this.playerIndex;
+
+    // Filter out proven/disproven children with sufficient visits (solver enhancement)
+    let eligibleChildren = node.children;
+    if (usePNS) {
+      eligibleChildren = node.children.filter(child => {
+        // Allow selection if visits < 5 to confirm solver result
+        if (child.visits < 5) return true;
+        // Don't select isProven children when it's opponent's turn (opponent won't help us)
+        if (!isBotTurn && child.isProven) return false;
+        // Don't select isDisproven children when it's our turn (avoid known losses)
+        if (isBotTurn && child.isDisproven) return false;
+        return true;
+      });
+      // Fallback if all children filtered out
+      if (eligibleChildren.length === 0) {
+        eligibleChildren = node.children;
+      }
+    }
+
+    // Pre-compute proof number ranks if PNS is enabled
+    let pnRanks: Map<MCTSNode, number> | null = null;
+    if (usePNS && pnWeight > 0) {
+      pnRanks = this.computeProofNumberRanks(eligibleChildren, isBotTurn);
+    }
+
+    let best = eligibleChildren[0];
+    let bestScore = -Infinity;
+
+    for (const child of eligibleChildren) {
+      const visits = child.visits + 1e-6; // Avoid division by zero
+      const exploitation = child.value / visits;
+      const exploration = C * Math.sqrt(Math.log(node.visits + 1) / visits);
+      const uct = exploitation + exploration;
+
+      // RAVE component (blend with UCT if enabled)
+      let uctRaveScore = uct;
+      if (this.config.useRAVE !== false && child.parentMove) {
+        const raveEntry = this.raveTable.get(this.getMoveKey(child.parentMove));
+        if (raveEntry && raveEntry.visits > 0) {
+          // RAVE value is already stored from correct perspective (move-maker's perspective)
+          // But here we need it from the parent's perspective (who made the move to this child)
+          // The move was made by node.currentPlayer, so:
+          // - If node.currentPlayer === this.playerIndex, RAVE value is from our perspective (use as-is)
+          // - If node.currentPlayer !== this.playerIndex, RAVE value is from opponent's perspective (flip it)
+          const raveValue = node.currentPlayer === this.playerIndex
+            ? raveEntry.value
+            : (1 - raveEntry.value);
+
+          // Beta decreases as node visits increase (trust UCT more with more data)
+          const beta = Math.sqrt(k / (3 * visits + k));
+          uctRaveScore = (1 - beta) * uct + beta * raveValue;
+        }
+      }
+
+      // Blend with proof number ranking if PNS enabled
+      let score = uctRaveScore;
+      if (pnRanks && pnWeight > 0) {
+        const pnRank = pnRanks.get(child) ?? 0;
+        score = (1 - pnWeight) * uctRaveScore + pnWeight * pnRank;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = child;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Compute proof number ranks for children, normalized to [0, 1].
+   * Higher rank = better for current player.
+   *
+   * Bot's turn: rank by proof number (lower pn = easier to prove win = higher rank)
+   * Opponent's turn: rank by disproof number (lower dpn = easier for opponent = higher rank for them)
+   */
+  private computeProofNumberRanks(children: MCTSNode[], isBotTurn: boolean): Map<MCTSNode, number> {
+    const ranks = new Map<MCTSNode, number>();
+
+    // Get the relevant proof numbers for ranking
+    const pnValues: Array<{ child: MCTSNode; value: number }> = children.map(child => ({
+      child,
+      // Bot's turn: want low proof number (close to proving win)
+      // Opponent's turn: want low disproof number (close to proving loss for bot)
+      value: isBotTurn ? child.proofNumber : child.disproofNumber,
+    }));
+
+    // Sort by value ascending (lower is better)
+    pnValues.sort((a, b) => a.value - b.value);
+
+    // Assign ranks: position 0 gets rank 1 (best), position n-1 gets rank 0 (worst)
+    const maxRank = children.length - 1;
+    pnValues.forEach((entry, index) => {
+      // Normalize rank to [0, 1] where higher is better
+      // Handle case where all children have same value (all get 0.5)
+      const rank = maxRank > 0 ? 1 - (index / maxRank) : 0.5;
+      ranks.set(entry.child, rank);
+    });
+
+    return ranks;
+  }
+
+  /**
+   * Apply a node's parent move to searchGame.
+   * Used during selection to descend the tree.
+   */
+  private applyMoveToSearchGame(node: MCTSNode): void {
+    if (!node.parentMove || !this.searchGame || !node.parent) return;
+
+    // T-159-07 / F-07: capture the pre-reveal simultaneous baseline during
+    // SELECT descent too (not only in expand/playout). `searchGame` is currently
+    // at `node.parent`'s state; if that is the START of a fresh simultaneous
+    // step (nobody completed), snapshot it BEFORE this move commits a co-decider
+    // pick. Without this, descending past 2+ already-committed co-deciders left
+    // the baseline undefined, so the 3rd+ co-decider re-enumerated against the
+    // live (reveal-leaking) state — the sequentialized-reveal defect for ≥3
+    // co-deciders. The `every(!completed)` guard makes it idempotent mid-step.
+    this.maybeCaptureSimultaneousBaseline(node.parent.flowState);
+
+    const currentPlayer = this.getCurrentPlayerFromFlowState(node.parent.flowState);
+    try {
+      this.searchGame.continueFlow(node.parentMove.action, this.rebindArgs(node.parentMove.args), currentPlayer);
+    } catch (error) {
+      // Move failed - this shouldn't happen for already-explored nodes
+      // but handle gracefully
+    }
+  }
+
+  /**
+   * EXPAND with incremental state: Apply one unexplored move to searchGame.
+   * The searchGame is already positioned at the node's state from selection.
+   * Returns the new child node (or current node if expansion fails).
+   */
+  private expandIncremental(node: MCTSNode): MCTSNode {
+    if (node.untriedMoves.length === 0 || node.flowState.complete) {
+      return node;
+    }
+
+    if (!this.searchGame) {
+      return node;
+    }
+
+    // T-159-07: if `node.flowState` is the start of a fresh simultaneous step
+    // (no co-decider has acted yet), snapshot searchGame now -- BEFORE this
+    // move mutates it -- so later co-deciders' enumeration in this step
+    // reads the pre-reveal state, not this move's committed effects.
+    this.maybeCaptureSimultaneousBaseline(node.flowState);
+
+    // Pick first untried move (ordering determined at node creation by moveOrdering hook)
+    const move = node.untriedMoves.shift()!;
+
+    // Record command count before applying move
+    const commandCountBefore = this.searchGame.commandHistory.length;
+
+    // Use the current player from flow state (handles simultaneous actions)
+    const currentPlayer = this.getCurrentPlayerFromFlowState(node.flowState);
+
+    // Try to apply the move
+    let flowState: FlowState;
+    try {
+      flowState = this.searchGame.continueFlow(move.action, this.rebindArgs(move.args), currentPlayer);
+    } catch (error) {
+      // Move failed during simulation - return current node
+      return node;
+    }
+
+    // Calculate how many commands this move generated
+    const commandCount = this.searchGame.commandHistory.length - commandCountBefore;
+
+    // Get available moves for the NEXT player (whoever's turn it is now)
+    const newMoves = flowState.complete ? [] : this.enumerateMovesForSimulation(this.searchGame, flowState);
+
+    // Create child node with command count (no snapshot needed!)
+    const child = this.createNode(flowState, node, move, newMoves, commandCount);
+    node.children.push(child);
+
+    return child;
+  }
+
+  // ============================================================================
+  // SECTION: Simulation
+  // Purpose: PLAYOUT phase - random rollout to estimate position value
+  // ============================================================================
+
+  /**
+   * PLAYOUT with incremental state: Simulate from searchGame's current position.
+   * The searchGame is already positioned at the node's state.
+   * Plays random moves (or uses playoutPolicy if available) until the game ends or playoutDepth is reached.
+   * Returns a score in [0,1] and the moves played during playout with player info (for RAVE).
+   */
+  private playoutIncremental(node: MCTSNode): { score: number; playoutMoves: Array<{ move: BotMove; player: number }> } {
+    const playoutMoves: Array<{ move: BotMove; player: number }> = [];
+
+    if (!this.searchGame) {
+      return { score: 0.5, playoutMoves };
+    }
+
+    let flowState = node.flowState;
+    let depth = 0;
+
+    while (!flowState.complete && depth < this.config.playoutDepth) {
+      // T-159-07: same pre-reveal baseline capture as expandIncremental --
+      // must run before this iteration's move mutates searchGame.
+      this.maybeCaptureSimultaneousBaseline(flowState);
+
+      // Get available moves for the current player (whoever's turn it is)
+      const moves = this.enumerateMovesForSimulation(this.searchGame, flowState);
+      if (moves.length === 0) {
+        break;
+      }
+
+      // Select move: use playoutPolicy if available, otherwise random
+      const currentPlayer = this.getCurrentPlayerFromFlowState(flowState);
+      let move: BotMove;
+
+      if (this.playoutPolicy) {
+        // Use game-specific playout policy for smarter move selection
+        move = this.playoutPolicy(this.searchGame, currentPlayer, moves, () => this.rng.next());
+      } else {
+        // Default to random move selection
+        move = this.rng.pick(moves);
+      }
+
+      // Track move for RAVE update
+      playoutMoves.push({ move, player: currentPlayer });
+
+      // Try to apply the move - if it fails, stop the playout
+      try {
+        flowState = this.searchGame.continueFlow(move.action, this.rebindArgs(move.args), currentPlayer);
+      } catch (error) {
+        // Move failed during simulation - stop playout and evaluate current state
+        break;
+      }
+      depth++;
+    }
+
+    // Evaluate using the final game state (with transposition table caching)
+    const score = this.evaluateWithCache(this.searchGame, flowState);
+    return { score, playoutMoves };
+  }
+
+  // ============================================================================
+  // SECTION: Backpropagation
+  // Purpose: BACKPROPAGATE phase - update visit counts and values up the tree
+  // ============================================================================
+
+  /**
+   * BACKPROPAGATE with undo: Update statistics, RAVE table, and roll back searchGame to root state.
+   * First undoes all playout moves to get back to node state, then undoes tree moves
+   * as we walk up to root.
+   *
+   * @param node - The leaf node to start backpropagation from
+   * @param result - The playout score (0=loss, 0.5=draw, 1=win for bot)
+   * @param playoutMoves - Moves played during playout with player info (for RAVE)
+   * @param treeMoves - Moves from tree path with player info (for RAVE)
+   */
+  private backpropagateWithUndo(
+    node: MCTSNode | null,
+    result: number,
+    playoutMoves: Array<{ move: BotMove; player: number }> = [],
+    treeMoves: Array<{ move: BotMove; player: number }> = []
+  ): void {
+    if (!this.searchGame) return;
+
+    // Update RAVE table with all moves from this playout (if enabled)
+    if (this.config.useRAVE !== false) {
+      // Combine tree moves and playout moves for RAVE update
+      const allMoves = [...treeMoves, ...playoutMoves];
+      for (const { move, player } of allMoves) {
+        const key = this.getMoveKey(move);
+
+        // RAVE value is from perspective of the player who made the move
+        // If bot made the move: good result is good for RAVE
+        // If opponent made the move: good result for bot is bad for that move
+        const moveValue = player === this.playerIndex ? result : (1 - result);
+
+        const entry = this.raveTable.get(key);
+        if (entry) {
+          // Running average update
+          entry.visits++;
+          entry.value = entry.value + (moveValue - entry.value) / entry.visits;
+        } else {
+          this.raveTable.set(key, { visits: 1, value: moveValue });
+        }
+      }
+    }
+
+    // Backpropagate up the tree, updating pure node bookkeeping (visits, value,
+    // proof numbers). NOTE: this loop must NOT touch `searchGame` -- the game is
+    // reset to root state below via a full authoritative restore, not via
+    // per-node `undoCommands`. See the block after the loop for why.
+    while (node !== null) {
+      node.visits++;
+      // Value is from perspective of player who just moved to reach this node
+      // If it's our player's turn at parent, result is good for us
+      // If it's opponent's turn at parent, result is bad for them (good for us)
+      const isOurPerspective = node.parent === null ||
+        node.parent.currentPlayer === this.playerIndex;
+      node.value += isOurPerspective ? result : (1 - result);
+
+      // Update proof numbers from children (if PNS enabled)
+      if (this.config.usePNS !== false) {
+        this.updateProofNumbers(node);
+      }
+
+      node = node.parent;
+    }
+
+    // v4.8 F-01 (bot-02): reset `searchGame` to the ROOT position via a full
+    // authoritative restore rather than incremental `undoCommands`.
+    //
+    // Incremental undo was fundamentally unsound: the ONLY engine call that
+    // records a command is `game.execute()` (an ANIMATE event). Every element
+    // move -- `Piece.putInto` -> `moveToInternal` -- splices `_t.children`
+    // directly and records NOTHING, and plain custom-property mutations aren't
+    // commands either. So for any real game whose actions move elements or
+    // mutate custom state (cards, checkers, Seven, OTP...), `node.commandCount`
+    // is 0, `undoCommands` is a no-op, and every EXPAND + playout permanently
+    // corrupted the search game -- from iteration 2 the tree was replayed onto
+    // progressively fictional state.
+    //
+    // A full restore is state-authoritative (adopts the serialized element
+    // tree, flow position, phase/winners, sequence), so it correctly rolls back
+    // element-tree AND custom-property mutations that `undoCommands` never
+    // could. The stored tree-node move args resolve by element id
+    // (`resolveArgs` -> `getElementById`), and ids are stable across restore, so
+    // replaying the tree path on the fresh instance is sound.
+    //
+    // TRADEOFF: this is O(tree size) per iteration instead of O(commands
+    // undone). We deliberately choose correctness over the cheaper-but-broken
+    // incremental undo. RNG advancement is preserved across iterations (below)
+    // so playouts stay varied -- a naive restore would reset the RNG and make
+    // every iteration's playout identical.
+    this.restoreSearchGameToRoot();
+  }
+
+  /**
+   * Reset `searchGame` to the ROOT snapshot's authoritative state while
+   * PRESERVING the RNG position, so successive iterations produce varied
+   * playouts. See the call site in `backpropagateWithUndo` (v4.8 F-01).
+   */
+  private restoreSearchGameToRoot(): void {
+    if (!this.rootSnapshot || !this.searchGame) return;
+    // Carry the advanced RNG position forward across the restore so playouts do
+    // not repeat. Everything else (tree, flow, phase, winners) resets to root.
+    const rngState = this.searchGame.getRandomState();
+    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
+    this.searchGame.setRandomState(rngState);
+    this.rootCommandCount = this.searchGame.commandHistory.length;
+    // F-07: drop any baseline captured last iteration — it was cloned from the
+    // now-discarded searchGame instance. It is re-captured fresh during this
+    // iteration's descent/expand when a fresh simultaneous step is reached.
+    this.simultaneousBaseline = undefined;
+  }
+
+  /**
+   * Re-resolve any element-valued args to the CURRENT `searchGame`'s live
+   * element objects by id (v4.8 F-01). Tree-node moves store in-process element
+   * OBJECTS captured on a PRIOR searchGame instance; because
+   * `restoreSearchGameToRoot` rebuilds the tree each iteration, those stored
+   * objects go stale. Feeding a stale (foreign-tree) element into
+   * `continueFlow` -> `Piece.putInto` would splice a wrong-instance object into
+   * the live tree and duplicate its id. Element ids are stable across restore,
+   * so we canonicalize by id here. Non-element args (scalars, `{value,label}`
+   * choices without a numeric `id`) pass through untouched; already-live
+   * objects resolve to themselves (no-op).
+   */
+  private rebindArgs(args: Record<string, unknown>): Record<string, unknown> {
+    const game = this.searchGame;
+    if (!game) return args;
+    const rebindOne = (v: unknown): unknown => {
+      if (v && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'number') {
+        return game.getElementById((v as { id: number }).id) ?? v;
+      }
+      return v;
+    };
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(args)) {
+      out[k] = Array.isArray(v) ? v.map(rebindOne) : rebindOne(v);
+    }
+    return out;
+  }
+
+  // ============================================================================
+  // SECTION: Utility
+  // Purpose: Helper methods for bot turn detection and position evaluation
+  // ============================================================================
+
+  /**
+   * Generate a unique key for a move (used for RAVE table lookup)
+   */
+  private getMoveKey(move: BotMove): string {
+    return `${move.action}:${JSON.stringify(move.args)}`;
+  }
+
+  /**
+   * Check if the bot can act in the current flow state
+   */
+  private canBotAct(flowState: FlowState): boolean {
+    return canSeatAct(flowState, this.playerIndex);
+  }
+
+  /**
+   * Get available actions for the bot player from flow state
+   */
+  private getAvailableActionsForBot(flowState: FlowState): string[] {
+    // Simultaneous action step - check awaitingPlayers first (takes priority)
+    if (flowState.awaitingPlayers) {
+      const playerState = flowState.awaitingPlayers.find(
+        p => p.playerIndex === this.playerIndex && !p.completed
+      );
+      if (playerState && playerState.availableActions.length > 0) {
+        return playerState.availableActions;
+      }
+    }
+
+    // Regular action step - use availableActions if currentPlayer matches
+    if (flowState.availableActions && flowState.availableActions.length > 0 &&
+        flowState.currentPlayer === this.playerIndex) {
+      return flowState.availableActions;
+    }
+
+    // Fallback to availableActions if currentPlayer matches or is undefined
+    if (flowState.availableActions && flowState.availableActions.length > 0) {
+      return flowState.availableActions;
+    }
+
+    return [];
+  }
+
+  // ============================================================================
+  // SECTION: Move Enumeration
+  // Purpose: Discover and enumerate all legal moves for action selection
+  // ============================================================================
+
+  /**
+   * Discover all legal moves available to the bot player at the current game state.
+   * Queries available actions from flowState, then generates all valid argument
+   * combinations for each action by examining selection definitions.
+   * Returns an array of {action, args} pairs ready for tree expansion.
+   *
+   * NOTE: This method samples moves to limit branching factor (max 20 per selection).
+   * For threat response, use enumerateAllMoves() first to get the full list.
+   */
+  private enumerateMoves(game: G | null, flowState: FlowState): BotMove[] {
+    return this.enumerateMovesInternal(game, flowState, false);
+  }
+
+  /**
+   * Enumerate ALL legal moves without sampling.
+   * Used for threat response analysis where we need to check all possible blocking cells.
+   */
+  private enumerateAllMoves(game: G | null, flowState: FlowState): BotMove[] {
+    return this.enumerateMovesInternal(game, flowState, true);
+  }
+
+  /**
+   * Internal move enumeration with optional sampling control.
+   */
+  private enumerateMovesInternal(game: G | null, flowState: FlowState, noSampling: boolean): BotMove[] {
+    const moves: BotMove[] = [];
+    if (!game) return moves;
+    const actions = this.getAvailableActionsForBot(flowState);
+    const player = game.getPlayer(this.playerIndex);
+
+    for (const actionName of actions) {
+      const actionDef = game.getAction(actionName);
+      if (!actionDef) continue;
+
+      // Generate all valid argument combinations
+      const argCombos = this.enumerateSelectionsInternal(game, actionDef, player, noSampling);
+      for (const args of argCombos) {
+        moves.push({ action: actionName, args });
+      }
+    }
+
+    return moves;
+  }
+
+  /**
+   * Enumerate all valid moves for the current player (whoever's turn it is)
+   * Used during MCTS simulation (expand/playout)
+   */
+  private enumerateMovesForSimulation(game: G, flowState: FlowState): BotMove[] {
+    const moves: BotMove[] = [];
+
+    // T-159-07: within a simultaneous step, enumerate against the pre-reveal
+    // baseline (if one was captured) instead of the live, possibly-mutated
+    // `game` -- a co-decider's move set must not depend on an earlier
+    // co-decider's already-committed pick. Outside a simultaneous step (or
+    // before any baseline exists), `game` is used unchanged.
+    const enumerationGame: G =
+      flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0 && this.simultaneousBaseline
+        ? this.simultaneousBaseline
+        : game;
+
+    // Get the current player from flow state
+    let currentPlayerIndex = flowState.currentPlayer;
+    let actions: string[] = flowState.availableActions ?? [];
+
+    // For simultaneous actions, pick the first awaiting player
+    if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
+      const firstAwaiting = flowState.awaitingPlayers.find(p => !p.completed && p.availableActions.length > 0);
+      if (firstAwaiting) {
+        currentPlayerIndex = firstAwaiting.playerIndex;
+        actions = firstAwaiting.availableActions;
+      }
+    }
+
+    if (currentPlayerIndex === undefined) {
+      return moves;
+    }
+
+    // Read the player/actionDef from the SAME game instance we enumerate
+    // against -- actionDef closures (chooseFrom choices, filters) are bound
+    // to their owning game instance, so mixing instances would enumerate
+    // against the wrong element graph.
+    const player = enumerationGame.getPlayer(currentPlayerIndex);
+    if (!player) {
+      return moves;
+    }
+
+    for (const actionName of actions) {
+      const actionDef = enumerationGame.getAction(actionName);
+      if (!actionDef) continue;
+
+      // Generate all valid argument combinations
+      const argCombos = this.enumerateSelections(enumerationGame, actionDef, player);
+      for (const args of argCombos) {
+        moves.push({ action: actionName, args });
+      }
+    }
+
+    return moves;
+  }
+
+  /**
+   * T-159-07: detect the start of a fresh simultaneous step and snapshot
+   * searchGame BEFORE any co-decider's move mutates it. A step is "fresh"
+   * when every awaiting player is still not-completed (nobody has acted
+   * yet). Mid-step (some completed, some not) the existing baseline is kept
+   * unchanged. Outside a simultaneous step, any stale baseline is cleared so
+   * it can't leak into an unrelated future step.
+   */
+  private maybeCaptureSimultaneousBaseline(flowState: FlowState): void {
+    const awaiting = flowState.awaitingPlayers;
+    if (!awaiting || awaiting.length === 0) {
+      this.simultaneousBaseline = undefined;
+      return;
+    }
+    if (awaiting.every(p => !p.completed) && this.searchGame) {
+      this.simultaneousBaseline = this.cloneSearchGame(this.searchGame);
+    }
+  }
+
+  /**
+   * Clone the given game's CURRENT state into an independent Game instance.
+   * Used to freeze the T-159-07 pre-reveal baseline. No redaction is applied
+   * here -- `game` is already the bot's own redacted search sandbox (cloned
+   * from `toJSONForPlayer(botSeat)` at the root), so this just needs a plain
+   * state-authoritative copy, reusing the same restore path as the root.
+   */
+  private cloneSearchGame(game: G): G {
+    const snapshot = createSnapshot(game, this.gameType, [], this.seed);
+    return this.restoreGame(snapshot) as G;
+  }
+
+  /**
+   * Get the current player index from flow state (for simulation)
+   */
+  private getCurrentPlayerFromFlowState(flowState: FlowState): number {
+    // For simultaneous actions, pick the first awaiting player
+    if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
+      const firstAwaiting = flowState.awaitingPlayers.find(p => !p.completed && p.availableActions.length > 0);
+      if (firstAwaiting) {
+        return firstAwaiting.playerIndex;
+      }
+    }
+    return flowState.currentPlayer ?? this.playerIndex;
+  }
+
+  /**
+   * Enumerate all valid argument combinations for an action (with sampling)
+   */
+  private enumerateSelections(
+    game: Game,
+    actionDef: ActionDefinition,
+    player: Player
+  ): Record<string, unknown>[] {
+    return this.enumerateSelectionsInternal(game, actionDef, player, false);
+  }
+
+  /**
+   * Internal method with sampling control.
+   * Delegates to the shared enumerateSelectionsCore utility (INTRO-04 extraction).
+   *
+   * The core returns in-process element objects. This wrapper applies the bot's
+   * serializeArgs (converting objects to wire IDs) and — when noSampling is
+   * false — limits the result set with the bot's seeded-RNG sampleChoices.
+   */
+  private enumerateSelectionsInternal(
+    game: Game,
+    actionDef: ActionDefinition,
+    player: Player,
+    noSampling: boolean
+  ): Record<string, unknown>[] {
+    // Shared core: full enumeration, element objects (no serialization, no sampling)
+    const combos = enumerateSelectionsCore(game, actionDef, player);
+
+    // Bot wire format: convert element objects to numeric IDs
+    const serialized = combos.map(args => this.serializeArgs(args, actionDef.selections));
+
+    if (noSampling) return serialized;
+
+    // Bot sampling: limit branching factor using seeded RNG (bot-specific concern)
+    const maxChoices = 20;
+    return serialized.length > maxChoices
+      ? this.sampleChoices(serialized, maxChoices)
+      : serialized;
+  }
+
+  /**
+   * Serialize a choice value for action args
+   */
+  private serializeChoice(choice: unknown, selection: Selection): unknown {
+    // Use the public .id getter for both element types — consistent and immune to
+    // internal tree-node (_t) renames. GameElement.id returns this._t.id but the
+    // public surface is stable.
+    if (selection.type === 'element') {
+      return (choice as { id: number }).id;
+    }
+    // For 'elements' type (chooseElements), choices are GameElement objects with id property
+    if (selection.type === 'elements') {
+      return (choice as { id: number }).id;
+    }
+    return choice;
+  }
+
+  /**
+   * Serialize all args at once after enumeration is complete.
+   * This ensures element objects are available during recursion for dependent filters,
+   * and only converted to IDs when returning final results.
+   */
+  private serializeArgs(
+    args: Record<string, unknown>,
+    selections: Selection[]
+  ): Record<string, unknown> {
+    const serialized: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(args)) {
+      const selection = selections.find(s => s.name === key);
+      if (!selection) {
+        serialized[key] = value;
+        continue;
+      }
+
+      if (Array.isArray(value)) {
+        serialized[key] = value.map(v => this.serializeChoice(v, selection));
+      } else {
+        serialized[key] = this.serializeChoice(value, selection);
+      }
+    }
+
+    return serialized;
+  }
+
+  /**
+   * Sample choices to limit branching
+   */
+  private sampleChoices<T>(choices: T[], maxCount: number): T[] {
+    if (choices.length <= maxCount) return choices;
+
+    const sampled: T[] = [];
+    const indices = new Set<number>();
+
+    while (sampled.length < maxCount) {
+      const idx = this.rng.nextInt(choices.length);
+      if (!indices.has(idx)) {
+        indices.add(idx);
+        sampled.push(choices[idx]);
+      }
+    }
+
+    return sampled;
+  }
+
+  /**
+   * Sample moves while preserving specified critical moves.
+   * Used to ensure threat response blocking moves survive random sampling.
+   *
+   * @param moves - All available moves
+   * @param maxCount - Maximum total moves to return
+   * @param preserve - Moves that must be included (e.g., blocking moves)
+   * @returns Sampled moves with preserved moves guaranteed to be included
+   */
+  private sampleMovesWithPreserved(
+    moves: BotMove[],
+    maxCount: number,
+    preserve: BotMove[]
+  ): BotMove[] {
+    if (moves.length <= maxCount) return moves;
+
+    // Start with preserved moves
+    const preserveKeys = new Set(preserve.map(m => JSON.stringify(m)));
+    const result: BotMove[] = [...preserve];
+    const resultKeys = new Set(preserveKeys);
+
+    // If preserved moves already exceed limit, just return them
+    if (result.length >= maxCount) {
+      return result.slice(0, maxCount);
+    }
+
+    // Sample from remaining moves to fill up to maxCount
+    const remaining = moves.filter(m => !preserveKeys.has(JSON.stringify(m)));
+    const needed = maxCount - result.length;
+
+    if (remaining.length <= needed) {
+      // Add all remaining
+      result.push(...remaining);
+    } else {
+      // Random sample from remaining
+      const sampled = this.sampleChoices(remaining, needed);
+      result.push(...sampled);
+    }
+
+    return result;
+  }
+
+  // ============================================================================
+  // SECTION: State Management
+  // Purpose: Incremental state management with snapshot fallback for recovery
+  // ============================================================================
+
+  /**
+   * Capture current game state as snapshot.
+   *
+   * T-159-06 (bot-02): passes `forSeat: this.playerIndex` so `createSnapshot`
+   * clones the bot's per-seat REDACTED view (`toJSONForPlayer`) instead of
+   * the full un-redacted truth. The search sandbox must never see opponents'
+   * hidden info -- reusing the existing redaction, not inventing one.
+   */
+  private captureSnapshot(): GameStateSnapshot {
+    return createSnapshot(this.game, this.gameType, this.actionHistory, this.seed, { forSeat: this.playerIndex });
+  }
+
+  /**
+   * Restore a game from a snapshot — fully STATE-AUTHORITATIVE, NO replay.
+   *
+   * Mirrors `GameRunner.fromSnapshot`: the snapshot carries the complete
+   * authoritative state (element tree, flow position, sequence counter, seeded
+   * RNG), so we adopt those directly instead of replaying command/action
+   * history. Replay was unsound for the search root: selection-step /
+   * pending-completed actions mutate the tree via `Piece.putInto` and are
+   * recorded in NEITHER commandHistory NOR actionHistory, so a root carrying
+   * such a mutation lost it on every clone and the bot searched from a wrong
+   * position. Adopting the serialized tree keeps those mutations.
+   *
+   * MCTS still drives the search incrementally on the returned game: it appends
+   * commands (with valid inverses) and rolls them back via `undoCommands` down
+   * to `rootCommandCount`, which the caller recomputes from THIS game's
+   * commandHistory length right after restore — so the (empty) command baseline
+   * here is correct, only the delta matters.
+   */
+  private restoreGame(snapshot: GameStateSnapshot): Game {
+    // Use full gameOptions from snapshot if available, falling back to basic options
+    // This ensures custom options like playerConfigs are preserved in MCTS clones
+    const gameOptions = snapshot.gameOptions ?? {
+      playerCount: snapshot.state.settings.playerCount as number,
+      playerNames: snapshot.state.settings.playerNames as string[],
+      seed: snapshot.seed,
+    };
+
+    const game = new this.GameClass(gameOptions as any);
+
+    // Adopt the authoritative element tree (clears + rebuilds children, re-points
+    // the game's own serialized refs, resolves element references).
+    //
+    // The message log rides beside the tree, not in it. The search game gets it
+    // so a game whose rules read `game.messages` evaluates the same way inside
+    // the search as it does outside — a silently empty log there would make the
+    // bot reason over a different world than the one it is playing in. On a
+    // `forSeat` clone `createSnapshot` has already filtered it to that seat's
+    // audience, so the sandbox cannot see private lines the seat may not.
+    game.loadSerializedState(snapshot.state, { messageLog: snapshot.messageLog ?? [] });
+
+    // Restore the element id sequence so newly created elements don't drift.
+    if (snapshot.sequence !== undefined) {
+      game._ctx.sequence = snapshot.sequence;
+    }
+
+    // Restore the seeded RNG position so the next draw matches the live game.
+    if (snapshot.randomState !== undefined) {
+      game.setRandomState(snapshot.randomState);
+    }
+
+    // Restore the authoritative flow position. Element-valued flow variables were
+    // serialized to markers by getPosition; restoreFlowState relinks them to the
+    // freshly loaded tree internally. `hiddenIdRemap` (CR-02, 159) is only ever
+    // present on a redacted (`forSeat`) snapshot — it lets a flow variable that
+    // pointed at a now-anonymized hidden-zone child relink to its correct
+    // redacted placeholder instead of being left as a dead serialized marker.
+    //
+    // `snapshot.hiddenIdRemap ?? this.rootSnapshot?.hiddenIdRemap`: a
+    // DESCENDANT clone of an already-redacted searchGame (`cloneSearchGame`'s
+    // T-159-07 simultaneous baseline) calls `createSnapshot` WITHOUT `forSeat`
+    // (the source game is already redacted, so `toJSON()` is correct and no
+    // fresh remap is collected) -- but `frame.data.forEachItems` entries
+    // referencing an ORIGINAL (pre-redaction) id are copied forward verbatim
+    // through every subsequent position serialize/restore cycle for as long
+    // as that forEach loop is active, so those descendants still need the
+    // SAME remap the root redaction produced. The remap is a static snapshot
+    // of "which original id got anonymized to which synthetic id at root
+    // capture time" and stays valid for the whole search: nothing after root
+    // capture ever introduces a NEW original-id reference (all further
+    // mutation happens on already-redacted/synthetic ids).
+    if (snapshot.flowState) {
+      game.restoreFlowState(snapshot.flowState, snapshot.hiddenIdRemap ?? this.rootSnapshot?.hiddenIdRemap);
+    }
+
+    return game;
+  }
+
+  /**
+   * Create an MCTS node (path-based, no snapshot)
+   * allMoves is cached at creation time - enumerated once per node
+   * If moveOrdering is available, untriedMoves are sorted by priority (explore best first)
+   */
+  private createNode(
+    flowState: FlowState,
+    parent: MCTSNode | null,
+    parentMove: BotMove | null,
+    allMoves: BotMove[],
+    commandCount: number
+  ): MCTSNode {
+    // Order moves if moveOrdering hook is available
+    // This determines exploration order: first moves are tried first
+    let untriedMoves: BotMove[];
+    if (this.moveOrdering && this.searchGame) {
+      untriedMoves = this.moveOrdering(this.searchGame, this.playerIndex, [...allMoves]);
+    } else {
+      untriedMoves = [...allMoves];
+    }
+
+    // Initialize proof numbers based on terminal state
+    let proofNumber = 1;
+    let disproofNumber = 1;
+    let isProven = false;
+    let isDisproven = false;
+
+    if (flowState.complete && this.searchGame) {
+      // Terminal node - check winner to determine proof status
+      const winners = (this.searchGame as any).settings?.winners as number[] | undefined;
+      if (winners && winners.includes(this.playerIndex)) {
+        // Bot wins: proven
+        proofNumber = 0;
+        disproofNumber = Infinity;
+        isProven = true;
+      } else {
+        // Bot loses or draws: disproven
+        proofNumber = Infinity;
+        disproofNumber = 0;
+        isDisproven = true;
+      }
+    }
+
+    // v4.8-MCTS-UNDO: capture the plain-property bookkeeping `undoCommands`
+    // can never revert (see MCTSNode.phase/.winners doc). Read from
+    // `this.searchGame` (the live sandbox), which is already positioned at
+    // this node's state by the caller (expandIncremental / runSearch).
+    const nodeWinners = (this.searchGame as unknown as { settings?: { winners?: number[] } } | null)
+      ?.settings?.winners;
+
+    return {
+      flowState,
+      phase: this.searchGame?.phase ?? 'started',
+      winners: nodeWinners ? [...nodeWinners] : undefined,
+      parent,
+      parentMove,
+      commandCount,
+      children: [],
+      allMoves: allMoves,
+      untriedMoves,
+      visits: 0,
+      value: 0,
+      // Not `flowState.currentPlayer` directly: inside a simultaneous step that field never
+      // advances (the engine tracks per-seat progress in `awaitingPlayers` instead), so every
+      // co-decider node was attributed to the bot's own seat. `selectChild`/`backpropagate` then
+      // read the OPPONENT's simultaneous decision as the bot's own, making the search max-max
+      // optimistic -- it assumed the opponent would pick whatever suited the bot, and never
+      // explored the refutation. `getCurrentPlayerFromFlowState` resolves the awaiting seat and
+      // otherwise falls back to this very expression, so sequential steps are unchanged.
+      currentPlayer: this.getCurrentPlayerFromFlowState(flowState),
+      proofNumber,
+      disproofNumber,
+      isProven,
+      isDisproven,
+    };
+  }
+
+  /**
+   * Update proof numbers for a node based on its children.
+   * Uses perspective-aware propagation:
+   * - OR nodes (bot's turn): pn = min(children), dpn = sum(children)
+   * - AND nodes (opponent's turn): pn = sum(children), dpn = min(children)
+   */
+  private updateProofNumbers(node: MCTSNode): void {
+    if (node.children.length === 0) {
+      // Leaf node - keep initialized values
+      return;
+    }
+
+    const isBotTurn = node.currentPlayer === this.playerIndex;
+
+    if (isBotTurn) {
+      // OR node: bot picks best move, so pn = min(child pn), dpn = sum(child dpn)
+      let minPn = Infinity;
+      let sumDpn = 0;
+
+      for (const child of node.children) {
+        minPn = Math.min(minPn, child.proofNumber);
+        // Handle Infinity: sum of any Infinity is Infinity
+        if (child.disproofNumber === Infinity) {
+          sumDpn = Infinity;
+        } else if (sumDpn !== Infinity) {
+          sumDpn += child.disproofNumber;
+        }
+      }
+
+      node.proofNumber = minPn;
+      node.disproofNumber = sumDpn;
+    } else {
+      // AND node: opponent picks best for them, so pn = sum(child pn), dpn = min(child dpn)
+      let sumPn = 0;
+      let minDpn = Infinity;
+
+      for (const child of node.children) {
+        minDpn = Math.min(minDpn, child.disproofNumber);
+        // Handle Infinity: sum of any Infinity is Infinity
+        if (child.proofNumber === Infinity) {
+          sumPn = Infinity;
+        } else if (sumPn !== Infinity) {
+          sumPn += child.proofNumber;
+        }
+      }
+
+      node.proofNumber = sumPn;
+      node.disproofNumber = minDpn;
+    }
+
+    // Update solved status
+    node.isProven = node.proofNumber === 0;
+    node.isDisproven = node.disproofNumber === 0;
+  }
+
+  /**
+   * Hash a position for transposition table lookup.
+   * Uses flow state position as unique identifier (tracks game progression).
+   */
+  private hashPosition(game: Game, flowState: FlowState): string {
+    // Flow state position changes as the game progresses through flow nodes
+    // It uniquely identifies where we are in the game flow
+    return JSON.stringify(flowState.position);
+  }
+
+  /**
+   * Evaluate position with transposition table caching.
+   * Caches evaluation results to avoid redundant computation for positions
+   * reached via different move orders.
+   */
+  private evaluateWithCache(game: Game, flowState: FlowState): number {
+    // Skip caching if disabled
+    if (this.config.useTranspositionTable === false) {
+      return this.evaluateTerminalFromGame(game, flowState);
+    }
+
+    const hash = this.hashPosition(game, flowState);
+    const cached = this.transpositionTable.get(hash);
+
+    // Return cached value if we have enough confidence (3+ visits)
+    if (cached && cached.visits >= 3) {
+      return cached.value;
+    }
+
+    // Evaluate the position
+    const value = this.evaluateTerminalFromGame(game, flowState);
+
+    // Update cache with running average
+    if (cached) {
+      const newVisits = cached.visits + 1;
+      const newValue = (cached.value * cached.visits + value) / newVisits;
+      this.transpositionTable.set(hash, { value: newValue, visits: newVisits });
+    } else {
+      this.transpositionTable.set(hash, { value, visits: 1 });
+    }
+
+    return value;
+  }
+
+  /**
+   * Evaluate terminal position directly from game instance (faster, no snapshot needed)
+   */
+  private evaluateTerminalFromGame(game: Game, flowState: FlowState): number {
+    if (!flowState.complete) {
+      // Game didn't complete - use objectives if available
+      if (this.objectives) {
+        const objectives = this.objectives(game, this.playerIndex);
+        let totalScore = 0;
+        let maxPossibleScore = 0;
+        let minPossibleScore = 0;
+
+        for (const [name, obj] of Object.entries(objectives)) {
+          if (obj.weight > 0) {
+            maxPossibleScore += obj.weight;
+          } else {
+            minPossibleScore += obj.weight;
+          }
+          // Gradient evaluation: multiply weight by achievement level (0.0-1.0)
+          const achieved = obj.checker(game, this.playerIndex);
+          totalScore += obj.weight * achieved;
+        }
+
+        // Normalize to [0.1, 0.9] range based on possible score range
+        // This preserves discrimination between different objective achievements
+        const scoreRange = maxPossibleScore - minPossibleScore;
+        if (scoreRange === 0) return 0.5;
+
+        // Map totalScore from [minPossibleScore, maxPossibleScore] to [0.1, 0.9]
+        const normalized = (totalScore - minPossibleScore) / scoreRange;
+        const result = 0.1 + normalized * 0.8;
+
+        return result;
+      }
+      return 0.5; // Draw/unknown
+    }
+
+    // Check for winner from game settings
+    const winners = (game as any).settings?.winners as number[] | undefined;
+    if (!winners || winners.length === 0) {
+      return 0.5; // Draw
+    }
+
+    if (winners.includes(this.playerIndex)) {
+      return 1; // Win
+    }
+
+    return 0; // Loss
+  }
+
+  /**
+   * Warn (dev-only, once per bot) when the wall-clock `timeout` cut a SEEDED
+   * search short.
+   *
+   * Passing a `seed` means the caller is asking for a reproducible search — but
+   * `timeout` is wall-clock, so a truncated run silently returns whatever the
+   * machine had time for. The same seed then yields different moves on a
+   * different machine, under different load, or in CI, and the symptom is an
+   * intermittently-failing tactical test with no visible cause. Warning here is
+   * the whole fix for discoverability: the run still succeeds (truncation is a
+   * legitimate responsiveness failsafe in production), it just stops being
+   * silent about having broken the reproducibility the seed implied.
+   *
+   * Unseeded searches are not warned about: they never promised determinism.
+   */
+  private warnIfSeededSearchWasTruncated(completedIterations: number, timeout: number): void {
+    if (this.warnedSeededTruncation) return;
+    if (this.seed === undefined) return;
+    if (completedIterations >= this.config.iterations) return;
+
+    this.warnedSeededTruncation = true;
+    console.warn(
+      `[BoardSmith] MCTS bot (seed "${this.seed}") ran ${completedIterations} of `
+      + `${this.config.iterations} requested iterations before hitting its ${timeout}ms `
+      + 'timeout, so this move is NOT reproducible — the same seed will pick a different '
+      + 'move on a faster/slower machine. Pass `timeout: Infinity` to bound the search by '
+      + 'iterations alone, or lower `iterations` so the search finishes within the timeout.',
+    );
+  }
+}

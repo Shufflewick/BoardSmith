@@ -15,7 +15,7 @@ import type {
   SetReadyRequest,
   AddSlotRequest,
   RemoveSlotRequest,
-  SetSlotAIRequest,
+  SetSlotBotRequest,
   UpdateGameOptionsRequest,
   UpdatePlayerOptionsRequest,
   WebSocketMessage,
@@ -470,7 +470,7 @@ export type {
   SetReadyRequest,
   AddSlotRequest,
   RemoveSlotRequest,
-  SetSlotAIRequest,
+  SetSlotBotRequest,
   UpdateGameOptionsRequest,
   UpdatePlayerOptionsRequest,
 };

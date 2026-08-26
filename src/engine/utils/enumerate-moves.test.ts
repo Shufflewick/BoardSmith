@@ -17,7 +17,7 @@ import {
   actionStep,
   type GameOptions,
 } from '../index.js';
-import { MCTSBot } from '../../ai/mcts-bot.js';
+import { MCTSBot } from '../../bot/mcts-bot.js';
 import { enumerateLegalMoves } from './enumerate-moves.js';
 
 // ============================================================================
@@ -173,7 +173,7 @@ describe('enumerateLegalMoves', () => {
 });
 
 // ============================================================================
-// Function-valued multiSelect resolution (AI-01 / D9).
+// Function-valued multiSelect resolution (bot-01 / D9).
 //
 // Pre-fix: `_enumerateRecursive` treats ANY function-valued `multiSelect` as
 // "cannot be statically enumerated" and unconditionally skips it (devWarn,
@@ -242,7 +242,7 @@ describe('enumerateLegalMoves: function-valued multiSelect', () => {
 // MCTS search sandbox, so every option came back `undefined`. Enumeration
 // happily built `{ownDiscard: el, namedType: undefined}`, serialization dropped
 // the undefined key, and the engine then rejected the "complete" move with
-// "Missing required selection: namedType" — an AI seat that stopped driving the
+// "Missing required selection: namedType" — a bot seat that stopped driving the
 // flow for a reason nothing upstream could see.
 // ============================================================================
 

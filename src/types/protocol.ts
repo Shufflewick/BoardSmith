@@ -96,10 +96,10 @@ export type LobbyState = 'waiting' | 'playing' | 'finished';
 /**
  * Status of a player slot in the lobby.
  * - 'open': Slot is available for a human player
- * - 'ai': Slot is taken by an AI player
+ * - 'bot': Slot is taken by a bot player
  * - 'claimed': Slot is taken by a human player
  */
-export type SlotStatus = 'open' | 'ai' | 'claimed';
+export type SlotStatus = 'open' | 'bot' | 'claimed';
 
 /**
  * Information about a player slot in the lobby.
@@ -109,7 +109,7 @@ export interface LobbySlot {
   seat: number;
   /** Current status of this slot */
   status: SlotStatus;
-  /** Player name (set by creator for AI, by joiner for humans) */
+  /** Player name (set by creator for bot, by joiner for humans) */
   name: string;
   /**
    * Player ID who claimed this slot (for humans).
@@ -121,11 +121,11 @@ export interface LobbySlot {
    * seeing another player's id here.
    */
   playerId?: string;
-  /** AI level if this is an AI slot */
-  aiLevel?: string;
+  /** bot level if this is a bot slot */
+  botLevel?: string;
   /** Custom player options (color, role, etc.) */
   playerOptions?: Record<string, unknown>;
-  /** Whether this player is ready to start (AI slots are always ready) */
+  /** Whether this player is ready to start (bot slots are always ready) */
   ready: boolean;
   /** Whether this player is currently connected via WebSocket (for humans) */
   connected?: boolean;
@@ -216,10 +216,10 @@ export interface CreateGameRequest {
   playerNames?: string[];
   playerIds?: string[];
   seed?: string;
-  /** AI player positions (1-indexed seat numbers) */
-  aiPlayers?: number[];
-  /** AI difficulty level */
-  aiLevel?: string;
+  /** bot player positions (1-indexed seat numbers) */
+  botPlayers?: number[];
+  /** bot difficulty level */
+  botLevel?: string;
   /** Game-specific options (boardSize, targetScore, etc.) */
   gameOptions?: Record<string, unknown>;
   /** Per-player configurations (for lobby UI) */
@@ -235,8 +235,8 @@ export interface CreateGameRequest {
  */
 export interface PlayerConfig {
   name?: string;
-  isAI?: boolean;
-  aiLevel?: string;
+  isBot?: boolean;
+  botLevel?: string;
   /** Custom player options (color, role, etc.) */
   [key: string]: unknown;
 }
@@ -288,7 +288,7 @@ export interface JoinLobbyResponse {
 }
 
 /**
- * Generic lobby response (setReady, addSlot, removeSlot, setSlotAI, leavePosition,
+ * Generic lobby response (setReady, addSlot, removeSlot, setSlotBot, leavePosition,
  * kickPlayer, updatePlayerOptions, updateSlotPlayerOptions, updateGameOptions).
  */
 export interface LobbyResponse {
@@ -327,17 +327,17 @@ export interface RemoveSlotRequest {
 }
 
 /**
- * Request to set a slot to AI or open (host only).
+ * Request to set a slot to bot or open (host only).
  */
-export interface SetSlotAIRequest {
+export interface SetSlotBotRequest {
   /** Player's unique ID */
   playerId: string;
   /** Seat to target (1-indexed) */
   seat: number;
-  /** Whether the slot should be AI */
-  isAI: boolean;
-  /** AI difficulty level (when isAI is true) */
-  aiLevel?: string;
+  /** Whether the slot should be bot */
+  isBot: boolean;
+  /** bot difficulty level (when isBot is true) */
+  botLevel?: string;
 }
 
 /**
@@ -455,15 +455,15 @@ export interface RemoveSlotMessage {
   seat: number;
 }
 
-/** Host toggles a slot between AI and open. */
-export interface SetSlotAIMessage {
-  type: 'setSlotAI';
+/** Host toggles a slot between bot and open. */
+export interface SetSlotBotMessage {
+  type: 'setSlotBot';
   /** Seat to target (1-indexed) */
   seat: number;
-  /** Whether the slot should be AI */
-  isAI: boolean;
-  /** AI difficulty level (when isAI is true) */
-  aiLevel?: string;
+  /** Whether the slot should be bot */
+  isBot: boolean;
+  /** bot difficulty level (when isBot is true) */
+  botLevel?: string;
 }
 
 /** The calling player leaves their seat. */
@@ -516,7 +516,7 @@ export type WebSocketMessage =
   | SetReadyMessage
   | AddSlotMessage
   | RemoveSlotMessage
-  | SetSlotAIMessage
+  | SetSlotBotMessage
   | LeaveSeatMessage
   | KickPlayerMessage
   | UpdatePlayerOptionsMessage

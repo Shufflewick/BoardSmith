@@ -161,7 +161,7 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
 
   it('case 5b — the PRODUCTION re-broadcast path (a heatmapToggle op) republishes the same boundary', async () => {
     // `bot-game-fixture` rather than a simultaneous fixture: a heatmap needs a
-    // real `ai` config to compute against, and this is the only fixture that
+    // real `bot` config to compute against, and this is the only fixture that
     // carries one. Its action-step frame stays open across moves, so the
     // boundary genuinely should stand still here.
     const session = createHeadlessSession(botGameDef, botGameOptions);

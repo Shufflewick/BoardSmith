@@ -20,7 +20,7 @@ export interface Player {
   color?: string;
   /**
    * Live WebSocket connection status (humans only). `undefined` means unknown —
-   * e.g. AI slots or modes with no lobby — in which case no indicator is shown
+   * e.g. bot slots or modes with no lobby — in which case no indicator is shown
    * (presence is never fabricated).
    */
   connected?: boolean;

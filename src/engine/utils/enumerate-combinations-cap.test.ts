@@ -4,7 +4,7 @@ import {
   MAX_MULTISELECT_COMBINATIONS,
 } from './enumerate-moves.js';
 
-// F-08 (v4.8, AI-01): an unbounded/dynamic multiSelect over an N-item choice
+// F-08 (v4.8, bot-01): an unbounded/dynamic multiSelect over an N-item choice
 // set is 2^N-1 combinations. Without a cap, N=25 materializes 33M objects
 // (multi-GB) and N=30 hangs/OOMs. generateCombinations must bound the number of
 // combinations it materializes.

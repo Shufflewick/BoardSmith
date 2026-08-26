@@ -66,8 +66,8 @@ const TEST_CONFIG: DevHostConfig = {
   minPlayers: 2,
   maxPlayers: 4,
   playerCount: 3,
-  aiSeats: [2, 3], // seats 2 and 3 are AI
-  aiLevel: 'medium',
+  botSeats: [2, 3], // seats 2 and 3 are bot
+  botLevel: 'medium',
   gameOptions: [
     { id: 'speed', type: 'choice', label: 'Game Speed', default: 'normal', choices: [{ value: 'normal', label: 'Normal' }, { value: 'fast', label: 'Fast' }] },
   ],
@@ -81,8 +81,8 @@ const SEAT_LOBBY = {
   type: 'lobby',
   seats: [
     { seat: 1, clientId: 'client-a', name: 'Alice', connected: true },
-    { seat: 2, clientId: null, name: '', connected: false }, // AI seat
-    { seat: 3, clientId: null, name: '', connected: false }, // AI seat
+    { seat: 2, clientId: null, name: '', connected: false }, // bot seat
+    { seat: 3, clientId: null, name: '', connected: false }, // bot seat
   ],
 };
 
@@ -129,7 +129,7 @@ afterEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('DevHost — seat switcher menu (presence + follow)', () => {
-  // The standalone presence strip was removed; per-seat presence (name, AI, online
+  // The standalone presence strip was removed; per-seat presence (name, bot, online
   // status) and the Follow-active-seat toggle now live inside the seat-switcher menu.
   async function openMenu(wrapper: Awaited<ReturnType<typeof mountDevHost>>) {
     await wrapper.find('.dev-chrome__badge--btn').trigger('click');
@@ -160,12 +160,12 @@ describe('DevHost — seat switcher menu (presence + follow)', () => {
     expect(items.some((i) => i.text().includes('Alice'))).toBe(true);
   });
 
-  it('shows AI badge for seats listed in cfg.aiSeats', async () => {
+  it('shows bot badge for seats listed in cfg.botSeats', async () => {
     const wrapper = await mountDevHost();
     await activateSeat(wrapper);
     await openMenu(wrapper);
 
-    // Seats 2 and 3 are AI → two AI badges in the menu
+    // Seats 2 and 3 are bot → two bot badges in the menu
     expect(wrapper.findAll('.seat-switcher-menu__ai')).toHaveLength(2);
   });
 });

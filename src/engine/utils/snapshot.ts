@@ -411,7 +411,7 @@ export function createSnapshot(
     version: 1,
     gameType,
     // Default: full un-redacted truth (existing callers, e.g. GameRunner, must
-    // keep seeing the authoritative tree). Opt-in `forSeat` (AI-02): callers
+    // keep seeing the authoritative tree). Opt-in `forSeat` (bot-02): callers
     // that need a per-seat REDACTED clone (the MCTS bot's search sandbox) pass
     // their seat and get `toJSONForPlayer`'s existing redaction instead of
     // inventing a new one. Never flip this default for all callers.

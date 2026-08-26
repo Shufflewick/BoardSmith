@@ -89,7 +89,7 @@ class TutorialGame extends Game<TutorialGame, Player> {
   }
 }
 
-/** Tutorial definition threaded un-serialized (like ai config). */
+/** Tutorial definition threaded un-serialized (like bot config). */
 const TUTORIAL_DEF: TutorialDefinition = {
   steps: [
     { id: 's1', gate: { action: 'movePawn' } },

@@ -211,8 +211,8 @@ describe('GameSession lobby integration', () => {
     expect(capturedPlayerConfigs![1].isDictator).toBe(false);
   });
 
-  it('should compute default exclusive options for AI slots during lobby creation', async () => {
-    // Create a session with 1 human + 1 AI, where AI should get the exclusive option
+  it('should compute default exclusive options for bot slots during lobby creation', async () => {
+    // Create a session with 1 human + 1 bot, where bot should get the exclusive option
     const session = GameSession.create<TestLobbyGame>({
       gameType: 'test-lobby',
       GameClass: TestLobbyGame,
@@ -222,7 +222,7 @@ describe('GameSession lobby integration', () => {
       creatorId: 'creator-123',
       playerConfigs: [
         { name: 'Alice' },
-        { name: 'Bot', isAI: true },
+        { name: 'Bot', isBot: true },
       ],
       playerOptionsDefinitions: {
         role: {
@@ -240,7 +240,7 @@ describe('GameSession lobby integration', () => {
     // Seat 1 (human host) should NOT have role=true (it's not "last")
     expect(lobby!.slots[0].playerOptions?.role).toBe(false);
 
-    // Seat 2 (AI, the "last" player) SHOULD have role=true
+    // Seat 2 (bot, the "last" player) SHOULD have role=true
     expect(lobby!.slots[1].playerOptions?.role).toBe(true);
   });
 
@@ -536,15 +536,15 @@ describe('joinLobby', () => {
     expect(slot?.playerOptions?.color).toBe('blue');
   });
 
-  it('should skip AI slots when finding open seats', async () => {
+  it('should skip bot slots when finding open seats', async () => {
     const session = createLobbySession(4);
 
     // Host claims seat 1
     await session.claimSeat(1, 'creator-123', 'Host');
-    // Host sets seat 2 to AI
-    await session.setSlotAI('creator-123', 2, true, 'medium');
+    // Host sets seat 2 to bot
+    await session.setSlotBot('creator-123', 2, true, 'medium');
 
-    // Player joins — should skip AI seat 2, get seat 3
+    // Player joins — should skip bot seat 2, get seat 3
     const result = await session.joinLobby('player-2', 'Alice');
     expect(result.success).toBe(true);
     expect(result.seat).toBe(3);

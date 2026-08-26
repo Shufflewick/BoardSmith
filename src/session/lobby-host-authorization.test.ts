@@ -5,7 +5,7 @@
  *    OPEN when the identity is empty (`undefined === undefined`, or two empty
  *    strings). A caller that omits playerId on a lobby with no creator bound
  *    (or whose creatorId is empty) passed every host check and could add /
- *    remove slots, flip slots to AI, kick players, and mutate game options."
+ *    remove slots, flip slots to bot, kick players, and mutate game options."
  *
  * The fix makes the gate FAIL CLOSED: a host action is authorized only when a
  * non-empty creatorId is bound AND the caller presents that exact secret id.
@@ -58,8 +58,8 @@ describe('F11: host-only gate fails closed on an empty/unbound identity', () => 
     const removed = await session.removeSlot(undefined as unknown as string, 2);
     expect(removed.success).toBe(false);
 
-    const aiToggled = await session.setSlotAI(undefined as unknown as string, 2, true);
-    expect(aiToggled.success).toBe(false);
+    const botToggled = await session.setSlotBot(undefined as unknown as string, 2, true);
+    expect(botToggled.success).toBe(false);
 
     const optionsSet = await session.updateGameOptions(undefined as unknown as string, { x: 1 });
     expect(optionsSet.success).toBe(false);

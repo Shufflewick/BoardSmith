@@ -543,7 +543,7 @@ export interface ActionDefinition {
    * player) but is never auto-EXECUTED for them — the player must take the beat
    * themselves (e.g. a draw). Default false preserves the roadmap-locked
    * auto-execute default for a sole no-selection action. Set via `.manual()`.
-   * This is a human-UI hint only — it does not affect the AI seat, which still
+   * This is a human-UI hint only — it does not affect the bot seat, which still
    * plays a sole legal move unconditionally.
    */
   manual?: boolean;

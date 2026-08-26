@@ -201,7 +201,7 @@ export function computeUndoInfo(
  * The minimal `FlowState` shape {@link computeUndoEligibility} reads. Kept
  * structural (not the concrete engine `FlowState`) so both executors --
  * `state-history.ts` (real `FlowState`) and `stateless-ops.ts` (its own
- * narrower `AIFlowState`) -- can pass their own flow-state type without a
+ * narrower `BotFlowState`) -- can pass their own flow-state type without a
  * cast, the same way `seat-activity.ts`'s `SeatActivityState` does.
  */
 export interface UndoFlowState {
@@ -654,7 +654,7 @@ export function buildPlayerState(
   }
 
   // Include colorSelectionEnabled from game settings so clients know to show color swatches
-  // (In lobby mode this comes from LobbyInfo, but in non-lobby mode like --ai, this is the only source)
+  // (In lobby mode this comes from LobbyInfo, but in non-lobby mode like --bot, this is the only source)
   if (runner.game.settings.colorSelectionEnabled) {
     state.colorSelectionEnabled = true;
   }

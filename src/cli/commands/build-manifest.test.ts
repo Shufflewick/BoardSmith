@@ -139,8 +139,8 @@ describe('parseBuildManifest', () => {
     const chunk = [
       '## Build Manifest',
       '',
-      '- wrote src/ai/opponent.ts',
-      '- wrote tests/ai.test.ts',
+      '- wrote src/bot/opponent.ts',
+      '- wrote tests/bot.test.ts',
       '',
       '## Playtest Test Script',
       '',

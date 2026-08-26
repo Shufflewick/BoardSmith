@@ -4,7 +4,7 @@
  * postMessage protocol the embedded GameShell speaks, so `boardsmith dev` drives
  * the game through the EXACT production path: game UI in an `<iframe>` (platform
  * mode) talking to a host that owns op execution, snapshot/pendingState
- * threading, broadcast-before-response ordering, and the AI pump.
+ * threading, broadcast-before-response ordering, and the bot pump.
  *
  * This module is deliberately DOM-free so it can be unit-tested by feeding fake
  * `server_request` messages and asserting the host is driven and the iframe is
@@ -27,11 +27,11 @@ export type WireOp =
   | 'undo'
   | 'start-tutorial'
   | 'exit-tutorial'
-  // Teaching wire ops — hint/heatmap-toggle request AI suggestions;
+  // Teaching wire ops — hint/heatmap-toggle request bot suggestions;
   // results flow back via game_state broadcasts (not via the op response).
   | 'hint'
   | 'heatmap-toggle'
-  // Demo lifecycle wire ops — start/stop the AI-vs-AI narrated demo loop.
+  // Demo lifecycle wire ops — start/stop the bot-vs-bot narrated demo loop.
   // Results flow via game_state broadcasts (isDemoRunning, narration);
   // the op response carries only { success, error } (RESEARCH Pitfall 7).
   | 'demo-start'
@@ -59,8 +59,8 @@ export type WireOp =
 
 export interface DevSessionOptions {
   playerCount: number;
-  /** AI seats (1-indexed) with optional per-seat difficulty. */
-  aiSeats?: Array<{ seat: number; level?: string }>;
+  /** bot seats (1-indexed) with optional per-seat difficulty. */
+  botSeats?: Array<{ seat: number; level?: string }>;
   /**
    * When true, teaching/assist features (hint, heatmap, demo, tutorial) are rejected
    * fail-loud for this session. Mirrors `--lock-teaching` in `boardsmith dev`.
@@ -103,7 +103,7 @@ export interface DevSessionOptions {
 
 export interface DevSession {
   readonly host: SnapshotSessionHost;
-  /** Run the opening `start` op (and any opening AI turns). */
+  /** Run the opening `start` op (and any opening bot turns). */
   start(): Promise<void>;
   /**
    * Dispatch a `server_request` from a seat's iframe: translate the wire op to
@@ -359,7 +359,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
 
   const host = new SnapshotSessionHost({
     playerCount: opts.playerCount,
-    aiSeats: opts.aiSeats,
+    botSeats: opts.botSeats,
     teachingDisabled: opts.teachingDisabled,
     executeOp: opts.executeOp,
     persist: opts.persist,

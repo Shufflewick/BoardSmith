@@ -45,7 +45,7 @@ export type {
   PlayerGameState,
   SessionInfo,
   StateUpdate,
-  AIConfig,
+  BotSeatConfig,
   StorageAdapter,
   BroadcastAdapter,
   CreateGameRequest,
@@ -122,7 +122,7 @@ export {
   type ReadOnlyRunnerFacade,
 } from './game-session.js';
 
-export { AIController } from './ai-controller.js';
+export { BotController } from './bot-controller.js';
 
 export {
   DevCheckpointManager,
@@ -145,7 +145,7 @@ export { buildSingleActionMetadata } from './utils.js';
 export * from './stateless-ops.js';
 
 // Stateful session host: threads snapshot/pendingStates, enforces broadcast-before-response
-// ordering, and drives the AI pump. Accepts an injected executeOp adapter so the same
+// ordering, and drives the bot pump. Accepts an injected executeOp adapter so the same
 // host class works in-process (dev) and via remote RPC (production executor worker).
 export * from './snapshot-session-host.js';
 

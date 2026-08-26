@@ -85,17 +85,17 @@ describe('GameLobby', () => {
     await wrapper.findAll('button').find((b) => b.text() === 'Create Game')!.trigger('click');
     const [config] = wrapper.emitted('create')![0] as [{ playerConfigs: Array<Record<string, unknown>> }];
     expect(config.playerConfigs.map((p) => p.name)).toEqual(['Player 1', 'Player 2']);
-    expect(config.playerConfigs.every((p) => p.isAI === false)).toBe(true);
+    expect(config.playerConfigs.every((p) => p.isBot === false)).toBe(true);
   });
 
-  it('marks the requested seats as AI', async () => {
-    const wrapper = mountLobby({ defaultAIPlayers: [1] });
+  it('marks the requested seats as bot', async () => {
+    const wrapper = mountLobby({ defaultBotPlayers: [1] });
     await flushPromises();
     await wrapper.findAll('button').find((b) => b.text() === 'Create Game')!.trigger('click');
     const [config] = wrapper.emitted('create')![0] as [{ playerConfigs: Array<Record<string, unknown>> }];
-    expect(config.playerConfigs.map((p) => p.isAI)).toEqual([false, true]);
+    expect(config.playerConfigs.map((p) => p.isBot)).toEqual([false, true]);
     expect(config.playerConfigs[1].name).toBe('Bot');
-    expect(config.playerConfigs[1].aiLevel).toBe('medium');
+    expect(config.playerConfigs[1].botLevel).toBe('medium');
   });
 
   it('falls back to two players when the server never answered', async () => {

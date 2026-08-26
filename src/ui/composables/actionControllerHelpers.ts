@@ -19,7 +19,7 @@ export { isDevMode, devWarn };
  * Resolve the EFFECTIVE multiSelect config for a selection — the one shared
  * helper `useActionController` (fill/toggleMultiSelect), `ActionPanel.vue`,
  * and `useBoardActionBridge.ts` all call, so the panel and custom UIs can
- * never disagree (mirrors the engine-side AI-01/D9 guarantee that
+ * never disagree (mirrors the engine-side bot-01/D9 guarantee that
  * `resolveMultiSelect` gives enumeration and metadata).
  *
  * Resolution order:

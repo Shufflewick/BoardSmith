@@ -1,6 +1,6 @@
 /**
  * resolveMultiSelect — single source of truth for resolving a selection's
- * `multiSelect` config (AI-01 / D9, roadmap SC3 fail-loud principle).
+ * `multiSelect` config (bot-01 / D9, roadmap SC3 fail-loud principle).
  *
  * `multiSelect` on `chooseFrom`/`chooseElements` may be a plain value
  * (`number | MultiSelectConfig`) or a function of the same

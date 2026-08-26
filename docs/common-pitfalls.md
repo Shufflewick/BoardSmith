@@ -58,7 +58,7 @@ const found = myCards.find(c => c.id === selectedCard.id);
 BoardSmith serializes and deserializes game state for:
 - Network synchronization between players
 - Action replay and undo
-- AI decision making
+- bot decision making
 - State snapshots
 
 Each deserialization creates new object instances with the same data but different memory addresses.
