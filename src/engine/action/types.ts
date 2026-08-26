@@ -601,6 +601,17 @@ export interface ActionResult {
   success: boolean;
   /** Error message if failed */
   error?: string;
+  /**
+   * Set by the engine when the failure came from `execute()` THROWING rather
+   * than from the action refusing cleanly (#44).
+   *
+   * The distinction is the whole point: a clean refusal mutated nothing, so
+   * there is nothing to undo, while a throw may have landed part of its
+   * changes before it stopped. The runner reads this to roll the game back to
+   * the pre-action checkpoint, so a failed action really did do nothing.
+   * Never set by game code.
+   */
+  threw?: boolean;
   /** Additional data to return */
   data?: Record<string, unknown>;
   /** Message to log */

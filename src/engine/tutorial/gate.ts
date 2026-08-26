@@ -195,7 +195,7 @@ export function getActionLevelDisabledReasons(
     // Labeled-predicate condition gate: evaluate via the shared evaluator.
     // All predicates must pass (AND semantics). On failure, surface the first
     // failing label so the author knows exactly which condition blocked progress.
-    const { passed, details } = evaluateConditionWithTrace(gate, { game, seat });
+    const { passed, details } = evaluateConditionWithTrace(gate, { game, seat }, 'a tutorial gate');
     if (!passed) {
       const failingLabel = details.find(d => !d.passed)?.label
         ?? 'tutorial gate condition not met';

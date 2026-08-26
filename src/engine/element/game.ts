@@ -39,6 +39,7 @@ import { describeFlowPosition } from '../flow/describe-flow-position.js';
 import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../session/types.js';
 import { devWarn } from '../../utils/dev.js';
+import { PlayerFacingError } from '../errors.js';
 
 // ---------------------------------------------------------------------------
 // INTRO-01 / INTRO-02 view types
@@ -425,7 +426,7 @@ function createSeededRandom(seed: string): SeededRandom {
  * never draws. A session that draws zero times is provably immune to both,
  * because the generator's state advances on draws and nothing else.
  */
-export class RandomnessForbiddenError extends Error {
+export class RandomnessForbiddenError extends PlayerFacingError {
   constructor() {
     super(
       'This session forbids randomness (order-entry mode): every random draw ' +
@@ -2135,6 +2136,8 @@ export class Game<
     if (!this._flowDefinition) return;
 
     const referencedNames = new Set<string>();
+    /** First step that named each action, so an error can point at it. */
+    const referencedBy = new Map<string, string>();
     let hasDynamicActionStep = false;
 
     for (const node of walkFlowNodes(this._flowDefinition.root)) {
@@ -2148,17 +2151,21 @@ export class Game<
         hasDynamicActionStep = true;
         continue;
       }
+      const stepName = node.config.name ?? node.type;
       for (const name of actions) {
         referencedNames.add(name);
+        if (!referencedBy.has(name)) referencedBy.set(name, stepName);
       }
     }
 
     for (const name of referencedNames) {
       if (!this.getAction(name)) {
+        const registered = this.getActionNames();
         throw new Error(
-          `Flow references action '${name}' that is not registered. ` +
-          `Call this.registerActions(Action.create('${name}')...) in your game's constructor before startFlow(), ` +
-          `or fix the typo in the actionStep(...) that references it.`
+          `Flow step '${referencedBy.get(name)}' references action '${name}' that is not registered.\n` +
+          `  Registered actions: ${registered.length ? registered.join(', ') : '(none)'}\n` +
+          `  Fix: call this.registerActions(Action.create('${name}')...) in your game's constructor ` +
+          `before startFlow(), or correct the name in the actionStep(...) that references it.`
         );
       }
     }

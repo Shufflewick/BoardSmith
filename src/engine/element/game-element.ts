@@ -175,6 +175,40 @@ function markNearestPartition(
   }
 }
 
+/**
+ * Attribute names `create()` refuses. `id` is what every element reference,
+ * snapshot entry and `atId` lookup keys on; `_t` and `_ctx` are the element's
+ * own internals. A game that sets any of them does not get a slightly odd
+ * element, it gets a tree whose identity system no longer holds.
+ */
+const RESERVED_ELEMENT_KEYS: ReadonlySet<string> = new Set(['id', '_t', '_ctx']);
+
+/**
+ * Thrown when `create()`/`createMany()` is handed an attribute that would
+ * overwrite an element's identity or internals.
+ */
+export class ReservedAttributeError extends Error {
+  constructor(
+    readonly key: string,
+    readonly className: string,
+    readonly elementName: string | undefined,
+  ) {
+    super(
+      `Cannot set reserved property "${key}" on ${className} "${elementName ?? '(unnamed)'}".\n` +
+      `  "${key}" is owned by the engine: ${RESERVED_KEY_REASONS[key] ?? 'it is element internals'}.\n` +
+      `  Fix: rename the attribute (for example "${key}" -> "${key}Value"), or set it on your own ` +
+      `class field in the element's constructor.`
+    );
+    this.name = 'ReservedAttributeError';
+  }
+}
+
+const RESERVED_KEY_REASONS: Record<string, string> = {
+  id: 'every element reference, snapshot entry and atId() lookup keys on it',
+  _t: "it holds the element's tree position (parent and children)",
+  _ctx: 'it holds the shared game context (sequence counter, class registry)',
+};
+
 export class GameElement<G extends Game = any, P extends Player = any> {
   /** Element name for identification and queries */
   name?: string;
@@ -422,15 +456,19 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     if (attributes) {
       try {
         for (const [key, value] of Object.entries(attributes)) {
-          if (key === 'id' || key === '_t' || key === '_ctx') {
-            console.warn(
-              `Warning: Setting reserved property "${key}" on ${elementClass.name} "${name}" - ` +
-              `this may cause unexpected behavior.`
-            );
+          if (RESERVED_ELEMENT_KEYS.has(key)) {
+            // Not a warning: `id` is the key the whole snapshot, reference and
+            // element-lookup machinery is built on, and `_t`/`_ctx` are the
+            // element's own internals. Overwriting any of them corrupts state
+            // that every later restore reads, so this cannot be allowed through.
+            throw new ReservedAttributeError(key, elementClass.name, name);
           }
           (element as any)[key] = value;
         }
       } catch (error) {
+        // A reserved-key rejection already says exactly what is wrong and how
+        // to fix it; wrapping it would bury that behind a generic heading.
+        if (error instanceof ReservedAttributeError) throw error;
         const errMsg = error instanceof Error ? error.message : String(error);
         throw new Error(
           `Failed to set attributes on ${elementClass.name} "${name}":\n` +
@@ -604,15 +642,19 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       const index = oldParent._t.children.indexOf(this);
       if (index !== -1) {
         oldParent._t.children.splice(index, 1);
-      } else if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
-        // DEV: Element has a parent reference but isn't in parent's children array
-        // This indicates tree corruption - element may end up in multiple places
-        console.error(
-          `[BoardSmith] 🚨 TREE CORRUPTION in moveToInternal:\n` +
-          `  Element ${this.name ?? this.constructor.name} (id: ${this.id}) has parent reference to\n` +
+      } else if (isDevMode()) {
+        // The element points at a parent that does not list it. Completing the
+        // move would re-parent it while leaving the stale reference in place,
+        // so it would exist in two places at once — and that tree is what the
+        // next snapshot and checkpoint capture, poisoning every later restore.
+        // Refuse rather than make it worse (#45).
+        throw new Error(
+          `TREE CORRUPTION in moveToInternal — refusing to move.\n` +
+          `  Element ${this.name ?? this.constructor.name} (id: ${this.id}) has a parent reference to\n` +
           `  "${oldParent.name ?? oldParent.constructor.name}" (id: ${oldParent.id})\n` +
-          `  but was NOT found in parent's children array!\n` +
-          `  This element will now exist in multiple places in the tree.`
+          `  but is NOT in that parent's children array.\n` +
+          `  Something moved the element by writing _t.children directly. Use putInto()/moveTo(),\n` +
+          `  which keep the parent reference and the children array in step.`
         );
       }
 

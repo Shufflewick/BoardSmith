@@ -17,6 +17,7 @@ import {
 } from './types.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { buildSingleActionMetadata } from './utils.js';
+import { isDevThrowEnabled } from '../utils/dev.js';
 
 /** Serialize a pending action's state to a JSON-safe object (Set -> array). */
 function serializePendingState(s: PendingActionState): Record<string, unknown> {
@@ -33,13 +34,25 @@ function deserializePendingState(s: Record<string, unknown>): PendingActionState
 }
 
 /**
- * Extract a sanitized, wire-safe message from a caught error. Never includes
- * the stack trace or other implementation details — callers of game-authored
- * boardRefs()/display()/boardRef() callbacks must not leak internals onto the
- * wire (T-126-07).
+ * Turn a throw out of a game-authored `boardRefs()`/`display()`/`boardRef()`
+ * callback into a message that is safe to put on the wire (T-126-07, #47).
+ *
+ * It used to return `error.message` verbatim, which is not sanitizing: a
+ * runtime `TypeError: Cannot read properties of undefined (reading 'suit')`
+ * reached the player as-is, leaking implementation detail and offering no next
+ * step. The full error is now logged where the game runs, and only in a
+ * positively-labelled dev/test environment does the underlying text travel —
+ * where the reader is the author who needs it and there is no player to leak to.
+ *
+ * @param source - Which callback failed, e.g. `boardRefs(...)`. Named in the
+ *   message so the author knows where to look even in production.
  */
-function sanitizeErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function sanitizeErrorMessage(error: unknown, source: string): string {
+  console.error(`[BoardSmith] ${source} threw and its result was dropped:`, error);
+  if (isDevThrowEnabled()) {
+    return `${source} threw: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  return `${source} could not be evaluated for this choice.`;
 }
 
 /**
@@ -248,10 +261,9 @@ export class PickHandler<G extends Game = Game> {
               const result = choiceSel.boardRefs(rawValue, ctx);
               choice.refs = result.refs;
             } catch (e) {
-              console.error('boardRefs() error (ignored):', e);
               warnings.push({
                 code: 'BOARD_REFS_ERROR',
-                message: sanitizeErrorMessage(e),
+                message: sanitizeErrorMessage(e, 'boardRefs(...)'),
                 source: 'boardRefs(...)',
               });
             }
@@ -380,10 +392,9 @@ export class PickHandler<G extends Game = Game> {
           // Support both display signatures: (element, ctx) and (element, ctx, allElements)
           validElem.display = elemSel.display(element, ctx, elements);
         } catch (e) {
-          console.error('display() error (ignored):', e);
           warnings.push({
             code: 'DISPLAY_ERROR',
-            message: sanitizeErrorMessage(e),
+            message: sanitizeErrorMessage(e, 'display(...)'),
             source: 'display(...)',
           });
           validElem.display = element.name || String(element.id);
@@ -412,7 +423,7 @@ export class PickHandler<G extends Game = Game> {
               // (see the taxonomy in the plan's <interfaces> CONTEXT note).
               warnings.push({
                 code: 'CHOICES_ERROR',
-                message: sanitizeErrorMessage(e),
+                message: sanitizeErrorMessage(e, 'boardRef(...)'),
                 source: 'boardRef(...)',
               });
               return { id: element.id };

@@ -97,7 +97,7 @@ export function evaluateAdvanceWhen(
   const step = getActiveStep(game, seat);
   if (!step?.advanceWhen) return { fired: false, details: [] };
 
-  const { passed, details } = evaluateConditionWithTrace(step.advanceWhen, { game, seat });
+  const { passed, details } = evaluateConditionWithTrace(step.advanceWhen, { game, seat }, `tutorial step '${step.id}'`);
   return { fired: passed, details };
 }
 

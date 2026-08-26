@@ -97,7 +97,8 @@ class FunctionValuedActionsGame extends Game<FunctionValuedActionsGame, Player> 
     super(options);
     // Note: 'x' is deliberately unregistered — the function-valued `actions`
     // field is a static-walk blind spot (documented in
-    // Game#validateActionReachability) and must never throw.
+    // Game#validateActionReachability), so startFlow()'s static pass says
+    // nothing about it. The runtime evaluation still refuses it (#51).
     // No outer loop() wrapper: a single eachPlayer pass with zero available
     // actions per player auto-completes the flow, avoiding an unrelated
     // loop-maxIterations safety error that would otherwise mask the
@@ -353,9 +354,15 @@ describe('PIT-03', () => {
     warnSpy.mockRestore();
   });
 
-  it('does not throw when actionStep actions is a function (static-walk blind spot)', () => {
+  it('function-valued actions escape the STATIC walk but not the runtime check (#51)', () => {
+    // The static walk cannot enumerate a function-valued `actions` list, so it
+    // says nothing about 'x'. Evaluation can and does: by the time the step
+    // runs, the registered set is fixed, so a name that is not in it can never
+    // become available and there is nothing to wait for. Warning once and
+    // filtering it out forever turned that into a silently missing button.
     const game = new FunctionValuedActionsGame(makeOptions());
-    expect(() => game.startFlow()).not.toThrow();
+    expect(() => game.startFlow()).toThrow(/unknown action 'x'/);
+    expect(() => new FunctionValuedActionsGame(makeOptions()).startFlow()).toThrow(/registerActions/);
   });
 
   it('suppresses the unreachable-action devWarn when any actionStep has function-valued actions', () => {

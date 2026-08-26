@@ -22,40 +22,102 @@ import type {
   OnSelectContext,
 } from './types.js';
 import { wrapFilterWithHelpfulErrors } from './helpers.js';
-import { isDevMode, devWarn } from '../../utils/dev.js';
+import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
 import { Action } from './action-builder.js';
+import { PlayerFacingError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 
 // Re-export Action class from action-builder
 export { Action };
 
 /**
+ * Turn a throw out of an action's `execute()` into a failure result.
+ *
+ * Two things happen here that did not before:
+ *
+ * - The full error, stack and all, is logged where the game runs and NOT put
+ *   on the wire (#47). A raw `TypeError: Cannot read properties of undefined
+ *   (reading 'suit')` reaching a player leaks implementation detail and tells
+ *   them nothing they can act on.
+ * - The result is marked `threw`, so the runner knows the action may have
+ *   applied part of its changes before it stopped and rolls the game back
+ *   (#44). A clean refusal carries no such mark, because it mutated nothing.
+ */
+function failedExecute(actionName: string, error: unknown): ActionResult {
+  console.error(`[BoardSmith] Action '${actionName}' execution failed:`, error);
+  // An engine policy refusal was written to be read — its message IS the
+  // actionable next step. Anything else is an arbitrary runtime error, and
+  // goes no further than this log.
+  const generic = `The "${actionName}" action could not be completed because of an error in the game's rules. Nothing was changed.`;
+  // A PlayerFacingError's text was written to be read, so it always travels.
+  // Anything else travels only in a positively-labelled dev/test environment,
+  // where the reader is the author who needs it and there is no player to leak
+  // to. In production it goes no further than the log above.
+  const message = error instanceof PlayerFacingError
+    ? error.message
+    : isDevThrowEnabled()
+      ? `${generic} (${error instanceof Error ? error.message : String(error)})`
+      : generic;
+  return { success: false, error: message, threw: true };
+}
+
+/**
+ * A labeled predicate threw./**
+ * A labeled predicate threw. Distinct from "the predicate returned false",
+ * which is a normal game state — this is a bug in the predicate itself.
+ */
+export class ConditionEvaluationError extends Error {
+  constructor(
+    readonly label: string,
+    readonly owner: string,
+    readonly cause: unknown,
+  ) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `Condition "${label}" on ${owner} threw instead of returning true or false.\n` +
+      `  ${detail}\n` +
+      `  A crashing predicate is not "the condition is false" — folding the two together ` +
+      `would make the action silently vanish from every player's list with no error anywhere. ` +
+      `Fix the predicate, or guard the value it reads.`
+    );
+    this.name = 'ConditionEvaluationError';
+  }
+}
+
+/**
  * Evaluate a labeled-predicate condition record, returning result and trace details.
  * All predicates are evaluated (AND semantics) and their results captured.
+ *
+ * A predicate that THROWS is not treated as a failed condition (#46). It is a
+ * bug in game code, and reporting it as "condition false" makes the action
+ * disappear from every player's list — the game may then deadlock or auto-skip
+ * with nothing logged on the availability path at all. It throws
+ * {@link ConditionEvaluationError} instead.
  *
  * Context-generic so it can be shared across action conditions, tutorial gates,
  * and advanceWhen predicates without duplicating the evaluation logic.
  *
  * @typeParam Ctx - The context object passed to each predicate (e.g. ActionContext, TutorialGateContext).
+ * @param owner - What the condition belongs to, for the error message (e.g. `action 'draw'`).
  */
 export function evaluateConditionWithTrace<Ctx>(
   condition: Record<string, (ctx: Ctx) => boolean>,
-  context: Ctx
+  context: Ctx,
+  owner = 'this condition'
 ): { passed: boolean; details: ConditionDetail[] } {
   const details: ConditionDetail[] = [];
   let allPassed = true;
 
   for (const [label, predicate] of Object.entries(condition)) {
-    let passed = false;
-    let value: unknown = undefined;
+    let value: unknown;
     try {
-      const result = predicate(context);
-      passed = Boolean(result);
-      value = result;
+      value = predicate(context);
     } catch (error) {
-      passed = false;
-      value = error instanceof Error ? error.message : String(error);
+      throw new ConditionEvaluationError(label, owner, error);
     }
+    // The trace keeps the RAW return value, not the coerced boolean, so a
+    // designer reading it sees what was actually measured (a count, a name).
+    const passed = Boolean(value);
     details.push({ label, value, passed });
     if (!passed) allPassed = false;
   }
@@ -65,12 +127,16 @@ export function evaluateConditionWithTrace<Ctx>(
 
 /**
  * Evaluate a condition config and return whether it passes.
+ *
+ * Throws {@link ConditionEvaluationError} if a predicate crashes — see
+ * {@link evaluateConditionWithTrace}.
  */
 export function evaluateCondition(
   condition: ConditionConfig,
-  context: ActionContext
+  context: ActionContext,
+  owner = 'this condition'
 ): boolean {
-  return evaluateConditionWithTrace(condition, context).passed;
+  return evaluateConditionWithTrace(condition, context, owner).passed;
 }
 
 /**
@@ -1119,7 +1185,7 @@ export class ActionExecutor {
     };
 
     // Check condition
-    if (action.condition && !evaluateCondition(action.condition, context)) {
+    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
       return {
         valid: false,
         errors: ['Action is not available'],
@@ -1221,11 +1287,7 @@ export class ActionExecutor {
       const result = action.execute(resolvedArgs, context);
       return result ?? { success: true };
     } catch (error) {
-      console.error(`[BoardSmith] Action '${action.name}' execution failed:`, error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return failedExecute(action.name, error);
     }
   }
 
@@ -1241,7 +1303,7 @@ export class ActionExecutor {
       args: {},
     };
 
-    if (action.condition && !evaluateCondition(action.condition, context)) {
+    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
       return false;
     }
 
@@ -1271,7 +1333,7 @@ export class ActionExecutor {
     // Check condition with automatic tracing
     if (action.condition) {
       try {
-        const { passed, details } = evaluateConditionWithTrace(action.condition, context);
+        const { passed, details } = evaluateConditionWithTrace(action.condition, context, `action '${action.name}'`);
         trace.conditionResult = passed;
         if (details.length > 0) {
           trace.conditionDetails = details;
@@ -1808,8 +1870,19 @@ export class ActionExecutor {
       if (customDisplay && context) {
         try {
           display = customDisplay(el, context, elements);
-        } catch {
-          // Fallback to element name if display function fails
+        } catch (error) {
+          // #50: this used to swallow the throw with no log at all, so the
+          // author saw a plausible but wrong label and had nothing to go on.
+          // In dev/test the bug stops the run; in a live game a label is
+          // cosmetic and is not worth crashing over, so it degrades VISIBLY.
+          const detail = `A custom display() for element "${el.name ?? el.id}" threw`;
+          console.error(`[BoardSmith] ${detail}:`, error);
+          if (isDevThrowEnabled()) {
+            throw new Error(
+              `${detail}. Fix the display callback — a label it cannot produce would otherwise ` +
+              `be silently replaced by the element's name, which reads as correct output.`
+            );
+          }
           display = el.name || 'Element';
         }
       } else {
@@ -1991,11 +2064,7 @@ export class ActionExecutor {
       const result = action.execute(resolvedArgs, context);
       return result ?? { success: true };
     } catch (error) {
-      console.error(`[BoardSmith] Action '${action.name}' execution failed:`, error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return failedExecute(action.name, error);
     }
   }
 }

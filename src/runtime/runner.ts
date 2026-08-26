@@ -28,6 +28,8 @@ import {
   type RandomnessPolicy,
 } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
+import { PlayerFacingError } from '../engine/errors.js';
+import { isDevThrowEnabled } from '../utils/dev.js';
 
 /**
  * Re-exported so `boardsmith/runtime` keeps naming these policy types alongside
@@ -421,6 +423,43 @@ export class GameRunner<G extends Game = Game> {
   }
 
   /**
+   * Restore the game to the state it was in before the current action ran.
+   *
+   * The per-action checkpoint window's head entry IS that state: it is captured
+   * at the current action count and the failed action recorded nothing, so no
+   * extra serialization is needed for this. Only the element tree, sequence
+   * counter, RNG position and message log are restored — the flow engine
+   * deliberately stayed put on the failure, and its position is already right.
+   *
+   * @returns undefined when the rollback succeeded, or a sentence to append to
+   *   the player-facing error when there was no checkpoint to restore. A game
+   *   running with `checkpoints: { enabled: false }` has nothing to roll back
+   *   to, and saying so is far better than reporting that nothing happened
+   *   when something did.
+   */
+  private rollbackToPreActionState(): string | undefined {
+    const headOffset = this.actionHistory.length - this.checkpointBaseIndex;
+    const checkpoint = this.actionCheckpoints[headOffset];
+    if (!checkpoint) {
+      return 'The game could not be rolled back, so its state may be inconsistent — ' +
+        'per-action checkpoints are disabled for this session.';
+    }
+
+    this.game.loadSerializedState(checkpoint.state, {
+      messageLog: (this.game.messages ?? []).slice(0, checkpoint.messageCount ?? 0),
+    });
+    if (checkpoint.sequence !== undefined) {
+      this.game._ctx.sequence = checkpoint.sequence;
+    }
+    if (checkpoint.randomState !== undefined) {
+      this.game.setRandomState(checkpoint.randomState);
+    }
+    return undefined;
+  }
+
+  /**
+   * Perform an action and record it in history
+   */  /**
    * Perform an action and record it in history
    */
   performAction(
@@ -475,18 +514,33 @@ export class GameRunner<G extends Game = Game> {
       if (error instanceof FlowHaltedError) {
         this.actionHistory.push(serializedAction);
       }
+      // #47: an engine policy error's message was written to be read and goes
+      // through; anything else is an arbitrary runtime error whose text would
+      // leak internals and tell the reader nothing they can act on.
+      if (!(error instanceof PlayerFacingError)) {
+        console.error(`[BoardSmith] Flow failed during action '${actionName}':`, error);
+      }
       return {
         success: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof PlayerFacingError
+          ? error.message
+          : isDevThrowEnabled()
+            ? `The "${actionName}" action could not be completed because of an error in the game's rules. (${error instanceof Error ? error.message : String(error)})`
+            : `The "${actionName}" action could not be completed because of an error in the game's rules.`,
         errorCode: ErrorCode.ENGINE_ERROR,
       };
     }
 
     // Check if the action failed (flow state contains error)
     if (flowState.actionError) {
+      // #44: a clean refusal mutated nothing, but a THROW out of execute() may
+      // have applied part of its changes before it stopped — leaving the tree
+      // half-moved while the player is told nothing happened, and persisting
+      // that disagreement at the next snapshot. Undo it.
+      const rollback = flowState.actionThrew ? this.rollbackToPreActionState() : undefined;
       return {
         success: false,
-        error: flowState.actionError,
+        error: rollback === undefined ? flowState.actionError : `${flowState.actionError} ${rollback}`,
         errorCode: ErrorCode.ACTION_EXECUTION_ERROR,
         flowState,
       };

@@ -297,3 +297,10 @@ export type {
   AnnotationPlacement,
   ElementRef,
 } from './tutorial/types.js';
+
+/**
+ * Base class for a throw whose message is meant to be read (see errors.ts).
+ * A game extends it when its error text is the actionable next step; a plain
+ * `Error` is sanitized at the action boundary instead.
+ */
+export { PlayerFacingError } from './errors.js';

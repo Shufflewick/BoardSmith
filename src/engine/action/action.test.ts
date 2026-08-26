@@ -8,6 +8,7 @@ import {
   ActionExecutor,
   actionTempState,
   DEFAULT_TEXT_MAX_LENGTH,
+  PlayerFacingError,
 } from '../index.js';
 import type { ActionContext, ActionDefinition } from '../index.js';
 
@@ -1133,15 +1134,40 @@ describe('Action Executor', () => {
       expect(result.error).toContain('Invalid selection');
     });
 
-    it('should catch execution errors', () => {
+    it('catches an execution error and leads with a sentence the reader can act on (#47)', () => {
+      // A raw throw's text leaks implementation detail and gives the reader no
+      // next step, so the wire gets a sentence naming the action. The
+      // underlying detail rides along ONLY in a positively-labelled dev/test
+      // environment (this one) — in production it goes no further than the log.
       const action = Action.create('test').execute(() => {
-        throw new Error('Something went wrong');
+        throw new Error("Cannot read properties of undefined (reading 'suit')");
       });
 
       const result = executor.executeAction(action, game.getPlayer(1)!, {});
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Something went wrong');
+      expect(result.error).toContain('"test" action could not be completed');
+      expect(result.error).toContain('Nothing was changed');
+    });
+
+    it('always carries a PlayerFacingError\'s own message, which was written to be read', () => {
+      const action = Action.create('locked').execute(() => {
+        throw new PlayerFacingError('You cannot replan after the bell has rung.');
+      });
+
+      const result = executor.executeAction(action, game.getPlayer(1)!, {});
+      expect(result.error).toBe('You cannot replan after the bell has rung.');
+    });
+
+    it('marks the failure as a throw, so the runner knows to roll state back (#44)', () => {
+      const threw = Action.create('threw').execute(() => {
+        throw new Error('boom');
+      });
+      const refused = Action.create('refused').execute(() => ({ success: false, error: 'no' }));
+
+      expect(executor.executeAction(threw, game.getPlayer(1)!, {}).threw).toBe(true);
+      // A clean refusal mutated nothing, so it carries no such mark.
+      expect(executor.executeAction(refused, game.getPlayer(1)!, {}).threw).toBeUndefined();
     });
 
     it('should treat null as skipped for optional selections', () => {

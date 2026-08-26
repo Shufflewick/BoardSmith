@@ -2198,31 +2198,35 @@ describe('Action Chaining with followUp in FlowState', () => {
   });
 });
 
-describe('Unknown action warning (F20)', () => {
+describe('Unknown action in a flow step is fatal (F20, #51)', () => {
   let game: TestGame;
-  let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     game = new TestGame({ playerCount: 3 });
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
-  afterEach(() => {
-    warnSpy.mockRestore();
-  });
+  // These used to warn once and filter the name out forever, which turned a
+  // typo into a missing button: the step ran, the action was never offered,
+  // and if it was the only action the step completed or hung with the one
+  // console line long gone. The registered set is fixed at construction, so a
+  // name that is not in it can never become available — there is nothing to
+  // wait for, and nothing downstream can recover.
 
-  it('actionStep references a non-existent method in the warning is not used; points to the real API', () => {
-    const flow = defineFlow({
-      root: actionStep({ actions: ['nope'] }),
-    });
+  it('throws from actionStep, naming the action and the step', () => {
+    const flow = defineFlow({ root: actionStep({ name: 'turn', actions: ['nope'] }) });
 
-    new FlowEngine(game, flow).start();
+    let message = '';
+    expect(() => {
+      try {
+        new FlowEngine(game, flow).start();
+      } catch (e) {
+        message = (e as Error).message;
+        throw e;
+      }
+    }).toThrow();
 
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    const message = warnSpy.mock.calls[0][0] as string;
-
-    // Names the unknown action.
     expect(message).toContain("references unknown action 'nope'");
+    expect(message).toContain("Flow step 'turn'");
     // Points to the REAL builder + registration API (Action.create(...).execute(...)
     // registered via this.registerActions(...) in the game's constructor) --
     // there is no defineActions()/defineFlow() lifecycle hook (139-02 DOCX-04).
@@ -2232,23 +2236,38 @@ describe('Unknown action warning (F20)', () => {
     // Must NOT reference any of the non-existent phantom APIs (the F20 defect
     // and its 139-02 successor: action()/.do()/defineActions() never existed).
     expect(message).not.toContain('defineAction(');
-    expect(message).not.toContain("game.defineAction('nope', ...)");
     expect(message).not.toContain('defineActions()');
     expect(message).not.toMatch(/\baction\('nope'\)/);
   });
 
-  it('simultaneous-action-step warning also points to the real API', () => {
-    const flow = defineFlow({
-      root: simultaneousActionStep({ actions: ['missing'] }),
-    });
+  it('throws from simultaneousActionStep too', () => {
+    const flow = defineFlow({ root: simultaneousActionStep({ name: 'bid', actions: ['missing'] }) });
 
-    new FlowEngine(game, flow).start();
+    let message = '';
+    expect(() => {
+      try {
+        new FlowEngine(game, flow).start();
+      } catch (e) {
+        message = (e as Error).message;
+        throw e;
+      }
+    }).toThrow();
 
-    expect(warnSpy).toHaveBeenCalled();
-    const message = warnSpy.mock.calls[0][0] as string;
     expect(message).toContain("references unknown action 'missing'");
+    expect(message).toContain("Flow step 'bid'");
     expect(message).toContain('registerActions(');
     expect(message).not.toContain('defineAction(');
+  });
+
+  it('lists what IS registered, so a near-miss name is obvious', () => {
+    const flow = defineFlow({ root: actionStep({ actions: ['nope'] }) });
+    let message = '';
+    try {
+      new FlowEngine(game, flow).start();
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toContain('Registered actions:');
   });
 });
 

@@ -370,15 +370,17 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
 
     traverse(this as unknown as GameElement[], options.order ?? 'asc', 0, '<root>');
 
-    // DEV: Log if duplicates were found (indicates tree corruption)
+    // A duplicate visit is a proven invariant violation, not a diagnostic:
+    // this result set feeds snapshots and player views, so returning it ships
+    // the corruption onward and poisons every later restore (#45).
     if (visitedIds && duplicates.length > 0) {
-      // Only log first few duplicates to avoid spam
+      // Only name the first few, so the message stays readable.
       const shown = duplicates.slice(0, 5);
       const more = duplicates.length > 5 ? ` (and ${duplicates.length - 5} more)` : '';
-      console.error(
-        `[BoardSmith] 🚨 TREE CORRUPTION: ${duplicates.length} duplicate element visits detected!\n` +
+      throw new Error(
+        `TREE CORRUPTION: ${duplicates.length} duplicate element visit(s) during traversal.\n` +
         shown.map(d => `  - ${d.name} (id: ${d.id}) reachable under BOTH "${d.firstPath}" and "${d.dupPath}" (depth ${d.depth})`).join('\n') + more + '\n' +
-        `  An element is parented in two places (or two elements share an id).\n` +
+        `  An element is parented in two places, or two elements share an id.\n` +
         `  The two container labels above are where to look.`
       );
     }

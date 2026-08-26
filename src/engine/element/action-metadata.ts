@@ -49,7 +49,7 @@ export function buildActionMetadata(
     if (actionDef.condition) {
       const ctx = { game, player, args: {} };
       try {
-        if (!evaluateCondition(actionDef.condition, ctx)) {
+        if (!evaluateCondition(actionDef.condition, ctx, `action "${actionName}"`)) {
           continue; // Skip actions whose condition is now false
         }
       } catch (error) {

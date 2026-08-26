@@ -1,7 +1,7 @@
 {
-  "revision": 17,
+  "revision": 19,
   "bundleProtocol": 1,
-  "surfaceHash": "e1b57cd06ab9dc45",
+  "surfaceHash": "304b3829682dd75e",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -139,6 +139,22 @@
       "surfaceHash": "e1b57cd06ab9dc45",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "World mode, step one (ShufflewickPub #35 item 2): Game gains enableWorldMode/worldMode, definePartition, adoptSubtree, evictSubtree, touchedPartitions and clearTouchedPartitions, so a resident engine can hold only the partitions a command names and pay O(room) per action instead of O(world). ADDITIONS ONLY -- nothing removed or renamed, and snapshot mode (every published board game) is behaviourally unchanged. World mode changes exactly one thing when it is switched on: an element reference in an attribute serializes as { __elementId } instead of the positional { __elementRef: branch }, because a non-resident partition shifts every later sibling index and a branch path recorded against the full world resolves against a partial one to a DIFFERENT element. In world mode an __elementId that cannot resolve is kept verbatim rather than becoming undefined, so a reference into a non-resident partition survives the next checkpoint. moveToInternal -- the one shared re-parent path -- now marks BOTH endpoints' partitions after its existing throws, so a rejected move marks nothing and a cross-partition move still reports the destination the command never read."
+    },
+    {
+      "revision": 18,
+      "date": "2026-08-26",
+      "bundleProtocol": 1,
+      "surfaceHash": "0b9c7505ca54e63e",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "r18: fail-loud authoring errors — ReservedAttributeError, ConditionEvaluationError and PlayerFacingError are exported; a crashing condition, an unknown flow action and detected tree corruption now throw; a failed execute() rolls back and its raw message no longer reaches players."
+    },
+    {
+      "revision": 19,
+      "date": "2026-08-26",
+      "bundleProtocol": 1,
+      "surfaceHash": "304b3829682dd75e",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "r18: fail-loud authoring errors — ReservedAttributeError, ConditionEvaluationError and PlayerFacingError are exported; a crashing condition, an unknown flow action and detected tree corruption now throw; a failed execute() rolls back and its raw message no longer reaches players (a PlayerFacingError's does)."
     }
   ]
 }

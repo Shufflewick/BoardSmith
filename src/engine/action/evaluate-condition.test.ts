@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { evaluateCondition, evaluateConditionWithTrace } from './action.js';
+import { evaluateCondition, evaluateConditionWithTrace, ConditionEvaluationError } from './action.js';
 import type { ActionContext, ConditionConfig } from './types.js';
 
 /** Conditions only ever read the context, so a stub stands in for a live game. */
@@ -41,10 +41,18 @@ describe('evaluateCondition', () => {
     expect(evaluateCondition(conditions({ falsy: () => 0 as unknown as boolean }), ctx)).toBe(false);
   });
 
-  it('treats a throwing predicate as a failed condition, not a crash', () => {
-    expect(evaluateCondition(conditions({
-      explodes: () => { throw new Error('boom'); },
-    }), ctx)).toBe(false);
+  it('throws on a crashing predicate rather than reporting a failed condition (#46)', () => {
+    // Folding a crash into "condition false" makes the action vanish from every
+    // player's list with no error anywhere on the availability path.
+    const config = conditions({ explodes: () => { throw new Error('boom'); } });
+    expect(() => evaluateCondition(config, ctx)).toThrow(ConditionEvaluationError);
+    expect(() => evaluateCondition(config, ctx)).toThrow(/explodes/);
+    expect(() => evaluateCondition(config, ctx)).toThrow(/boom/);
+  });
+
+  it('names what the condition belongs to, so the author knows where to look', () => {
+    const config = conditions({ explodes: () => { throw new Error('boom'); } });
+    expect(() => evaluateCondition(config, ctx, "action 'draw'")).toThrow(/action 'draw'/);
   });
 });
 
@@ -72,19 +80,16 @@ describe('evaluateConditionWithTrace', () => {
     expect(details[0].passed).toBe(true);
   });
 
-  it('surfaces a thrown message as the detail value', () => {
-    const { passed, details } = evaluateConditionWithTrace(conditions({
+  it('throws rather than recording the crash as a trace detail (#46)', () => {
+    expect(() => evaluateConditionWithTrace(conditions({
       explodes: () => { throw new Error('no board yet'); },
-    }), ctx);
-    expect(passed).toBe(false);
-    expect(details[0]).toEqual({ label: 'explodes', value: 'no board yet', passed: false });
+    }), ctx)).toThrow(/no board yet/);
   });
 
-  it('stringifies a non-Error throw', () => {
-    const { details } = evaluateConditionWithTrace(conditions({
+  it('stringifies a non-Error throw into the message', () => {
+    expect(() => evaluateConditionWithTrace(conditions({
       explodes: () => { throw 'plain string'; },
-    }), ctx);
-    expect(details[0].value).toBe('plain string');
+    }), ctx)).toThrow(/plain string/);
   });
 
   it('keeps evaluating after a failure so the whole trace is reported', () => {
@@ -97,13 +102,13 @@ describe('evaluateConditionWithTrace', () => {
     expect(details).toHaveLength(2);
   });
 
-  it('keeps evaluating after a throw', () => {
+  it('stops at a throw — later predicates may depend on what the crashing one read', () => {
     const later = vi.fn().mockReturnValue(true);
-    evaluateConditionWithTrace(conditions({
+    expect(() => evaluateConditionWithTrace(conditions({
       throws: () => { throw new Error('x'); },
       later,
-    }), ctx);
-    expect(later).toHaveBeenCalled();
+    }), ctx)).toThrow();
+    expect(later).not.toHaveBeenCalled();
   });
 
   it('agrees with evaluateCondition on the verdict', () => {

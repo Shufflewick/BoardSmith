@@ -2,6 +2,7 @@ import type { Game } from '../element/game.js';
 import { GameElement } from '../element/game-element.js';
 import { Player } from '../player/player.js';
 import { devWarn } from '../../utils/dev.js';
+import { PlayerFacingError } from '../errors.js';
 import type { ActionResult } from '../action/types.js';
 import type {
   FlowNode,
@@ -268,7 +269,7 @@ interface ExecutionFrame {
  * and record the committed action, otherwise action history diverges from
  * applied game state and replay/undo/snapshot become inconsistent.
  */
-export class FlowHaltedError extends Error {
+export class FlowHaltedError extends PlayerFacingError {
   constructor(cause: unknown) {
     const message = cause instanceof Error ? cause.message : String(cause);
     super(
@@ -304,12 +305,35 @@ export class FlowEngine<G extends Game = Game> {
   private lastActionResult?: ActionResult;
   /** Error from last action if it failed (cleared on success) */
   private actionError?: string;
+  /** See FlowState.actionThrew — set alongside actionError. */
+  private actionThrew = false;
   /** For simultaneous action steps - tracks which players can act */
   private awaitingPlayers: PlayerAwaitingState[] = [];
   /** Current named phase (for UI display) */
   private currentPhase?: string;
   /** Track warned actions to avoid console spam */
-  private warnedUnknownActions = new Set<string>();
+  /**
+   * Refuse a flow step that names an action the game never registered.
+   *
+   * This used to warn once and filter the name out, which turned a typo in a
+   * flow definition into a missing button: the step still ran, the action was
+   * simply never offered, and if it was the step's only action the step
+   * completed or hung with the one console line long gone. The set of
+   * registered actions is fixed at construction, so a name that is not in it
+   * can never become available later — there is nothing to wait for.
+   */
+  private requireRegisteredActions(actionNames: string[], stepName: string): void {
+    for (const actionName of actionNames) {
+      if (this.game.getAction(actionName)) continue;
+      const registered = this.game.getActionNames();
+      throw new Error(
+        `Flow step '${stepName}' references unknown action '${actionName}'.\n` +
+        `  Registered actions: ${registered.length ? registered.join(', ') : '(none)'}\n` +
+        `  Fix: define it with Action.create('${actionName}') and register it via ` +
+        `this.registerActions(...) in your game's constructor, or correct the name in the flow.`
+      );
+    }
+  }
   /** Move count for current action step with move limits */
   private moveCount = 0;
   /** Current action step config (for move limit tracking) */
@@ -361,6 +385,7 @@ export class FlowEngine<G extends Game = Game> {
     this.moveCount = 0;
     this.lastActionResult = undefined;
     this.actionError = undefined;
+    this.actionThrew = false;
     this.currentPhase = undefined;
 
     // Execute until we need input or complete
@@ -398,11 +423,16 @@ export class FlowEngine<G extends Game = Game> {
     if (!result.success) {
       // Action failed, stay in same state and record the error
       this.actionError = result.error;
+      // #44: a throw out of execute() may have applied part of its changes.
+      // Staying put is right for the flow, but the runner still has to roll
+      // the game state back, and this is how it learns it must.
+      this.actionThrew = result.threw === true;
       return this.getState();
     }
 
     // Clear error and awaiting state on success
     this.actionError = undefined;
+    this.actionThrew = false;
     this.awaitingInput = false;
 
     return this.continueAfterCommittedAction(result);
@@ -423,11 +453,16 @@ export class FlowEngine<G extends Game = Game> {
     if (!result.success) {
       // Action failed, stay in same state
       this.actionError = result.error;
+      // #44: a throw out of execute() may have applied part of its changes.
+      // Staying put is right for the flow, but the runner still has to roll
+      // the game state back, and this is how it learns it must.
+      this.actionThrew = result.threw === true;
       return this.getState();
     }
 
     // Clear awaiting state
     this.actionError = undefined;
+    this.actionThrew = false;
     this.awaitingInput = false;
 
     return this.continueAfterCommittedAction(result);
@@ -688,11 +723,16 @@ export class FlowEngine<G extends Game = Game> {
     if (!result.success) {
       // Action failed, stay in same state and record the error
       this.actionError = result.error;
+      // #44: a throw out of execute() may have applied part of its changes.
+      // Staying put is right for the flow, but the runner still has to roll
+      // the game state back, and this is how it learns it must.
+      this.actionThrew = result.threw === true;
       return this.getState();
     }
 
     // Clear error on success (mirrors resume()'s success-path clear).
     this.actionError = undefined;
+    this.actionThrew = false;
 
     // 160-02 (D4 step-window bound): count this action toward the CURRENT
     // simultaneous-step frame's move counter (mirrors
@@ -819,6 +859,7 @@ export class FlowEngine<G extends Game = Game> {
     // Include action error if present
     if (this.actionError) {
       state.actionError = this.actionError;
+      if (this.actionThrew) state.actionThrew = true;
     }
 
     // Include followUp if last action returned one. NOTE: the sibling fields
@@ -951,6 +992,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Restore action error and follow-up state
     this.actionError = state.actionError;
+    this.actionThrew = state.actionThrew === true;
     this.lastActionResult = state.followUp ? { success: true, followUp: state.followUp } : undefined;
 
     // Restore move-limit tracking for action steps
@@ -1648,23 +1690,14 @@ export class FlowEngine<G extends Game = Game> {
       ? config.actions(context)
       : config.actions;
 
-    // Filter to only available actions, warning about non-existent ones
+    // A name with no registered action is a structural authoring error, not a
+    // condition that happens to be false — see requireRegisteredActions.
+    this.requireRegisteredActions(actions, config.name ?? 'action-step');
+
     const allAvailable = this.game.getAvailableActions(player as any);
-    const available = actions.filter((actionName) => {
-      const action = this.game.getAction(actionName);
-      if (!action) {
-        // Warn once per action name to avoid console spam
-        if (!this.warnedUnknownActions.has(actionName)) {
-          this.warnedUnknownActions.add(actionName);
-          console.warn(
-            `[BoardSmith] Flow step '${config.name ?? 'action-step'}' references unknown action '${actionName}'. ` +
-            `Define it with Action.create('${actionName}') and register it via this.registerActions(...) in your game's constructor.`
-          );
-        }
-        return false;
-      }
-      return allAvailable.some((a) => a.name === actionName);
-    });
+    const available = actions.filter((actionName) =>
+      allAvailable.some((a) => a.name === actionName)
+    );
 
     // If no available actions and minMoves met, complete
     if (available.length === 0 && minMovesMet) {
@@ -1739,21 +1772,11 @@ export class FlowEngine<G extends Game = Game> {
         ? config.actions(context, player)
         : config.actions;
 
-      const available = actions.filter((actionName) => {
-        const action = this.game.getAction(actionName);
-        if (!action) {
-          // Warn once per action name to avoid console spam
-          if (!this.warnedUnknownActions.has(actionName)) {
-            this.warnedUnknownActions.add(actionName);
-            console.warn(
-              `[BoardSmith] Flow step '${config.name ?? 'simultaneous-action-step'}' references unknown action '${actionName}'. ` +
-              `Define it with Action.create('${actionName}') and register it via this.registerActions(...) in your game's constructor.`
-            );
-          }
-          return false;
-        }
-        return this.game.getAvailableActions(player as any).some((a) => a.name === actionName);
-      });
+      this.requireRegisteredActions(actions, config.name ?? 'simultaneous-action-step');
+
+      const available = actions.filter((actionName) =>
+        this.game.getAvailableActions(player as any).some((a) => a.name === actionName)
+      );
 
       // Only add player if they have available actions
       if (available.length > 0) {

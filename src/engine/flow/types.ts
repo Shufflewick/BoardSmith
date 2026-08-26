@@ -307,6 +307,13 @@ export interface FlowState {
   /** Error from last action if it failed (cleared on success) */
   actionError?: string;
   /**
+   * True when `actionError` came from author code THROWING inside `execute()`,
+   * rather than from a clean refusal or a validation rejection (#44). The
+   * runner rolls the game back to the pre-action checkpoint when it sees this,
+   * because a throw may have applied part of its changes.
+   */
+  actionThrew?: boolean;
+  /**
    * Follow-up action to chain after the last action completed.
    * When present, the client should automatically start this action
    * with the provided args pre-filled.
