@@ -163,8 +163,19 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     let msg: DevHostInboundMessage;
     try {
       msg = JSON.parse(String(event.data));
-    } catch {
-      return; // ignore malformed frames, mirroring DevHost.vue's onmessage guard
+    } catch (error) {
+      // #43: dropping this in silence hid the bug in the tool built to surface
+      // bugs. A pending request tied to the frame then died as a generic
+      // timeout pointing nowhere near the cause. The frame IS the bug report,
+      // so say so before dropping it.
+      const raw = String(event.data);
+      console.error(
+        `createDevHostClient: dropping a malformed dev-host frame — it is not valid JSON. ` +
+        `A request waiting on it will now time out instead.\n` +
+        `  Frame (${raw.length} chars): ${raw.length > 500 ? `${raw.slice(0, 500)}…` : raw}\n` +
+        `  Parse error: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return;
     }
     for (const listener of listeners) listener(msg);
 

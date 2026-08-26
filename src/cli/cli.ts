@@ -193,6 +193,7 @@ program
   .option('--dry-run', 'Show what would be published without uploading')
   .option('--dev', 'Publish to the local dev platform (http://localhost:3006)')
   .option('--test', 'Publish to the test platform (test.shufflewick.pub)')
+  .option('--prod', 'Publish to the LIVE platform (shufflewick.pub) -- required, there is no default target')
   .action(publishCommand);
 
 // Ingest: deterministic archive + hash + INDEX provenance header.

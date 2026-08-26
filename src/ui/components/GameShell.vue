@@ -1254,17 +1254,34 @@ async function handleTeachingAction(
   }
 }
 
-// Helper to fetch playerOptions from game definitions
+/**
+ * Fetch a game's declared playerOptions (colors, variants) for the lobby.
+ *
+ * A failure here used to be a console line and `undefined` (#40), which the
+ * lobby rendered as "this game declares no options" — indistinguishable from
+ * the real thing. Players got a lobby missing its option controls with nothing
+ * on screen to say so, and games could start misconfigured. It now says so, in
+ * the same toast style the rest of this file already uses for a failed request.
+ */
 async function fetchPlayerOptions(gameType: string): Promise<Record<string, unknown> | undefined> {
   try {
     const response = await fetch(`${props.apiUrl}/games/definitions`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText || 'Request failed'}`);
+    }
     const data = await response.json();
     if (data.success && data.definitions) {
       const definition = data.definitions.find((d: { gameType: string }) => d.gameType === gameType);
+      // A game that genuinely declares none is not a failure — the lobby is
+      // correct to render without option controls.
       return definition?.playerOptions;
     }
+    throw new Error(typeof data.error === 'string' ? data.error : 'the server returned no game definitions');
   } catch (err) {
     console.error('Failed to fetch game definitions:', err);
+    toast.error(
+      'Could not load this game\'s setup options. The lobby is showing defaults — reload before starting if the game has variants to choose.'
+    );
   }
   return undefined;
 }

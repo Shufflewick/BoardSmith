@@ -15,8 +15,11 @@ ruleTester.run('no-network', rule, {
   valid: [
     // A game reads its state, it does not call out.
     { code: `const state = game.all(Card).length;` },
-    // A method merely NAMED fetch on a game object is not the global fetch...
-    // but the rule flags any `.fetch()` member call, so use a different name.
+    // A method merely NAMED fetch on a game object is not the global fetch, so
+    // a game with a `deck.fetch()` domain method lints clean (#38). Only a
+    // known global receiver is the real thing.
+    { code: `const card = deck.fetch();` },
+    { code: `const card = this.deck.fetch(suit);` },
     { code: `const deck = game.draw();` },
     // Non-network node modules stay allowed by THIS rule.
     { code: `import { Buffer } from 'node:buffer';` },
@@ -36,6 +39,14 @@ ruleTester.run('no-network', rule, {
     },
     {
       code: `const res = globalThis.fetch('/api');`,
+      errors: [{ messageId: 'noFetch' }],
+    },
+    {
+      code: `const res = self.fetch('/api');`,
+      errors: [{ messageId: 'noFetch' }],
+    },
+    {
+      code: `const res = global.fetch('/api');`,
       errors: [{ messageId: 'noFetch' }],
     },
     {

@@ -16,6 +16,7 @@
  * ```
  */
 import { ref, reactive, onMounted, onUnmounted, type Ref } from 'vue';
+import { devWarn } from '../../utils/dev.js';
 
 export interface CardPreviewData {
   /** Card rank (e.g., 'A', '5', 'K') */
@@ -258,6 +259,31 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     }
   }
 
+  /**
+   * Say which element carried a `data-*-preview` attribute that would not parse.
+   *
+   * A zoom preview is cosmetic, so a malformed attribute degrades rather than
+   * throwing — but degrading in silence presented the broken payload as
+   * content, which reads as correct output (#42).
+   */
+  function warnMalformedPreviewAttribute(
+    element: HTMLElement,
+    attribute: string,
+    value: string,
+    error: unknown
+  ): void {
+    const where = element.tagName.toLowerCase() +
+      (element.id ? `#${element.id}` : '') +
+      (element.className ? `.${String(element.className).split(/\s+/).filter(Boolean).join('.')}` : '');
+    devWarn(
+      `zoom-preview-malformed:${attribute}:${where}`,
+      `<${where}> has a ${attribute} attribute that is not valid JSON, so the zoom preview ` +
+      `cannot use it. Serialize the payload with JSON.stringify(...).\n` +
+      `  Attribute: ${value.length > 200 ? `${value.slice(0, 200)}…` : value}\n` +
+      `  Parse error: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
   function showPreviewFromElement(element: HTMLElement, event: MouseEvent) {
     if (!isAltPressed.value) return;
 
@@ -271,8 +297,12 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
         previewState.visible = true;
         updatePosition(event);
         return;
-      } catch {
-        // Fall through to clone mode if parse fails
+      } catch (error) {
+        // #42: an author who mis-serialized the attribute used to get a silent
+        // fall-through to clone mode with no hint the JSON was the problem.
+        warnMalformedPreviewAttribute(element, 'data-die-preview', dieDataAttr, error);
+        // Clone mode is still the right visual outcome — a zoom preview is not
+        // worth breaking the board over — but the cause is now visible.
       }
     }
 
@@ -283,7 +313,10 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
         previewState.cardData = JSON.parse(cardDataAttr);
         previewState.dieData = null;
         previewState.clonedElement = null;
-      } catch {
+      } catch (error) {
+        // The broken payload used to be rendered AS the card's label, so the
+        // author saw their malformed JSON presented as content (#42).
+        warnMalformedPreviewAttribute(element, 'data-card-preview', cardDataAttr, error);
         previewState.cardData = { label: cardDataAttr };
         previewState.dieData = null;
         previewState.clonedElement = null;

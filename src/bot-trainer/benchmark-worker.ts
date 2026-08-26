@@ -45,6 +45,13 @@ export interface BenchmarkResponse {
   losses: number;
   /** Number of draws */
   draws: number;
+  /**
+   * Games that reached no outcome (#37). Always 0 in practice, because
+   * benchmarkBot throws rather than returning a rate built around a hole and
+   * the throw arrives as a BenchmarkErrorResponse — carried so a future caller
+   * that opts into `allowIncomplete` still sees it rather than inferring it.
+   */
+  incomplete: number;
 }
 
 /**
@@ -97,6 +104,7 @@ parentPort.on('message', async (request: BenchmarkRequest) => {
       wins: result.wins,
       losses: result.losses,
       draws: result.draws,
+      incomplete: result.incomplete,
     };
     parentPort!.postMessage(response);
   } catch (error) {

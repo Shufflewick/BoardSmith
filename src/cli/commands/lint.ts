@@ -55,17 +55,24 @@ const LINT_RULES = {
     ],
   },
 
-  // Direct element equality
-  'element-equality': {
-    pattern: /===\s*(?:card|piece|element|merc|squad|sector)/gi,
-    severity: 'warning' as const,
-    message: 'Direct element comparison (===) may fail - use element.equals() or compare IDs',
-    suggestion: 'Use element1.equals(element2) or element1.id === element2.id',
-  },
+  // Direct element equality is DELIBERATELY not checked here (#34).
+  //
+  // The check used to be `/===\s*(?:card|piece|element|merc|squad|sector)/gi`,
+  // a raw-text match for a domain word anywhere to the right of `===`. It
+  // therefore fired on `m.id === merc.id`, `c.id === card.id` and
+  // `s.sectorId === sectorId` — the exact `.id` comparison its own message
+  // recommends — producing 111 warnings on a clean codebase and burying every
+  // real one. No amount of tightening fixes it: text cannot tell `a === b` on
+  // two elements from `a === b` on two numbers.
+  //
+  // The AST rule that can already exists and is already in the recommended
+  // config: `no-element-identity-comparison` in the ESLint plugin, which
+  // `boardsmith validate` runs. See docs/api/eslint-plugin.md.
 
-  // indexOf on element arrays
+  // indexOf on element arrays. The trailing `\b(?!\w*[Ii]d\b)` keeps
+  // `ids.indexOf(cardId)` out of it — comparing ids IS the recommended form.
   'element-indexof': {
-    pattern: /\.indexOf\s*\(\s*(?:card|piece|element|merc|squad|sector)/gi,
+    pattern: /\.indexOf\s*\(\s*(?:card|piece|element|merc|squad|sector)\w*\b(?<![Ii]d)\s*\)/gi,
     severity: 'warning' as const,
     message: 'indexOf() on elements may fail - use .findIndex(e => e.id === target.id)',
     suggestion: 'Replace with .findIndex(e => e.id === target.id)',
@@ -143,7 +150,7 @@ function findTypeScriptFiles(dir: string, files: string[] = []): string[] {
 /**
  * Lint a single file for BoardSmith-specific issues
  */
-function lintFile(filePath: string, content: string): LintIssue[] {
+export function lintFile(filePath: string, content: string): LintIssue[] {
   const issues: LintIssue[] = [];
   const lines = content.split('\n');
 

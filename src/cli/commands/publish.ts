@@ -25,17 +25,52 @@ interface PublishOptions {
   publisher?: string;
   dev?: boolean;
   test?: boolean;
+  prod?: boolean;
   dryRun?: boolean;
 }
 
-function resolveTarget(options: PublishOptions): PlatformTarget {
-  if (options.dev && options.test) {
-    console.error(chalk.red('Pass at most one of --dev / --test.'));
-    process.exit(1);
+/** A publish that does not name exactly one platform. */
+export class PublishTargetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PublishTargetError';
   }
-  if (options.dev) return 'dev';
-  if (options.test) return 'test';
-  return 'prod';
+}
+
+/**
+ * Work out which platform a publish is aimed at.
+ *
+ * There is deliberately NO default (#36). `boardsmith publish` used to mean
+ * "ship to production", so the most dangerous target was the zero-effort one
+ * and the safe targets were the ones you had to type — the Pit of Success
+ * exactly inverted. One forgotten flag while iterating against test put a
+ * work-in-progress build in front of players, with no confirmation anywhere in
+ * the flow to catch it.
+ *
+ * Naming the target is one word, and it is the word that makes the difference
+ * between a test deploy and a live one.
+ */
+export function resolveTarget(options: PublishOptions): PlatformTarget {
+  const named: PlatformTarget[] = [];
+  if (options.dev) named.push('dev');
+  if (options.test) named.push('test');
+  if (options.prod) named.push('prod');
+
+  if (named.length > 1) {
+    throw new PublishTargetError(
+      `A publish goes to one platform, but ${named.map((t) => `--${t}`).join(' and ')} were both passed. ` +
+      `Pick one.`
+    );
+  }
+  if (named.length === 0) {
+    throw new PublishTargetError(
+      'Name the platform to publish to. There is no default, because the default used to be production.\n' +
+      '  --dev    the local dev platform (http://localhost:3006)\n' +
+      '  --test   the test platform (test.shufflewick.pub)\n' +
+      '  --prod   the LIVE platform, where players will see this build'
+    );
+  }
+  return named[0];
 }
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -43,7 +78,14 @@ const MAX_SLUG_ATTEMPTS = 10;
 
 export async function publishCommand(options: PublishOptions): Promise<void> {
   const cwd = process.cwd();
-  const target = resolveTarget(options);
+  let target: PlatformTarget;
+  try {
+    target = resolveTarget(options);
+  } catch (error) {
+    if (!(error instanceof PublishTargetError)) throw error;
+    console.error(chalk.red(error.message));
+    process.exit(1);
+  }
 
   // -- Resolve API key (per target: dev/test/prod are separate deployments
   // with separate key stores) --

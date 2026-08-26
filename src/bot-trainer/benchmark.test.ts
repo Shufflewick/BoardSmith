@@ -162,7 +162,11 @@ describe('benchmarkBot', () => {
       wins: 0,
       losses: 0,
       draws: 0,
+      incomplete: 0,
+      incompleteRate: 0,
+      failures: [],
       gamesPlayed: 0,
+      gamesAttempted: 0,
       gamesAsPlayer0: 0,
       gamesAsPlayer1: 0,
       winRateAsPlayer0: 0,
@@ -170,8 +174,11 @@ describe('benchmarkBot', () => {
     });
   });
 
-  it('treats a game that never completes as a draw rather than hanging', async () => {
-    // FixedWinnerGame never calls finish(), so the flow runs out of actions.
+  it('counts a completed game with no winner as a draw — that IS a draw', async () => {
+    // FixedWinnerGame's eachPlayer flow completes once both seats have acted,
+    // and finish() names no winner. The game decided a tie, so a draw is the
+    // honest reading. What must NOT be a draw is a game that never got there
+    // (#37) — see the incomplete-outcome tests below.
     const result = await benchmarkBot(FixedWinnerGame, 'fixed', noObjectives, {
       gameCount: 2,
       mctsIterations: 1,
@@ -181,6 +188,7 @@ describe('benchmarkBot', () => {
     });
     expect(result.gamesPlayed).toBe(2);
     expect(result.draws).toBe(2);
+    expect(result.incomplete).toBe(0);
   });
 
   it('keeps every reported rate inside 0..1', async () => {
@@ -207,5 +215,85 @@ describe('benchmarkBot', () => {
       seed: 'with-objectives',
     });
     expect(result.gamesPlayed).toBe(2);
+  });
+});
+
+/**
+ * A game whose action always throws — the shape a trained bot with a broken
+ * objectives function produces. It used to be indistinguishable from a
+ * competitive matchup (#37): the benchmark substituted a random bot for the
+ * crashing one and scored crashed games as draws, so a bot that failed on
+ * every single call reported roughly a 50% win rate and weight evolution then
+ * optimized pure noise.
+ */
+class ExplodingGame extends Game<ExplodingGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create<ExplodingGame>('move')
+        .chooseFrom('value', { choices: [1, 2] })
+        .execute(() => {
+          throw new Error('objectives function is broken');
+        }),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+      }),
+    );
+  }
+}
+
+describe('benchmarkBot on a game that cannot finish (#37)', () => {
+  const runExploding = (overrides: Record<string, unknown> = {}) =>
+    benchmarkBot(ExplodingGame, 'exploding', noObjectives, {
+      gameCount: 4,
+      mctsIterations: 1,
+      maxActions: 10,
+      timeout: 5000,
+      seed: 'explode',
+      ...overrides,
+    });
+
+  it('refuses to report a win rate built on games that never finished', async () => {
+    await expect(runExploding()).rejects.toThrow(/did not finish/i);
+  });
+
+  it('says how many games failed, so the number is not a mystery', async () => {
+    await expect(runExploding()).rejects.toThrow(/4 of 4/);
+  });
+
+  it('counts them as their own outcome rather than folding them into draws', async () => {
+    const result = await runExploding({ allowIncomplete: true });
+    expect(result.incomplete).toBe(4);
+    expect(result.draws).toBe(0);
+    expect(result.wins).toBe(0);
+    expect(result.losses).toBe(0);
+  });
+
+  it('keeps an unfinished game out of the win-rate denominator', async () => {
+    const result = await runExploding({ allowIncomplete: true });
+    // Nothing was decided, so there is no rate to report — not 0.5.
+    expect(result.gamesPlayed).toBe(0);
+    expect(result.winRate).toBe(0);
+    expect(result.incompleteRate).toBe(1);
+  });
+
+  it('records why, so the failure can be fixed rather than guessed at', async () => {
+    const result = await runExploding({ allowIncomplete: true });
+    expect(result.failures.length).toBeGreaterThan(0);
+    expect(result.failures.join('\n')).toMatch(/could not be completed|broken/i);
+  });
+});
+
+describe('a healthy benchmark reports no failures', () => {
+  it('leaves the failure counters empty', async () => {
+    const result = await benchmark(4, 'seat1');
+    expect(result.incomplete).toBe(0);
+    expect(result.incompleteRate).toBe(0);
+    expect(result.failures).toEqual([]);
+    expect(result.gamesPlayed).toBe(4);
   });
 });

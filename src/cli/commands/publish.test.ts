@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describeAudienceMismatch } from './publish.js';
+import { describeAudienceMismatch, resolveTarget, PublishTargetError } from './publish.js';
 import type { TaxonomyAudience } from '../lib/publish-api.js';
 
 const AUDIENCES: TaxonomyAudience[] = [
@@ -28,5 +28,34 @@ describe('describeAudienceMismatch (publish preflight)', () => {
     const lines = describeAudienceMismatch(undefined, AUDIENCES);
     expect(lines).not.toBeNull();
     expect(lines![0]).toContain('missing');
+  });
+});
+
+describe('resolveTarget (#36: production is never the zero-effort default)', () => {
+  it('requires an explicit target rather than shipping to production', () => {
+    // `boardsmith publish` used to mean "deploy to production, no questions
+    // asked", so one forgotten flag while iterating against test put a
+    // work-in-progress build in front of players.
+    expect(() => resolveTarget({})).toThrow(PublishTargetError);
+    expect(() => resolveTarget({})).toThrow(/--prod/);
+    expect(() => resolveTarget({})).toThrow(/--test/);
+    expect(() => resolveTarget({})).toThrow(/--dev/);
+  });
+
+  it('resolves each target from its own flag', () => {
+    expect(resolveTarget({ dev: true })).toBe('dev');
+    expect(resolveTarget({ test: true })).toBe('test');
+    expect(resolveTarget({ prod: true })).toBe('prod');
+  });
+
+  it('refuses two targets at once rather than picking one', () => {
+    expect(() => resolveTarget({ dev: true, test: true })).toThrow(PublishTargetError);
+    expect(() => resolveTarget({ test: true, prod: true })).toThrow(PublishTargetError);
+    expect(() => resolveTarget({ dev: true, prod: true })).toThrow(PublishTargetError);
+  });
+
+  it('names every flag that was passed, so the fix is obvious', () => {
+    expect(() => resolveTarget({ dev: true, prod: true })).toThrow(/--dev/);
+    expect(() => resolveTarget({ dev: true, prod: true })).toThrow(/--prod/);
   });
 });

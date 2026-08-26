@@ -19,6 +19,10 @@ ruleTester.run('no-timers', rule, {
     { code: `const result = await Promise.resolve(1);` },
     // Clearing is not scheduling; the rule targets the scheduling calls.
     { code: `clearTimeout(handle);` },
+    // A domain method that happens to share a timer's name on some other
+    // receiver is not a timer (#38) — only a known global receiver is.
+    { code: `scheduler.setTimeout(turnOrder);` },
+    { code: `this.clock.setInterval(4);` },
   ],
   invalid: [
     { code: `setTimeout(() => {}, 100);`, errors: [{ messageId: 'noSetTimeout' }] },

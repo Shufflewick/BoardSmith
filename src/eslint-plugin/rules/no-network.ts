@@ -1,4 +1,5 @@
 import type { Rule } from 'eslint';
+import { isGlobalMemberCall } from './global-receiver.js';
 
 /**
  * Disallows network access in game rules code
@@ -48,11 +49,13 @@ const rule: Rule.RuleModule = {
           });
         }
 
-        // Check for window.fetch(), globalThis.fetch(), etc.
+        // Check for window.fetch(), globalThis.fetch(), etc. — but ONLY on a
+        // real global receiver, so a game's own `deck.fetch()` is untouched.
         if (
           node.callee.type === 'MemberExpression' &&
           node.callee.property.type === 'Identifier' &&
-          node.callee.property.name === 'fetch'
+          node.callee.property.name === 'fetch' &&
+          isGlobalMemberCall(node.callee)
         ) {
           context.report({
             node,
