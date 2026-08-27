@@ -15,6 +15,11 @@ Every design decision should guide developers and users toward correct behavior 
 - Required parameters for dangerous operations
 - Impossible to represent invalid states in types
 
+**UI Design**
+- The action panel is a simple, accessible, text-based representation of available player actions. 
+- The custom UI is a visual representation of available player actions. 
+- The action panel and the custom UI must remain in sync at all times. They are two different representations of the same state in the game.
+
 **Architecture**
 - Single source of truth for each piece of data
 - Idempotent operations where possible
