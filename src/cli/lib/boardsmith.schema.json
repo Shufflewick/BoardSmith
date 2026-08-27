@@ -81,8 +81,9 @@
     },
     "thumbnail": {
       "x-convex-sink": false,
+      "x-asset-path": true,
       "type": "string",
-      "description": "Relative path to the game's thumbnail image. Scaffold-emitted."
+      "description": "Relative path to the game's thumbnail image, resolved from the project root. NOT scaffold-emitted: `boardsmith new` creates no thumbnail image, so declaring the key by default meant every new game named a file its bundle did not carry. `boardsmith validate` fails when a declared asset path resolves to nothing (`x-asset-path` marks which keys it checks)."
     },
     "scoreboard": {
       "x-convex-sink": false,

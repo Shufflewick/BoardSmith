@@ -1,184 +1,4 @@
 <script lang="ts">
-import { defineComponent, h } from 'vue';
-
-// Recursive TreeNode component for unlimited depth state tree
-export const TreeNode = defineComponent({
-  name: 'TreeNode',
-  props: {
-    nodeKey: { type: String, required: true },
-    value: { type: null, required: true },
-    path: { type: String, required: true },
-    depth: { type: Number, default: 0 },
-    expandedPaths: { type: Set, required: true },
-    searchQuery: { type: String, default: '' },
-  },
-  emits: ['toggle', 'copy'],
-  setup(props, { emit }) {
-    const isExpandable = (val: unknown): boolean => val !== null && typeof val === 'object';
-
-    const getTypeColor = (val: unknown): string => {
-      if (val === null) return 'var(--bsg-danger)';
-      if (val === undefined) return 'var(--bsg-away)';
-      if (typeof val === 'string') return 'var(--bsg-ok)';
-      if (typeof val === 'number') return 'var(--bsg-accent)';
-      if (typeof val === 'boolean') return 'var(--bsg-warn)';
-      if (Array.isArray(val)) return 'var(--bsg-ink-2)';
-      if (typeof val === 'object') return 'var(--bsg-accent-2)';
-      return 'var(--bsg-ink)';
-    };
-
-    const formatValue = (val: unknown): string => {
-      if (val === null) return 'null';
-      if (val === undefined) return 'undefined';
-      if (typeof val === 'string') return `"${val}"`;
-      if (typeof val === 'boolean') return val ? 'true' : 'false';
-      if (Array.isArray(val)) return `Array(${val.length})`;
-      if (typeof val === 'object') {
-        const keys = Object.keys(val as object);
-        return `{${keys.length} keys}`;
-      }
-      return String(val);
-    };
-
-    const isExpanded = () => props.expandedPaths.has(props.path);
-    const expandable = () => isExpandable(props.value);
-
-    const handleToggle = () => {
-      if (expandable()) {
-        emit('toggle', props.path);
-      }
-    };
-
-    const handleCopy = (e: Event) => {
-      e.stopPropagation();
-      emit('copy', props.value);
-    };
-
-    // Inline styles for render function (scoped CSS doesn't apply)
-    const styles = {
-      row: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        padding: '3px 4px',
-        borderRadius: '3px',
-        cursor: 'default',
-      },
-      rowExpandable: {
-        cursor: 'pointer',
-      },
-      arrow: {
-        color: 'var(--bsg-ink-3)',
-        fontSize: '10px',
-        width: '12px',
-        textAlign: 'center' as const,
-      },
-      arrowPlaceholder: {
-        width: '12px',
-      },
-      key: {
-        color: 'var(--bsg-accent-2)',
-        fontWeight: '500' as const,
-      },
-      separator: {
-        color: 'var(--bsg-ink-3)',
-      },
-      value: {
-        marginLeft: '4px',
-      },
-      copyBtn: {
-        opacity: '0',
-        marginLeft: 'auto',
-        padding: '2px 6px',
-        fontSize: '10px',
-        background: 'var(--bsg-surface-3)',
-        border: '1px solid var(--bsg-line-2)',
-        borderRadius: '3px',
-        color: 'var(--bsg-ink-2)',
-        cursor: 'pointer',
-      },
-      children: {
-        marginLeft: '16px',
-        borderLeft: '1px solid var(--bsg-line)',
-        paddingLeft: '8px',
-      },
-    };
-
-    return () => {
-      const children: any[] = [];
-
-      // Row
-      const rowStyle = expandable()
-        ? { ...styles.row, ...styles.rowExpandable }
-        : styles.row;
-
-      const rowChildren = [
-        // Arrow
-        expandable()
-          ? h('span', { style: styles.arrow }, isExpanded() ? '▼' : '▶')
-          : h('span', { style: styles.arrowPlaceholder }),
-        // Key
-        h('span', { style: styles.key }, props.nodeKey),
-        h('span', { style: styles.separator }, ':'),
-        // Value
-        h('span', { style: { ...styles.value, color: getTypeColor(props.value) } }, formatValue(props.value)),
-        // Copy button
-        h('button', {
-          class: 'tree-copy-btn',
-          style: styles.copyBtn,
-          onClick: handleCopy,
-          title: 'Copy JSON',
-          'aria-label': 'Copy JSON to clipboard',
-        }, h('span', { 'aria-hidden': 'true' }, '⎘')),
-      ];
-
-      children.push(
-        h('div', {
-          class: 'tree-row',
-          style: rowStyle,
-          onClick: handleToggle,
-          onMouseenter: (e: MouseEvent) => {
-            const btn = (e.currentTarget as HTMLElement).querySelector('.tree-copy-btn') as HTMLElement;
-            if (btn) btn.style.opacity = '1';
-          },
-          onMouseleave: (e: MouseEvent) => {
-            const btn = (e.currentTarget as HTMLElement).querySelector('.tree-copy-btn') as HTMLElement;
-            if (btn) btn.style.opacity = '0';
-          },
-        }, rowChildren)
-      );
-
-      // Children if expanded
-      if (expandable() && isExpanded() && props.value) {
-        const childNodes = Object.entries(props.value as Record<string, unknown>).map(([childKey, childValue]) =>
-          h(TreeNode, {
-            key: childKey,
-            nodeKey: childKey,
-            value: childValue,
-            path: `${props.path}.${childKey}`,
-            depth: props.depth + 1,
-            expandedPaths: props.expandedPaths,
-            searchQuery: props.searchQuery,
-            onToggle: (p: string) => emit('toggle', p),
-            onCopy: (v: unknown) => emit('copy', v),
-          })
-        );
-        children.push(h('div', { style: styles.children }, childNodes));
-      }
-
-      return h('div', {}, children);
-    };
-  },
-});
-
-export interface ElementDiff {
-  added: number[];
-  removed: number[];
-  changed: number[];
-  fromIndex: number;
-  toIndex: number;
-}
-
 export interface DebugPanelProps {
   /** Current game state (raw) */
   state: any;
@@ -200,37 +20,51 @@ export interface DebugPanelProps {
 </script>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, inject, nextTick } from 'vue';
-import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
-
-interface SerializedAction {
-  name: string;
-  player: number;
-  args: Record<string, unknown>;
-  timestamp?: number;
-}
-
-interface ActionTrace {
-  actionName: string;
-  available: boolean;
-  conditionResult?: boolean;
-  conditionError?: string;
-  conditionDetails?: Array<{
-    label: string;
-    value: unknown;
-    passed: boolean;
-    children?: unknown[];
-  }>;
-  selections: Array<{
-    name: string;
-    type: string;
-    choiceCount: number;
-    skipped?: boolean;
-    optional?: boolean | string;
-    filterApplied?: boolean;
-    dependentOn?: string;
-  }>;
-}
+/**
+ * The in-game debug panel.
+ *
+ * This component owns the panel's chrome — which tab is showing, when a tab
+ * refreshes itself, and what the reader has selected. Everything it does beyond
+ * that is delegated (#41):
+ *
+ *  - `useDebugBridge` is the one place the `debug:*` wire protocol is spelled
+ *    out. This file names no ops and builds no payloads.
+ *  - `useDebugTimeline` owns the action history, time travel and rewind.
+ *  - `useDeckWorkbench` owns the deck edits and the transfer dialog.
+ *  - `useStateTree` owns which rows of the State tab are open.
+ *  - `debug-view-tree` derives the Elements and Decks tabs from the view tree.
+ *  - `debug-format` renders values, and is shared with `TreeNode`.
+ *
+ * Each of those is tested on its own; `DebugPanel.characterization.test.ts`
+ * pins the behaviour they add up to.
+ */
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { TreeNode } from './debug/TreeNode.js';
+import { searchStateTree } from './debug/state-tree-search.js';
+import {
+  formatState,
+  formatConditionValue,
+  formatActionName,
+  formatActionArgs,
+  formatTimestamp,
+} from './debug/debug-format.js';
+import {
+  groupElementsByClass,
+  discoverDecks,
+  discoverCardContainers,
+  filterElementGroups,
+  filterDecks,
+  decksExpandedBySearch,
+  cardMatchesSearch,
+  getElementDisplayName,
+  getCardDisplayName,
+  type GroupedElement,
+  type DeckInfo,
+} from './debug/debug-view-tree.js';
+import { useDebugBridge, type ActionTrace, type FlowContext, type FlowStateInfo, type LogEntry, type ElementDiff } from '../composables/useDebugBridge.js';
+import { useDebugTimeline } from '../composables/useDebugTimeline.js';
+import { useDeckWorkbench } from '../composables/useDeckWorkbench.js';
+import { useStateTree } from '../composables/useStateTree.js';
 
 const props = withDefaults(defineProps<DebugPanelProps>(), {
   expanded: false,
@@ -250,24 +84,15 @@ const emit = defineEmits<{
 // All debug data/edits flow through the host bridge that GameShell provides in
 // platform mode (the dev host answers from its in-process session). There is no
 // debug HTTP server, so this is the only transport.
-type PlatformRequest = (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
-const platformRequest = inject(GAME_CONTEXT_KEYS.platformRequest, null) as PlatformRequest | null;
+const bridge = useDebugBridge();
 
-/** Is this an object (and not null / an array / a primitive)? */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+// How stale a tab's data may be before re-entering it refetches. Switching back
+// and forth must not hammer the host.
+const TAB_REFRESH_MAX_AGE_MS = 2000;
 
-async function debugRequest(op: string, payload: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
-  if (!platformRequest) {
-    throw new Error('DebugPanel requires a host bridge (mount it inside GameShell in platform mode).');
-  }
-  return platformRequest(op, payload);
-}
+// ── Panel chrome ────────────────────────────────────────────────────────────
 
-// Local state
 const panelExpanded = ref(props.expanded);
-const activeTab = ref<'state' | 'elements' | 'decks' | 'actions' | 'history' | 'logs' | 'controls'>('state');
 
 // Tab descriptor for ARIA pattern — order matters for arrow-key navigation
 const DEBUG_TABS = [
@@ -280,99 +105,8 @@ const DEBUG_TABS = [
   { id: 'controls' as const, label: 'Controls' },
 ] as const;
 type TabId = typeof DEBUG_TABS[number]['id'];
-const showRawState = ref(false);
-const stateSearchQuery = ref('');
-const expandedPaths = ref<Set<string>>(new Set(['root']));
+const activeTab = ref<TabId>('state');
 
-// Copy toast state
-const copyToastVisible = ref(false);
-const copyToastTimeout = ref<ReturnType<typeof setTimeout> | null>(null);
-
-// Restart confirm state (two-click guard — prevents single-click data loss)
-const restartConfirming = ref(false);
-// Plain let — no reactive consumers read the timer ID; a ref would track
-// reads/writes unnecessarily (matches DevHost.vue's pattern for the same).
-let restartConfirmTimer: ReturnType<typeof setTimeout> | null = null;
-
-// Action traces state
-const actionTraces = ref<ActionTrace[]>([]);
-const tracesLoading = ref(false);
-const tracesError = ref<string | null>(null);
-const tracesLastFetched = ref<number>(0);
-
-// Flow context state (from action-traces response)
-interface FlowContext {
-  flowAllowedActions: string[];
-  currentPlayer?: number;
-  isMyTurn: boolean;
-  currentPhase?: string;
-}
-
-/**
- * Validate a host `flowContext` payload against its REQUIRED fields, so a
- * malformed response becomes `null` rather than a half-populated object that
- * claims to be a FlowContext.
- */
-function isFlowContext(value: unknown): value is FlowContext {
-  return isRecord(value)
-    && Array.isArray(value.flowAllowedActions)
-    && typeof value.isMyTurn === 'boolean';
-}
-const flowContext = ref<FlowContext | null>(null);
-
-// Flow-position state (from the debug:flow-state op — FLOW-01 locked debug:* channel).
-// Distinct from flowContext above (sourced from debug:action-traces): this carries the
-// human-readable description string produced by Game.getFlowDebugInfo().describe().
-interface FlowStateInfo {
-  phase?: string;
-  step?: string;
-  path: number[];
-  awaiting: { currentPlayer?: number; awaitingPlayers?: number[] };
-  description: string;
-}
-const flowStateInfo = ref<FlowStateInfo | null>(null);
-
-// Element inspector state
-const selectedElementId = ref<number | null>(null);
-const elementSearchQuery = ref('');
-const expandedElementGroups = ref<Set<string>>(new Set());
-
-// Deck inspector state
-const deckSearchQuery = ref('');
-const expandedDecks = ref<Set<number>>(new Set());
-const selectedDeckCard = ref<{ deckId: number; cardId: number } | null>(null);
-const deckManipulationLoading = ref(false);
-const deckManipulationError = ref<string | null>(null);
-
-// History state
-const actionHistory = ref<SerializedAction[]>([]);
-const historyLoading = ref(false);
-const historyError = ref<string | null>(null);
-const historyLastFetched = ref<number>(0);
-
-// Logs state (ERR-04) — captured server-side errors/warnings from the
-// dev-host's log-capture ring buffer, pulled via the debug:logs op.
-interface LogEntry {
-  severity: 'error' | 'warning' | 'info';
-  message: string;
-  source: string;
-  timestamp: number;
-}
-const logEntries = ref<LogEntry[]>([]);
-const logsLoading = ref(false);
-const logsError = ref<string | null>(null);
-const logsLastFetched = ref<number>(0);
-
-// Time travel state
-const selectedActionIndex = ref<number | null>(null);
-const historicalState = ref<any>(null);
-const historicalStateLoading = ref(false);
-const historicalStateError = ref<string | null>(null);
-
-// Diff state
-const stateDiff = ref<ElementDiff | null>(null);
-
-// Sync expanded state
 watch(() => props.expanded, (val) => {
   panelExpanded.value = val;
 });
@@ -407,7 +141,7 @@ function handleTabKeydown(e: KeyboardEvent) {
   e.preventDefault();
 
   const ids = DEBUG_TABS.map(t => t.id);
-  const currentIndex = ids.indexOf(activeTab.value as TabId);
+  const currentIndex = ids.indexOf(activeTab.value);
 
   let nextIndex: number;
   if (e.key === 'ArrowRight') {
@@ -441,39 +175,95 @@ onUnmounted(() => {
   }
 });
 
-// Format state for display
-const formattedState = computed(() => {
-  if (!props.state) return 'No state available';
-  try {
-    return JSON.stringify(props.state, null, 2);
-  } catch {
-    return 'Error formatting state';
-  }
+// ── Time travel, history and rewind ─────────────────────────────────────────
+
+const playerSeat = computed(() => props.playerSeat);
+
+const {
+  actionHistory,
+  historyLoading,
+  historyError,
+  fetchHistory,
+  refreshHistoryIfStale,
+  selectedActionIndex,
+  historicalState,
+  historicalStateLoading,
+  historicalStateError,
+  stateDiff,
+  isViewingHistory,
+  selectAction,
+  fetchStateAtAction,
+  clearHistoricalState,
+  pendingRewindIndex,
+  pendingRewindDiscardCount,
+  rewindLoading,
+  rewindError,
+  requestRewind,
+  cancelRewind,
+  confirmRewind,
+} = useDebugTimeline({
+  bridge,
+  playerSeat,
+  onTimeTravel: (state, actionIndex, diff) => emit('time-travel', state, actionIndex, diff),
 });
 
-// Tree node expansion
-function toggleExpand(path: string) {
-  if (expandedPaths.value.has(path)) {
-    expandedPaths.value.delete(path);
-  } else {
-    expandedPaths.value.add(path);
+/**
+ * The state every tab reads from: the historical snapshot while time
+ * travelling, the live props otherwise.
+ *
+ * `props.state` is `{ state: PlayerGameState, flowState: FlowState }`, while a
+ * historical snapshot is a bare `PlayerGameState`, so it is wrapped to match.
+ */
+const displayedState = computed(() => {
+  if (isViewingHistory.value && historicalState.value) {
+    return { state: historicalState.value, flowState: null };
   }
-  // Force reactivity
-  expandedPaths.value = new Set(expandedPaths.value);
+  return props.state;
+});
+
+/** The player view tree every derivation below walks. */
+const displayedView = computed(() => (displayedState.value as { state?: { view?: unknown } } | null)?.state?.view);
+
+// ── State tab ───────────────────────────────────────────────────────────────
+
+const showRawState = ref(false);
+const stateSearchQuery = ref('');
+
+const { expandedPaths, toggleExpand, expandAll: expandTreePaths, collapseAll } = useStateTree();
+
+/** Which rows the State tab's search box leaves standing, and what to open. */
+const stateSearch = computed(() => searchStateTree(displayedState.value, stateSearchQuery.value));
+
+/**
+ * The paths the tree renders as open: what the reader opened, plus whatever the
+ * running search had to open to put its matches on screen. Merged rather than
+ * replaced, so clearing the box returns the reader to the tree they had.
+ */
+const treeExpandedPaths = computed(
+  () => new Set([...expandedPaths.value, ...stateSearch.value.expandedPaths])
+);
+
+/** True once the reader has typed a term that matches no row at all. */
+const stateSearchFoundNothing = computed(
+  () => stateSearchQuery.value.trim().length > 0 && stateSearch.value.matchCount === 0
+);
+
+/** Open every path in the LIVE state, which is what the tree is keyed against. */
+function expandAll() {
+  expandTreePaths(props.state);
 }
 
-function isNodeExpanded(path: string): boolean {
-  return expandedPaths.value.has(path);
-}
+const formattedState = computed(() => formatState(props.state));
 
-// Copy any node value to clipboard as JSON
+// Copy toast state
+const copyToastVisible = ref(false);
+const copyToastTimeout = ref<ReturnType<typeof setTimeout> | null>(null);
+
+/** Copy any value to the clipboard as JSON, and say so briefly. */
 async function copyNodeToClipboard(value: unknown) {
   try {
     await navigator.clipboard.writeText(JSON.stringify(value, null, 2));
-    // Show toast
-    if (copyToastTimeout.value) {
-      clearTimeout(copyToastTimeout.value);
-    }
+    if (copyToastTimeout.value) clearTimeout(copyToastTimeout.value);
     copyToastVisible.value = true;
     copyToastTimeout.value = setTimeout(() => {
       copyToastVisible.value = false;
@@ -483,96 +273,10 @@ async function copyNodeToClipboard(value: unknown) {
   }
 }
 
-function expandAll() {
-  const paths = new Set<string>(['root']);
-  function traverse(obj: any, path: string) {
-    if (obj && typeof obj === 'object') {
-      paths.add(path);
-      for (const key in obj) {
-        traverse(obj[key], `${path}.${key}`);
-      }
-    }
-  }
-  traverse(props.state, 'root');
-  expandedPaths.value = paths;
-}
-
-function collapseAll() {
-  expandedPaths.value = new Set(['root']);
-}
-
-// Get type color for value
-function getTypeColor(value: any): string {
-  if (value === null) return 'var(--bsg-danger)';
-  if (value === undefined) return 'var(--bsg-away)';
-  if (typeof value === 'string') return 'var(--bsg-ok)';
-  if (typeof value === 'number') return 'var(--bsg-accent)';
-  if (typeof value === 'boolean') return 'var(--bsg-warn)';
-  if (Array.isArray(value)) return 'var(--bsg-ink-2)';
-  if (typeof value === 'object') return 'var(--bsg-accent-2)';
-  return 'var(--bsg-ink)';
-}
-
-// Format value for display
-function formatValue(value: any): string {
-  if (value === null) return 'null';
-  if (value === undefined) return 'undefined';
-  if (typeof value === 'string') return `"${value}"`;
-  if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (Array.isArray(value)) return `Array(${value.length})`;
-  if (typeof value === 'object') {
-    const keys = Object.keys(value);
-    return `{${keys.length} keys}`;
-  }
-  return String(value);
-}
-
-// Check if value is expandable
-function isExpandable(value: any): boolean {
-  return value !== null && typeof value === 'object';
-}
-
-// Filter state based on search query
-function matchesSearch(key: string, value: any, query: string): boolean {
-  if (!query) return true;
-  const lowerQuery = query.toLowerCase();
-  if (key.toLowerCase().includes(lowerQuery)) return true;
-  if (typeof value === 'string' && value.toLowerCase().includes(lowerQuery)) return true;
-  if (typeof value === 'number' && String(value).includes(query)) return true;
-  return false;
-}
-
-// Player switching
-function switchToPlayer(position: number) {
-  emit('switch-player', position);
-}
-
-// Restart game — two-click confirm (no native dialog; first click arms, second fires)
-function handleRestartClick() {
-  if (!restartConfirming.value) {
-    // Arm the confirm state with a 5s auto-cancel
-    restartConfirming.value = true;
-    restartConfirmTimer = setTimeout(() => {
-      restartConfirming.value = false;
-      restartConfirmTimer = null;
-    }, 5000);
-  } else {
-    // Second click — confirmed
-    if (restartConfirmTimer) {
-      clearTimeout(restartConfirmTimer);
-      restartConfirmTimer = null;
-    }
-    restartConfirming.value = false;
-    emit('restart-game');
-  }
-}
-
-// Copy state to clipboard
 function copyState() {
   navigator.clipboard.writeText(formattedState.value);
 }
 
-// Download state as JSON
 function downloadState() {
   const blob = new Blob([formattedState.value], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -583,25 +287,24 @@ function downloadState() {
   URL.revokeObjectURL(url);
 }
 
-// Fetch action traces from the host bridge
+// ── Actions tab ─────────────────────────────────────────────────────────────
+
+const actionTraces = ref<ActionTrace[]>([]);
+const tracesLoading = ref(false);
+const tracesError = ref<string | null>(null);
+const tracesLastFetched = ref(0);
+const flowContext = ref<FlowContext | null>(null);
+const flowStateInfo = ref<FlowStateInfo | null>(null);
+
 async function fetchActionTraces() {
   if (tracesLoading.value) return;
 
   tracesLoading.value = true;
   tracesError.value = null;
-
   try {
-    const data = await debugRequest('debug:action-traces', { player: props.playerSeat });
-
-    if (!data.success) {
-      throw new Error((data.error as string) || 'Failed to fetch action traces');
-    }
-
-    // `debugRequest` returns an untyped host payload, so check the shape rather
-    // than asserting it: a malformed response degrades to empty/null instead of
-    // putting a non-array or a stray primitive into typed state.
-    actionTraces.value = Array.isArray(data.traces) ? (data.traces as ActionTrace[]) : [];
-    flowContext.value = isFlowContext(data.flowContext) ? data.flowContext : null;
+    const { traces, flowContext: context } = await bridge.actionTraces(props.playerSeat);
+    actionTraces.value = traces;
+    flowContext.value = context;
     tracesLastFetched.value = Date.now();
   } catch (e) {
     tracesError.value = e instanceof Error ? e.message : 'Unknown error';
@@ -610,7 +313,19 @@ async function fetchActionTraces() {
   }
 }
 
-// Computed: actions that pass conditions but are blocked by flow
+/**
+ * Where the flow currently stands. A host that cannot say is not an error worth
+ * showing — the Actions tab simply omits the section.
+ */
+async function fetchFlowState() {
+  try {
+    flowStateInfo.value = await bridge.flowState(props.playerSeat);
+  } catch {
+    flowStateInfo.value = null;
+  }
+}
+
+/** Actions that pass their conditions but that the flow will not accept. */
 const flowRestrictedActions = computed(() => {
   if (!flowContext.value) return [];
   const flowAllowed = new Set(flowContext.value.flowAllowedActions);
@@ -619,91 +334,90 @@ const flowRestrictedActions = computed(() => {
     .sort((a, b) => a.actionName.localeCompare(b.actionName));
 });
 
-// Computed: actions that are truly available (pass conditions AND in flow)
+/** Actions that pass their conditions AND that the flow will accept. */
 const trulyAvailableActions = computed(() => {
-  if (!flowContext.value) {
-    // No flow context - show all available as truly available
-    return actionTraces.value
-      .filter(t => t.available)
-      .sort((a, b) => a.actionName.localeCompare(b.actionName));
-  }
-  const flowAllowed = new Set(flowContext.value.flowAllowedActions);
+  const flowAllowed = flowContext.value ? new Set(flowContext.value.flowAllowedActions) : null;
   return actionTraces.value
-    .filter(t => t.available && flowAllowed.has(t.actionName))
+    .filter(t => t.available && (flowAllowed === null || flowAllowed.has(t.actionName)))
     .sort((a, b) => a.actionName.localeCompare(b.actionName));
 });
 
-// Computed: actions that fail their conditions
-const conditionFailedActions = computed(() => {
-  return actionTraces.value
+/** Actions that fail their own conditions. */
+const conditionFailedActions = computed(() =>
+  actionTraces.value
     .filter(t => !t.available)
-    .sort((a, b) => a.actionName.localeCompare(b.actionName));
-});
+    .sort((a, b) => a.actionName.localeCompare(b.actionName))
+);
 
-// Copy available actions to clipboard
 async function copyAvailableActions() {
-  const available = actionTraces.value.filter(t => t.available);
-  await copyNodeToClipboard(available);
+  await copyNodeToClipboard(actionTraces.value.filter(t => t.available));
 }
 
-// Copy unavailable actions to clipboard
 async function copyUnavailableActions() {
-  const unavailable = actionTraces.value.filter(t => !t.available);
-  await copyNodeToClipboard(unavailable);
+  await copyNodeToClipboard(actionTraces.value.filter(t => !t.available));
 }
 
-// Group elements by class name from the view tree
-interface GroupedElement {
-  id: number;
-  className: string;
-  name?: string;
-  notation?: string;
-  attributes: Record<string, unknown>;
-  fullObject: Record<string, unknown>; // Store full object for detail view
+// ── Logs tab (ERR-04) ───────────────────────────────────────────────────────
+
+const logEntries = ref<LogEntry[]>([]);
+const logsLoading = ref(false);
+const logsError = ref<string | null>(null);
+const logsLastFetched = ref(0);
+
+async function fetchLogs() {
+  if (logsLoading.value) return;
+
+  logsLoading.value = true;
+  logsError.value = null;
+  try {
+    logEntries.value = await bridge.logs();
+    logsLastFetched.value = Date.now();
+  } catch (e) {
+    logsError.value = e instanceof Error ? e.message : 'Unknown error';
+  } finally {
+    logsLoading.value = false;
+  }
 }
 
-const groupedElements = computed(() => {
-  const groups: Record<string, GroupedElement[]> = {};
+// ── Tab-driven refreshing ───────────────────────────────────────────────────
+// Entering a tab loads it, unless it was loaded moments ago; a new game state
+// reloads whichever tab is showing, because that state is what it describes.
 
-  function traverse(node: unknown) {
-    if (!node || typeof node !== 'object') return;
-    const obj = node as Record<string, unknown>;
-
-    if (typeof obj.id === 'number') {
-      const className = (obj.className as string) || 'Unknown';
-      if (!groups[className]) {
-        groups[className] = [];
-      }
-
-      // Create a copy of the object without children for the detail view
-      const { children, ...objectWithoutChildren } = obj;
-
-      groups[className].push({
-        id: obj.id,
-        className,
-        name: obj.name as string | undefined,
-        notation: obj.notation as string | undefined,
-        attributes: (obj.attributes as Record<string, unknown>) || {},
-        fullObject: objectWithoutChildren,
-      });
-    }
-
-    // Traverse children
-    if (Array.isArray(obj.children)) {
-      for (const child of obj.children) {
-        traverse(child);
-      }
-    }
+watch(activeTab, (tab) => {
+  if (!props.gameId) return;
+  if (tab === 'actions' && Date.now() - tracesLastFetched.value > TAB_REFRESH_MAX_AGE_MS) {
+    fetchActionTraces();
+    fetchFlowState();
   }
-
-  if (displayedState.value?.state?.view) {
-    traverse(displayedState.value.state.view);
+  if (tab === 'history') {
+    refreshHistoryIfStale(TAB_REFRESH_MAX_AGE_MS);
   }
-
-  return groups;
+  if (tab === 'logs' && Date.now() - logsLastFetched.value > TAB_REFRESH_MAX_AGE_MS) {
+    fetchLogs();
+  }
 });
 
-// Get the currently selected element
+watch(() => props.state, () => {
+  if (activeTab.value === 'actions') {
+    fetchActionTraces();
+    fetchFlowState();
+  }
+  if (activeTab.value === 'history') fetchHistory();
+  if (activeTab.value === 'logs') fetchLogs();
+}, { deep: false });
+
+// ── Elements tab ────────────────────────────────────────────────────────────
+
+const selectedElementId = ref<number | null>(null);
+const elementSearchQuery = ref('');
+const expandedElementGroups = ref<Set<string>>(new Set());
+
+const groupedElements = computed(() => groupElementsByClass(displayedView.value));
+
+const filteredElementGroups = computed(() =>
+  filterElementGroups(groupedElements.value, elementSearchQuery.value)
+);
+
 const selectedElement = computed<GroupedElement | null>(() => {
   if (selectedElementId.value === null) return null;
   for (const elements of Object.values(groupedElements.value)) {
@@ -713,284 +427,69 @@ const selectedElement = computed<GroupedElement | null>(() => {
   return null;
 });
 
-// Copy element JSON to clipboard
+function toggleElementGroup(className: string) {
+  const next = new Set(expandedElementGroups.value);
+  if (next.has(className)) next.delete(className);
+  else next.add(className);
+  expandedElementGroups.value = next;
+}
+
+/** Select an element and highlight it on the board; selecting it again clears. */
+function selectElement(element: GroupedElement) {
+  const next = selectedElementId.value === element.id ? null : element.id;
+  selectedElementId.value = next;
+  emit('highlight-element', next);
+}
+
 async function copyElementToClipboard(element: GroupedElement) {
   await copyNodeToClipboard(element.fullObject);
 }
 
-// Filter elements by search query
-const filteredElementGroups = computed(() => {
-  if (!elementSearchQuery.value) return groupedElements.value;
+/** Whatever extra the game itself chose to publish for debugging. */
+const customDebugData = computed(
+  () => (displayedState.value as { state?: { customDebug?: unknown } } | null)?.state?.customDebug ?? null
+);
 
-  const query = elementSearchQuery.value.toLowerCase();
-  const filtered: Record<string, GroupedElement[]> = {};
+// ── Decks tab ───────────────────────────────────────────────────────────────
 
-  for (const [className, elements] of Object.entries(groupedElements.value)) {
-    const matchingElements = elements.filter(el =>
-      className.toLowerCase().includes(query) ||
-      el.name?.toLowerCase().includes(query) ||
-      el.notation?.toLowerCase().includes(query) ||
-      String(el.id).includes(query)
-    );
+const deckSearchQuery = ref('');
+const expandedDecks = ref<Set<number>>(new Set());
+const selectedDeckCard = ref<{ deckId: number; cardId: number } | null>(null);
 
-    if (matchingElements.length > 0) {
-      filtered[className] = matchingElements;
-    }
-  }
+const discoveredDecks = computed(() => discoverDecks(displayedView.value));
+const discoveredCardContainers = computed(() => discoverCardContainers(displayedView.value));
 
-  return filtered;
-});
+const filteredDecks = computed(() => filterDecks(discoveredDecks.value, deckSearchQuery.value));
 
-// Toggle element group expansion
-function toggleElementGroup(className: string) {
-  if (expandedElementGroups.value.has(className)) {
-    expandedElementGroups.value.delete(className);
-  } else {
-    expandedElementGroups.value.add(className);
-  }
-  expandedElementGroups.value = new Set(expandedElementGroups.value);
-}
+/** Decks the search pulled open on its own, because the match is on a card. */
+const searchExpandedDecks = computed(() =>
+  decksExpandedBySearch(filteredDecks.value, deckSearchQuery.value)
+);
 
-// Select an element and highlight it on the board
-function selectElement(element: GroupedElement) {
-  if (selectedElementId.value === element.id) {
-    // Deselect
-    selectedElementId.value = null;
-    emit('highlight-element', null);
-  } else {
-    selectedElementId.value = element.id;
-    emit('highlight-element', element.id);
-  }
-}
-
-// Get display name for an element
-function getElementDisplayName(element: GroupedElement): string {
-  if (element.notation) return element.notation;
-  if (element.name) return element.name;
-  return `#${element.id}`;
-}
-
-// Get custom debug data from state
-const customDebugData = computed(() => {
-  return displayedState.value?.state?.customDebug ?? null;
-});
-
-// Discover deck elements from view tree
-interface DeckInfo {
-  id: number;
-  name: string;
-  className: string;
-  cards: Array<{
-    id: number;
-    name?: string;
-    notation?: string;
-    className: string;
-    fullObject: Record<string, unknown>;
-  }>;
-  fullObject: Record<string, unknown>;
-}
-
-const discoveredDecks = computed<DeckInfo[]>(() => {
-  const decks: DeckInfo[] = [];
-
-  function traverse(node: unknown) {
-    if (!node || typeof node !== 'object') return;
-    const obj = node as Record<string, unknown>;
-
-    // Check if this is a deck element (has $type: 'deck' or className contains 'Deck')
-    const isDeck = obj.$type === 'deck' ||
-                   (typeof obj.className === 'string' && obj.className.toLowerCase().includes('deck'));
-
-    if (isDeck && typeof obj.id === 'number') {
-      const cards: DeckInfo['cards'] = [];
-
-      // Traverse children to find cards
-      if (Array.isArray(obj.children)) {
-        for (const child of obj.children) {
-          if (child && typeof child === 'object') {
-            const cardObj = child as Record<string, unknown>;
-            if (typeof cardObj.id === 'number') {
-              const { children: cardChildren, ...cardWithoutChildren } = cardObj;
-              cards.push({
-                id: cardObj.id,
-                name: cardObj.name as string | undefined,
-                notation: cardObj.notation as string | undefined,
-                className: (cardObj.className as string) || 'Unknown',
-                fullObject: cardWithoutChildren,
-              });
-            }
-          }
-        }
-      }
-
-      const { children, ...deckWithoutChildren } = obj;
-      decks.push({
-        id: obj.id,
-        name: (obj.name as string) || `Deck #${obj.id}`,
-        className: (obj.className as string) || 'Deck',
-        cards,
-        fullObject: deckWithoutChildren,
-      });
-    }
-
-    // Continue traversing children
-    if (Array.isArray(obj.children)) {
-      for (const child of obj.children) {
-        traverse(child);
-      }
-    }
-  }
-
-  if (displayedState.value?.state?.view) {
-    traverse(displayedState.value.state.view);
-  }
-
-  return decks;
-});
-
-/**
- * Card container info - any element that can hold cards (decks, hands, discard piles, etc.)
- */
-interface CardContainerInfo {
-  id: number;
-  name: string;
-  className: string;
-  cardCount: number;
-}
-
-/**
- * Discover all card containers in the game state.
- * This includes decks, hands, discard piles, and any other element with children.
- */
-const discoveredCardContainers = computed<CardContainerInfo[]>(() => {
-  const containers: CardContainerInfo[] = [];
-  const seenIds = new Set<number>();
-
-  function traverse(node: unknown) {
-    if (!node || typeof node !== 'object') return;
-    const obj = node as Record<string, unknown>;
-
-    // Check if this element has children (making it a potential card container)
-    if (typeof obj.id === 'number' && Array.isArray(obj.children) && obj.children.length > 0) {
-      // Check if children look like cards (have id property)
-      const hasCardLikeChildren = obj.children.some(
-        (child: unknown) => child && typeof child === 'object' && typeof (child as Record<string, unknown>).id === 'number'
-      );
-
-      if (hasCardLikeChildren && !seenIds.has(obj.id)) {
-        seenIds.add(obj.id);
-        containers.push({
-          id: obj.id,
-          name: (obj.name as string) || (obj.className as string) || `Container #${obj.id}`,
-          className: (obj.className as string) || 'Unknown',
-          cardCount: obj.children.filter(
-            (child: unknown) => child && typeof child === 'object' && typeof (child as Record<string, unknown>).id === 'number'
-          ).length,
-        });
-      }
-    }
-
-    // Continue traversing children
-    if (Array.isArray(obj.children)) {
-      for (const child of obj.children) {
-        traverse(child);
-      }
-    }
-  }
-
-  if (displayedState.value?.state?.view) {
-    traverse(displayedState.value.state.view);
-  }
-
-  return containers;
-});
-
-// Check if a card matches the search query
-function cardMatchesSearch(card: DeckInfo['cards'][0], query: string): boolean {
-  if (!query) return false;
-  const lowerQuery = query.toLowerCase();
-  return !!(
-    (card.name && card.name.toLowerCase().includes(lowerQuery)) ||
-    (card.notation && card.notation.toLowerCase().includes(lowerQuery)) ||
-    card.className.toLowerCase().includes(lowerQuery) ||
-    String(card.id).includes(lowerQuery)
-  );
-}
-
-// Filter decks by search query (shows decks that match OR have cards that match)
-const filteredDecks = computed(() => {
-  if (!deckSearchQuery.value) return discoveredDecks.value;
-
-  const query = deckSearchQuery.value.toLowerCase();
-  return discoveredDecks.value.filter(deck => {
-    // Check if deck itself matches
-    const deckMatches =
-      deck.name.toLowerCase().includes(query) ||
-      deck.className.toLowerCase().includes(query) ||
-      String(deck.id).includes(query);
-
-    if (deckMatches) return true;
-
-    // Check if any card in the deck matches
-    return deck.cards.some(card => cardMatchesSearch(card, query));
-  });
-});
-
-// Get decks that should be auto-expanded due to card-level search matches
-const searchExpandedDecks = computed(() => {
-  const expanded = new Set<number>();
-  if (!deckSearchQuery.value) return expanded;
-
-  const query = deckSearchQuery.value.toLowerCase();
-  for (const deck of filteredDecks.value) {
-    // Auto-expand if any card matches the search
-    if (deck.cards.some(card => cardMatchesSearch(card, query))) {
-      expanded.add(deck.id);
-    }
-  }
-  return expanded;
-});
-
-// Check if a deck should be shown as expanded (user expanded OR search auto-expanded)
 function isDeckExpanded(deckId: number): boolean {
   return expandedDecks.value.has(deckId) || searchExpandedDecks.value.has(deckId);
 }
 
-// Toggle deck expansion
 function toggleDeck(deckId: number) {
-  if (expandedDecks.value.has(deckId)) {
-    expandedDecks.value.delete(deckId);
-  } else {
-    expandedDecks.value.add(deckId);
-  }
-  expandedDecks.value = new Set(expandedDecks.value);
+  const next = new Set(expandedDecks.value);
+  if (next.has(deckId)) next.delete(deckId);
+  else next.add(deckId);
+  expandedDecks.value = next;
 }
 
-// Get display name for a card
-function getCardDisplayName(card: DeckInfo['cards'][0]): string {
-  if (card.notation) return card.notation;
-  if (card.name) return card.name;
-  return `#${card.id}`;
-}
-
-// Select a card in a deck for detail view
 function selectDeckCard(deckId: number, cardId: number) {
-  if (selectedDeckCard.value?.deckId === deckId && selectedDeckCard.value?.cardId === cardId) {
-    selectedDeckCard.value = null;
-  } else {
-    selectedDeckCard.value = { deckId, cardId };
-  }
+  const isSelected = selectedDeckCard.value?.deckId === deckId
+    && selectedDeckCard.value?.cardId === cardId;
+  selectedDeckCard.value = isSelected ? null : { deckId, cardId };
 }
 
-// Get the currently selected card object
 const selectedCard = computed(() => {
-  if (!selectedDeckCard.value) return null;
-  const deck = discoveredDecks.value.find(d => d.id === selectedDeckCard.value!.deckId);
-  if (!deck) return null;
-  return deck.cards.find(c => c.id === selectedDeckCard.value!.cardId) || null;
+  const selection = selectedDeckCard.value;
+  if (!selection) return null;
+  const deck = discoveredDecks.value.find(d => d.id === selection.deckId);
+  return deck?.cards.find(c => c.id === selection.cardId) ?? null;
 });
 
-// Copy deck contents to clipboard
 async function copyDeckToClipboard(deck: DeckInfo) {
   await copyNodeToClipboard({
     ...deck.fullObject,
@@ -998,403 +497,58 @@ async function copyDeckToClipboard(deck: DeckInfo) {
   });
 }
 
-// Deck manipulation — routed through the host bridge. The host broadcasts the
-// new state, so the view updates without a local refresh.
-async function runDeckEdit(op: string, payload: Record<string, unknown>, failMessage: string) {
-  deckManipulationLoading.value = true;
-  deckManipulationError.value = null;
+const {
+  deckManipulationLoading,
+  deckManipulationError,
+  moveCardToTop,
+  reorderCard,
+  transferCard,
+  shuffleDeck,
+  moveCardUp,
+  moveCardDown,
+  transferDialogOpen,
+  transferDialogCardId,
+  transferDialogSourceDeckId,
+  transferDialogTargetDeckId,
+  transferDialogPosition,
+  availableTargetContainers,
+  openTransferDialog,
+  closeTransferDialog,
+  confirmTransfer,
+} = useDeckWorkbench({ bridge, cardContainers: discoveredCardContainers });
 
-  try {
-    const data = await debugRequest(op, payload);
-    if (!data.success) {
-      deckManipulationError.value = (data.error as string) || failMessage;
-    }
-  } catch (err) {
-    deckManipulationError.value = err instanceof Error ? err.message : 'Debug request failed';
-  } finally {
-    deckManipulationLoading.value = false;
-  }
+// ── Controls tab ────────────────────────────────────────────────────────────
+
+function switchToPlayer(position: number) {
+  emit('switch-player', position);
 }
 
-async function moveCardToTop(cardId: number) {
-  await runDeckEdit('debug:move-to-top', { cardId }, 'Failed to move card');
-}
+// Restart confirm state (two-click guard — prevents single-click data loss)
+const restartConfirming = ref(false);
+// Plain let — no reactive consumers read the timer ID; a ref would track
+// reads/writes unnecessarily (matches DevHost.vue's pattern for the same).
+let restartConfirmTimer: ReturnType<typeof setTimeout> | null = null;
 
-async function reorderCard(cardId: number, targetIndex: number) {
-  await runDeckEdit('debug:reorder-card', { cardId, targetIndex }, 'Failed to reorder card');
-}
-
-async function transferCard(cardId: number, targetDeckId: number, position: 'first' | 'last' = 'first') {
-  await runDeckEdit('debug:transfer-card', { cardId, targetDeckId, position }, 'Failed to transfer card');
-}
-
-async function shuffleDeck(deckId: number) {
-  await runDeckEdit('debug:shuffle-deck', { deckId }, 'Failed to shuffle deck');
-}
-
-// Move card up one position in the deck
-function moveCardUp(deck: DeckInfo, cardId: number) {
-  const currentIndex = deck.cards.findIndex(c => c.id === cardId);
-  if (currentIndex > 0) {
-    reorderCard(cardId, currentIndex - 1);
-  }
-}
-
-// Move card down one position in the deck
-function moveCardDown(deck: DeckInfo, cardId: number) {
-  const currentIndex = deck.cards.findIndex(c => c.id === cardId);
-  if (currentIndex < deck.cards.length - 1) {
-    reorderCard(cardId, currentIndex + 1);
-  }
-}
-
-// Transfer dialog state
-const transferDialogOpen = ref(false);
-const transferDialogCardId = ref<number | null>(null);
-const transferDialogSourceDeckId = ref<number | null>(null);
-const transferDialogTargetDeckId = ref<number | null>(null);
-const transferDialogPosition = ref<'first' | 'last'>('first');
-
-function openTransferDialog(cardId: number, sourceDeckId: number) {
-  transferDialogCardId.value = cardId;
-  transferDialogSourceDeckId.value = sourceDeckId;
-  transferDialogTargetDeckId.value = null;
-  transferDialogPosition.value = 'first';
-  transferDialogOpen.value = true;
-}
-
-function closeTransferDialog() {
-  transferDialogOpen.value = false;
-  transferDialogCardId.value = null;
-  transferDialogSourceDeckId.value = null;
-}
-
-async function confirmTransfer() {
-  if (transferDialogCardId.value !== null && transferDialogTargetDeckId.value !== null) {
-    await transferCard(transferDialogCardId.value, transferDialogTargetDeckId.value, transferDialogPosition.value);
-    closeTransferDialog();
-  }
-}
-
-// Get available target containers (excluding the source container)
-// Uses discoveredCardContainers to include hands, discard piles, etc.
-const availableTargetContainers = computed(() => {
-  if (transferDialogSourceDeckId.value === null) return [];
-  return discoveredCardContainers.value.filter(c => c.id !== transferDialogSourceDeckId.value);
-});
-
-// Format a condition value for display
-function formatConditionValue(value: unknown): string {
-  if (value === null) return 'null';
-  if (value === undefined) return 'undefined';
-  if (typeof value === 'boolean') return value.toString();
-  if (typeof value === 'number') return value.toString();
-  if (typeof value === 'string') return `"${value}"`;
-  if (Array.isArray(value)) return `[${value.length} items]`;
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
-// Fetch the readable flow position from the debug:flow-state op (FLOW-01 locked
-// debug:* channel — distinct from fetchActionTraces' debug:action-traces).
-async function fetchFlowState() {
-  try {
-    const data = await debugRequest('debug:flow-state', { player: props.playerSeat });
-    if (!data.success) {
-      flowStateInfo.value = null;
-      return;
-    }
-    flowStateInfo.value = (data.flowDebugInfo as FlowStateInfo) ?? null;
-  } catch {
-    flowStateInfo.value = null;
-  }
-}
-
-// Refresh action traces when switching to actions tab or when state changes
-watch(activeTab, (tab) => {
-  if (tab === 'actions' && props.gameId) {
-    // Refresh traces when switching to actions tab
-    if (Date.now() - tracesLastFetched.value > 2000) {
-      fetchActionTraces();
-      fetchFlowState();
-    }
-  }
-});
-
-// Refresh traces when state changes
-watch(() => props.state, () => {
-  if (activeTab.value === 'actions') {
-    fetchActionTraces();
-    fetchFlowState();
-  }
-}, { deep: false });
-
-// Fetch action history from server
-async function fetchHistory() {
-  if (historyLoading.value) return;
-
-  historyLoading.value = true;
-  historyError.value = null;
-
-  try {
-    const data = await debugRequest('debug:history', {});
-
-    if (!data.success) {
-      throw new Error((data.error as string) || 'Failed to fetch history');
-    }
-
-    actionHistory.value = (data.actionHistory as typeof actionHistory.value) || [];
-    historyLastFetched.value = Date.now();
-  } catch (e) {
-    historyError.value = e instanceof Error ? e.message : 'Unknown error';
-  } finally {
-    historyLoading.value = false;
-  }
-}
-
-// Refresh history when switching to history tab
-watch(activeTab, (tab) => {
-  if (tab === 'history' && props.gameId) {
-    // Refresh if not fetched recently (within 2 seconds)
-    if (Date.now() - historyLastFetched.value > 2000) {
-      fetchHistory();
-    }
-  }
-});
-
-// Refresh history when state changes (new action occurred)
-watch(() => props.state, () => {
-  if (activeTab.value === 'history') {
-    fetchHistory();
-  }
-}, { deep: false });
-
-// Fetch captured server-side logs (ERR-04) from the debug:logs op.
-async function fetchLogs() {
-  if (logsLoading.value) return;
-
-  logsLoading.value = true;
-  logsError.value = null;
-
-  try {
-    const data = await debugRequest('debug:logs', {});
-
-    if (!data.success) {
-      throw new Error((data.error as string) || 'Failed to fetch logs');
-    }
-
-    logEntries.value = (data.entries as LogEntry[]) || [];
-    logsLastFetched.value = Date.now();
-  } catch (e) {
-    logsError.value = e instanceof Error ? e.message : 'Unknown error';
-  } finally {
-    logsLoading.value = false;
-  }
-}
-
-// Refresh logs when switching to the logs tab
-watch(activeTab, (tab) => {
-  if (tab === 'logs' && props.gameId) {
-    if (Date.now() - logsLastFetched.value > 2000) {
-      fetchLogs();
-    }
-  }
-});
-
-// Refresh logs when state changes (new op may have recorded new entries)
-watch(() => props.state, () => {
-  if (activeTab.value === 'logs') {
-    fetchLogs();
-  }
-}, { deep: false });
-
-// Format action for display
-function formatActionName(name: string): string {
-  // Convert camelCase to Title Case with spaces
-  return name
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/^./, s => s.toUpperCase());
-}
-
-// Format action arguments for display
-function formatActionArgs(args: Record<string, unknown>): string {
-  if (!args || Object.keys(args).length === 0) return '';
-
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(args)) {
-    if (value !== undefined && value !== null) {
-      // Handle element references
-      if (typeof value === 'object' && value !== null) {
-        const obj = value as Record<string, unknown>;
-        if (obj.__elementRef) {
-          parts.push(`${key}: ${obj.__elementRef}`);
-        } else if (obj.__elementId) {
-          parts.push(`${key}: #${obj.__elementId}`);
-        } else {
-          parts.push(`${key}: ${JSON.stringify(value)}`);
-        }
-      } else {
-        parts.push(`${key}: ${value}`);
-      }
-    }
-  }
-  return parts.join(', ');
-}
-
-// Format timestamp
-function formatTimestamp(timestamp?: number): string {
-  if (!timestamp) return '';
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString();
-}
-
-// Select an action to view its state
-async function selectAction(index: number) {
-  // If clicking the last action (current state) or toggling off, go to live mode
-  if (index === actionHistory.value.length || selectedActionIndex.value === index) {
-    clearHistoricalState();
+/** Restart the game — first click arms, second fires, five seconds disarms. */
+function handleRestartClick() {
+  if (!restartConfirming.value) {
+    restartConfirming.value = true;
+    restartConfirmTimer = setTimeout(() => {
+      restartConfirming.value = false;
+      restartConfirmTimer = null;
+    }, 5000);
     return;
   }
 
-  selectedActionIndex.value = index;
-  await fetchStateAtAction(index);
-}
-
-// Fetch state at a specific action
-async function fetchStateAtAction(actionIndex: number) {
-  historicalStateLoading.value = true;
-  historicalStateError.value = null;
-
-  try {
-    // Fetch state and diff in parallel via the host bridge.
-    const [stateData, diffData] = await Promise.all([
-      debugRequest('debug:state-at', { actionIndex, player: props.playerSeat }),
-      // Diff from previous action to this action (what changed to get here)
-      actionIndex > 0
-        ? debugRequest('debug:state-diff', {
-            fromIndex: actionIndex - 1,
-            toIndex: actionIndex,
-            player: props.playerSeat,
-          })
-        : Promise.resolve(null),
-    ]);
-
-    if (!stateData.success) {
-      throw new Error((stateData.error as string) || 'Failed to fetch state');
-    }
-
-    historicalState.value = stateData.state;
-    stateDiff.value = diffData?.success ? (diffData.diff as ElementDiff) : null;
-
-    // Emit to parent so main game UI can show historical state with diff
-    emit('time-travel', stateData.state, actionIndex, stateDiff.value);
-  } catch (e) {
-    historicalStateError.value = e instanceof Error ? e.message : 'Unknown error';
-    historicalState.value = null;
-    stateDiff.value = null;
-    emit('time-travel', null, null, null);
-  } finally {
-    historicalStateLoading.value = false;
+  if (restartConfirmTimer) {
+    clearTimeout(restartConfirmTimer);
+    restartConfirmTimer = null;
   }
+  restartConfirming.value = false;
+  emit('restart-game');
 }
-
-// Clear historical state when going back to live view
-function clearHistoricalState() {
-  selectedActionIndex.value = null;
-  historicalState.value = null;
-  historicalStateError.value = null;
-  stateDiff.value = null;
-  // Emit to parent to return to live state
-  emit('time-travel', null, null, null);
-}
-
-// Rewind game to a specific action index (debug only)
-// This permanently rewinds the game - all subsequent actions are discarded
-const rewindLoading = ref(false);
-const rewindError = ref<string | null>(null);
-
-/**
- * Pending rewind target, or null when no confirmation is open.
- *
- * This confirmation is an IN-PANEL dialog (same shape as the deck transfer
- * dialog below), never `window.confirm`. A native dialog is the wrong tool here
- * for three separate reasons, each of which broke this control:
- *
- *  - It BLOCKS the whole page while open. The game holds a live WebSocket and
- *    renders continuously; a modal dialog freezes the renderer, so nothing in
- *    the tab (including the debug panel that opened it) responds until it is
- *    dismissed. That is also what it looks like to any browser automation
- *    driving the shell — an unresponsive page, not a prompt.
- *  - The game runs INSIDE AN IFRAME in platform mode. Chrome blocks modal
- *    dialogs from cross-origin iframes outright: `confirm()` returns false
- *    without ever showing anything, so "Rewind Here" silently did nothing —
- *    no rewind, no error, no explanation.
- *  - One tick of Chrome's "prevent this page from creating additional dialogs"
- *    box makes every later `confirm()` return false, permanently and silently
- *    disabling the control for that session.
- *
- * The rewind is irreversible, so it keeps a confirmation — just one this app
- * actually controls, which can state what will be discarded and stay operable.
- */
-const pendingRewindIndex = ref<number | null>(null);
-
-function requestRewind(actionIndex: number): void {
-  rewindError.value = null;
-  pendingRewindIndex.value = actionIndex;
-}
-
-function cancelRewind(): void {
-  pendingRewindIndex.value = null;
-}
-
-/** How many actions the pending rewind would permanently discard. */
-const pendingRewindDiscardCount = computed(() =>
-  pendingRewindIndex.value === null ? 0 : actionHistory.value.length - pendingRewindIndex.value
-);
-
-async function confirmRewind(): Promise<void> {
-  const actionIndex = pendingRewindIndex.value;
-  if (actionIndex === null) return;
-  pendingRewindIndex.value = null;
-  await rewindToAction(actionIndex);
-}
-
-async function rewindToAction(actionIndex: number) {
-  rewindLoading.value = true;
-  rewindError.value = null;
-
-  try {
-    const result = await debugRequest('debug:rewind', { actionIndex });
-
-    if (result.success) {
-      // Clear time travel state - we're now at the live (rewound) state
-      clearHistoricalState();
-      // Refresh history to show the updated action list
-      await fetchHistory();
-    } else {
-      rewindError.value = (result.error as string) || 'Rewind failed';
-    }
-  } catch (err) {
-    rewindError.value = err instanceof Error ? err.message : 'Rewind failed';
-  } finally {
-    rewindLoading.value = false;
-  }
-}
-
-// Computed: is viewing historical state?
-const isViewingHistory = computed(() => selectedActionIndex.value !== null);
-
-// Computed: the state to display in the State tab
-// Note: props.state has structure { state: PlayerGameState, flowState: FlowState }
-// historicalState is directly a PlayerGameState
-// We wrap historical state to match the structure
-const displayedState = computed(() => {
-  if (isViewingHistory.value && historicalState.value) {
-    return { state: historicalState.value, flowState: null };
-  }
-  return props.state;
-});
 </script>
+
 
 <template>
   <div class="debug-panel" :class="{ expanded: panelExpanded }">
@@ -1468,7 +622,28 @@ const displayedState = computed(() => {
             />
           </div>
 
-          <div class="state-display" :class="{ historical: isViewingHistory }">
+          <!--
+            A time-travel read that is still running, or that failed. Without
+            these the panel falls back to the LIVE state while `isViewingHistory`
+            is still true, and shows it inside the historical border: the reader
+            cannot tell a failed read from a state that genuinely looks that way.
+          -->
+          <div v-if="historicalStateLoading" class="historical-state-loading">
+            Reading the state after action {{ selectedActionIndex }}&hellip;
+          </div>
+          <div v-else-if="historicalStateError" class="historical-state-error" role="alert">
+            <strong>Could not read the state after action {{ selectedActionIndex }}.</strong>
+            <span class="historical-state-reason">{{ historicalStateError }}</span>
+            <span>
+              Pick a more recent action, or press Back to Live to return to the current state.
+            </span>
+          </div>
+
+          <div
+            v-else
+            class="state-display"
+            :class="{ historical: isViewingHistory }"
+          >
             <pre v-if="showRawState">{{ formattedState }}</pre>
 
             <!-- Tree View -->
@@ -1497,11 +672,16 @@ const displayedState = computed(() => {
                     :value="value"
                     :path="`root.${key}`"
                     :depth="0"
-                    :expanded-paths="expandedPaths"
-                    :search-query="stateSearchQuery"
+                    :expanded-paths="treeExpandedPaths"
+                    :visible-paths="stateSearch.visiblePaths"
                     @toggle="toggleExpand"
                     @copy="copyNodeToClipboard"
                   />
+
+                  <div v-if="stateSearchFoundNothing" class="state-search-empty">
+                    No part of the state matches &ldquo;{{ stateSearchQuery }}&rdquo;. The search
+                    reads property names and leaf values.
+                  </div>
                 </div>
               </template>
               <div v-else class="no-state">No state available</div>
@@ -3072,6 +2252,39 @@ const displayedState = computed(() => {
 
 .historical-banner button {
   margin-left: auto;
+}
+
+.historical-state-loading {
+  padding: 12px;
+  color: var(--bsg-ink-2);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.historical-state-error {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bsg-danger) 12%, transparent);
+  border: 1px solid var(--bsg-danger);
+  border-radius: 6px;
+  color: var(--bsg-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.historical-state-reason {
+  font-family: var(--bsg-font-mono, monospace);
+  color: var(--bsg-ink-2);
+  word-break: break-word;
+}
+
+.state-search-empty {
+  padding: 12px 4px;
+  color: var(--bsg-ink-2);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 /* Historical state indicator */

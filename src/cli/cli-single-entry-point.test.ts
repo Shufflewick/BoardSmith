@@ -65,7 +65,15 @@ describe('the CLI is the only entry point', () => {
 
   describe('scaffolded game projects', () => {
     const generated = JSON.parse(
-      generatePackageJson({ name: 'test-game', displayName: 'Test Game', description: 'x' }),
+      generatePackageJson(
+        {
+          name: 'test-game',
+          displayName: 'Test Game',
+          description: 'x',
+          playerCount: { min: 2, max: 4 },
+        },
+        '/tmp/test-game',
+      ),
     );
 
     it('get no scripts at all — the CLI is their one interface', () => {

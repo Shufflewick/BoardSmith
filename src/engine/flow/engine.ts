@@ -1,5 +1,5 @@
 import type { Game } from '../element/game.js';
-import { GameElement } from '../element/game-element.js';
+import { GameElement, hasZoneVisibility } from '../element/game-element.js';
 import { Player } from '../player/player.js';
 import { devWarn } from '../../utils/dev.js';
 import { PlayerFacingError } from '../errors.js';
@@ -8,6 +8,7 @@ import type {
   FlowNode,
   FlowContext,
   FlowPosition,
+  TurnRun,
   FlowState,
   FlowStepResult,
   FlowDefinition,
@@ -75,11 +76,11 @@ type ForEachSnapshotItem =
  *  (already-disclosed) container, never a per-child structure whose size
  *  would leak the hidden zone's exact child count. */
 function hiddenContainerIdOf(element: GameElement): number | undefined {
-  const container = element.parent as unknown;
-  if (container && typeof (container as { getZoneVisibility?: unknown }).getZoneVisibility === 'function') {
-    const zoneVisibility = (container as { getZoneVisibility: () => { mode?: string } | undefined }).getZoneVisibility();
+  const container = element.parent;
+  if (hasZoneVisibility(container)) {
+    const zoneVisibility = container.getZoneVisibility();
     if (zoneVisibility?.mode === 'hidden') {
-      return (container as GameElement).id;
+      return container.id;
     }
   }
   return undefined;
@@ -336,6 +337,18 @@ export class FlowEngine<G extends Game = Game> {
   }
   /** Move count for current action step with move limits */
   private moveCount = 0;
+  /**
+   * The acting seat's run of committed actions, carried across the frame
+   * boundaries a `loop` iteration or a `sequence` of action steps creates.
+   *
+   * `moveCount` lives on the action-step FRAME, so a step re-entered in a new
+   * frame starts at 0 and undo reaches nothing -- even mid-turn. This is what
+   * a `turnScope: 'continue'` step seeds its fresh frame from so the reach
+   * covers the whole run. Mirrored into `FlowPosition.turnRun` so a restore
+   * landing between one frame closing and the next opening carries the same
+   * count it would have carried without one.
+   */
+  private turnRun?: TurnRun;
   /** Current action step config (for move limit tracking) */
   private currentActionConfig?: ActionStepConfig;
   /**
@@ -383,6 +396,7 @@ export class FlowEngine<G extends Game = Game> {
     this.complete = false;
     this.currentActionConfig = undefined;
     this.moveCount = 0;
+    this.turnRun = undefined;
     this.lastActionResult = undefined;
     this.actionError = undefined;
     this.actionThrew = false;
@@ -519,6 +533,13 @@ export class FlowEngine<G extends Game = Game> {
     const currentMoveCount = (currentFrame.data?.moveCount as number) ?? 0;
     const newMoveCount = currentMoveCount + 1;
     currentFrame.data = { ...currentFrame.data, moveCount: newMoveCount };
+
+    // The run this seat is on, which a `turnScope: 'continue'` step re-entered
+    // in a fresh frame seeds itself from. Recorded per seat so an entry for a
+    // DIFFERENT seat never carries -- that is a turn boundary by definition.
+    if (this.currentPlayer) {
+      this.turnRun = { player: this.currentPlayer.seat, count: newMoveCount };
+    }
 
     // Check completion conditions
     if (config.maxMoves && newMoveCount >= config.maxMoves) {
@@ -698,7 +719,7 @@ export class FlowEngine<G extends Game = Game> {
       this.requireRegisteredActions(declared, config.name ?? 'simultaneous-action-step');
 
       const available = declared.filter((actionName) =>
-        this.game.getAvailableActions(player as any).some((a) => a.name === actionName),
+        this.game.getAvailableActions(player).some((a) => a.name === actionName),
       );
 
       if (available.length === 0) {
@@ -797,7 +818,7 @@ export class FlowEngine<G extends Game = Game> {
     if (!player) {
       throw new Error(`Invalid player position: ${actingPlayerIndex}`);
     }
-    const result = this.game.performAction(actionName, player as any, args);
+    const result = this.game.performAction(actionName, player, args);
     this.lastActionResult = result;
 
     if (!result.success) {
@@ -845,7 +866,7 @@ export class FlowEngine<G extends Game = Game> {
         playerState.availableActions = actions.filter((availableActionName) => {
           const action = this.game.getAction(availableActionName);
           if (!action) return false;
-          return this.game.getAvailableActions(player as any).some((a) => a.name === availableActionName);
+          return this.game.getAvailableActions(player).some((a) => a.name === availableActionName);
         });
         // If no available actions left, mark as completed
         if (playerState.availableActions.length === 0) {
@@ -928,6 +949,14 @@ export class FlowEngine<G extends Game = Game> {
     // `session/utils.ts`'s per-seat simultaneous undo boundary depends on.
     if (this.currentActionConfig || this.awaitingPlayers.length > 0) {
       state.moveCount = this.moveCount;
+      // Why moveCount is 0 here, when the seat plainly just acted: the step
+      // this frame belongs to never said whether re-entering it continues the
+      // same turn. Published so the undo refusal can name the cause instead of
+      // reporting "No actions to undo" -- see `entryMoveCount`.
+      const undeclared = this.stack[this.stack.length - 1]?.data?.turnScopeUndeclared;
+      if (typeof undeclared === 'string') {
+        state.turnScopeUndeclared = undeclared;
+      }
       if (this.currentActionConfig?.maxMoves) {
         state.movesRemaining = this.currentActionConfig.maxMoves - this.moveCount;
       }
@@ -1002,6 +1031,8 @@ export class FlowEngine<G extends Game = Game> {
     if (position.playerIndex !== undefined) {
       this.currentPlayer = this.game.getPlayer(position.playerIndex);
     }
+
+    this.turnRun = position.turnRun ? { ...position.turnRun } : undefined;
 
     this.restoreActionStepTracking();
   }
@@ -1260,6 +1291,8 @@ export class FlowEngine<G extends Game = Game> {
       // Serialize element-valued flow variables (e.g. eachPlayer's currentPlayer)
       // so the position is structured-cloneable across the broadcast/RPC boundary.
       variables: serializeFlowVariables({ ...this.variables }) as Record<string, unknown>,
+      // Plain seat number and count, so it needs no relinking on the way back.
+      turnRun: this.turnRun ? { ...this.turnRun } : undefined,
     };
   }
 
@@ -1552,7 +1585,7 @@ export class FlowEngine<G extends Game = Game> {
     // Build eligible seat list once so turn order is deterministic, then re-check
     // filter dynamically each iteration so mid-round state changes are respected.
     if (frame.data?.eligibleSeats === undefined) {
-      const players = [...this.game.all(Player as any)] as Player[];
+      const players: Player[] = [...this.game.all(Player)];
 
       if (config.direction === 'backward') {
         players.reverse();
@@ -1723,6 +1756,69 @@ export class FlowEngine<G extends Game = Game> {
    * Filters available actions to those actually valid for the current player,
    * warning once about unknown action names to help catch typos.
    */
+  /**
+   * The move count a FRESH action-step frame starts at.
+   *
+   * Zero unless the seat about to be prompted is the same seat that committed
+   * the immediately preceding action -- the one case where the frame boundary
+   * and the turn boundary can disagree. `moveCount` is the sole input to undo's
+   * rewind anchor (`session/utils.ts` `computeUndoInfo`), so starting a
+   * continuing turn's second entry at 0 means the seat cannot take back the
+   * action it just took.
+   *
+   * The engine cannot infer which was meant, and the two readings are not
+   * distinguishable from the flow's shape: a `sequence` of same-seat action
+   * steps is ONE turn in Polyhedral Potions and THREE separate turns in
+   * `session/testing/solo-undo-authoritative.test.ts`. So the author declares
+   * it with `turnScope`, and an ambiguous entry that declares nothing warns in
+   * dev and marks the frame, so the undo it disables says why.
+   */
+  private entryMoveCount(config: ActionStepConfig, player: Player, frame: ExecutionFrame): number {
+    const run = this.turnRun;
+    if (!run || run.player !== player.seat || run.count === 0) return 0;
+
+    if (config.turnScope === 'continue') return run.count;
+
+    if (config.turnScope === 'restart') {
+      // The run ends here: this entry is the start of a new turn.
+      this.turnRun = undefined;
+      return 0;
+    }
+
+    // Undeclared, and ambiguous. Behave as `'restart'` -- the safe reading,
+    // since reaching too far back discards actions the author may consider
+    // finished -- but never silently: warn here, and mark the frame so an undo
+    // attempted at this point is refused with the reason rather than with the
+    // misleading "No actions to undo" that hid this defect for so long.
+    //
+    // Deliberately NOT a throw. This is only detectable at the moment the flow
+    // reaches the shape, so a throw would be exactly the "surprise runtime
+    // throw deep into a game session" that `loop`'s construction-time check
+    // (builders.ts) exists to avoid, and it would fire in games where undo is
+    // never offered and the distinction cannot be observed.
+    const stepName = config.name ?? 'action-step';
+    const where = config.name
+      ? `'${stepName}'`
+      : `'${stepName}' at flow path ${this.stack.map((f) => f.index).join('.')}`;
+    devWarn(
+      // Keyed on the step's IDENTITY (name plus stack depth), never on the
+      // path -- a loop's path index moves every iteration, which would re-warn
+      // once per move instead of once per step.
+      `turn-scope:${stepName}:${this.stack.length}`,
+      `Flow step ${where} is about to prompt seat ${player.seat} again, in a new ` +
+      `action-step frame, right after that same seat committed an action. Undo reach is ` +
+      `measured per action-step frame, so undo is OFF at this point until the step says ` +
+      `whether the seat is still taking the same turn:\n` +
+      `  turnScope: 'continue'  -- one continuing turn (a multi-jump, an extra turn, the ` +
+      `next step of a multi-step turn). Undo reaches back over the whole run.\n` +
+      `  turnScope: 'restart'   -- a new turn starts here. Undo does not reach behind it.\n` +
+      `Add one of those to actionStep({ name: '${stepName}', ... }).`
+    );
+    frame.data = { ...frame.data, turnScopeUndeclared: stepName };
+    this.turnRun = undefined;
+    return 0;
+  }
+
   private executeActionStep(
     frame: ExecutionFrame,
     config: ActionStepConfig,
@@ -1736,9 +1832,19 @@ export class FlowEngine<G extends Game = Game> {
       return { continue: true, awaitingInput: false };
     }
 
-    // Initialize move count on first entry
+    // Initialize move count on first entry. A fresh frame does not always start
+    // at 0: `turnScope` decides whether this entry continues the run the same
+    // seat is already on, which is what gives undo its reach across the frame
+    // boundary a loop iteration or a sibling step creates.
     if (frame.data?.moveCount === undefined) {
-      frame.data = { ...frame.data, moveCount: 0 };
+      const entryPlayer = config.player ? config.player(context) : context.player;
+      if (!entryPlayer) {
+        throw new Error('ActionStep requires a player');
+      }
+      // Resolved BEFORE the assignment: `entryMoveCount` may also mark the
+      // frame, and a spread evaluated first would discard that mark.
+      const startingMoveCount = this.entryMoveCount(config, entryPlayer, frame);
+      frame.data = { ...frame.data, moveCount: startingMoveCount };
     }
     const moveCount = frame.data.moveCount as number;
 
@@ -1774,7 +1880,7 @@ export class FlowEngine<G extends Game = Game> {
     // condition that happens to be false — see requireRegisteredActions.
     this.requireRegisteredActions(actions, config.name ?? 'action-step');
 
-    const allAvailable = this.game.getAvailableActions(player as any);
+    const allAvailable = this.game.getAvailableActions(player);
     const available = actions.filter((actionName) =>
       allAvailable.some((a) => a.name === actionName)
     );
@@ -1818,7 +1924,7 @@ export class FlowEngine<G extends Game = Game> {
     // Get players who should participate
     const players: Player[] = config.players
       ? config.players(context)
-      : [...this.game.all(Player as any)] as Player[];
+      : [...this.game.all(Player)];
 
     // Build awaiting state for each player
     this.awaitingPlayers = [];
@@ -1835,6 +1941,10 @@ export class FlowEngine<G extends Game = Game> {
     // like `executeActionStep`'s moveCount (`getPosition`/`restore`).
     frame.data = { ...frame.data, moveCount: 0 };
     this.moveCount = 0;
+    // A simultaneous step is a turn boundary in its own right: its undo
+    // boundary comes from `simultaneousUndoBoundary` (session/utils.ts), not
+    // from a sequential run, so no run survives across it.
+    this.turnRun = undefined;
 
     for (const player of players) {
       // Check if player should be skipped
@@ -1855,7 +1965,7 @@ export class FlowEngine<G extends Game = Game> {
       this.requireRegisteredActions(actions, config.name ?? 'simultaneous-action-step');
 
       const available = actions.filter((actionName) =>
-        this.game.getAvailableActions(player as any).some((a) => a.name === actionName)
+        this.game.getAvailableActions(player).some((a) => a.name === actionName)
       );
 
       // Only add player if they have available actions

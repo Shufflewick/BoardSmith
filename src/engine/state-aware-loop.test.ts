@@ -69,6 +69,9 @@ function buildFlow(options: { skip?: boolean } = {}) {
         actionStep({
           actions: ['strike', 'hold'],
           player: (ctx) => ctx.game.getPlayer(2)!,
+          // The MERC shape: one seat's phase is one turn, however many passes
+          // round the loop it takes, so undo reaches back over the whole run.
+          turnScope: 'continue',
         }),
         execute((ctx) => {
           const game = ctx.game as PhaseGame;
@@ -191,6 +194,7 @@ describe('the simple form still works exactly as before', () => {
           maxIterations: 12,
           while: (ctx: FlowContext) => (ctx.game as PhaseGame).actionsLeft > 0,
           pendingStates: (ctx) => [(ctx.game as PhaseGame).pendingCombat],
+          turnScope: 'continue',
         }),
       })
     );

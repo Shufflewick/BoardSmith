@@ -34,6 +34,7 @@ class SimpleGame extends Game<SimpleGame, Player> {
           actions: ['pass'],
           player: (ctx) => ctx.game.getPlayer(1)!,
           repeatUntil: () => false,
+          turnScope: 'restart',
         }),
       }),
     }));
@@ -41,7 +42,7 @@ class SimpleGame extends Game<SimpleGame, Player> {
 }
 
 const simpleGameDef: GameDefinitionLike = {
-  gameClass: SimpleGame as new (...args: unknown[]) => unknown,
+  gameClass: SimpleGame,
   gameType: 'simple',
   minPlayers: 1,
   maxPlayers: 4,
@@ -76,6 +77,7 @@ class FollowUpGame extends Game<FollowUpGame, Player> {
         do: actionStep({
           actions: ['begin', 'finish'],
           player: (ctx) => ctx.game.getPlayer(1)!,
+          turnScope: 'restart',
         }),
       }),
     }));
@@ -83,7 +85,7 @@ class FollowUpGame extends Game<FollowUpGame, Player> {
 }
 
 const followUpGameDef: GameDefinitionLike = {
-  gameClass: FollowUpGame as new (...args: unknown[]) => unknown,
+  gameClass: FollowUpGame,
   gameType: 'followup',
   minPlayers: 1,
   maxPlayers: 2,
@@ -115,6 +117,7 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
         do: actionStep({
           actions: ['pick'],
           player: (ctx) => ctx.game.getPlayer(1)!,
+          turnScope: 'restart',
         }),
       }),
     }));
@@ -122,7 +125,7 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
 }
 
 const twoStepGameDef: GameDefinitionLike = {
-  gameClass: TwoStepGame as new (...args: unknown[]) => unknown,
+  gameClass: TwoStepGame,
   gameType: 'twostep',
   minPlayers: 1,
   maxPlayers: 2,
@@ -168,6 +171,7 @@ class BadChoicesGame extends Game<BadChoicesGame, Player> {
         do: actionStep({
           actions: ['pick'],
           player: (ctx) => ctx.game.getPlayer(1)!,
+          turnScope: 'restart',
         }),
       }),
     }));
@@ -175,7 +179,7 @@ class BadChoicesGame extends Game<BadChoicesGame, Player> {
 }
 
 const badChoicesGameDef: GameDefinitionLike = {
-  gameClass: BadChoicesGame as new (...args: unknown[]) => unknown,
+  gameClass: BadChoicesGame,
   gameType: 'bad-choices',
   minPlayers: 1,
   maxPlayers: 2,
@@ -216,6 +220,7 @@ class WarningGame extends Game<WarningGame, Player> {
         do: actionStep({
           actions: ['move'],
           player: (ctx) => ctx.game.getPlayer(1)!,
+          turnScope: 'restart',
         }),
       }),
     }));
@@ -223,7 +228,7 @@ class WarningGame extends Game<WarningGame, Player> {
 }
 
 const warningGameDef: GameDefinitionLike = {
-  gameClass: WarningGame as new (...args: unknown[]) => unknown,
+  gameClass: WarningGame,
   gameType: 'warning-game',
   minPlayers: 1,
   maxPlayers: 2,
@@ -713,6 +718,7 @@ describe('executeOp', () => {
                   actions: ['advance', 'concede'],
                   player: (ctx) => ctx.game.getPlayer(1)!,
                   repeatUntil: () => false,
+                  turnScope: 'restart',
                 }),
               }),
             }),
@@ -724,7 +730,7 @@ describe('executeOp', () => {
         moves.filter((m) => m.action !== 'concede'),
       );
       const concedeDef: GameDefinitionLike & { bot?: BotStrategy } = {
-        gameClass: ConcedeGame as new (...args: unknown[]) => unknown,
+        gameClass: ConcedeGame,
         gameType: 'concede-game',
         minPlayers: 1,
         maxPlayers: 2,
@@ -856,6 +862,7 @@ describe('executeOp', () => {
             do: actionStep({
               actions: ['pass'],
               player: (ctx) => ctx.game.getPlayer(1)!,
+              turnScope: 'restart',
             }),
           }),
         }));
@@ -879,7 +886,7 @@ describe('executeOp', () => {
     };
 
     const countingGameDef: GameDefinitionLike = {
-      gameClass: CountingGame as new (...args: unknown[]) => unknown,
+      gameClass: CountingGame,
       gameType: 'counting',
       minPlayers: 1,
       maxPlayers: 2,
@@ -954,6 +961,7 @@ describe('executeOp', () => {
               do: actionStep({
                 actions: ['move'],
                 player: (ctx) => ctx.game.getPlayer(1)!,
+                turnScope: 'restart',
               }),
             }),
           }),
@@ -982,7 +990,7 @@ describe('executeOp', () => {
     };
 
     const botGameDef: BotGameDefinitionLike = {
-      gameClass: BotGame as new (...args: unknown[]) => unknown,
+      gameClass: BotGame,
       gameType: 'bot-game',
       minPlayers: 1,
       maxPlayers: 2,
@@ -1126,7 +1134,7 @@ describe('executeOp', () => {
         this.setFlow(defineFlow({
           root: loop({
             maxIterations: 100,
-            do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! }),
+            do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
           }),
         }));
       }
@@ -1139,7 +1147,7 @@ describe('executeOp', () => {
     };
 
     const lockBotDef: GameDefinitionLike & { bot?: BotStrategy; tutorial?: TutorialDefinition } = {
-      gameClass: LockBotGame as new (...args: unknown[]) => unknown,
+      gameClass: LockBotGame,
       gameType: 'lock-bot',
       minPlayers: 1,
       maxPlayers: 2,
@@ -1287,7 +1295,7 @@ describe('executeOp', () => {
         this.setFlow(defineFlow({
           root: loop({
             maxIterations: 100,
-            do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! }),
+            do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
           }),
         }));
       }
@@ -1309,7 +1317,7 @@ describe('executeOp', () => {
     };
 
     const botSuggestGameDef: BotSuggestGameDef = {
-      gameClass: BotSuggestGame as new (...args: unknown[]) => unknown,
+      gameClass: BotSuggestGame,
       gameType: 'bot-suggest-game',
       minPlayers: 1,
       maxPlayers: 2,
@@ -1410,6 +1418,7 @@ describe('executeOp', () => {
             do: actionStep({
               actions: ['pass'],
               player: (ctx) => ctx.game.getPlayer(1)!,
+              turnScope: 'restart',
             }),
           }),
         }));
@@ -1422,7 +1431,7 @@ describe('executeOp', () => {
     };
 
     const markerGameDef: GameDefinitionLike = {
-      gameClass: MarkerGame as new (...args: unknown[]) => unknown,
+      gameClass: MarkerGame,
       gameType: 'marker',
       minPlayers: 1,
       maxPlayers: 2,

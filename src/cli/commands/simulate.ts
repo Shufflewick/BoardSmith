@@ -5,18 +5,45 @@ import chalk from 'chalk';
 import type { Game, GameOptions } from '../../engine/index.js';
 import { simulateRandomGames } from '../../testing/random-simulation.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
+import { parseGameOptionFlags } from './dev.js';
+import { validateGameOptionSelection, type DevOptionDef } from '../dev-host/config-types.js';
+import type { GameOptionDefinition } from '../../session/types.js';
 
 interface SimulateOptions {
   games: string;
   seed?: string;
   players: string;
   json?: boolean;
+  /** Repeatable `--game-option key=value`, mirroring `boardsmith dev`. */
+  gameOption?: string[];
 }
 
 interface BoardSmithConfig {
   paths?: {
     rules?: string;
   };
+}
+
+/**
+ * Resolve repeatable `--game-option key=value` flags against the game's own
+ * declared options, coercing each value to its declared type.
+ *
+ * Simulating only the default configuration is how a game's worst case stays
+ * invisible: the longest or heaviest mode is usually behind an option, and a
+ * harness that cannot reach it reports green about a configuration nobody
+ * asked about. Throws an actionable error on an unknown key, a malformed
+ * flag, or a value outside a select option's declared choices.
+ */
+export function resolveSimulationGameOptions(
+  declaredOptions: Record<string, GameOptionDefinition> | undefined,
+  rawFlags: string[] | undefined,
+): Record<string, unknown> {
+  const selection: Record<string, unknown> = parseGameOptionFlags(rawFlags);
+  const declaredList: DevOptionDef[] = Object.entries(declaredOptions ?? {}).map(
+    ([id, def]) => ({ id, ...(def as object) }) as DevOptionDef,
+  );
+  validateGameOptionSelection(declaredList, selection);
+  return selection;
 }
 
 /** Stable per-game status enum for the CLI's `--json` output. */
@@ -38,6 +65,13 @@ export interface RunSimulationOptions {
   seed?: string;
   timeout?: number;
   maxActions?: number;
+  /**
+   * Game-specific options forwarded to every simulated game (`--game-option
+   * key=value`). Without them a simulation only ever exercises the game's
+   * default configuration, so a game whose longest or heaviest mode is gated
+   * by an option gets a green result that says nothing about that mode.
+   */
+  gameOptions?: Record<string, unknown>;
 }
 
 export interface RunSimulationResult {
@@ -61,6 +95,7 @@ export async function runSimulation<G extends Game>(
     seed: options.seed,
     timeout: options.timeout,
     maxActions: options.maxActions,
+    gameOptions: options.gameOptions,
   });
 
   const games: PerGameReport[] = results.games.map((g, index) => {
@@ -92,7 +127,10 @@ const STATUS_ICON: Record<GameStatus, string> = {
   error: chalk.red('✗'),
 };
 
-function printHumanReport(report: RunSimulationResult): void {
+function printHumanReport(report: RunSimulationResult, gameOptionFlags: string[]): void {
+  // Carried into the replay hint below: a seed alone does not reproduce a
+  // game-option-gated run.
+  const replayOptions = gameOptionFlags.map((flag) => ` --game-option ${flag}`).join('');
   console.log(chalk.cyan(`\nSimulation Results (seed: ${report.baseSeed}):\n`));
 
   for (const g of report.games) {
@@ -116,7 +154,7 @@ function printHumanReport(report: RunSimulationResult): void {
       if (g.error) {
         console.log(chalk.dim(`  ${g.error}`));
       }
-      console.log(chalk.dim(`  Replay: boardsmith simulate --games 1 --seed ${g.seed}`));
+      console.log(chalk.dim(`  Replay: boardsmith simulate --games 1 --seed ${g.seed}${replayOptions}`));
     }
   }
   console.log('');
@@ -176,12 +214,27 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
     return;
   }
 
+  let gameOptions: Record<string, unknown>;
+  try {
+    gameOptions = resolveSimulationGameOptions(gameDefinition.gameOptions, options.gameOption);
+  } catch (error) {
+    console.error(chalk.red((error as Error).message));
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup; do not mask the original error
+    }
+    process.exitCode = 1;
+    return;
+  }
+
   let report: RunSimulationResult;
   try {
     report = await runSimulation(gameDefinition.gameClass as new (options: GameOptions) => Game, {
       count: gamesCount,
       players: playersCount,
       seed: options.seed,
+      gameOptions,
     });
   } finally {
     try {
@@ -194,7 +247,7 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
   if (options.json) {
     console.log(JSON.stringify(report.games, null, 2));
   } else {
-    printHumanReport(report);
+    printHumanReport(report, options.gameOption ?? []);
   }
 
   process.exitCode = report.anyFailed ? 1 : 0;

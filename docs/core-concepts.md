@@ -157,6 +157,64 @@ itself (and its whitelisted attributes) is still present in the view. To hide
 an entire element or an entire zone's contents, use the element/zone
 visibility controls below instead.
 
+**A hidden ELEMENT withholds everything, not just the non-whitelisted.** An
+element the view cannot see (`showOnlyTo` / `hideFrom`, or any child of a
+hidden, count-only or owner-only zone) is replaced by a placeholder carrying
+its `$type`, its face-down artwork and nothing else. Every game attribute it
+would have carried is withheld on restore, the whitelist included: a
+whitelisted attribute is one non-owners may see ON A VISIBLE ELEMENT, and it
+never rode the wire for a placeholder. What the placeholder does carry stays
+known and unforgeable, so a search can still see that a card is in a
+particular hand without seeing what it is.
+
+**The game ROOT redacts the same way.** Declare `static visibleAttributes` on
+your `Game` subclass and every root field outside the list is withheld from
+every seat, on the wire and on restore. Fields the ENGINE owns on the root
+(`phase`, `settings`, `tutorialProgress` and the rest) are never swept up by
+that list: their audience is the engine's to decide, and it narrows the
+per-seat ones itself.
+
+```typescript
+class MyGame extends Game<MyGame, MyPlayer> {
+  static visibleAttributes = ['round'];  // every other root field is withheld
+
+  round = 1;
+  mapSeed = '';       // reading this in another seat's view throws
+}
+```
+
+**A withheld attribute holds nothing, and says so.** A redacted view is not
+only a wire payload: a bot's MCTS search restores its own seat's view as a
+live game and computes moves against it, for every seat the flow is awaiting.
+So an attribute the view withheld comes back with no value at all — reading it
+throws `RedactedAttributeError` rather than quietly handing back whatever the
+class field was initialized to. `0` is a real square, `[]` is a real empty
+hand, and a search that reasons from either is confidently describing a world
+that does not exist.
+
+Ask before you read anything a rule may have to evaluate for another seat:
+
+```typescript
+.chooseFrom('steal', {
+  choices: (ctx) => {
+    const rival = ctx.game.getPlayer(otherSeat)!;
+    if (rival.isAttributeRedacted('pack')) return [];  // nothing to offer
+    return rival.pack;
+  },
+})
+```
+
+`element.redactedAttributes` lists everything withheld from this copy. In the
+authoritative game nothing is ever redacted, so these read `false` and `[]`
+there and the guard costs nothing.
+
+An unguarded read inside move enumeration is not a crash: `RedactedAttributeError`
+is a `NotSimulableError`, so the action simply contributes no move for that
+seat (with a dev warning naming the action and the attribute) — the honest
+answer, rather than a move scored against an invented value. Making the action
+searchable again means deriving its `condition`, `choices`, `disabled` and
+`validate` from public information, or guarding as above.
+
 ## Actions and State Mutation
 
 BoardSmith separates player intent (actions) from state mutation (direct
@@ -347,7 +405,8 @@ Each player receives a filtered view of the game state:
 - Elements inside hidden zones are redacted to a minimal shape (id/className +
   safe layout attributes only); non-owners never see their real attributes
 - A declared `static visibleAttributes` whitelist further redacts individual
-  attributes on visible elements for non-owners (see Attribute Visibility above)
+  attributes on visible elements for non-owners, and on the game root redacts
+  the game's own root fields (see Attribute Visibility above)
 - Private zones of other players are hidden via `contentsHidden()` /
   `contentsVisibleToOwner()`
 - Server-side information is stripped

@@ -85,7 +85,7 @@ class CrossPhaseGame extends Game<CrossPhaseGame, CrossPhasePlayer> {
 export { CrossPhaseGame, CrossPhasePlayer };
 
 export const crossPhaseFixtureDefinition: GameDefinitionLike = {
-  gameClass: CrossPhaseGame as new (...args: unknown[]) => unknown,
+  gameClass: CrossPhaseGame,
   gameType: 'simultaneous-cross-phase',
   minPlayers: 2,
   maxPlayers: 2,

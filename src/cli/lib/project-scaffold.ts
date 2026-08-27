@@ -7,7 +7,7 @@
 
 import { DESIGN_DIR, SCRATCH_DIR } from './project-paths.js';
 import { existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -57,18 +57,27 @@ export function getMonorepoRoot(): string | null {
 }
 
 /**
- * Get dependency paths (local file: links or npm versions)
+ * Get the `boardsmith` dependency spec for a project being scaffolded at
+ * `projectPath` — a local `file:` link when the CLI can see the monorepo,
+ * the published version otherwise.
+ *
+ * The local link is RELATIVE to `projectPath`. An absolute `file:` path bakes
+ * the scaffolding developer's home directory into the new game's
+ * package.json, so `npm install` fails on every other machine and in CI — the
+ * defect issue 142 was filed for, after it reached five games.
  */
-export function getDependencyPaths(): {
+export function getDependencyPaths(projectPath: string): {
   boardsmith: string;
   isLocalDev: boolean;
 } {
   const monorepoRoot = getMonorepoRoot();
-  const isLocalDev = monorepoRoot !== null;
 
-  if (isLocalDev) {
+  if (monorepoRoot !== null) {
+    // `relative` between two absolute paths; `resolve` first so a caller's
+    // relative projectPath still produces a link that resolves correctly.
+    const link = relative(resolve(projectPath), resolve(monorepoRoot));
     return {
-      boardsmith: `file:${monorepoRoot}`,
+      boardsmith: `file:${toPosixPath(link)}`,
       isLocalDev: true,
     };
   }
@@ -77,6 +86,14 @@ export function getDependencyPaths(): {
     boardsmith: '^0.0.1',
     isLocalDev: false,
   };
+}
+
+/**
+ * package.json is a cross-platform file: a `file:` link must use forward
+ * slashes even when the scaffold runs on Windows.
+ */
+function toPosixPath(path: string): string {
+  return path.split('\\').join('/');
 }
 
 /**
@@ -112,7 +129,12 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
     playtime: { min: 15, max: 30 },
     cooperative: false,
     complexity: 2,
-    thumbnail: './public/thumbnail.png',
+    // No `thumbnail` key, deliberately. The scaffold creates no thumbnail
+    // image, and `deriveManifest` stamps whatever this file declares straight
+    // into dist/manifest.json — so scaffolding the key meant every new game
+    // shipped a manifest naming a file the bundle did not carry (issue 142).
+    // Add it once there is art behind it; `boardsmith validate` now fails on a
+    // declared asset path that resolves to nothing.
     scoreboard: { stats: ['score'] },
     // No `ui` field, deliberately. A game's UIs are declared in src/ui/uis.ts
     // (defineGameUIs) — the one place. The manifest used to carry a `"ui"` key
@@ -126,8 +148,8 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
 /**
  * Generate package.json
  */
-export function generatePackageJson(config: ProjectConfig): string {
-  const deps = getDependencyPaths();
+export function generatePackageJson(config: ProjectConfig, projectPath: string): string {
+  const deps = getDependencyPaths(projectPath);
 
   // No `scripts` block, deliberately. The BoardSmith CLI is the one way to
   // build, test, lint, and validate a game — `npx boardsmith test`, not
@@ -568,140 +590,6 @@ describe('GameTable — a11y floor (axe-core scan)', () => {
 }
 
 /**
- * Generate src/ui/components/AssetImage.vue
- *
- * The one sanctioned way to render card/piece art. A missing or unresolved
- * `src` never renders a broken `<img>` — it always leaves a drawn,
- * game-semantic fallback (rank+suit for cards, a label token for pieces)
- * visible instead. The real image overlays the fallback only after it
- * successfully loads (`@load`), and reverts to the fallback on `@error`.
- * Fallback and `<img>` share one aspect-ratio input so swapping in the real
- * asset causes zero layout change (the `<img>` is absolutely positioned over
- * the fallback — neither element ever leaves document flow).
- */
-export function generateAssetImageVue(): string {
-  return `<script setup lang="ts">
-/**
- * AssetImage — the sanctioned way to render card/piece art.
- *
- * A missing/unresolved \`src\` always leaves the drawn, game-semantic fallback
- * visible (rank+suit for cards, a label token for pieces) — never a broken
- * <img>. The real image overlays the fallback only after \`@load\` fires, and
- * \`@error\` reverts to the fallback. Fallback and <img> share one aspect-ratio
- * input, so swapping in the real asset causes zero layout change.
- */
-import { ref, watch } from 'vue';
-
-const props = withDefaults(
-  defineProps<{
-    kind: 'card' | 'piece';
-    src?: string | null;
-    /** Card rank, e.g. 'A', '10', 'K'. Ignored for kind="piece". */
-    rank?: string;
-    /** Card suit, e.g. '♠', '♥'. Ignored for kind="piece". */
-    suit?: string;
-    /** Piece label token. Ignored for kind="card". */
-    label?: string;
-    /** Shared aspect ratio for both the fallback and the overlaid <img>. */
-    aspectRatio?: string;
-    alt?: string;
-  }>(),
-  {
-    src: null,
-    rank: '',
-    suit: '',
-    label: '',
-    aspectRatio: '2 / 3',
-    alt: '',
-  },
-);
-
-const loaded = ref(false);
-
-// Reset when the resolved src changes so an AssetImage reused for a different
-// asset re-guards — otherwise a stale loaded=true would flash the previous (or a
-// new, still-unresolved) image at full opacity before its own load/error fires.
-watch(
-  () => props.src,
-  () => {
-    loaded.value = false;
-  },
-);
-
-function onLoad() {
-  loaded.value = true;
-}
-
-function onError() {
-  // Never leave a broken <img> visible — revert to the drawn fallback.
-  loaded.value = false;
-}
-</script>
-
-<template>
-  <div class="asset-image" :style="{ aspectRatio: props.aspectRatio }">
-    <div class="asset-image-fallback" :class="{ 'is-loaded': loaded }">
-      <template v-if="props.kind === 'card'">
-        <span class="asset-image-rank">{{ props.rank }}</span>
-        <span class="asset-image-suit">{{ props.suit }}</span>
-      </template>
-      <template v-else>
-        <span class="asset-image-label">{{ props.label }}</span>
-      </template>
-    </div>
-    <img
-      v-if="props.src"
-      class="asset-image-img"
-      :class="{ 'is-loaded': loaded }"
-      :src="props.src"
-      :alt="props.alt"
-      @load="onLoad"
-      @error="onError"
-    />
-  </div>
-</template>
-
-<style scoped>
-.asset-image {
-  position: relative;
-  width: 100%;
-  border-radius: var(--bsg-r-sm);
-  overflow: hidden;
-}
-
-.asset-image-fallback {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--bsg-s1);
-  background: var(--bsg-surface);
-  border: 1px solid var(--bsg-line);
-  color: var(--bsg-ink);
-  font-size: var(--bsg-text-sm);
-  font-weight: bold;
-}
-
-.asset-image-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity var(--bsg-dur-base) var(--bsg-ease);
-}
-
-.asset-image-img.is-loaded {
-  opacity: 1;
-}
-</style>
-`;
-}
-
-/**
  * Generate .gitignore
  */
 export function generateGitignore(): string {
@@ -721,10 +609,10 @@ dist/
 /**
  * Generate all scaffold files for a project
  */
-export function generateScaffoldFiles(config: ProjectConfig): GeneratedFile[] {
+export function generateScaffoldFiles(config: ProjectConfig, projectPath: string): GeneratedFile[] {
   return [
     { path: 'boardsmith.json', content: generateBoardsmithJson(config) },
-    { path: 'package.json', content: generatePackageJson(config) },
+    { path: 'package.json', content: generatePackageJson(config, projectPath) },
     { path: 'tsconfig.json', content: generateTsConfig() },
     { path: 'vite.config.ts', content: generateViteConfig() },
     { path: 'index.html', content: generateIndexHtml(config) },
@@ -734,7 +622,6 @@ export function generateScaffoldFiles(config: ProjectConfig): GeneratedFile[] {
     { path: 'src/ui/uis.ts', content: generateUisTs(config) },
     { path: 'src/ui/App.vue', content: generateAppVue(config) },
     { path: 'src/ui/components/GameTable.vue', content: generateGameTableVue() },
-    { path: 'src/ui/components/AssetImage.vue', content: generateAssetImageVue() },
     { path: 'tests/a11y.example.test.ts', content: generateA11yExampleTestTs() },
     { path: '.gitignore', content: generateGitignore() },
   ];

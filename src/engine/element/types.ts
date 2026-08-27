@@ -128,6 +128,17 @@ export type ElementJSON = {
   children?: ElementJSON[];
   /** For 'count-only' visibility mode, just show the count */
   childCount?: number;
+  /**
+   * This node was filtered by `static visibleAttributes` for a seat that does
+   * not own it (#19), so every attribute absent from `attributes` was WITHHELD
+   * rather than unset. A restore turns each of those into an attribute that
+   * throws on read instead of quietly holding its class-field default.
+   *
+   * A flag, never a list: the withheld names would themselves disclose which
+   * optional attributes the owner has set. The names are recoverable from the
+   * class's own static whitelist at restore time.
+   */
+  redacted?: boolean;
 };
 
 /**

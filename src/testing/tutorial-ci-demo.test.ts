@@ -62,8 +62,11 @@ class DemoGame extends Game<DemoGame, Player> {
   /**
    * Per-seat move counter. Seat → number of moves made this cycle.
    * Using `persistentMap` so the counter survives serialization / HMR.
+   *
+   * Keyed by `String(seat)`: a persistentMap is backed by a JSON object in
+   * `game.settings`, so its keys are strings (#149).
    */
-  movesPerSeat = this.persistentMap<number, number>('movesPerSeat');
+  movesPerSeat = this.persistentMap<string, number>('movesPerSeat');
 
   constructor(options: GameOptions) {
     super(options);
@@ -73,12 +76,12 @@ class DemoGame extends Game<DemoGame, Player> {
       .prompt('Move your piece')
       .condition({
         'not in forced-capture position': (ctx) => {
-          const moves = ctx.game.movesPerSeat.get(ctx.player.seat) ?? 0;
+          const moves = ctx.game.movesPerSeat.get(String(ctx.player.seat)) ?? 0;
           return moves < 2;
         },
       })
       .execute((_args, ctx) => {
-        const seat = ctx.player.seat;
+        const seat = String(ctx.player.seat);
         const count = ctx.game.movesPerSeat.get(seat) ?? 0;
         ctx.game.movesPerSeat.set(seat, count + 1);
       });
@@ -89,12 +92,12 @@ class DemoGame extends Game<DemoGame, Player> {
       .prompt('Capture (forced)')
       .condition({
         'forced capture available': (ctx) => {
-          const moves = ctx.game.movesPerSeat.get(ctx.player.seat) ?? 0;
+          const moves = ctx.game.movesPerSeat.get(String(ctx.player.seat)) ?? 0;
           return moves >= 2;
         },
       })
       .execute((_args, ctx) => {
-        ctx.game.movesPerSeat.set(ctx.player.seat, 0);
+        ctx.game.movesPerSeat.set(String(ctx.player.seat), 0);
       });
 
     this.registerActions(move, capture);

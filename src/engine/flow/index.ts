@@ -52,6 +52,8 @@ export type {
   EachPlayerConfig,
   ForEachConfig,
   ActionStepConfig,
+  TurnScope,
+  TurnRun,
   SimultaneousActionStepConfig,
   SwitchConfig,
   IfConfig,

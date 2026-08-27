@@ -8,6 +8,7 @@
  */
 
 import type { Game } from '../element/game.js';
+import { readDynamicAttribute } from '../element/game-element.js';
 import type {
   GameCommand,
   MoveCommand,
@@ -27,7 +28,7 @@ import type {
   TrackAddCommand,
   TrackRemoveLastCommand,
 } from './types.js';
-import type { TrackOwner } from './executor.js';
+import { isTrackOwner } from './executor.js';
 import type { VisibilityState } from './visibility.js';
 
 /**
@@ -145,7 +146,7 @@ function createSetAttributeInverse(game: Game, command: SetAttributeCommand): Se
   if (!element) return null;
 
   // Capture current value
-  const currentValue = (element as unknown as Record<string, unknown>)[command.attribute];
+  const currentValue = readDynamicAttribute(element, command.attribute);
 
   return {
     type: 'SET_ATTRIBUTE',
@@ -315,12 +316,11 @@ function createTrackRemoveLastInverse(game: Game, command: TrackRemoveLastComman
   const owner = game.getElementById(command.ownerId);
   if (!owner) return null;
 
-  // Check if owner implements TrackOwner interface
-  if (!('getTrack' in owner) || typeof (owner as unknown as TrackOwner).getTrack !== 'function') {
+  if (!isTrackOwner(owner)) {
     return null;
   }
 
-  const track = (owner as unknown as TrackOwner).getTrack(command.trackId);
+  const track = owner.getTrack(command.trackId);
   if (!track) return null;
 
   const lastEntry = track.getLastEntry();

@@ -108,7 +108,7 @@ class CommitGame extends Game<CommitGame, CommitPlayer> {
 export { CommitGame, CommitPlayer };
 
 export const simultaneousFixtureDefinition: GameDefinitionLike = {
-  gameClass: CommitGame as new (...args: unknown[]) => unknown,
+  gameClass: CommitGame,
   gameType: 'simultaneous',
   minPlayers: 2,
   maxPlayers: 4,

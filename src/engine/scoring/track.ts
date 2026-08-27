@@ -114,11 +114,13 @@ export abstract class Track {
       throw new Error(`Cannot add value ${value} to track ${this.id}`);
     }
 
-    // If command emitter is set, emit command instead of modifying directly
+    // If command emitter is set, emit command instead of modifying directly.
+    // The position is captured before emitting because a synchronous emitter has
+    // already advanced entries.length by the time the emitter returns.
     if (this.commandEmitter) {
+      const position = this.entries.length;
       this.commandEmitter(this.id, value, isSpecial);
-      // Return expected points (command executor will do actual add)
-      return this.pointsPerEntry[this.entries.length] ?? 0;
+      return this.pointsPerEntry[position] ?? 0;
     }
 
     return this.addInternal(value, isSpecial);

@@ -1,5 +1,5 @@
 import { Space, type ElementEventHandler } from './space.js';
-import { GameElement, registerElementClass } from './game-element.js';
+import { GameElement, hasZoneVisibility, isPlayerElement, readDynamicAttribute, registerElementClass, HIDDEN_PLACEHOLDER_ATTRIBUTE } from './game-element.js';
 import { Piece } from './piece.js';
 import { Card } from './card.js';
 import { Hand } from './hand.js';
@@ -8,7 +8,7 @@ import { Die } from './die.js';
 import { DicePool } from './dice-pool.js';
 import { Grid, GridCell } from './grid.js';
 import { HexGrid, HexCell } from './hex-grid.js';
-import type { ElementContext, ElementClass, ElementJSON } from './types.js';
+import type { ElementAttributes, ElementContext, ElementClass, ElementJSON } from './types.js';
 
 /**
  * Built-in element classes provided by the framework. These are implicitly
@@ -22,7 +22,7 @@ import type { ElementContext, ElementClass, ElementJSON } from './types.js';
 const BUILTIN_ELEMENT_CLASSES: ReadonlyArray<ElementClass> = [
   GameElement, Space, Piece, Card, Hand, Deck, Die, DicePool,
   Grid, GridCell, HexGrid, HexCell,
-] as unknown as ElementClass[];
+];
 import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand, undoCommand } from '../command/executor.js';
@@ -82,102 +82,10 @@ export interface ActionSpaceView {
   actions: ActionSchemaView[];
 }
 
-/**
- * A Map-like structure that persists through HMR by syncing to game.settings.
- * Use game.persistentMap() to create instances.
- *
- * Limitations:
- * - Keys must be serializable to JSON (strings, numbers)
- * - Values must be serializable to JSON (no element references, functions, etc.)
- * - For element references, use element children instead
- */
-export class PersistentMap<K, V> implements Map<K, V> {
-  #game: Game;
-  #key: string;
-
-  constructor(game: Game, key: string) {
-    this.#game = game;
-    this.#key = key;
-    // Initialize settings entry if not exists
-    if (!(key in game.settings)) {
-      game.settings[key] = {};
-    }
-  }
-
-  #getData(): Record<string, V> {
-    return (this.#game.settings[this.#key] as Record<string, V>) ?? {};
-  }
-
-  #setData(data: Record<string, V>): void {
-    this.#game.settings[this.#key] = data;
-  }
-
-  #toMap(): Map<K, V> {
-    const data = this.#getData();
-    return new Map(Object.entries(data).map(([k, v]) => [k as unknown as K, v as V]));
-  }
-
-  get size(): number {
-    return Object.keys(this.#getData()).length;
-  }
-
-  get(key: K): V | undefined {
-    return this.#getData()[String(key)];
-  }
-
-  set(key: K, value: V): this {
-    const data = this.#getData();
-    data[String(key)] = value;
-    this.#setData(data);
-    return this;
-  }
-
-  has(key: K): boolean {
-    return String(key) in this.#getData();
-  }
-
-  delete(key: K): boolean {
-    const data = this.#getData();
-    const existed = String(key) in data;
-    delete data[String(key)];
-    this.#setData(data);
-    return existed;
-  }
-
-  clear(): void {
-    this.#setData({});
-  }
-
-  forEach(callbackfn: (value: V, key: K, map: Map<K, V>) => void, thisArg?: unknown): void {
-    const data = this.#getData();
-    for (const [k, v] of Object.entries(data)) {
-      callbackfn.call(thisArg, v as V, k as unknown as K, this);
-    }
-  }
-
-  entries() {
-    return this.#toMap().entries();
-  }
-
-  keys() {
-    return this.#toMap().keys();
-  }
-
-  values() {
-    return this.#toMap().values();
-  }
-
-  [Symbol.iterator]() {
-    return this.entries();
-  }
-
-  get [Symbol.toStringTag](): string {
-    return 'PersistentMap';
-  }
-}
 import { FlowEngine } from '../flow/engine.js';
 import { canSeatAct } from '../flow/seat-activity.js';
 import { checkForVolatileState } from './volatile-state.js';
+import { PersistentMap } from './persistent-map.js';
 
 /**
  * Default player color palette, used when a game doesn't pass `GameOptions.colors`.
@@ -242,18 +150,6 @@ export const DEFAULT_COLOR_LABELS: Readonly<Record<string, string>> = {
   '#f1948a': 'Salmon',
   '#85c1e9': 'Sky',
 };
-
-/**
- * The one answer to "is this child a player?" — for a live element.
- *
- * Structural (`$type`), never by class name: a game that declares
- * `static PlayerClass = MyPlayer` has players whose `constructor.name` is
- * `MyPlayer`, which is the normal case, not the exotic one. `instanceof Player`
- * is also avoided because bundling can produce separate copies of the class.
- */
-function isPlayerElement<P extends Player>(el: GameElement): el is P {
-  return (el as unknown as { $type?: string }).$type === 'player';
-}
 
 /**
  * The one answer to "is this child a player?" — for a serialized child.
@@ -575,6 +471,34 @@ export interface FormattedMessage {
 export const GAME_SELF_SERIALIZED_FIELDS = ['phase', 'messages', 'settings'] as const;
 
 /**
+ * The own-field names of `game` that are currently bound to a
+ * {@link PersistentMap}.
+ *
+ * A PersistentMap is a live view onto `game.settings[name]`, not a value of its
+ * own. The data is therefore already serialized exactly once, with `settings`.
+ * Emitting the FIELD as well wrote an empty object into the attribute bag (a
+ * PersistentMap keeps its state in private fields, so it serializes as `{}`),
+ * and every restore path then assigned that `{}` straight over the live map —
+ * so the first call after a restore threw "<name>.get is not a function" (#139).
+ *
+ * Skipping the field on the way OUT and on the way BACK IN is what makes the
+ * round-trip work: the constructor rebinds the field to a fresh PersistentMap,
+ * and restoring `settings` refills it with the serialized contents. This is
+ * also why these names must count as KNOWN to the redaction pass — a key the
+ * payload does not carry is otherwise taken for a withheld attribute and
+ * replaced with a throwing accessor.
+ */
+function persistentMapFields(game: Game): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const key of Object.keys(game)) {
+    if (readDynamicAttribute(game, key) instanceof PersistentMap) {
+      names.add(key);
+    }
+  }
+  return names;
+}
+
+/**
  * Who may see each engine-owned field that reaches a serialized game ROOT.
  *
  * The root is visible to every seat, so the element-visibility pass never
@@ -751,7 +675,7 @@ export class Game<
    * }
    * ```
    */
-  static PlayerClass?: any;
+  static PlayerClass?: ElementClass<Player>;
 
   /** Container for removed elements */
   pile!: GameElement;
@@ -808,7 +732,7 @@ export class Game<
   private _debugRegistry: Map<string, () => unknown> = new Map();
 
   /** Persistent maps that survive HMR (synced to settings) */
-  private _persistentMaps: Map<string, PersistentMap<unknown, unknown>> = new Map();
+  private _persistentMaps: Map<string, PersistentMap<string, unknown>> = new Map();
 
   /** Animation events buffer (for UI playback) */
   private _animationEvents: AnimationEvent[] = [];
@@ -915,6 +839,11 @@ export class Game<
     super(ctx);
 
     this.random = random;
+    // LOAD-BEARING. `G` is the game's own concrete class (`class MyGame extends
+    // Game<MyGame, MyPlayer>`), so at runtime `this` IS a `G` — but inside the base
+    // class `G` is an unresolved type parameter and the F-bounded relationship
+    // cannot be proven. Every element's `game` back-reference is typed `G` for the
+    // game author's benefit, and this is the one place it is established.
     this.game = this as unknown as G;
     this._ctx.game = this;
 
@@ -974,13 +903,13 @@ export class Game<
     );
 
     // Register Player class for serialization
-    this._ctx.classRegistry.set('Player', Player as unknown as ElementClass);
+    this._ctx.classRegistry.set('Player', Player);
 
     // Get the Player class to use (subclass may define a custom one)
     const PlayerClassToUse = (this.constructor as typeof Game).PlayerClass ?? Player;
     if (PlayerClassToUse !== Player) {
       // Register custom Player class for serialization
-      this._ctx.classRegistry.set(PlayerClassToUse.name, PlayerClassToUse as unknown as ElementClass);
+      this._ctx.classRegistry.set(PlayerClassToUse.name, PlayerClassToUse);
     }
 
     // Resolve color palette
@@ -1009,7 +938,27 @@ export class Game<
     // Create players (1-indexed: Player 1 has seat 1)
     for (let i = 0; i < options.playerCount; i++) {
       const playerName = options.playerNames?.[i] ?? `Player ${i + 1}`;
-      const player = this.create(PlayerClassToUse as unknown as ElementClass<P>, playerName, { seat: i + 1 } as any);
+      // Typed against the concrete `Player` first so a renamed `seat` fails
+      // here, then bridged to the generic. `ElementAttributes<P>` is a mapped
+      // type over an unresolved type parameter, so TypeScript cannot see that
+      // `seat` survives it; the bridge is the limitation, not the shape.
+      const playerAttributes: Partial<Pick<Player, 'seat'>> = { seat: i + 1 };
+      // LOAD-BEARING BRIDGE (both casts). `PlayerClass` is declared as
+      // `ElementClass<Player>` — the strongest type a base class can state, since
+      // `Game`'s own `P` is not in scope on a static — so nothing here can prove
+      // that this game's `PlayerClass` builds THIS game's `P`. The declaration is
+      // what a game author writes (`static override PlayerClass = MyPlayer`), and
+      // `Game<MyGame, MyPlayer>` is what they write one line above it; keeping the
+      // two in step is not something the type system can check for them.
+      // `ElementAttributes<P>` is a mapped type over an unresolved type parameter,
+      // so `seat` surviving it is unprovable for the same reason — hence the
+      // concrete `Player` typing on the line above, which does fail to compile if
+      // `seat` is renamed.
+      const player = this.create(
+        PlayerClassToUse as ElementClass<P>,
+        playerName,
+        playerAttributes as ElementAttributes<P>,
+      );
       // Auto-assign color from palette (seat 1 = index 0, seat 2 = index 1, etc.)
       const hex = colorPalette[i];
       player.color = hex;
@@ -1085,14 +1034,14 @@ export class Game<
    * - Values must be JSON-serializable (no element references)
    * - For element references, use element children instead
    */
-  protected persistentMap<K extends string | number, V>(name: string): PersistentMap<K, V> {
+  protected persistentMap<K extends string, V>(name: string): PersistentMap<K, V> {
     // Return existing map if already created (for idempotency)
     if (this._persistentMaps.has(name)) {
       return this._persistentMaps.get(name) as PersistentMap<K, V>;
     }
 
     const map = new PersistentMap<K, V>(this, name);
-    this._persistentMaps.set(name, map as PersistentMap<unknown, unknown>);
+    this._persistentMaps.set(name, map as PersistentMap<string, unknown>);
     return map;
   }
 
@@ -1131,7 +1080,7 @@ export class Game<
   ): T {
     const element = new elementClass(this._ctx);
     element.name = name;
-    element.game = this as unknown as Game;
+    element.game = this;
 
     // Routed through the shared SPACE-04/D25 collision guard — see
     // `registerElementClass` (game-element.ts).
@@ -1219,7 +1168,7 @@ export class Game<
           `Hydrate the partition (Game#adoptSubtree) before declaring it a partition root.`
       );
     }
-    if (element === (this as unknown as GameElement)) {
+    if (element === this) {
       throw new Error(
         `Cannot define the game root (id ${id}) as a partition: a partition is a subtree ` +
           `that can be evicted, and evicting the game would evict the world.`
@@ -1302,7 +1251,7 @@ export class Game<
     collectJsonIds(json, adoptedIds);
 
     const resident = new Set<number>();
-    collectResidentIds(this as unknown as GameElement, resident);
+    collectResidentIds(this, resident);
     collectResidentIds(this.pile, resident);
     const clash = adoptedIds.find((id) => resident.has(id));
     if (clash !== undefined) {
@@ -1779,7 +1728,7 @@ export class Game<
   performSerializedAction(serialized: SerializedAction): ActionResult {
     const player = this.getPlayer(serialized.player);
     if (!player) {
-      return { success: false, error: `Invalid player seat: ${serialized.player}. Expected 1 to ${this.all(Player as unknown as ElementClass<P>).length}.` };
+      return { success: false, error: `Invalid player seat: ${serialized.player}. Expected 1 to ${this.players.length}.` };
     }
 
     return this.performAction(serialized.name, player as P, serialized.args);
@@ -2719,12 +2668,13 @@ export class Game<
    * @see {@link Player.isCurrent} - Check if a specific player is current
    */
   get currentPlayer(): P | undefined {
-    // Find current player directly without instanceof check.
-    // This avoids issues when code is bundled (esbuild creates separate class copies).
-    // Players are direct children of game with numeric seat property and isCurrent method.
+    // Structural, via the one shared answer to "is this child a player?" --
+    // `instanceof` is unusable because bundling can create separate copies of
+    // the class, and a numeric `seat` is not the answer either (a seat-tagged
+    // board has one too).
     return this._t.children.find(
-      el => typeof (el as any).seat === 'number' && (el as any).isCurrent?.()
-    ) as P | undefined;
+      (el): el is P => isPlayerElement<P>(el) && el.isCurrent()
+    );
   }
 
   /**
@@ -2776,12 +2726,12 @@ export class Game<
    * @see {@link Player.seat} - The seat property on players
    */
   getPlayer(seat: number): P | undefined {
-    // Find player by seat directly without instanceof check.
-    // This avoids issues when code is bundled (esbuild creates separate class copies).
-    // Players are direct children of game with numeric seat property.
+    // Same structural test as `currentPlayer` and `players` -- matching on a
+    // numeric `seat` alone used to hand back any seat-tagged child, such as a
+    // per-seat board.
     return this._t.children.find(
-      el => typeof (el as any).seat === 'number' && (el as any).seat === seat
-    ) as P | undefined;
+      (el): el is P => isPlayerElement<P>(el) && el.seat === seat
+    );
   }
 
   /**
@@ -2815,7 +2765,7 @@ export class Game<
     if (!player) {
       throw new Error(
         `No player at seat ${seat}. ` +
-        `This game has ${this.all(Player as unknown as ElementClass<P>).length} players.`
+        `This game has ${this.players.length} players.`
       );
     }
     return player;
@@ -2897,7 +2847,7 @@ export class Game<
     const current = this.currentPlayer;
     if (!current) return undefined;
 
-    const players = this.all(Player as unknown as ElementClass<P>).sortBy('seat');
+    const players = this.players;
     const idx = players.findIndex(p => p.seat === current.seat);
     const nextIdx = (idx + 1) % players.length;
     return players[nextIdx] as P | undefined;
@@ -2933,7 +2883,7 @@ export class Game<
     const current = this.currentPlayer;
     if (!current) return undefined;
 
-    const players = this.all(Player as unknown as ElementClass<P>).sortBy('seat');
+    const players = this.players;
     const idx = players.findIndex(p => p.seat === current.seat);
     const prevIdx = (idx - 1 + players.length) % players.length;
     return players[prevIdx] as P | undefined;
@@ -2972,7 +2922,7 @@ export class Game<
    * @see {@link previousBefore} - Get player before any specific player
    */
   nextAfter(player: P): P | undefined {
-    const players = this.all(Player as unknown as ElementClass<P>).sortBy('seat');
+    const players = this.players;
     const idx = players.findIndex(p => p.seat === player.seat);
     if (idx === -1) return undefined;
     const nextIdx = (idx + 1) % players.length;
@@ -3004,7 +2954,7 @@ export class Game<
    * @see {@link nextAfter} - Get player after any specific player
    */
   previousBefore(player: P): P | undefined {
-    const players = this.all(Player as unknown as ElementClass<P>).sortBy('seat');
+    const players = this.players;
     const idx = players.findIndex(p => p.seat === player.seat);
     if (idx === -1) return undefined;
     const prevIdx = (idx - 1 + players.length) % players.length;
@@ -3043,9 +2993,7 @@ export class Game<
    * @see {@link playerChoices} - Build choice arrays for actions
    */
   others(player: P): P[] {
-    return [...this.all(Player as unknown as ElementClass<P>)].filter(
-      p => p.seat !== player.seat
-    ) as P[];
+    return this.players.filter(p => p.seat !== player.seat);
   }
 
   /**
@@ -3101,7 +3049,7 @@ export class Game<
     filter?: (player: P) => boolean;
     currentPlayer?: Player;
   } = {}): { value: number; display: string }[] {
-    let players = [...this.all(Player as unknown as ElementClass<P>)] as P[];
+    let players = this.players;
 
     if (options.excludeSelf && options.currentPlayer) {
       players = players.filter(p => p.seat !== options.currentPlayer!.seat);
@@ -3647,6 +3595,12 @@ export class Game<
     for (const key of GAME_SELF_SERIALIZED_FIELDS) {
       delete base.attributes[key];
     }
+    // A persistentMap field is a live view onto `settings`, which is serialized
+    // in full below. See persistentMapFields for why emitting it too broke
+    // every restore path (#139).
+    for (const key of persistentMapFields(this)) {
+      delete base.attributes[key];
+    }
 
     return {
       ...base,
@@ -3737,7 +3691,7 @@ export class Game<
         return {
           className: json.className,
           id: json.id,
-          attributes: { __hidden: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
+          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
           childCount: element._t.children.length,
         };
       }
@@ -3778,7 +3732,7 @@ export class Game<
           // can render face-down on first paint, consistent with the zone
           // branches below. redactHiddenElementAttrs drops $image and narrows
           // $images to { back } only, so $images.face still never leaks.
-          attributes: { __hidden: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
+          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
         };
       }
 
@@ -3803,28 +3757,42 @@ export class Game<
       const ElementClass = element.constructor as typeof GameElement;
       let ownJson = json;
       if (ElementClass.visibleAttributes !== undefined) {
-        // WR-01: duck-type the Player check (matching serializeValue,
-        // currentPlayer and getPlayer in this file) instead of
-        // `instanceof Player` — bundlers (esbuild) can create separate Player
-        // class copies, making instanceof return false and redacting a player
-        // out of their OWN restricted attributes (the exact Pitfall-4 failure
-        // this special case exists to prevent).
-        const isPlayerNode = 'seat' in element && typeof (element as unknown as Player).seat === 'number';
-        const isOwner = isPlayerNode
-          ? (element as unknown as Player).seat === visibilityPosition
+        // WR-01: a player is not resolved by `instanceof Player` — bundlers
+        // (esbuild) can create separate Player class copies, making instanceof
+        // return false and redacting a player out of their OWN restricted
+        // attributes (the exact Pitfall-4 failure this special case exists to
+        // prevent). #149: nor by a numeric `seat`, which a per-seat board
+        // carries too — that read the BOARD's seat as its owner, showing its
+        // restricted attributes to whichever seat the board was numbered for
+        // instead of to the seat that owns it. `isPlayerElement` is the one
+        // structural answer, shared with `players`/`getPlayer`/`currentPlayer`.
+        const isOwner = isPlayerElement(element)
+          ? element.seat === visibilityPosition
           : element.getEffectiveOwner()?.seat === visibilityPosition;
         if (!isOwner) {
           const whitelist = new Set(ElementClass.visibleAttributes);
+          // #148: on the game ROOT, the engine's own fields are not the game's
+          // to withhold. Each already has a declared audience
+          // (GAME_ROOT_FIELD_AUDIENCE) and the seat-scoped ones are narrowed
+          // further down this method, so sweeping them off the wire with a
+          // game's whitelist withholds no secret and instead breaks the seat's
+          // own state (its `tutorialProgress` vanishing from its own view).
+          const isRoot = element === this;
           const filteredAttrs: Record<string, unknown> = {};
           for (const [key, value] of Object.entries(json.attributes ?? {})) {
             // `_isCurrent` is framework metadata (Player.toJSON), not a
             // developer-declared game attribute -- it must always survive
             // filtering regardless of the whitelist.
-            if (whitelist.has(key) || key === '_isCurrent') {
+            if (whitelist.has(key) || key === '_isCurrent' || (isRoot && isEngineRootField(key))) {
               filteredAttrs[key] = value;
             }
           }
-          ownJson = { ...json, attributes: filteredAttrs };
+          // `redacted: true` (#19) marks WHY the missing attributes are
+          // missing. Restoring this tree rebuilds a live game (the MCTS search
+          // sandbox does exactly that), and without the marker every withheld
+          // attribute came back as its class-field default — a specific false
+          // fact the searcher then reasoned from. See `GameElement.fromJSON`.
+          ownJson = { ...json, attributes: filteredAttrs, redacted: true };
         }
       }
 
@@ -3857,7 +3825,7 @@ export class Game<
       }
 
       // Check zone visibility for children (if this is a Space)
-      const zoneVisibility = (element as any).getZoneVisibility?.();
+      const zoneVisibility = hasZoneVisibility(element) ? element.getZoneVisibility() : undefined;
 
       // SPACE-03 / F-09: a per-seat visibility GRANT (`addZoneVisibleTo`, i.e.
       // `zoneVisibility.addPlayers`) must reveal the zone's real contents to the
@@ -3916,7 +3884,7 @@ export class Game<
                 className: childJson.className,
                 // Use negative index-based IDs to prevent correlation with real element IDs
                 id: syntheticId,
-                attributes: { __hidden: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
+                attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
                 // Don't include name - could reveal card identity
               });
             }
@@ -3949,7 +3917,7 @@ export class Game<
               hiddenChildren.push({
                 className: childJson.className,
                 id: syntheticId,
-                attributes: { __hidden: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
+                attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
                 // Don't include name - could reveal card identity
               });
             }
@@ -4269,11 +4237,46 @@ export class Game<
     const unserializable = new Set(
       (this.constructor as typeof GameElement).unserializableAttributes
     );
-    const handledKeys = new Set<string>(GAME_SELF_SERIALIZED_FIELDS);
+    // persistentMap fields are handled by restoring `settings` above — the
+    // constructor already rebound each one to a live PersistentMap over it —
+    // so they are KNOWN, not withheld. Without this the redaction pass below
+    // sees a field the payload does not carry, takes it for an attribute this
+    // seat was denied, and replaces the live map with a throwing accessor
+    // (#139).
+    const handledKeys = new Set<string>([
+      ...GAME_SELF_SERIALIZED_FIELDS,
+      ...persistentMapFields(this),
+    ]);
     for (const [key, value] of Object.entries(json.attributes)) {
       if (!unserializable.has(key) && !key.startsWith('_') && !handledKeys.has(key)) {
-        (this as unknown as Record<string, unknown>)[key] = value;
+        Object.assign(this, { [key]: value });
       }
+    }
+
+    // #148: the ROOT is redacted on restore too.
+    //
+    // Every other element reaches the redaction path through
+    // `GameElement.fromJSON`, but the root is rebuilt HERE — by this method,
+    // into an instance whose constructor has already run. So a root field the
+    // per-seat view withheld (`static visibleAttributes` on the Game class,
+    // applied to the root by `toJSONForPlayer` exactly as it is to any other
+    // element) kept whatever the constructor put there: the real seed, the
+    // real deck order, a specific false fact a searcher then reasoned from.
+    //
+    // The engine's own root fields are never withheld here. Their audience is
+    // settled by `GAME_ROOT_FIELD_AUDIENCE`, they are passed through the
+    // whitelist on the way out, and `phase`/`settings`/`messages` are restored
+    // above from their own top-level slots rather than from the attribute bag.
+    if (json.redacted) {
+      const whitelist = new Set(
+        (this.constructor as typeof GameElement).visibleAttributes ?? []
+      );
+      GameElement._restoreRedaction(
+        this,
+        json,
+        'game-root',
+        (key) => whitelist.has(key) || isEngineRootField(key) || handledKeys.has(key),
+      );
     }
 
     // Resolve element references in all restored elements

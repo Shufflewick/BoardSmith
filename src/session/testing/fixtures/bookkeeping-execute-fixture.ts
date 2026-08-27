@@ -52,10 +52,10 @@ class BookkeepingExecuteGame extends Game<BookkeepingExecuteGame, Player> {
           execute((ctx) => {
             (ctx.game as BookkeepingExecuteGame).turnFlag += 1;
           }),
-          actionStep({ actions: ['act2'], player: p1, maxMoves: 2 }),
+          actionStep({ actions: ['act2'], player: p1, maxMoves: 2, turnScope: 'restart' }),
           // Holds the flow (and `game.phase`) open so undo attempts reach the
           // commitment fence rather than the unrelated finished-phase fence.
-          actionStep({ actions: ['idle'], player: p1 }),
+          actionStep({ actions: ['idle'], player: p1, turnScope: 'restart' }),
         ),
       }),
     );
@@ -65,7 +65,7 @@ class BookkeepingExecuteGame extends Game<BookkeepingExecuteGame, Player> {
 export { BookkeepingExecuteGame };
 
 export const bookkeepingExecuteFixtureDefinition: GameDefinitionLike = {
-  gameClass: BookkeepingExecuteGame as new (...args: unknown[]) => unknown,
+  gameClass: BookkeepingExecuteGame,
   gameType: 'bookkeeping-execute',
   minPlayers: 1,
   maxPlayers: 1,

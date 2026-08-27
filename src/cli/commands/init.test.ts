@@ -13,12 +13,14 @@
  * pin that pattern so the template can't regress to the crashing shape.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generateGameTs, generateTestTs, initCommand } from './init.js';
+import { validateAssetPaths } from './validate.js';
+import { ASSET_PATH_KEYS } from '../lib/config-schema.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -156,5 +158,68 @@ describe('initCommand — git init on scaffold (Phase 149 Finding 1)', () => {
     } finally {
       process.env = prev;
     }
+  });
+});
+
+
+/**
+ * Issue 142: end-to-end proof that a freshly scaffolded game carries neither
+ * defect — no absolute `file:` dependency path (which bakes the scaffolding
+ * developer's home directory into the project and breaks `npm install`
+ * everywhere else), and no manifest key naming a file the scaffold never
+ * created.
+ */
+describe('initCommand — a scaffolded project is portable and has no dangling assets (issue 142)', () => {
+  const originalCwd = process.cwd();
+  let parentDir: string;
+  let projectPath: string;
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (parentDir) rmSync(parentDir, { recursive: true, force: true });
+  });
+
+  async function scaffold(): Promise<void> {
+    parentDir = mkdtempSync(join(tmpdir(), 'bs-init-scaffold-'));
+    process.chdir(parentDir);
+    await initCommand('scaffold-defects-game', { withoutRulebook: true });
+    projectPath = join(parentDir, 'scaffold-defects-game');
+  }
+
+  it('writes a relative boardsmith dependency path, never an absolute one', async () => {
+    await scaffold();
+    const pkg = JSON.parse(readFileSync(join(projectPath, 'package.json'), 'utf-8'));
+    const link: string = pkg.dependencies.boardsmith;
+
+    expect(link.startsWith('file:')).toBe(true);
+    expect(link.startsWith('file:/')).toBe(false);
+    // Resolves back to a real BoardSmith checkout from the project directory.
+    expect(existsSync(join(projectPath, link.replace(/^file:/, ''), 'src', 'engine'))).toBe(true);
+  });
+
+  it('declares no manifest asset it did not create', async () => {
+    await scaffold();
+    const config = JSON.parse(readFileSync(join(projectPath, 'boardsmith.json'), 'utf-8'));
+    for (const key of ASSET_PATH_KEYS) {
+      expect(config).not.toHaveProperty(key);
+    }
+  });
+
+  it('passes the Asset Paths gate that now opens boardsmith.json', async () => {
+    await scaffold();
+    const result = await validateAssetPaths(projectPath);
+    expect(result.passed).toBe(true);
+  });
+
+  it('and that gate fails the moment a dangling asset path is added back', async () => {
+    await scaffold();
+    const configPath = join(projectPath, 'boardsmith.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+    config.thumbnail = './public/thumbnail.png';
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    const result = await validateAssetPaths(projectPath);
+    expect(result.passed).toBe(false);
+    expect((result.details ?? []).join('\n')).toContain('thumbnail');
   });
 });

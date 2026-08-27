@@ -31,7 +31,7 @@ class RollGame extends Game<RollGame, Player> {
       defineFlow({
         root: loop({
           maxIterations: 10,
-          do: actionStep({ actions: ['roll'], player: (ctx) => ctx.game.getPlayer(1)! }),
+          do: actionStep({ actions: ['roll'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
         }),
       }),
     );
@@ -39,7 +39,7 @@ class RollGame extends Game<RollGame, Player> {
 }
 
 const rollGameDef: GameDefinitionLike = {
-  gameClass: RollGame as new (...args: unknown[]) => unknown,
+  gameClass: RollGame,
   gameType: 'roll',
   minPlayers: 1,
   maxPlayers: 1,

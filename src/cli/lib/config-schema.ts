@@ -23,6 +23,11 @@ interface SinkAnnotatedProperty {
   'x-convex-sink'?: boolean;
 }
 
+/** A top-level property that names a file the bundle must actually carry. */
+interface AssetAnnotatedProperty {
+  'x-asset-path'?: boolean;
+}
+
 /**
  * Every allowed-key list in this module is read out of the shipped schema, so
  * a block's keys are declared in exactly one place — the JSON an author's
@@ -54,6 +59,22 @@ export const ALLOWED_TOP_LEVEL_KEYS: readonly string[] = keysOf(rootSchema);
 export const CONVEX_SINK_KEYS: readonly string[] = Object.freeze(
   Object.entries((schema as unknown as ObjectSchema).properties)
     .filter(([, property]) => (property as SinkAnnotatedProperty)['x-convex-sink'] === true)
+    .map(([key]) => key),
+);
+
+/**
+ * The top-level keys whose value is a PATH TO A FILE the bundle must carry —
+ * read off each schema property's `x-asset-path` annotation.
+ *
+ * `boardsmith validate` fails when one of these resolves to nothing. The
+ * scaffold used to emit `thumbnail: './public/thumbnail.png'` for a file it
+ * never created, `deriveManifest` stamped it into every dist/manifest.json,
+ * and every gate stayed green — for eight games. Marking a key here is the
+ * whole of what it takes for the gate to cover a new asset key.
+ */
+export const ASSET_PATH_KEYS: readonly string[] = Object.freeze(
+  Object.entries((schema as unknown as ObjectSchema).properties)
+    .filter(([, property]) => (property as AssetAnnotatedProperty)['x-asset-path'] === true)
     .map(([key]) => key),
 );
 

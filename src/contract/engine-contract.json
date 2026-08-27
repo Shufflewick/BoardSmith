@@ -1,7 +1,7 @@
 {
-  "revision": 24,
+  "revision": 26,
   "bundleProtocol": 1,
-  "surfaceHash": "6848a30448bd2096",
+  "surfaceHash": "6e1dfd417d1a9856",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -195,6 +195,22 @@
       "surfaceHash": "6848a30448bd2096",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r23: NotSimulableError lets a game say a move is legal but unresolvable from a bot's redacted information state, so MCTS drops it from the search instead of logging a stack per rollout; enumerateLegalMoves re-checks condition and validate rather than trusting the flow state's frozen availableActions."
+    },
+    {
+      "revision": 25,
+      "date": "2026-08-27",
+      "bundleProtocol": 1,
+      "surfaceHash": "0af6c5f02e5c0d6b",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "A withheld attribute now restores as unknown and throws on read (RedactedAttributeError, GameElement.isAttributeRedacted / redactedAttributes) instead of silently holding its class-field default."
+    },
+    {
+      "revision": 26,
+      "date": "2026-08-27",
+      "bundleProtocol": 1,
+      "surfaceHash": "6e1dfd417d1a9856",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "actionStep gains turnScope, and FlowPosition/FlowState gain turnRun/turnScopeUndeclared, so undo reach can span the frame boundary a loop iteration or a sibling action step creates."
     }
   ]
 }

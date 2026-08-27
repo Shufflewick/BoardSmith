@@ -119,6 +119,9 @@ class CollectGame extends Game<CollectGame, Player> {
           do: actionStep({
             actions: ['explore'],
             player: (ctx) => ctx.game.getPlayer(1)!,
+            // One seat, one action per loop iteration: every iteration is a
+            // new turn, so undo does not reach behind the current one.
+            turnScope: 'restart',
           }),
         }),
       }),
@@ -129,7 +132,7 @@ class CollectGame extends Game<CollectGame, Player> {
 export { CollectGame, Equipment, Stash, Held, Sector };
 
 export const collectFixtureDefinition: GameDefinitionLike = {
-  gameClass: CollectGame as new (...args: unknown[]) => unknown,
+  gameClass: CollectGame,
   gameType: 'collect',
   minPlayers: 1,
   maxPlayers: 4,

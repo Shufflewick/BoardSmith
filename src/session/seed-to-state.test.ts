@@ -96,7 +96,7 @@ class CounterGame extends Game<CounterGame, Player> {
 }
 
 const counterGameDef: GameDefinitionLike = {
-  gameClass: CounterGame as new (...args: unknown[]) => unknown,
+  gameClass: CounterGame,
   gameType: 'counter',
   minPlayers: 1,
   maxPlayers: 4,

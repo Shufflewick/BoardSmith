@@ -13,13 +13,12 @@ import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState } fro
 import { ErrorCode } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
-import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
+import type { GameClass, HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import {
   GameRunner,
   describeCheckpointAbsence,
   type GameStateSnapshot,
-  type GameRunnerOptions,
   type CheckpointPolicy,
   type UndoPolicy,
   type RandomnessPolicy,
@@ -32,6 +31,7 @@ import {
   buildSingleActionMetadata,
   buildPlayerState,
   computeUndoEligibility,
+  undoUnavailableMessage,
   buildActionTraces,
   computeElementDiff,
   serializeFlowDebugInfo,
@@ -280,7 +280,15 @@ export interface OpResult {
 // ---------------------------------------------------------------------------
 
 export interface GameDefinitionLike {
-  gameClass: new (...args: unknown[]) => unknown;
+  /**
+   * The author's game class, typed exactly as {@link GameDefinition.gameClass}
+   * so a real game class is assignable with no cast (#138). The previous
+   * `new (...args: unknown[]) => unknown` was satisfied by NO game class at
+   * all — `unknown[]` is not assignable to a constructor's `GameOptions`
+   * parameter — so every call site erased the class with an assertion, which
+   * is the one thing this field exists to prevent.
+   */
+  gameClass: GameClass;
   gameType: string;
   minPlayers: number;
   maxPlayers: number;
@@ -495,13 +503,13 @@ function handleStart(
     ? { ...gameOptions, tutorial: def.tutorial }
     : gameOptions;
   const runner = new GameRunner({
-    GameClass: def.gameClass as GameRunnerOptions<never>['GameClass'],
+    GameClass: def.gameClass,
     gameType: def.gameType,
     gameOptions: effectiveOptions,
     checkpoints: def.checkpoints,
     randomness: def.randomness,
     undo: def.undo,
-  } as GameRunnerOptions<never>);
+  });
 
   runner.start();
 
@@ -684,7 +692,7 @@ function handleUndo(
     return errorResult("It's not your turn", 'bundle', ErrorCode.NOT_YOUR_TURN);
   }
   if (actionsThisTurn === 0) {
-    return errorResult('No actions to undo', 'bundle', ErrorCode.NO_ACTIONS_TO_UNDO);
+    return errorResult(undoUnavailableMessage(flowState), 'bundle', ErrorCode.NO_ACTIONS_TO_UNDO);
   }
 
   // Server-side enforcement (UNDO-01 / UNDO-02 finished-phase fence): refuse
@@ -765,7 +773,7 @@ async function handleBotTurn(
   // handleHint already passes it; this is the same bot, so it gets the same config.
   const bot = createBot(
     runner.game as Game,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
+    def.gameClass,
     def.gameType,
     botPlayer,
     runner.actionHistory,
@@ -859,7 +867,7 @@ async function handleHint(
 
   const bot = createBot(
     runner.game as Game,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
+    def.gameClass,
     def.gameType,
     op.seat,
     runner.actionHistory,
@@ -950,7 +958,7 @@ async function handleHeatmapToggle(
 
   const bot = createBot(
     runner.game as Game,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
+    def.gameClass,
     def.gameType,
     op.seat,
     runner.actionHistory,
@@ -1038,7 +1046,7 @@ async function handleBotSuggest(
   const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;
   const bot = createBot(
     runner.game as Game,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
+    def.gameClass,
     def.gameType,
     botPlayer,
     runner.actionHistory,
@@ -1071,10 +1079,6 @@ async function handleBotSuggest(
 // Debug op handlers
 // ---------------------------------------------------------------------------
 
-function gameClassOf(def: GameDefinitionLike): GameRunnerOptions<never>['GameClass'] {
-  return def.gameClass as GameRunnerOptions<never>['GameClass'];
-}
-
 /**
  * Restore a runner from a snapshot and thread the tutorial definition back onto
  * the game (tutorials are unserializable attributes excluded from the snapshot;
@@ -1087,7 +1091,7 @@ function runnerFromSnapshot(
 ): GameRunner {
   const runner = GameRunner.fromSnapshot(
     snapshot,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
+    def.gameClass,
     { checkpoints: def.checkpoints, randomness: def.randomness, undo: def.undo },
   );
   if (def.tutorial) {
@@ -1110,7 +1114,7 @@ function runnerFromCheckpoint(
 ): GameRunner | null {
   // Carry checkpoints up to and including the restore point so a later getSnapshot
   // keeps the linear history coherent (mirrors the undo op).
-  const runner = GameRunner.fromCheckpoint(snap, actionIndex, gameClassOf(def), {
+  const runner = GameRunner.fromCheckpoint(snap, actionIndex, def.gameClass, {
     checkpoints: def.checkpoints,
     randomness: def.randomness,
     undo: def.undo,

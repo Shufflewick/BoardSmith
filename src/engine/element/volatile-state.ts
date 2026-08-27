@@ -1,6 +1,6 @@
 import { Player } from '../player/player.js';
-import type { ElementClass } from './types.js';
-import { PersistentMap } from './game.js';
+import { readDynamicAttribute } from './game-element.js';
+import { PersistentMap } from './persistent-map.js';
 import type { Game } from './game.js';
 
 /**
@@ -59,7 +59,7 @@ export function checkForVolatileState(game: Game): void {
     if (SAFE_PROPERTIES.has(key)) continue;
     if (key.startsWith('_')) continue; // Private by convention
 
-    const value = (game as unknown as Record<string, unknown>)[key];
+    const value = readDynamicAttribute(game, key);
 
     // Check for native Map (not PersistentMap)
     if (value instanceof Map && !(value instanceof PersistentMap)) {
@@ -80,12 +80,12 @@ export function checkForVolatileState(game: Game): void {
   }
 
   // Also check Player instances
-  for (const player of game.all(Player as unknown as ElementClass<Player>)) {
+  for (const player of game.all(Player)) {
     for (const key of Object.keys(player)) {
       if (key.startsWith('_')) continue;
       if (['seat', 'name', 'game', 'score'].includes(key)) continue;
 
-      const value = (player as unknown as Record<string, unknown>)[key];
+      const value = readDynamicAttribute(player, key);
 
       if (value instanceof Map) {
         warnings.push(

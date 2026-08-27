@@ -170,6 +170,7 @@ program
   .option('--games <count>', 'Number of games to simulate', '10')
   .option('--seed <seed>', 'Base seed (per-game seeds derived and recorded in output)')
   .option('--players <count>', 'Player count for each simulated game', '2')
+  .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard) so option-gated configurations are simulated too')
   .option('--json', 'Output results as JSON')
   .action(simulateCommand);
 

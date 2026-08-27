@@ -283,6 +283,23 @@ export class MultiplayerHost {
       return;
     }
 
+    // A 1-seat game has no seat to pick, so the seat-picker can never be the right
+    // screen for it: with the one seat already held by a connected client there is
+    // nothing takeable, and `DevHost.vue` renders a lobby with no "Take seat"
+    // button — no control of any kind, and the board never mounts (issue #150).
+    // Every client that reaches a solo dev host IS the player, so hand it seat 1.
+    // The seat is not contested: a solo game has no second player to protect, and
+    // the dev host already supersedes an older tab at the socket layer (one socket
+    // per clientId), so superseding the seat is the same rule one level up.
+    if (this.opts.playerCount === 1) {
+      this.assignSeat(clientId, 1);
+      // When a start is still in flight, `startGame`'s post-await reinit pass
+      // covers this client (it is seated and connected by then) — see WR-02.
+      if (this.phase === 'playing') this.reinitSeat(clientId, 1);
+      this.broadcastLobby();
+      return;
+    }
+
     // Game already live (or starting): show the seat-picker.
     this.send(clientId, this.lobbyMessage());
   }
@@ -653,6 +670,13 @@ export class MultiplayerHost {
     this.releaseSeat(clientId); // one seat per client
     const info = this.seats.get(seat);
     if (!info) return;
+    // The seat may still be reserved for a DIFFERENT holder — an away client whose
+    // seat this one is taking over (`handleJoin`), or the tab this one supersedes
+    // in a solo game (`hello`). Drop that reservation too: leaving it in
+    // `clientSeat` dangles a mapping to a seat the old client no longer owns, and
+    // its next `hello` would take the reconnect branch, flip this seat's
+    // `connected` flag under the new owner, and re-init the old client onto it.
+    if (info.clientId && info.clientId !== clientId) this.clientSeat.delete(info.clientId);
     info.clientId = clientId;
     info.name = name?.trim() || `Player ${seat}`;
     info.color = color ?? this.opts.colorPalette?.[seat - 1]?.value;

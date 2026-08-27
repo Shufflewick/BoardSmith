@@ -10,9 +10,11 @@ import type {
 } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
+import { PersistentMap } from './persistent-map.js';
 import type { VisibilityState } from '../command/visibility.js';
 import { DEFAULT_VISIBILITY, canPlayerSee, copyVisibilityState, resolveVisibility } from '../command/visibility.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
+import { RedactedAttributeError, type RedactionReason } from '../errors.js';
 import {
   decodeTypedArray,
   encodeTypedArray,
@@ -209,6 +211,34 @@ const RESERVED_KEY_REASONS: Record<string, string> = {
   _ctx: 'it holds the shared game context (sequence counter, class registry)',
 };
 
+/**
+ * Attributes the ENGINE owns on every element, whatever a game's
+ * `visibleAttributes` says about them (#19).
+ *
+ * These are structure, not game data: identity, ownership and layout, read by
+ * the engine itself (`getEffectiveOwner`, seat lookup, turn order, the
+ * renderers). A redacted restore leaves them alone — withholding them would
+ * not withhold a secret, it would take the tree apart. A game's own secrets
+ * are never in this list.
+ */
+/**
+ * The attribute a per-seat view puts on an element the seat cannot see.
+ *
+ * `toJSONForPlayer` replaces such an element with a placeholder carrying this
+ * marker, safe layout keys and nothing else. It is engine metadata rather than
+ * a game attribute (hence the `_` prefix, which keeps it out of the generic
+ * attribute loops), and it is what tells a restore that EVERY game attribute
+ * this element would otherwise carry was withheld (#147).
+ */
+export const HIDDEN_PLACEHOLDER_ATTRIBUTE = '__hidden';
+
+const ENGINE_OWNED_ATTRIBUTES: ReadonlySet<string> = new Set([
+  // GameElement: identity, ownership, grid position, artwork.
+  'name', 'player', 'row', 'column', '$image', '$images',
+  // Player: seat identity, liveness (TurnOrder reads it) and seat colour.
+  'seat', 'status', '$type', 'color', 'colorLabel',
+]);
+
 export class GameElement<G extends Game = any, P extends Player = any> {
   /** Element name for identification and queries */
   name?: string;
@@ -247,6 +277,19 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
   /** Visibility state for this element */
   _visibility?: VisibilityState;
+
+  /**
+   * Attributes this copy of the element was never told (#19).
+   *
+   * Populated only on a restore from a per-seat REDACTED serialization, where
+   * `visibleAttributes` withheld the value. Each name in here is also an own,
+   * non-enumerable accessor on this element that THROWS
+   * {@link RedactedAttributeError} on read, so a withheld attribute cannot be
+   * mistaken for its class-field default. Non-enumerable is what keeps
+   * `toJSON` and `resolveReferences` (both `Object.keys` walks) from reading
+   * it back.
+   */
+  _redactedAttributes?: Set<string>;
 
   /** Static flag to identify GameElement classes */
   static isGameElement = true;
@@ -463,7 +506,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
             // that every later restore reads, so this cannot be allowed through.
             throw new ReservedAttributeError(key, elementClass.name, name);
           }
-          (element as any)[key] = value;
+          // The key is only known at runtime (it came off a caller's attribute
+          // bag), so Object.assign is the one write form that does not require
+          // lying to the type system about the element's shape. Reserved keys
+          // are already refused above.
+          Object.assign(element, { [key]: value });
         }
       } catch (error) {
         // A reserved-key rejection already says exactly what is wrong and how
@@ -608,7 +655,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // `_t.children`/`_t.parent` byte-identical to before the call
     // (no corrupt-on-reject). Adding INTO a sealed Space (sealed is the
     // DESTINATION, not oldParent) is unaffected — append-only, not frozen.
-    if (oldParent && 'sealed' in oldParent && (oldParent as unknown as { sealed?: boolean }).sealed) {
+    if (oldParent && isSealableContainer(oldParent) && oldParent.sealed) {
       throw new Error(
         `Cannot remove "${this.name ?? this.constructor.name}" from "${oldParent.name ?? oldParent.constructor.name}": ` +
         `this Space is sealed (append-only) and does not allow elements to be removed from it. ` +
@@ -663,9 +710,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       // game-element.ts and space.ts (Space extends GameElement) — mirrors
       // `getParentZoneVisibility`'s duck-typed `getZoneVisibility` check
       // above and `fromJSON`'s duck-typed `_restoreZoneVisibility` call.
-      const oldTrigger = (oldParent as unknown as { triggerEvent?: (type: 'exit' | 'enter', el: GameElement) => void }).triggerEvent;
-      if (typeof oldTrigger === 'function') {
-        oldTrigger.call(oldParent, 'exit', this);
+      if (isChildEventTarget(oldParent)) {
+        oldParent.triggerEvent('exit', this);
       }
     }
 
@@ -680,9 +726,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     }
 
     // Trigger enter event if moving to a Space (duck-typed, see above).
-    const newTrigger = (destination as unknown as { triggerEvent?: (type: 'exit' | 'enter', el: GameElement) => void }).triggerEvent;
-    if (typeof newTrigger === 'function') {
-      newTrigger.call(destination, 'enter', this);
+    if (isChildEventTarget(destination)) {
+      destination.triggerEvent('enter', this);
     }
   }
 
@@ -949,8 +994,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     if (!parent) return undefined;
 
     // Check if parent is a Space with zone visibility
-    if ('getZoneVisibility' in parent && typeof parent.getZoneVisibility === 'function') {
-      const zoneVis = (parent as any).getZoneVisibility();
+    if (hasZoneVisibility(parent)) {
+      const zoneVis = parent.getZoneVisibility();
       if (zoneVis) return zoneVis;
     }
 
@@ -1011,6 +1056,95 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   // ============================================
 
   /**
+   * Does this copy of the game know `key`, or was it withheld (#19)?
+   *
+   * `false` everywhere except inside a per-seat redacted clone (a bot's MCTS
+   * search sandbox is the one the engine builds itself), so a rule that asks
+   * costs nothing in the authoritative game and stays honest in the sandbox.
+   *
+   * @example
+   * ```typescript
+   * if (opponent.isAttributeRedacted('pack')) return [];  // nothing to offer
+   * return opponent.pack.filter(...)                       // safe to read
+   * ```
+   */
+  isAttributeRedacted(key: string): boolean {
+    return this._redactedAttributes?.has(key) ?? false;
+  }
+
+  /** Every attribute withheld from this copy of the element (#19). */
+  get redactedAttributes(): readonly string[] {
+    return this._redactedAttributes ? [...this._redactedAttributes] : [];
+  }
+
+  /**
+   * Replace `keys` with accessors that throw on read (#19).
+   *
+   * The setter is the way back: assigning a real value makes the attribute
+   * known again and restores it as an ordinary enumerable data property, so a
+   * search that learns or decides a value can write it and carry on. Without
+   * that, every write inside the sandbox would fail on a getter-only property.
+   */
+  private _redactAttributes(keys: Iterable<string>, reason: RedactionReason): void {
+    for (const key of keys) {
+      (this._redactedAttributes ??= new Set()).add(key);
+      Object.defineProperty(this, key, {
+        configurable: true,
+        enumerable: false,
+        get: () => {
+          throw new RedactedAttributeError(key, this.constructor.name, this._t.id, reason);
+        },
+        set: (value: unknown) => {
+          this._redactedAttributes?.delete(key);
+          Object.defineProperty(this, key, {
+            value, writable: true, enumerable: true, configurable: true,
+          });
+        },
+      });
+    }
+  }
+
+  /**
+   * Take away every attribute a REDACTED serialization did not carry, and make
+   * reading one throw (#19, #147, #148).
+   *
+   * The constructor that just ran filled each of them in with its class-field
+   * initializer, which is the whole defect: `0` is a real map square, `[]` is a
+   * real empty pack, `undefined` is a real "nobody set this". The withheld
+   * NAMES are not on the wire (a name list would disclose which optional
+   * attributes the owner has set), so they are derived here from what this
+   * copy's own class declares against what the JSON actually carries.
+   *
+   * `isKnown` answers, for a key the JSON does not carry, whether this copy was
+   * told it anyway: the class's `visibleAttributes` whitelist for a whitelist
+   * redaction, nothing at all for a hidden placeholder (which carries no game
+   * attributes by construction), and additionally the engine's own root fields
+   * on the game root, whose audience the engine settles for itself.
+   *
+   * Engine-owned structure is never withheld: it holds no secret, and taking it
+   * away would take the tree apart.
+   *
+   * @internal Engine-internal. Called by `fromJSON` and `Game.loadSerializedState`.
+   */
+  static _restoreRedaction(
+    element: GameElement,
+    json: ElementJSON,
+    reason: RedactionReason,
+    isKnown: (key: string) => boolean,
+  ): void {
+    const Class = element.constructor as typeof GameElement;
+    const unserializable = new Set(Class.unserializableAttributes);
+    const withheld = Object.keys(element).filter((key) => (
+      !key.startsWith('_') &&
+      !unserializable.has(key) &&
+      !ENGINE_OWNED_ATTRIBUTES.has(key) &&
+      !isKnown(key) &&
+      !(key in json.attributes)
+    ));
+    element._redactAttributes(withheld, reason);
+  }
+
+  /**
    * Serialize this element and its descendants to JSON
    */
   toJSON(): ElementJSON {
@@ -1048,6 +1182,16 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       }
     }
 
+    // #147: carry the placeholder marker forward. `__hidden` is engine
+    // metadata, so the `_`-prefix rule in the loop above skips it — but an MCTS
+    // descendant clone re-serializes an ALREADY redacted sandbox with plain
+    // `toJSON()`, and without the marker the second restore would take the
+    // placeholder for an ordinary element and hand back every class-field
+    // default one ply into the search, which is this defect again.
+    if (readDynamicAttribute(this, HIDDEN_PLACEHOLDER_ATTRIBUTE) === true) {
+      attributes[HIDDEN_PLACEHOLDER_ATTRIBUTE] = true;
+    }
+
     const json: ElementJSON = {
       className,
       id: this._t.id,
@@ -1056,6 +1200,14 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
     if (this.name) {
       json.name = this.name;
+    }
+
+    // #19: carry the redaction forward. An MCTS descendant clone re-serializes
+    // an ALREADY redacted sandbox with plain `toJSON()` — without this flag the
+    // second restore would hand the class-field default back one ply into the
+    // search, which is the whole defect again.
+    if (this._redactedAttributes && this._redactedAttributes.size > 0) {
+      json.redacted = true;
     }
 
     // Include visibility if explicitly set. Emit a COPY — `addVisibleTo` etc.
@@ -1101,10 +1253,12 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
     // GameElement references get special handling (no cycle risk - they become refs)
     if (value instanceof GameElement) {
-      // Check if this is a Player (has seat property unique to Player)
-      // Use duck typing to avoid circular import (Player extends GameElement)
-      if ('seat' in value && typeof (value as Player).seat === 'number') {
-        const player = value as Player;
+      // #149: the one shared structural answer to "is this a player?" --
+      // a numeric `seat` is not it, because a per-seat board carries one too
+      // and would then serialize as a `__playerRef` to a seat that has no
+      // such player on the other end.
+      if (isPlayerElement(value)) {
+        const player: Player = value;
         // Include useful properties for UI while maintaining deserializability via __playerRef
         return {
           __playerRef: player.seat,
@@ -1269,6 +1423,16 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       return value;
     }
 
+    // A live PersistentMap is a VIEW onto `game.settings`, not a value to
+    // rebuild: the plain-object branch below flattened it to `{}` (its state
+    // lives in private fields) and `resolveElementReferences` wrote that back
+    // over the field, so the first call after a restore threw
+    // "<name>.get is not a function" (#139). Its contents are resolved once,
+    // with `settings` itself.
+    if (value instanceof PersistentMap) {
+      return value;
+    }
+
     // Rebuild Map / Set from the tagged shapes serializeValue produced.
     if (typeof value === 'object' && value !== null && '__map' in value) {
       const entries = (value as { __map: [unknown, unknown][] }).__map;
@@ -1358,11 +1522,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // accessor — see the comment on that method for why it exists instead of
     // widening `_zoneVisibility` to public.
     if (json.zoneVisibility) {
-      const restoreZoneVisibility = (
-        element as unknown as { _restoreZoneVisibility?: (state: typeof json.zoneVisibility) => void }
-      )._restoreZoneVisibility;
-      if (typeof restoreZoneVisibility === 'function') {
-        restoreZoneVisibility.call(element, json.zoneVisibility);
+      if (isZoneVisibilityRestorer(element)) {
+        element._restoreZoneVisibility(json.zoneVisibility);
       }
     }
 
@@ -1380,7 +1541,37 @@ export class GameElement<G extends Game = any, P extends Player = any> {
         }
       }
       if (getterOnly) continue;
-      (element as unknown as Record<string, unknown>)[key] = value;
+      Object.assign(element, { [key]: value });
+    }
+
+    // #19 / #147: this JSON was redacted for a seat, so every attribute it does
+    // NOT carry is an attribute this copy of the game was never told. The
+    // constructor above already filled those in with class field defaults,
+    // which is exactly the lie: `0` is a real map square and `[]` is a real
+    // empty pack. Take them away, and make reading one throw.
+    //
+    // Two ways an element gets here, and they withhold different amounts:
+    //
+    // - `__hidden` (#147): the seat cannot see the ELEMENT at all
+    //   (`showOnlyTo`/`hideFrom`, or a hidden/count-only/owner-only zone), and
+    //   the placeholder carries no game attributes whatsoever. Not even the
+    //   class's `visibleAttributes` survived that pass, so nothing on the
+    //   whitelist may be assumed either. What the placeholder DOES carry (its
+    //   `$type`, its `$images.back`, the marker itself, its position in a
+    //   visible parent) stays known and unforgeable, which is why this is done
+    //   per attribute rather than by exempting the element.
+    // - `redacted` (#19): the element itself is visible and only the
+    //   non-whitelisted attributes were dropped.
+    const hiddenPlaceholder = json.attributes[HIDDEN_PLACEHOLDER_ATTRIBUTE] === true;
+    if (hiddenPlaceholder || json.redacted) {
+      const Class = element.constructor as typeof GameElement;
+      const whitelist = new Set(Class.visibleAttributes ?? []);
+      GameElement._restoreRedaction(
+        element,
+        json,
+        hiddenPlaceholder ? 'hidden-element' : 'attribute-whitelist',
+        hiddenPlaceholder ? () => false : (key) => whitelist.has(key),
+      );
     }
 
     // Recursively create children
@@ -1425,4 +1616,145 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   hasId(id: number): boolean {
     return this._t.id === id;
   }
+}
+
+/**
+ * The one answer to "is this element a player?".
+ *
+ * Structural, via `Player`'s own `$type` marker, for two reasons. `instanceof
+ * Player` is unusable because a bundler can produce a second copy of the class
+ * (and `Player` extends this module, so importing it here would be a cycle).
+ * A numeric `seat` is not the answer either: a per-seat board carries one too,
+ * and taking that for a player is the defect #52 removed from `getPlayer` and
+ * #149 removed from the per-seat redaction walk.
+ *
+ * The marker is typed against `Player` itself, so renaming `$type` or changing
+ * its literal fails to compile here rather than silently answering `false`
+ * everywhere.
+ */
+export function isPlayerElement<P extends Player = Player>(el: GameElement): el is P {
+  const playerType: Player['$type'] = 'player';
+  return (el as Partial<Pick<Player, '$type'>>).$type === playerType;
+}
+
+/**
+ * Read a property whose name is only known at runtime.
+ *
+ * Serialization, HMR restore, the volatile-state audit and command inversion
+ * all walk keys that come from JSON or `Object.keys`, so the property being
+ * read is on no declared type. The result is deliberately `unknown`: every
+ * caller has to narrow it before use, which is what separates this from the
+ * `as unknown as Record<string, unknown>` casts it replaces — those handed
+ * back a bag the caller could also silently WRITE through.
+ *
+ * To write a runtime-named attribute, use `Object.assign(element, { [key]:
+ * value })`, which needs no cast at all.
+ */
+export function readDynamicAttribute(element: GameElement, key: string): unknown {
+  // Widened to `object` first so the index cast is the ordinary "this object
+  // has string keys" one, not a claim about `GameElement`'s declared shape.
+  const bag: object = element;
+  return (bag as Record<string, unknown>)[key];
+}
+
+/** An element that rejects children being removed from it (i.e. a sealed Space). */
+interface SealableContainer {
+  sealed: boolean;
+}
+
+/**
+ * Narrow an element to one that can be sealed.
+ *
+ * Duck-typed rather than `instanceof Space` for the same reason as
+ * {@link hasZoneVisibility}: `Space` imports from this module.
+ */
+function isSealableContainer(value: unknown): value is SealableContainer {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Partial<SealableContainer>).sealed === 'boolean'
+  );
+}
+
+/** An element that receives enter/exit notifications for its children (i.e. a Space). */
+interface ChildEventTarget {
+  triggerEvent(type: 'exit' | 'enter', element: GameElement): void;
+}
+
+/**
+ * Narrow an element to one that receives child enter/exit events.
+ *
+ * Duck-typed rather than `instanceof Space` for the same reason as
+ * {@link hasZoneVisibility}: `Space` imports from this module.
+ */
+function isChildEventTarget(value: unknown): value is ChildEventTarget {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Partial<ChildEventTarget>).triggerEvent === 'function'
+  );
+}
+
+/** An element that can restore its own zone visibility from serialized state (i.e. a Space). */
+interface ZoneVisibilityRestorer {
+  _restoreZoneVisibility(state: NonNullable<ElementJSON['zoneVisibility']>): void;
+}
+
+/**
+ * Narrow an element to one that can restore zone visibility.
+ *
+ * `_restoreZoneVisibility` is `Space`'s scoped internal accessor — see the
+ * comment on that method for why it exists instead of widening
+ * `_zoneVisibility` to public. Duck-typed rather than `instanceof Space` for
+ * the same reason as {@link hasZoneVisibility}: `Space` imports from this
+ * module.
+ */
+function isZoneVisibilityRestorer(value: unknown): value is ZoneVisibilityRestorer {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Partial<ZoneVisibilityRestorer>)._restoreZoneVisibility === 'function'
+  );
+}
+
+/**
+ * Narrow an unknown value to a live element.
+ *
+ * `instanceof GameElement` is not usable for this: a bundler can produce more
+ * than one copy of the class, which is why `Game.getPlayer` and friends
+ * duck-type as well. Every live element carries a numeric `id` and the engine's
+ * `_t` tree record, and both are in {@link RESERVED_ELEMENT_KEYS}, so no
+ * game-authored object can impersonate one.
+ *
+ * Use this wherever a value typed `unknown` (a selection choice, a flow
+ * variable, a wire argument) is about to be read as an element. It is the
+ * difference between refusing a choice that carries no element and throwing
+ * `Cannot read properties of undefined` at the player.
+ */
+export function isElement(value: unknown): value is GameElement {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { id?: unknown; _t?: unknown };
+  return typeof candidate.id === 'number' && typeof candidate._t === 'object' && candidate._t !== null;
+}
+
+/** An element that declares zone visibility for its children (i.e. a Space). */
+export interface ZoneVisibilityOwner {
+  getZoneVisibility(): VisibilityState | undefined;
+}
+
+/**
+ * Narrow a value to an element that declares zone visibility.
+ *
+ * Deliberately duck-typed rather than `instanceof Space`: `Space` imports from
+ * this module, and every visibility walk starts from a `GameElement`, so an
+ * `instanceof` here would be a cycle. Kept in one place because the three
+ * callers (a child's parent walk, per-seat serialization, and flow-variable
+ * relinking) must agree on what counts as a zone.
+ */
+export function hasZoneVisibility(value: unknown): value is ZoneVisibilityOwner {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Partial<ZoneVisibilityOwner>).getZoneVisibility === 'function'
+  );
 }

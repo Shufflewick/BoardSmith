@@ -117,7 +117,7 @@ class SimultaneousRoundsGame extends Game<SimultaneousRoundsGame, RoundCommitPla
 export { SimultaneousRoundsGame, RoundCommitPlayer };
 
 export const simultaneousRoundsFixtureDefinition: GameDefinitionLike = {
-  gameClass: SimultaneousRoundsGame as new (...args: unknown[]) => unknown,
+  gameClass: SimultaneousRoundsGame,
   gameType: 'simultaneous-rounds',
   minPlayers: 2,
   maxPlayers: 4,

@@ -219,7 +219,10 @@ export function encodeTypedArray(value: ArrayBufferView, path: string): Serializ
     );
   }
 
-  const length = (value as unknown as { length: number }).length;
+  // Derived from the view's own byte length rather than read off a `length`
+  // property: `ArrayBufferView` declares `byteLength`, not `length`, so this is
+  // the same number with the type system left on.
+  const length = value.byteLength / codec.bytesPerElement;
   const bytes = new Uint8Array(length * codec.bytesPerElement);
   const view = new DataView(bytes.buffer);
   for (let i = 0; i < length; i++) {

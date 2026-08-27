@@ -130,6 +130,10 @@ here.
      playerCounts: [2, 3, 4],
      timeout: 5000,      // optional
      seed: 'some-base-seed', // optional
+     // Required when this chunk's rules only apply under a game option — the
+     // harness otherwise simulates the default configuration only, and reports
+     // green about a configuration nobody asked about.
+     gameOptions: { difficulty: 'hard' },
    });
 
    expect(results.crashed).toBe(0);
@@ -181,7 +185,8 @@ here.
    entirely — it has no UI to check. This is the single source of truth for ASSET-02's bare-`<img>`
    scan — do not reimplement or duplicate this scan in prose; cite it and run the real function,
    the same discipline item 2 above applies to `sandbox-scan.ts`. Any non-empty result (any bare
-   asset `<img>` found outside `AssetImage.vue`) is a build-blocking FAIL that routes this chunk
+   asset `<img>` found anywhere in the game's own `src/ui`, since `AssetImage` lives in
+   `boardsmith/ui`) is a build-blocking FAIL that routes this chunk
    back to `build` (see "Failures Loop Back to `build`" below) — never silently worked around
    here.
 

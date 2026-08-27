@@ -1,4 +1,5 @@
 import type { GameElement } from '../element/game-element.js';
+import { isElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
 import type { Game } from '../element/game.js';
 import type {
@@ -120,6 +121,13 @@ export function evaluateConditionWithTrace<Ctx>(
     try {
       value = predicate(context);
     } catch (error) {
+      // #19/#31: "I cannot answer this from the information state I have" is
+      // not a crashing predicate — it is the honest answer inside a bot's
+      // redacted search sandbox, where a withheld attribute has no value at
+      // all. Blaming the author's predicate for it would send them looking for
+      // a bug that is not there. It travels as itself, and enumeration drops
+      // the action.
+      if (error instanceof NotSimulableError) throw error;
       throw new ConditionEvaluationError(label, owner, error);
     }
     // The trace keeps the RAW return value, not the coerced boolean, so a
@@ -581,7 +589,7 @@ export class ActionExecutor {
 
         return elements.map(el => {
           const gameDisabled = elementSel.disabled
-            ? elementSel.disabled(el as any, context)
+            ? elementSel.disabled(el, context)
             : false;
           // OR-in gate reason: only when no game-defined reason already applies.
           if (tutorialStep && gameDisabled === false) {
@@ -601,7 +609,7 @@ export class ActionExecutor {
 
         return elements.map(el => {
           const gameDisabled = elementsSel.disabled
-            ? elementsSel.disabled(el as any, context)
+            ? elementsSel.disabled(el, context)
             : false;
           // OR-in gate reason: only when no game-defined reason already applies.
           if (tutorialStep && gameDisabled === false) {
@@ -1719,15 +1727,22 @@ export class ActionExecutor {
     // For element selections, value is an element ID - validate it exists in choices
     if (isElementSelection) {
       const elementId = value as number;
-      const validIds = currentChoices.map((c) => (c.value as any).id);
-      if (!validIds.includes(elementId)) {
+      // A choice whose value is not a live element cannot be selected by id.
+      // Such values do occur: a `choices`/`elements` closure reading redacted
+      // state yields `undefined` (see enumerate-moves' undefined-choice-value
+      // warning). Narrowing rather than casting turns that into a refused
+      // selection instead of a TypeError on `.id`.
+      const elementChoices = currentChoices.flatMap((c) =>
+        isElement(c.value) ? [{ element: c.value, disabled: c.disabled }] : []
+      );
+      if (!elementChoices.some((c) => c.element.id === elementId)) {
         // Format choices as {value, display} for UI
-        const formattedChoices = this.formatElementChoices(currentChoices.map(c => c.value) as GameElement[]);
+        const formattedChoices = this.formatElementChoices(elementChoices.map((c) => c.element));
         return { done: false, error: `Invalid element ID: ${elementId}`, nextChoices: formattedChoices };
       }
       // Check if the selected element is disabled
-      const disabledMatch = currentChoices.find(
-        c => (c.value as any).id === elementId && c.disabled !== false
+      const disabledMatch = elementChoices.find(
+        (c) => c.element.id === elementId && c.disabled !== false
       );
       if (disabledMatch) {
         return { done: false, error: `Selection disabled: ${disabledMatch.disabled}` };
@@ -1793,7 +1808,7 @@ export class ActionExecutor {
       // Simple termination: check if value matches repeatUntil
       // For elements, repeatUntil would be an element, so compare IDs
       if (isElementSelection) {
-        const untilId = typeof repeatUntil === 'number' ? repeatUntil : (repeatUntil as any)?.id;
+        const untilId = typeof repeatUntil === 'number' ? repeatUntil : isElement(repeatUntil) ? repeatUntil.id : undefined;
         isDone = value === untilId;
       } else {
         isDone = this.valuesEqual(value, repeatUntil);
@@ -1844,7 +1859,7 @@ export class ActionExecutor {
     // Format choices for UI - element selections need {value: id, display: name}
     const nextChoicesRaw = nextAnnotated.map(c => c.value);
     const formattedChoices = isElementSelection
-      ? this.formatElementChoices(nextChoicesRaw as GameElement[], selection, nextContext)
+      ? this.formatElementChoices(nextChoicesRaw.filter(isElement), selection, nextContext)
       : nextChoicesRaw;
 
     return { done: false, nextChoices: formattedChoices };
@@ -1859,8 +1874,14 @@ export class ActionExecutor {
     selection?: Selection,
     context?: ActionContext
   ): Array<{ value: number; display: string }> {
-    // Get custom display function from selection if available
-    const customDisplay = selection && 'display' in selection ? (selection as any).display : undefined;
+    // Only the two element selections reach here, and only they carry an
+    // element-shaped `display`. Narrowing on the discriminant gives the real
+    // signature, so a wrong arity or a renamed variant fails to compile rather
+    // than at render time.
+    const customDisplay =
+      selection && (selection.type === 'element' || selection.type === 'elements')
+        ? selection.display
+        : undefined;
 
     // Auto-disambiguate names (for fallback when no custom display)
     const nameCounts = new Map<string, number>();

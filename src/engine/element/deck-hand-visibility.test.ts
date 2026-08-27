@@ -217,3 +217,31 @@ describe('SPACE-03/F-09: addZoneVisibleTo grants reveal a hidden zone to the gra
     }
   });
 });
+
+// #149: `drawTo` was a single generic signature, `drawTo<T extends Piece>(dest,
+// count?, elementClass?): T[]`, whose body bridged the default with
+// `Piece as unknown as ElementClass<T>`. Nothing tied `T` to what the deck
+// actually holds, so `deck.drawTo<Card>(hand, 5)` -- naming no class at all --
+// typed a pile of plain pieces as cards. It is two overloads now: name the
+// class to get it back typed, or get `Piece[]`.
+describe('Deck#drawTo only promises the element type it was asked for (#149)', () => {
+  class Token extends Piece<TestGame> {}
+
+  it('returns Piece[] when no class is named, and the named class when one is', () => {
+    const game = new TestGame({ playerCount: 2 });
+    const deck = game.create(Deck, 'deck');
+    const hand = game.create(Hand, 'hand');
+    deck.create(Card, 'card-1', { suit: 'hearts', rank: 'A' });
+    // A Deck stacks, so the last piece created is the top one drawn first.
+    deck.create(Token, 'token-1');
+
+    const anyPiece = deck.drawTo(hand, 1);
+    expect(anyPiece.map(p => p.name)).toEqual(['token-1']);
+    // Typed `Piece[]`: reading a Card field off it must not compile.
+    // @ts-expect-error - a Piece has no `suit`
+    void anyPiece[0].suit;
+
+    const cards: Card[] = deck.drawTo(hand, 1, Card);
+    expect(cards[0]?.suit).toBe('hearts');
+  });
+});

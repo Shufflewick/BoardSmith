@@ -10,11 +10,13 @@ export type {
   BotMove,
   BotMoveStats,
   BotStrategy,
+  DeterminizeSampler,
   Objective,
   ThreatResponse,
   DifficultyLevel,
 } from './types.js';
 export { DIFFICULTY_PRESETS, DEFAULT_CONFIG } from './types.js';
+export { DeterminizationError } from './determinization.js';
 
 /** Game class constructor type */
 type GameClass<G extends Game = Game> = new (options: GameOptions) => G;

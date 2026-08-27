@@ -468,6 +468,49 @@ A `loop` iteration is only incremented when an action completes **without return
 
 ---
 
+## 6.6. A Re-entered Action Step Turns Undo Off Until It Says Otherwise
+
+### The Problem
+
+Undo reach is measured per action-step **frame**. `moveCount` lives on the
+frame, and `computeUndoInfo` anchors the rewind at
+`actionHistory.length - moveCount`. A `loop` around an `actionStep`, or a
+`sequence` of several action steps, opens a NEW frame for every action -- so a
+seat that is prompted again straight after its own action starts from zero and
+cannot take back what it just did, even mid-turn.
+
+That hits the shapes most turns actually need: a multi-jump, an extra turn, a
+turn made of a draft step then a craft step then a record step. `repeatUntil`
+keeps one frame and does not have the problem, but it cannot express a turn
+whose steps offer different actions.
+
+### The Solution
+
+Say which the re-entry is, with `turnScope`:
+
+```typescript
+// One continuing turn -- undo reaches back over the whole run.
+actionStep({ name: 'ask-step', actions: ['ask'], turnScope: 'continue' })
+
+// A new turn starts here -- undo does not reach behind it.
+actionStep({ name: 'take-turn', actions: ['play'], turnScope: 'restart' })
+```
+
+The engine does not guess, because the two readings have the same shape: a
+`sequence` of same-seat action steps is one turn in some games and several in
+others. An ambiguous entry that declares nothing warns in dev naming the step,
+and any undo attempted there is refused with that reason rather than with
+"No actions to undo".
+
+### How to Spot It
+
+- A player mid-turn is told "No actions to undo" about the action they just took
+- Your game declares `undo: { fenceRandomRewind: true }` or a `checkpoints.max`
+  window sized to a whole turn, but no undo is ever granted
+- The dev console names a flow step and asks for a `turnScope`
+
+---
+
 ## 7. Element Class Registration
 
 ### The Problem

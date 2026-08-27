@@ -99,7 +99,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     };
 
     // Generate scaffold files
-    const scaffoldFiles = generateScaffoldFiles(config);
+    const scaffoldFiles = generateScaffoldFiles(config, projectPath);
     for (const file of scaffoldFiles) {
       await writeFile(join(projectPath, file.path), file.content);
     }
@@ -113,7 +113,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     await writeFile(join(projectPath, 'tests', 'game.test.ts'), generateTestTs(pascal));
 
     // Log if using local dev
-    const deps = getDependencyPaths();
+    const deps = getDependencyPaths(projectPath);
     if (deps.isLocalDev) {
       console.log(chalk.dim(`  Using local BoardSmith from monorepo`));
     }

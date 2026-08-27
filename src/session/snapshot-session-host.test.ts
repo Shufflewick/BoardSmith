@@ -24,6 +24,7 @@ class SimpleGame extends Game<SimpleGame, Player> {
           do: actionStep({
             actions: ['pass'],
             player: (ctx) => ctx.game.getPlayer(1)!,
+            turnScope: 'restart',
           }),
         }),
       }),
@@ -32,7 +33,7 @@ class SimpleGame extends Game<SimpleGame, Player> {
 }
 
 const simpleGameDef: GameDefinitionLike = {
-  gameClass: SimpleGame as new (...args: unknown[]) => unknown,
+  gameClass: SimpleGame,
   gameType: 'simple',
   minPlayers: 1,
   maxPlayers: 4,
@@ -60,6 +61,7 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
           do: actionStep({
             actions: ['pick'],
             player: (ctx) => ctx.game.getPlayer(1)!,
+            turnScope: 'restart',
           }),
         }),
       }),
@@ -68,7 +70,7 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
 }
 
 const twoStepGameDef: GameDefinitionLike = {
-  gameClass: TwoStepGame as new (...args: unknown[]) => unknown,
+  gameClass: TwoStepGame,
   gameType: 'twostep',
   minPlayers: 1,
   maxPlayers: 2,

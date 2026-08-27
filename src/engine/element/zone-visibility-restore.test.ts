@@ -206,7 +206,7 @@ describe('SEC-01/F1/F7: zone visibility survives restore (byte-identity of oppon
 
   it('(e) survives the stateless-ops path (playerViews built after GameRunner.fromSnapshot)', async () => {
     const def: GameDefinitionLike = {
-      gameClass: ZoneVisGame as unknown as GameDefinitionLike['gameClass'],
+      gameClass: ZoneVisGame,
       gameType: 'zone-vis-test',
       minPlayers: 2,
       maxPlayers: 2,

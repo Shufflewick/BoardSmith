@@ -54,6 +54,9 @@ export class BotGame extends Game<BotGame, Player> {
             actions: ['move'],
             player: (ctx) => ctx.game.getPlayer(1)!,
             repeatUntil: () => false,
+            // Only consulted if `repeatUntil` ever closes the frame and the
+            // loop re-enters: that would be a new turn, not a continuation.
+            turnScope: 'restart',
           }),
         }),
       }),
@@ -83,7 +86,7 @@ const botGameBotDef: BotStrategy = {
 };
 
 export const botGameDef: BotGameDefinitionLike = {
-  gameClass: BotGame as new (...args: unknown[]) => unknown,
+  gameClass: BotGame,
   gameType: 'bot-game',
   minPlayers: 1,
   maxPlayers: 2,

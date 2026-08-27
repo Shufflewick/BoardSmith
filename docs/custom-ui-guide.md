@@ -121,10 +121,10 @@ const sector = findElementByAttribute(gameView, 'sectorId', 'alpha-3');
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findPlayerHand, findElement } from 'boardsmith/ui';
+import { findPlayerHand, findElement, type GameViewElement } from 'boardsmith/ui';
 
 const props = defineProps<{
-  gameView: any;
+  gameView: GameViewElement | null;
   playerSeat: number;
 }>();
 
@@ -1013,11 +1013,12 @@ import {
   useBoardInteraction,
   findPlayerHand,
   findElement,
+  type GameViewElement,
   type UseActionControllerReturn,
 } from 'boardsmith/ui';
 
 const props = defineProps<{
-  gameView: any;
+  gameView: GameViewElement | null;
   playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];

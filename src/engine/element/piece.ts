@@ -39,6 +39,20 @@ import { visibilityFromMode } from '../command/visibility.js';
  * @typeParam G - The Game subclass type
  * @typeParam P - The Player subclass type
  */
+
+/**
+ * Is this element class `Space` itself, or a subclass of it?
+ *
+ * Written as a function so the identity comparison happens against a parameter
+ * typed `ElementClass<GameElement>`, which `Space` satisfies outright. Compared
+ * inline against `create`'s `ElementClass<T>` it needed a cast purely to make
+ * the two sides comparable — a cast that also stopped checking that the left
+ * side was an element class at all.
+ */
+function isSpaceClass(elementClass: ElementClass<GameElement>): boolean {
+  return elementClass === Space || Object.prototype.isPrototypeOf.call(Space, elementClass);
+}
+
 export class Piece<G extends Game = any, P extends Player = any> extends GameElement<G, P> {
   constructor(ctx: Partial<ElementContext>) {
     super(ctx);
@@ -183,8 +197,7 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
     name: string,
     attributes?: ElementAttributes<T>
   ): T {
-    if (elementClass === Space as unknown as ElementClass<T> ||
-        Object.prototype.isPrototypeOf.call(Space, elementClass)) {
+    if (isSpaceClass(elementClass)) {
       throw new Error(`Cannot create Space "${name}" inside Piece "${this.name}"`);
     }
     return super.create(elementClass, name, attributes);

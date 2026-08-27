@@ -63,20 +63,31 @@ describe('scanAssetReachability', () => {
     expect(violations).toEqual([]);
   });
 
-  // WR-01 — the wrapper is excluded by its canonical path, not merely its basename
-  it('excludes the canonical src/ui/components/AssetImage.vue from the gate', () => {
+  // Issue #81 — AssetImage now lives in boardsmith/ui, so NO file in a game may
+  // carry a bare <img>. A hand-rolled per-game copy is the exact drift the hoist
+  // removed, and re-creating one under the old scaffold path no longer buys an
+  // exemption from the gate.
+  it('flags a hand-rolled src/ui/components/AssetImage.vue — no path is exempt', () => {
     const violations = scanWith({
       'src/ui/components/AssetImage.vue': '<template>\n  <img :src="src" @load="onLoad" @error="onError" />\n</template>',
     });
-    expect(violations).toEqual([]);
+    expect(violations.length).toBe(1);
+    expect(violations[0].file).toContain('AssetImage.vue');
   });
 
-  it('still flags a second AssetImage.vue placed elsewhere (basename cannot bypass the gate)', () => {
+  it('flags an AssetImage.vue placed elsewhere too (basename never bypassed the gate)', () => {
     const violations = scanWith({
       'src/ui/components/legacy/AssetImage.vue': '<template>\n  <img src="/cards/AH.svg" />\n</template>',
     });
     expect(violations.length).toBe(1);
     expect(violations[0].file).toContain('legacy/AssetImage.vue');
+  });
+
+  it("points an offender at the library import rather than a file it no longer has", () => {
+    const violations = scanWith({
+      'src/ui/components/GameTable.vue': '<template>\n  <img src="/cards/AH.svg" />\n</template>',
+    });
+    expect(violations[0].message).toContain("boardsmith/ui");
   });
 
   // D17 — commented-out <img> tags (JS line, JS block, Vue HTML, and a multi-line

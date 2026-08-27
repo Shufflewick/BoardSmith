@@ -133,7 +133,7 @@ class SequenceGame extends Game<SequenceGame, RebelPlayer> {
 export { SequenceGame, RebelPlayer, Sector, Merc };
 
 export const sequenceFixtureDefinition: GameDefinitionLike = {
-  gameClass: SequenceGame as new (...args: unknown[]) => unknown,
+  gameClass: SequenceGame,
   gameType: 'sequence',
   minPlayers: 1,
   maxPlayers: 4,

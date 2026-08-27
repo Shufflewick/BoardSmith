@@ -110,7 +110,7 @@ class ReportingGame extends Game<ReportingGame, Player> {
 }
 
 const gameDef: GameDefinitionLike = {
-  gameClass: ReportingGame as new (...args: unknown[]) => unknown,
+  gameClass: ReportingGame,
   gameType: 'reporting',
   minPlayers: 1,
   maxPlayers: 2,

@@ -20,6 +20,7 @@ import {
 import {
   buildPlayerState,
   computeUndoEligibility,
+  undoUnavailableMessage,
   buildActionTraces,
   computeElementDiff,
   assertUndoAllowed,
@@ -291,9 +292,15 @@ export class StateHistory<G extends Game = Game> {
       return { success: false, error: "It's not your turn", errorCode: ErrorCode.NOT_YOUR_TURN };
     }
 
-    // Check if there's anything to undo
+    // Check if there's anything to undo. The message is shared with the
+    // stateless twin so an undeclared `turnScope` is explained identically by
+    // both executors (parity, T-160-* drift guard).
     if (actionsThisTurn === 0) {
-      return { success: false, error: 'No actions to undo', errorCode: ErrorCode.NO_ACTIONS_TO_UNDO };
+      return {
+        success: false,
+        error: undoUnavailableMessage(flowState),
+        errorCode: ErrorCode.NO_ACTIONS_TO_UNDO,
+      };
     }
 
     // Restore the turn-start state AUTHORITATIVELY from the per-action checkpoint
