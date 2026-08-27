@@ -32,14 +32,15 @@ export function buildActionMetadata(
   const metadata: Record<string, ActionMetadata> = {};
 
   for (const actionName of availableActionNames) {
-    // Access registered actions via the game's internal API
-    const actions = (game as any)._actions as Map<string, ActionDefinition>;
-    const actionDef = actions?.get(actionName);
+    // `getAction` is the public reader for the registry — this used to reach
+    // through `(game as any)._actions`, which is the same lookup with the type
+    // system switched off (#52).
+    const actionDef = game.getAction(actionName);
 
     if (!actionDef) {
       devWarn(
         `buildActionMetadata:unknown-action:${actionName}`,
-        `[buildActionMetadata] Action "${actionName}" not found in game._actions`,
+        `[buildActionMetadata] Action "${actionName}" is not registered`,
       );
       continue;
     }
@@ -120,14 +121,14 @@ export function buildPickMetadata(
   };
 
   // onSelect callback flag - client needs this to route through server per-step
-  if ((selection as any).onSelect) {
+  if (selection.onSelect) {
     base.hasOnSelect = true;
   }
 
   // Type-specific properties (static metadata only)
   switch (selection.type) {
     case 'choice': {
-      const choiceSel = selection as any;
+      const choiceSel = selection;
 
       // Include dependsOn info so client knows what args to send when fetching
       if (choiceSel.dependsOn) {
@@ -159,7 +160,7 @@ export function buildPickMetadata(
     }
 
     case 'element': {
-      const elemSel = selection as any;
+      const elemSel = selection;
 
       // Include elementClassName for CSS targeting
       if (elemSel.elementClass?.name) {
@@ -182,7 +183,7 @@ export function buildPickMetadata(
     }
 
     case 'elements': {
-      const elementsSel = selection as any;
+      const elementsSel = selection;
 
       // Include dependsOn info so client knows what args to send when fetching
       if (elementsSel.dependsOn) {
@@ -209,7 +210,7 @@ export function buildPickMetadata(
     }
 
     case 'number': {
-      const numSel = selection as any;
+      const numSel = selection;
       base.min = numSel.min;
       base.max = numSel.max;
       base.integer = numSel.integer;
@@ -217,7 +218,7 @@ export function buildPickMetadata(
     }
 
     case 'text': {
-      const textSel = selection as any;
+      const textSel = selection;
       base.pattern = textSel.pattern?.source;
       base.minLength = textSel.minLength;
       base.maxLength = textSel.maxLength;
