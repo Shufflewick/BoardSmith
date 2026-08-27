@@ -140,9 +140,17 @@ boardsmith publish --dev     # a local platform at http://localhost:3006
   "playtime": { "min": 15, "max": 30 },
   "cooperative": false,
   "complexity": 2,
-  "thumbnail": "./public/thumbnail.png",
   "scoreboard": { "stats": ["score"] }
 }
+```
+
+The scaffold declares no `thumbnail`, because it creates no thumbnail image.
+Add the key once there is art behind it — `boardsmith validate` fails on a
+declared asset path that resolves to nothing, so a manifest can never name a
+file the bundle does not carry:
+
+```json
+  "thumbnail": "./public/thumbnail.png"
 ```
 
 ### Game Class (src/rules/game.ts)

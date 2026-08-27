@@ -47,6 +47,12 @@ export interface FlowPosition {
   playerIndex?: number;
   /** Variables stored in flow context */
   variables: Record<string, unknown>;
+  /**
+   * The acting seat's run of committed actions, so a `turnScope: 'continue'`
+   * step entered after a restore carries the same count it would have carried
+   * without one. See {@link TurnRun}.
+   */
+  turnRun?: TurnRun;
 }
 
 /**
@@ -161,6 +167,62 @@ export interface ActionStepConfig extends BaseFlowConfig {
   minMoves?: number;
   /** Maximum number of moves allowed (auto-completes after this many) */
   maxMoves?: number;
+  /**
+   * What a FRESH entry into this step means for the seat that just acted:
+   * the continuation of the turn it is already taking, or the start of a new
+   * one.
+   *
+   * Undo reach is measured in `moveCount`, which lives on the action-step
+   * FRAME. A step re-entered from a `loop`, or reached as the next step of a
+   * `sequence`, gets a NEW frame -- so without this field its `moveCount`
+   * starts at 0 and the seat cannot take back the action it just took, even
+   * though its turn is still going.
+   *
+   * - `'continue'` -- this entry continues the same turn. The frame starts
+   *   with the run's move count already on it, so undo reaches back over the
+   *   whole run. `minMoves`/`maxMoves`, if declared, then bound the RUN rather
+   *   than the single entry, which is the same thing when the run is one turn.
+   * - `'restart'` -- this entry is a new turn. The frame starts at 0 and undo
+   *   does not reach behind it. This is what a closed turn boundary looks like.
+   *
+   * Required only where the answer is genuinely ambiguous: the engine is about
+   * to prompt the SAME seat that committed the immediately preceding action,
+   * in a NEW frame. Everywhere else -- the first action of the game, a step
+   * that stays open via `repeatUntil`, or any step reached after a DIFFERENT
+   * seat acted -- there is nothing to carry and the field is not consulted.
+   * Leaving it out on an ambiguous step is not silent: the engine warns in dev
+   * and publishes {@link FlowState.turnScopeUndeclared}, so an undo attempted
+   * there is refused with the reason rather than with "No actions to undo".
+   * It does not throw, because both readings are plausible and only the author
+   * knows which -- a `sequence` of same-seat steps is one turn in Polyhedral
+   * Potions and three separate turns in
+   * `session/testing/solo-undo-authoritative.test.ts`.
+   */
+  turnScope?: TurnScope;
+}
+
+/**
+ * Whether a fresh entry into an action step continues the acting seat's
+ * current turn or begins a new one. See {@link ActionStepConfig.turnScope}.
+ */
+export type TurnScope = 'continue' | 'restart';
+
+/**
+ * The acting seat's run of committed actions, carried across the frame
+ * boundaries a `loop` or a `sequence` of steps creates.
+ *
+ * Lives on {@link FlowPosition} rather than only in memory because a restore
+ * (`GameRunner.fromSnapshot`, an MCTS clone, the dev-server HMR transfer) can
+ * land between the action that ended one frame and the entry that opens the
+ * next. Without it the engine would reach that entry with nothing to carry and
+ * would seed a `'continue'` step at 0 -- silently the same zero-reach defect
+ * `turnScope` exists to remove.
+ */
+export interface TurnRun {
+  /** Seat number of the player whose run this is. */
+  player: number;
+  /** Committed actions in the run so far. */
+  count: number;
 }
 
 /**
@@ -300,6 +362,16 @@ export interface FlowState {
    * only when the flow isn't awaiting an action-step's input at all.
    */
   moveCount?: number;
+  /**
+   * Name of the action step whose fresh entry re-prompted the seat that had
+   * just acted WITHOUT declaring {@link ActionStepConfig.turnScope}.
+   *
+   * Present only while that frame is the active one. `moveCount` is 0 there
+   * for a structural reason rather than because the seat has done nothing, so
+   * the undo refusal quotes this instead of the misleading "No actions to
+   * undo" that made the defect look like a design decision.
+   */
+  turnScopeUndeclared?: string;
   /** Moves remaining until maxMoves (if configured) */
   movesRemaining?: number;
   /** Moves required until minMoves met (if configured) */

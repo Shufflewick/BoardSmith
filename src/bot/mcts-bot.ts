@@ -9,9 +9,13 @@ import type {
   GameStateSnapshot,
 } from '../engine/index.js';
 import { createSnapshot, canSeatAct } from '../engine/index.js';
-import { enumerateSelectionsCore } from '../engine/utils/enumerate-moves.js';
-import type { BotConfig, BotMove, BotMoveStats, MCTSNode, BotStrategy, Objective, ThreatResponse } from './types.js';
+import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
+import type {
+  BotConfig, BotMove, BotMoveStats, MCTSNode, BotStrategy, Objective, ThreatResponse,
+  DeterminizeSampler,
+} from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
+import { applyDeterminization } from './determinization.js';
 import { SeededRandom } from '../utils/random.js';
 
 /** Game class constructor type */
@@ -41,6 +45,12 @@ export class MCTSBot<G extends Game = Game> {
   private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
   private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
   private uctConstant?: (game: Game, playerIndex: number) => number;
+  /**
+   * The game's declared world sampler (#73). Its presence, and nothing else,
+   * is what switches this search from "skip what cannot be resolved" to
+   * information-set MCTS. Absent for every game without hidden state.
+   */
+  private determinize?: DeterminizeSampler;
   private rng: SeededRandom;
   private actionHistory: SerializedAction[];
   private seed?: string;
@@ -68,6 +78,12 @@ export class MCTSBot<G extends Game = Game> {
    * future steps.
    */
   private simultaneousBaseline?: G;
+  /**
+   * Root move keys a `threatResponseMoves` hook forced for THIS search (#73).
+   * Only set when the game said a block is mandatory; the per-world root
+   * refresh must not widen past it. Undefined for every other search.
+   */
+  private forcedRootMoveKeys?: Set<string>;
   /** Transposition table for caching position evaluations */
   private transpositionTable: Map<string, { value: number; visits: number }> = new Map();
   /** RAVE table for move value estimation across all playouts */
@@ -93,6 +109,7 @@ export class MCTSBot<G extends Game = Game> {
     this.playoutPolicy = botStrategy?.playoutPolicy;
     this.moveOrdering = botStrategy?.moveOrdering;
     this.uctConstant = botStrategy?.uctConstant;
+    this.determinize = botStrategy?.determinize;
     this.seed = this.config.seed;
     this.rng = new SeededRandom(this.config.seed ?? Math.random().toString(36).substring(2));
   }
@@ -191,6 +208,7 @@ export class MCTSBot<G extends Game = Game> {
           playoutPolicy: this.playoutPolicy,
           moveOrdering: this.moveOrdering,
           uctConstant: this.uctConstant,
+          determinize: this.determinize,
         }
       );
 
@@ -264,6 +282,10 @@ export class MCTSBot<G extends Game = Game> {
     // redacted view is byte-identical to the full view, so this is a no-op.
     this.rootSnapshot = this.captureSnapshot();
     this.searchGame = this.restoreGame(this.rootSnapshot) as G;
+    // #73: the first world. Every later iteration gets its own from
+    // `restoreSearchGameToRoot`, so the tree's statistics average over worlds
+    // rather than describing the one this root happened to draw.
+    this.sampleWorld();
     const flowState = this.searchGame.getFlowState() ?? liveFlowState;
 
     // Cache UCT constant once per move (not per selectChild call)
@@ -287,7 +309,9 @@ export class MCTSBot<G extends Game = Game> {
     // If only one move, skip MCTS search entirely.
     // Return a minimal root with no children — playWithStats() callers get empty stats,
     // which is correct: there is nothing meaningful to evaluate for a forced move.
-    if (allMoves.length === 1) {
+    // #73: under determinization one world offering a single move says nothing
+    // about the others, so the fast path is only sound without a sampler.
+    if (allMoves.length === 1 && !this.determinize) {
       const root = this.createNode(flowState, null, null, allMoves, 0);
       return { move: allMoves[0], root };
     }
@@ -295,6 +319,7 @@ export class MCTSBot<G extends Game = Game> {
     // Check for threats BEFORE sampling - this is critical!
     // The threat response needs to see ALL possible moves to find blocking cells
     let moves: BotMove[];
+    this.forcedRootMoveKeys = undefined;
 
     if (this.threatResponseMoves) {
       const threatResponse = this.threatResponseMoves(this.searchGame, this.playerIndex, allMoves);
@@ -302,6 +327,10 @@ export class MCTSBot<G extends Game = Game> {
         // FORCE blocking when threat is detected - no half measures!
         // If threat response finds blocking moves, the bot MUST use them
         moves = threatResponse.moves;
+        // #73: a forced block stays forced under determinization. Without this
+        // the per-world root refresh would widen the root straight back to
+        // every move, quietly undoing the game's "you MUST block" ruling.
+        this.forcedRootMoveKeys = new Set(moves.map(m => this.getMoveKey(m)));
       } else {
         // No threat - sample normally
         moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
@@ -452,8 +481,10 @@ export class MCTSBot<G extends Game = Game> {
   private selectWithPath(node: MCTSNode): { leaf: MCTSNode; treeMoves: Array<{ move: BotMove; player: number }> } {
     const treeMoves: Array<{ move: BotMove; player: number }> = [];
 
-    while (node.untriedMoves.length === 0 && node.children.length > 0) {
-      const child = this.selectChild(node);
+    for (;;) {
+      const eligible = this.eligibleChildrenForWorld(node);
+      if (node.untriedMoves.length > 0 || eligible.length === 0) break;
+      const child = this.selectChild(node, eligible);
       // Track tree path move for RAVE (player is from parent node where move was made)
       if (child.parentMove) {
         treeMoves.push({ move: child.parentMove, player: node.currentPlayer });
@@ -463,6 +494,73 @@ export class MCTSBot<G extends Game = Game> {
       node = child;
     }
     return { leaf: node, treeMoves };
+  }
+
+  /**
+   * The children of `node` whose move is legal in the world currently loaded
+   * into `searchGame`, refreshing what the node knows about this world (#73).
+   *
+   * Without a sampler there is only ever one world, node move sets never go
+   * stale, and this is `node.children` unchanged.
+   *
+   * With one, legality is a property of the sample: a move enumerated three
+   * iterations ago may be unavailable now, and a move nothing had offered yet
+   * may have just appeared. Selection must choose among what THIS world allows,
+   * and each eligible child records that it was on offer so the exploration
+   * term can divide by availability rather than by parent visits.
+   */
+  private eligibleChildrenForWorld(node: MCTSNode): MCTSNode[] {
+    if (!this.determinize) return node.children;
+    const legal = this.refreshNodeForWorld(node);
+    const eligible = node.children.filter(
+      (child) => child.parentMove && legal.has(this.getMoveKey(child.parentMove)),
+    );
+    for (const child of eligible) child.availability++;
+    return eligible;
+  }
+
+  /**
+   * Re-derive `node`'s move sets against the world now loaded into
+   * `searchGame`, and report which moves that world makes legal (#73).
+   *
+   * `allMoves` becomes the UNION over every world sampled so far — that union
+   * is the seat's actual option set across its information set, and a move only
+   * one world in ten offers still deserves a place in the tree. `untriedMoves`
+   * is narrowed to the moves this world allows and no child has yet, so
+   * expansion never tries a move the current world would refuse.
+   *
+   * A root under a forced threat response is left alone: the game said MUST.
+   */
+  private refreshNodeForWorld(node: MCTSNode): Set<string> {
+    const enumerated = (node.flowState.complete || !this.searchGame)
+      ? []
+      : this.enumerateMovesForSimulation(this.searchGame, node.flowState);
+
+    const forced = node.parent === null ? this.forcedRootMoveKeys : undefined;
+    const legalMoves = forced
+      ? enumerated.filter((move) => forced.has(this.getMoveKey(move)))
+      : enumerated;
+    const legal = new Set(legalMoves.map((move) => this.getMoveKey(move)));
+
+    if (!forced) {
+      const known = new Set(node.allMoves.map((move) => this.getMoveKey(move)));
+      for (const move of legalMoves) {
+        const key = this.getMoveKey(move);
+        if (known.has(key)) continue;
+        known.add(key);
+        node.allMoves.push(move);
+      }
+    }
+
+    const explored = new Set(
+      node.children.map((child) => this.getMoveKey(child.parentMove!)),
+    );
+    node.untriedMoves = node.allMoves.filter((move) => {
+      const key = this.getMoveKey(move);
+      return legal.has(key) && !explored.has(key);
+    });
+
+    return legal;
   }
 
   /**
@@ -477,7 +575,7 @@ export class MCTSBot<G extends Game = Game> {
    * Early in search, beta is high so RAVE dominates (fast learning from all playouts).
    * As visits accumulate, beta decreases so UCT dominates (accurate tree statistics).
    */
-  private selectChild(node: MCTSNode): MCTSNode {
+  private selectChild(node: MCTSNode, candidates: MCTSNode[] = node.children): MCTSNode {
     const C = this.cachedUctC; // Exploration constant (cached per move)
     const k = this.config.raveK ?? 500; // RAVE decay constant
     const usePNS = this.config.usePNS !== false;
@@ -485,9 +583,9 @@ export class MCTSBot<G extends Game = Game> {
     const isBotTurn = node.currentPlayer === this.playerIndex;
 
     // Filter out proven/disproven children with sufficient visits (solver enhancement)
-    let eligibleChildren = node.children;
+    let eligibleChildren = candidates;
     if (usePNS) {
-      eligibleChildren = node.children.filter(child => {
+      eligibleChildren = candidates.filter(child => {
         // Allow selection if visits < 5 to confirm solver result
         if (child.visits < 5) return true;
         // Don't select isProven children when it's opponent's turn (opponent won't help us)
@@ -498,7 +596,7 @@ export class MCTSBot<G extends Game = Game> {
       });
       // Fallback if all children filtered out
       if (eligibleChildren.length === 0) {
-        eligibleChildren = node.children;
+        eligibleChildren = candidates;
       }
     }
 
@@ -514,7 +612,11 @@ export class MCTSBot<G extends Game = Game> {
     for (const child of eligibleChildren) {
       const visits = child.visits + 1e-6; // Avoid division by zero
       const exploitation = child.value / visits;
-      const exploration = C * Math.sqrt(Math.log(node.visits + 1) / visits);
+      // #73: under determinization, explore against how often this move was
+      // ON OFFER, not how often its parent was visited. A move only some worlds
+      // make legal is otherwise permanently starved by moves every world offers.
+      const offered = this.determinize ? child.availability : node.visits;
+      const exploration = C * Math.sqrt(Math.log(offered + 1) / visits);
       const uct = exploitation + exploration;
 
       // RAVE component (blend with UCT if enabled)
@@ -836,6 +938,27 @@ export class MCTSBot<G extends Game = Game> {
     // now-discarded searchGame instance. It is re-captured fresh during this
     // iteration's descent/expand when a fresh simultaneous step is reached.
     this.simultaneousBaseline = undefined;
+    // #73: a fresh world for the next iteration. Re-sampling HERE — per
+    // playout, not per move — is what makes the tree's statistics describe the
+    // seat's uncertainty instead of one hypothesis it happened to draw.
+    this.sampleWorld();
+  }
+
+  /**
+   * Draw one world consistent with this seat's information set into
+   * `searchGame`, if the game declared a sampler (#73).
+   *
+   * No-op for every game without one, which is why a game with no hidden state
+   * pays nothing for this feature existing.
+   */
+  private sampleWorld(): void {
+    if (!this.determinize || !this.searchGame) return;
+    applyDeterminization(
+      this.searchGame,
+      this.playerIndex,
+      this.determinize,
+      () => this.rng.next(),
+    );
   }
 
   /**
@@ -1077,11 +1200,17 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * Internal method with sampling control.
-   * Delegates to the shared enumerateSelectionsCore utility (INTRO-04 extraction).
+   * Delegates to the shared `enumerateActionMoves` utility, which applies every
+   * gate the game can write — `condition`, `choices`/`disabled`, `validate` —
+   * and drops an action whose rules cannot be answered from this seat's
+   * redacted sandbox (#19). The bot had its own ungated loop here, so it could
+   * play moves `enumerateLegalMoves` would refuse and `performAction` then
+   * rejected, halting the pump.
    *
-   * The core returns in-process element objects. This wrapper applies the bot's
-   * serializeArgs (converting objects to wire IDs) and — when noSampling is
-   * false — limits the result set with the bot's seeded-RNG sampleChoices.
+   * The shared enumerator returns in-process element objects. This wrapper
+   * applies the bot's serializeArgs (converting objects to wire IDs) and — when
+   * noSampling is false — limits the result set with the bot's seeded-RNG
+   * sampleChoices.
    */
   private enumerateSelectionsInternal(
     game: Game,
@@ -1089,8 +1218,8 @@ export class MCTSBot<G extends Game = Game> {
     player: Player,
     noSampling: boolean
   ): Record<string, unknown>[] {
-    // Shared core: full enumeration, element objects (no serialization, no sampling)
-    const combos = enumerateSelectionsCore(game, actionDef, player);
+    // Shared enumerator: fully gated, element objects (no serialization, no sampling)
+    const combos = enumerateActionMoves(game, actionDef, player);
 
     // Bot wire format: convert element objects to numeric IDs
     const serialized = combos.map(args => this.serializeArgs(args, actionDef.selections));
@@ -1379,6 +1508,7 @@ export class MCTSBot<G extends Game = Game> {
       disproofNumber,
       isProven,
       isDisproven,
+      availability: 0,
     };
   }
 
@@ -1453,8 +1583,12 @@ export class MCTSBot<G extends Game = Game> {
    * reached via different move orders.
    */
   private evaluateWithCache(game: Game, flowState: FlowState): number {
-    // Skip caching if disabled
-    if (this.config.useTranspositionTable === false) {
+    // Skip caching if disabled, or under determinization (#73): the table keys
+    // on flow position alone, and under a sampler the same flow position is
+    // reached in many different worlds with different outcomes. Caching there
+    // freezes the first world's verdict and destroys the averaging the whole
+    // feature exists to do.
+    if (this.config.useTranspositionTable === false || this.determinize) {
       return this.evaluateTerminalFromGame(game, flowState);
     }
 

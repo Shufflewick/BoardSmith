@@ -65,3 +65,80 @@ export class NotSimulableError extends Error {
     this.name = 'NotSimulableError';
   }
 }
+
+/**
+ * Why a copy of the game was not told an attribute.
+ *
+ * These are different facts and an author chasing one must not be sent looking
+ * for another:
+ *
+ * - `'attribute-whitelist'` (#19) - the element itself is visible, but
+ *   `static visibleAttributes` kept this attribute from a non-owner.
+ * - `'hidden-element'` (#147) - the whole element is a placeholder. The seat
+ *   cannot see the element (`showOnlyTo` / `hideFrom` / a hidden, count-only
+ *   or owner-only zone), so it was serialized with no game attributes at all.
+ *   Nothing the game can declare on the class widens this: the fix, when a
+ *   fact is meant to be public, is to stop hiding the element.
+ * - `'game-root'` (#148) - the game root's own `static visibleAttributes`
+ *   withheld the field from this seat.
+ */
+export type RedactionReason = 'attribute-whitelist' | 'hidden-element' | 'game-root';
+
+/** The clause naming what withheld the attribute, per {@link RedactionReason}. */
+const REDACTION_CAUSE: Record<RedactionReason, (className: string) => string> = {
+  'attribute-whitelist': (className) =>
+    `${className}.visibleAttributes withheld it when this game state was serialized for another seat`,
+  'hidden-element': (className) =>
+    `this ${className} is a hidden placeholder: the seat this game state was serialized for ` +
+    `cannot see the element, so it was sent with none of its game attributes`,
+  'game-root': (className) =>
+    `${className}.visibleAttributes withheld this root field when the game state was ` +
+    `serialized for this seat`,
+};
+
+/**
+ * Thrown when game code READS an attribute this copy of the game was never
+ * told (#19).
+ *
+ * `static visibleAttributes` withholds an attribute from every seat but its
+ * owner, a hidden element is replaced wholesale by a placeholder that carries
+ * none of its game attributes (#147), and a snapshot taken `forSeat` carries
+ * either redaction. The restore
+ * rebuilds the tree from that JSON, so a withheld attribute has no value to
+ * assign — and for years it silently kept whatever the class field was
+ * initialized to. `0` is a real map square, `[]` is a real empty pack, `false`
+ * is a real answer: redaction quietly became "this is definitely zero", and a
+ * bot searching that clone reasoned confidently about a world that does not
+ * exist.
+ *
+ * So a withheld attribute now holds nothing at all, and reading it says so.
+ * Ask {@link GameElement.isAttributeRedacted} (or read
+ * {@link GameElement.redactedAttributes}) before reading an attribute a rule
+ * may have to evaluate inside a bot's search sandbox.
+ *
+ * It extends {@link NotSimulableError} because it IS that answer, arrived at
+ * without the game having to say it: the information state does not support
+ * this rule. Move enumeration drops the action, `execute()` drops the move,
+ * and nothing is logged per rollout. In an authoritative game nothing is ever
+ * redacted, so this can never fire there.
+ */
+export class RedactedAttributeError extends NotSimulableError {
+  constructor(
+    readonly attribute: string,
+    readonly className: string,
+    readonly elementId: number,
+    readonly reason: RedactionReason,
+  ) {
+    super(
+      `"${attribute}" on ${className} #${elementId} is not known here. ` +
+      REDACTION_CAUSE[reason](className) +
+      `. This copy holds no value for it: not a default, nothing.\n\n` +
+      `  Ask first: element.isAttributeRedacted('${attribute}') says whether this copy knows it, ` +
+      `and element.redactedAttributes lists everything withheld.\n` +
+      `  A rule that runs inside a bot's search (an action's condition, choices, disabled or validate) ` +
+      `must treat a withheld attribute as unknown rather than assume a value — the move is then dropped ` +
+      `from the search instead of being scored against a world that was made up.`
+    );
+    this.name = 'RedactedAttributeError';
+  }
+}

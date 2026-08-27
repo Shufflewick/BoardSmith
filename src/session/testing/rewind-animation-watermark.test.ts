@@ -79,7 +79,7 @@ class TickGame extends Game<TickGame, Player> {
 }
 
 const tickFixtureDefinition: GameDefinitionLike = {
-  gameClass: TickGame as new (...args: unknown[]) => unknown,
+  gameClass: TickGame,
   gameType: 'tick-watermark',
   minPlayers: 2,
   maxPlayers: 2,

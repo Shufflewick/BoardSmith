@@ -1,6 +1,35 @@
 import type { Game, FlowState, ElementRef, GamePhase } from '../engine/index.js';
 
 /**
+ * Sample one concrete world out of a seat's information set (#73).
+ *
+ * Called once per MCTS iteration against the seat's REDACTED search sandbox —
+ * never the authoritative game — so a sampler physically cannot read the truth
+ * it is guessing. Write the attributes `element.isAttributeRedacted(key)`
+ * reports true for; assigning one clears the redaction and makes it an ordinary
+ * readable attribute for the rest of that iteration.
+ *
+ * The contract, enforced on every sample:
+ *
+ *   Write ONLY what this sandbox was never told.
+ *
+ * Anything the seat legitimately knows must survive the sample byte-identical,
+ * and removing an element the seat can see is the same violation. A sampler
+ * that breaks it throws `DeterminizationError` and stops the search, because a
+ * world contradicting the seat's own view scores moves that do not exist.
+ *
+ * A sampler that leaves an attribute redacted is fine and costs nothing: that
+ * part of the state stays unsearchable exactly as it was before this hook
+ * existed.
+ *
+ * @param sandbox - The seat's redacted view, restored as a live game
+ * @param seat - 1-indexed seat the search belongs to
+ * @param rng - Seeded [0, 1) source; use it, not `Math.random`, so a seeded
+ *   search stays reproducible
+ */
+export type DeterminizeSampler = (sandbox: Game, seat: number, rng: () => number) => void;
+
+/**
  * Configuration options for the MCTS bot
  */
 export interface BotConfig {
@@ -133,6 +162,17 @@ export interface MCTSNode {
   isProven: boolean;
   /** True if this subtree is solved as a loss/draw */
   isDisproven: boolean;
+  /**
+   * How many times this node's move was LEGAL at a selection step (#73).
+   *
+   * Only meaningful under determinization, where a move's legality depends on
+   * the world sampled for this iteration. Information-set MCTS explores against
+   * the number of times a move was on offer, not the number of times its parent
+   * was visited — otherwise a move that only a rare world makes legal looks
+   * under-explored forever. Without a sampler it stays 0 and the classic
+   * parent-visits UCT term is used unchanged.
+   */
+  availability: number;
 }
 
 /**
@@ -254,6 +294,27 @@ export interface BotStrategy {
    * @returns UCT exploration constant (typical range: 0.5 to 2.0)
    */
   uctConstant?: (game: Game, playerIndex: number) => number;
+
+  /**
+   * Sample a world consistent with the searching seat's information set (#73).
+   *
+   * Declaring this turns the search into information-set MCTS: a fresh world is
+   * sampled once per iteration, the tree is keyed by the seat's move history
+   * (not by concrete state) so it survives every re-sample, and a move's
+   * statistics end up averaged over the worlds the seat might be in.
+   *
+   * Without it the bot searches only the moves it can resolve from what it can
+   * see, and drops the rest (`NotSimulableError`). That stays the default, and
+   * a game with no hidden state pays nothing for this hook existing.
+   *
+   * Two costs come with declaring it, both inherent rather than incidental:
+   * the transposition table is off (it keys on flow position, which means the
+   * same key in two different worlds), and the root searches the UNION of the
+   * moves every sampled world offers rather than a capped sample of one world's.
+   *
+   * @see DeterminizeSampler for the contract every sampler must keep.
+   */
+  determinize?: DeterminizeSampler;
 }
 
 /**

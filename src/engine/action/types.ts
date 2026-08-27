@@ -252,8 +252,13 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
   elementClass?: ElementClass<T>;
   /** Starting point for the search (defaults to game) */
   from?: GameElement | ((context: ActionContext) => GameElement);
-  /** Display function for elements (for UI buttons) */
-  display?: (element: T, context: ActionContext) => string;
+  /**
+   * Custom display function for the element's label (for UI buttons). If not
+   * provided, uses element.name with automatic disambiguation. Same shape as
+   * {@link ElementsSelection.display} on purpose: both element selections are
+   * formatted by the same code, so one signature covers both.
+   */
+  display?: (element: T, context: ActionContext, allElements: T[]) => string;
   /** Get board element reference for highlighting */
   boardRef?: (element: T, context: ActionContext) => BoardElementRef;
   /**

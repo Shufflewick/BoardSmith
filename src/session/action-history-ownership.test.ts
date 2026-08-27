@@ -39,7 +39,7 @@ class CounterGame extends Game<CounterGame, Player> {
 
 const definition: GameDefinition = {
   gameType: 'counter',
-  gameClass: CounterGame as unknown as GameDefinition['gameClass'],
+  gameClass: CounterGame,
   minPlayers: 2,
   maxPlayers: 2,
 };

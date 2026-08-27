@@ -13,6 +13,7 @@ import type {
   IfConfig,
   FlowDefinition,
   PhaseConfig,
+  TurnScope,
 } from './types.js';
 
 /**
@@ -249,6 +250,7 @@ export function actionStep(config: {
   skipIf?: (context: FlowContext) => boolean;
   minMoves?: number;
   maxMoves?: number;
+  turnScope?: TurnScope;
 }): FlowNode {
   return {
     type: 'action-step',
@@ -260,6 +262,7 @@ export function actionStep(config: {
       skipIf: config.skipIf,
       minMoves: config.minMoves,
       maxMoves: config.maxMoves,
+      turnScope: config.turnScope,
     },
   };
 }
@@ -622,6 +625,15 @@ export function turnLoop(config: {
    * (`loop()` fails fast on that).
    */
   unbounded?: boolean;
+  /**
+   * Whether a second pass round this loop continues the same seat's turn or
+   * starts a new one, forwarded to the action step it builds. Deliberately
+   * undefaulted: the name says "turn loop", but the builder is used both for a
+   * single seat's multi-action turn (`'continue'`) and as a whole game's turn
+   * rotation (`'restart'`), and only the author knows which. See
+   * {@link ActionStepConfig.turnScope}.
+   */
+  turnScope?: TurnScope;
 }): FlowNode {
   return loop({
     name: config.name,
@@ -641,6 +653,7 @@ export function turnLoop(config: {
     unbounded: config.unbounded,
     do: actionStep({
       actions: config.actions,
+      turnScope: config.turnScope,
     }),
   });
 }
@@ -746,6 +759,13 @@ export function stateAwareLoop(config: {
    * applies. Cannot be combined with an explicit `maxIterations`.
    */
   unbounded?: boolean;
+  /**
+   * Whether a second pass round this loop continues the same seat's turn or
+   * starts a new one, forwarded to the action step it builds. Ignored when
+   * `do` is supplied -- the body owns its own steps then. See
+   * {@link ActionStepConfig.turnScope}.
+   */
+  turnScope?: TurnScope;
 }): FlowNode {
   // Two ways to say what the body is, and exactly one must be used. Accepting
   // both would mean silently ignoring one of them.
@@ -765,6 +785,7 @@ export function stateAwareLoop(config: {
     actions: config.actions!,
     ...(config.player ? { player: config.player } : {}),
     ...(config.skipIf ? { skipIf: config.skipIf } : {}),
+    ...(config.turnScope ? { turnScope: config.turnScope } : {}),
   });
 
   return loop({

@@ -55,6 +55,14 @@ const SUIT_COLORS: Record<string, string> = {
   S: '#2c3e50', // dark
 };
 
+/** Map of suit abbreviations to full names */
+const SUIT_NAMES: Record<string, string> = {
+  H: 'Hearts',
+  D: 'Diamonds',
+  C: 'Clubs',
+  S: 'Spades',
+};
+
 /** Map of rank abbreviations to full names */
 const RANK_NAMES: Record<string, string> = {
   A: 'Ace',
@@ -94,6 +102,32 @@ export function getSuitColor(suit: string): string {
  */
 export function getRankName(rank: string): string {
   return RANK_NAMES[rank] ?? rank;
+}
+
+/**
+ * Get the full name for a suit.
+ *
+ * @param suit - Suit abbreviation ('H', 'D', 'C', 'S')
+ * @returns Full suit name ('Hearts', 'Spades', ...) or the input if not recognized
+ */
+export function getSuitName(suit: string): string {
+  return SUIT_NAMES[suit] ?? suit;
+}
+
+/**
+ * Name a card the way a player says it out loud, e.g. `'King of Spades'`.
+ *
+ * A card drawn as a rank glyph and a suit pip has no text for a screen reader
+ * to read, so every clickable card needs words. This is those words, in one
+ * place, so no game has to keep its own suit table.
+ *
+ * @param rank - Rank abbreviation ('A', '2'-'10', 'J', 'Q', 'K')
+ * @param suit - Suit abbreviation ('H', 'D', 'C', 'S'); omit for a suitless deck
+ * @returns e.g. `'King of Spades'`, or just the rank name when there is no suit
+ */
+export function getCardName(rank: string, suit = ''): string {
+  const named = getRankName(rank);
+  return suit ? `${named} of ${getSuitName(suit)}` : named;
 }
 
 /**
@@ -138,6 +172,8 @@ export function useCardDisplay() {
     getSuitSymbol,
     getSuitColor,
     getRankName,
+    getSuitName,
+    getCardName,
     getCardPointValue,
     isRedSuit,
     isBlackSuit,

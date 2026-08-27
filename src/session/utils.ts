@@ -195,6 +195,36 @@ export interface UndoFlowState {
   currentPlayer?: number;
   moveCount?: number;
   awaitingPlayers?: Array<{ playerIndex: number; completed: boolean; availableActions?: string[] }>;
+  /**
+   * Set by the engine when the active action-step frame was entered by
+   * re-prompting the seat that had just acted, and the step did not say
+   * whether that continues the seat's turn (`ActionStepConfig.turnScope`).
+   * `moveCount` is 0 there for a STRUCTURAL reason, not because the seat has
+   * done nothing -- see {@link undoUnavailableMessage}.
+   */
+  turnScopeUndeclared?: string;
+}
+
+/**
+ * The refusal a seat gets when it is eligible to undo but `actionsThisTurn`
+ * is 0, shared by both executors (`state-history.ts` `undoToTurnStart` and
+ * `stateless-ops.ts` `handleUndo`) so the two cannot drift.
+ *
+ * Normally that genuinely means "you have not acted yet this turn". But a
+ * seat that just acted and was immediately re-prompted in a fresh action-step
+ * frame ALSO reads as 0, and reporting "No actions to undo" there is what made
+ * an undeclared `turnScope` look like a deliberate no-undo design for so long
+ * (issues 144/145). When the engine has flagged that case, say so instead.
+ */
+export function undoUnavailableMessage(flowState: UndoFlowState | undefined): string {
+  const step = flowState?.turnScopeUndeclared;
+  if (!step) return 'No actions to undo';
+  return (
+    `Undo is unavailable here because flow step '${step}' does not say whether re-entering ` +
+    `it continues the same turn. Add turnScope: 'continue' to that actionStep if the seat is ` +
+    `still taking one turn (undo then reaches back over the whole run), or turnScope: 'restart' ` +
+    `if each entry starts a new turn (undo is then correctly unavailable at its start).`
+  );
 }
 
 /**

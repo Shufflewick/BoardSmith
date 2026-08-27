@@ -236,6 +236,7 @@ class RepeatMoveGame extends Game<RepeatMoveGame, Player> {
           do: actionStep({
             actions: ['move'],
             player: (ctx) => ctx.game.getPlayer(1)!,
+            turnScope: 'restart',
           }),
         }),
       })

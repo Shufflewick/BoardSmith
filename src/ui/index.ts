@@ -11,6 +11,11 @@ export { default as PlayersPanel } from './components/PlayersPanel.vue';
 export { default as WaitingRoom } from './components/WaitingRoom.vue';
 export { default as Toast } from './components/Toast.vue';
 
+// The one sanctioned path for game art: a missing or broken asset always shows
+// the caller's drawn fallback instead of a broken <img>. `boardsmith audit`'s
+// asset scan fails a game that renders art with a bare <img> anywhere else.
+export { default as AssetImage } from './components/AssetImage.vue';
+
 // Helper components
 export {
   BoardMessage,
@@ -92,6 +97,14 @@ export {
   type BoardTarget,
 } from './composables/useBoardInteraction.js';
 
+// Keyboard operability for custom boards: the same click+keydown+ARIA wiring
+// the library's own board renderers use, so a hand-written board gets a real
+// keyboard path without inventing one.
+export {
+  useSelectable,
+  useSelectableGrid,
+} from './composables/useSelectable.js';
+
 // The bridge that keeps a custom board's selection in step with the action
 // controller's fill -> fetchChoicesForPick -> snapshotVersion++ -> currentChoices
 // chain. GameShell calls it internally, so a game built on the shell gets it for
@@ -136,6 +149,14 @@ export {
   prefersReducedMotion,
   type AnimationOptions,
 } from './composables/useElementAnimation.js';
+
+// Focus management for game-authored dialogs and overlays. Games that cover the
+// board with a modal reach for this instead of hand-rolling a trap: it saves and
+// restores focus, confines Tab to the dialog, and inerts the background.
+export {
+  useFocusTrap,
+  type FocusTrapOptions,
+} from './composables/useFocusTrap.js';
 
 // Animation test-mode + trace recorder (ANIM-01) — Vue-free, also re-exported from boardsmith/testing
 export {
@@ -278,6 +299,8 @@ export {
   getSuitSymbol,
   getSuitColor,
   getRankName,
+  getSuitName,
+  getCardName,
   getCardPointValue,
   isRedSuit,
   isBlackSuit,
@@ -341,6 +364,18 @@ export {
   type ImageInfo,
   type SpriteData,
 } from './utils/image.js';
+
+// Colour utilities (for theming custom boards from player.color)
+export {
+  lightenColor,
+  darkenColor,
+  isLightColor,
+} from './utils/color.js';
+
+export {
+  contrastInk,
+  type ContrastInk,
+} from './utils/color-contrast.js';
 
 // Theming
 export {

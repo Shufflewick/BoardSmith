@@ -248,11 +248,37 @@ hidden state — and it means the sandbox does not hold what the redaction remov
 
 Those two halves compose differently:
 
-- **Enumeration** usually works. The seat's own view carries its own options, so
-  the bot offers exactly its legal moves.
+- **Enumeration** works for the bot's own seat: its view carries its own options,
+  so the bot offers exactly its legal moves. For OTHER seats it works only as far
+  as public information goes. The search plays every seat the flow is awaiting —
+  under a simultaneous step that is the whole table, and one ply into any
+  per-turn game — and those seats' withheld attributes have no value in the
+  sandbox. An action whose `condition`, `choices`, `disabled` or `validate` reads
+  one contributes no move for that seat (a dev warning names the action and the
+  attribute); asking `element.isAttributeRedacted(key)` first is how a rule
+  answers from what the searcher can actually see. See
+  [Attribute Visibility](./core-concepts.md#attribute-visibility).
 - **Simulation** often does not. A move's `execute()` frequently resolves against
   state the seat cannot see — a shared map, an opponent's hand — and inside the
   sandbox that state is simply not there.
+- **Scoring is not enumeration.** `objectives`, `threatResponseMoves` and
+  `uctConstant` are handed the redacted sandbox as well, and an unguarded read
+  there is NOT dropped quietly the way a move is: it fails the search, loudly and
+  on purpose. An objective that scores a fact the seat was never told is not a
+  weaker heuristic, it is a wrong one, and returning a neutral score for it would
+  hide that for the whole session. Ask `isAttributeRedacted` and score what the
+  seat can see:
+
+```typescript
+function nearBooks(hand: Hand): number {
+  const counts = new Map<string, number>();
+  for (const card of hand.all(Card)) {
+    if (card.isAttributeRedacted('rank')) continue;  // an opponent's hand, in the sandbox
+    counts.set(card.rank, (counts.get(card.rank) ?? 0) + 1);
+  }
+  return [...counts.values()].filter((n) => n === 3).length;
+}
+```
 
 When a move is legal to offer but cannot be resolved, say so:
 
@@ -283,9 +309,108 @@ you doing either:
   state the caller cannot see, one layer later: the answer is no move, not a guess.
 
 A bot that skips its unresolvable moves plays worse than one that could resolve
-them. Making it play WELL in a hidden-information game needs determinization —
-sampling a hypothesis consistent with what the seat can see — which BoardSmith
-does not offer yet.
+them. Making it play WELL in a hidden-information game needs determinization,
+which is the next section.
+
+## Determinization: searching hidden state instead of skipping it
+
+A skipping bot plays the boring half of its options well and never considers the
+rest. Determinization is the other answer: sample a *hypothesis* consistent with
+what the seat can actually see, search inside that, and repeat, so the bot
+chooses against the distribution of worlds it might be in.
+
+Declare a sampler and the search becomes information-set MCTS:
+
+```typescript
+export const botStrategy: BotStrategy = {
+  determinize: (sandbox, seat, rng) => {
+    for (const rival of sandbox.players) {
+      if (rival.seat === seat) continue;
+      if (!rival.isAttributeRedacted('carrying')) continue;   // ask first
+      // Sample from the worlds this seat's own view still allows.
+      const possible = unseenGoods(sandbox, seat);
+      rival.carrying = possible[Math.floor(rng() * possible.length)];
+    }
+  },
+};
+```
+
+### The one rule
+
+> A sampler may write ONLY attributes the sandbox was never told.
+
+Everything the seat legitimately knows must survive the sample unchanged, and
+removing an element the seat can see is the same violation. The engine checks
+this on every sample and throws `DeterminizationError`, naming the element and
+the attribute, when a sampler breaks it.
+
+That check is the feature, not a guard rail bolted onto it. Fabricating hidden
+state is what `NotSimulableError` exists to prevent; determinization is
+fabrication done deliberately and with a stated constraint, so a sampler that
+quietly rewrites something the seat can see is the original defect back again
+with the game's blessing, and it fails as loudly as any other engine invariant.
+
+The sandbox handed to a sampler is the seat's REDACTED clone, never the
+authoritative game, so a sampler physically cannot read the truth it is
+guessing. Reading a withheld attribute without asking
+`element.isAttributeRedacted(key)` first throws, and the throw is reported
+against the sampler rather than swallowed.
+
+### What declaring it changes
+
+- **A world per playout, not per move.** The sampler runs once per MCTS
+  iteration. Sampling once per move would be a single guess wearing
+  determinization's clothes: the tree's statistics would describe that one
+  hypothesis rather than the seat's uncertainty.
+- **One tree across every sample.** Nodes are keyed by the acting seat's move
+  history, not by concrete state, so the tree survives re-sampling. A move's
+  value ends up averaged over the worlds it was searched in.
+- **Legality is per world.** A move one sample makes legal and another does not
+  is selected only in the samples that offer it, and its exploration term
+  divides by how often it was ON OFFER rather than by parent visits — otherwise
+  a move only rare worlds allow is starved forever.
+- **The root searches the union.** Root moves accumulate across samples instead
+  of being capped to one world's list. A forced `threatResponseMoves` block
+  still wins: the game said MUST.
+- **The transposition table is off.** It keys on flow position alone, so under a
+  sampler the same key covers many different worlds. Caching there would freeze
+  the first world's verdict and destroy the averaging.
+- **Costs nothing when absent.** No sampler means no sampling, no per-world
+  refresh, and the classic UCT term unchanged. Games without hidden state pay
+  for none of this.
+
+### What a sampler may fill in
+
+Every kind of hidden state the engine marks unknown on restore, which is all
+three of them, and `element.isAttributeRedacted(key)` is how a sampler finds
+each one:
+
+- **Withheld attributes** on a visible element (`static visibleAttributes`).
+- **Hidden ELEMENTS** (`showOnlyTo` / `hideFrom`, or any child of a hidden,
+  count-only or owner-only zone). A face-down card is a placeholder holding no
+  game attributes at all, so a sampler supposes its rank and suit the same way
+  it supposes any other withheld value. What the placeholder genuinely carries
+  (its type, its face-down artwork, which hand it sits in) is information the
+  seat holds, and the contract still refuses a sampler that rewrites it.
+- **Game ROOT fields** withheld by `static visibleAttributes` on the `Game`
+  subclass, for the shared secret that belongs to no element: a map seed, a
+  hidden objective deck order.
+
+```typescript
+determinize: (sandbox, seat, rng) => {
+  const game = sandbox as MyGame;
+  const unseen = /* every card this seat has not seen, from public counts */;
+  for (const player of game.players) {
+    if (player.seat === seat) continue;
+    for (const card of game.handOf(player).all(Card)) {
+      if (!card.isAttributeRedacted('rank')) continue;  // the seat saw this one
+      const drawn = unseen.splice(Math.floor(rng() * unseen.length), 1)[0];
+      card.rank = drawn.rank;
+      card.suit = drawn.suit;
+    }
+  }
+}
+```
 
 ## API Reference
 

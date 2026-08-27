@@ -23,7 +23,7 @@ export interface ContrastInk {
   textShadow: string;
 }
 
-interface Rgb {
+export interface Rgb {
   r: number;
   g: number;
   b: number;
@@ -106,7 +106,15 @@ function hslToRgb(h: number, s: number, l: number): Rgb {
   };
 }
 
-function parseColor(input: string): Rgb {
+/**
+ * Parse any colour string the library accepts into 0-255 RGB channels.
+ *
+ * Shared with `./color.ts` so that every colour helper in the library agrees
+ * on exactly which formats are legal and fails loud on the same inputs.
+ *
+ * @throws {Error} on an unsupported format or an out-of-range component.
+ */
+export function parseColor(input: string): Rgb {
   const trimmed = input.trim();
 
   const shortHex = trimmed.match(HEX_SHORT);
@@ -136,7 +144,7 @@ function parseColor(input: string): Rgb {
     // plausible authoring typo, not a value we should guess an answer for.
     if ([r, g, b].some(c => c > 255)) {
       throw new Error(
-        `contrastInk: rgb()/rgba() channel out of range (0-255) in "${input}".`
+        `BoardSmith color parser: rgb()/rgba() channel out of range (0-255) in "${input}".`
       );
     }
     return { r, g, b };
@@ -147,7 +155,7 @@ function parseColor(input: string): Rgb {
     const [h, s, l] = [hslFn[1], hslFn[2], hslFn[3]].map(Number);
     if (s > 100 || l > 100) {
       throw new Error(
-        `contrastInk: hsl()/hsla() saturation/lightness out of range (0-100%) in "${input}".`
+        `BoardSmith color parser: hsl()/hsla() saturation/lightness out of range (0-100%) in "${input}".`
       );
     }
     return hslToRgb(h, s, l);
@@ -159,7 +167,7 @@ function parseColor(input: string): Rgb {
   }
 
   throw new Error(
-    `contrastInk: unsupported color value "${input}". ` +
+    `BoardSmith color parser: unsupported color value "${input}". ` +
       'Supported formats: #rgb, #rrggbb, rgb(r,g,b), rgba(r,g,b,a), hsl(h,s%,l%), hsla(h,s%,l%,a), and standard CSS named colors (e.g. "crimson").'
   );
 }

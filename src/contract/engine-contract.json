@@ -1,7 +1,7 @@
 {
-  "revision": 25,
+  "revision": 26,
   "bundleProtocol": 1,
-  "surfaceHash": "63d698a6f5d7552b",
+  "surfaceHash": "0790c85715b5879d",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -203,6 +203,14 @@
       "surfaceHash": "63d698a6f5d7552b",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r25: boardsmith/persistence is a new platform entrypoint carrying the persistence validation core -- the reserved persist/persistPrivate channel names, PERSIST_MAX_COMMIT_BYTES, readPersistCommit, toStartPayload, drainResolutionInputs, the session-kind vocabulary and a pure cross-session store. ShufflewickPub's games worker now re-exports it from games/src/persistence.ts instead of restating it, so boardsmith dev's MultiplayerHost runs the SAME validators the platform's Durable Object does (ShufflewickPub #41)."
+    },
+    {
+      "revision": 26,
+      "date": "2026-08-28",
+      "bundleProtocol": 1,
+      "surfaceHash": "0790c85715b5879d",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "Tracker sweep, two surface changes recorded together (they were originally r25 and r26 on the pre-rebase branch, renumbered because that branch forked before boardsmith/persistence existed): (1) a withheld attribute now restores as unknown and throws on read (RedactedAttributeError, GameElement.isAttributeRedacted / redactedAttributes) instead of silently holding its class-field default; (2) actionStep gains turnScope, and FlowPosition/FlowState gain turnRun/turnScopeUndeclared, so undo reach can span the frame boundary a loop iteration or a sibling action step creates."
     }
   ]
 }

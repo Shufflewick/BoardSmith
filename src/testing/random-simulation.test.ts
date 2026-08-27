@@ -46,6 +46,42 @@ class PickGame extends Game<PickGame, Player> {
   }
 }
 
+/**
+ * A game whose length is gated by a GAME OPTION, not by player count. The
+ * harness can only reach the longer configuration if it forwards
+ * `gameOptions` to the game constructor.
+ */
+class TargetGame extends Game<TargetGame, Player> {
+  total = 0;
+  readonly target: number;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.target = (options as { target?: number }).target ?? 6;
+
+    this.registerAction(
+      Action.create<TargetGame>('pick')
+        .chooseFrom('value', { choices: [1] })
+        .execute((args, ctx) => {
+          (ctx.game as TargetGame).total += args.value as number;
+          return { success: true };
+        }),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: (ctx: FlowContext) => (ctx.game as TargetGame).total < (ctx.game as TargetGame).target,
+          maxIterations: 200,
+          do: eachPlayer({
+            do: actionStep({ actions: ['pick'] }),
+          }),
+        }),
+      }),
+    );
+  }
+}
+
 describe('simulateRandomGames', () => {
   it('generates valid arguments so arg-based games complete (F49)', async () => {
     const results = await simulateRandomGames(PickGame, {
@@ -115,5 +151,59 @@ describe('simulateRandomGames', () => {
     expect(replay.actionCount).toBe(target.actionCount);
     expect(replay.completed).toBe(target.completed);
     expect(replay.winners).toEqual(target.winners);
+  });
+
+  describe('gameOptions forwarding (issue 141)', () => {
+    it('reaches a game-option-gated configuration', async () => {
+      const base = await simulateRandomGames(TargetGame, {
+        count: 2,
+        playerCounts: [2],
+        seed: 'option-base',
+        timeout: 5000,
+      });
+      const gated = await simulateRandomGames(TargetGame, {
+        count: 2,
+        playerCounts: [2],
+        seed: 'option-base',
+        timeout: 5000,
+        gameOptions: { target: 30 },
+      });
+
+      expect(base.completed).toBe(2);
+      expect(gated.completed).toBe(2);
+      expect(base.games[0].actionCount).toBe(6);
+      expect(gated.games[0].actionCount).toBe(30);
+    });
+
+    it('forwards gameOptions through replayRandomGame so a failure reproduces', async () => {
+      const gated = await simulateRandomGames(TargetGame, {
+        count: 1,
+        playerCounts: [2],
+        seed: 'option-replay',
+        timeout: 5000,
+        gameOptions: { target: 12 },
+      });
+      const target = gated.games[0];
+
+      const replay = await replayRandomGame(TargetGame, {
+        seed: target.seed,
+        playerCount: target.playerCount,
+        gameOptions: { target: 12 },
+      });
+
+      expect(replay.actionCount).toBe(target.actionCount);
+      expect(replay.actionCount).toBe(12);
+    });
+
+    it('refuses a gameOptions key the harness owns rather than silently ignoring it', async () => {
+      await expect(
+        simulateRandomGames(TargetGame, {
+          count: 1,
+          playerCounts: [2],
+          seed: 'option-clash',
+          gameOptions: { playerCount: 4 },
+        }),
+      ).rejects.toThrow(/playerCount/);
+    });
   });
 });

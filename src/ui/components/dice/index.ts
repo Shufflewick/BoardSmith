@@ -42,3 +42,9 @@ export const Die3D = defineAsyncComponent(() => import('./Die3D.vue'));
 setDiePreviewComponent(Die3D);
 
 export { getDiePreviewComponent } from './die-preview-registry.js';
+
+/**
+ * The words for a die's current face. Exported so a game wrapping a die in a
+ * control can name that control with the same text the die itself announces.
+ */
+export { dieAriaLabel } from './die-label.js';

@@ -18,26 +18,23 @@ import type { GameDefinitionLike, Op } from '../stateless-ops.js';
  * Authoritative-undo contract. Drives the SAME SnapshotSessionHost + executeOp
  * snapshot round-trip production uses.
  *
- * 155-03 CONTRACT CHANGE (CONTEXT D-06, deliberate -- NOT a regression):
- * `moveCount` is scoped to the currently active action-STEP frame, not to a
- * logical player turn that may span several frames (155-RESEARCH.md §B).
- * `collect-turns-fixture.ts` structures each turn as TWO separate
- * single-move action-step frames (`sequence(actionStep, actionStep)`). Once
- * the first of the two commits, that frame closes and a FRESH frame opens
- * (`moveCount === 0`) -- so an undo attempted after only the first action of
- * a turn is now correctly REFUSED ("No actions to undo"), because it would
- * have to reach back across a frame boundary the fix no longer permits any
- * fallback for. The block below titled "the mid-turn cross-frame case is now
- * REFUSED" asserts exactly this -- it replaces this suite's old
- * `undo.success === true` expectation for that same scenario, which is
- * SUPERSEDED, not a bug to restore.
+ * MID-TURN CROSS-FRAME UNDO (issues 144/145): `moveCount` lives on the
+ * action-STEP frame, and `collect-turns-fixture.ts` structures each turn as
+ * TWO single-move frames (`sequence(actionStep, actionStep)`). For a while
+ * that meant an undo attempted after only the first action of a turn was
+ * refused with "No actions to undo" -- the frame boundary silently standing in
+ * for a turn boundary it is not.
  *
- * The property this suite exists to protect -- undoing the CURRENT turn does
- * not destroy a PRIOR turn's pending-action mutation (equipment collected via
- * the selection-step path, moved with Piece.putInto -- recorded in neither
- * command nor action history) -- is preserved below, adapted to a target
- * that's still reachable under the new contract (the SAME turn's own first
- * actionStep, undone before advancing into its second).
+ * The fixture's second step now declares `turnScope: 'continue'`, which says
+ * the two actions are one turn, so the run's move count carries across the
+ * frame boundary and the undo is GRANTED again -- rewinding exactly this
+ * turn's own actions.
+ *
+ * The property this suite exists to protect is unchanged and is what the test
+ * below actually asserts: undoing the CURRENT turn does not destroy a PRIOR
+ * turn's pending-action mutation (equipment collected via the selection-step
+ * path, moved with Piece.putInto -- recorded in neither command nor action
+ * history).
  */
 
 const gameOptions = { playerCount: 2, seed: 't' };
@@ -64,7 +61,7 @@ function currentPlayer(result: { flowState: unknown }): number | undefined {
 }
 
 describe('authoritative undo across a prior pending mutation (155-03 contract)', () => {
-  it('the mid-turn cross-frame case is now REFUSED -- explore+collect (turn N-1) survives untouched', async () => {
+  it('the mid-turn cross-frame undo is granted and stops at this turn\'s start -- explore+collect (turn N-1) survives untouched', async () => {
     const session = createHeadlessSession(collectTurnsFixtureDefinition, gameOptions);
     await session.start();
 
@@ -105,19 +102,21 @@ describe('authoritative undo across a prior pending mutation (155-03 contract)',
     expect(p1turn3.success).toBe(true);
     expect(currentPlayer(p1turn3)).toBe(1); // still player 1's turn (second actionStep pending)
 
-    // Pre-155-03 this succeeded (branch C's same-player backward scan bounded
-    // by the phase/actionStep structure). Post-155-03, turn3's first
-    // actionStep frame already closed the instant its one action committed --
-    // moveCount is 0 for the SECOND (now-open) frame -- so this is correctly
-    // REFUSED, not a bug.
+    // The second step declares `turnScope: 'continue'`, so turn 3's run carries
+    // across the frame boundary its first action closed: the undo is granted
+    // and rewinds exactly that one action.
     const undo = await session.send(1, { type: 'undo', player: 1 } as Op);
-    expect(undo.success).toBe(false);
-    expect(undo.error).toMatch(/no actions to undo/i);
+    expect(undo.success).toBe(true);
 
-    // Turn 1's equipment (a PRIOR turn's pending-action mutation) was never
-    // at risk -- a refused undo is a no-op, so the state is unchanged from
-    // right before the (rejected) undo attempt.
-    expect(spaceChildIds(p1turn3.snapshot, 'held-1')).toContain(collectedId);
+    // Back at the START of turn 3 -- player 1 is due again with the turn's
+    // first step open.
+    expect(currentPlayer(undo)).toBe(1);
+
+    // The point of the suite: the rewind stopped at THIS turn's start. Turn
+    // 1's equipment (a PRIOR turn's pending-action mutation, recorded in
+    // neither command nor action history and therefore unrecoverable by
+    // replay) is still in held-1.
+    expect(spaceChildIds(undo.snapshot, 'held-1')).toContain(collectedId);
   });
 });
 
@@ -169,7 +168,7 @@ class TwoMoveTurnGame extends Game<TwoMoveTurnGame, Player> {
 }
 
 const twoMoveTurnFixtureDefinition: GameDefinitionLike = {
-  gameClass: TwoMoveTurnGame as new (...args: unknown[]) => unknown,
+  gameClass: TwoMoveTurnGame,
   gameType: 'two-move-turn',
   minPlayers: 2,
   maxPlayers: 2,

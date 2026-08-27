@@ -201,7 +201,7 @@ export { ScumGame, SimulScumGame, ConstructorDrawGame };
 
 /** Competitive: a draw, once made, is final. */
 export const fencedScumDefinition: GameDefinitionLike = {
-  gameClass: ScumGame as new (...args: unknown[]) => unknown,
+  gameClass: ScumGame,
   gameType: 'scum-fenced',
   minPlayers: 1,
   maxPlayers: 1,
@@ -214,7 +214,7 @@ export const fencedScumDefinition: GameDefinitionLike = {
  * policy, so a test can fail if the fence ever stops firing.
  */
 export const unfencedScumDefinition: GameDefinitionLike = {
-  gameClass: ScumGame as new (...args: unknown[]) => unknown,
+  gameClass: ScumGame,
   gameType: 'scum-unfenced',
   minPlayers: 1,
   maxPlayers: 1,
@@ -226,7 +226,7 @@ export const unfencedScumDefinition: GameDefinitionLike = {
  * for, and must refuse rather than guess.
  */
 export const fencedPrunedScumDefinition: GameDefinitionLike = {
-  gameClass: ScumGame as new (...args: unknown[]) => unknown,
+  gameClass: ScumGame,
   gameType: 'scum-fenced-pruned',
   minPlayers: 1,
   maxPlayers: 1,
@@ -235,7 +235,7 @@ export const fencedPrunedScumDefinition: GameDefinitionLike = {
 };
 
 export const fencedSimulScumDefinition: GameDefinitionLike = {
-  gameClass: SimulScumGame as new (...args: unknown[]) => unknown,
+  gameClass: SimulScumGame,
   gameType: 'scum-simul-fenced',
   minPlayers: 2,
   maxPlayers: 2,
@@ -247,7 +247,7 @@ export const fencedSimulScumDefinition: GameDefinitionLike = {
  * fence has nothing to say about setup; only the order-entry policy does.
  */
 export const constructorDrawDefinition: GameDefinitionLike = {
-  gameClass: ConstructorDrawGame as new (...args: unknown[]) => unknown,
+  gameClass: ConstructorDrawGame,
   gameType: 'scum-constructor-draw',
   minPlayers: 1,
   maxPlayers: 1,
@@ -260,7 +260,7 @@ export const constructorDrawDefinition: GameDefinitionLike = {
  * one from a too-short window, and the refusal has to say so.
  */
 export const fencedUncheckpointedScumDefinition: GameDefinitionLike = {
-  gameClass: ScumGame as new (...args: unknown[]) => unknown,
+  gameClass: ScumGame,
   gameType: 'scum-fenced-uncheckpointed',
   minPlayers: 1,
   maxPlayers: 1,

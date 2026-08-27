@@ -111,8 +111,11 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
         root: loop({
           maxIterations: 1000,
           do: sequence(
-            actionStep({ actions: ['explore', 'pass'], player: activePlayer }),
-            actionStep({ actions: ['pass'], player: activePlayer }),
+            // A turn is these two actions together, which is what makes the
+            // second entry a CONTINUATION: undo from it reaches back over both
+            // and stops at the turn's start, never into the prior seat's turn.
+            actionStep({ actions: ['explore', 'pass'], player: activePlayer, turnScope: 'restart' }),
+            actionStep({ actions: ['pass'], player: activePlayer, turnScope: 'continue' }),
             execute((ctx) => {
               const game = ctx.game as CollectTurnsGame;
               game.activeSeat = game.activeSeat >= game.players.length ? 1 : game.activeSeat + 1;
@@ -135,7 +138,7 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
 export { CollectTurnsGame, Equipment, Stash, Held };
 
 export const collectTurnsFixtureDefinition: GameDefinitionLike = {
-  gameClass: CollectTurnsGame as new (...args: unknown[]) => unknown,
+  gameClass: CollectTurnsGame,
   gameType: 'collect-turns',
   minPlayers: 2,
   maxPlayers: 4,

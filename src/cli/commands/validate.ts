@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve as resolvePath } from 'node:path';
 import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -10,6 +10,7 @@ import {
   ALLOWED_WORLD_KEYS,
   ALLOWED_ROUND_DEADLINE_KEYS,
   ALLOWED_NAMED_ACTION_KEYS,
+  ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
@@ -572,44 +573,93 @@ function findAbsolutePathIssues(cwd: string, files: string[], publicDirs: string
   return issues;
 }
 
-async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
+/**
+ * One issue per `boardsmith.json` asset key (see `ASSET_PATH_KEYS`) whose
+ * declared path names no file on disk.
+ *
+ * `deriveManifest` stamps this config's keys verbatim into
+ * `dist/manifest.json`, so a dangling path here ships a manifest naming a file
+ * the bundle does not carry. Nothing else catches it: the path-style scan
+ * below never opens boardsmith.json, which is how a scaffold-emitted
+ * `thumbnail: './public/thumbnail.png'` survived across eight games with every
+ * gate green (issue 142).
+ */
+function findDanglingManifestAssets(cwd: string): string[] {
+  const configPath = join(cwd, 'boardsmith.json');
+  if (!existsSync(configPath)) return [];
+
+  let config: Record<string, unknown>;
+  try {
+    config = JSON.parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+  } catch {
+    // A malformed boardsmith.json is the Project Config check's business, not
+    // this one's; reporting it twice would only obscure the real error.
+    return [];
+  }
+
+  const issues: string[] = [];
+  for (const key of ASSET_PATH_KEYS) {
+    const declared = config[key];
+    if (typeof declared !== 'string' || declared.length === 0) continue;
+    if (existsSync(resolvePath(cwd, declared))) continue;
+    issues.push(
+      `boardsmith.json "${key}": "${declared}" names a file that does not exist. ` +
+        `Add the file at ${resolvePath(cwd, declared)}, or remove the "${key}" key.`,
+    );
+  }
+  return issues;
+}
+
+/**
+ * Two failures, one gate: an asset path a game DECLARES must resolve to a real
+ * file, and an asset path a game REFERENCES must be relative.
+ */
+export async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
+  const danglingIssues = findDanglingManifestAssets(cwd);
+
   const publicDir = join(cwd, 'public');
-  if (!existsSync(publicDir)) {
-    return { name: 'Asset Paths', passed: true, message: '', details: ['No public/ directory'] };
-  }
-
-  // Get top-level directory names in public/
-  const publicDirs = readdirSync(publicDir, { withFileTypes: true })
-    .filter(e => e.isDirectory())
-    .map(e => e.name);
-
-  if (publicDirs.length === 0) {
-    return { name: 'Asset Paths', passed: true, message: '' };
-  }
+  const publicDirs = existsSync(publicDir)
+    ? readdirSync(publicDir, { withFileTypes: true })
+        .filter(e => e.isDirectory())
+        .map(e => e.name)
+    : [];
 
   // Built UI JS, plus source data files (JSON carrying image paths).
-  const filesToScan = [
-    ...listFilesWithExtension(join(cwd, 'dist', 'ui', 'assets'), '.js'),
-    ...listFilesWithExtension(join(cwd, 'data'), '.json'),
-  ];
+  const filesToScan = publicDirs.length > 0
+    ? [
+        ...listFilesWithExtension(join(cwd, 'dist', 'ui', 'assets'), '.js'),
+        ...listFilesWithExtension(join(cwd, 'data'), '.json'),
+      ]
+    : [];
 
-  const issues = findAbsolutePathIssues(cwd, filesToScan, publicDirs);
+  const absoluteIssues = findAbsolutePathIssues(cwd, filesToScan, publicDirs);
 
-  if (issues.length === 0) {
+  if (danglingIssues.length === 0 && absoluteIssues.length === 0) {
     return { name: 'Asset Paths', passed: true, message: '' };
+  }
+
+  const details: string[] = [...danglingIssues];
+  if (absoluteIssues.length > 0) {
+    if (details.length > 0) details.push('');
+    details.push(
+      ...absoluteIssues.slice(0, 5),
+      '',
+      'Use relative paths (e.g., "sectors/image.jpg" not "/sectors/image.jpg")',
+      'Absolute paths starting with "/" resolve to the domain root,',
+      'which doesn\'t match the game\'s asset path on the platform.',
+    );
   }
 
   return {
     name: 'Asset Paths',
     passed: false,
-    message: 'Absolute asset paths will break on the publishing platform',
-    details: [
-      ...issues.slice(0, 5),
-      '',
-      'Use relative paths (e.g., "sectors/image.jpg" not "/sectors/image.jpg")',
-      'Absolute paths starting with "/" resolve to the domain root,',
-      'which doesn\'t match the game\'s asset path on the platform.',
-    ],
+    message:
+      danglingIssues.length > 0 && absoluteIssues.length > 0
+        ? 'Declared assets are missing, and absolute asset paths will break on the publishing platform'
+        : danglingIssues.length > 0
+          ? 'boardsmith.json declares an asset the project does not have'
+          : 'Absolute asset paths will break on the publishing platform',
+    details,
   };
 }
 

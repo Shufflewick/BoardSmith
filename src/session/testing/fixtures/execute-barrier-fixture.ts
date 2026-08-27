@@ -86,8 +86,10 @@ class ExecuteBarrierGame extends Game<ExecuteBarrierGame, Player> {
             // Declares the commitment: this is the fence these tests exercise.
             { irreversible: true },
           ),
-          actionStep({ actions: ['act2'], player: p1, maxMoves: 2 }),
-          actionStep({ actions: ['idle'], player: p1 }),
+          // Each of these steps is its own closed turn: the barrier tests pin
+          // that undo never reaches behind the step it is offered in.
+          actionStep({ actions: ['act2'], player: p1, maxMoves: 2, turnScope: 'restart' }),
+          actionStep({ actions: ['idle'], player: p1, turnScope: 'restart' }),
         ),
       }),
     );
@@ -97,7 +99,7 @@ class ExecuteBarrierGame extends Game<ExecuteBarrierGame, Player> {
 export { ExecuteBarrierGame };
 
 export const executeBarrierFixtureDefinition: GameDefinitionLike = {
-  gameClass: ExecuteBarrierGame as new (...args: unknown[]) => unknown,
+  gameClass: ExecuteBarrierGame,
   gameType: 'execute-barrier',
   minPlayers: 1,
   maxPlayers: 1,

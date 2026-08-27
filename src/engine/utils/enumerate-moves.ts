@@ -23,6 +23,7 @@ import type { Player } from '../player/player.js';
 import type { ActionDefinition, Selection } from '../action/types.js';
 import { availableActionsForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect } from './resolve-multiselect.js';
+import { NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -101,26 +102,52 @@ export function enumerateLegalMoves(
 
   const result: Array<{ action: string; args: Record<string, unknown> }> = [];
 
-  const executor = game.getActionExecutor();
-
   for (const actionName of actionNames) {
     const actionDef = game.getAction(actionName);
     if (!actionDef) continue;
 
-    // #19: `actionNames` comes from the flow state's FROZEN `availableActions`,
+    for (const args of enumerateActionMoves(game, actionDef, player, options)) {
+      result.push({ action: actionName, args });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Every legal set of args for ONE action, with every gate the game can write
+ * already applied.
+ *
+ * This is the single enumerator. `enumerateLegalMoves` loops it over a seat's
+ * available actions; `MCTSBot` loops it over the actions the flow is awaiting
+ * and then serializes and samples what comes back. Two loops, one set of
+ * rules — a bot must never be able to reach a move that
+ * `enumerateLegalMoves` would refuse, which is exactly what happened while the
+ * bot had an enumerator of its own (#19).
+ *
+ * @param options.maxPerAction - Truncate to this many arg sets. Default:
+ *   unlimited (full enumeration).
+ */
+export function enumerateActionMoves(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  options?: { maxPerAction?: number },
+): Record<string, unknown>[] {
+  const executor = game.getActionExecutor();
+
+  try {
+    // #19: an action list comes from the flow state's FROZEN `availableActions`,
     // computed once on the authoritative game when the step opened and replayed
     // verbatim — into a bot's redacted sandbox, and into a game whose state has
     // moved on since. Re-check the action's own `condition` against the game as
     // it stands: without this, a `choices` closure the condition was written to
     // guard runs anyway, and the reporting game's threw outright.
-    if (
-      actionDef.condition &&
-      !executor.isActionAvailable(actionDef, player)
-    ) {
-      continue;
+    if (actionDef.condition && !executor.isActionAvailable(actionDef, player)) {
+      return [];
     }
 
-    const combos = enumerateSelectionsCore(game, actionDef, player);
+    const combos = enumerateSelections(game, actionDef, player);
 
     // #19: an action-level `.validate()` refuses a SUBMISSION, and enumeration
     // never called it — so a bot enumerated moves the engine then rejected, and
@@ -131,34 +158,41 @@ export function enumerateLegalMoves(
       : combos;
 
     // Apply maxPerAction truncation only when caller opts in (D-07: full enumeration default)
-    const limited =
-      options?.maxPerAction !== undefined
-        ? legal.slice(0, options.maxPerAction)
-        : legal;
-
-    for (const args of limited) {
-      result.push({ action: actionName, args });
-    }
+    return options?.maxPerAction !== undefined ? legal.slice(0, options.maxPerAction) : legal;
+  } catch (error) {
+    // #19: this game is a REDACTED clone (a bot's search sandbox) and one of
+    // the action's gates needed a value the clone was never told. There is no
+    // legal move to be had here: the honest answer is that this action cannot
+    // be enumerated from what this copy knows, and inventing one would score a
+    // world that does not exist. Anything else propagates — a rule that
+    // crashes is still a bug and still fails loud.
+    if (!(error instanceof NotSimulableError)) throw error;
+    devWarn(
+      `redacted-enumeration-skip:${actionDef.name}:${player.seat}`,
+      `Action "${actionDef.name}" contributed no moves for seat ${player.seat} because a rule it ` +
+        `runs read information this copy of the game does not have: ${error.message.split('\n')[0]} ` +
+        `This is expected inside a bot's search sandbox for a seat other than its own. If this ` +
+        `action should be searchable there, derive its condition, choices, disabled and validate ` +
+        `from public information, or check element.isAttributeRedacted(key) before reading.`,
+    );
+    return [];
   }
-
-  return result;
 }
 
-// ─── Shared Core (also used by MCTSBot via import) ───────────────────────────
+// ─── Selection combinatorics ─────────────────────────────────────────────────
 
 /**
- * Enumerate all valid argument combinations for a single action.
+ * Every combination of selection values for one action, gates aside.
  *
- * Returns an array of args records where each value is an in-process element
- * object (for element/elements selections) or a plain scalar. No serialization
- * is performed here — the bot wrapper applies serializeArgs on the result.
+ * Module-private: the combinatorics alone are not a legal move set (they see
+ * `choices`/`disabled` but neither `condition` nor `validate`), and a caller
+ * that reached them directly is how the bot came to search moves the engine
+ * then refused. `enumerateActionMoves` is the way in.
  *
- * @param game - Live game instance
- * @param actionDef - The action definition to enumerate selections for
- * @param player - The player who will perform the action
- * @returns Array of args records with in-process values (NO serialization)
+ * Values are in-process element objects (for element/elements selections) or
+ * plain scalars — no serialization.
  */
-export function enumerateSelectionsCore(
+function enumerateSelections(
   game: Game,
   actionDef: ActionDefinition,
   player: Player,
@@ -345,7 +379,7 @@ function _getChoices(
   const annotated = game.getSelectionChoices(
     actionName,
     selection.name,
-    player as any,
+    player,
     currentArgs,
   );
   const enabled = annotated.filter(c => c.disabled === false).map(c => c.value);

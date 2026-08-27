@@ -458,6 +458,49 @@ The color picker in PlayerConfigList:
 
 ## Helper Components
 
+### AssetImage
+
+The one sanctioned way to render game art. A missing, unresolved, or broken `src`
+always leaves the game's own drawn fallback visible; a broken `<img>` never
+reaches a player. The real image overlays the fallback only after `@load` fires,
+and `@error` reverts to the fallback.
+
+The fallback is your DEFAULT SLOT, because the placeholder that reads correctly
+is always the game's own drawn face (a card's rank and suit, a part's name and
+roll condition, a piece's glyph) — never something the library could guess at.
+The fallback layer is a bare `position: absolute; inset: 0` box, so your slot
+content owns its own presentation.
+
+```vue
+<script setup lang="ts">
+import { AssetImage } from 'boardsmith/ui';
+</script>
+
+<template>
+  <AssetImage class="card-art" :src="artSrc" aspect-ratio="2 / 3" :alt="cardName">
+    <div class="card-drawn">
+      <span class="card-rank">{{ rank }}</span>
+      <span class="card-suit">{{ suit }}</span>
+    </div>
+  </AssetImage>
+</template>
+
+<style scoped>
+/* The wrapper takes your class, so the game rounds its own corners and crops its
+   own art. AssetImage clips to the wrapper (`overflow: hidden`). */
+.card-art { border-radius: var(--bsg-r-sm); }
+.card-drawn { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+</style>
+```
+
+**Props:**
+- `src` (`string | null`, default: `null`) - The resolved asset URL, or null when there is no art (yet)
+- `aspectRatio` (string, **required**) - The box both the fallback and the image fill, e.g. `'2 / 3'`. Required because reserving the right box is what makes a later asset swap a zero-layout-change edit. Pass `'auto'` when an ancestor already sizes the art
+- `alt` (string, **required**) - Alt text for the image. Required so every call site decides; pass `''` when the fallback slot already carries the same words as visible text
+
+`boardsmith audit`'s asset-reachability scan fails a game that renders art with a
+bare `<img>` anywhere in `src/ui`, so this is the only path art takes.
+
 ### FlyingCardsOverlay
 
 Overlay for card flight animations between positions. Teleports to body to render above all content.
@@ -611,7 +654,7 @@ Custom game boards can detect which action is currently being filled in. This is
 - Customizing the board based on current selection step
 
 ```typescript
-import { useBoardInteraction } from 'boardsmith/ui';
+import { useBoardInteraction, type GameViewElement } from 'boardsmith/ui';
 import { computed, watch } from 'vue';
 
 const boardInteraction = useBoardInteraction();
@@ -634,7 +677,7 @@ import { computed, watch } from 'vue';
 import { useBoardInteraction } from 'boardsmith/ui';
 
 const props = defineProps<{
-  gameView: any;
+  gameView: GameViewElement | null;
 }>();
 
 const boardInteraction = useBoardInteraction();
@@ -2138,11 +2181,12 @@ import {
   useElementAnimation,
   findPlayerHand,
   getCards,
+  type GameViewElement,
   type UseActionControllerReturn
 } from 'boardsmith/ui';
 
 const props = defineProps<{
-  gameView: any;
+  gameView: GameViewElement | null;
   playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];

@@ -304,7 +304,7 @@ describe('FlowEngine', () => {
             execute(() => {
               count++;
             }),
-            actionStep({ actions: ['tick'] })
+            actionStep({ actions: ['tick'], turnScope: 'restart' })
           ),
         }),
       });
@@ -383,7 +383,7 @@ describe('FlowEngine', () => {
       );
 
       const flow = defineFlow({
-        root: repeat(2, actionStep({ actions: ['test'] })),
+        root: repeat(2, actionStep({ actions: ['test'], turnScope: 'restart' })),
       });
 
       const engine1 = new FlowEngine(game, flow);
@@ -468,7 +468,7 @@ describe('FlowEngine', () => {
       const flow = defineFlow({
         root: eachPlayer({
           filter: (player) => player.isActive,
-          do: actionStep({ actions: ['act'] }),
+          do: actionStep({ actions: ['act'] , turnScope: 'restart' }),
         }),
       });
 
@@ -648,7 +648,7 @@ describe('FlowEngine', () => {
             execute((ctx) => {
               visitedIds.push((ctx.get('card') as Card).id);
             }),
-            actionStep({ actions: ['step'] })
+            actionStep({ actions: ['step'], turnScope: 'restart' })
           ),
         }),
       });
@@ -1005,6 +1005,7 @@ describe('FlowEngine', () => {
           actionStep({
             actions: ['second'],
             repeatUntil: () => true,
+            turnScope: 'restart',
           })
         ),
       });
@@ -1243,6 +1244,7 @@ describe('Game Flow Integration', () => {
       root: eachPlayer({
         do: actionStep({
           actions: ['draw', 'pass'],
+          turnScope: 'restart',
         }),
       }),
     });
@@ -1260,6 +1262,7 @@ describe('Game Flow Integration', () => {
       root: eachPlayer({
         do: actionStep({
           actions: ['draw', 'pass'],
+          turnScope: 'restart',
         }),
       }),
     });
@@ -1307,7 +1310,7 @@ describe('Game Flow Integration', () => {
   it('should get current flow player', () => {
     const flow = defineFlow({
       root: eachPlayer({
-        do: actionStep({ actions: ['pass'] }),
+        do: actionStep({ actions: ['pass'] , turnScope: 'restart' }),
       }),
     });
 
@@ -1462,7 +1465,7 @@ describe('Named Phases', () => {
       root: sequence(
         phase('setup', { do: execute(() => {}) }),
         phase('main', {
-          do: actionStep({ actions: ['act'] }),
+          do: actionStep({ actions: ['act'] , turnScope: 'restart' }),
         })
       ),
     });
@@ -1571,6 +1574,7 @@ describe('Move Limits', () => {
         do: actionStep({
           actions: ['count'],
           maxMoves: 2,
+          turnScope: 'restart',
         }),
       }),
     });
@@ -1684,6 +1688,8 @@ describe('turnLoop Helper', () => {
     const flow = defineFlow({
       root: turnLoop({
         actions: ['act'],
+        // A solo turn loop: each pass is its own turn.
+        turnScope: 'restart',
       }),
     });
 
@@ -1719,6 +1725,7 @@ describe('turnLoop Helper', () => {
       root: turnLoop({
         actions: ['act'],
         while: () => actionsRemaining > 0,
+        turnScope: 'restart',
       }),
     });
 
@@ -1753,6 +1760,7 @@ describe('turnLoop Helper', () => {
       root: turnLoop({
         actions: ['act'],
         while: () => actionCount < 2,
+        turnScope: 'restart',
       }),
     });
 
@@ -2173,6 +2181,7 @@ describe('Action Chaining with followUp in FlowState', () => {
         while: () => chainDepth < maxChainDepth,
         do: actionStep({
           actions: ['chain'],
+          turnScope: 'restart',
         }),
       }),
     });

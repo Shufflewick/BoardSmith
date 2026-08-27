@@ -46,6 +46,18 @@ export interface SimulateRandomGamesOptions {
   maxActions?: number;
   /** Called after each game completes (for progress reporting) */
   onGameComplete?: (result: SingleGameResult, progress: { completed: number; total: number }) => void;
+  /**
+   * Game-specific options forwarded to every simulated game's constructor —
+   * the same values a preset or a `--game-option` flag would supply.
+   *
+   * Without these the harness can only ever measure a game's DEFAULT
+   * configuration, so a game whose longest or heaviest mode sits behind an
+   * option gets a green result that says nothing about that mode.
+   *
+   * The harness owns `playerCount`, `playerNames`, `seed` and `autoStart`;
+   * naming one of them here throws rather than being silently overridden.
+   */
+  gameOptions?: Record<string, unknown>;
 }
 
 /**
@@ -60,6 +72,12 @@ export interface ReplayRandomGameOptions {
   timeout?: number;
   /** Maximum actions before considering the game hung */
   maxActions?: number;
+  /**
+   * The same `gameOptions` the failing run used. A seed alone does NOT
+   * reproduce a game-option-gated configuration — the options are part of the
+   * repro.
+   */
+  gameOptions?: Record<string, unknown>;
 }
 
 /**
@@ -323,6 +341,31 @@ function buildRandomMoves<G extends Game>(
 }
 
 /**
+ * Options the harness itself supplies to every simulated game. A caller-set
+ * `gameOptions` entry with one of these names would be silently overwritten,
+ * so it is refused instead.
+ * @internal
+ */
+const HARNESS_OWNED_OPTIONS = ['playerCount', 'playerNames', 'seed', 'autoStart'] as const;
+
+/**
+ * Reject a `gameOptions` bundle that names an option the harness controls.
+ * @internal
+ */
+function assertGameOptionsAreGameSpecific(gameOptions: Record<string, unknown> | undefined): void {
+  if (!gameOptions) return;
+  const clashes = HARNESS_OWNED_OPTIONS.filter((key) => key in gameOptions);
+  if (clashes.length > 0) {
+    throw new Error(
+      `gameOptions cannot set ${clashes.join(', ')} — the simulation harness supplies ` +
+        `${HARNESS_OWNED_OPTIONS.join(', ')} itself. ` +
+        `Use the playerCounts and seed options to vary those, and keep gameOptions for ` +
+        `your game's own options.`,
+    );
+  }
+}
+
+/**
  * Run a single random game simulation.
  * @internal
  */
@@ -331,7 +374,8 @@ async function simulateSingleGame<G extends Game>(
   playerCount: number,
   seed: string,
   timeout: number,
-  maxActions: number
+  maxActions: number,
+  gameOptions: Record<string, unknown> | undefined,
 ): Promise<SingleGameResult> {
   const startTime = Date.now();
   const rng = new SeededRandom(seed);
@@ -346,6 +390,9 @@ async function simulateSingleGame<G extends Game>(
 
   try {
     testGame = createTestGame(GameClass, {
+      // Game-specific options first: the four keys the harness owns are
+      // refused up front, so nothing here can shadow them.
+      ...gameOptions,
       playerCount,
       seed,
       autoStart: true,
@@ -478,8 +525,9 @@ export async function replayRandomGame<G extends Game>(
   GameClass: new (options: GameOptions) => G,
   options: ReplayRandomGameOptions
 ): Promise<SingleGameResult> {
-  const { seed, playerCount, timeout = 5000, maxActions = 10000 } = options;
-  return simulateSingleGame(GameClass, playerCount, seed, timeout, maxActions);
+  const { seed, playerCount, timeout = 5000, maxActions = 10000, gameOptions } = options;
+  assertGameOptionsAreGameSpecific(gameOptions);
+  return simulateSingleGame(GameClass, playerCount, seed, timeout, maxActions, gameOptions);
 }
 
 /**
@@ -522,7 +570,10 @@ export async function simulateRandomGames<G extends Game>(
     timeout = 5000,
     maxActions = 10000,
     onGameComplete,
+    gameOptions,
   } = options;
+
+  assertGameOptionsAreGameSpecific(gameOptions);
 
   const games: SingleGameResult[] = [];
   const errors = new Set<string>();
@@ -542,7 +593,8 @@ export async function simulateRandomGames<G extends Game>(
         playerCount,
         seed,
         timeout,
-        maxActions
+        maxActions,
+        gameOptions,
       );
 
       games.push(result);

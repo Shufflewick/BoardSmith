@@ -31,7 +31,7 @@ class InstantWinGame extends Game<InstantWinGame, Player> {
 }
 
 const instantWinGameDef: GameDefinitionLike = {
-  gameClass: InstantWinGame as new (...args: unknown[]) => unknown,
+  gameClass: InstantWinGame,
   gameType: 'instant-win',
   minPlayers: 1,
   maxPlayers: 4,

@@ -62,7 +62,7 @@ import {
 
 ### Types
 
-- `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, plus any game-specific constructor options). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable`/`playUntilComplete` failure messages so a failing run is one copy-paste from a deterministic repro.
+- `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable`/`playUntilComplete` failure messages so a failing run is one copy-paste from a deterministic repro.
 - `SimulateActionResult` - Action simulation result (extends `ActionExecutionResult` with `action`/`playerSeat`/`args`)
 - `PlayUntilCompleteOptions` - Options for `playUntilComplete()` (`maxMoves`, `strategy`, `rng`)
 - `SimulateRandomGamesOptions`, `ReplayRandomGameOptions`, `SingleGameResult`, `SimulationResults` - Random simulation types
@@ -271,6 +271,23 @@ test('game always terminates', async () => {
   console.log(`Average game length: ${results.averageActions} actions`);
 });
 ```
+
+A game whose longest or heaviest configuration sits behind a game option needs
+`gameOptions`, or the run only ever measures the default one:
+
+```typescript
+const hard = await simulateRandomGames(MyGame, {
+  count: 100,
+  playerCounts: [4],
+  gameOptions: { difficulty: 'hard' },
+});
+```
+
+The harness supplies `playerCount`, `playerNames`, `seed` and `autoStart`
+itself, so naming one of those in `gameOptions` is an error rather than a
+silent override. `replayRandomGame` takes the same `gameOptions` — a seed alone
+does not reproduce an option-gated game. From the command line the same thing
+is `boardsmith simulate --game-option difficulty=hard`.
 
 ### Debugging Test Failures
 

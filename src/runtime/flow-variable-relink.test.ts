@@ -55,7 +55,9 @@ class RelinkGame extends Game<RelinkGame, Player> {
           collection: (ctx: FlowContext) => (ctx.game as RelinkGame).bag.all(Token),
           as: 'token',
           do: sequence(
-            actionStep({ actions: ['mark'] }),
+            // One mark per token, and the forEach moves on: each iteration is
+            // its own turn as far as undo is concerned.
+            actionStep({ actions: ['mark'], turnScope: 'restart' }),
             execute((ctx: FlowContext) => {
               const token = ctx.get<Token>('token');
               if (token) {

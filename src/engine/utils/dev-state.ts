@@ -193,12 +193,12 @@ export function restoreDevState<G extends Game>(
   // constructor default across HMR. phase/messages/settings are restored
   // explicitly above, so skip them here.
   const unserializable = new Set(
-    (game.constructor as unknown as { unserializableAttributes: string[] }).unserializableAttributes
+    (game.constructor as typeof GameElement).unserializableAttributes
   );
   const handledKeys = new Set<string>(GAME_SELF_SERIALIZED_FIELDS);
   for (const [key, value] of Object.entries(snapshot.elements.attributes)) {
     if (!unserializable.has(key) && !key.startsWith('_') && !handledKeys.has(key)) {
-      (game as unknown as Record<string, unknown>)[key] = value;
+      Object.assign(game, { [key]: value });
     }
   }
 
@@ -280,7 +280,7 @@ function restoreElement(
   // Getters are automatically excluded from toJSON() since they're not
   // "own enumerable properties" - they recalculate with new code
   for (const [key, value] of Object.entries(json.attributes)) {
-    (element as unknown as Record<string, unknown>)[key] = value;
+    Object.assign(element, { [key]: value });
   }
 
   // Recursively restore children

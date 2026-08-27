@@ -17,7 +17,12 @@ import {
   type PendingActionState,
   type AnnotatedChoice,
 } from '../engine/index.js';
-import { GameRunner, type ActionExecutionResult, type PlayerStateView } from '../runtime/index.js';
+import {
+  GameRunner,
+  type ActionExecutionResult,
+  type PlayerStateView,
+  type CheckpointPolicy,
+} from '../runtime/index.js';
 import { ActionBuilder } from './action-builder.js';
 import { isElementVisible, getVisibleElements } from './visibility.js';
 
@@ -33,6 +38,16 @@ export interface TestGameOptions {
   seed?: string;
   /** Whether to auto-start the game */
   autoStart?: boolean;
+  /**
+   * Per-action checkpoint retention policy for this game's runner — the same
+   * `checkpoints` block a `GameDefinition` declares.
+   *
+   * Applied to the RUNNER, not passed to the game constructor. Without it a
+   * test always runs under the unbounded default, so a state-size budget test
+   * cannot exercise the retention policy the game actually ships (see
+   * `docs/state-size.md`).
+   */
+  checkpoints?: CheckpointPolicy;
   /**
    * Extra game-specific constructor options passed through to the game class.
    *
@@ -184,7 +199,14 @@ export class TestGame<G extends Game = Game> {
 
     // Separate known TestGame fields from extra game-specific options so the
     // extras can be forwarded to the game constructor unchanged.
-    const { playerCount, playerNames: _pn, seed: _s, autoStart: _a, ...extraOptions } = options;
+    const {
+      playerCount,
+      playerNames: _pn,
+      seed: _s,
+      autoStart: _a,
+      checkpoints,
+      ...extraOptions
+    } = options;
 
     const runner = new GameRunner({
       GameClass,
@@ -195,6 +217,7 @@ export class TestGame<G extends Game = Game> {
         playerNames,
         seed,
       },
+      checkpoints,
     });
 
     const testGame = new TestGame(runner, seed);

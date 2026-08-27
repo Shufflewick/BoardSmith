@@ -59,14 +59,18 @@ class SoloWipeGame extends Game<SoloWipeGame, Player> {
         root: sequence(
           // Two closed, single-move turns -- the "prior game history" a
           // correct fix must preserve no matter how many `act` moves follow.
-          actionStep({ actions: ['pass'], player: p1 }),
-          actionStep({ actions: ['pass'], player: p1 }),
+          // Same seat, three steps in a row, and each one is its OWN turn --
+          // the reading `turnScope: 'restart'` states. Polyhedral Potions
+          // writes the identical shape and means the opposite, which is why
+          // the engine asks rather than guessing.
+          actionStep({ actions: ['pass'], player: p1, turnScope: 'restart' }),
+          actionStep({ actions: ['pass'], player: p1, turnScope: 'restart' }),
           // The open-ended step under test: NO minMoves/maxMoves declared.
           // `repeatUntil` never becomes true within this test, so the step
           // (and therefore the SAME action-step frame) stays open across
           // repeated `act` moves -- the shape that makes moveCount meaningful
           // (branch B) once it's actually published for a limits-free step.
-          actionStep({ actions: ['act'], player: p1, repeatUntil: () => false }),
+          actionStep({ actions: ['act'], player: p1, repeatUntil: () => false, turnScope: 'restart' }),
         ),
       }),
     );
@@ -74,7 +78,7 @@ class SoloWipeGame extends Game<SoloWipeGame, Player> {
 }
 
 const soloWipeFixtureDefinition: GameDefinitionLike = {
-  gameClass: SoloWipeGame as new (...args: unknown[]) => unknown,
+  gameClass: SoloWipeGame,
   gameType: 'solo-wipe',
   minPlayers: 1,
   maxPlayers: 1,

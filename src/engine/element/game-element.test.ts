@@ -916,3 +916,30 @@ describe('Serialization safety (F7)', () => {
     expect(pair.right).toEqual({ tag: 'shared-value' });
   });
 });
+
+// #149: `serializeValue` answered "is this element a player?" with a numeric
+// `seat`, so a per-seat board held in a game field serialized as a
+// `__playerRef` to that seat number. Restoring it then resolved the field to
+// the PLAYER at that seat, or to `undefined` when no such seat exists -- the
+// board was gone either way.
+describe('a seat-tagged element is not serialized as a player reference', () => {
+  class SeatBoard extends Space<SeatRefGame> {
+    seat!: number;
+  }
+  class SeatRefGame extends Game<SeatRefGame, Player> {
+    activeBoard!: SeatBoard;
+    constructor(options: { playerCount: number }) {
+      super(options);
+      this.activeBoard = this.create(SeatBoard, 'board-2', { seat: 2 });
+    }
+  }
+
+  it('serializes it as an element reference, not a __playerRef', () => {
+    const game = new SeatRefGame({ playerCount: 2 });
+    const json = game.toJSON();
+
+    const activeBoard = json.attributes.activeBoard as Record<string, unknown>;
+    expect(activeBoard.__playerRef).toBeUndefined();
+    expect(activeBoard.__elementRef ?? activeBoard.__elementId).toBeDefined();
+  });
+});

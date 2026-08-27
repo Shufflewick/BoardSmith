@@ -78,7 +78,7 @@ class ReportingGame extends Game<ReportingGame, Player> {
 }
 
 const gameDef: GameDefinitionLike = {
-  gameClass: ReportingGame as new (...args: unknown[]) => unknown,
+  gameClass: ReportingGame,
   gameType: 'reporting',
   minPlayers: 1,
   maxPlayers: 2,
@@ -89,6 +89,7 @@ const gameOptions = { playerCount: 2, seed: 'bug-017' };
 function makeRunner(): GameRunner<ReportingGame> {
   const runner = new GameRunner({
     GameClass: ReportingGame,
+    gameType: 'reporting',
     gameOptions: { playerCount: 2, seed: 'bug-017' },
   });
   runner.start();

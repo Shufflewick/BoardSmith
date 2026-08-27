@@ -156,9 +156,9 @@ repositioning anything, the placeholder's aspect ratio was declared wrong at des
 is a `DESIGN.md` correction (its own chunk), not something `build` improvises around.
 
 A chunk's UI MUST NEVER emit a bare asset `<img>` for card/piece art. All such art routes through
-the scaffold-shipped `AssetImage.vue` component — emitted by `project-scaffold.ts` into every
-project from Chunk 0 — which draws the game-semantic fallback and overlays the real image only
-once it has loaded. `AssetImage.vue` is the operationalization of `## Placeholder Policy` above:
+the library's `AssetImage` component — `import { AssetImage } from 'boardsmith/ui'` — which draws
+the game's own placeholder (supplied in the default slot) and overlays the real image only once it
+has loaded. `AssetImage` is the operationalization of `## Placeholder Policy` above:
 it is the one code path that makes the zero-layout-diff guarantee hold structurally, rather than
 by convention every chunk's author has to remember. A bare asset `<img>` is not merely
 discouraged — it is a `test`-step failure (see `build/test.md`'s asset-reachability gate), so the

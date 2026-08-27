@@ -7,6 +7,8 @@ import {
   getSuitSymbol,
   getSuitColor,
   getRankName,
+  getSuitName,
+  getCardName,
   getCardPointValue,
   isRedSuit,
   isBlackSuit,
@@ -160,15 +162,17 @@ describe('useCardDisplay', () => {
     expect(display.getSuitSymbol).toBe(getSuitSymbol);
     expect(display.getSuitColor).toBe(getSuitColor);
     expect(display.getRankName).toBe(getRankName);
+    expect(display.getSuitName).toBe(getSuitName);
+    expect(display.getCardName).toBe(getCardName);
     expect(display.getCardPointValue).toBe(getCardPointValue);
     expect(display.isRedSuit).toBe(isRedSuit);
     expect(display.isBlackSuit).toBe(isBlackSuit);
   });
 
-  it('exposes exactly those six helpers', () => {
+  it('exposes exactly those eight helpers', () => {
     expect(Object.keys(useCardDisplay()).sort()).toEqual([
-      'getCardPointValue', 'getRankName', 'getSuitColor', 'getSuitSymbol',
-      'isBlackSuit', 'isRedSuit',
+      'getCardName', 'getCardPointValue', 'getRankName', 'getSuitColor',
+      'getSuitName', 'getSuitSymbol', 'isBlackSuit', 'isRedSuit',
     ]);
   });
 
@@ -180,5 +184,32 @@ describe('useCardDisplay', () => {
     const { getSuitSymbol: symbol, getCardPointValue: value } = useCardDisplay();
     expect(symbol('S')).toBe('♠');
     expect(value('K')).toBe(10);
+  });
+
+  /**
+   * A card drawn as a glyph needs words before a screen reader can read it, and
+   * pasting a suit map into every game is how those words drift (issue 82).
+   */
+  describe('naming a card in words', () => {
+    it('names every suit', () => {
+      expect(getSuitName('H')).toBe('Hearts');
+      expect(getSuitName('D')).toBe('Diamonds');
+      expect(getSuitName('C')).toBe('Clubs');
+      expect(getSuitName('S')).toBe('Spades');
+    });
+
+    it('hands back an unrecognized suit unchanged rather than inventing one', () => {
+      expect(getSuitName('Z')).toBe('Z');
+    });
+
+    it('names a whole card the way a player would say it', () => {
+      expect(getCardName('K', 'S')).toBe('King of Spades');
+      expect(getCardName('7', 'H')).toBe('7 of Hearts');
+      expect(getCardName('A', 'D')).toBe('Ace of Diamonds');
+    });
+
+    it('names a suitless card by its rank alone', () => {
+      expect(getCardName('Q', '')).toBe('Queen');
+    });
   });
 });

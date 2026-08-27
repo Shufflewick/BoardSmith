@@ -97,7 +97,7 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
     this.setFlow(defineFlow({
       root: loop({
         maxIterations: 20,
-        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(guesserSeat)! }),
+        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(guesserSeat)! , turnScope: 'restart' }),
       }),
     }));
   }
@@ -127,12 +127,22 @@ function makeBot(game: HiddenInfoGame, seed: string, guesserSeat = 1) {
     {
       // The bot "wins" (achieved=1) when its guess matches the hidden card's
       // TRUE value -- a full-info clone can always satisfy this; a redacted
-      // clone (post-fix) sees `value` as undefined and can never match it.
+      // clone can never match it, because it holds no value to match against.
+      //
+      // #147: the card is a HIDDEN ELEMENT, so `value` is now withheld the same
+      // way #19 withholds a non-whitelisted attribute: reading it throws rather
+      // than yielding a class-field `undefined`. An objective checker runs
+      // against the search clone, so it asks first -- exactly as a condition or
+      // a `choices` closure must. Unguarded, the throw propagates out of
+      // `evaluateTerminalFromGame` and fails the search loudly, which is the
+      // intended contract: an objective that scores a fact the seat was never
+      // told is a modelling bug, and scoring it as 0 would hide that.
       objectives: (game) => ({
         correctGuess: {
           weight: 1,
           checker: (g) => {
             const hg = g as HiddenInfoGame;
+            if (hg.secretCard.isAttributeRedacted('value')) return 0;
             return hg.lastGuess !== undefined && hg.lastGuess === hg.secretCard.value ? 1 : 0;
           },
         },
@@ -452,7 +462,7 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
 
 describe('MCTSBot root-decision redaction (bot-02 / CR-01)', () => {
   it('threatResponseMoves does not see the opponent\'s hidden card value at the ROOT', async () => {
-    let sawValue: number | undefined = 'unset' as unknown as number;
+    let sawRedacted: boolean | undefined;
     const secretValue = 2;
     const game = createHiddenInfoGame(secretValue, 'cr01-threat-1');
     const bot = new MCTSBot(
@@ -464,7 +474,11 @@ describe('MCTSBot root-decision redaction (bot-02 / CR-01)', () => {
       { iterations: 5, playoutDepth: 0, seed: 'cr01-threat-1', async: false, usePNS: false },
       {
         threatResponseMoves: (g) => {
-          sawValue = (g as HiddenInfoGame).secretCard.value;
+          // #147: the card is a hidden element, so the root heuristic is told
+          // it was not told -- asking is the read. Reading `value` outright
+          // throws, which is the point: the hook cannot be handed a number
+          // that looks like the truth.
+          sawRedacted = (g as HiddenInfoGame).secretCard.isAttributeRedacted('value');
           return { moves: [] };
         },
       },
@@ -473,14 +487,13 @@ describe('MCTSBot root-decision redaction (bot-02 / CR-01)', () => {
     await bot.play();
 
     // Pre-fix: threatResponseMoves is called with `this.game` (full truth) --
-    // sawValue === secretValue (the real hidden value leaks into the root
-    // heuristic). Post-fix: it's called with the redacted searchGame, whose
-    // secretCard.value attribute was never populated (redacted away).
-    expect(sawValue).toBeUndefined();
+    // the real hidden value leaks into the root heuristic. Post-fix: it's
+    // called with the redacted searchGame, where `value` is withheld.
+    expect(sawRedacted).toBe(true);
   });
 
   it('uctConstant does not see the opponent\'s hidden card value, even on the allMoves.length===1 fast path', async () => {
-    let sawValue: number | undefined = 'unset' as unknown as number;
+    let sawRedacted: boolean | undefined;
     const secretValue = 3;
     // Single choice -- forces the allMoves.length===1 fast path (mcts-bot.ts),
     // which historically returned BEFORE the redacted searchGame was ever
@@ -496,7 +509,7 @@ describe('MCTSBot root-decision redaction (bot-02 / CR-01)', () => {
       { iterations: 5, playoutDepth: 0, seed: 'cr01-uct-1', async: false, usePNS: false },
       {
         uctConstant: (g) => {
-          sawValue = (g as HiddenInfoGame).secretCard.value;
+          sawRedacted = (g as HiddenInfoGame).secretCard.isAttributeRedacted('value');
           return Math.sqrt(2);
         },
       },
@@ -504,10 +517,10 @@ describe('MCTSBot root-decision redaction (bot-02 / CR-01)', () => {
 
     await bot.play();
 
-    // Pre-fix: uctConstant(this.game, ...) -- sawValue === secretValue.
+    // Pre-fix: uctConstant(this.game, ...) -- the real value was readable.
     // Post-fix: uctConstant is called against the redacted searchGame (built
-    // unconditionally before the fast-path check), so the value is redacted.
-    expect(sawValue).toBeUndefined();
+    // unconditionally before the fast-path check), so the value is withheld.
+    expect(sawRedacted).toBe(true);
   });
 });
 
@@ -571,7 +584,7 @@ class HiddenFlowVarGame extends Game<HiddenFlowVarGame, Player> {
       root: forEach({
         collection: (ctx) => (ctx.game as HiddenFlowVarGame).secretZone.all(FlowCard),
         as: 'currentCard',
-        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)! }),
+        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
       }),
     }));
   }
@@ -669,7 +682,7 @@ class TrueHiddenFlowVarGame extends Game<TrueHiddenFlowVarGame, Player> {
       root: forEach({
         collection: (ctx) => (ctx.game as TrueHiddenFlowVarGame).secretZone.all(FlowCard),
         as: 'currentCard',
-        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)! }),
+        do: actionStep({ actions: ['guess'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
       }),
     }));
   }

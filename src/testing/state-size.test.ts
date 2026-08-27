@@ -13,6 +13,7 @@ import {
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import { measureSnapshotSize, projectSnapshotSize } from './state-size.js';
+import { createTestGame } from './test-game.js';
 
 class Token extends Piece<BudgetGame> {}
 class Board extends Space<BudgetGame> {}
@@ -73,6 +74,79 @@ describe('measureSnapshotSize', () => {
     const size = measureSnapshotSize(runner.getSnapshot());
     expect(size.checkpointCount).toBe(0);
     expect(size.bytesPerCheckpoint).toBe(0);
+  });
+});
+
+describe('measureSnapshotSize — sparse checkpoint windows (issue 143)', () => {
+  /**
+   * The documented-but-wrong recipe: perform N actions, snapshot ONCE at the
+   * end. Checkpoints are captured through the snapshot funnel, so every slot
+   * between the start and the final action is left uncaptured.
+   */
+  function playSnapshottingOnlyAtTheEnd(actions: number) {
+    const runner = new GameRunner({
+      GameClass: BudgetGame,
+      gameType: 'budget-game',
+      gameOptions: { playerCount: 2, seed: 'budget' },
+    });
+    runner.start();
+    for (let i = 0; i < actions; i++) {
+      runner.performAction('pass', (i % 2) + 1, {});
+    }
+    return runner.getSnapshot();
+  }
+
+  it('refuses to average over uncaptured slots instead of reporting a wrong multiplier', () => {
+    const snapshot = playSnapshottingOnlyAtTheEnd(20);
+    expect(() => measureSnapshotSize(snapshot)).toThrow(/never captured/);
+  });
+
+  it('names the counts and the fix in the error', () => {
+    const snapshot = playSnapshottingOnlyAtTheEnd(20);
+    let message = '';
+    try {
+      measureSnapshotSize(snapshot);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('19 of 21');
+    expect(message).toContain('getSnapshot()');
+  });
+
+  it('measures normally once the snapshot funnel ran after every action', () => {
+    const size = measureSnapshotSize(play(20));
+    expect(size.checkpointCount).toBe(21);
+    expect(size.bytesPerCheckpoint).toBeGreaterThan(size.treeBytes * 0.9);
+  });
+});
+
+describe('createTestGame checkpoints policy (issue 143)', () => {
+  it('applies a retention policy instead of passing it to the game constructor', () => {
+    const game = createTestGame(BudgetGame, {
+      playerCount: 2,
+      seed: 'budget',
+      checkpoints: { max: 3 },
+    });
+    for (let i = 0; i < 10; i++) {
+      game.doAction((i % 2) + 1, 'pass', {});
+      game.runner.getSnapshot();
+    }
+    const size = measureSnapshotSize(game.runner.getSnapshot());
+    expect(size.checkpointCount).toBe(3);
+    expect(game.runner.checkpointPolicy.max).toBe(3);
+    // The policy must NOT have leaked into the game's constructor options.
+    expect(game.game.getConstructorOptions().checkpoints).toBeUndefined();
+  });
+
+  it('can turn checkpointing off entirely', () => {
+    const game = createTestGame(BudgetGame, {
+      playerCount: 2,
+      seed: 'budget',
+      checkpoints: { enabled: false },
+    });
+    game.doAction(1, 'pass', {});
+    const size = measureSnapshotSize(game.runner.getSnapshot());
+    expect(size.checkpointCount).toBe(0);
   });
 });
 

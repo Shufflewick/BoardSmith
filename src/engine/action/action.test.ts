@@ -3011,3 +3011,36 @@ describe('Object-subset choice resolution (custom-UI partial choice objects)', (
     expect(executor.validateAction(action, player, resolved).valid).toBe(false);
   });
 });
+
+describe('repeating element selection with an unresolvable choice', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+  let hand: Hand;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    hand = game.create(Hand, 'hand');
+    executor = new ActionExecutor(game);
+  });
+
+  // A `choices`/`elements` closure that reads redacted state yields `undefined`
+  // entries (see enumerate-moves' undefined-choice-value warning). Validating a
+  // repeating element step must report that as a refused selection, not crash
+  // reading `.id` off nothing.
+  it('refuses the step instead of throwing when a choice has no element', () => {
+    const card = hand.create(Card, 'ace');
+    const action = Action.create('discard')
+      .chooseElement('cards', {
+        elements: () => [card, undefined as unknown as Card],
+        repeatUntil: card,
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('discard', 1);
+
+    const result = executor.processRepeatingStep(action, player, pendingState, 999999);
+    expect(result.done).toBe(false);
+    expect(result.error).toContain('999999');
+  });
+});

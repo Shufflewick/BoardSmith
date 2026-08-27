@@ -1069,6 +1069,90 @@ describe('useActionController picks', () => {
       // The single choice auto-filled and the action auto-executed.
       expect(sendAction).toHaveBeenCalledWith('drawAuto', { source: 'deck' });
     });
+
+    // The start path is not the only way a selection comes up for auto-fill: filling one
+    // selection advances to the next, and THAT advance must honour .manual() too. A manual
+    // action whose second pick has a single choice would otherwise resolve and execute on
+    // the player's first tap, which is exactly the silent play .manual() exists to stop.
+    function makeTwoStepMeta(manual: boolean): Record<string, ActionMetadata> {
+      const name = manual ? 'allocateManual' : 'allocateAuto';
+      return {
+        [name]: {
+          name,
+          prompt: 'Allocate',
+          manual,
+          selections: [
+            {
+              name: 'target',
+              type: 'choice',
+              prompt: 'Pick a target',
+              choices: [
+                { value: 'a', display: 'A' },
+                { value: 'b', display: 'B' },
+              ],
+            },
+            {
+              name: 'dice',
+              type: 'choice',
+              prompt: 'Pick the dice',
+              dependsOn: 'target',
+              choices: [{ value: 'only', display: 'Only set' }],
+            },
+          ],
+        },
+      };
+    }
+
+    it('does NOT auto-fill a later single-choice selection reached through fill()', async () => {
+      actionMetadata.value = { ...createTestMetadata(), ...makeTwoStepMeta(true) };
+      availableActions.value = [...(availableActions.value ?? []), 'allocateManual'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: true,
+        playerSeat: ref(1),
+      });
+
+      await controller.start('allocateManual');
+      await nextTick();
+      await controller.fill('target', 'a');
+      await nextTick();
+
+      // The lone remaining choice must be OFFERED, not spent for the player.
+      expect(sendAction).not.toHaveBeenCalled();
+      expect(controller.currentArgs.value.dice).toBeUndefined();
+      expect(controller.currentPick.value?.name).toBe('dice');
+
+      await controller.fill('dice', 'only');
+      await nextTick();
+      expect(sendAction).toHaveBeenCalledWith('allocateManual', { target: 'a', dice: 'only' });
+    });
+
+    it('negative control: a NON-manual action still auto-fills the later single-choice selection', async () => {
+      actionMetadata.value = { ...createTestMetadata(), ...makeTwoStepMeta(false) };
+      availableActions.value = [...(availableActions.value ?? []), 'allocateAuto'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: true,
+        playerSeat: ref(1),
+      });
+
+      await controller.start('allocateAuto');
+      await nextTick();
+      await controller.fill('target', 'a');
+      await nextTick();
+
+      expect(sendAction).toHaveBeenCalledWith('allocateAuto', { target: 'a', dice: 'only' });
+    });
   });
 
   describe('followUp auto-fill submission (R-04)', () => {

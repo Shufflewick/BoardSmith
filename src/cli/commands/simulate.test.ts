@@ -13,7 +13,7 @@ import {
   type GameOptions,
   type FlowContext,
 } from '../../engine/index.js';
-import { runSimulation, simulateCommand } from './simulate.js';
+import { runSimulation, simulateCommand, resolveSimulationGameOptions } from './simulate.js';
 
 /**
  * Minimal always-completing game (mirrors the fixture used by
@@ -50,7 +50,53 @@ class PickGame extends Game<PickGame, Player> {
   }
 }
 
+/** A game whose length is gated by a game option, not by player count. */
+class TargetGame extends Game<TargetGame, Player> {
+  total = 0;
+  readonly target: number;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.target = (options as { target?: number }).target ?? 6;
+
+    this.registerAction(
+      Action.create<TargetGame>('pick')
+        .chooseFrom('value', { choices: [1] })
+        .execute((args, ctx) => {
+          (ctx.game as TargetGame).total += args.value as number;
+          return { success: true };
+        }),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: (ctx: FlowContext) =>
+            (ctx.game as TargetGame).total < (ctx.game as TargetGame).target,
+          maxIterations: 200,
+          do: eachPlayer({
+            do: actionStep({ actions: ['pick'] }),
+          }),
+        }),
+      }),
+    );
+  }
+}
+
 describe('runSimulation', () => {
+  it('issue 141: forwards gameOptions so an option-gated configuration is reachable', async () => {
+    const base = await runSimulation(TargetGame, { count: 1, players: 2, seed: 'gated' });
+    const gated = await runSimulation(TargetGame, {
+      count: 1,
+      players: 2,
+      seed: 'gated',
+      gameOptions: { target: 25 },
+    });
+
+    expect(base.games[0].turns).toBe(6);
+    expect(gated.games[0].turns).toBe(26);
+  });
+
   it('is deterministic: same seed twice produces identical per-game reports', async () => {
     const run1 = await runSimulation(PickGame, { count: 3, players: 2, seed: 'fixed' });
     const run2 = await runSimulation(PickGame, { count: 3, players: 2, seed: 'fixed' });
@@ -95,6 +141,39 @@ describe('runSimulation', () => {
     const [g] = report.games;
     expect(g.status).toBe('error');
     expect(g.error).toBe('Game exceeded the maximum action count.');
+  });
+});
+
+describe('resolveSimulationGameOptions (issue 141)', () => {
+  const declared = {
+    difficulty: { type: 'select' as const, label: 'Difficulty', choices: [
+      { value: 'normal', label: 'Normal' },
+      { value: 'hard', label: 'Hard' },
+    ] },
+    rounds: { type: 'number' as const, label: 'Rounds' },
+  };
+
+  it('parses and coerces --game-option values against the declared options', () => {
+    expect(resolveSimulationGameOptions(declared, ['difficulty=hard', 'rounds=12'])).toEqual({
+      difficulty: 'hard',
+      rounds: 12,
+    });
+  });
+
+  it('returns an empty bundle when no flag is passed', () => {
+    expect(resolveSimulationGameOptions(declared, undefined)).toEqual({});
+  });
+
+  it('rejects an undeclared option, naming the declared ones', () => {
+    expect(() => resolveSimulationGameOptions(declared, ['nope=1'])).toThrow(/difficulty, rounds/);
+  });
+
+  it('rejects a value outside a select option\'s declared choices', () => {
+    expect(() => resolveSimulationGameOptions(declared, ['difficulty=brutal'])).toThrow(/difficulty/);
+  });
+
+  it('rejects a flag with no "=" separator', () => {
+    expect(() => resolveSimulationGameOptions(declared, ['difficulty'])).toThrow(/key=value/);
   });
 });
 

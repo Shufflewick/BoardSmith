@@ -98,7 +98,7 @@ class UndoFenceGame extends Game<UndoFenceGame, Player> {
 export { UndoFenceGame };
 
 export const undoFenceFixtureDefinition: GameDefinitionLike = {
-  gameClass: UndoFenceGame as new (...args: unknown[]) => unknown,
+  gameClass: UndoFenceGame,
   gameType: 'undo-fence',
   minPlayers: 2,
   maxPlayers: 2,

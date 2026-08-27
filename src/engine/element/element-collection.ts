@@ -368,7 +368,7 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
       }
     };
 
-    traverse(this as unknown as GameElement[], options.order ?? 'asc', 0, '<root>');
+    traverse(this, options.order ?? 'asc', 0, '<root>');
 
     // A duplicate visit is a proven invariant violation, not a diagnostic:
     // this result set feeds snapshots and player views, so returning it ships

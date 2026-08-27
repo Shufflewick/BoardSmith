@@ -17,6 +17,7 @@ import {
   type QueuedRender,
   type DieAnimationContext,
 } from './die3d-state';
+import { dieAriaLabel } from './die-label.js';
 
 // Inject animation context from parent UI, or create a local fallback
 // Each UI tree should provide its own context so dice animate independently in each UI
@@ -51,6 +52,14 @@ const props = withDefaults(defineProps<{
   rollCount: 0,
   zeroIndexed: false,
 });
+
+/**
+ * What this die shows, in words. The container carries it so the value reaches
+ * assistive tech; the canvas and snapshot inside are decoration on top of it.
+ */
+const ariaLabel = computed(() =>
+  dieAriaLabel(props.sides, props.value, props.faceLabels, props.zeroIndexed),
+);
 
 const emit = defineEmits<{
   click: [];
@@ -952,8 +961,13 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <!-- The faces are drawn in WebGL, so the value on screen is pixels on a canvas
+       and nothing in the page says it. role="img" plus the face text is what
+       makes the die readable to anything that is not a pair of eyes. -->
   <div
     class="die-3d-container"
+    role="img"
+    :aria-label="ariaLabel"
     :style="{ width: `${size}px`, height: `${size}px` }"
     @click="emit('click')"
   >
@@ -963,7 +977,7 @@ onUnmounted(() => {
       :src="snapshotDataUrl"
       class="die-snapshot"
       :style="{ width: `${size}px`, height: `${size}px` }"
-      alt="Die"
+      alt=""
     />
     <!-- WebGL canvas container (Three.js appends canvas here) -->
     <div

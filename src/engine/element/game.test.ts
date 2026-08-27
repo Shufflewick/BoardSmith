@@ -499,3 +499,90 @@ describe('ENG-08 handler-less registration', () => {
     expect(() => game.registerAction(handlerfulDef)).not.toThrow();
   });
 });
+
+describe('a seat number is not what makes a child a player', () => {
+  class SeatBoard extends Space<SeatGame> {
+    seat!: number;
+  }
+  class SeatGame extends Game<SeatGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      // A seat-tagged board is ordinary authoring: one per seat, plus a
+      // spare that belongs to no seat in play.
+      this.create(SeatBoard, 'board-3', { seat: 3 });
+    }
+  }
+
+  it('does not hand back a seat-tagged board as the player at that seat', () => {
+    const game = new SeatGame({ playerCount: 2 });
+
+    expect(game.getPlayer(3)).toBeUndefined();
+    expect(() => game.getPlayerOrThrow(3)).toThrow();
+  });
+
+  it('agrees with game.players about who the players are', () => {
+    const game = new SeatGame({ playerCount: 2 });
+
+    expect(game.players.map(p => p.seat)).toEqual([1, 2]);
+    for (const player of game.players) {
+      expect(game.getPlayer(player.seat)).toBe(player);
+    }
+  });
+});
+
+// #149: the turn-order and player-choice helpers used to answer "who are the
+// players?" with `this.all(Player)` -- an `instanceof` search over every
+// descendant -- while `players`, `getPlayer` and `currentPlayer` answered it
+// with the structural direct-child test. Two answers to one question, and the
+// `all(Player)` one contradicts the others in both directions: it counts a
+// Player element that is not a direct child of the game, and (the reason the
+// structural test exists at all) it misses every player when a bundler
+// produces a second copy of the Player class.
+describe('every player helper answers with the same set of players', () => {
+  class Vault extends Space<NestedPlayerGame> {}
+  class NestedPlayerGame extends Game<NestedPlayerGame, Player> {
+    vault!: Vault;
+    constructor(options: GameOptions) {
+      super(options);
+      this.vault = this.create(Vault, 'vault');
+      // A Player element parked inside another element: not a seated
+      // participant, and `players`/`getPlayer` already agree it is not one.
+      this.vault.create(Player, 'ghost', { seat: 9 });
+    }
+  }
+
+  const helperSeats = (game: NestedPlayerGame) => ({
+    players: game.players.map(p => p.seat),
+    others: game.others(game.getPlayerOrThrow(1)).map(p => p.seat),
+    choices: game.playerChoices().map(c => c.value),
+    nextAfter: game.nextAfter(game.getPlayerOrThrow(3))?.seat,
+    previousBefore: game.previousBefore(game.getPlayerOrThrow(1))?.seat,
+  });
+
+  it('does not treat a nested Player element as a seated player', () => {
+    const game = new NestedPlayerGame({ playerCount: 3 });
+
+    expect(helperSeats(game)).toEqual({
+      players: [1, 2, 3],
+      others: [2, 3],
+      choices: [1, 2, 3],
+      // Turn order wraps within the seated players, so seat 3 is followed by
+      // seat 1 and seat 1 is preceded by seat 3.
+      nextAfter: 1,
+      previousBefore: 3,
+    });
+  });
+
+  it('never offers a player that getPlayerOrThrow denies exists', () => {
+    const game = new NestedPlayerGame({ playerCount: 3 });
+    game.setCurrentPlayer(3);
+
+    const next = game.nextPlayer();
+    expect(next).toBeDefined();
+    expect(game.getPlayerOrThrow(next!.seat)).toBe(next);
+
+    const previous = game.previousPlayer();
+    expect(previous).toBeDefined();
+    expect(game.getPlayerOrThrow(previous!.seat)).toBe(previous);
+  });
+});

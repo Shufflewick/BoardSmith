@@ -30,7 +30,7 @@ class DifficultyGame extends Game<DifficultyGame, Player> {
 }
 
 const def: GameDefinitionLike = {
-  gameClass: DifficultyGame as new (...args: unknown[]) => unknown,
+  gameClass: DifficultyGame,
   gameType: 'difficulty-game',
   minPlayers: 1,
   maxPlayers: 4,

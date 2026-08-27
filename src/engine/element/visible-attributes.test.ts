@@ -41,6 +41,15 @@ class RestrictedBoard extends Space<TestGame> {
   secretPlan = 'owner-only-plan';
 }
 
+// #149: a per-seat board. Carries a numeric `seat` (which board belongs to
+// which seat) while being owned, via `.player`, by whoever is sitting there.
+class SeatBoard extends Space<TestGame> {
+  static override visibleAttributes = ['publicField'];
+  publicField = 'board-public';
+  secretPlan = 'owner-only-plan';
+  seat = 0;
+}
+
 class TestGame extends Game<TestGame, SecretPlayer> {
   static override PlayerClass = SecretPlayer;
 }
@@ -53,7 +62,7 @@ describe('static visibleAttributes filtering (SEC-02 / F2)', () => {
   let game: TestGame;
 
   beforeEach(() => {
-    game = new TestGame({ playerCount: 2 });
+    game = new TestGame({ playerCount: 3 });
   });
 
   it('redacts non-whitelisted attributes from a non-owner view', () => {
@@ -189,5 +198,26 @@ describe('static visibleAttributes filtering (SEC-02 / F2)', () => {
     expect(boardJson.attributes.publicField).toBe('board-public');
     expect(boardJson.attributes.secretPlan).toBe('owner-only-plan');
     expect(boardJson.children?.[0]?.name).toBe('inner');
+  });
+  // #149: a seat-tagged element that is NOT a player.
+  //
+  // `filterElement` used to answer "is this node a player?" with
+  // `'seat' in element && typeof element.seat === 'number'`, the same wrong
+  // duck-type #52 removed from `getPlayer`/`currentPlayer`. A per-seat board
+  // carries a numeric `seat` too, so the whitelist check took the board's OWN
+  // seat number for its owner: seat 2 (which does not own it) saw the
+  // restricted attributes, and seat 3 (which does) did not.
+  it('a seat-tagged non-player element is owned by its .player, not by its seat number', () => {
+    const board = game.create(SeatBoard, 'seat-board');
+    board.seat = 2;
+    board.player = game.getPlayerOrThrow(3);
+
+    const seatTwoView = game.toJSONForPlayer(2);
+    const ownerView = game.toJSONForPlayer(3);
+
+    // Seat 2 does not own this board: the secret must be redacted.
+    expect(findByName(seatTwoView.children, 'seat-board').attributes.secretPlan).toBeUndefined();
+    // Seat 3 owns it: the secret must survive.
+    expect(findByName(ownerView.children, 'seat-board').attributes.secretPlan).toBe('owner-only-plan');
   });
 });

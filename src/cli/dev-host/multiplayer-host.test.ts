@@ -20,7 +20,7 @@ class PassGame extends Game<PassGame, Player> {
       defineFlow({
         root: loop({
           maxIterations: 1000,
-          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }),
+          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
         }),
       }),
     );
@@ -28,7 +28,7 @@ class PassGame extends Game<PassGame, Player> {
 }
 
 const def: GameDefinitionLike = {
-  gameClass: PassGame as new (...args: unknown[]) => unknown,
+  gameClass: PassGame,
   gameType: 'pass',
   minPlayers: 1,
   maxPlayers: 4,
@@ -43,14 +43,14 @@ class AlternateGame extends Game<AlternateGame, Player> {
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
     this.setFlow(
       defineFlow({
-        root: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+        root: eachPlayer({ do: actionStep({ actions: ['pass'] , turnScope: 'restart' }) }),
       }),
     );
   }
 }
 
 const altDef: GameDefinitionLike = {
-  gameClass: AlternateGame as new (...args: unknown[]) => unknown,
+  gameClass: AlternateGame,
   gameType: 'alternate',
   minPlayers: 2,
   maxPlayers: 2,
@@ -712,5 +712,72 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
     await host.handleMessage('A', { type: 'restart' });
     const err = sent.find((e) => e.msg.type === 'error');
     expect(err?.msg).toMatchObject({ message: 'No game in progress to restart.' });
+  });
+});
+
+/**
+ * A 1-seat game (`minPlayers: 1`, or `--players 1`) has exactly one seat, so a
+ * "pick a seat" screen offers no choice. Before the fix, only the FIRST client
+ * ever to connect was auto-seated; every later client was sent the seat-picker,
+ * and when seat 1's holder was still connected `DevHost.vue` rendered no "Take
+ * seat" button for it. That left the page with no control of any kind and the
+ * board never mounted (issue #150).
+ */
+function makeSoloHost() {
+  const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+  const host = new MultiplayerHost({
+    playerCount: 1,
+    minPlayers: 1,
+    maxPlayers: def.maxPlayers,
+    makeSeed: () => 'solo',
+    executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
+    send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
+  });
+  const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
+  const has = (clientId: string, type: HostOutbound['type']) => to(clientId).some((m) => m.type === type);
+  const lastOfType = (clientId: string, type: HostOutbound['type']) =>
+    [...to(clientId)].reverse().find((m) => m.type === type) as any;
+  return { host, sent, to, has, lastOfType, clear: () => (sent.length = 0) };
+}
+
+describe('MultiplayerHost — a 1-seat game has no seat to pick (#150)', () => {
+  it('seats a SECOND live client in seat 1 instead of a seat-picker it cannot act on', async () => {
+    const { host, has, lastOfType } = makeSoloHost();
+    await host.handleMessage('A', { type: 'hello' }); // auto-seated, game starts
+    await host.handleMessage('B', { type: 'hello' }); // second tab, A still connected
+
+    expect(has('B', 'init')).toBe(true);
+    expect(lastOfType('B', 'init').seat).toBe(1);
+    expect(has('B', 'game_state')).toBe(true);
+  });
+
+  it('seats a later SOLO client in seat 1 when the first client has gone away', async () => {
+    const { host, has, lastOfType } = makeSoloHost();
+    await host.handleMessage('A', { type: 'hello' });
+    host.disconnect('A'); // tab closed / fresh browser profile → new clientId next time
+    await host.handleMessage('B', { type: 'hello' });
+
+    expect(has('B', 'init')).toBe(true);
+    expect(lastOfType('B', 'init').seat).toBe(1);
+  });
+
+  it('hands seat 1 wholly to the new client, leaving no dangling reservation for the old one', async () => {
+    const { host, lastOfType } = makeSoloHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' }); // B supersedes A on seat 1
+    await host.handleMessage('A', { type: 'hello' }); // A returns: must NOT reclaim B's seat
+
+    const seat1 = lastOfType('B', 'lobby').seats.find((s: any) => s.seat === 1);
+    expect(seat1.clientId).toBe('A'); // newest client owns the one seat
+    expect(seat1.connected).toBe(true);
+  });
+
+  it('does NOT auto-seat later clients when there is more than one seat (the real lobby is preserved)', async () => {
+    const { host, has, lastOfType } = makeHost(); // playerCount: 2
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+
+    expect(has('B', 'init')).toBe(false); // B still picks its seat
+    expect(lastOfType('B', 'lobby').seats.find((s: any) => s.seat === 2).clientId).toBe(null);
   });
 });

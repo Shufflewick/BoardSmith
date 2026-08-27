@@ -1563,27 +1563,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
         await fetchChoicesForPick(nextSel.name);
 
-        // After fetch, check for auto-fill on the next selection
-        // (the watch may have fired before cache was populated)
-        // Don't auto-fill optional selections - user must consciously choose or skip
-        // Don't auto-fill if the active tutorial step suppresses it for this selection
-        if (getAutoFill() && !isExecuting.value && !isTutorialSuppressingAutoFill(nextSel.name)) {
-          const choices = getChoices(nextSel);
-          const enabledChoices = choices.filter(c => !c.disabled);
-          if (enabledChoices.length === 1 && !nextSel.optional) {
-            const autoValue = enabledChoices[0].value;
-            currentArgs.value[nextSel.name] = autoValue;
-
-            // Also store auto-filled value in snapshot
-            if (actionSnapshot.value) {
-              actionSnapshot.value.collectedPicks.set(nextSel.name, {
-                value: autoValue,
-                display: enabledChoices[0].display,
-                skipped: false,
-              });
-            }
-          }
-        }
+        // After fetch, check for auto-fill on the next selection (the watch may have
+        // fired before the cache was populated). This goes through the one auto-fill
+        // chokepoint so every suppressor applies here too: the `autoFill` knob,
+        // `.manual()` (AUTOEXEC-01), tutorial suppression, and optional picks.
+        tryAutoFillSelection(nextSel);
       }
     } else {
       setError(validation.error || 'Validation failed');
@@ -1796,13 +1780,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
         await fetchChoicesForPick(nextSel.name);
 
-        // Auto-fill if only one choice
-        if (getAutoFill() && !isExecuting.value) {
-          const choices = getChoices(nextSel);
-          const enabledChoices = choices.filter(c => !c.disabled);
-          if (enabledChoices.length === 1 && !nextSel.optional) {
-            // Auto-fill the next selection through onSelect path too
-            return await handleOnSelectFill(nextSel, enabledChoices[0].value);
+        // Auto-fill through the one chokepoint, so `.manual()` (AUTOEXEC-01) and
+        // tutorial suppression hold on this path too; the resolved value then goes
+        // back through the onSelect transport.
+        if (tryAutoFillSelection(nextSel)) {
+          const autoFilledValue = currentArgs.value[nextSel.name];
+          if (autoFilledValue !== undefined) {
+            return await handleOnSelectFill(nextSel, autoFilledValue);
           }
         }
       }

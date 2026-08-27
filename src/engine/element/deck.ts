@@ -78,35 +78,49 @@ export class Deck<G extends Game = any, P extends Player = any> extends Space<G,
    * This is a convenience method that combines `first()` + `putInto()` for the
    * common pattern of drawing cards to a player's hand or another space.
    *
+   * Name the class you expect to draw to get it back typed. Without it you get
+   * `Piece[]`, because that is all the deck can promise: `drawTo` takes whatever
+   * is on top, and only the class you pass makes it check.
+   *
    * @param destination - Where to put the drawn cards
    * @param count - Number of cards to draw (default: 1)
-   * @param elementClass - Optional class to filter by (default: Piece)
-   * @returns Array of drawn cards (may be fewer than count if deck runs out)
+   * @param elementClass - Class to draw, e.g. `Card`. Omit to draw any `Piece`.
+   * @returns Array of drawn pieces (may be fewer than count if deck runs out)
    *
    * @example
    * ```ts
-   * // Draw 1 card to hand
+   * // Draw 1 piece to hand
    * deck.drawTo(player.hand);
    *
-   * // Draw 5 cards to hand
+   * // Draw 5 pieces to hand
    * deck.drawTo(player.hand, 5);
    *
-   * // Draw 5 cards with type safety
+   * // Draw 5 cards, typed as Card[]
    * const cards = deck.drawTo(player.hand, 5, Card);
    *
    * // Deal to multiple players
    * for (const player of game.players) {
-   *   deck.drawTo(player.hand, 7);
+   *   deck.drawTo(player.hand, 7, Card);
    * }
    * ```
    */
+  drawTo(destination: Space<G, P>, count?: number): Piece[];
+  drawTo<T extends Piece>(
+    destination: Space<G, P>,
+    count: number,
+    elementClass: ElementClass<T>
+  ): T[];
   drawTo<T extends Piece>(
     destination: Space<G, P>,
     count: number = 1,
     elementClass?: ElementClass<T>
-  ): T[] {
-    const drawn: T[] = [];
-    const cls = elementClass ?? (Piece as unknown as ElementClass<T>);
+  ): Piece[] {
+    const drawn: Piece[] = [];
+    // No cast: the overloads above carry the caller's element type, so the body
+    // only ever needs to know it is drawing pieces. The old single signature
+    // claimed `T[]` even when nothing named `T`, which meant
+    // `deck.drawTo<Card>(hand, 5)` typed a pile of tokens as cards.
+    const cls: ElementClass<Piece> = elementClass ?? Piece;
 
     for (let i = 0; i < count; i++) {
       const card = this.first(cls);

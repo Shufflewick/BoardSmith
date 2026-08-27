@@ -4,6 +4,7 @@ import {
   Space,
   Piece,
   Player,
+  PersistentMap,
   captureDevState,
   restoreDevState,
 } from '../index.js';
@@ -106,5 +107,59 @@ describe('Map/Set persistence', () => {
     expect(tok).toBeInstanceOf(Token);
     // Same live element as the one in the tree, not a copy.
     expect(tok).toBe(restored.bag.all(Token)[0]);
+  });
+
+  it('a persistentMap field survives HMR as a live PersistentMap (#139)', async () => {
+    class LootGame extends Game<LootGame, Player> {
+      pendingLoot = this.persistentMap<string, string[]>('pendingLoot');
+    }
+    const game = await createTestGame(LootGame);
+    game.pendingLoot.set('sector1', ['gold']);
+
+    const restored = await simulateHMR(game, LootGame);
+
+    // The field must still be the live view onto settings, not the `{}` the
+    // attribute bag used to carry back over it.
+    expect(restored.pendingLoot).toBeInstanceOf(PersistentMap);
+    expect(restored.pendingLoot.get('sector1')).toEqual(['gold']);
+    restored.pendingLoot.set('sector2', ['silver']);
+    expect(restored.settings.pendingLoot).toEqual({ sector1: ['gold'], sector2: ['silver'] });
+  });
+  // #149: `PersistentMap` stringified every key on the way in (`String(key)`)
+  // and asserted them back to `K` on the way out with `k as unknown as K`. A
+  // map declared `persistentMap<number, number>` therefore handed back `'1'`
+  // typed `number`, so `key + 1` produced `'11'` and a `Map<number, …>` lookup
+  // against the iterated key missed. `K` is now constrained to `string`, which
+  // is what a JSON object key actually is.
+  it('hands back exactly the keys it was given, through every iteration path (#149)', () => {
+    class KeyedGame extends Game<KeyedGame, Player> {
+      bySeat = this.persistentMap<string, number>('bySeat');
+    }
+    const game = new KeyedGame({ playerCount: 2 });
+    game.bySeat.set('1', 5);
+    game.bySeat.set('2', 7);
+
+    expect([...game.bySeat.keys()]).toEqual(['1', '2']);
+    expect([...game.bySeat.entries()]).toEqual([['1', 5], ['2', 7]]);
+    expect([...game.bySeat]).toEqual([['1', 5], ['2', 7]]);
+
+    const seenKeys: string[] = [];
+    game.bySeat.forEach((_value, key) => seenKeys.push(key));
+    expect(seenKeys).toEqual(['1', '2']);
+
+    expect(game.bySeat.get('1')).toBe(5);
+    expect(game.bySeat.has('2')).toBe(true);
+    expect(game.bySeat.delete('2')).toBe(true);
+    expect(game.bySeat.has('2')).toBe(false);
+  });
+
+  it('refuses a non-string key type at compile time (#149)', () => {
+    class NumericKeyGame extends Game<NumericKeyGame, Player> {
+      // A JSON object key is a string, so a number-keyed persistentMap cannot
+      // round-trip. It must not compile rather than lie about the key type.
+      // @ts-expect-error - K is constrained to string
+      bySeat = this.persistentMap<number, number>('bySeat');
+    }
+    expect(new NumericKeyGame({ playerCount: 2 }).bySeat).toBeInstanceOf(PersistentMap);
   });
 });

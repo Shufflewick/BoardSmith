@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import type { GameDefinition } from '../../session/index.js';
+import { Game, Player } from '../../engine/index.js';
 import { deriveManifest } from './build.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -13,7 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  */
 function makeGameDefinition(minPlayers: number, maxPlayers: number): GameDefinition {
   return {
-    gameClass: class {} as unknown as GameDefinition['gameClass'],
+    gameClass: class FixtureGame extends Game<FixtureGame, Player> {},
     gameType: 'fixture',
     minPlayers,
     maxPlayers,

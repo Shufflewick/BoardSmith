@@ -168,6 +168,25 @@ describe('Track (shared behaviour, exercised through MonotonicTrack)', () => {
       expect(track.add(4)).toBe(1);
     });
 
+    it('reports the points of the row it filled when the emitter applies the add synchronously', () => {
+      const track = make();
+      track.setCommandEmitter((_id, value, isSpecial) => track.addInternal(value, isSpecial));
+
+      const first = track.add(1);
+      expect(first).toBe(track.getEntries()[0].points);
+      expect(first).toBe(1);
+
+      const second = track.add(2);
+      expect(second).toBe(track.getEntries()[1].points);
+      expect(second).toBe(3);
+
+      const third = track.add(3);
+      expect(third).toBe(track.getEntries()[2].points);
+      expect(third).toBe(6);
+
+      expect(first + second + third).toBe(track.getPointsBreakdown().entries);
+    });
+
     it('still enforces the track rule before emitting', () => {
       const track = make();
       const emit = vi.fn();

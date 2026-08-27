@@ -10,7 +10,6 @@ export { Grid, GridCell } from './grid.js';
 export { HexGrid, HexCell } from './hex-grid.js';
 export {
   Game,
-  PersistentMap,
   DEFAULT_COLOR_PALETTE,
   RandomnessForbiddenError,
   // The engine's own root-field audience table, and the two accessors a game
@@ -20,6 +19,7 @@ export {
   isEngineRootField,
   engineRootFieldAudience,
 } from './game.js';
+export { PersistentMap } from './persistent-map.js';
 export { ElementCollection } from './element-collection.js';
 
 export type {

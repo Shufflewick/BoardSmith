@@ -73,8 +73,17 @@ export function executeCommand(game: Game, command: GameCommand): CommandResult 
         return executeTrackRemoveLast(game, command);
       case 'ANIMATE':
         return executeAnimate(game, command);
-      default:
-        return { success: false, error: `Unknown command type: ${(command as any).type}` };
+      default: {
+        // Exhaustiveness: `command` is `never` here only while every member of
+        // GameCommand has a case above. Add a command type without a case and
+        // this assignment stops compiling, which is the whole point (#52) --
+        // an `any` cast here let a new command fall silently to this branch.
+        const unhandled: never = command;
+        return {
+          success: false,
+          error: `Unknown command type: ${(unhandled as GameCommand).type}`,
+        };
+      }
     }
   } catch (err) {
     return {
@@ -174,7 +183,10 @@ function executeSetAttribute(game: Game, command: SetAttributeCommand): CommandR
     };
   }
 
-  (element as any)[command.attribute] = command.value;
+  // Object.assign rather than a cast: the attribute name is only known at
+  // runtime, and this is the one write form the type system accepts without
+  // being lied to about the element's shape.
+  Object.assign(element, { [command.attribute]: command.value });
   return { success: true };
 }
 
@@ -319,18 +331,27 @@ export interface TrackOwner {
   getTrack(trackId: string): Track | undefined;
 }
 
+/**
+ * Narrow an element to one that owns tracks. A command carries only an owner
+ * id, so this is the single seam where that shape gets established -- asserting
+ * it at each call site is how `getTrack` came to be read off elements that do
+ * not have it.
+ */
+export function isTrackOwner(element: GameElement): element is GameElement & TrackOwner {
+  return typeof (element as Partial<TrackOwner>).getTrack === 'function';
+}
+
 function executeTrackAdd(game: Game, command: TrackAddCommand): CommandResult {
   const owner = game.getElementById(command.ownerId);
   if (!owner) {
     return { success: false, error: `Track owner not found: ${command.ownerId}` };
   }
 
-  // Check if owner implements TrackOwner interface
-  if (!('getTrack' in owner) || typeof (owner as any).getTrack !== 'function') {
+  if (!isTrackOwner(owner)) {
     return { success: false, error: `Element ${command.ownerId} does not support tracks` };
   }
 
-  const track = (owner as unknown as TrackOwner).getTrack(command.trackId);
+  const track = owner.getTrack(command.trackId);
   if (!track) {
     return { success: false, error: `Track not found: ${command.trackId}` };
   }
@@ -346,11 +367,11 @@ function executeTrackRemoveLast(game: Game, command: TrackRemoveLastCommand): Co
     return { success: false, error: `Track owner not found: ${command.ownerId}` };
   }
 
-  if (!('getTrack' in owner) || typeof (owner as any).getTrack !== 'function') {
+  if (!isTrackOwner(owner)) {
     return { success: false, error: `Element ${command.ownerId} does not support tracks` };
   }
 
-  const track = (owner as unknown as TrackOwner).getTrack(command.trackId);
+  const track = owner.getTrack(command.trackId);
   if (!track) {
     return { success: false, error: `Track not found: ${command.trackId}` };
   }

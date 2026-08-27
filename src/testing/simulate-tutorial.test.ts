@@ -63,7 +63,7 @@ class TutSimGame extends Game<TutSimGame, Player> {
         while: () => true,
         maxIterations: 50,
         do: eachPlayer({
-          do: actionStep({ actions: ['move', 'pass'] }),
+          do: actionStep({ actions: ['move', 'pass'] , turnScope: 'restart' }),
         }),
       }),
     });

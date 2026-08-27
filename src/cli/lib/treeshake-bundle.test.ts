@@ -99,13 +99,16 @@ function readBundleFiles(dir: string, ext: string): string {
  *            stub that generateScaffoldFiles creates at src/ui/components/GameTable.vue.
  */
 function writeFixtureFiles(dir: string, ui?: string): void {
-  const files = generateScaffoldFiles({
-    name: 'treeshake-test',
-    displayName: 'TreeShake Test',
-    description: 'Test fixture for tree-shaking verification',
-    playerCount: { min: 2, max: 2 },
-    ui,
-  });
+  const files = generateScaffoldFiles(
+    {
+      name: 'treeshake-test',
+      displayName: 'TreeShake Test',
+      description: 'Test fixture for tree-shaking verification',
+      playerCount: { min: 2, max: 2 },
+      ui,
+    },
+    dir,
+  );
   for (const { path: relPath, content } of files) {
     const fullPath = join(dir, relPath);
     mkdirSync(dirname(fullPath), { recursive: true });

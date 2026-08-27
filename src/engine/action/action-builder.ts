@@ -30,6 +30,16 @@ type NoArgs = Record<never, never>;
 /**
  * Accumulates a new named selection into the args record threaded through the
  * builder chain. `AddArg<A, 'card', Card>` produces `A & { card: Card }`.
+ *
+ * Every selection method mutates `this.definition` and then returns `this`
+ * re-typed with the wider args record. That re-type is a LOAD-BEARING cast, and
+ * the same one in all five methods: the builder is one object whose static type
+ * grows as the chain proceeds, and TypeScript has no way to say "the same
+ * instance, now with one more arg" — `A` is an unresolved type parameter, so
+ * `Action<G, A>` and `Action<G, AddArg<A, K, T>>` are unrelated to it. The cast
+ * is a single assertion rather than the `as unknown as` it used to be, so the
+ * two sides still have to be comparable: a change to the class's shape breaks
+ * it instead of passing through.
  */
 type AddArg<A, K extends string, T> = A & { [P in K]: T };
 
@@ -303,10 +313,12 @@ export class Action<
    *
    * @param name - Argument name that will be passed to the execute handler
    * @param options - Configuration for the choice selection
-   * @param options.prompt - User-facing prompt text
+   * @param options.prompt - User-facing prompt text, or a function evaluated
+   *   against the current game state each time the pick is rendered
    * @param options.choices - Static array or function returning available choices
    * @param options.display - Custom display function for each choice
-   * @param options.optional - If true, player can skip this selection
+   * @param options.optional - If true, player can skip this selection. A string skips
+   *   too, and is used as the Skip button's label.
    * @param options.validate - Custom validation function
    * @param options.boardRefs - Get board element references for highlighting
    * @param options.filterBy - Filter choices based on a previous selection value
@@ -340,10 +352,10 @@ export class Action<
   chooseFrom<K extends string, T>(
     name: K,
     options: {
-      prompt?: string;
+      prompt?: string | ((context: ActionContext<G>) => string);
       choices: T[] | ((context: ActionContext<G>) => T[]);
       display?: (choice: T) => string;
-      optional?: boolean;
+      optional?: boolean | string;
       validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Get board element references for highlighting (source/target) */
       boardRefs?: (choice: T, context: ActionContext<G>) => ChoiceBoardRefs;
@@ -397,7 +409,7 @@ export class Action<
       onCancel: options.onCancel,
     } as ChoiceSelection<T>;
     this.definition.selections.push(selection as Selection);
-    return this as unknown as Action<G, AddArg<A, K, T>>;
+    return this as Action<G, AddArg<A, K, T>>;
   }
 
   /**
@@ -417,12 +429,14 @@ export class Action<
    *
    * @param name - Argument name that will be passed to the execute handler
    * @param options - Configuration for the element selection
-   * @param options.prompt - User-facing prompt text
+   * @param options.prompt - User-facing prompt text, or a function evaluated
+   *   against the current game state each time the pick is rendered
    * @param options.elementClass - Filter to specific element types (e.g., Card, Piece)
    * @param options.from - Container element to select from (defaults to game board)
    * @param options.filter - Additional filter function for elements
    * @param options.elements - Precomputed array (or function) of candidates
-   * @param options.optional - If true, player can skip this selection
+   * @param options.optional - If true, player can skip this selection. A string skips
+   *   too, and is used as the Skip button's label.
    * @param options.validate - Custom validation function
    * @param options.display - Display function for elements (for UI buttons)
    * @param options.boardRef - Get board element reference for highlighting
@@ -461,7 +475,7 @@ export class Action<
   chooseElement<K extends string, T extends GameElement>(
     name: K,
     options: {
-      prompt?: string;
+      prompt?: string | ((context: ActionContext<G>) => string);
       elementClass?: ElementClass<T>;
       from?: GameElement | ((context: ActionContext<G>) => GameElement);
       filter?: (element: GameElement, context: ActionContext<G>) => boolean;
@@ -470,10 +484,13 @@ export class Action<
        * Custom UIs send the element ID directly.
        */
       elements?: T[] | ((context: ActionContext<G>) => T[]);
-      optional?: boolean;
+      optional?: boolean | string;
       validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
-      /** Display function for elements (for UI buttons) */
-      display?: (element: T, context: ActionContext<G>) => string;
+      /**
+       * Custom label for each element (for UI buttons). Receives the whole
+       * candidate list too, so a label can disambiguate against its siblings.
+       */
+      display?: (element: T, context: ActionContext<G>, allElements: T[]) => string;
       /** Get board element reference for highlighting */
       boardRef?: (element: T, context: ActionContext<G>) => BoardElementRef;
       /**
@@ -521,7 +538,7 @@ export class Action<
       onCancel: options.onCancel,
     } as ElementSelection<T>;
     this.definition.selections.push(selection as Selection);
-    return this as unknown as Action<G, AddArg<A, K, T>>;
+    return this as Action<G, AddArg<A, K, T>>;
   }
 
   /**
@@ -537,10 +554,12 @@ export class Action<
    *
    * @param name - Argument name that will be passed to the execute handler
    * @param options - Configuration for the element selection
-   * @param options.prompt - User-facing prompt text
+   * @param options.prompt - User-facing prompt text, or a function evaluated
+   *   against the current game state each time the pick is rendered
    * @param options.elements - Elements to choose from (array or function)
    * @param options.multiSelect - Count bound (number = max, or `{ min, max }`)
-   * @param options.optional - If true, player can skip this selection
+   * @param options.optional - If true, player can skip this selection. A string skips
+   *   too, and is used as the Skip button's label.
    * @param options.validate - Custom validation function
    * @param options.display - Display function for elements (for UI buttons)
    * @param options.boardRef - Get board element reference for highlighting
@@ -563,7 +582,7 @@ export class Action<
   chooseElements<K extends string, T extends GameElement>(
     name: K,
     options: {
-      prompt?: string;
+      prompt?: string | ((context: ActionContext<G>) => string);
       /**
        * Elements to choose from - can be static array or function.
        * Custom UIs send the element ID directly.
@@ -579,7 +598,7 @@ export class Action<
        * automatic disambiguation when multiple elements have the same name.
        */
       display?: (element: T, context: ActionContext<G>, allElements: T[]) => string;
-      optional?: boolean;
+      optional?: boolean | string;
       validate?: (value: T[], args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Get board element reference for highlighting */
       boardRef?: (element: T, context: ActionContext<G>) => BoardElementRef;
@@ -627,7 +646,7 @@ export class Action<
       onCancel: options.onCancel,
     } as ElementsSelection<T>;
     this.definition.selections.push(selection as Selection);
-    return this as unknown as Action<G, AddArg<A, K, T[]>>;
+    return this as Action<G, AddArg<A, K, T[]>>;
   }
 
   /**
@@ -647,11 +666,13 @@ export class Action<
    *
    * @param name - Argument name that will be passed to the execute handler
    * @param options - Configuration for the text input
-   * @param options.prompt - User-facing prompt text
+   * @param options.prompt - User-facing prompt text, or a function evaluated
+   *   against the current game state each time the pick is rendered
    * @param options.pattern - Regex pattern the input must match
    * @param options.minLength - Minimum required string length
    * @param options.maxLength - Maximum allowed string length. Default: {@link DEFAULT_TEXT_MAX_LENGTH}
-   * @param options.optional - If true, player can skip this selection
+   * @param options.optional - If true, player can skip this selection. A string skips
+   *   too, and is used as the Skip button's label.
    * @param options.validate - Custom validation function
    * @returns The builder for chaining
    *
@@ -672,11 +693,11 @@ export class Action<
   enterText<K extends string>(
     name: K,
     options: {
-      prompt?: string;
+      prompt?: string | ((context: ActionContext<G>) => string);
       pattern?: RegExp;
       minLength?: number;
       maxLength?: number;
-      optional?: boolean;
+      optional?: boolean | string;
       validate?: (value: string, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: string, context: OnSelectContext) => void;
@@ -697,7 +718,7 @@ export class Action<
       onCancel: options.onCancel,
     } as TextSelection;
     this.definition.selections.push(selection);
-    return this as unknown as Action<G, AddArg<A, K, string>>;
+    return this as Action<G, AddArg<A, K, string>>;
   }
 
   /**
@@ -705,11 +726,13 @@ export class Action<
    *
    * @param name - Argument name that will be passed to the execute handler
    * @param options - Configuration for the number input
-   * @param options.prompt - User-facing prompt text
+   * @param options.prompt - User-facing prompt text, or a function evaluated
+   *   against the current game state each time the pick is rendered
    * @param options.min - Minimum allowed value
    * @param options.max - Maximum allowed value
    * @param options.integer - If true, only whole numbers are allowed
-   * @param options.optional - If true, player can skip this selection
+   * @param options.optional - If true, player can skip this selection. A string skips
+   *   too, and is used as the Skip button's label.
    * @param options.validate - Custom validation function
    * @returns The builder for chaining
    *
@@ -731,11 +754,11 @@ export class Action<
   enterNumber<K extends string>(
     name: K,
     options: {
-      prompt?: string;
+      prompt?: string | ((context: ActionContext<G>) => string);
       min?: number;
       max?: number;
       integer?: boolean;
-      optional?: boolean;
+      optional?: boolean | string;
       validate?: (value: number, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: number, context: OnSelectContext) => void;
@@ -756,7 +779,7 @@ export class Action<
       onCancel: options.onCancel,
     } as NumberSelection;
     this.definition.selections.push(selection);
-    return this as unknown as Action<G, AddArg<A, K, number>>;
+    return this as Action<G, AddArg<A, K, number>>;
   }
 
   /**

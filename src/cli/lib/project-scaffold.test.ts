@@ -1,6 +1,6 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
@@ -9,7 +9,6 @@ import {
   generateUisTs,
   generateBoardsmithJson,
   generateGameTableVue,
-  generateAssetImageVue,
   generateRulesIndexTs,
   generateUiIndexTs,
   generatePackageJson,
@@ -17,6 +16,8 @@ import {
   generateA11yExampleTestTs,
   generateTsConfig,
   generateViteConfig,
+  getDependencyPaths,
+  getMonorepoRoot,
   type ProjectConfig,
 } from './project-scaffold.js';
 import {
@@ -25,6 +26,9 @@ import {
   generateActionsTs,
   generateFlowTs,
 } from '../commands/init.js';
+
+/** Where a scaffolded project would live; the `file:` link is relative to it. */
+const PROJECT_PATH = '/tmp/boardsmith-scaffold-fixture/my-game';
 
 const config: ProjectConfig = {
   name: 'my-game',
@@ -132,10 +136,47 @@ describe('generateBoardsmithJson', () => {
     expect(parsed).not.toHaveProperty('estimatedDuration');
   });
 
+  // Issue 142: the scaffold used to emit `thumbnail: './public/thumbnail.png'`
+  // for a file it never created, and `deriveManifest` stamped that dangling
+  // path into every dist/manifest.json.
+  it('emits no thumbnail key — the scaffold creates no thumbnail image', () => {
+    const parsed = JSON.parse(generateBoardsmithJson(config));
+    expect(parsed).not.toHaveProperty('thumbnail');
+  });
+
   it('threads a caller-supplied audience and tags through', () => {
     const parsed = JSON.parse(generateBoardsmithJson({ ...config, audience: 'strategy', tags: ['abstract'] }));
     expect(parsed.audience).toBe('strategy');
     expect(parsed.tags).toEqual(['abstract']);
+  });
+});
+
+describe('getDependencyPaths — local-dev boardsmith link (issue 142)', () => {
+  // This suite runs FROM the monorepo, so the local-dev branch is the one under test.
+  const monorepoRoot = getMonorepoRoot();
+
+  it('emits a path relative to the project, never one carrying a home directory', () => {
+    expect(monorepoRoot).not.toBeNull();
+    const projectPath = join(monorepoRoot as string, '..', 'BoardSmithGames', 'my-game');
+    const deps = getDependencyPaths(projectPath);
+
+    expect(deps.isLocalDev).toBe(true);
+    const linked = deps.boardsmith.replace(/^file:/, '');
+    expect(isAbsolute(linked)).toBe(false);
+    expect(deps.boardsmith).toBe('file:../../BoardSmith');
+  });
+
+  it('resolves from the project directory back to the monorepo root', () => {
+    const projectPath = join(monorepoRoot as string, '..', 'elsewhere', 'nested', 'game');
+    const deps = getDependencyPaths(projectPath);
+    const linked = deps.boardsmith.replace(/^file:/, '');
+    expect(resolve(projectPath, linked)).toBe(resolve(monorepoRoot as string));
+  });
+
+  it('puts the same relative path into the scaffolded package.json', () => {
+    const projectPath = join(monorepoRoot as string, '..', 'BoardSmithGames', 'my-game');
+    const pkg = JSON.parse(generatePackageJson(config, projectPath));
+    expect(pkg.dependencies.boardsmith).toBe('file:../../BoardSmith');
   });
 });
 
@@ -266,7 +307,7 @@ describe('generateTsConfig — vite/client types (Phase 149 dry-run Defect 1)', 
 
 describe('generatePackageJson — explicit vite devDependency (Phase 149 dry-run Defect 1)', () => {
   it('includes vite explicitly (not relying on @vitejs/plugin-vue hoisting) so "vite/client" types always resolve', () => {
-    const parsed = JSON.parse(generatePackageJson(config));
+    const parsed = JSON.parse(generatePackageJson(config, PROJECT_PATH));
     expect(parsed.devDependencies).toHaveProperty('vite');
   });
 });
@@ -280,17 +321,17 @@ describe('generateUiIndexTs', () => {
 
 describe('generatePackageJson — axe-core scaffold devDependency', () => {
   it('includes axe-core in devDependencies', () => {
-    const parsed = JSON.parse(generatePackageJson(config));
+    const parsed = JSON.parse(generatePackageJson(config, PROJECT_PATH));
     expect(parsed.devDependencies).toHaveProperty('axe-core');
   });
 
   it('includes @vue/test-utils in devDependencies (needed to mount components for the a11y example)', () => {
-    const parsed = JSON.parse(generatePackageJson(config));
+    const parsed = JSON.parse(generatePackageJson(config, PROJECT_PATH));
     expect(parsed.devDependencies).toHaveProperty('@vue/test-utils');
   });
 
   it('includes jsdom in devDependencies (CR-02 regression: the a11y example runs in `@vitest-environment jsdom`, which vitest v2 does not bundle)', () => {
-    const parsed = JSON.parse(generatePackageJson(config));
+    const parsed = JSON.parse(generatePackageJson(config, PROJECT_PATH));
     // Without jsdom installed, `boardsmith test` in a fresh scaffold is red out of the
     // box: requesting the jsdom environment fails with `Cannot find package 'jsdom'`.
     expect(parsed.devDependencies).toHaveProperty('jsdom');
@@ -299,12 +340,12 @@ describe('generatePackageJson — axe-core scaffold devDependency', () => {
 
 describe('generateScaffoldFiles — a11y example test harness', () => {
   it('includes tests/a11y.example.test.ts', () => {
-    const files = generateScaffoldFiles(config);
+    const files = generateScaffoldFiles(config, PROJECT_PATH);
     expect(files.some((f) => f.path === 'tests/a11y.example.test.ts')).toBe(true);
   });
 
   it('the a11y example harness imports axe-core and calls axe.run(', () => {
-    const files = generateScaffoldFiles(config);
+    const files = generateScaffoldFiles(config, PROJECT_PATH);
     const entry = files.find((f) => f.path === 'tests/a11y.example.test.ts');
     expect(entry).toBeDefined();
     expect(entry!.content).toContain("from 'axe-core'");
@@ -351,45 +392,12 @@ describe('generateGameTableVue', () => {
   });
 });
 
-describe('generateScaffoldFiles — AssetImage.vue (ASSET-01)', () => {
-  it('includes src/ui/components/AssetImage.vue', () => {
-    const files = generateScaffoldFiles(config);
-    const entry = files.find((f) => f.path === 'src/ui/components/AssetImage.vue');
-    expect(entry).toBeDefined();
-    expect(entry!.content).toContain('AssetImage');
-  });
-});
-
-describe('generateAssetImageVue — AssetImage load-reveal + token fallback', () => {
-  it('emits an @load handler that reveals the loaded state, and a --bsg- token fallback', () => {
-    const out = generateAssetImageVue();
-    expect(out).toContain('@load');
-    expect(out).toContain('loaded');
-    expect(out).toContain('is-loaded');
-    expect(out).toMatch(/--bsg-/);
-  });
-
-  it('shares a single aspect-ratio input between the fallback container and the <img>', () => {
-    const out = generateAssetImageVue();
-    expect(out).toContain('aspectRatio');
-  });
-});
-
-describe('generateAssetImageVue — onerror reverts to the fallback (never a broken image)', () => {
-  it('emits an @error handler that reverts loaded to false', () => {
-    const out = generateAssetImageVue();
-    expect(out).toContain('@error');
-    expect(out).toMatch(/onError[\s\S]*loaded\.value\s*=\s*false/);
-  });
-});
-
-describe('generateAssetImageVue — resets loaded on src change (CR-01 regression)', () => {
-  it('watches props.src and resets loaded to false so a reused AssetImage re-guards', () => {
-    const out = generateAssetImageVue();
-    // Must import watch and watch props.src, resetting loaded — otherwise a reused
-    // instance flashes the stale/unresolved image at full opacity (DEF-A class).
-    expect(out).toMatch(/import\s*\{[^}]*\bwatch\b[^}]*\}\s*from\s*'vue'/);
-    expect(out).toMatch(/watch\(\s*\(\)\s*=>\s*props\.src[\s\S]*loaded\.value\s*=\s*false/);
+describe('generateScaffoldFiles — AssetImage comes from boardsmith/ui (issue #81)', () => {
+  it('stamps no per-project AssetImage.vue', () => {
+    const files = generateScaffoldFiles(config, PROJECT_PATH);
+    // A scaffold-stamped copy is a copy that drifts. The load/error state machine
+    // lives in the library exactly once, as `AssetImage` on the boardsmith/ui barrel.
+    expect(files.find((f) => f.path === 'src/ui/components/AssetImage.vue')).toBeUndefined();
   });
 });
 
@@ -524,7 +532,7 @@ describe('no ambient *.vue shim (SFCs are type-checked by vue-tsc)', () => {
 
   it('scaffolds vue-tsc, which is what replaces the shim', () => {
     const pkg = JSON.parse(
-      generatePackageJson({ name: 'x', displayName: 'X', description: 'x' } as ProjectConfig),
+      generatePackageJson({ name: 'x', displayName: 'X', description: 'x' } as ProjectConfig, PROJECT_PATH),
     );
     expect(pkg.devDependencies).toHaveProperty('vue-tsc');
   });

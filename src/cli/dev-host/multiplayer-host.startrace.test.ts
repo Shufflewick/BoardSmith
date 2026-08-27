@@ -48,7 +48,7 @@ class RaceGame extends Game<RaceGame, Player> {
 }
 
 const raceDef: GameDefinitionLike = {
-  gameClass: RaceGame as new (...args: unknown[]) => unknown,
+  gameClass: RaceGame,
   gameType: 'race',
   minPlayers: 2,
   maxPlayers: 2,

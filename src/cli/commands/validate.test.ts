@@ -1,14 +1,15 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   ALLOWED_TOP_LEVEL_KEYS,
   CONVEX_SINK_KEYS,
   suggestKey,
   findUnknownKeys,
+  ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
-import { checkMetadataIssues, checkTaxonomyShape, validateBundleSize } from './validate.js';
+import { checkMetadataIssues, checkTaxonomyShape, validateBundleSize, validateAssetPaths } from './validate.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 
 describe('config-schema', () => {
@@ -36,6 +37,24 @@ describe('config-schema', () => {
    * discouraged. The one remaining way to be silent — adding a key and
    * declaring nothing — is what this test refuses.
    */
+  /**
+   * The gate's coverage is derived, not hand-listed: marking a new asset key
+   * `x-asset-path` in the schema is the whole of what it takes for
+   * `validateAssetPaths` to check that it resolves.
+   */
+  it('ASSET_PATH_KEYS is exactly the set of properties marked x-asset-path', async () => {
+    const schema = (await import('../lib/boardsmith.schema.json')).default as {
+      properties: Record<string, Record<string, unknown>>;
+    };
+    const marked = Object.entries(schema.properties)
+      .filter(([, property]) => property['x-asset-path'] === true)
+      .map(([key]) => key);
+
+    expect([...ASSET_PATH_KEYS].sort()).toEqual(marked.sort());
+    // The key the scaffold used to dangle must stay covered.
+    expect(ASSET_PATH_KEYS).toContain('thumbnail');
+  });
+
   it('every top-level schema property declares an x-convex-sink disposition', async () => {
     const schema = (await import('../lib/boardsmith.schema.json')).default as {
       properties: Record<string, Record<string, unknown>>;
@@ -451,5 +470,73 @@ describe('platform-consumed blocks', () => {
     expect(deadline).toHaveLength(1);
     expect(deadline[0]).toContain("Unknown key 'mindingSafeish'");
     expect(checkMetadataIssues({ ...validConfig(), idleAction: 'pass' })[0]).toContain('"idleAction" must be an object');
+  });
+});
+
+
+/**
+ * Issue 142: `boardsmith validate` reported `Asset Paths: PASS` on a manifest
+ * whose `thumbnail` named a file that did not exist, because the check only
+ * scanned built JS and data/*.json for path STYLE and never opened
+ * boardsmith.json. A manifest that can name a file the bundle does not carry,
+ * with every gate green, is the wrong path being easy.
+ */
+describe('validate.ts validateAssetPaths — declared manifest assets must resolve', () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = mkdtempSync(join(tmpdir(), 'boardsmith-asset-paths-'));
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  function writeConfig(config: Record<string, unknown>): void {
+    writeFileSync(join(projectDir, 'boardsmith.json'), JSON.stringify(config, null, 2));
+  }
+
+  it('fails on a thumbnail path that resolves to nothing', async () => {
+    writeConfig({ name: 'x', thumbnail: './public/thumbnail.png' });
+    const result = await validateAssetPaths(projectDir);
+
+    expect(result.passed).toBe(false);
+    expect((result.details ?? []).join('\n')).toContain('thumbnail');
+    expect((result.details ?? []).join('\n')).toContain('public/thumbnail.png');
+  });
+
+  it('fails even when the project has no public/ directory at all', async () => {
+    writeConfig({ name: 'x', thumbnail: 'art/cover.png' });
+    const result = await validateAssetPaths(projectDir);
+    expect(result.passed).toBe(false);
+  });
+
+  it('passes once the declared file exists', async () => {
+    mkdirSync(join(projectDir, 'public'), { recursive: true });
+    writeFileSync(join(projectDir, 'public', 'thumbnail.png'), 'png-bytes');
+    writeConfig({ name: 'x', thumbnail: './public/thumbnail.png' });
+
+    const result = await validateAssetPaths(projectDir);
+    expect(result.passed).toBe(true);
+  });
+
+  it('passes a manifest that declares no asset paths at all', async () => {
+    writeConfig({ name: 'x' });
+    const result = await validateAssetPaths(projectDir);
+    expect(result.passed).toBe(true);
+  });
+
+  it('still catches absolute public/ path style in data JSON', async () => {
+    mkdirSync(join(projectDir, 'public', 'cards'), { recursive: true });
+    mkdirSync(join(projectDir, 'data'), { recursive: true });
+    writeFileSync(
+      join(projectDir, 'data', 'cards.json'),
+      JSON.stringify([{ image: '/cards/one.png' }]),
+    );
+    writeConfig({ name: 'x' });
+
+    const result = await validateAssetPaths(projectDir);
+    expect(result.passed).toBe(false);
+    expect((result.details ?? []).join('\n')).toContain('/cards/');
   });
 });

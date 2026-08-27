@@ -6,9 +6,10 @@
  * SPA fallback serves a 200 for any unmatched path, including missing images, so
  * an HTTP-based "is this asset reachable?" probe would falsely pass every time
  * (Pitfall 2). Instead this scan reads generated UI source directly off disk and
- * flags any bare `<img` tag found outside `AssetImage.vue`'s own definition — the
- * coarse, pit-of-success heuristic locked in 152-CONTEXT.md. Routing art through
- * `<AssetImage>` is the one sanctioned path; anything else is a FAIL regardless
+ * flags any bare `<img` tag in a game's own UI source — the coarse, pit-of-success
+ * heuristic locked in 152-CONTEXT.md. `AssetImage` lives in `boardsmith/ui`
+ * (issue #81), so no path inside a game is exempt: routing art through
+ * `<AssetImage>` is the one sanctioned path, and anything else is a FAIL regardless
  * of what `src` resolves to. Today the `bs-build-chunk` skill's `test` step is the
  * caller (see build/test.md); any future CLI wiring (`boardsmith build`/`lint`)
  * should delegate here too rather than growing a second, subtly different regex
@@ -54,11 +55,6 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
 // (HTML tag names are). The trailing class excludes kebab-case custom elements
 // like `<img-carousel>` (a false positive `\b` would have matched).
 const BARE_IMG_TAG = /<img[\s/>]/i;
-
-// The one sanctioned wrapper, identified by its canonical scaffold-relative path
-// (not just basename) so a stray/second file merely named AssetImage.vue elsewhere
-// cannot bypass the gate.
-const ASSET_IMAGE_RELATIVE_PATH = join('src', 'ui', 'components', 'AssetImage.vue');
 
 /**
  * Blank out comment spans (JS `//`, JS `/* *\/`, Vue `<!-- -->`) across an entire
@@ -187,7 +183,7 @@ function stripComments(lines: string[]): StripCommentsResult {
 }
 
 /**
- * Scan `<cwd>/src/ui` for bare `<img` tags outside `AssetImage.vue`.
+ * Scan `<cwd>/src/ui` for bare `<img` tags.
  * Returns one violation per offending line; an empty array is a PASS.
  */
 export function scanAssetReachability(cwd: string): AssetViolation[] {
@@ -198,9 +194,6 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
 
   for (const filePath of collectSourceFiles(uiDir)) {
     const relPath = relative(cwd, filePath);
-    // AssetImage.vue's own <img> definition is the sanctioned wrapper — excluded
-    // by its canonical path, not merely its basename.
-    if (relPath === ASSET_IMAGE_RELATIVE_PATH) continue;
 
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
@@ -210,7 +203,7 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
         violations.push({
           file: relPath,
           line: i + 1,
-          message: `${relPath}:${i + 1} uses a bare <img> tag. Route art through <AssetImage :src=... kind="..." /> instead so missing assets fall back cleanly rather than shipping a broken image.`,
+          message: `${relPath}:${i + 1} uses a bare <img> tag. Route art through \`import { AssetImage } from 'boardsmith/ui'\` instead (<AssetImage :src="..." aspect-ratio="2 / 3" :alt="..."> with your drawn fallback in the slot), so a missing asset falls back cleanly rather than shipping a broken image.`,
         });
       }
     }

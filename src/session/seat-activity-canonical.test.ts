@@ -125,7 +125,7 @@ class PassGame extends Game<PassGame, Player> {
 }
 
 const passDef: GameDefinitionLike = {
-  gameClass: PassGame as new (...args: unknown[]) => unknown,
+  gameClass: PassGame,
   gameType: 'pass',
   minPlayers: 1,
   maxPlayers: 4,

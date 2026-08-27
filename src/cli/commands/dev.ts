@@ -22,7 +22,7 @@ import { parseBotLevel } from '../../bot/index.js';
 
 /** executeOp bundled from the SAME module graph as the rules (one engine). */
 type RuntimeExecuteOp = (
-  def: { gameClass: new (...args: unknown[]) => unknown; gameType: string; minPlayers: number; maxPlayers: number },
+  def: { gameClass: GameClass; gameType: string; minPlayers: number; maxPlayers: number },
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: unknown,
   pendingState: Record<string, unknown> | null,
@@ -31,7 +31,7 @@ type RuntimeExecuteOp = (
 ) => Promise<OpResult>;
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 import { validateGameOptionSelection } from '../dev-host/config-types.js';
-import type { GameOptionDefinition, GamePreset } from '../../session/types.js';
+import type { GameClass, GameOptionDefinition, GamePreset } from '../../session/types.js';
 
 interface DevOptions {
   port: string;
@@ -519,17 +519,36 @@ const UNSAFE_PORTS = new Set([
   10080,
 ]);
 
-/** The URL the host iframe loads to render the game UI (GameShell, platform mode). */
-const GAME_IFRAME_PATH = '/__boardsmith/play';
+/**
+ * The URL the host iframe loads to render the game UI (GameShell, platform mode).
+ *
+ * ONE path segment, deliberately. A game references its art the way the built
+ * dist resolves it — relatively, `cards/x.png` — and a relative reference is
+ * resolved against the DIRECTORY of the document that makes it. At
+ * `/__boardsmith/play` that directory is `/__boardsmith/`, so every asset
+ * resolved to `/__boardsmith/cards/x.png` and missed (issue 134). At a
+ * top-level path the directory is `/`, which is where Vite serves `public/`
+ * and where the platform serves the bundle's assets from.
+ */
+export const GAME_IFRAME_PATH = '/__boardsmith-play';
 
 /**
- * The dev-host Vite plugin: it serves the HOST page in the main window, exposes
- * the author's gameDefinition + dev config as virtual modules, and lets the game
- * UI be served (via SPA fallback) at the iframe route. This is what makes
+ * The dev-host Vite plugin: it serves the HOST page in the main window, serves
+ * the game UI document at the board iframe route, and exposes the author's
+ * gameDefinition + dev config as virtual modules. This is what makes
  * `boardsmith dev` drive the game through the production iframe/postMessage path.
+ *
+ * It routes both HTML documents itself and sets `appType: 'custom'`, so Vite
+ * installs no SPA fallback. That fallback answered EVERY unmatched request —
+ * a missing card image included — with index.html at HTTP 200 `text/html`, so
+ * a game whose art did not resolve fell back to placeholders with no error
+ * anywhere (issue 134). Anything that is not one of these two documents and
+ * not a real file must 404.
  */
-function boardsmithDevHostPlugin(args: {
+export function boardsmithDevHostPlugin(args: {
   devHostDir: string;
+  /** Vite root — the game project directory whose `index.html` is the board document. */
+  uiPath: string;
   rulesIndexPath: string;
   devConfig: DevHostConfig;
 }): VitePlugin {
@@ -540,10 +559,16 @@ function boardsmithDevHostPlugin(args: {
 
   const hostHtmlPath = join(args.devHostDir, 'host.html');
   const hostMainPath = join(args.devHostDir, 'host-main.ts');
+  const gameHtmlPath = join(args.uiPath, 'index.html');
 
   return {
     name: 'boardsmith-dev-host',
     enforce: 'pre',
+    config() {
+      // See this plugin's doc comment: no SPA fallback, so a missing asset is
+      // a 404 rather than a 200 of HTML that silently becomes a placeholder.
+      return { appType: 'custom' as const };
+    },
     resolveId(source) {
       if (source === VIRTUAL_GAME) return RESOLVED_GAME;
       if (source === VIRTUAL_CONFIG) return RESOLVED_CONFIG;
@@ -561,18 +586,24 @@ function boardsmithDevHostPlugin(args: {
       return null;
     },
     configureServer(server) {
-      // Serve the HOST page for the main window. Added in configureServer so it
-      // runs before Vite's SPA index fallback, which then serves the GAME UI at
-      // the iframe route (GAME_IFRAME_PATH) in platform mode.
+      // The dev host serves exactly two HTML documents, and routes both here:
+      // the Dev chrome in the main window, and the game UI in the board iframe
+      // (GAME_IFRAME_PATH) in platform mode. Registered in the configureServer
+      // BODY so it runs before Vite's own middlewares.
       server.middlewares.use(async (req, res, next) => {
         const url = (req.url ?? '/').split('?')[0];
-        if (url !== '/' && url !== '/index.html') return next();
+
+        const isHostPage = url === '/' || url === '/index.html';
+        if (!isHostPage && url !== GAME_IFRAME_PATH) return next();
+
         try {
-          const raw = readFileSync(hostHtmlPath, 'utf-8').replace(
-            '__HOST_MAIN_SRC__',
-            `/@fs/${toPosix(hostMainPath)}`,
-          );
-          const html = await server.transformIndexHtml(req.url ?? '/', raw);
+          const source = readFileSync(isHostPage ? hostHtmlPath : gameHtmlPath, 'utf-8');
+          // Only the host page carries the placeholder; the game's own
+          // index.html is served as the author wrote it.
+          const raw = isHostPage
+            ? source.replace('__HOST_MAIN_SRC__', `/@fs/${toPosix(hostMainPath)}`)
+            : source;
+          const html = await server.transformIndexHtml(url, raw, req.originalUrl);
           res.statusCode = 200;
           res.setHeader('Content-Type', 'text/html');
           res.end(html);
@@ -580,6 +611,26 @@ function boardsmithDevHostPlugin(args: {
           next(err as Error);
         }
       });
+
+      // Installed AFTER Vite's own middlewares (that is what returning a
+      // function from configureServer does), so it only ever sees a request
+      // nothing served. Without it, connect's default handler answers with an
+      // HTML 404 body — and an HTML body is exactly what made the missing-asset
+      // failure invisible in the first place. Plain text, naming the fix.
+      return () => {
+        server.middlewares.use((req, res) => {
+          const url = (req.url ?? '/').split('?')[0];
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.end(
+            `boardsmith dev: nothing is served at ${url}\n\n` +
+              `Game assets live in the project's public/ directory and are served from the ` +
+              `site root: public/cards/x.png is /cards/x.png.\n` +
+              `Reference them relatively ("cards/x.png"), which is how the built bundle ` +
+              `resolves them too.\n`,
+          );
+        });
+      };
     },
   };
 }
@@ -944,7 +995,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   }
 
   const vitePlugins: VitePlugin[] = [
-    boardsmithDevHostPlugin({ devHostDir, rulesIndexPath, devConfig }),
+    boardsmithDevHostPlugin({ devHostDir, uiPath, rulesIndexPath, devConfig }),
   ];
 
   // In monorepo context, add plugin to resolve boardsmith imports to src/
@@ -1000,9 +1051,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
   try {
     const vite = await createViteServer({
       root: uiPath,
-      // SPA fallback serves the GAME UI (index.html → GameShell) at the iframe
-      // route; the dev-host plugin intercepts '/' to serve the HOST page.
-      appType: 'spa',
+      // `appType` is NOT set here: boardsmithDevHostPlugin sets 'custom' from
+      // its own `config` hook, so no call site can reintroduce the SPA
+      // fallback that turned a missing asset into a 200 of HTML (issue 134).
       server: {
         port,
         host,
@@ -1028,7 +1079,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     // ShufflewickPub game DO) and every browser is a WebSocket client. A solo
     // dev is just one client; others on the LAN join the same game.
     const gameDef = {
-      gameClass: gameDefinition.gameClass as new (...args: unknown[]) => unknown,
+      gameClass: gameDefinition.gameClass,
       gameType: gameDefinition.gameType,
       minPlayers,
       maxPlayers,

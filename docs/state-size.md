@@ -160,18 +160,29 @@ host's ceiling.
 Do not infer. Assert it in CI:
 
 ```ts
-import { createTestGame } from 'boardsmith/testing';
-import { measureSnapshotSize, projectSnapshotSize } from 'boardsmith/testing';
+import { createTestGame, measureSnapshotSize, projectSnapshotSize } from 'boardsmith/testing';
 
 const EXPECTED_ACTIONS_PER_GAME = 325;   // your longest realistic game
 const HOST_BUDGET_BYTES = 1_800_000;
 
 it('fits the host state budget for a full game', () => {
-  const game = createTestGame(MyGame, { playerCount: 8 });
-  // ...play a representative position: full board, hands dealt, log populated...
+  const game = createTestGame(MyGame, {
+    playerCount: 8,
+    // The policy the game actually ships. Without it the test measures the
+    // unbounded default and says nothing about what players will run.
+    checkpoints: { max: 20 },
+  });
+
+  // Play a representative position: full board, hands dealt, log populated.
+  // Snapshot after EVERY action — that is what captures the checkpoints.
+  while (!game.isComplete()) {
+    game.doAction(seat, 'play', args);
+    game.runner.getSnapshot();
+  }
 
   const size = measureSnapshotSize(game.runner.getSnapshot());
-  expect(projectSnapshotSize(size, EXPECTED_ACTIONS_PER_GAME)).toBeLessThan(HOST_BUDGET_BYTES);
+  expect(projectSnapshotSize(size, EXPECTED_ACTIONS_PER_GAME, { maxCheckpoints: 20 }))
+    .toBeLessThan(HOST_BUDGET_BYTES);
 });
 ```
 
@@ -183,6 +194,21 @@ what you have played is exactly how the ceiling stays invisible.
 
 Pass `{ maxCheckpoints }` to project under a retention policy; the result goes
 flat in the action count, which is the point of setting one.
+
+### Why the snapshot call belongs inside the loop
+
+Checkpoints are captured through the SNAPSHOT funnel, not by `performAction`.
+`GameRunner.getSnapshot()` calls `captureCheckpoint()`, and the stateful
+`GameSession` calls it from its broadcast funnel — which is why a host has a
+checkpoint per action. A driver that performs 300 actions and snapshots once at
+the end leaves every slot between them uncaptured. They still count toward the
+window's length, so `bytesPerCheckpoint` comes out one to two orders of
+magnitude too small (measured at 17x to 219x across six games), and the budget
+assertion passes green while measuring nothing.
+
+`measureSnapshotSize` refuses such a snapshot rather than reporting the wrong
+number, naming the uncaptured count and the fix. If you see that error, move
+`getSnapshot()` inside the loop.
 
 ## What happens if you ignore all this
 

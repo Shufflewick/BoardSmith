@@ -1089,6 +1089,65 @@ actionStep({
 })
 ```
 
+##### `turnScope` - say whether a re-entry continues the turn
+
+Undo reach is measured per action-step **frame**: `moveCount` lives on the frame,
+and `computeUndoInfo` anchors the rewind at `actionHistory.length - moveCount`.
+A step that stays open via `repeatUntil` keeps one frame, so the count
+accumulates. A step **re-entered** -- from a `loop` iteration, or as the next
+step of a `sequence` -- gets a NEW frame, and the count starts again.
+
+That matters whenever the same seat is prompted again straight after its own
+action: a multi-jump, an extra turn, the second step of a multi-step turn. The
+frame boundary is not a turn boundary there, and without a declaration the seat
+cannot take back the action it just took.
+
+The engine cannot infer which was meant, because the two readings have the same
+shape. A `sequence` of same-seat action steps is ONE turn in Polyhedral Potions
+and THREE separate turns in the library's own solo-undo fixture. So the step
+says which:
+
+```typescript
+loop({
+  name: 'move-loop',
+  maxIterations: 20,
+  while: (ctx) => !ctx.get('turnComplete'),
+  do: actionStep({
+    name: 'move-step',
+    actions: ['move', 'endTurn'],
+    // One continuing turn: undo reaches back over the whole run.
+    turnScope: 'continue',
+  }),
+})
+
+loop({
+  name: 'turns',
+  maxIterations: 1000,
+  while: (ctx) => !ctx.game.isFinished(),
+  do: actionStep({
+    name: 'take-turn',
+    actions: ['play'],
+    // Each pass is a new turn: undo does not reach behind it.
+    turnScope: 'restart',
+  }),
+})
+```
+
+`turnScope` is consulted **only** on an ambiguous entry -- the same seat, in a
+new frame, immediately after its own action. The first action of the game, a
+step held open by `repeatUntil`, and any step reached after a DIFFERENT seat
+acted all have nothing to carry, so most steps never need it.
+
+Leave it out on an ambiguous step and the engine warns in dev naming the step,
+and any undo attempted there is refused with the reason rather than with the
+misleading "No actions to undo".
+
+On a `'continue'` step, `minMoves`/`maxMoves` bound the whole run rather than
+the single entry -- which is the same thing when the run is one turn.
+
+`turnLoop` and `stateAwareLoop` forward `turnScope` to the action step they
+build, and leave it undeclared by default for the same reason.
+
 #### `simultaneousActionStep` - All players act at once
 
 ```typescript

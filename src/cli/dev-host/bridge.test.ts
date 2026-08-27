@@ -17,7 +17,7 @@ class SimpleGame extends Game<SimpleGame, Player> {
       defineFlow({
         root: loop({
           maxIterations: 1000,
-          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }),
+          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
         }),
       }),
     );
@@ -25,7 +25,7 @@ class SimpleGame extends Game<SimpleGame, Player> {
 }
 
 const simpleGameDef: GameDefinitionLike = {
-  gameClass: SimpleGame as new (...args: unknown[]) => unknown,
+  gameClass: SimpleGame,
   gameType: 'simple',
   minPlayers: 1,
   maxPlayers: 4,

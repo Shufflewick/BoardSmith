@@ -20,13 +20,12 @@ import type { GameDefinitionLike } from '../stateless-ops.js';
  * (game-session.ts + state-history.ts) used by BoardSmith's standalone
  * server/worker.
  *
- * 155-03 CONTRACT CHANGE (CONTEXT D-06, deliberate -- NOT a regression): see
+ * MID-TURN CROSS-FRAME UNDO (issues 144/145): see
  * `undo-authoritative.test.ts`'s header comment for the full rationale.
- * `moveCount` is frame-scoped; `collect-turns-fixture.ts`'s two-actionStep
- * turn means an undo attempted after only the FIRST action of a turn now
- * correctly reaches back across a closed frame boundary and is refused.
- * This suite's old `undo.success === true` expectation for that exact
- * scenario is SUPERSEDED, not restored.
+ * `moveCount` is frame-scoped, and `collect-turns-fixture.ts` spends a turn
+ * over two action-step frames; its second step declares
+ * `turnScope: 'continue'`, so the run carries across that boundary and an undo
+ * after the turn's FIRST action is granted, rewinding only that turn.
  */
 
 function spaceChildIds(snapshot: unknown, spaceName: string): number[] {
@@ -43,7 +42,7 @@ function spaceChildIds(snapshot: unknown, spaceName: string): number[] {
 }
 
 describe('stateful undo across a prior pending mutation (155-03 contract)', () => {
-  it('the mid-turn cross-frame case is now REFUSED -- explore+collect (turn N-1) survives untouched', async () => {
+  it("the mid-turn cross-frame undo is granted and stops at this turn's start -- explore+collect (turn N-1) survives untouched", async () => {
     const session = GameSession.create<CollectTurnsGame>({
       gameType: 'collect-turns',
       GameClass: CollectTurnsGame,
@@ -75,15 +74,13 @@ describe('stateful undo across a prior pending mutation (155-03 contract)', () =
     expect(p1turn3.success).toBe(true);
     expect((p1turn3.flowState as any)?.currentPlayer).toBe(1);
 
-    // Pre-155-03 this succeeded. Post-155-03, turn3's first actionStep frame
-    // already closed the instant its one action committed -- moveCount is 0
-    // for the SECOND (now-open) frame -- correctly refused.
+    // `turnScope: 'continue'` carries turn 3's run across the frame boundary
+    // its first action closed, so the undo is granted and rewinds that action.
     const undo = await session.undoToTurnStart(1);
-    expect(undo.success).toBe(false);
-    expect(undo.error).toMatch(/no actions to undo/i);
+    expect(undo.success).toBe(true);
 
-    // A refused undo is a no-op -- turn 1's equipment (a PRIOR turn's
-    // pending-action mutation) was never at risk.
+    // The rewind stopped at THIS turn's start: turn 1's equipment (a PRIOR
+    // turn's pending-action mutation, recoverable by no replay) survives.
     expect(spaceChildIds(session.runner.getSnapshot(), 'held-1')).toContain(collectedId);
   });
 });
@@ -130,7 +127,7 @@ class TwoMoveTurnGame extends Game<TwoMoveTurnGame, Player> {
 }
 
 const twoMoveTurnFixtureDefinition: GameDefinitionLike = {
-  gameClass: TwoMoveTurnGame as new (...args: unknown[]) => unknown,
+  gameClass: TwoMoveTurnGame,
   gameType: 'two-move-turn',
   minPlayers: 2,
   maxPlayers: 2,

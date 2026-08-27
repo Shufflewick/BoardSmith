@@ -29,7 +29,11 @@ class EachPlayerGame extends Game<EachPlayerGame, Player> {
         root: loop({
           maxIterations: 100,
           do: eachPlayer({
-            do: actionStep({ actions: ['pass'] }),
+            // At a one-seat table `eachPlayer` re-prompts the same seat every
+            // iteration; each of those is its own turn.
+            // At a one-seat table `eachPlayer` re-prompts the same seat every
+            // iteration; each of those is its own turn.
+            do: actionStep({ actions: ['pass'], turnScope: 'restart' }),
           }),
         }),
       }),
@@ -40,7 +44,7 @@ class EachPlayerGame extends Game<EachPlayerGame, Player> {
 export { EachPlayerGame };
 
 export const eachPlayerFixtureDefinition: GameDefinitionLike = {
-  gameClass: EachPlayerGame as new (...args: unknown[]) => unknown,
+  gameClass: EachPlayerGame,
   gameType: 'each-player',
   minPlayers: 2,
   maxPlayers: 4,
