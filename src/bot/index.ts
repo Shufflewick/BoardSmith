@@ -16,7 +16,11 @@ export type {
   DifficultyLevel,
 } from './types.js';
 export { DIFFICULTY_PRESETS, DEFAULT_CONFIG } from './types.js';
-export { DeterminizationError } from './determinization.js';
+// `applyDeterminization` is exported so a GAME can test its own sampler against
+// the same consistency check the search runs, without standing up an MCTSBot: it
+// is the only way for an author to see "you rewrote something the seat can see"
+// as a test failure instead of as a mid-session throw.
+export { DeterminizationError, applyDeterminization } from './determinization.js';
 
 /** Game class constructor type */
 type GameClass<G extends Game = Game> = new (options: GameOptions) => G;

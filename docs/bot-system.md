@@ -412,6 +412,62 @@ determinize: (sandbox, seat, rng) => {
 }
 ```
 
+Go Fish ships one: `goFishDeterminize` in `~/BoardSmithGames/go-fish/src/rules/bot.ts`,
+with `tests/determinize.test.ts` beside it. Two things it learned the hard way are
+worth knowing before you write your own.
+
+**A concealed container may not arrive at all.** `contentsHidden()` hides a zone's
+SIZE as well as its contents, so the pond does not reach the sandbox as a stack of
+unknown cards -- it reaches it EMPTY. A search over that world believes the draw
+pile is exhausted and never plays the branch that decides most of the game. Go
+Fish's sampler puts the pond back, which is a supposition rather than an invention
+only because the size is derivable: 52 cards, each in a hand, a book, or the pond.
+Check what your hidden zones actually restore as before assuming the placeholders
+are there to fill in.
+
+**Fail loudly when no legal world exists.** The sampler throws, by name, on a
+half-revealed card and on a deck that does not add up. Both are states where the
+only alternative is to guess, and a guessed world is scored as if it were real.
+
+### Testing your sampler
+
+`applyDeterminization` is exported from `boardsmith/bot` so a game can run its own
+sampler through the same consistency check the search runs, without standing up an
+`MCTSBot`:
+
+```typescript
+import { applyDeterminization } from 'boardsmith/bot';
+
+// Refused by name if the sampler writes anything this seat can see.
+applyDeterminization(sandboxForSeat(1), 1, myDeterminize, () => 0.5);
+```
+
+Build the sandbox the way the bot does -- `new MyGame(options)` followed by
+`loadSerializedState(truth.toJSONForPlayer(seat))` -- so the test sees exactly the
+redaction the search sees.
+
+### What the check costs
+
+The consistency check walks the element tree twice per sample (once before the
+sampler runs, once after) and the sampler runs once per MCTS iteration, so the
+cost is linear in tree size and in `iterations`. Measured on this machine, with a
+no-op sampler, per sample:
+
+| Elements | Per sample | 300 iterations |
+| --- | --- | --- |
+| 100 | 0.23 ms | 0.07 s |
+| 1,000 | 1.36 ms | 0.41 s |
+| 5,000 | 8.66 ms | 2.6 s |
+| 20,000 | 35.2 ms | 10.5 s |
+
+About 1.8 microseconds per element per sample. At card-game scale (Go Fish's tree
+is ~75 elements) it disappears into the search. Past roughly 2,000 elements it
+becomes the dominant cost of the search rather than a tax on it -- at 5,000 the
+checking alone exceeds the default 2-second timeout, so the search runs far fewer
+iterations than `iterations` asks for. A game with a large tree and a determinize
+hook should measure its real iteration count rather than assume it got the budget
+it configured.
+
 ## API Reference
 
 ### createBot()
