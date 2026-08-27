@@ -91,17 +91,40 @@ export function enumerateLegalMoves(
 
   const result: Array<{ action: string; args: Record<string, unknown> }> = [];
 
+  const executor = game.getActionExecutor();
+
   for (const actionName of actionNames) {
     const actionDef = game.getAction(actionName);
     if (!actionDef) continue;
 
+    // #19: `actionNames` comes from the flow state's FROZEN `availableActions`,
+    // computed once on the authoritative game when the step opened and replayed
+    // verbatim — into a bot's redacted sandbox, and into a game whose state has
+    // moved on since. Re-check the action's own `condition` against the game as
+    // it stands: without this, a `choices` closure the condition was written to
+    // guard runs anyway, and the reporting game's threw outright.
+    if (
+      actionDef.condition &&
+      !executor.isActionAvailable(actionDef, player)
+    ) {
+      continue;
+    }
+
     const combos = enumerateSelectionsCore(game, actionDef, player);
+
+    // #19: an action-level `.validate()` refuses a SUBMISSION, and enumeration
+    // never called it — so a bot enumerated moves the engine then rejected, and
+    // the pump halted on the rejection with the round never closing for any
+    // seat. Every move handed back must be one `performAction` would accept.
+    const legal = actionDef.validate
+      ? combos.filter((args) => executor.validateAction(actionDef, player, args).valid)
+      : combos;
 
     // Apply maxPerAction truncation only when caller opts in (D-07: full enumeration default)
     const limited =
       options?.maxPerAction !== undefined
-        ? combos.slice(0, options.maxPerAction)
-        : combos;
+        ? legal.slice(0, options.maxPerAction)
+        : legal;
 
     for (const args of limited) {
       result.push({ action: actionName, args });
