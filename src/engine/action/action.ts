@@ -24,7 +24,7 @@ import type {
 import { wrapFilterWithHelpfulErrors } from './helpers.js';
 import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
 import { Action } from './action-builder.js';
-import { PlayerFacingError } from '../errors.js';
+import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 
 // Re-export Action class from action-builder
@@ -44,6 +44,13 @@ export { Action };
  *   (#44). A clean refusal carries no such mark, because it mutated nothing.
  */
 function failedExecute(actionName: string, error: unknown): ActionResult {
+  // #31: a game saying "I cannot resolve this from the information state I
+  // have" is an expected answer inside a bot's redacted sandbox, not a crash.
+  // Logging it printed a stack per rollout — measured at 198 MB in 15 seconds
+  // on one game — for a search that was working as designed.
+  if (error instanceof NotSimulableError) {
+    return { success: false, error: error.message, threw: true, notSimulable: true };
+  }
   console.error(`[BoardSmith] Action '${actionName}' execution failed:`, error);
   // An engine policy refusal was written to be read — its message IS the
   // actionable next step. Anything else is an arbitrary runtime error, and

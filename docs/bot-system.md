@@ -240,6 +240,53 @@ interface BotConfig {
 - **Text/number inputs**: The bot can't handle actions that require text or number input (it can only choose from discrete options).
 - **Determinism**: With a seed, the bot is deterministic. Without a seed, it uses `Math.random()`.
 
+## Hidden information: enumeration and simulation are not the same thing
+
+A bot searches its OWN seat's information state. `MCTSBot` rebuilds its sandbox
+from that seat's redacted view, which is what stops the search from reading
+hidden state — and it means the sandbox does not hold what the redaction removed.
+
+Those two halves compose differently:
+
+- **Enumeration** usually works. The seat's own view carries its own options, so
+  the bot offers exactly its legal moves.
+- **Simulation** often does not. A move's `execute()` frequently resolves against
+  state the seat cannot see — a shared map, an opponent's hand — and inside the
+  sandbox that state is simply not there.
+
+When a move is legal to offer but cannot be resolved, say so:
+
+```typescript
+import { NotSimulableError } from 'boardsmith';
+
+Action.create('travel')
+  .chooseFrom('direction', { choices: (ctx) => ctx.player.here.exits })
+  .execute((args, ctx) => {
+    if (ctx.game.mapSeed === undefined) {
+      throw new NotSimulableError('travel resolves against the map, which this seat cannot see');
+    }
+    // ... resolve for real
+  });
+```
+
+The bot drops that move from its search and moves on. Nothing is logged, and no
+hidden value is invented.
+
+The two things to reach for instead are both worse, and the engine will not stop
+you doing either:
+
+- **Letting `execute()` throw an ordinary error** logs a stack on every rollout —
+  measured at 198 MB in 15 seconds on one game — while the search quietly
+  collapses to whatever moves happen not to touch hidden state.
+- **Fabricating the missing state** so `execute()` succeeds makes the bot search
+  a world that does not exist. It is the same mistake as deriving `choices` from
+  state the caller cannot see, one layer later: the answer is no move, not a guess.
+
+A bot that skips its unresolvable moves plays worse than one that could resolve
+them. Making it play WELL in a hidden-information game needs determinization —
+sampling a hypothesis consistent with what the seat can see — which BoardSmith
+does not offer yet.
+
 ## API Reference
 
 ### createBot()

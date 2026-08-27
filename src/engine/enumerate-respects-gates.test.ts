@@ -42,15 +42,16 @@ class FieldGame extends Game<FieldGame, Scout> {
       // Availability written as a `condition`: a scout with no position cannot
       // travel. The `choices` closure below THROWS for such a scout, exactly as
       // the reporting game's did, so a skipped condition is a crash.
-      Action.create<FieldGame, Scout>('travel')
+      Action.create<FieldGame>('travel')
         .prompt('Travel')
-        .condition({ 'scout has a position': (ctx) => ctx.player.position > 0 })
+        .condition({ 'scout has a position': (ctx) => (ctx.player as Scout).position > 0 })
         .chooseFrom('to', {
           choices: (ctx) => {
-            if (ctx.player.position <= 0) {
+            const scout = ctx.player as Scout;
+            if (scout.position <= 0) {
               throw new Error('stepsFrom(0): position 0 is not a place any scout can stand.');
             }
-            return [ctx.player.position + 1, ctx.player.position - 1];
+            return [scout.position + 1, scout.position - 1];
           },
         })
         .execute(() => {}),
@@ -58,17 +59,17 @@ class FieldGame extends Game<FieldGame, Scout> {
       // Availability written as `.validate()`: kept available on purpose so a
       // broke seat is not locked out of the round, and refused with a message
       // naming the shortfall.
-      Action.create<FieldGame, Scout>('sprint')
+      Action.create<FieldGame>('sprint')
         .prompt('Sprint')
         .chooseFrom('distance', { choices: [1, 2, 3] })
         .validate((args, ctx) =>
-          (args.distance as number) <= ctx.player.actionPoints
+          (args.distance as number) <= (ctx.player as Scout).actionPoints
             ? true
-            : `Sprinting ${args.distance} costs ${args.distance} action points and you have ${ctx.player.actionPoints}.`
+            : `Sprinting ${args.distance} costs ${args.distance} action points and you have ${(ctx.player as Scout).actionPoints}.`
         )
         .execute(() => {}),
 
-      Action.create<FieldGame, Scout>('rest').prompt('Rest').execute(() => {}),
+      Action.create<FieldGame>('rest').prompt('Rest').execute(() => {}),
     );
 
     this.setFlow(

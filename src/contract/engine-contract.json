@@ -1,7 +1,7 @@
 {
-  "revision": 23,
+  "revision": 24,
   "bundleProtocol": 1,
-  "surfaceHash": "46be1aab855efb2e",
+  "surfaceHash": "6848a30448bd2096",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -187,6 +187,14 @@
       "surfaceHash": "46be1aab855efb2e",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r21: game.refreshAwaitingActions() lets a simultaneous step's awaiting set grow for a seat that becomes eligible mid-step; game.pruneMessages() caps the log safely — ActionCheckpoint.messageCount is now the log's ABSOLUTE length and the game tracks how many entries were evicted, so pruning no longer corrupts earlier checkpoints."
+    },
+    {
+      "revision": 24,
+      "date": "2026-08-27",
+      "bundleProtocol": 1,
+      "surfaceHash": "6848a30448bd2096",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "r23: NotSimulableError lets a game say a move is legal but unresolvable from a bot's redacted information state, so MCTS drops it from the search instead of logging a stack per rollout; enumerateLegalMoves re-checks condition and validate rather than trusting the flow state's frozen availableActions."
     }
   ]
 }

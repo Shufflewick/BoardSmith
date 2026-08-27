@@ -311,4 +311,4 @@ export type {
  * A game extends it when its error text is the actionable next step; a plain
  * `Error` is sanitized at the action boundary instead.
  */
-export { PlayerFacingError } from './errors.js';
+export { PlayerFacingError, NotSimulableError } from './errors.js';

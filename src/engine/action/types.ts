@@ -612,6 +612,13 @@ export interface ActionResult {
    * Never set by game code.
    */
   threw?: boolean;
+  /**
+   * Set when the failure was a {@link NotSimulableError} — the game saying this
+   * move is legal but cannot be resolved from the information state it has
+   * (#31). A bot drops the move from its search rather than counting it as a
+   * failure; nothing is logged, and no hidden value is invented.
+   */
+  notSimulable?: boolean;
   /** Additional data to return */
   data?: Record<string, unknown>;
   /** Message to log */
