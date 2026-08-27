@@ -1,5 +1,64 @@
 # Migration Guide
 
+## Engine contract r17 → r23
+
+A run of upstream fixes. Most need nothing from a game; these four do.
+
+### The game context is provided under typed keys, not strings (r21)
+
+`GameShell` used to `provide()` its twelve context values under bare string keys
+while the library's own composables used typed `InjectionKey` symbols, so every
+consumer cast and a misspelled key was a silent `undefined`. The string keys are
+gone.
+
+A game only feels this if it mounts a BoardSmith component directly — the
+common case is an a11y test mounting the real `ActionPanel`, which throws when
+it cannot find a controller:
+
+```diff
+-  global: { provide: { actionController: controller } }
++  global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } }
+```
+
+```typescript
+import { GAME_CONTEXT_KEYS } from 'boardsmith/ui';
+```
+
+A custom UI reading the context should use `useGameContext()`, which throws
+outside a shell rather than returning a bag of `undefined`s:
+
+```typescript
+import { useGameContext } from 'boardsmith/ui';
+const { gameView, playerSeat, actionController } = useGameContext();
+```
+
+### `boardsmith publish` requires a target (r18)
+
+There is no default, because the default used to be production:
+
+```diff
+-boardsmith publish
++boardsmith publish --prod    # or --test, or --dev
+```
+
+### `--bot-level expert` is rejected (r18)
+
+It was never a real preset and silently played at medium. Use `easy`, `medium`,
+`hard`, or an explicit iteration count.
+
+### Authoring mistakes now throw (r18)
+
+Four things that used to warn and carry on:
+
+- an attribute that clobbers `id`/`_t`/`_ctx` in `create()`
+- an action `condition` that throws (it was read as "condition false", so the
+  action silently vanished)
+- a flow step naming an action that is not registered
+- detected element-tree corruption, at dev/test time
+
+Each was already a bug; the change is that it stops rather than degrades. A game
+that was relying on any of them was not doing what it looked like it was doing.
+
 ## v4.4: Agent-Ergonomics
 
 v4.4 closes the determinism guarantee (no `Math.random` fallback anywhere in
