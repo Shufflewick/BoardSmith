@@ -39,7 +39,7 @@ class ClockGame extends Game<ClockGame, Player> {
 
     this.setFlow(defineFlow({
       root: loop({
-        while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 2,
+        while: (ctx) => (ctx.get<number>('round') ?? 1) <= 2,
         maxIterations: 10,
         do: eachPlayer({ do: actionStep({ actions: ['nudge'] }) }),
       }),

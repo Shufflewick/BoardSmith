@@ -38,6 +38,7 @@ export {
 
 export type {
   GameRootFieldAudience,
+  PlayerOf,
   MessageEntry,
   MessageOptions,
   FormattedMessage,

@@ -588,6 +588,30 @@ export function engineRootFieldAudience(key: string): GameRootFieldAudience | un
 }
 
 /**
+ * The Player subclass a game declared, recovered from the game type itself.
+ *
+ * A game already names its player once, in `class MyGame extends Game<MyGame,
+ * MyPlayer>`. Every context the engine hands back then derives the player from
+ * that single declaration rather than asking the author to repeat it as a second
+ * type argument on `ActionContext`, `FlowContext` and every flow builder. So
+ * `ctx.player` is `MyPlayer` in a game's own callbacks with nothing extra
+ * written, and stays the base `Player` for a game that never named a subclass.
+ *
+ * The `IsAny` guard is load-bearing, not defensive. `Game`'s own parameters
+ * default to `any` (`Game<G extends Game = any, P extends Player = any>`), so a
+ * bare `Game` infers `P = any` -- and `ctx.player: any` would be strictly worse
+ * than what this replaces: every misspelled field would compile. The guard turns
+ * that case back into `Player`, which is what the base game actually has.
+ */
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+export type PlayerOf<G extends Game> = G extends Game<any, infer P>
+  ? IsAny<P> extends true
+    ? Player
+    : P
+  : Player;
+
+/**
  * Base Game class. The root of the element tree and container for all game state.
  *
  * Extend this class to create your game. The Game class serves as:
@@ -723,10 +747,10 @@ export class Game<
   private _actionExecutor!: ActionExecutor;
 
   /** Flow definition for this game */
-  private _flowDefinition?: FlowDefinition;
+  private _flowDefinition?: FlowDefinition<G>;
 
   /** Flow engine instance */
-  private _flowEngine?: FlowEngine;
+  private _flowEngine?: FlowEngine<G>;
 
   /** Debug registry for custom debug data (dev mode only) */
   private _debugRegistry: Map<string, () => unknown> = new Map();
@@ -2160,14 +2184,14 @@ export class Game<
    * }));
    * ```
    */
-  setFlow(definition: FlowDefinition): void {
+  setFlow(definition: FlowDefinition<G>): void {
     this._flowDefinition = definition;
   }
 
   /**
    * Get the flow definition
    */
-  getFlow(): FlowDefinition | undefined {
+  getFlow(): FlowDefinition<G> | undefined {
     return this._flowDefinition;
   }
 
@@ -2259,7 +2283,12 @@ export class Game<
 
     this.#validateActionReachability();
 
-    this._flowEngine = new FlowEngine(this, this._flowDefinition);
+    // `this.game` rather than `this`: the engine is generic over the game type
+    // the flow was WRITTEN against (`FlowDefinition<G>`), and inside the base
+    // class `this` is the polymorphic `this` type, which TypeScript cannot
+    // relate to `G`. `this.game` is the same object, already carried as `G` by
+    // the one F-bounded self-bridge this class establishes (see its assignment).
+    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
 
     // PIT-02: record every element class queried through the GameElement
     // finder methods (all/first/firstN/last/lastN/has) during this FIRST
@@ -2436,7 +2465,7 @@ export class Game<
       throw new Error('No flow definition set');
     }
 
-    this._flowEngine = new FlowEngine(this, this._flowDefinition);
+    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
     const result = this._flowEngine.tryRestore(position);
 
     if (!result.success) {
@@ -2464,7 +2493,7 @@ export class Game<
       throw new Error('No flow definition set');
     }
 
-    this._flowEngine = new FlowEngine(this, this._flowDefinition);
+    this._flowEngine = new FlowEngine(this.game, this._flowDefinition);
     const result = this._flowEngine.restoreFullState(state, idRemap);
 
     if (!result.success) {

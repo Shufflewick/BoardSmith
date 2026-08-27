@@ -47,14 +47,14 @@ class TraceGame extends Game<TraceGame, Player> {
       Action.create<TraceGame>('take')
         .chooseFrom('value', { choices: [1, 2, 3] })
         .execute((args, ctx) => {
-          (ctx.game as TraceGame).score += args.value as number;
+          ctx.game.score += args.value as number;
           return { success: true };
         }),
     );
 
     this.registerAction(
       Action.create<TraceGame>('spend')
-        .condition({ 'is unlocked': (ctx) => (ctx.game as TraceGame).unlocked })
+        .condition({ 'is unlocked': (ctx) => ctx.game.unlocked })
         .execute(() => ({ success: true })),
     );
 
@@ -70,7 +70,7 @@ class TraceGame extends Game<TraceGame, Player> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) => (ctx.game as TraceGame).score < 6,
+          while: (ctx) => ctx.game.score < 6,
           maxIterations: 100,
           do: eachPlayer({ do: actionStep({ actions: ['take', 'spend', 'pickEmpty'] }) }),
         }),

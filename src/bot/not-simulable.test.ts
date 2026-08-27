@@ -69,7 +69,7 @@ class FogGame extends Game<FogGame, Player> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 10,
+          while: (ctx) => (ctx.get<number>('round') ?? 1) <= 10,
           maxIterations: 30,
           do: eachPlayer({ do: actionStep({ actions: ['travel', 'rest'] }) }),
         }),

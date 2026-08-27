@@ -1,4 +1,5 @@
 import type { FlowDebugInfo } from './types.js';
+import type { Game } from '../element/game.js';
 import type { FlowNode, FlowPosition, FlowState } from './types.js';
 
 /**
@@ -19,7 +20,7 @@ import type { FlowNode, FlowPosition, FlowState } from './types.js';
  *     `config.default` when `idx` is out of range for `cases`
  *   - `action-step` / `simultaneous-action-step` / `execute` -> leaves, no children
  */
-function walkPath(root: FlowNode, path: number[]): { node: FlowNode; step?: string } {
+function walkPath<G extends Game = Game>(root: FlowNode<G>, path: number[]): { node: FlowNode<G>; step?: string } {
   let node = root;
   let step: string | undefined = root.config.name ?? root.type;
 
@@ -36,7 +37,7 @@ function walkPath(root: FlowNode, path: number[]): { node: FlowNode; step?: stri
   return { node, step };
 }
 
-function getChildNode(node: FlowNode, index: number): FlowNode | undefined {
+function getChildNode<G extends Game = Game>(node: FlowNode<G>, index: number): FlowNode<G> | undefined {
   switch (node.type) {
     case 'sequence':
       return node.config.steps[index];
@@ -112,8 +113,8 @@ function formatDescribe(phase: string | undefined, step: string | undefined, flo
  * // "phase *pegging* -> step *player-turn*, waiting on seat 2"
  * ```
  */
-export function describeFlowPosition(
-  root: FlowNode,
+export function describeFlowPosition<G extends Game = Game>(
+  root: FlowNode<G>,
   position: FlowPosition,
   flowState: FlowState,
 ): FlowDebugInfo {

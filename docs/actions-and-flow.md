@@ -18,9 +18,10 @@ Pass your concrete game class to `Action.create<MyGame>(...)`. The builder then
   casts, and a typo'd key (`args.crad`) is a compile error instead of silently
   returning `undefined`.
 
-`ctx.player` is the **base `Player`** type, not your player subclass — reading
-your own fields off it needs a cast (`ctx.player as MyPlayer`). Only `ctx.game`
-and `args` are threaded.
+- `ctx.player` is typed as **your** player subclass too. It is derived from the
+  game type you already named, so `Action.create<MyGame>(...)` on a
+  `class MyGame extends Game<MyGame, MyPlayer>` gives `ctx.player: MyPlayer` with
+  nothing extra written and no `ctx.player as MyPlayer` cast.
 
 ```typescript
 import { Action, type ActionDefinition } from 'boardsmith';
@@ -446,9 +447,9 @@ generically, or **a string to refuse with that message shown to the player**:
 Action.create<MyGame>('play')
   .chooseElements('cards', { elements: (ctx) => ctx.game.hand.all(Card) })
   .validate((args, ctx) => {
-    // args.cards is Card[] — threaded through the chain, no cast.
-    // ctx.player is the base Player type; cast for your own player fields.
-    const player = ctx.player as MyPlayer;
+    // args.cards is Card[] and ctx.player is MyPlayer — both threaded through
+    // the chain from `Action.create<MyGame>`, no casts.
+    const player = ctx.player;
     if (args.cards.length < 2) return 'Must play at least 2 cards';
     if (args.cards.length > player.actionPoints) {
       return `That costs ${args.cards.length} AP; you have ${player.actionPoints}.`;
@@ -477,7 +478,7 @@ Every selection method takes a `validate` option with the **same three returns**
   min: 1,
   max: 10,
   validate: (value, args, ctx) =>
-    value <= (ctx.player as MyPlayer).gold || 'You cannot bid more than you hold',
+    value <= ctx.player.gold || 'You cannot bid more than you hold',
 })
 ```
 
@@ -544,9 +545,9 @@ casts are required:
 });
 ```
 
-> **Note:** `ctx.player` is typed as the base `Player`. If your game uses a
-> custom player subclass, cast it (`ctx.player as MyPlayer`) — only `ctx.game`
-> and `args` are auto-typed by the builder.
+> **Note:** `ctx.player` is your player subclass, recovered from the game type
+> you named on `Action.create<MyGame>`. A game that never declared a subclass
+> (`Game<MyGame, Player>`) gets the base `Player`, which is what it has.
 
 > **Important:** When using `chooseElement`, the `args` contain the **full serialized element object**, not just the ID. To find the element by ID:
 > ```typescript
@@ -936,7 +937,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
     })
     .chooseFrom('rank', {
       prompt: 'What rank do you want?',
-      choices: (ctx) => game.getPlayerRanks(ctx.player as GoFishPlayer),
+      choices: (ctx) => game.getPlayerRanks(ctx.player),
       display: (rank) => {
         const names: Record<string, string> = {
           'A': 'Aces', '2': 'Twos', '3': 'Threes', '4': 'Fours',
@@ -947,7 +948,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
       },
     })
     .execute((args, ctx) => {
-      const player = ctx.player as GoFishPlayer;
+      const player = ctx.player;
       const targetChoice = args.target as { value: number; display: string };
       const target = game.getPlayer(targetChoice.value) as GoFishPlayer;
       const rank = args.rank as string;
@@ -976,16 +977,53 @@ The Flow system defines game structure using composable nodes.
 
 ### Flow Definition
 
+Name your game once, on the return type, and every callback in the flow is typed
+to it: `ctx.game` is `MyGame` and `ctx.player` is `MyPlayer`, with no casts.
+
 ```typescript
 import { loop, eachPlayer, actionStep, sequence, type FlowDefinition } from 'boardsmith';
 
-export function createGameFlow(game: MyGame): FlowDefinition {
+export function createGameFlow(game: MyGame): FlowDefinition<MyGame> {
   return {
     root: /* flow node */,
     isComplete: (ctx) => game.isFinished(),
     getWinners: (ctx) => game.getWinners(),
   };
 }
+```
+
+**Two things to know about how the type reaches your callbacks.**
+
+`ctx.player` is **optional** in a flow context (`MyPlayer | undefined`) and
+required in an action context. That is not an oversight: a `loop` or an
+`execute` can sit outside any player-scoped step, and the type says so. Inside an
+`eachPlayer` body it is always set, so guard once and carry on:
+
+```typescript
+execute((ctx) => {
+  if (!ctx.player) throw new Error('Turn setup ran with no active seat.');
+  game.startTurn(ctx.player);
+})
+```
+
+The game type flows **downward through nesting**, so a builder written directly
+inside `root:` (or inside another builder's `do:`) needs no type argument. It
+does NOT reach a node you store in an intermediate `const`, because a standalone
+`const` has no surrounding type to infer from. Annotate those:
+
+```typescript
+// Inferred: nested inside a FlowDefinition<MyGame>, so ctx is concrete.
+root: loop({
+  maxIterations: 100,
+  while: (ctx) => !ctx.game.isFinished(),
+  do: eachPlayer({ do: actionStep({ actions: ['play'] }) }),
+})
+
+// Annotated: an intermediate const has nothing to infer from.
+const playerTurn: FlowNode<MyGame> = sequence(
+  execute((ctx) => ctx.game.startTurn(ctx.player!)),
+  actionStep({ actions: ['play'] }),
+);
 ```
 
 ### Flow Nodes

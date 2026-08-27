@@ -52,7 +52,7 @@ class AssertionsFixtureGame extends Game<AssertionsFixtureGame, Player> {
       Action.create<AssertionsFixtureGame>('pick')
         .chooseFrom('value', { choices: [1, 2, 3] })
         .execute((args, ctx) => {
-          (ctx.game as AssertionsFixtureGame).total += args.value as number;
+          ctx.game.total += args.value as number;
           return { success: true };
         }),
     );
@@ -80,8 +80,8 @@ class AssertionsFixtureGame extends Game<AssertionsFixtureGame, Player> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) =>
-            (ctx.game as AssertionsFixtureGame).total < 6,
+          while: (ctx) =>
+            ctx.game.total < 6,
           maxIterations: 100,
           do: eachPlayer({
             do: actionStep({ actions: ['pick', 'pass'] }),

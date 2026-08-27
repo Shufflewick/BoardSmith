@@ -48,7 +48,7 @@ class RaceGame extends Game<RaceGame, Player> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) => !(ctx.game as RaceGame).isFinished(),
+          while: (ctx) => !ctx.game.isFinished(),
           maxIterations: 50,
           do: eachPlayer({ do: actionStep({ actions: ['take'] }) }),
         }),

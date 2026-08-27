@@ -1209,11 +1209,14 @@ startFlow(), or fix the typo in the actionStep(...) that references it.
 Use a function for conditional action lists:
 
 ```typescript
-actionStep({
+actionStep<MyGame>({
   name: 'merc-action',
   actions: (ctx) => {
     const baseActions = ['move', 'attack', 'endTurn'];
-    const player = ctx.player as MyPlayer;
+    // ctx.player is MyPlayer here, derived from the game type on the builder.
+    // It is optional in a flow context because not every step is player-scoped.
+    const player = ctx.player;
+    if (!player) return baseActions;
 
     // Only add special actions if player has capabilities
     if (player.hasTactics) baseActions.push('playTactics');
@@ -1553,10 +1556,9 @@ Your flow loop's `while` condition only checks action availability, but doesn't 
 
 ```typescript
 // WRONG - Exits when actions are depleted, even if combat is pending
-loop({
+loop<MercGame>({
   while: (ctx) => {
-    const player = ctx.player as MercPlayer;
-    return player.team.some(m => m.actionsRemaining > 0);
+    return ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false;
   },
   do: actionStep({ actions: ['move', 'attack', 'endTurn'] })
 })
@@ -1576,16 +1578,13 @@ Use `stateAwareLoop()` to automatically check for pending state before exiting:
 ```typescript
 import { stateAwareLoop } from 'boardsmith';
 
-stateAwareLoop({
+stateAwareLoop<MercGame>({
   name: 'combat-action-loop',
   actions: ['move', 'attack', 'endTurn'],
-  while: (ctx) => {
-    const player = ctx.player as MercPlayer;
-    return player.team.some(m => m.actionsRemaining > 0);
-  },
+  while: (ctx) => ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false,
   pendingStates: (ctx) => [
-    (ctx.game as MercGame).activeCombat,    // Keep looping while combat pending
-    (ctx.game as MercGame).pendingCombat,   // Keep looping while combat about to start
+    ctx.game.activeCombat,    // Keep looping while combat pending
+    ctx.game.pendingCombat,   // Keep looping while combat about to start
   ],
 })
 ```
@@ -1600,9 +1599,9 @@ stateAwareLoop({
 You can also add checks directly in a regular `loop`:
 
 ```typescript
-loop({
+loop<MercGame>({
   while: (ctx) => {
-    const game = ctx.game as MercGame;
+    const game = ctx.game;
 
     // Always stop if game is finished
     if (game.isFinished()) return false;
@@ -1612,8 +1611,7 @@ loop({
     if (game.pendingCombat) return true;
 
     // Then check normal action availability
-    const player = ctx.player as MercPlayer;
-    return player.team.some(m => m.actionsRemaining > 0);
+    return ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false;
   },
   do: actionStep({ actions: ['move', 'attack', 'endTurn'] })
 })

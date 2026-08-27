@@ -1,4 +1,4 @@
-import type { Game } from '../element/game.js';
+import type { Game, PlayerOf } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
 import type { ActionDefinition, ActionResult, FollowUpAction } from '../action/types.js';
@@ -61,8 +61,11 @@ export interface FlowPosition {
 export interface FlowContext<G extends Game = Game> {
   /** The game instance */
   game: G;
-  /** Current player (if in a player-scoped flow) */
-  player?: Player;
+  /**
+   * Current player (if in a player-scoped flow), typed as the game's own
+   * Player subclass -- see {@link PlayerOf}.
+   */
+  player?: PlayerOf<G>;
   /** Variables stored during flow execution */
   variables: Record<string, unknown>;
   /** Set a variable */
@@ -84,17 +87,17 @@ export interface BaseFlowConfig {
 /**
  * Configuration for sequence flow
  */
-export interface SequenceConfig extends BaseFlowConfig {
+export interface SequenceConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Steps to execute in order */
-  steps: FlowNode[];
+  steps: FlowNode<G>[];
 }
 
 /**
  * Configuration for loop flow
  */
-export interface LoopConfig extends BaseFlowConfig {
+export interface LoopConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Condition to continue looping (evaluated before each iteration) */
-  while?: (context: FlowContext) => boolean;
+  while?: (context: FlowContext<G>) => boolean;
   /** Maximum iterations (safety limit) */
   maxIterations?: number;
   /**
@@ -105,31 +108,31 @@ export interface LoopConfig extends BaseFlowConfig {
    */
   unbounded?: boolean;
   /** Body of the loop */
-  do: FlowNode;
+  do: FlowNode<G>;
 }
 
 /**
  * Configuration for repeat flow
  */
-export interface RepeatNodeConfig extends BaseFlowConfig {
+export interface RepeatNodeConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Number of iterations to run */
   times: number;
   /** Body of the repeat */
-  do: FlowNode;
+  do: FlowNode<G>;
 }
 
 /**
  * Configuration for each-player flow
  */
-export interface EachPlayerConfig extends BaseFlowConfig {
+export interface EachPlayerConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Filter which players to include */
-  filter?: (player: Player, context: FlowContext) => boolean;
+  filter?: (player: PlayerOf<G>, context: FlowContext<G>) => boolean;
   /** Direction of rotation */
   direction?: 'forward' | 'backward';
   /** Starting player (defaults to current player) */
-  startingPlayer?: (context: FlowContext) => Player;
+  startingPlayer?: (context: FlowContext<G>) => PlayerOf<G>;
   /** Body to execute for each player */
-  do: FlowNode;
+  do: FlowNode<G>;
 }
 
 /**
@@ -142,27 +145,28 @@ export interface EachPlayerConfig extends BaseFlowConfig {
  */
 export interface ForEachConfig<
   T extends GameElement | string | number | boolean | null = GameElement | string | number | boolean | null,
+  G extends Game = Game,
 > extends BaseFlowConfig {
   /** Items to iterate over */
-  collection: T[] | ((context: FlowContext) => T[]);
+  collection: T[] | ((context: FlowContext<G>) => T[]);
   /** Variable name to store current item */
   as: string;
   /** Body to execute for each item */
-  do: FlowNode;
+  do: FlowNode<G>;
 }
 
 /**
  * Configuration for action step
  */
-export interface ActionStepConfig extends BaseFlowConfig {
+export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Player who should act (defaults to context.player) */
-  player?: (context: FlowContext) => Player;
+  player?: (context: FlowContext<G>) => PlayerOf<G>;
   /** Actions available to the player */
-  actions: string[] | ((context: FlowContext) => string[]);
+  actions: string[] | ((context: FlowContext<G>) => string[]);
   /** Continue until this returns true */
-  repeatUntil?: (context: FlowContext) => boolean;
+  repeatUntil?: (context: FlowContext<G>) => boolean;
   /** Skip if this returns true */
-  skipIf?: (context: FlowContext) => boolean;
+  skipIf?: (context: FlowContext<G>) => boolean;
   /** Minimum number of moves required before step can complete */
   minMoves?: number;
   /** Maximum number of moves allowed (auto-completes after this many) */
@@ -228,49 +232,49 @@ export interface TurnRun {
 /**
  * Configuration for simultaneous action step (multiple players act at once)
  */
-export interface SimultaneousActionStepConfig extends BaseFlowConfig {
+export interface SimultaneousActionStepConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Players who can act (defaults to all players) */
-  players?: (context: FlowContext) => Player[];
+  players?: (context: FlowContext<G>) => PlayerOf<G>[];
   /** Actions available to each player */
-  actions: string[] | ((context: FlowContext, player: Player) => string[]);
+  actions: string[] | ((context: FlowContext<G>, player: PlayerOf<G>) => string[]);
   /** Condition to check if a player is done (per-player) */
-  playerDone?: (context: FlowContext, player: Player) => boolean;
+  playerDone?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
   /** Condition to check if the entire step is complete */
-  allDone?: (context: FlowContext) => boolean;
+  allDone?: (context: FlowContext<G>) => boolean;
   /** Skip this player if returns true */
-  skipPlayer?: (context: FlowContext, player: Player) => boolean;
+  skipPlayer?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
 }
 
 /**
  * Configuration for switch flow (branch based on condition)
  */
-export interface SwitchConfig extends BaseFlowConfig {
+export interface SwitchConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Value to switch on */
-  on: (context: FlowContext) => unknown;
+  on: (context: FlowContext<G>) => unknown;
   /** Cases to match */
-  cases: Record<string, FlowNode>;
+  cases: Record<string, FlowNode<G>>;
   /** Default case if no match */
-  default?: FlowNode;
+  default?: FlowNode<G>;
 }
 
 /**
  * Configuration for if flow (conditional execution)
  */
-export interface IfConfig extends BaseFlowConfig {
+export interface IfConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Condition to check */
-  condition: (context: FlowContext) => boolean;
+  condition: (context: FlowContext<G>) => boolean;
   /** Execute if true */
-  then: FlowNode;
+  then: FlowNode<G>;
   /** Execute if false */
-  else?: FlowNode;
+  else?: FlowNode<G>;
 }
 
 /**
  * Configuration for execute flow (run side effect)
  */
-export interface ExecuteConfig extends BaseFlowConfig {
+export interface ExecuteConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Function to execute */
-  fn: (context: FlowContext) => void;
+  fn: (context: FlowContext<G>) => void;
   /**
    * Does this step COMMIT something an undo cannot honestly take back
    * (UNDO-02)?
@@ -299,28 +303,28 @@ export interface ExecuteConfig extends BaseFlowConfig {
 /**
  * Configuration for phase flow (named game phase)
  */
-export interface PhaseConfig extends BaseFlowConfig {
+export interface PhaseConfig<G extends Game = Game> extends BaseFlowConfig {
   /** Phase name (required, displayed in UI) */
   name: string;
   /** Body to execute during this phase */
-  do: FlowNode;
+  do: FlowNode<G>;
 }
 
 /**
  * Union of all flow node types
  */
-export type FlowNode =
-  | { type: 'sequence'; config: SequenceConfig }
-  | { type: 'loop'; config: LoopConfig }
-  | { type: 'repeat'; config: RepeatNodeConfig }
-  | { type: 'each-player'; config: EachPlayerConfig }
-  | { type: 'for-each'; config: ForEachConfig }
-  | { type: 'action-step'; config: ActionStepConfig }
-  | { type: 'simultaneous-action-step'; config: SimultaneousActionStepConfig }
-  | { type: 'switch'; config: SwitchConfig }
-  | { type: 'if'; config: IfConfig }
-  | { type: 'execute'; config: ExecuteConfig }
-  | { type: 'phase'; config: PhaseConfig };
+export type FlowNode<G extends Game = Game> =
+  | { type: 'sequence'; config: SequenceConfig<G> }
+  | { type: 'loop'; config: LoopConfig<G> }
+  | { type: 'repeat'; config: RepeatNodeConfig<G> }
+  | { type: 'each-player'; config: EachPlayerConfig<G> }
+  | { type: 'for-each'; config: ForEachConfig<GameElement | string | number | boolean | null, G> }
+  | { type: 'action-step'; config: ActionStepConfig<G> }
+  | { type: 'simultaneous-action-step'; config: SimultaneousActionStepConfig<G> }
+  | { type: 'switch'; config: SwitchConfig<G> }
+  | { type: 'if'; config: IfConfig<G> }
+  | { type: 'execute'; config: ExecuteConfig<G> }
+  | { type: 'phase'; config: PhaseConfig<G> };
 
 /**
  * Per-player awaiting state for simultaneous actions
@@ -427,17 +431,17 @@ export interface FlowDebugInfo {
 /**
  * Flow definition for a game
  */
-export interface FlowDefinition {
+export interface FlowDefinition<G extends Game = Game> {
   /** The root flow node */
-  root: FlowNode;
+  root: FlowNode<G>;
   /** Setup function called before flow starts */
-  setup?: (context: FlowContext) => void;
+  setup?: (context: FlowContext<G>) => void;
   /** Check if game is complete */
-  isComplete?: (context: FlowContext) => boolean;
+  isComplete?: (context: FlowContext<G>) => boolean;
   /** Determine winners when complete */
-  getWinners?: (context: FlowContext) => Player[];
+  getWinners?: (context: FlowContext<G>) => PlayerOf<G>[];
   /** Called when entering a named phase */
-  onEnterPhase?: (phaseName: string, context: FlowContext) => void;
+  onEnterPhase?: (phaseName: string, context: FlowContext<G>) => void;
   /** Called when exiting a named phase */
-  onExitPhase?: (phaseName: string, context: FlowContext) => void;
+  onExitPhase?: (phaseName: string, context: FlowContext<G>) => void;
 }
