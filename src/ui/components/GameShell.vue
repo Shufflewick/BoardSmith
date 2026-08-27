@@ -54,7 +54,8 @@ import { useActionController, type ActionResult as ControllerActionResult } from
 import type { ActionMetadata } from '../composables/useActionControllerTypes';
 import type { GameState, FlowState } from '../../client/types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
-import { toCloneablePayload } from './platformRequestClone.js';
+import { usePlatformTransport } from '../composables/usePlatformTransport.js';
+import { useLobby } from '../composables/useLobby.js';
 
 // Generate or retrieve persistent player ID
 // Session-specific IDs (for same-browser scenarios) are stored in sessionStorage
@@ -280,16 +281,6 @@ const currentScreen = ref<Screen>(platformMode.value ? 'game' : 'lobby');
 // Player identity (persistent across sessions, but can change for joiners in same-browser scenarios)
 const playerId = ref(getPlayerId());
 
-// Lobby state
-const joinGameId = ref('');
-const createdGameId = ref<string | null>(null);
-const lobbyInfo = ref<LobbyInfo | null>(null);
-const isCreator = ref(false);
-const lobbyConnection = ref<GameConnection | null>(null);
-
-// Game definition (for playerOptions)
-const gamePlayerOptions = ref<Record<string, unknown> | undefined>(undefined);
-
 // Color selection state (persists through lobby->game transition)
 const colorSelectionEnabled = ref(false);
 
@@ -301,13 +292,6 @@ const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
 // before any broadcast. The broadcast-preferred computed below (teachingDisabledProp)
 // uses the authoritative broadcast value once state is available (criterion 4 / D-03).
 const teachingDisabled = ref(false);
-
-// Sync colorSelectionEnabled from lobbyInfo (persists through lobby->game transition)
-watch(lobbyInfo, (lobby) => {
-  if (lobby?.colorSelectionEnabled !== undefined) {
-    colorSelectionEnabled.value = lobby.colorSelectionEnabled;
-  }
-}, { immediate: true });
 
 // UI state
 const debugExpanded = ref(false);
@@ -400,6 +384,64 @@ const client = new MeepleClient({
   baseUrl: props.apiUrl,
   playerId: playerId.value,
 });
+
+// Toast notifications
+const toast = useToast();
+
+// Create, join, seat claim, the waiting-room controls and leaving all live in
+// useLobby. It reaches back into the three refs the GAME half also reads --
+// playerSeat, gameId, currentScreen -- and owns everything that is only the
+// lobby's.
+const lobby = useLobby({
+  client,
+  apiUrl: props.apiUrl,
+  gameType: props.gameType,
+  playerCount: props.playerCount,
+  playerId,
+  playerSeat,
+  gameId,
+  currentScreen,
+  toast,
+  fetchPlayerOptions,
+  setSessionPlayerId,
+  clearSessionPlayerId,
+  getPlayerName,
+  setPlayerName,
+  log: hmrLog,
+});
+
+const {
+  joinGameId,
+  createdGameId,
+  lobbyInfo,
+  isCreator,
+  gamePlayerOptions,
+  createGame,
+  joinGame,
+  resumeGame,
+  handleJoinLobby,
+  handleUpdateLobbyName,
+  handleSetReady,
+  handleAddSlot,
+  handleRemoveSlot,
+  handleSetSlotBot,
+  handleKickPlayer,
+  handleUpdatePlayerOptions,
+  handleUpdateGameOptions,
+  handleUpdateSlotPlayerOptions,
+  handleLobbyCancel,
+  copyGameCode,
+  leaveGame,
+} = lobby;
+
+// Sync colorSelectionEnabled from lobbyInfo (persists through lobby->game transition)
+watch(lobbyInfo, (lobby) => {
+  if (lobby?.colorSelectionEnabled !== undefined) {
+    colorSelectionEnabled.value = lobby.colorSelectionEnabled;
+  }
+}, { immediate: true });
+
+
 
 // Initialize audio service with the turn notification sound
 audioService.init({
@@ -573,9 +615,6 @@ const displayedState = computed<DisplayedGameState | null>(() => {
 // op in the executor; the host relay is generic and needs no per-op changes.
 // This prevents the recurring "works in dev, broken in the iframe" class of bug
 // where an individual server call forgot its platform branch.
-let platformRequestSeq = 0;
-const pendingPlatformRequests = new Map<string, (r: Record<string, unknown>) => void>();
-
 /**
  * Narrow an untyped host response into a ControllerActionResult.
  *
@@ -595,43 +634,20 @@ function hostErrorText(raw: Record<string, unknown>, fallback: string): string {
   return typeof raw.error === 'string' && raw.error.length > 0 ? raw.error : fallback;
 }
 
+// The wire itself lives in `usePlatformTransport` — request ids, the pending
+// map, the timeout, and the response hand-off. What stays here is the ONE thing
+// that is the shell's own knowledge: which flow state a submission is judged
+// against.
+//
+// `state.value`, deliberately, NOT `displayedState`: during time travel the
+// displayed flow state is nulled out, and a submission must name the LIVE round
+// it will be judged against, not the historical frame on screen.
+const platformTransport = usePlatformTransport({
+  boundaryState: () => state.value?.flowState as BoundaryKeyState | null | undefined,
+});
+
 function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
-  // Strip Vue reactivity (a reactive proxy / ref is not structured-cloneable) so the
-  // natural `someRef.value` arg survives postMessage; a genuine live-element leak
-  // still fails loud via assertCloneable inside toCloneablePayload.
-  //
-  // BSMITH-05: the boundary key is stamped HERE, on the ONE outbound chokepoint,
-  // from the flow state THIS SHELL RENDERED — the round the human was actually
-  // looking at. Stamping it per call site is how a submission ends up carrying
-  // no key at all and landing in whichever round is open by the time it arrives.
-  // It rides on every op, not just the two the engine reads it from: an inert
-  // extra field on a debug payload costs nothing, and "remember to add it when
-  // you add a submission op" is not a guardrail. See
-  // docs/simultaneous-and-interrupt-semantics.md.
-  //
-  // `state.value`, deliberately, NOT `displayedState`: during time travel the
-  // displayed flow state is nulled out, and a submission must name the LIVE
-  // round it will be judged against, not the historical frame on screen.
-  const cloneable = toCloneablePayload(op, payload, state.value?.flowState as BoundaryKeyState | null | undefined);
-  return new Promise((resolve) => {
-    const requestId = `req-${platformRequestSeq++}`;
-    const timer = setTimeout(() => {
-      if (pendingPlatformRequests.delete(requestId)) {
-        resolve({ success: false, error: `Timed out on '${op}'` });
-      }
-    }, 20000);
-    pendingPlatformRequests.set(requestId, (result) => {
-      clearTimeout(timer);
-      resolve(result);
-    });
-    window.parent.postMessage({
-      source: 'shufflewick-game',
-      type: 'server_request',
-      requestId,
-      op,
-      payload: cloneable,
-    }, '*');
-  });
+  return platformTransport.request(op, payload);
 }
 
 // MR-01 closure: thread the projected tutorial step into the action controller so
@@ -1106,9 +1122,6 @@ if (isDevBuild) {
 // Zoom preview (Alt+hover to enlarge cards) - uses event delegation for all cards
 const { previewState } = useZoomPreview();
 
-// Toast notifications
-const toast = useToast();
-
 // ── Teaching controls state (bot-01/02/03) ────────────────────────────────────
 // isDemoRunning is derived from broadcast state — injected by GameSession.broadcast()
 // when #demoMode is true. This ensures all connections (second window, reconnect)
@@ -1336,14 +1349,11 @@ onMounted(async () => {
 onUnmounted(() => {
   compactQuery?.removeEventListener('change', updateCompact);
   if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
-  disconnectFromLobby();
+  lobby.disconnect();
   if (platformMessageHandler) {
     window.removeEventListener('message', platformMessageHandler);
   }
-  for (const [, cb] of pendingPlatformRequests) {
-    cb({ success: false, error: 'GameShell unmounted' });
-  }
-  pendingPlatformRequests.clear();
+  platformTransport.rejectAll('GameShell unmounted');
 });
 
 // Platform mode: postMessage bridge for iframe embedding
@@ -1382,13 +1392,7 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     }
 
     if (data.type === 'server_response') {
-      const cb = pendingPlatformRequests.get(data.requestId);
-      if (cb) {
-        pendingPlatformRequests.delete(data.requestId);
-        // `result` is the executor op's full result object (choices, step
-        // result, etc.). Fall back to the message itself for resilience.
-        cb((data.result ?? data) as Record<string, unknown>);
-      }
+      platformTransport.handleResponse(data);
       return;
     }
 
@@ -1485,490 +1489,11 @@ if (typeof window !== 'undefined' && window.parent !== window) {
   // works whether or not the footer ActionPanel is mounted.
 }
 
-// Update URL when entering a game
+// Update URL when entering a game. The lobby owns the other two URL shapes
+// (/lobby/:id and /), and this one is here because switching seats and
+// restarting rewrite it outside any lobby flow.
 function updateUrl(gid: string, position: number) {
   window.history.pushState({ gameId: gid, position }, '', `/game/${gid}/${position}`);
-}
-
-// Update URL when entering a lobby
-function updateLobbyUrl(gid: string) {
-  window.history.pushState({ gameId: gid, lobby: true }, '', `/lobby/${gid}`);
-}
-
-// Clear URL when leaving game
-function clearUrl() {
-  window.history.pushState({}, '', '/');
-}
-
-// Lobby config type
-interface LobbyConfig {
-  playerCount: number;
-  gameOptions: Record<string, unknown>;
-  playerConfigs: Array<{
-    name: string;
-    isBot: boolean;
-    botLevel: string;
-    [key: string]: unknown;
-  }>;
-}
-
-// Actions
-async function createGame(config?: LobbyConfig) {
-  try {
-    // Use config from lobby if provided, otherwise fallback to props
-    const effectivePlayerCount = config?.playerCount ?? props.playerCount;
-
-    // Build player names and bot config from lobby config
-    let playerNames: string[];
-    let botPlayers: number[] = [];
-    let botLevel = 'medium';
-
-    if (config?.playerConfigs?.length) {
-      playerNames = config.playerConfigs.map((pc, i) =>
-        pc.name || (pc.isBot ? 'Bot' : `Player ${i + 1}`)
-      );
-      // Extract bot players
-      botPlayers = config.playerConfigs
-        .map((pc, i) => (pc.isBot ? i : -1))
-        .filter((i) => i >= 0);
-      // Get bot level from first bot player
-      const firstBot = config.playerConfigs.find((pc) => pc.isBot);
-      if (firstBot) {
-        botLevel = firstBot.botLevel || 'medium';
-      }
-    } else {
-      // Fallback when no config provided
-      playerNames = Array.from({ length: effectivePlayerCount }, (_, i) => `Player ${i + 1}`);
-    }
-
-    // Always use the lobby so host can configure players, add bot, change settings
-    const result = await client.createGame({
-      gameType: props.gameType,
-      playerCount: effectivePlayerCount,
-      playerNames,
-      botPlayers: botPlayers.length > 0 ? botPlayers : undefined,
-      botLevel: botPlayers.length > 0 ? botLevel : undefined,
-      gameOptions: config?.gameOptions,
-      playerConfigs: config?.playerConfigs,
-      useLobby: true,
-      creatorId: playerId.value,
-    });
-
-    if (result.gameId) {
-      createdGameId.value = result.gameId;
-      playerSeat.value = 1; // Creator defaults to seat 1
-      isCreator.value = true;
-
-      if (result.lobby) {
-        // Go to waiting room for configuration
-        lobbyInfo.value = result.lobby;
-        // Fetch playerOptions for the lobby
-        gamePlayerOptions.value = await fetchPlayerOptions(props.gameType);
-        currentScreen.value = 'waiting';
-        updateLobbyUrl(result.gameId);
-        connectToLobby(result.gameId);
-      } else {
-        // Fallback if lobby wasn't created (shouldn't happen)
-        gameId.value = result.gameId;
-        currentScreen.value = 'game';
-        updateUrl(result.gameId, 1);
-      }
-    }
-  } catch (err) {
-    console.error('Failed to create game:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to create game.');
-  }
-}
-
-// Lobby WebSocket connection functions
-function connectToLobby(gid: string) {
-  hmrLog('connectToLobby', gid, {
-    existingConnection: !!lobbyConnection.value,
-  });
-
-  // Disconnect any existing connection
-  disconnectFromLobby();
-
-  // Create a new connection for the lobby
-  const connection = new GameConnection(props.apiUrl, {
-    gameId: gid,
-    playerId: playerId.value,
-    playerSeat: playerSeat.value,
-    autoReconnect: true,
-  });
-
-  // Listen for lobby updates
-  connection.onLobbyChange((lobby) => {
-    hmrLog('onLobbyChange', {
-      state: lobby.state,
-      slots: lobby.slots.map(s => ({ seat: s.seat, status: s.status })),
-    });
-    lobbyInfo.value = lobby;
-
-    // If game has started, transition to game
-    if (lobby.state === 'playing') {
-      disconnectFromLobby();
-
-      // Find my seat from the lobby slots
-      const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
-      if (mySlot) {
-        playerSeat.value = mySlot.seat;
-      }
-
-      gameId.value = gid;
-      currentScreen.value = 'game';
-      updateUrl(gid, playerSeat.value);
-    }
-  });
-
-  // Handle connection errors
-  connection.onError((err) => {
-    hmrLog('connection.onError', err);
-    console.error('Lobby connection error:', err);
-  });
-
-  // Log connection state changes
-  connection.onConnectionChange?.((status) => {
-    hmrLog('connection.onConnectionChange', status);
-  });
-
-  // Connect
-  connection.connect();
-  lobbyConnection.value = connection;
-}
-
-function disconnectFromLobby() {
-  hmrLog('disconnectFromLobby', { hadConnection: !!lobbyConnection.value });
-  if (lobbyConnection.value) {
-    lobbyConnection.value.disconnect();
-    lobbyConnection.value = null;
-  }
-}
-
-// Decide whether a getLobby() failure means "this game is already in progress
-// — join it directly" vs. a real error to surface. Mirrored in
-// GameShell.join-fallthrough.test.ts — keep the two in sync.
-//
-// Fall through ONLY on MeepleClientError: the server answered, and what it
-// answered is a game/lobby state error. An HTTP 404 does NOT fall through
-// (#63) — it used to, on the theory that the server might be an old-style one
-// without a lobby endpoint, which is a backward-compatibility branch this
-// library does not keep, and which swallowed the far more common cause of a
-// 404: a mistyped game code. Network failures and 5xx never fell through.
-function shouldFallThroughToDirectJoin(e: unknown): boolean {
-  return e instanceof MeepleClientError;
-}
-
-async function joinGame() {
-  if (!joinGameId.value.trim()) {
-    toast.error('Please enter a game code.');
-    return;
-  }
-
-  try {
-    const gid = joinGameId.value.trim();
-
-    // Try to get lobby info first
-    try {
-      const lobby = await client.getLobby(gid);
-      createdGameId.value = gid;
-      isCreator.value = false;
-
-      if (lobby.state === 'waiting') {
-        // Check if our playerId is already claimed in this lobby (same browser scenario)
-        // If so, generate a new playerId for this joiner session
-        const existingSlot = lobby.slots.find(s => s.playerId === playerId.value);
-        if (existingSlot) {
-          // Mint a new unique playerId for this joiner (same-browser scenario)
-          // via the SDK's secure minting path — it's a capability token.
-          const newPlayerId = generatePlayerId();
-          playerId.value = newPlayerId;
-          client.setPlayerId(newPlayerId);
-          // Save to sessionStorage so it survives refresh but not browser close
-          setSessionPlayerId(newPlayerId);
-        }
-
-        // Check if there are open slots to join
-        const hasOpenSlots = lobby.slots.some(s => s.status === 'open');
-
-        if (hasOpenSlots) {
-          // Auto-join the lobby (server assigns seat)
-          const playerName = getPlayerName() || `Player ${lobby.slots.length + 1}`;
-
-          try {
-            const joinResult = await client.joinLobby(gid, playerName);
-            lobbyInfo.value = joinResult.lobby ?? lobby;
-
-            // Check if game started (all slots filled)
-            if (joinResult.lobby?.state === 'playing' && joinResult.seat) {
-              playerSeat.value = joinResult.seat;
-              gameId.value = gid;
-              currentScreen.value = 'game';
-              updateUrl(gid, joinResult.seat);
-              return;
-            }
-          } catch (joinErr) {
-            // Join failed, show lobby anyway so they can try manually
-            console.error('Failed to auto-join lobby:', joinErr);
-            lobbyInfo.value = lobby;
-          }
-
-          // Fetch playerOptions for the lobby
-          gamePlayerOptions.value = await fetchPlayerOptions(lobby.gameType);
-          currentScreen.value = 'waiting';
-          updateLobbyUrl(gid);
-          connectToLobby(gid);
-        } else {
-          // No open slots - game is full
-          toast.error('This game is full. No open positions available.');
-        }
-        return;
-      }
-      // Game already started - fall through to direct join
-    } catch (e) {
-      if (e instanceof Error && /HTTP 404/.test(e.message)) {
-        throw new Error(`No game found with code "${gid}". Check the code and try again.`);
-      }
-      if (!shouldFallThroughToDirectJoin(e)) {
-        throw e;
-      }
-      // The server answered with a lobby/game-state error — most often "this
-      // game is already in progress", which is exactly what a direct join is for.
-    }
-
-    // Direct join (the game is already playing)
-    const stateResult = await client.getGameState(gid, 1);
-
-    if (stateResult) {
-      playerSeat.value = 1;
-      gameId.value = gid;
-      currentScreen.value = 'game';
-      updateUrl(gid, 1);
-    }
-  } catch (err) {
-    console.error('Failed to join game:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to join game. Check the game code.');
-  }
-}
-
-// Resume a persisted game by ID
-async function resumeGame(gid: string) {
-  joinGameId.value = gid;
-  await joinGame();
-}
-
-// Lobby event handlers
-async function handleJoinLobby(name: string) {
-  if (!createdGameId.value) return;
-
-  try {
-    const result = await client.joinLobby(createdGameId.value, name);
-
-    if (result.lobby) {
-      lobbyInfo.value = result.lobby;
-    }
-    // Save name for future games
-    setPlayerName(name);
-
-    // If game started, transition
-    if (result.lobby?.state === 'playing' && result.seat) {
-      disconnectFromLobby();
-      playerSeat.value = result.seat;
-      gameId.value = createdGameId.value;
-      currentScreen.value = 'game';
-      updateUrl(createdGameId.value, result.seat);
-    }
-  } catch (err) {
-    console.error('Failed to join lobby:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to join lobby.');
-  }
-}
-
-async function handleUpdateLobbyName(name: string) {
-  if (!createdGameId.value) return;
-
-  try {
-    await client.updateLobbyName(createdGameId.value, name);
-    // Save name for future games
-    setPlayerName(name);
-    // Lobby update will come via polling
-  } catch (err) {
-    console.error('Failed to update name:', err);
-  }
-}
-
-async function handleSetReady(ready: boolean) {
-  if (!createdGameId.value) return;
-
-  try {
-    const result = await client.setReady(createdGameId.value, ready);
-
-    if (result.lobby) {
-      lobbyInfo.value = result.lobby;
-
-      // If game started (all ready), transition to game
-      if (result.lobby.state === 'playing') {
-        disconnectFromLobby();
-
-        // Find my seat from the lobby slots
-        const mySlot = result.lobby.slots.find(s => s.playerId === playerId.value);
-        if (mySlot) {
-          playerSeat.value = mySlot.seat;
-        }
-
-        gameId.value = createdGameId.value;
-        currentScreen.value = 'game';
-        updateUrl(createdGameId.value, playerSeat.value);
-      }
-    }
-  } catch (err) {
-    console.error('Failed to set ready:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to mark as ready.');
-  }
-}
-
-async function handleAddSlot() {
-  if (!createdGameId.value) return;
-
-  try {
-    const result = await client.addSlot(createdGameId.value);
-
-    if (result.lobby) {
-      lobbyInfo.value = result.lobby;
-    }
-  } catch (err) {
-    console.error('Failed to add slot:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to add slot');
-  }
-}
-
-async function handleRemoveSlot(position: number) {
-  if (!createdGameId.value) return;
-
-  try {
-    const result = await client.removeSlot(createdGameId.value, position);
-
-    if (result.lobby) {
-      lobbyInfo.value = result.lobby;
-    }
-  } catch (err) {
-    console.error('Failed to remove slot:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to remove slot');
-  }
-}
-
-async function handleSetSlotBot(position: number, isBot: boolean, botLevel?: string) {
-  if (!createdGameId.value) return;
-
-  try {
-    const result = await client.setSlotBot(createdGameId.value, position, isBot, botLevel);
-
-    if (result.lobby) {
-      lobbyInfo.value = result.lobby;
-    }
-  } catch (err) {
-    console.error('Failed to set slot bot:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to update slot');
-  }
-}
-
-async function handleKickPlayer(position: number) {
-  if (!createdGameId.value) return;
-
-  try {
-    const result = await client.kickPlayer(createdGameId.value, position);
-
-    if (result.lobby) {
-      lobbyInfo.value = result.lobby;
-    }
-  } catch (err) {
-    console.error('Failed to kick player:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to kick player');
-  }
-}
-
-async function handleUpdatePlayerOptions(options: Record<string, unknown>) {
-  if (!createdGameId.value) return;
-
-  try {
-    const result = await client.updatePlayerOptions(createdGameId.value, options);
-
-    if (result.lobby) {
-      lobbyInfo.value = result.lobby;
-    }
-  } catch (err) {
-    console.error('Failed to update player options:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to update options');
-  }
-}
-
-async function handleUpdateGameOptions(options: Record<string, unknown>) {
-  if (!createdGameId.value) return;
-
-  try {
-    const result = await client.updateGameOptions(createdGameId.value, options);
-
-    if (result.lobby) {
-      lobbyInfo.value = result.lobby;
-    }
-  } catch (err) {
-    console.error('Failed to update game options:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to update game options');
-  }
-}
-
-async function handleUpdateSlotPlayerOptions(position: number, options: Record<string, unknown>) {
-  if (!createdGameId.value) return;
-
-  try {
-    const result = await client.updateSlotPlayerOptions(createdGameId.value, position, options);
-
-    if (result.lobby) {
-      lobbyInfo.value = result.lobby;
-    }
-  } catch (err) {
-    console.error('Failed to update slot player options:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to update slot options');
-  }
-}
-
-async function handleLobbyCancel() {
-  // For non-hosts, release our slot before leaving
-  if (!isCreator.value && createdGameId.value) {
-    try {
-      await client.leavePosition(createdGameId.value);
-    } catch (err) {
-      console.error('[Leave] Failed to leave position:', err);
-      // Continue with cleanup even if leave fails
-    }
-  }
-
-  disconnectFromLobby();
-  clearSessionPlayerId();
-  lobbyInfo.value = null;
-  createdGameId.value = null;
-  isCreator.value = false;
-  currentScreen.value = 'lobby';
-  clearUrl();
-}
-
-function copyGameCode() {
-  if (createdGameId.value) {
-    navigator.clipboard.writeText(createdGameId.value);
-    toast.success('Copied!');
-  }
-}
-
-function leaveGame() {
-  disconnectFromLobby();
-  clearSessionPlayerId();
-  gameId.value = null;
-  createdGameId.value = null;
-  joinGameId.value = '';
-  lobbyInfo.value = null;
-  isCreator.value = false;
-  currentScreen.value = 'lobby';
-  clearUrl();
 }
 
 // Debug panel handlers
@@ -2221,7 +1746,6 @@ if ((import.meta as any).hot) {
     hmrLog('vite:beforeUpdate', {
       screen: currentScreen.value,
       hasLobbyInfo: !!lobbyInfo.value,
-      hasConnection: !!lobbyConnection.value,
       gameId: gameId.value,
       createdGameId: createdGameId.value,
     });
@@ -2231,7 +1755,6 @@ if ((import.meta as any).hot) {
     hmrLog('vite:afterUpdate', {
       screen: currentScreen.value,
       hasLobbyInfo: !!lobbyInfo.value,
-      hasConnection: !!lobbyConnection.value,
       gameId: gameId.value,
       createdGameId: createdGameId.value,
     });
