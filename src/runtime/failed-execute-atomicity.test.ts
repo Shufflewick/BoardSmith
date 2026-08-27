@@ -71,7 +71,7 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 20,
+          while: (ctx) => (ctx.get<number>('round') ?? 1) <= 20,
           maxIterations: 50,
           do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'cleanMove', 'refuse'] }) }),
         }),

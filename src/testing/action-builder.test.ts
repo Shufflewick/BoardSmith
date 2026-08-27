@@ -63,7 +63,7 @@ class SelectionBuilderGame extends Game<SelectionBuilderGame, Player> {
             (ctx.args.category as string) === 'A' ? [10, 20, 30] : [40, 50],
         })
         .execute((args, ctx) => {
-          (ctx.game as SelectionBuilderGame).moves += 1;
+          ctx.game.moves += 1;
           return { success: true };
         }),
     );
@@ -71,8 +71,8 @@ class SelectionBuilderGame extends Game<SelectionBuilderGame, Player> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) =>
-            (ctx.game as SelectionBuilderGame).moves < 3,
+          while: (ctx) =>
+            ctx.game.moves < 3,
           maxIterations: 20,
           do: eachPlayer({
             do: actionStep({ actions: ['categorize'] }),

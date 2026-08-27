@@ -1,4 +1,5 @@
 import type { FlowNode } from './types.js';
+import type { Game } from '../element/game.js';
 
 /**
  * Recursively walk a flow-node tree, yielding every node (the node itself,
@@ -18,7 +19,7 @@ import type { FlowNode } from './types.js';
  * enumerate every `action-step` / `simultaneous-action-step` node in a
  * game's flow before it starts.
  */
-export function* walkFlowNodes(node: FlowNode): Generator<FlowNode> {
+export function* walkFlowNodes<G extends Game = Game>(node: FlowNode<G>): Generator<FlowNode<G>> {
   yield node;
 
   switch (node.type) {

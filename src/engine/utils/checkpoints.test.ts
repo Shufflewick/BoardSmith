@@ -57,7 +57,7 @@ class CheckGame extends Game<CheckGame, Player> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) => (ctx.game as CheckGame).total < 30,
+          while: (ctx) => ctx.game.total < 30,
           maxIterations: 100,
           do: eachPlayer({ do: actionStep({ actions: ['add'] }) }),
         }),

@@ -1,4 +1,4 @@
-import type { Game } from '../element/game.js';
+import type { Game, PlayerOf } from '../element/game.js';
 import { GameElement, hasZoneVisibility } from '../element/game-element.js';
 import { Player } from '../player/player.js';
 import { devWarn } from '../../utils/dev.js';
@@ -187,7 +187,7 @@ function relinkFlowVariables(value: unknown, game: Game, idRemap?: Map<number, n
  */
 function createContext<G extends Game>(
   game: G,
-  player?: Player,
+  player?: PlayerOf<G>,
   variables: Record<string, unknown> = {}
 ): FlowContext<G> {
   return {
@@ -217,8 +217,8 @@ function createContext<G extends Game>(
 /**
  * Internal execution state for tracking position in nested flows
  */
-interface ExecutionFrame {
-  node: FlowNode;
+interface ExecutionFrame<G extends Game = Game> {
+  node: FlowNode<G>;
   index: number; // Current step index for sequences, iteration for loops
   completed: boolean;
   data?: Record<string, unknown>; // Node-specific data
@@ -283,8 +283,8 @@ export class FlowHaltedError extends PlayerFacingError {
 
 export class FlowEngine<G extends Game = Game> {
   private game: G;
-  private definition: FlowDefinition;
-  private stack: ExecutionFrame[] = [];
+  private definition: FlowDefinition<G>;
+  private stack: ExecutionFrame<G>[] = [];
   private variables: Record<string, unknown> = {};
   /**
    * CR-02 (159): `originalId -> syntheticId` remap for fungible hidden-zone
@@ -299,7 +299,7 @@ export class FlowEngine<G extends Game = Game> {
    * there is unchanged.
    */
   private hiddenIdRemap?: Map<number, number>;
-  private currentPlayer?: Player;
+  private currentPlayer?: PlayerOf<G>;
   private awaitingInput = false;
   private availableActions: string[] = [];
   private complete = false;
@@ -350,7 +350,7 @@ export class FlowEngine<G extends Game = Game> {
    */
   private turnRun?: TurnRun;
   /** Current action step config (for move limit tracking) */
-  private currentActionConfig?: ActionStepConfig;
+  private currentActionConfig?: ActionStepConfig<G>;
   /**
    * Monotonic count of completed IRREVERSIBLE `execute()` flow nodes --
    * those declared `{ irreversible: true }` (UNDO-02, 155-02). An ordinary
@@ -366,7 +366,7 @@ export class FlowEngine<G extends Game = Game> {
    */
   irreversibleCommitCount = 0;
 
-  constructor(game: G, definition: FlowDefinition) {
+  constructor(game: G, definition: FlowDefinition<G>) {
     this.game = game;
     this.definition = definition;
   }
@@ -562,7 +562,7 @@ export class FlowEngine<G extends Game = Game> {
   /**
    * Mark an action step frame as completed and reset tracking state.
    */
-  private completeActionStep(frame: ExecutionFrame): void {
+  private completeActionStep(frame: ExecutionFrame<G>): void {
     this.restorePlayerFromActionStep(frame);
     frame.completed = true;
     this.currentActionConfig = undefined;
@@ -573,13 +573,13 @@ export class FlowEngine<G extends Game = Game> {
    * Restore currentPlayer after a player: override completes.
    * Only restores if this frame saved a previous player (i.e., had a player: override).
    */
-  private restorePlayerFromActionStep(frame: ExecutionFrame): void {
+  private restorePlayerFromActionStep(frame: ExecutionFrame<G>): void {
     if (frame.data?.playerSaved) {
       // Always a live Player (or a deliberate `undefined`, when no player was
       // current at save time): `getPosition`/`restore` round-trip frame data
       // through serializeFlowVariables/relinkFlowVariables, so there is no
       // serialized form to decode here.
-      this.currentPlayer = frame.data.previousPlayer as Player | undefined;
+      this.currentPlayer = frame.data.previousPlayer as PlayerOf<G> | undefined;
     }
   }
 
@@ -590,7 +590,7 @@ export class FlowEngine<G extends Game = Game> {
   private restoreActionStepTracking(): void {
     const currentFrame = this.stack[this.stack.length - 1];
     if (currentFrame?.node.type === 'action-step') {
-      this.currentActionConfig = currentFrame.node.config as ActionStepConfig;
+      this.currentActionConfig = currentFrame.node.config as ActionStepConfig<G>;
       this.moveCount = (currentFrame.data?.moveCount as number) ?? 0;
       return;
     }
@@ -640,7 +640,7 @@ export class FlowEngine<G extends Game = Game> {
    * legitimate external-gate pattern, so we only warn.
    */
   private warnIfDeadlockedSimultaneousStep(
-    config: SimultaneousActionStepConfig
+    config: SimultaneousActionStepConfig<G>
   ): void {
     const noEligibleActor =
       this.awaitingPlayers.length === 0 || this.awaitingPlayers.every(p => p.completed);
@@ -743,7 +743,7 @@ export class FlowEngine<G extends Game = Game> {
     actionName: string,
     args: Record<string, unknown>,
     playerIndex: number | undefined,
-    frame: ExecutionFrame
+    frame: ExecutionFrame<G>
   ): FlowState {
     const config = frame.node.config as SimultaneousActionStepConfig;
 
@@ -1179,7 +1179,7 @@ export class FlowEngine<G extends Game = Game> {
   /**
    * Get the number of valid child indices for a flow node.
    */
-  private getChildCount(node: FlowNode): number {
+  private getChildCount(node: FlowNode<G>): number {
     switch (node.type) {
       case 'sequence':
         return node.config.steps.length;
@@ -1296,7 +1296,7 @@ export class FlowEngine<G extends Game = Game> {
     };
   }
 
-  private getSwitchBranchIndex(config: SwitchConfig, branchKey: string): number | undefined {
+  private getSwitchBranchIndex(config: SwitchConfig<G>, branchKey: string): number | undefined {
     const caseKeys = Object.keys(config.cases);
     if (branchKey === '__default') {
       return config.default ? caseKeys.length : undefined;
@@ -1306,7 +1306,7 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private getNavigationIndex(
-    node: FlowNode,
+    node: FlowNode<G>,
     frameIndex: number,
     frameData?: Record<string, unknown>
   ): number {
@@ -1354,7 +1354,7 @@ export class FlowEngine<G extends Game = Game> {
     return frameIndex === childCount ? frameIndex - 1 : frameIndex;
   }
 
-  private getChildNode(node: FlowNode, index: number): FlowNode {
+  private getChildNode(node: FlowNode<G>, index: number): FlowNode<G> {
     switch (node.type) {
       case 'sequence':
         return node.config.steps[index];
@@ -1457,7 +1457,7 @@ export class FlowEngine<G extends Game = Game> {
   /**
    * Execute a single flow node
    */
-  private executeNode(frame: ExecutionFrame): FlowStepResult {
+  private executeNode(frame: ExecutionFrame<G>): FlowStepResult {
     const context = this.createContext();
 
     switch (frame.node.type) {
@@ -1495,9 +1495,9 @@ export class FlowEngine<G extends Game = Game> {
   // ============================================================================
 
   private executeSequence(
-    frame: ExecutionFrame,
-    config: SequenceConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: SequenceConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     if (frame.index >= config.steps.length) {
       frame.completed = true;
@@ -1513,9 +1513,9 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private executeLoop(
-    frame: ExecutionFrame,
-    config: LoopConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: LoopConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
     const maxIterations = config.maxIterations ?? (config.unbounded ? Infinity : DEFAULT_MAX_ITERATIONS);
@@ -1558,9 +1558,9 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private executeRepeat(
-    frame: ExecutionFrame,
-    config: RepeatNodeConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: RepeatNodeConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
     const times = Math.max(0, config.times);
@@ -1578,14 +1578,14 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private executeEachPlayer(
-    frame: ExecutionFrame,
-    config: EachPlayerConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: EachPlayerConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     // Build eligible seat list once so turn order is deterministic, then re-check
     // filter dynamically each iteration so mid-round state changes are respected.
     if (frame.data?.eligibleSeats === undefined) {
-      const players: Player[] = [...this.game.all(Player)];
+      const players: PlayerOf<G>[] = [...this.game.players];
 
       if (config.direction === 'backward') {
         players.reverse();
@@ -1647,9 +1647,9 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private executeForEach(
-    frame: ExecutionFrame,
-    config: ForEachConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: ForEachConfig<GameElement | string | number | boolean | null, G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     // Snapshot the collection exactly once on first entry (mirrors executeEachPlayer's
     // eligibleSeats pattern) so a loop body that mutates the source collection (removes
@@ -1773,7 +1773,7 @@ export class FlowEngine<G extends Game = Game> {
    * it with `turnScope`, and an ambiguous entry that declares nothing warns in
    * dev and marks the frame, so the undo it disables says why.
    */
-  private entryMoveCount(config: ActionStepConfig, player: Player, frame: ExecutionFrame): number {
+  private entryMoveCount(config: ActionStepConfig<G>, player: Player, frame: ExecutionFrame<G>): number {
     const run = this.turnRun;
     if (!run || run.player !== player.seat || run.count === 0) return 0;
 
@@ -1820,9 +1820,9 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private executeActionStep(
-    frame: ExecutionFrame,
-    config: ActionStepConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: ActionStepConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     // Check skip condition
     if (config.skipIf?.(context)) {
@@ -1917,14 +1917,14 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private executeSimultaneousActionStep(
-    frame: ExecutionFrame,
-    config: SimultaneousActionStepConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: SimultaneousActionStepConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     // Get players who should participate
-    const players: Player[] = config.players
+    const players: PlayerOf<G>[] = config.players
       ? config.players(context)
-      : [...this.game.all(Player)];
+      : [...this.game.players];
 
     // Build awaiting state for each player
     this.awaitingPlayers = [];
@@ -2019,9 +2019,9 @@ export class FlowEngine<G extends Game = Game> {
   // ============================================================================
 
   private executeSwitch(
-    frame: ExecutionFrame,
-    config: SwitchConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: SwitchConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     // If we've already pushed a branch, we're done (child has completed)
     if (frame.data?.branchPushed) {
@@ -2055,9 +2055,9 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private executeIf(
-    frame: ExecutionFrame,
-    config: IfConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: IfConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     // If we've already pushed a branch, we're done (child has completed)
     if (frame.data?.branchPushed) {
@@ -2082,9 +2082,9 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private executeExecute(
-    frame: ExecutionFrame,
-    config: ExecuteConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: ExecuteConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     // Run the side effect function
     config.fn(context);
@@ -2104,9 +2104,9 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   private executePhase(
-    frame: ExecutionFrame,
-    config: PhaseConfig,
-    context: FlowContext
+    frame: ExecutionFrame<G>,
+    config: PhaseConfig<G>,
+    context: FlowContext<G>
   ): FlowStepResult {
     // If we haven't entered this phase yet
     if (!frame.data?.entered) {

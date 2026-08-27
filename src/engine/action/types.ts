@@ -1,6 +1,6 @@
 import type { GameElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
-import type { Game } from '../element/game.js';
+import type { Game, PlayerOf } from '../element/game.js';
 import type { ElementClass } from '../element/types.js';
 
 /**
@@ -419,8 +419,13 @@ export type Selection =
 export interface ActionContext<G extends Game = Game> {
   /** The game instance, typed as the concrete game class. */
   game: G;
-  /** The player taking the action */
-  player: Player;
+  /**
+   * The player taking the action, typed as the game's own Player subclass --
+   * see {@link PlayerOf}. Derived from `G` rather than taken as a second type
+   * parameter, so `Action.create<MyGame>(...)` types both halves of the context
+   * from the one name the author already wrote.
+   */
+  player: PlayerOf<G>;
   /** Arguments collected so far */
   args: Record<string, unknown>;
 }

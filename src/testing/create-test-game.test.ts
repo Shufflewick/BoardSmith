@@ -46,7 +46,7 @@ class CountGame extends Game<CountGame, CountPlayer> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) => (ctx.game as CountGame).total < 6,
+          while: (ctx) => ctx.game.total < 6,
           maxIterations: 50,
           do: eachPlayer({ do: actionStep({ actions: ['claim'] }) }),
         }),

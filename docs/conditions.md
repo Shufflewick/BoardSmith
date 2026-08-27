@@ -86,8 +86,8 @@ For conditions with complex logic, keep the predicate function readable:
 ```typescript
 .condition({
   'can afford building cost': (ctx) => {
-    const player = ctx.player as MyPlayer;
-    return player.canAfford({ wood: 5, gold: 2 });
+    // ctx.player is MyPlayer, from the game type named on Action.create<MyGame>.
+    return ctx.player.canAfford({ wood: 5, gold: 2 });
   },
 })
 ```
@@ -96,7 +96,7 @@ For conditions with complex logic, keep the predicate function readable:
 
 ```typescript
 .condition({
-  'player can take action': (ctx) => game.canTakeAction(ctx.player as MyPlayer),
+  'player can take action': (ctx) => game.canTakeAction(ctx.player),
 })
 ```
 

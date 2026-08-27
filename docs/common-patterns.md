@@ -478,15 +478,14 @@ class MyPlayer extends Player {
 ### In Actions
 
 ```typescript
-Action.create('build')
+Action.create<MyGame>('build')
   .condition({
-    'can afford building cost': (ctx) => {
-      const player = ctx.player as MyPlayer;
-      return player.canAfford({ wood: 5, gold: 2 });
-    },
+    // Naming the game on `create` types both halves of every ctx below:
+    // ctx.game is MyGame and ctx.player is MyPlayer, with no casts.
+    'can afford building cost': (ctx) => ctx.player.canAfford({ wood: 5, gold: 2 }),
   })
   .execute((args, ctx) => {
-    const player = ctx.player as MyPlayer;
+    const player = ctx.player;
     player.pay({ wood: 5, gold: 2 });
 
     // Create building...

@@ -262,10 +262,10 @@ constructor(options) {
 
 ```typescript
 // actions.ts - Handling jump chains
-Action.create('move')
+Action.create<CheckersGame>('move')
   .chooseElement('piece', {
     filter: (piece, ctx) => {
-      const game = ctx.game as CheckersGame;
+      const game = ctx.game;
       // If there's a pending jump, only that piece can continue
       if (game.pendingJumpPiece) {
         return piece === game.pendingJumpPiece;
@@ -416,7 +416,7 @@ return {
 
   // Phase lifecycle hooks
   onEnterPhase: (phaseName, ctx) => {
-    const game = ctx.game as CribbageGame;
+    const game = ctx.game;
     game.cribbagePhase = phaseName;
 
     const phaseNames = {

@@ -1,4 +1,4 @@
-import type { Player } from '../player/player.js';
+import type { Game, PlayerOf } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
 import type {
   FlowNode,
@@ -27,7 +27,7 @@ import type {
  * )
  * ```
  */
-export function sequence(...steps: FlowNode[]): FlowNode {
+export function sequence<G extends Game = Game>(...steps: FlowNode<G>[]): FlowNode<G> {
   return {
     type: 'sequence',
     config: { steps },
@@ -56,7 +56,7 @@ export function sequence(...steps: FlowNode[]): FlowNode {
  * )
  * ```
  */
-export function phase(name: string, config: { do: FlowNode }): FlowNode {
+export function phase<G extends Game = Game>(name: string, config: { do: FlowNode<G> }): FlowNode<G> {
   return {
     type: 'phase',
     config: {
@@ -77,17 +77,17 @@ export function phase(name: string, config: { do: FlowNode }): FlowNode {
  * })
  * ```
  */
-export function loop(config: {
+export function loop<G extends Game = Game>(config: {
   name?: string;
-  while?: (context: FlowContext) => boolean;
+  while?: (context: FlowContext<G>) => boolean;
   maxIterations?: number;
   /**
    * Opt-in for a genuinely unbounded game — makes `maxIterations` optional.
    * The global whole-flow safety tripwire still applies even when set.
    */
   unbounded?: boolean;
-  do: FlowNode;
-}): FlowNode {
+  do: FlowNode<G>;
+}): FlowNode<G> {
   // Fail fast at construction time unless the author has provided a numeric
   // cap OR explicitly opted into `unbounded: true`. A missing cap with no
   // opt-in silently falls back to the engine's DEFAULT_MAX_ITERATIONS (10000),
@@ -143,7 +143,7 @@ export function loop(config: {
  * repeat(3, actionStep({ actions: ['draw'] }))
  * ```
  */
-export function repeat(times: number, body: FlowNode): FlowNode {
+export function repeat<G extends Game = Game>(times: number, body: FlowNode<G>): FlowNode<G> {
   return {
     type: 'repeat',
     config: {
@@ -163,13 +163,13 @@ export function repeat(times: number, body: FlowNode): FlowNode {
  * })
  * ```
  */
-export function eachPlayer(config: {
+export function eachPlayer<G extends Game = Game>(config: {
   name?: string;
-  filter?: (player: Player, context: FlowContext) => boolean;
+  filter?: (player: PlayerOf<G>, context: FlowContext<G>) => boolean;
   direction?: 'forward' | 'backward';
-  startingPlayer?: (context: FlowContext) => Player;
-  do: FlowNode;
-}): FlowNode {
+  startingPlayer?: (context: FlowContext<G>) => PlayerOf<G>;
+  do: FlowNode<G>;
+}): FlowNode<G> {
   return {
     type: 'each-player',
     config: {
@@ -205,12 +205,15 @@ export function eachPlayer(config: {
  * })
  * ```
  */
-export function forEach<T extends GameElement | string | number | boolean | null>(config: {
+export function forEach<
+  T extends GameElement | string | number | boolean | null,
+  G extends Game = Game,
+>(config: {
   name?: string;
-  collection: T[] | ((context: FlowContext) => T[]);
+  collection: T[] | ((context: FlowContext<G>) => T[]);
   as: string;
-  do: FlowNode;
-}): FlowNode {
+  do: FlowNode<G>;
+}): FlowNode<G> {
   return {
     type: 'for-each',
     config: {
@@ -242,16 +245,16 @@ export function forEach<T extends GameElement | string | number | boolean | null
  * })
  * ```
  */
-export function actionStep(config: {
+export function actionStep<G extends Game = Game>(config: {
   name?: string;
-  player?: (context: FlowContext) => Player;
-  actions: string[] | ((context: FlowContext) => string[]);
-  repeatUntil?: (context: FlowContext) => boolean;
-  skipIf?: (context: FlowContext) => boolean;
+  player?: (context: FlowContext<G>) => PlayerOf<G>;
+  actions: string[] | ((context: FlowContext<G>) => string[]);
+  repeatUntil?: (context: FlowContext<G>) => boolean;
+  skipIf?: (context: FlowContext<G>) => boolean;
   minMoves?: number;
   maxMoves?: number;
   turnScope?: TurnScope;
-}): FlowNode {
+}): FlowNode<G> {
   return {
     type: 'action-step',
     config: {
@@ -278,12 +281,12 @@ export function actionStep(config: {
  * })
  * ```
  */
-export function playerActions(config: {
+export function playerActions<G extends Game = Game>(config: {
   name?: string;
-  actions: string[] | ((context: FlowContext) => string[]);
-  repeatUntil?: (context: FlowContext) => boolean;
-  skipIf?: (context: FlowContext) => boolean;
-}): FlowNode {
+  actions: string[] | ((context: FlowContext<G>) => string[]);
+  repeatUntil?: (context: FlowContext<G>) => boolean;
+  skipIf?: (context: FlowContext<G>) => boolean;
+}): FlowNode<G> {
   return actionStep({
     name: config.name,
     actions: config.actions,
@@ -345,14 +348,14 @@ export function playerActions(config: {
  * })
  * ```
  */
-export function simultaneousActionStep(config: {
+export function simultaneousActionStep<G extends Game = Game>(config: {
   name?: string;
-  players?: (context: FlowContext) => Player[];
-  actions: string[] | ((context: FlowContext, player: Player) => string[]);
-  playerDone?: (context: FlowContext, player: Player) => boolean;
-  allDone?: (context: FlowContext) => boolean;
-  skipPlayer?: (context: FlowContext, player: Player) => boolean;
-}): FlowNode {
+  players?: (context: FlowContext<G>) => PlayerOf<G>[];
+  actions: string[] | ((context: FlowContext<G>, player: PlayerOf<G>) => string[]);
+  playerDone?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
+  allDone?: (context: FlowContext<G>) => boolean;
+  skipPlayer?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
+}): FlowNode<G> {
   return {
     type: 'simultaneous-action-step',
     config: {
@@ -381,12 +384,12 @@ export function simultaneousActionStep(config: {
  * })
  * ```
  */
-export function switchOn(config: {
+export function switchOn<G extends Game = Game>(config: {
   name?: string;
-  on: (context: FlowContext) => unknown;
-  cases: Record<string, FlowNode>;
-  default?: FlowNode;
-}): FlowNode {
+  on: (context: FlowContext<G>) => unknown;
+  cases: Record<string, FlowNode<G>>;
+  default?: FlowNode<G>;
+}): FlowNode<G> {
   return {
     type: 'switch',
     config: {
@@ -410,12 +413,12 @@ export function switchOn(config: {
  * })
  * ```
  */
-export function ifThen(config: {
+export function ifThen<G extends Game = Game>(config: {
   name?: string;
-  condition: (context: FlowContext) => boolean;
-  then: FlowNode;
-  else?: FlowNode;
-}): FlowNode {
+  condition: (context: FlowContext<G>) => boolean;
+  then: FlowNode<G>;
+  else?: FlowNode<G>;
+}): FlowNode<G> {
   return {
     type: 'if',
     config: {
@@ -463,14 +466,14 @@ export function ifThen(config: {
  * })
  * ```
  */
-export function defineFlow(config: {
-  setup?: (context: FlowContext) => void;
-  root: FlowNode;
-  isComplete?: (context: FlowContext) => boolean;
-  getWinners?: (context: FlowContext) => Player[];
-  onEnterPhase?: (phaseName: string, context: FlowContext) => void;
-  onExitPhase?: (phaseName: string, context: FlowContext) => void;
-}): FlowDefinition {
+export function defineFlow<G extends Game = Game>(config: {
+  setup?: (context: FlowContext<G>) => void;
+  root: FlowNode<G>;
+  isComplete?: (context: FlowContext<G>) => boolean;
+  getWinners?: (context: FlowContext<G>) => PlayerOf<G>[];
+  onEnterPhase?: (phaseName: string, context: FlowContext<G>) => void;
+  onExitPhase?: (phaseName: string, context: FlowContext<G>) => void;
+}): FlowDefinition<G> {
   return {
     setup: config.setup,
     root: config.root,
@@ -484,7 +487,7 @@ export function defineFlow(config: {
 /**
  * Create a "do nothing" node (useful as placeholder or in conditionals)
  */
-export function noop(): FlowNode {
+export function noop<G extends Game = Game>(): FlowNode<G> {
   return sequence();
 }
 
@@ -523,10 +526,10 @@ export function noop(): FlowNode {
  * @param options.irreversible - Fence undo/rewind at this point. Default false.
  *   See {@link ExecuteConfig.irreversible} for how to decide.
  */
-export function execute(
-  fn: (context: FlowContext) => void,
+export function execute<G extends Game = Game>(
+  fn: (context: FlowContext<G>) => void,
   options?: { irreversible?: boolean }
-): FlowNode {
+): FlowNode<G> {
   return {
     type: 'execute',
     config: { fn, ...(options?.irreversible ? { irreversible: true } : {}) },
@@ -552,10 +555,10 @@ export function execute(
  * )
  * ```
  */
-export function setVar(
+export function setVar<G extends Game = Game>(
   name: string,
-  value: unknown | ((context: FlowContext) => unknown)
-): FlowNode {
+  value: unknown | ((context: FlowContext<G>) => unknown)
+): FlowNode<G> {
   return execute((ctx) => {
     const resolvedValue = typeof value === 'function' ? (value as Function)(ctx) : value;
     ctx.set(name, resolvedValue);
@@ -608,13 +611,13 @@ export function setVar(
  * })
  * ```
  */
-export function turnLoop(config: {
+export function turnLoop<G extends Game = Game>(config: {
   /** Optional name for debugging */
   name?: string;
   /** Actions available during the loop */
-  actions: string[] | ((context: FlowContext) => string[]);
+  actions: string[] | ((context: FlowContext<G>) => string[]);
   /** Continue looping while this returns true. Game.isFinished() is checked automatically. */
-  while?: (context: FlowContext) => boolean;
+  while?: (context: FlowContext<G>) => boolean;
   /** Safety limit to prevent infinite loops (default: 100 unless `unbounded`) */
   maxIterations?: number;
   /**
@@ -634,7 +637,7 @@ export function turnLoop(config: {
    * {@link ActionStepConfig.turnScope}.
    */
   turnScope?: TurnScope;
-}): FlowNode {
+}): FlowNode<G> {
   return loop({
     name: config.name,
     while: (ctx) => {
@@ -711,14 +714,14 @@ export function turnLoop(config: {
  * })
  * ```
  */
-export function stateAwareLoop(config: {
+export function stateAwareLoop<G extends Game = Game>(config: {
   /** Optional name for debugging */
   name?: string;
   /**
    * Actions available during the loop — the simple form, which wraps them in an
    * `actionStep` for you. Mutually exclusive with `do`.
    */
-  actions?: string[] | ((context: FlowContext) => string[]);
+  actions?: string[] | ((context: FlowContext<G>) => string[]);
   /**
    * The loop body, for anything an `actionStep` alone cannot express: a
    * sequence that acts and then drains the pending state it produced, a phase
@@ -730,26 +733,26 @@ export function stateAwareLoop(config: {
    *
    * Mutually exclusive with `actions`.
    */
-  do?: FlowNode;
+  do?: FlowNode<G>;
   /**
    * Who acts, when the body is the built-in `actionStep`. Mirrors
    * `actionStep`'s own `player` (#35). Ignored when `do` is supplied — the body
    * owns its own actors then.
    */
-  player?: (context: FlowContext) => Player;
+  player?: (context: FlowContext<G>) => PlayerOf<G>;
   /**
    * Skip the body for this iteration. Mirrors `actionStep`'s own `skipIf`
    * (#35), and applies to a composite `do` body too.
    */
-  skipIf?: (context: FlowContext) => boolean;
+  skipIf?: (context: FlowContext<G>) => boolean;
   /** Continue looping while this returns true. Game.isFinished() is checked automatically. */
-  while?: (context: FlowContext) => boolean;
+  while?: (context: FlowContext<G>) => boolean;
   /**
    * Return an array of pending state values to check.
    * If ANY of these are truthy, the loop continues even if `while` returns false.
    * This ensures async game state (like combat) is resolved before the loop exits.
    */
-  pendingStates?: (context: FlowContext) => unknown[];
+  pendingStates?: (context: FlowContext<G>) => unknown[];
   /** Safety limit to prevent infinite loops (default: 100 unless `unbounded`) */
   maxIterations?: number;
   /**
@@ -766,7 +769,7 @@ export function stateAwareLoop(config: {
    * {@link ActionStepConfig.turnScope}.
    */
   turnScope?: TurnScope;
-}): FlowNode {
+}): FlowNode<G> {
   // Two ways to say what the body is, and exactly one must be used. Accepting
   // both would mean silently ignoring one of them.
   if (config.actions !== undefined && config.do !== undefined) {
@@ -781,7 +784,7 @@ export function stateAwareLoop(config: {
     );
   }
 
-  const body: FlowNode = config.do ?? actionStep({
+  const body: FlowNode<G> = config.do ?? actionStep({
     actions: config.actions!,
     ...(config.player ? { player: config.player } : {}),
     ...(config.skipIf ? { skipIf: config.skipIf } : {}),

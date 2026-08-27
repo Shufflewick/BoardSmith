@@ -31,7 +31,7 @@ class PickGame extends Game<PickGame, Player> {
       Action.create<PickGame>('pick')
         .chooseFrom('value', { choices: [1, 2, 3] })
         .execute((args, ctx) => {
-          (ctx.game as PickGame).total += args.value as number;
+          ctx.game.total += args.value as number;
           return { success: true };
         }),
     );
@@ -39,7 +39,7 @@ class PickGame extends Game<PickGame, Player> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) => (ctx.game as PickGame).total < 6,
+          while: (ctx) => ctx.game.total < 6,
           maxIterations: 100,
           do: eachPlayer({
             do: actionStep({ actions: ['pick'] }),
@@ -63,7 +63,7 @@ class TargetGame extends Game<TargetGame, Player> {
       Action.create<TargetGame>('pick')
         .chooseFrom('value', { choices: [1] })
         .execute((args, ctx) => {
-          (ctx.game as TargetGame).total += args.value as number;
+          ctx.game.total += args.value as number;
           return { success: true };
         }),
     );
@@ -71,8 +71,8 @@ class TargetGame extends Game<TargetGame, Player> {
     this.setFlow(
       defineFlow({
         root: loop({
-          while: (ctx: FlowContext) =>
-            (ctx.game as TargetGame).total < (ctx.game as TargetGame).target,
+          while: (ctx) =>
+            ctx.game.total < ctx.game.target,
           maxIterations: 200,
           do: eachPlayer({
             do: actionStep({ actions: ['pick'] }),
