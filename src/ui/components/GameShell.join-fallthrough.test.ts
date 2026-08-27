@@ -1,9 +1,10 @@
 /**
  * GameShell.joinGame — direct-join fall-through predicate (WR-02, narrowed by #63).
  *
- * Mirrors the exact catch-block predicate in GameShell.vue's joinGame()
- * (same canary pattern as GameShell.action-help.test.ts): if GameShell
- * changes the predicate, this mirror must receive the same change.
+ * The predicate itself is imported now. It used to be a hand-copied mirror of the
+ * catch block inside GameShell.vue's joinGame(), kept in sync by a comment; the
+ * lobby extraction (#41) gave it a name in a module, so the test drives the real
+ * one and the mirror cannot drift.
  *
  * Contract: after getLobby(gid) throws, GameShell falls through to a direct
  * join only when the SERVER ANSWERED with a game/lobby state error — a
@@ -20,12 +21,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { MeepleClientError } from '../../client/index.js';
-
-// ── Mirrored from GameShell.vue shouldFallThroughToDirectJoin() ─────────────
-function shouldFallThroughToDirectJoin(e: unknown): boolean {
-  return e instanceof MeepleClientError;
-}
-// ─────────────────────────────────────────────────────────────────────────────
+import { shouldFallThroughToDirectJoin } from '../composables/useLobby.js';
 
 describe('joinGame direct-join fall-through predicate (WR-02 / #63)', () => {
   it('falls through on MeepleClientError (server answered with a lobby/game-state error)', () => {
