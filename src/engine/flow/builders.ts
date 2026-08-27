@@ -681,12 +681,54 @@ export function turnLoop(config: {
  *   pendingStates: (ctx) => [ctx.game.pendingAnimation],
  * })
  * ```
+ *
+ * @example
+ * ```typescript
+ * // A composite body: act, then drain whatever the action queued (#35). This
+ * // is the shape the MERC-style example above actually needs — a bare
+ * // actionStep cannot both take the action and resolve what it produced.
+ * stateAwareLoop({
+ *   name: 'rebel-phase',
+ *   while: (ctx) => (ctx.game as MercGame).rebelsHaveActions(),
+ *   pendingStates: (ctx) => [(ctx.game as MercGame).pendingCombat],
+ *   do: sequence(
+ *     actionStep({ actions: ['move', 'attack'], player: (ctx) => ctx.game.getPlayer(1)! }),
+ *     execute((ctx) => (ctx.game as MercGame).drainPendingCombat()),
+ *   ),
+ * })
+ * ```
  */
 export function stateAwareLoop(config: {
   /** Optional name for debugging */
   name?: string;
-  /** Actions available during the loop */
-  actions: string[] | ((context: FlowContext) => string[]);
+  /**
+   * Actions available during the loop — the simple form, which wraps them in an
+   * `actionStep` for you. Mutually exclusive with `do`.
+   */
+  actions?: string[] | ((context: FlowContext) => string[]);
+  /**
+   * The loop body, for anything an `actionStep` alone cannot express: a
+   * sequence that acts and then drains the pending state it produced, a phase
+   * with several steps in it (#35).
+   *
+   * This is the shape the builder's own documented example needs. Without it,
+   * a game whose body is a sequence had to hand-roll the entire pending-state
+   * guard, which is what this builder exists to remove.
+   *
+   * Mutually exclusive with `actions`.
+   */
+  do?: FlowNode;
+  /**
+   * Who acts, when the body is the built-in `actionStep`. Mirrors
+   * `actionStep`'s own `player` (#35). Ignored when `do` is supplied — the body
+   * owns its own actors then.
+   */
+  player?: (context: FlowContext) => Player;
+  /**
+   * Skip the body for this iteration. Mirrors `actionStep`'s own `skipIf`
+   * (#35), and applies to a composite `do` body too.
+   */
+  skipIf?: (context: FlowContext) => boolean;
   /** Continue looping while this returns true. Game.isFinished() is checked automatically. */
   while?: (context: FlowContext) => boolean;
   /**
@@ -705,6 +747,26 @@ export function stateAwareLoop(config: {
    */
   unbounded?: boolean;
 }): FlowNode {
+  // Two ways to say what the body is, and exactly one must be used. Accepting
+  // both would mean silently ignoring one of them.
+  if (config.actions !== undefined && config.do !== undefined) {
+    throw new Error(
+      'stateAwareLoop: pass either `actions` (the built-in action step) or `do` (your own body), not both. ' +
+        'With `do`, put the actions in the actionStep inside it.',
+    );
+  }
+  if (config.actions === undefined && config.do === undefined) {
+    throw new Error(
+      'stateAwareLoop: needs a body — pass `actions` for a single action step, or `do` for a sequence.',
+    );
+  }
+
+  const body: FlowNode = config.do ?? actionStep({
+    actions: config.actions!,
+    ...(config.player ? { player: config.player } : {}),
+    ...(config.skipIf ? { skipIf: config.skipIf } : {}),
+  });
+
   return loop({
     name: config.name,
     while: (ctx) => {
@@ -730,8 +792,10 @@ export function stateAwareLoop(config: {
     // F-16: only apply the default cap when NOT unbounded (see turnLoop).
     maxIterations: config.unbounded ? config.maxIterations : (config.maxIterations ?? 100),
     unbounded: config.unbounded,
-    do: actionStep({
-      actions: config.actions,
-    }),
+    // `skipIf` on a COMPOSITE body cannot ride on the actionStep (there may be
+    // several, or none), so it gates the whole iteration here instead.
+    do: config.do && config.skipIf
+      ? ifThen({ condition: (ctx) => !config.skipIf!(ctx), then: body })
+      : body,
   });
 }
