@@ -45,6 +45,7 @@ import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { useActionController } from '../../composables/useActionController.js';
 import type { ActionMetadata } from '../../composables/useActionController.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Part 1: self-filter — GameShell awaitingPlayerNames/awaitingPlayerSeats
@@ -167,7 +168,7 @@ function mountConfirmPanel(opts: { completed: boolean; sendAction: ReturnType<ty
   });
 
   const wrapper = mount(ActionPanel, {
-    global: { provide: { actionController: controller } },
+    global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
     props: {
       availableActions: ['confirm'],
       playerSeat: 0,
@@ -243,7 +244,7 @@ describe('ActionPanel executeAction — commit-leak gate on own completed flag (
     });
 
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: { availableActions: ['confirm'], playerSeat: 0, isMyTurn: true, completed: false },
     });
 

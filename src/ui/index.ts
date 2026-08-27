@@ -110,6 +110,7 @@ export {
   useGameContext,
   tryUseGameContext,
   GAME_CONTEXT_KEYS,
+  injectPlayerSeat,
   type GameContext,
   type GameContextPlayer,
   type TimeTravelDiff,

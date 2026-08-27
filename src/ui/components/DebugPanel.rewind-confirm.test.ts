@@ -29,6 +29,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import DebugPanel from './DebugPanel.vue';
+import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,7 +56,7 @@ function mountPanel() {
       gameId: 'test-game',
       expanded: true,
     },
-    global: { provide: { platformRequest } },
+    global: { provide: { [GAME_CONTEXT_KEYS.platformRequest as symbol]: platformRequest } },
     attachTo: document.body,
   });
 

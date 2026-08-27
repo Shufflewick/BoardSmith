@@ -15,6 +15,7 @@ import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
+import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -41,7 +42,7 @@ const props = defineProps<{
 // ---------------------------------------------------------------------------
 // Inject context — exact keys provided by AutoRenderer.vue
 // ---------------------------------------------------------------------------
-const playerSeat = inject<number>('playerSeat', 0);
+const playerSeat = injectPlayerSeat();
 const selectableElements = inject<Ref<Set<number>>>('selectableElements');
 const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage');
@@ -54,7 +55,7 @@ const boardInteraction = tryUseBoardInteraction();
 // ---------------------------------------------------------------------------
 // Presentation overlay injection (D-04)
 // ---------------------------------------------------------------------------
-const overlay = inject<ComputedRef<PresentationOverlay | undefined>>('presentation');
+const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
 const presentationEntry = computed(() =>
   resolvePresentation(props.element, overlay?.value)
 );

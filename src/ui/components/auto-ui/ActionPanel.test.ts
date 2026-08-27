@@ -28,6 +28,7 @@ import ActionPanel from './ActionPanel.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
 import { DISABLED_TOOLTIP_ID } from '../../composables/useDisabledReasonTooltip.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ---------------------------------------------------------------------------
 // useToast mock — hoisted so the factory runs before module imports
@@ -252,7 +253,7 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
     });
 
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: { availableActions: [], playerSeat: 1, isMyTurn: true },
     });
 
@@ -277,7 +278,7 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
     });
 
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: {
         availableActions: ['testAction'],
         playerSeat: 1,
@@ -301,7 +302,7 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
     });
 
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: {
         availableActions: ['testAction'],
         playerSeat: 1,
@@ -329,7 +330,7 @@ describe('ActionPanel QUICK-02 — accessible names on icon-only controls', () =
     });
 
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: { availableActions: [], playerSeat: 1, isMyTurn: true },
     });
 
@@ -356,7 +357,7 @@ function mountWithHelp(opts: {
   const controller = makeTestController();
   return mount(ActionPanel, {
     global: {
-      provide: { actionController: controller },
+      provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
       stubs: { Teleport: true },
     },
     props: {
@@ -428,7 +429,7 @@ describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () =>
 
     const wrapper = mount(ActionPanel, {
       global: {
-        provide: { actionController: controller },
+        provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
         stubs: { Teleport: true },
       },
       props: {
@@ -501,7 +502,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     const startSpy = vi.fn(async () => {});
     const controller = makeTestController({ start: startSpy });
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: {
         availableActions: ['build'],
         actionMetadata: {
@@ -540,7 +541,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
   it('explains the in-flight state on every action button while a submission is executing', () => {
     const controller = makeTestController({ isExecuting: ref(true) });
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: {
         availableActions: ['build'],
         actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } },
@@ -563,7 +564,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
   it('prefers the action-specific reason over the generic in-flight one', () => {
     const controller = makeTestController({ isExecuting: ref(true) });
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: {
         availableActions: ['build'],
         actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } },
@@ -590,7 +591,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
       fill: fillSpy,
     });
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: { availableActions: ['paint'], playerSeat: 1, isMyTurn: true },
     });
 
@@ -627,7 +628,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
       isMultiSelectSelected: (_name: string, value: unknown) => value === 'a',
     });
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: { availableActions: ['discard'], playerSeat: 1, isMyTurn: true },
     });
 
@@ -659,7 +660,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
       multiSelectDraft: ref({ selectionName: 'cards', values: [] }),
     });
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller }, stubs: { Teleport: true } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: { availableActions: ['discard'], playerSeat: 1, isMyTurn: true },
     });
 

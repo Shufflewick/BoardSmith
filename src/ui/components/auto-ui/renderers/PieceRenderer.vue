@@ -17,6 +17,7 @@ import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
+import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -47,7 +48,7 @@ const pieceVisual = computed((): PieceVisual => resolvePieceVisual(props.element
 // Resolved AFTER visibility filtering; resolvePresentation strips image/stats
 // for __hidden elements (PRESENT-02). Pieces don't have __hidden but guard is
 // still routed through resolver for correctness.
-const overlay = inject<ComputedRef<PresentationOverlay | undefined>>('presentation');
+const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
 const presentationEntry = computed(() =>
   resolvePresentation(props.element, overlay?.value)
 );

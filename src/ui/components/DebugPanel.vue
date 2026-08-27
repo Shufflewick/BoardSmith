@@ -201,6 +201,7 @@ export interface DebugPanelProps {
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, inject, nextTick } from 'vue';
+import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 
 interface SerializedAction {
   name: string;
@@ -250,7 +251,7 @@ const emit = defineEmits<{
 // platform mode (the dev host answers from its in-process session). There is no
 // debug HTTP server, so this is the only transport.
 type PlatformRequest = (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
-const platformRequest = inject<PlatformRequest | null>('platformRequest', null);
+const platformRequest = inject(GAME_CONTEXT_KEYS.platformRequest, null) as PlatformRequest | null;
 
 /** Is this an object (and not null / an array / a primitive)? */
 function isRecord(value: unknown): value is Record<string, unknown> {

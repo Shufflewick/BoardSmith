@@ -65,6 +65,7 @@ import { useActionController } from '../../composables/useActionController.js';
 import type { ActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
 import CardRenderer from './renderers/CardRenderer.vue';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── Go Fish 'ask' fixture (test-local; NO import from BoardSmithGames) ────────
 //
@@ -167,7 +168,7 @@ describe('GoFish ask interaction tests', () => {
     // filteredChoices reads currentChoices.value (reactive, plan-02 fix) → shows ranks.
     const wrapper = mount(ActionPanel, {
       global: {
-        provide: { actionController: controller },
+        provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
       },
       props: {
         availableActions: ['ask'],

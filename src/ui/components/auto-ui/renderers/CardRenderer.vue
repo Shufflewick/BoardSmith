@@ -23,6 +23,7 @@ import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
+import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -49,7 +50,7 @@ const props = defineProps<{
 // ---------------------------------------------------------------------------
 // Inject context — exact keys provided by AutoRenderer.vue
 // ---------------------------------------------------------------------------
-const playerSeat = inject<number>('playerSeat', 0);
+const playerSeat = injectPlayerSeat();
 const selectableElements = inject<Ref<Set<number>>>('selectableElements');
 const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(null));
@@ -62,7 +63,7 @@ const boardInteraction = tryUseBoardInteraction();
 // Resolved AFTER engine visibility filtering; resolvePresentation strips
 // image/stats for __hidden elements (PRESENT-02).
 // ---------------------------------------------------------------------------
-const overlay = inject<ComputedRef<PresentationOverlay | undefined>>('presentation');
+const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
 const presentationEntry = computed(() =>
   resolvePresentation(props.element, overlay?.value)
 );

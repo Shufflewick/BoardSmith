@@ -20,6 +20,7 @@ import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
+import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -97,7 +98,7 @@ const rowLabels = computed(() => {
 // Presentation overlay injection (D-04)
 // GridBoardRenderer is a container — overlay affects the board header label.
 // Individual cells are rendered via ElementRenderer → their renderer handles their own overlay.
-const overlay = inject<ComputedRef<PresentationOverlay | undefined>>('presentation');
+const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
 const presentationEntry = computed(() =>
   resolvePresentation(props.element, overlay?.value)
 );

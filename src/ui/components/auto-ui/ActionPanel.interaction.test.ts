@@ -27,6 +27,7 @@ import { nextTick, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
 import type { ActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── Fixture: two-step move ────────────────────────────────────────────────
 // Step 1: element pick (piece)
@@ -126,7 +127,7 @@ describe('ActionPanel interaction tests', () => {
     // filteredChoices evaluates: getCurrentChoices() reads snapshot → [] → "No options available".
     const wrapper = mount(ActionPanel, {
       global: {
-        provide: { actionController: controller },
+        provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
       },
       props: {
         availableActions: ['twoStepMove'],
@@ -197,7 +198,7 @@ describe('ActionPanel interaction tests', () => {
     await nextTick();
 
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: { availableActions: ['twoStepMove'], playerSeat: 1, isMyTurn: true },
     });
 
@@ -259,7 +260,7 @@ describe('ActionPanel interaction tests', () => {
     await nextTick();
 
     const wrapper = mount(ActionPanel, {
-      global: { provide: { actionController: controller } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: { availableActions: ['twoStepMove'], playerSeat: 1, isMyTurn: true },
     });
 
@@ -318,7 +319,7 @@ describe('ActionPanel interaction tests', () => {
     // Mount to verify the panel is renderable (smoke-level check: no throw)
     const wrapper = mount(ActionPanel, {
       global: {
-        provide: { actionController: controller },
+        provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
       },
       props: {
         availableActions: ['notationChoice'],

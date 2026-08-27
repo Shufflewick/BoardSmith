@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { ref } from 'vue';
 import ActionPanel from './ActionPanel.vue';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 function makeMinimalController() {
   const noop = () => undefined;
@@ -53,7 +54,7 @@ describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
     const wrapper = mount(ActionPanel, {
       global: {
         provide: {
-          actionController: controller,
+          [GAME_CONTEXT_KEYS.actionController as symbol]: controller,
         },
       },
       props: {
@@ -89,7 +90,7 @@ describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
     const wrapper = mount(ActionPanel, {
       global: {
         provide: {
-          actionController: controller,
+          [GAME_CONTEXT_KEYS.actionController as symbol]: controller,
         },
       },
       props: {

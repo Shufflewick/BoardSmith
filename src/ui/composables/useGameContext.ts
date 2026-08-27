@@ -144,3 +144,15 @@ export function tryUseGameContext(): GameContext | undefined {
   if (actionController === undefined) return undefined;
   return useGameContext();
 }
+
+/**
+ * The viewing seat as a plain number, for a renderer that only ever reads it.
+ *
+ * The context carries a `Ref<number>`; the AutoUI renderers want the value.
+ * `0` outside a shell, matching the default they carried when they injected
+ * under a bare string key.
+ */
+export function injectPlayerSeat(): number {
+  const seat = inject(GAME_CONTEXT_KEYS.playerSeat, undefined);
+  return seat?.value ?? 0;
+}

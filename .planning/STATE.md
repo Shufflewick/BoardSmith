@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v4.9
-milestone_name: BS Skills Re-Verification
+milestone_name: milestone
 status: executing
-stopped_at: "Completed 180-01 (gap-closure fix, post-interactive-proof) — fixed the two 180-PROOF.md findings (from the first real interactive /bs-verify-game run) that can break a real designer's session. Finding 5 (JSON transport): parseSubagentJsonInput (verify-derive-check.ts, the single shared export site for every --enumerator-a/--enumerator-b/--reconciler/--extraction/--translation/--translated file read across verify-derive-check.ts, verify-example-replay.ts, and example-test-emit.ts) now tolerates a markdown fence wrapping the whole subagent return and prose before/after it, logging every repair in a new repairs[] result field, never silently. CR-04's ledger fence-marker rejection is confirmed untouched by a new test proving a forged marker inside a transport-repaired document is still rejected at record construction. Finding 2 (Session Lock): state-machine.md's Session Lock section now states an exact, worked-example-pinned released-value classification rule (strip one optional wrapping paren pair, leading token up to whitespace/em-dash-never-ASCII-hyphen must be exactly 'none') that correctly classifies seven's real (none — final-acceptance closed ...) value as released while still rejecting an adversarial none-the-wiser-shaped value as a live lock — kept in prose, not code, since the entire bs- skill directory has zero runtime .ts parsers. Findings 1/3/4/6/7 left untouched as instructed. Full suite: 4368/249 -> 4378/249, 0 failing. See 180-01-SUMMARY.md."
-last_updated: "2026-08-01T10:15:00.000Z"
-last_activity: 2026-08-01
+stopped_at: context exhaustion at 75% (2026-08-27)
+last_updated: "2026-08-27T03:07:27.722Z"
+last_activity: 2026-07-28
 progress:
-  total_phases: 11
-  completed_phases: 10
+  total_phases: 12
+  completed_phases: 9
   total_plans: 92
-  completed_plans: 92
-  percent: 91
+  completed_plans: 98
+  percent: 75
 ---
 
 # Project State
@@ -2270,10 +2270,10 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-31T23:55:09.322Z
-Stopped at: Completed 178-01-PLAN.md — Example (p.N): recognizer, WR-07 resolved (Option B), ingest marker added. Next: Phase 178 plan 02 (example-derivation.ts).
+Last session: 2026-08-27T03:07:27.713Z
+Stopped at: context exhaustion at 75% (2026-08-27)
 Resume file: 
-178-02-PLAN.md
+None
 
 ## Operator Next Steps
 

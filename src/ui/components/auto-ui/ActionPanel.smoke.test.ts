@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { ref, computed } from 'vue';
 import ActionPanel from './ActionPanel.vue';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 /**
  * Build the minimal controller object ActionPanel reads on first render.
@@ -61,7 +62,7 @@ describe('ActionPanel smoke test', () => {
     const wrapper = mount(ActionPanel, {
       global: {
         provide: {
-          actionController: controller,
+          [GAME_CONTEXT_KEYS.actionController as symbol]: controller,
         },
       },
       props: {

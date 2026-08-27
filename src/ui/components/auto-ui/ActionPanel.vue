@@ -29,10 +29,11 @@ import DoneButton from './DoneButton.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 import { vDisabledReason, isDisabled, type DisabledReason } from '../../directives/vDisabledReason.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // Inject the action controller from GameShell (REQUIRED)
 // ActionPanel is now a thin UI layer over the controller
-const _actionController = inject<UseActionControllerReturn>('actionController');
+const _actionController = inject(GAME_CONTEXT_KEYS.actionController, undefined) as UseActionControllerReturn | undefined;
 if (!_actionController) {
   throw new Error('ActionPanel requires actionController to be provided via inject. Use inside GameShell.');
 }

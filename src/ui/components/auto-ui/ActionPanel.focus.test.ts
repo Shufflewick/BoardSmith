@@ -20,6 +20,7 @@ import { nextTick, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
 import type { ActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 const twoChoiceAction: ActionMetadata = {
   name: 'enterWorld',
@@ -51,7 +52,7 @@ function mountPanel() {
   // document.activeElement meaningful.
   const wrapper = mount(ActionPanel, {
     attachTo: document.body,
-    global: { provide: { actionController: controller } },
+    global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
     props: { availableActions: ['enterWorld'], playerSeat: 1, isMyTurn: true },
   });
   return { wrapper, controller, sendAction };
@@ -184,7 +185,7 @@ describe('a six-selection action, the shape the report measured', () => {
     });
     const wrapper = mount(ActionPanel, {
       attachTo: document.body,
-      global: { provide: { actionController: controller } },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: { availableActions: ['create'], playerSeat: 1, isMyTurn: true },
     });
     await nextTick();
