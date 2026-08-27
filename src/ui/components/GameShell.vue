@@ -33,6 +33,7 @@ import PlayerToken from './PlayerToken.vue';
 import WaitingRoom from './WaitingRoom.vue';
 import Toast from './Toast.vue';
 import { provideGameContext } from '../composables/useGameContext.js';
+import { useTeachingActions } from '../composables/useTeachingActions.js';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import GameOverCard from './GameOverCard.vue';
@@ -1223,79 +1224,17 @@ const isHeatmapVisibleProp = computed(() =>
 // Handle 'teaching-action' emits from ControlsMenu.
 // Each action delegates to the appropriate platformRequest op so the dev bridge
 // (Phase 109) and production host can implement the server-side handler.
-async function handleTeachingAction(
-  teachAction: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle' | 'start-tutorial' | 'exit-tutorial'
-) {
-  if (teachAction === 'hint') {
-    // The MCTS search takes ~1s; show a persistent "thinking" toast so the
-    // player gets immediate feedback instead of a dead button. Cleared as soon
-    // as the hint resolves (or fails), just before the bubble/ring appears.
-    const thinkingId = toast.show('Thinking about the best move…', {
-      type: 'info',
-      duration: 0,
-    });
-    try {
-      await platformRequest('hint', { seat: playerSeat.value });
-    } catch {
-      toast.error('Hint unavailable — the bot could not suggest a move.');
-    } finally {
-      toast.remove(thinkingId);
-    }
-  } else if (teachAction === 'demo-toggle') {
-    if (isDemoRunning.value) {
-      try {
-        await platformRequest('demo-stop', {});
-        // isDemoRunning updates from the next broadcast — no local mutation needed.
-      } catch {
-        toast.error('Failed to stop demo.');
-      }
-    } else {
-      try {
-        await platformRequest('demo-start', {});
-        // isDemoRunning updates from the next broadcast — no local mutation needed.
-      } catch {
-        toast.error('Failed to start demo.');
-      }
-    }
-  } else if (teachAction === 'heatmap-toggle') {
-    // Ignore a second toggle while one is still computing — otherwise rapid
-    // clicks race on the stale broadcast state and the toggle ends up wrong.
-    if (heatmapToggling.value) return;
-    const nextVisible = !isHeatmapVisibleProp.value;
-    heatmapPending.value = nextVisible; // optimistic: flip the pill immediately
-    heatmapToggling.value = true;
-    try {
-      await platformRequest('heatmap-toggle', {
-        seat: playerSeat.value,
-        visible: nextVisible,
-      });
-    } catch {
-      toast.error('Failed to toggle move quality display.');
-    } finally {
-      // The broadcast carrying the new heatmap state is delivered before the op
-      // response resolves (WS order), so clearing the optimistic value here hands
-      // back to the authoritative server state with no flicker.
-      heatmapToggling.value = false;
-      heatmapPending.value = null;
-    }
-  } else if (teachAction === 'help-toggle') {
-    // Pure client display preference — no server round-trip.
-    isActionHelpVisible.value = !isActionHelpVisible.value;
-    setActionHelpEnabled(isActionHelpVisible.value);
-  } else if (teachAction === 'start-tutorial') {
-    try {
-      await platformRequest('start-tutorial', { seat: playerSeat.value });
-    } catch {
-      toast.error('Failed to start tutorial.');
-    }
-  } else if (teachAction === 'exit-tutorial') {
-    try {
-      await platformRequest('exit-tutorial', { seat: playerSeat.value });
-    } catch {
-      toast.error('Failed to exit tutorial.');
-    }
-  }
-}
+const { handleTeachingAction } = useTeachingActions({
+  platformRequest,
+  playerSeat,
+  isDemoRunning,
+  isHeatmapVisible: () => isHeatmapVisibleProp.value,
+  heatmapPending,
+  heatmapToggling,
+  isActionHelpVisible,
+  setActionHelpEnabled,
+  toast,
+});
 
 /**
  * Fetch a game's declared playerOptions (colors, variants) for the lobby.
