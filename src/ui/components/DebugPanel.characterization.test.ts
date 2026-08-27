@@ -53,6 +53,7 @@ const HISTORY = [
 
 interface Vm {
   activeTab: string;
+  displayedView: unknown;
   actionTraces: unknown[];
   tracesError: string | null;
   tracesLoading: boolean;
@@ -211,13 +212,13 @@ describe('DebugPanel host bridge', () => {
     await vm.fetchFlowState();
     await vm.fetchHistory();
     await vm.fetchLogs();
-    await vm.shuffleDeck(2);
     const ops = platformRequest.mock.calls.map((c) => c[0]);
     expect(ops).toContain('debug:action-traces');
     expect(ops).toContain('debug:flow-state');
     expect(ops).toContain('debug:history');
     expect(ops).toContain('debug:logs');
-    expect(ops).toContain('debug:shuffle-deck');
+    // The deck ops go through the same bridge from DecksTab, which owns them
+    // now; DecksTab.test.ts asserts each one's op string and payload.
   });
 });
 
@@ -559,225 +560,17 @@ describe('DebugPanel rewind', () => {
   });
 });
 
-describe('DebugPanel deck edits', () => {
-  it('sends each edit with its own op and payload', async () => {
-    const { platformRequest, vm } = track(mountPanel());
-    await vm.moveCardToTop(10);
-    await vm.reorderCard(10, 2);
-    await vm.transferCard(10, 3, 'last');
-    await vm.shuffleDeck(2);
-    expect(callsFor(platformRequest, 'debug:move-to-top')[0][1]).toEqual({ cardId: 10 });
-    expect(callsFor(platformRequest, 'debug:reorder-card')[0][1]).toEqual({ cardId: 10, targetIndex: 2 });
-    expect(callsFor(platformRequest, 'debug:transfer-card')[0][1]).toEqual({
-      cardId: 10,
-      targetDeckId: 3,
-      position: 'last',
-    });
-    expect(callsFor(platformRequest, 'debug:shuffle-deck')[0][1]).toEqual({ deckId: 2 });
-  });
-
-  it('defaults a transfer to the first position', async () => {
-    const { platformRequest, vm } = track(mountPanel());
-    await vm.transferCard(10, 3);
-    expect(callsFor(platformRequest, 'debug:transfer-card')[0][1]).toMatchObject({ position: 'first' });
-  });
-
-  it('uses the per-edit fallback message when the host gives no error', async () => {
-    const { vm } = track(mountPanel(async () => ({ success: false })));
-    await vm.moveCardToTop(10);
-    expect(vm.deckManipulationError).toBe('Failed to move card');
-    await vm.shuffleDeck(2);
-    expect(vm.deckManipulationError).toBe('Failed to shuffle deck');
-  });
-
-  it('prefers the host error string over the fallback', async () => {
-    const { vm } = track(mountPanel(async () => ({ success: false, error: 'card is face down' })));
-    await vm.reorderCard(10, 1);
-    expect(vm.deckManipulationError).toBe('card is face down');
-  });
-
-  it('turns a thrown edit into a message', async () => {
-    const { vm } = track(mountPanel(async () => { throw new Error('bridge down'); }));
-    await vm.shuffleDeck(2);
-    expect(vm.deckManipulationError).toBe('bridge down');
-  });
-
-  it('clears the previous error when a later edit succeeds', async () => {
-    let fail = true;
-    const { vm } = track(mountPanel(async () => (fail ? { success: false } : { success: true })));
-    await vm.shuffleDeck(2);
-    expect(vm.deckManipulationError).not.toBeNull();
-    fail = false;
-    await vm.shuffleDeck(2);
-    expect(vm.deckManipulationError).toBeNull();
-  });
-
-  it('moveCardUp reorders to the preceding index and refuses at the top', async () => {
-    const { platformRequest, vm } = track(mountPanel());
-    const deck = vm.discoveredDecks[0];
-    vm.moveCardUp(deck, 11);
-    await nextTick();
-    expect(callsFor(platformRequest, 'debug:reorder-card')[0][1]).toEqual({ cardId: 11, targetIndex: 0 });
-    vm.moveCardUp(deck, 10);
-    await nextTick();
-    expect(callsFor(platformRequest, 'debug:reorder-card')).toHaveLength(1);
-  });
-
-  it('moveCardDown reorders to the following index and refuses at the bottom', async () => {
-    const { platformRequest, vm } = track(mountPanel());
-    const deck = vm.discoveredDecks[0];
-    vm.moveCardDown(deck, 10);
-    await nextTick();
-    expect(callsFor(platformRequest, 'debug:reorder-card')[0][1]).toEqual({ cardId: 10, targetIndex: 1 });
-    vm.moveCardDown(deck, 11);
-    await nextTick();
-    expect(callsFor(platformRequest, 'debug:reorder-card')).toHaveLength(1);
-  });
-});
-
-describe('DebugPanel transfer dialog', () => {
-  it('opens with a clean target and first position', async () => {
-    const { vm } = track(mountPanel());
-    vm.transferDialogTargetDeckId = 99;
-    vm.openTransferDialog(10, 2);
-    expect(vm.transferDialogOpen).toBe(true);
-    expect(vm.transferDialogCardId).toBe(10);
-    expect(vm.transferDialogTargetDeckId).toBeNull();
-    expect(vm.transferDialogPosition).toBe('first');
-  });
-
-  it('offers every card container except the source', async () => {
-    const { vm } = track(mountPanel());
-    vm.openTransferDialog(10, 2);
-    await nextTick();
-    const ids = vm.availableTargetContainers.map((c) => c.id);
-    expect(ids).not.toContain(2);
-    expect(ids).toContain(3);
-  });
-
-  it('sends nothing and stays open when no target is chosen', async () => {
-    const { platformRequest, vm } = track(mountPanel());
-    vm.openTransferDialog(10, 2);
-    await vm.confirmTransfer();
-    expect(callsFor(platformRequest, 'debug:transfer-card')).toHaveLength(0);
-    expect(vm.transferDialogOpen).toBe(true);
-  });
-
-  it('sends the transfer and closes once a target is chosen', async () => {
-    const { platformRequest, vm } = track(mountPanel());
-    vm.openTransferDialog(10, 2);
-    vm.transferDialogTargetDeckId = 3;
-    vm.transferDialogPosition = 'last';
-    await vm.confirmTransfer();
-    expect(callsFor(platformRequest, 'debug:transfer-card')[0][1]).toEqual({
-      cardId: 10,
-      targetDeckId: 3,
-      position: 'last',
-    });
-    expect(vm.transferDialogOpen).toBe(false);
-    expect(vm.transferDialogCardId).toBeNull();
-  });
-});
-
 describe('DebugPanel view-tree derivations', () => {
-  it('groups every element with a numeric id by class name', async () => {
-    const { vm } = track(mountPanel());
-    expect(Object.keys(vm.groupedElements).sort()).toEqual(['Board', 'Card', 'Hand', 'MainDeck', 'Piece']);
-    expect(vm.groupedElements.Card.map((e) => e.id).sort()).toEqual([10, 11, 12]);
-  });
 
-  it('filters element groups by name, notation, class and id', async () => {
-    const { vm } = track(mountPanel());
-    vm.elementSearchQuery = 'a1';
-    await nextTick();
-    expect(Object.keys(vm.filteredElementGroups)).toEqual(['Piece']);
-    vm.elementSearchQuery = '12';
-    await nextTick();
-    expect(Object.keys(vm.filteredElementGroups)).toEqual(['Card']);
-  });
 
-  it('selecting an element highlights it and selecting it again clears it', async () => {
-    const { wrapper, vm } = track(mountPanel());
-    const piece = vm.groupedElements.Piece[0];
-    vm.selectElement(piece);
-    await nextTick();
-    expect(vm.selectedElementId).toBe(4);
-    expect((vm.selectedElement as { id: number }).id).toBe(4);
-    vm.selectElement(piece);
-    expect(vm.selectedElementId).toBeNull();
-    expect(wrapper.emitted('highlight-element')).toEqual([[4], [null]]);
-  });
 
-  it('prefers notation, then name, then id for an element label', async () => {
-    const { vm } = track(mountPanel());
-    expect(vm.getElementDisplayName({ id: 4, notation: 'a1', name: 'x' })).toBe('a1');
-    expect(vm.getElementDisplayName({ id: 4, name: 'x' })).toBe('x');
-    expect(vm.getElementDisplayName({ id: 4 })).toBe('#4');
-  });
-
-  it('discovers decks by $type or a Deck-ish class name, with their cards', async () => {
-    const { vm } = track(mountPanel());
-    expect(vm.discoveredDecks.map((d) => d.id)).toEqual([2]);
-    expect(vm.discoveredDecks[0].cards.map((c) => c.id)).toEqual([10, 11]);
-  });
-
-  it('discovers every container that holds card-like children', async () => {
-    const { vm } = track(mountPanel());
-    const byId = Object.fromEntries(vm.discoveredCardContainers.map((c) => [c.id, c.cardCount]));
-    expect(byId[2]).toBe(2);
-    expect(byId[3]).toBe(1);
-    expect(byId[1]).toBe(3);
-  });
-
-  it('matches decks whose cards match, and auto-expands those decks', async () => {
-    const { vm } = track(mountPanel());
-    vm.deckSearchQuery = 'Ace';
-    await nextTick();
-    expect(vm.filteredDecks.map((d) => d.id)).toEqual([2]);
-    expect(vm.isDeckExpanded(2)).toBe(true);
-  });
-
-  it('drops decks that match neither themselves nor any card', async () => {
-    const { vm } = track(mountPanel());
-    vm.deckSearchQuery = 'nothing-here';
-    await nextTick();
-    expect(vm.filteredDecks).toEqual([]);
-  });
-
-  it('toggles deck expansion by hand', async () => {
-    const { vm } = track(mountPanel());
-    expect(vm.isDeckExpanded(2)).toBe(false);
-    vm.toggleDeck(2);
-    await nextTick();
-    expect(vm.isDeckExpanded(2)).toBe(true);
-    vm.toggleDeck(2);
-    await nextTick();
-    expect(vm.isDeckExpanded(2)).toBe(false);
-  });
-
-  it('selects and deselects a card inside a deck', async () => {
-    const { vm } = track(mountPanel());
-    vm.selectDeckCard(2, 10);
-    await nextTick();
-    expect((vm.selectedCard as { id: number }).id).toBe(10);
-    vm.selectDeckCard(2, 10);
-    await nextTick();
-    expect(vm.selectedCard).toBeNull();
-  });
-
-  it('prefers notation, then name, then id for a card label', async () => {
-    const { vm } = track(mountPanel());
-    expect(vm.getCardDisplayName({ id: 10, notation: 'AS', name: 'Ace' })).toBe('AS');
-    expect(vm.getCardDisplayName({ id: 11, name: 'King' })).toBe('King');
-    expect(vm.getCardDisplayName({ id: 12 })).toBe('#12');
-  });
 
   it('exposes the game-supplied custom debug data', async () => {
     const { vm } = track(mountPanel());
     expect(vm.customDebugData).toEqual({ seed: 42 });
   });
 
-  it('derives elements and decks from the historical state while time travelling', async () => {
+  it('hands the tabs the historical view while time travelling', async () => {
     const alt = { id: 90, className: 'Board', children: [{ id: 91, className: 'Token' }] };
     const { vm } = track(
       mountPanel(async (op) =>
@@ -787,7 +580,9 @@ describe('DebugPanel view-tree derivations', () => {
     await vm.fetchStateAtAction(0);
     vm.selectedActionIndex = 0;
     await nextTick();
-    expect(Object.keys(vm.groupedElements).sort()).toEqual(['Board', 'Token']);
+    // `displayedView` is what every tab derives from, so this is the one place
+    // the switch has to be right; each tab's own tests cover what it makes of it.
+    expect((vm.displayedView as { id: number }).id).toBe(90);
   });
 });
 
@@ -857,39 +652,8 @@ describe('DebugPanel state tree', () => {
     expect([...vm.expandedPaths]).toEqual(['root']);
   });
 
-  it('formats condition values for the actions tab', async () => {
-    const { vm } = track(mountPanel());
-    expect(vm.formatConditionValue(null)).toBe('null');
-    expect(vm.formatConditionValue(undefined)).toBe('undefined');
-    expect(vm.formatConditionValue(false)).toBe('false');
-    expect(vm.formatConditionValue(3)).toBe('3');
-    expect(vm.formatConditionValue('x')).toBe('"x"');
-    expect(vm.formatConditionValue([1, 2, 3])).toBe('[3 items]');
-    expect(vm.formatConditionValue({ a: 1 })).toBe('{"a":1}');
-  });
 
-  it('formats action names, args and timestamps for the history tab', async () => {
-    const { vm } = track(mountPanel());
-    expect(vm.formatActionName('playCard')).toBe('Play Card');
-    expect(vm.formatActionArgs({})).toBe('');
-    expect(vm.formatActionArgs({ a: 1, b: undefined, c: null })).toBe('a: 1');
-    expect(vm.formatActionArgs({ card: { __elementRef: 'AS' } })).toBe('card: AS');
-    expect(vm.formatActionArgs({ card: { __elementId: 10 } })).toBe('card: #10');
-    expect(vm.formatActionArgs({ card: { rank: 1 } })).toBe('card: {"rank":1}');
-    expect(vm.formatTimestamp()).toBe('');
-    expect(vm.formatTimestamp(1000)).toBe(new Date(1000).toLocaleTimeString());
-  });
 
-  it('matches cards by name, notation, class and id, and never on an empty query', async () => {
-    const { vm } = track(mountPanel());
-    const card = { id: 10, name: 'Ace', notation: 'AS', className: 'Card' };
-    expect(vm.cardMatchesSearch(card, '')).toBe(false);
-    expect(vm.cardMatchesSearch(card, 'ace')).toBe(true);
-    expect(vm.cardMatchesSearch(card, 'as')).toBe(true);
-    expect(vm.cardMatchesSearch(card, 'card')).toBe(true);
-    expect(vm.cardMatchesSearch(card, '10')).toBe(true);
-    expect(vm.cardMatchesSearch(card, 'zzz')).toBe(false);
-  });
 });
 
 describe('DebugPanel clipboard and download', () => {
@@ -962,23 +726,4 @@ describe('DebugPanel clipboard and download', () => {
     expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(JSON.stringify([traces[1]], null, 2));
   });
 
-  it('copies a deck with its cards flattened into the payload', async () => {
-    const { vm } = track(mountPanel());
-    await vm.copyDeckToClipboard(vm.discoveredDecks[0]);
-    const written = JSON.parse(
-      (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0]
-    );
-    expect(written.id).toBe(2);
-    expect(written.cards.map((c: { id: number }) => c.id)).toEqual([10, 11]);
-  });
-
-  it('copies an element without its children', async () => {
-    const { vm } = track(mountPanel());
-    await vm.copyElementToClipboard(vm.groupedElements.MainDeck[0]);
-    const written = JSON.parse(
-      (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0]
-    );
-    expect(written.children).toBeUndefined();
-    expect(written.id).toBe(2);
-  });
 });

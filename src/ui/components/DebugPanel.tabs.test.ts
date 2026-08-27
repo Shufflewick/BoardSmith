@@ -65,7 +65,7 @@ describe('DebugPanel ARIA tablist', () => {
   it('inactive tabs have aria-selected="false" and tabindex="-1"', () => {
     const inactiveTabs = wrapper.element.querySelectorAll('[role="tab"][aria-selected="false"]');
     expect(inactiveTabs.length).toBe(6);
-    inactiveTabs.forEach((tab) => {
+    inactiveTabs.forEach((tab: any) => {
       expect(tab.getAttribute('tabindex')).toBe('-1');
     });
   });
