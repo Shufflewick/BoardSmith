@@ -10,6 +10,8 @@
  */
 import { ref, computed, watch } from 'vue';
 import { useToast } from '../composables/useToast';
+import { useLobbySeats } from '../composables/useLobbySeats.js';
+import { useLobbyOptions } from '../composables/useLobbyOptions.js';
 import type {
   LobbySlot,
   LobbyInfo,
@@ -90,147 +92,42 @@ watch(() => props.lobby, (lobby) => {
 }, { immediate: true });
 
 // Track which slot's color picker is expanded (null = none)
-const expandedColorSlot = ref<number | null>(null);
-
-// Get the color for a slot
-function getSlotColor(slot: LobbySlot): string {
-  return (slot.playerOptions?.color as string | undefined) ?? '#888888';
-}
-
-// Check if current user can edit a slot's color
-function canEditSlotColor(slot: LobbySlot): boolean {
-  // Host can edit any non-open slot (their own, bot, or other players)
-  if (props.isCreator && slot.status !== 'open') return true;
-  // Players can edit their own slot
-  if (slot.playerId === props.playerId) return true;
-  return false;
-}
-
-// Toggle color picker for a slot
-function toggleColorPicker(slot: LobbySlot) {
-  if (!canEditSlotColor(slot)) return;
-  if (expandedColorSlot.value === slot.seat) {
-    expandedColorSlot.value = null;
-  } else {
-    expandedColorSlot.value = slot.seat;
-  }
-}
-
-// Check if a color is taken by another slot
-function isColorTakenByOther(color: string, currentSeat: number): boolean {
-  return props.lobby.slots.some(
-    s => s.seat !== currentSeat && s.status !== 'open' && s.playerOptions?.color === color
-  );
-}
-
-// Handle color change for a slot
-function handleSlotColorChange(seat: number, color: string) {
-  const slot = props.lobby.slots.find(s => s.seat === seat);
-  if (!slot) return;
-
-  // Emit appropriate event based on who is changing
-  if (slot.playerId === props.playerId) {
-    // Player changing their own color
-    emit('update-player-options', { color });
-  } else if (props.isCreator) {
-    // Host changing another player's color (bot or other human)
-    emit('update-slot-player-options', seat, { color });
-  }
-
-  // Close the picker
-  expandedColorSlot.value = null;
-}
-
-// Type-safe player options
-const typedPlayerOptions = computed(() => {
-  if (!props.playerOptions) return null;
-  return props.playerOptions as Record<string, PlayerOptionDefinition>;
+// Which seat is whose, who may change what, and the colour picker's one-open-
+// at-a-time state. Every rule is a pure function of the lobby and who is asking,
+// so it lives in a composable its own tests can interrogate directly.
+const {
+  expandedColorSlot,
+  filledCount,
+  readyCount,
+  canAddSlot,
+  canRemoveSlots,
+  canHostManageSlot,
+  canHostRemoveSlot,
+  canHostKickPlayer,
+  getSlotStatusClass,
+  getSlotColor,
+  canEditSlotColor,
+  toggleColorPicker,
+  isColorTakenByOther,
+  handleSlotColorChange,
+} = useLobbySeats({
+  lobby: computed(() => props.lobby),
+  isCreator: computed(() => props.isCreator),
+  playerId: computed(() => props.playerId),
+  onOwnColor: (options) => emit('update-player-options', options),
+  onSlotColor: (seat, options) => emit('update-slot-player-options', seat, options),
 });
 
-// Effective player options - auto-injects color option when colorSelectionEnabled is true
-const effectivePlayerOptions = computed((): Record<string, PlayerOptionDefinition> | null => {
-  const baseOptions = typedPlayerOptions.value ?? {};
-
-  // If color selection is not enabled, return base options
-  if (!props.lobby.colorSelectionEnabled) {
-    return Object.keys(baseOptions).length > 0 ? baseOptions : null;
-  }
-
-  // If the game definition already provides a color option (with proper labels),
-  // don't auto-inject a generic one — the game's version takes precedence
-  if ('color' in baseOptions) {
-    return baseOptions;
-  }
-
-  // Auto-inject color option using lobby.colors
-  const colorOption: StandardPlayerOption = {
-    type: 'color' as const,
-    label: 'Color',
-    choices: (props.lobby.colors || []).map(c => ({ value: c, label: c })),
-  };
-
-  // Color option comes first
-  return { color: colorOption, ...baseOptions };
-});
-
-// Non-exclusive player options (for "Your Settings" panel)
-const standardPlayerOptions = computed(() => {
-  if (!effectivePlayerOptions.value) return null;
-  const filtered: Record<string, PlayerOptionDefinition> = {};
-  for (const [key, opt] of Object.entries(effectivePlayerOptions.value)) {
-    if (opt.type !== 'exclusive') {
-      filtered[key] = opt;
-    }
-  }
-  return Object.keys(filtered).length > 0 ? filtered : null;
-});
-
-// Exclusive player options (for display in player rows, host-controlled)
-const exclusivePlayerOptions = computed(() => {
-  if (!effectivePlayerOptions.value) return null;
-  const filtered: Record<string, ExclusivePlayerOption> = {};
-  for (const [key, opt] of Object.entries(effectivePlayerOptions.value)) {
-    if (opt.type === 'exclusive') {
-      filtered[key] = opt as ExclusivePlayerOption;
-    }
-  }
-  return Object.keys(filtered).length > 0 ? filtered : null;
-});
-
-// Filter out internal options like playerConfigs from display
-const displayableGameOptions = computed(() => {
-  if (!props.lobby.gameOptions) return null;
-  const filtered: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(props.lobby.gameOptions)) {
-    // Skip internal options
-    if (key === 'playerConfigs') continue;
-    filtered[key] = value;
-  }
-  return Object.keys(filtered).length > 0 ? filtered : null;
-});
-
-// Check if host can add more slots
-const canAddSlot = computed(() => {
-  if (!props.isCreator) return false;
-  const maxPlayers = props.lobby.maxPlayers ?? 10;
-  return props.lobby.slots.length < maxPlayers;
-});
-
-// Check if host can remove slots
-const canRemoveSlots = computed(() => {
-  if (!props.isCreator) return false;
-  const minPlayers = props.lobby.minPlayers ?? 2;
-  return props.lobby.slots.length > minPlayers;
-});
-
-// Count of players ready (excluding open slots)
-const readyCount = computed(() => {
-  return props.lobby.slots.filter(s => s.status !== 'open' && s.ready).length;
-});
-
-// Count of filled slots
-const filledCount = computed(() => {
-  return props.lobby.slots.filter(s => s.status !== 'open').length;
+// Which options this lobby offers, and where each one belongs on screen.
+const {
+  effectivePlayerOptions,
+  standardPlayerOptions,
+  exclusivePlayerOptions,
+  displayableGameOptions,
+  getPlayerOptionChoices,
+} = useLobbyOptions({
+  lobby: computed(() => props.lobby),
+  playerOptions: computed(() => props.playerOptions),
 });
 
 function copyGameCode() {
@@ -282,37 +179,8 @@ function handleCycleBotLevel(slot: LobbySlot) {
   emit('set-slot-bot', slot.seat, true, nextLevel);
 }
 
-function getSlotStatusClass(slot: LobbySlot): string {
-  if (slot.status === 'bot') return 'bot';
-  if (slot.status === 'claimed') return 'claimed';
-  return 'open';
-}
-
-function canHostManageSlot(slot: LobbySlot): boolean {
-  // Host can manage open or bot slots (not claimed by humans, not position 1/host)
-  return props.isCreator && slot.seat !== 1 && slot.status !== 'claimed';
-}
-
-function canHostRemoveSlot(slot: LobbySlot): boolean {
-  // Host can remove open slots (not claimed, not position 1/host, above min players)
-  return props.isCreator && slot.seat !== 1 && slot.status === 'open' && canRemoveSlots.value;
-}
-
-function canHostKickPlayer(slot: LobbySlot): boolean {
-  // Host can kick claimed players (not themselves at position 1, not bot)
-  return props.isCreator && slot.seat !== 1 && slot.status === 'claimed';
-}
-
 function handleKickPlayer(position: number) {
   emit('kick-player', position);
-}
-
-// Player options helpers
-function getPlayerOptionChoices(opt: PlayerOptionDefinition): Array<{ value: string; label: string }> {
-  if (opt.type === 'exclusive') return [];
-  const stdOpt = opt as StandardPlayerOption;
-  if (!stdOpt.choices) return [];
-  return stdOpt.choices.map((c) => (typeof c === 'string' ? { value: c, label: c } : c));
 }
 
 /**
