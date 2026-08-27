@@ -1,7 +1,7 @@
 {
-  "revision": 21,
+  "revision": 23,
   "bundleProtocol": 1,
-  "surfaceHash": "86ce199cd47f2874",
+  "surfaceHash": "46be1aab855efb2e",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -171,6 +171,22 @@
       "surfaceHash": "86ce199cd47f2874",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r20: message() and messageTo() take a game-supplied per-line type that survives to the client, so a log can classify its own entries; animateTo() gives animation events the same server-enforced audience messageTo() has."
+    },
+    {
+      "revision": 22,
+      "date": "2026-08-26",
+      "bundleProtocol": 1,
+      "surfaceHash": "3f0a3da60e37898a",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "r21: game.refreshAwaitingActions() lets a simultaneous step's awaiting set grow for a seat that becomes eligible mid-step; game.pruneMessages() caps the log safely now that each MessageEntry carries a seq identity and ActionCheckpoint records messageSeq instead of a prefix length."
+    },
+    {
+      "revision": 23,
+      "date": "2026-08-26",
+      "bundleProtocol": 1,
+      "surfaceHash": "46be1aab855efb2e",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "r21: game.refreshAwaitingActions() lets a simultaneous step's awaiting set grow for a seat that becomes eligible mid-step; game.pruneMessages() caps the log safely — ActionCheckpoint.messageCount is now the log's ABSOLUTE length and the game tracks how many entries were evicted, so pruning no longer corrupts earlier checkpoints."
     }
   ]
 }

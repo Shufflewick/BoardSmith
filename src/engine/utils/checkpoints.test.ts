@@ -110,7 +110,11 @@ describe('createActionCheckpoint', () => {
   it('records the message-log watermark rather than copying the log', () => {
     runner.performAction('add', 1, { value: 1 });
     const checkpoint = createActionCheckpoint(runner.game);
-    expect(checkpoint.messageCount).toBe(runner.game.messages.length);
+    // The log's ABSOLUTE length — entries ever written (#25). The old form was
+    // `messages.length`, a prefix watermark over an array the engine assumed
+    // was append-only, so a game that pruned its log corrupted every earlier
+    // checkpoint's restore.
+    expect(checkpoint.messageCount).toBe(runner.game.messageCount);
     // The log itself is stored once at snapshot level; duplicating it per
     // action is what the watermark exists to avoid.
     expect(checkpoint).not.toHaveProperty('messages');
@@ -120,6 +124,20 @@ describe('createActionCheckpoint', () => {
     const first = createActionCheckpoint(runner.game).messageCount!;
     runner.performAction('add', 1, { value: 1 });
     expect(createActionCheckpoint(runner.game).messageCount!).toBeGreaterThan(first);
+  });
+
+  it('keeps its watermark meaningful after the log is pruned', () => {
+    runner.performAction('add', 1, { value: 1 });
+    const watermark = createActionCheckpoint(runner.game).messageCount!;
+
+    runner.performAction('add', 2, { value: 3 });
+    runner.game.pruneMessages({ keepLast: 1 });
+
+    // The watermark still counts entries EVER WRITTEN, so it is unchanged by
+    // the prune; the eviction offset is what turns it back into a position.
+    // A current-length watermark would now name a line from after the boundary.
+    expect(createActionCheckpoint(runner.game).messageCount!).toBeGreaterThan(watermark);
+    expect(watermark - runner.game.messagesEvicted).toBeLessThanOrEqual(runner.game.messages.length);
   });
 
   it('is a point-in-time copy — later play does not alter it', () => {

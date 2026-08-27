@@ -37,11 +37,15 @@ import {
 } from 'vue';
 import type { HeatmapEntry } from '../../../session/types.js';
 import { buildSelector } from './overlay-utils.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── Inject ────────────────────────────────────────────────────────────────────
 
-const gameState = inject('gameState') as
-  | Ref<{ state: { heatmap?: { visible: boolean; entries: HeatmapEntry[] } } }>
+// The typed key, so a rename in GameShell is a compile error here rather than
+// a silently undefined ref (#39). Optional injection on purpose: an overlay
+// mounted outside a shell renders nothing rather than throwing.
+const gameState = inject(GAME_CONTEXT_KEYS.gameState, undefined) as
+  | Ref<{ state: { heatmap?: { visible: boolean; entries: HeatmapEntry[] } } } | null>
   | undefined;
 
 // ── Derived content ───────────────────────────────────────────────────────────

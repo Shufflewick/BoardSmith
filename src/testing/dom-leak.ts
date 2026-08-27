@@ -262,32 +262,90 @@ function inertRef<T>(value: T): { value: T } {
 }
 
 /**
+ * The `useActionController` members an inert stand-in has to carry, split by
+ * what a template does with them.
+ *
+ * Hand-listing these is what let the stand-in drift behind the real composable
+ * (#20): a board reading `showActionPanel` (may I offer controls right now?) or
+ * `lastActionResult` (what did the last action resolve to?) threw during
+ * `setup()`, before a node rendered, so the leak assertion never reached its own
+ * logic and the failure was a bare TypeError inside the game's component.
+ *
+ * `dom-leak-shape.test.ts` asserts these against the real return type, so a
+ * member added to the controller and forgotten here fails the library's own
+ * suite rather than a game's.
+ */
+const INERT_REF_MEMBERS: Record<string, unknown> = {
+  // State a template reads directly.
+  currentAction: null,
+  currentSelection: null,
+  currentChoices: [],
+  currentPick: null,
+  currentArgs: {},
+  selectedArgs: {},
+  pendingArgs: {},
+  isSelecting: false,
+  isExecuting: false,
+  isLoadingChoices: false,
+  error: null,
+  selectableElementIds: [],
+  repeatingState: null,
+  pendingFollowUp: false,
+  pendingOnServer: false,
+  actionCompletedTick: 0,
+  multiSelectDraft: null,
+  actionSnapshot: null,
+  validElements: [],
+  // Computed gates a board consults before offering anything. Both were missing.
+  lastActionResult: null,
+  allCurrentChoicesAnchored: false,
+  animationsPending: false,
+  // `false` rather than `true`: an inert controller must never invite a
+  // submission it cannot carry out.
+  showActionPanel: false,
+  snapshotVersion: 0,
+};
+
+/** Members a template calls. Every one is a no-op that submits nothing. */
+const INERT_METHOD_MEMBERS = [
+  'startAction', 'cancelAction', 'selectChoice', 'selectElement',
+  'execute', 'fill', 'start', 'skip', 'clear', 'cancel', 'undo',
+  'toggleMultiSelect', 'confirmMultiSelect', 'isMultiSelectSelected',
+  'getChoices', 'getCurrentChoices', 'getValidElements', 'getActionMetadata',
+  'clearArgs', 'fetchChoicesForPick', 'getCollectedPick', 'getCollectedPicks',
+  'setBeforeAutoExecute',
+] as const;
+
+/**
  * A minimal, inert `useActionController`-shaped object. Every field is a plain
  * ref-shaped value or a no-op: enough for a template to render against,
  * incapable of submitting anything. Games needing a real controller can pass
  * one via `componentProps`.
  */
 function inertActionController(availableActions: string[]): Record<string, unknown> {
-  const noop = (): void => {};
-  return {
+  const controller: Record<string, unknown> = {
     availableActions: inertRef(availableActions),
-    currentAction: inertRef(null),
-    currentSelection: inertRef(null),
-    currentChoices: inertRef([]),
-    selectedArgs: inertRef({}),
-    pendingArgs: inertRef({}),
-    isSelecting: inertRef(false),
-    isExecuting: inertRef(false),
-    error: inertRef(null),
-    selectableElementIds: inertRef([]),
-    startAction: noop,
-    cancelAction: noop,
-    selectChoice: noop,
-    selectElement: noop,
-    execute: noop,
-    fill: noop,
   };
+  for (const [name, value] of Object.entries(INERT_REF_MEMBERS)) {
+    controller[name] = inertRef(value);
+  }
+  for (const name of INERT_METHOD_MEMBERS) {
+    // Reads like the real thing to a template, resolves to nothing useful, and
+    // never reaches a server. The few members whose real form returns a
+    // collection return an empty one so a `.length`/`.map` in a template works.
+    controller[name] = () => undefined;
+  }
+  controller.getChoices = () => [];
+  controller.getCurrentChoices = () => [];
+  controller.getValidElements = () => [];
+  controller.getCollectedPicks = () => [];
+  controller.isMultiSelectSelected = () => false;
+  controller.setBeforeAutoExecute = () => () => undefined;
+  return controller;
 }
+
+/** @internal exported for the library's own shape test — not public API. */
+export const _inertActionControllerForTests = inertActionController;
 
 /**
  * A predicate allowlist: returns `true` for a marker that is a known,
@@ -429,11 +487,92 @@ function extractIdentityCandidates(
       continue;
     }
     if (key.startsWith('$')) continue; // structural/layout system metadata — not identity
-    const s = stringifyScalar(value);
-    if (s !== undefined) candidates.push({ attribute: key, value: s });
+    for (const s of identityStringsIn(value)) {
+      candidates.push({ attribute: key, value: s });
+    }
   }
 
   return candidates;
+}
+
+/** @internal exported for the library's own shape test — not public API. */
+export const _identityCandidatesForTests = extractIdentityCandidates;
+
+/**
+ * Every identity-bearing string reachable inside an attribute value.
+ *
+ * A bare `stringifyScalar` returned `undefined` for anything that was not a
+ * string or a number, so a game that packs private state into positional arrays
+ * or nested objects contributed ZERO forbidden markers for those fields (#20) —
+ * and the assertion then passed over an almost-empty marker set, which is worse
+ * than no coverage because it reads as coverage.
+ *
+ * Booleans stay excluded at every depth for the same reason `stringifyScalar`
+ * excluded them: "true" and "false" appear on almost any rendered page, so they
+ * would false-positive rather than detect.
+ *
+ * So are serialized ELEMENT and PLAYER references. Their contents are ids and
+ * seat numbers — public handles that the page is expected to render, and short
+ * numerics besides, which is the collision class this utility already scopes
+ * its DOM scan to avoid. A ref's identity, if it is secret, is the referenced
+ * element's own to protect, and that element is walked in its own right.
+ */
+function identityStringsIn(value: unknown, seen = new Set<unknown>()): string[] {
+  const direct = stringifyScalar(value);
+  if (direct !== undefined) return [direct];
+  return nestedIdentityStrings(value, seen);
+}
+
+/**
+ * The shortest numeric marker worth trusting from INSIDE a container.
+ *
+ * A container of small integers — a positional stat block, a per-skill array —
+ * contributes markers like "3", and this utility's whole surface-scoping
+ * discipline exists because a short numeric collides with the turn counters,
+ * scores and indices any page is full of (RESEARCH Pitfall 3). A one- or
+ * two-digit number reached by recursion is not evidence of anything: it says a
+ * "3" is on screen, not that THIS "3" is.
+ *
+ * Strings are kept at any length — a species name or a card face is distinctive
+ * in a way a digit is not — and a number that is an attribute's WHOLE value is
+ * still a marker at any length, because that was already the contract and the
+ * attribute name scopes it.
+ */
+const MIN_NESTED_NUMERIC_MARKER_DIGITS = 3;
+
+/** {@link identityStringsIn}, for a value that is not itself a scalar. */
+function nestedIdentityStrings(value: unknown, seen: Set<unknown>): string[] {
+  if (value === null || typeof value !== 'object') return [];
+  if (isReferenceLike(value)) return [];
+  // A game's state can hold a cycle (an element referencing its container);
+  // walking one is not worth crashing the assertion that exists to protect it.
+  if (seen.has(value)) return [];
+  seen.add(value);
+
+  const entries = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>);
+  return entries.flatMap((entry) => {
+    const scalar = stringifyScalar(entry);
+    if (scalar === undefined) return nestedIdentityStrings(entry, seen);
+    if (typeof entry === 'number' && scalar.replace('-', '').length < MIN_NESTED_NUMERIC_MARKER_DIGITS) {
+      return [];
+    }
+    return [scalar];
+  });
+}
+
+/**
+ * A serialized element/player reference, or a live Player. Either way its
+ * contents are public handles rather than identity — see `identityStringsIn`.
+ */
+function isReferenceLike(value: object): boolean {
+  return (
+    '__elementRef' in value ||
+    '__elementId' in value ||
+    '__playerRef' in value ||
+    // A live Player object reachable off an attribute (e.g. `player`): its seat
+    // and name are on screen by design.
+    ('seat' in value && 'name' in value)
+  );
 }
 
 /** Every attribute value (+ name) that survives on a FINAL tree node (excluding `__hidden`). */
@@ -455,8 +594,13 @@ function collectSurvivingValues(node: ElementJSON): Set<string> {
       if (s) values.add(s);
       continue;
     }
-    const s = stringifyScalar(value);
-    if (s !== undefined) values.add(s);
+    // The SAME extraction the forbidden-marker walk uses. It has to be: a value
+    // that survived redaction inside an array or a nested object would
+    // otherwise be absent from this set and therefore read as forbidden, so
+    // every game packing state positionally would fail on its own data (#20).
+    for (const identity of identityStringsIn(value)) {
+      values.add(identity);
+    }
   }
 
   return values;

@@ -32,6 +32,7 @@ import PlayersPanel from './PlayersPanel.vue';
 import PlayerToken from './PlayerToken.vue';
 import WaitingRoom from './WaitingRoom.vue';
 import Toast from './Toast.vue';
+import { provideGameContext } from '../composables/useGameContext.js';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import GameOverCard from './GameOverCard.vue';
@@ -388,7 +389,7 @@ const isViewingHistory = computed(() => timeTravelState.value !== null);
 
 // Debug highlight state (for element inspector)
 const debugHighlightedElementId = ref<number | null>(null);
-provide('debugHighlight', debugHighlightedElementId);
+// (published with the rest of the game context below — see provideGameContext)
 
 // Create client with our persisted playerId so all API calls (claim
 // position, etc.) use the same ID. Passing it into the constructor (rather
@@ -1328,20 +1329,28 @@ async function fetchPlayerOptions(gameType: string): Promise<Record<string, unkn
   return undefined;
 }
 
-// Provide context to child components
-provide('gameState', state);
-provide('gameView', gameView);
-provide('players', players);
-provide('myPlayer', myPlayer);
-provide('playerSeat', playerSeat);
-provide('isMyTurn', isMyTurn);
-provide('availableActions', availableActions);
-provide('actionController', actionController);
-provide('timeTravelDiff', timeTravelDiff);
-// The debug panel issues its queries/edits through the host bridge (dev only).
-provide('platformRequest', platformRequest);
-// Presentation overlay — provided reactively for AutoRenderer → renderers chain (D-04)
-provide('presentation', toRef(props, 'presentation'));
+// Publish the game context to every component below (#39). One call, one typed
+// contract — `provideGameContext` owns the key list, so a field cannot be
+// published under a key no consumer knows to look under, and a consumer that
+// misspells one gets a type error rather than a silent `undefined`.
+//
+// `platformRequest` is how the debug panel issues its queries/edits through the
+// host bridge (dev only); `presentation` is a reactive ref so the
+// AutoRenderer → renderers chain re-reads it (D-04).
+provideGameContext({
+  gameState: state,
+  gameView,
+  players,
+  myPlayer,
+  playerSeat,
+  isMyTurn,
+  availableActions,
+  actionController,
+  timeTravelDiff,
+  platformRequest,
+  presentation: toRef(props, 'presentation'),
+  debugHighlight: debugHighlightedElementId,
+});
 
 // Gate for the game UI (the registry's board component): it must
 // not mount until GameShell's own DOM — including the `#bs-game-modal` teleport

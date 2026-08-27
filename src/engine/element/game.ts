@@ -815,6 +815,21 @@ export class Game<
 
   /** Animation event sequence counter (for unique IDs) */
   private _animationEventSeq: number = 0;
+  /**
+   * How many message-log entries have been evicted from the FRONT of the log
+   * over this game's life (#25).
+   *
+   * This is what makes a checkpoint's watermark survive pruning without costing
+   * a byte per entry. A checkpoint records the log's ABSOLUTE length at its
+   * boundary — entries ever written, not entries currently held — and a restore
+   * subtracts this offset to turn that back into a position in the log as it
+   * stands now. One number per game, rather than an identity on every line, in
+   * a system whose whole problem is that the log is the thing that grows.
+   *
+   * It only works because eviction is front-only by construction: see
+   * `pruneMessages`, which has no way to remove from the middle.
+   */
+  private _messagesEvicted: number = 0;
 
   /** Original constructor options (for snapshot restoration) */
   private _constructorOptions: Record<string, unknown> = {};
@@ -1512,6 +1527,32 @@ export class Game<
   /**
    * Get all registered action names
    */
+  /**
+   * Re-derive the awaiting set of the currently open `simultaneousActionStep`,
+   * admitting seats that have become eligible since it opened (#28).
+   *
+   * Call this after something OTHER than a seat's own action changes what that
+   * seat may legally do — a round boundary that gives an uninhabited seat a
+   * character, a resource that arrives from elsewhere. Without it the seat keeps
+   * the list it was frozen with at step entry and cannot act until the next
+   * entry, even though the game considers it a full participant.
+   *
+   * The awaiting set can grow as well as shrink. A seat that already committed
+   * this step is left alone. No-op when no simultaneous step is open.
+   *
+   * @param seat - Refresh only this seat (1-indexed). Omit for every seat.
+   *
+   * @example
+   * ```typescript
+   * // In the round-boundary execute() that materialises pending arrivals:
+   * for (const seat of arriving) placeCharacter(game, seat);
+   * game.refreshAwaitingActions();
+   * ```
+   */
+  refreshAwaitingActions(seat?: number): void {
+    this._flowEngine?.refreshAwaitingActions(seat);
+  }
+
   getActionNames(): string[] {
     return [...this._actions.keys()];
   }
@@ -3307,6 +3348,87 @@ export class Game<
   }
 
   /**
+   * Cap the message log by dropping its OLDEST entries.
+   *
+   * `docs/state-size.md` tells a game the log is uncapped and theirs to prune,
+   * and a long-running game has to. This is the supported way (#25), and the
+   * only safe one: each per-action checkpoint records the log's ABSOLUTE length
+   * at its boundary, and the engine tracks how many entries have been evicted,
+   * so a restore still names exactly the lines that existed at that boundary.
+   *
+   * Eviction is FRONT-ONLY, and that is deliberate rather than a limitation.
+   * A checkpoint's watermark is a position in a chronological log; removing an
+   * entry from the middle moves lines across boundaries that were recorded
+   * before the removal, which is the corruption this exists to prevent. Keeping
+   * "the most recent N" and "everything after the round that ended" are both
+   * front evictions; "only the interesting lines" is not, and there is no way
+   * to ask for it here.
+   *
+   * Splicing `game.messages` by hand is not equivalent and never was — it moves
+   * entries past a boundary the checkpoint no longer describes.
+   *
+   * @param policy.keepLast - Keep the most recent N entries, dropping older ones.
+   * @param policy.dropWhile - Drop entries from the front while this returns
+   *   true. Stops at the first entry it declines, so what remains is always a
+   *   suffix of the log.
+   *
+   * @example
+   * ```typescript
+   * // A flat cap, at a round boundary in the game's own upkeep:
+   * game.pruneMessages({ keepLast: 400 });
+   *
+   * // Or by age, which is still a front eviction:
+   * game.pruneMessages({ dropWhile: (entry) => entry.data?.round as number < currentRound - 2 });
+   * ```
+   */
+  pruneMessages(policy: {
+    keepLast?: number;
+    dropWhile?: (entry: MessageEntry) => boolean;
+  }): void {
+    if (policy.keepLast !== undefined) {
+      if (!Number.isInteger(policy.keepLast) || policy.keepLast < 0) {
+        throw new Error(
+          `pruneMessages: keepLast must be a non-negative integer, got ${JSON.stringify(policy.keepLast)}.`,
+        );
+      }
+      if (this.messages.length > policy.keepLast) {
+        this.#evictFront(this.messages.length - policy.keepLast);
+      }
+    }
+    if (policy.dropWhile) {
+      let drop = 0;
+      while (drop < this.messages.length && policy.dropWhile(this.messages[drop])) drop++;
+      this.#evictFront(drop);
+    }
+  }
+
+  /** Drop `count` entries from the front, keeping the eviction offset in step. */
+  #evictFront(count: number): void {
+    if (count <= 0) return;
+    this.messages = this.messages.slice(count);
+    this._messagesEvicted += count;
+  }
+
+  /**
+   * The log's ABSOLUTE length: entries ever written, including those since
+   * evicted. This is the watermark a checkpoint records (#25).
+   * @internal
+   */
+  get messageCount(): number {
+    return this._messagesEvicted + this.messages.length;
+  }
+
+  /**
+   * How many entries have been evicted from the front of the log. A restore
+   * subtracts this from a checkpoint's watermark to locate the boundary in the
+   * log as it stands now.
+   * @internal
+   */
+  get messagesEvicted(): number {
+    return this._messagesEvicted;
+  }
+
+    /**
    * Whether `seat` is allowed to receive `message`. A message with no audience
    * is public. `null`/undefined seat is a spectator, who sees only public ones.
    */
@@ -3500,6 +3622,8 @@ export class Game<
     settings: Record<string, unknown>;
     animationEvents?: AnimationEvent[];
     animationEventSeq?: number;
+    /** Message-log front-eviction offset (#25) — see Game#messagesEvicted. */
+    messagesEvicted?: number;
   } {
     // CR-02: the top-level fields below MUST be copies, never live references.
     // `createActionCheckpoint`/`createSnapshot` store this result as-is, and
@@ -3541,6 +3665,10 @@ export class Game<
       // `animate()` has ever actually run (avoid cluttering a snapshot that
       // never used animation events at all).
       ...(this._animationEventSeq > 0 && { animationEventSeq: this._animationEventSeq }),
+      // How many log entries have been evicted (#25). Restored below so a
+      // resumed game still resolves an old checkpoint's watermark correctly.
+      // One number for the whole game, not a field on every line.
+      ...(this._messagesEvicted > 0 && { messagesEvicted: this._messagesEvicted }),
       // Only include the events array if the buffer is non-empty (avoid
       // cluttering empty snapshots with an empty array).
       ...(this._animationEvents.length > 0 && {
@@ -3876,7 +4004,15 @@ export class Game<
     // for player views. Do not reintroduce a `messages` field on this payload;
     // a per-seat tree is not the log's home, and the leak SEC-04 fixed came
     // from exactly that arrangement.
-    const view = filteredState as ReturnType<Game['toJSON']>;
+    // The eviction offset is engine bookkeeping for restores (#25): it has no
+    // meaning to a client, and shipping it puts an ever-growing number in every
+    // seat's payload for nothing. Dropped by REBUILDING the object rather than
+    // by `delete`, which would move it into dictionary mode — this runs once
+    // per seat per broadcast and once per MCTS playout, and a deoptimized shape
+    // here is measurable in bot search time.
+    const { messagesEvicted: _engineOnly, ...withoutEngineBookkeeping } =
+      filteredState as ReturnType<Game['toJSON']> & { messagesEvicted?: number };
+    const view = withoutEngineBookkeeping as ReturnType<Game['toJSON']>;
 
     // SEC-05: scope `tutorialProgress` to the receiving seat.
     //
@@ -3910,6 +4046,7 @@ export class Game<
     // without this every seat's payload carried every seat's private events
     // until the dispatch that produced them drained. Ids are left untouched, so
     // a client's monotonic watermark still advances correctly across the gaps.
+
     if (view.animationEvents) {
       const visible = view.animationEvents.filter(
         (event) => !event.to || (playerSeat !== null && event.to.includes(playerSeat)),
@@ -3960,6 +4097,9 @@ export class Game<
     // tree is far worse than an honestly empty one, and reads as history
     // corruption rather than as a missing argument.
     this.messages = options?.messageLog ?? [];
+    // Resume the eviction offset, so an old checkpoint's watermark still
+    // resolves to the right boundary after a restore (#25).
+    this._messagesEvicted = (json as { messagesEvicted?: number }).messagesEvicted ?? 0;
 
     // Restore animation events if present.
     //

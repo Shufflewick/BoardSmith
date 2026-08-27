@@ -39,6 +39,7 @@ import {
 import { useSelectable } from '../../composables/useSelectable.js';
 import type { ElementRef } from '../../composables/useBoardInteraction.js';
 import type { Annotation } from '../../../engine/tutorial/types.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── jsdom stubs ───────────────────────────────────────────────────────────────
 
@@ -161,7 +162,7 @@ function buildAutoUIWrapper(content: Annotation[]) {
 
   const wrapper = mount(WrapperComponent, {
     global: {
-      provide: { gameState },
+      provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState },
       // Stub Teleport so overlay renders inline — keeps wrapper.find() assertions
       // working in jsdom without teleported-DOM access.
       stubs: { Teleport: true },
@@ -212,7 +213,7 @@ function buildCustomUIWrapper(content: Annotation[]) {
 
   const wrapper = mount(WrapperComponent, {
     global: {
-      provide: { gameState },
+      provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState },
       // Stub Teleport so overlay renders inline — keeps wrapper.find() assertions
       // working in jsdom without teleported-DOM access.
       stubs: { Teleport: true },

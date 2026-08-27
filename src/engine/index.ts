@@ -38,6 +38,9 @@ export {
 
 export type {
   GameRootFieldAudience,
+  MessageEntry,
+  MessageOptions,
+  FormattedMessage,
   ElementClass,
   ElementContext,
   ElementTree,

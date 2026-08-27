@@ -24,6 +24,7 @@ import { mount } from '@vue/test-utils';
 import { ref, nextTick } from 'vue';
 import HintOverlay from './HintOverlay.vue';
 import type { Annotation } from '../../../engine/tutorial/types.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // jsdom lacks matchMedia; modules that read it at import time would throw.
 vi.stubGlobal(
@@ -74,7 +75,7 @@ function mountOverlay(
 
   const wrapper = mount(HintOverlay, {
     global: {
-      provide: { gameState },
+      provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState },
       // Stub Teleport so overlay content renders inline for wrapper.find() assertions.
       stubs: { Teleport: true },
     },
@@ -135,7 +136,7 @@ describe('HintOverlay', () => {
 
       const wrapper = mount(HintOverlay, {
         global: {
-          provide: { gameState },
+          provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState },
           stubs: { Teleport: true },
         },
         attachTo: fixture,
@@ -199,7 +200,7 @@ describe('HintOverlay', () => {
       document.body.appendChild(fixture);
 
       const wrapper = mount(HintOverlay, {
-        global: { provide: { gameState }, stubs: { Teleport: true } },
+        global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState }, stubs: { Teleport: true } },
         attachTo: fixture,
       });
       await nextTick();
@@ -226,7 +227,7 @@ describe('HintOverlay', () => {
       document.body.appendChild(fixture);
 
       const wrapper = mount(HintOverlay, {
-        global: { provide: { gameState }, stubs: { Teleport: true } },
+        global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState }, stubs: { Teleport: true } },
         attachTo: fixture,
       });
       await nextTick();

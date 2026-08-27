@@ -255,18 +255,28 @@ export interface ActionCheckpoint {
   randomState?: number;
 
   /**
-   * Length of `GameStateSnapshot.messageLog` at this action-count boundary —
-   * the watermark that keeps the log undoable without storing it per entry.
+   * The log's ABSOLUTE length at this action-count boundary — entries ever
+   * written, including any since evicted. The watermark that keeps the log
+   * undoable without storing it per entry.
    *
    * The log lives once on the enclosing snapshot rather than inside each
    * checkpoint's tree (see `GameStateSnapshot.messageLog`). Undo must still drop
-   * the lines the undone action wrote, so `GameRunner.fromCheckpoint` slices the
-   * snapshot's log to this count. A number per checkpoint instead of an array
-   * per checkpoint is the whole saving.
+   * the lines the undone action wrote, so `GameRunner.fromCheckpoint` resolves
+   * this against `Game#messagesEvicted` to find the boundary in the log as it
+   * stands now. A number per checkpoint instead of an array per checkpoint is
+   * the whole saving.
+   *
+   * ABSOLUTE, not the log's current length (#25). It used to be
+   * `messages.length`, a prefix watermark over an array the engine assumed was
+   * append-only — so a game that pruned its log, as `docs/state-size.md` tells
+   * it to, shifted every later index and made every earlier checkpoint name a
+   * prefix containing lines written after its boundary and missing lines that
+   * existed at it. Counting entries ever written, and tracking how many were
+   * evicted, costs one number per GAME rather than an identity on every line —
+   * which matters in the one system whose problem is that the log grows.
    *
    * Absent on a checkpoint captured before this field existed: read as "restore
-   * the whole log", which is the pre-watermark behaviour and the honest reading
-   * of no recorded boundary.
+   * the whole log", which is the honest reading of no recorded boundary.
    */
   messageCount?: number;
 }
@@ -463,8 +473,9 @@ export function createActionCheckpoint(game: Game): ActionCheckpoint {
     randomState: game.getRandomState(),
     // A watermark into the snapshot-level log, not a copy of it — see
     // `ActionCheckpoint.messageCount`. This is what keeps undo able to drop the
-    // lines an undone action wrote now that the log is stored once.
-    messageCount: game.messages.length,
+    // lines an undone action wrote now that the log is stored once, and being
+    // ABSOLUTE (entries ever written) is what survives a game pruning the log.
+    messageCount: game.messageCount,
   };
 }
 

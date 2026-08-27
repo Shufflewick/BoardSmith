@@ -58,6 +58,30 @@ actions, anything async and multi-round — reaches that cap on ordinary play.
   share from the remainder, and note that `projectSnapshotSize` infers the log's
   growth rate from the actions the measured game actually played — a fixture
   that constructs an end-state must pass `messageLogBytes` explicitly instead.
+
+  **Capping it is `game.pruneMessages()`, not a splice.** Each per-action
+  checkpoint records the log's ABSOLUTE length at its boundary — entries ever
+  written — and the engine counts how many have been evicted, so a restore
+  subtracts the one from the other to find that boundary in the log as it now
+  stands. One number for the whole game, which matters here of all places: a
+  per-entry identity would have made the fix for a size ceiling cost bytes per
+  line. Splicing `game.messages` directly is not equivalent — it moves entries
+  past a boundary the checkpoint no longer describes.
+
+  ```typescript
+  // At a round boundary, in the game's own upkeep:
+  game.pruneMessages({ keepLast: 400 });
+
+  // Or by age, which is still a front eviction:
+  game.pruneMessages({ dropWhile: (entry) => (entry.data?.round as number) < currentRound - 2 });
+  ```
+
+  Eviction is **front-only**, deliberately. A checkpoint's watermark is a
+  position in a chronological log, so removing an entry from the middle moves
+  later lines across boundaries recorded before the removal — which is exactly
+  the corruption this design exists to prevent. "The most recent N" and
+  "everything before round K" are front evictions; "only the interesting lines"
+  is not, and there is no way to ask for it.
 - **Named-key objects cost about 6× positional arrays.** `{beastLore: 3, …}` is
   137 bytes where `[3, …]` is 23. Across 8 seats and 325 actions, that single
   stylistic choice is ~579 KB of saved state.

@@ -22,6 +22,7 @@ import { mount } from '@vue/test-utils';
 import { ref, nextTick } from 'vue';
 import HeatmapOverlay from './HeatmapOverlay.vue';
 import type { HeatmapEntry } from '../../../session/types.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // jsdom lacks matchMedia
 vi.stubGlobal(
@@ -78,7 +79,7 @@ function mountOverlay(
 
   const wrapper = mount(HeatmapOverlay, {
     global: {
-      provide: { gameState },
+      provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState },
       // Stub Teleport so chips render inline for wrapper.findAll() assertions.
       stubs: { Teleport: true },
     },
@@ -253,7 +254,7 @@ describe('HeatmapOverlay', () => {
       document.body.appendChild(fixture);
 
       const wrapper = mount(HeatmapOverlay, {
-        global: { provide: { gameState }, stubs: { Teleport: true } },
+        global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState }, stubs: { Teleport: true } },
         attachTo: fixture,
       });
       await nextTick();
@@ -278,7 +279,7 @@ describe('HeatmapOverlay', () => {
       document.body.appendChild(fixture);
 
       const wrapper = mount(HeatmapOverlay, {
-        global: { provide: { gameState }, stubs: { Teleport: true } },
+        global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState }, stubs: { Teleport: true } },
         attachTo: fixture,
       });
       await nextTick();

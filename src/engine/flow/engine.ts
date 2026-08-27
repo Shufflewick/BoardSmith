@@ -638,6 +638,86 @@ export class FlowEngine<G extends Game = Game> {
     );
   }
 
+  /**
+   * Re-derive the awaiting set of the OPEN simultaneous step, admitting seats
+   * that have become eligible since it opened (#28).
+   *
+   * `simultaneousActionStep` builds each seat's `availableActions` once at step
+   * entry and re-derives it for exactly one seat afterwards — the seat that just
+   * acted — and every submission is gated on that list. A seat whose legal
+   * actions change for any OTHER reason therefore keeps a stale list for the
+   * rest of the step. The engine's two documented workarounds do not reach that
+   * case: keeping the action available only works when it CAN be legal from the
+   * moment the step opens, and re-entering the step only helps at a boundary.
+   * A seat that gains its first legal action mid-step was left present but
+   * frozen, unable to act until the next entry.
+   *
+   * The set can now GROW, which is the part that was impossible: a seat absent
+   * from it because it had nothing to do is admitted the moment it does. It can
+   * also shrink, since re-deriving is re-deriving.
+   *
+   * `skipPlayer` and `playerDone` are honoured exactly as at entry, and a seat
+   * that already completed this step is left alone — a refresh must never
+   * un-complete a commitment.
+   *
+   * No-op when no simultaneous step is open: there is no stale list to correct.
+   *
+   * @param seat - Refresh only this seat. Omit to refresh every seat.
+   */
+  refreshAwaitingActions(seat?: number): void {
+    const frame = this.stack[this.stack.length - 1];
+    if (!frame || frame.node.type !== 'simultaneous-action-step') return;
+    const config = frame.node.config as SimultaneousActionStepConfig;
+
+    const context = this.createContext();
+    const players = this.game.players as Player[];
+
+    if (seat !== undefined && !players.some((p) => p.seat === seat)) {
+      throw new Error(
+        `refreshAwaitingActions: there is no seat ${seat} in this game (it has ${players.length}). ` +
+          `Seats are 1-indexed.`,
+      );
+    }
+
+    for (const player of players) {
+      if (seat !== undefined && player.seat !== seat) continue;
+
+      const existing = this.awaitingPlayers.find((p) => p.playerIndex === player.seat);
+      // A seat that already committed this step stays committed. Re-deriving
+      // its list would be the one change a refresh must never make.
+      if (existing?.completed) continue;
+
+      if (config.skipPlayer?.(context, player as never) || config.playerDone?.(context, player as never)) {
+        if (existing) this.awaitingPlayers = this.awaitingPlayers.filter((p) => p !== existing);
+        continue;
+      }
+
+      const declared = typeof config.actions === 'function'
+        ? config.actions(context, player as never)
+        : config.actions;
+      this.requireRegisteredActions(declared, config.name ?? 'simultaneous-action-step');
+
+      const available = declared.filter((actionName) =>
+        this.game.getAvailableActions(player as any).some((a) => a.name === actionName),
+      );
+
+      if (available.length === 0) {
+        if (existing) this.awaitingPlayers = this.awaitingPlayers.filter((p) => p !== existing);
+        continue;
+      }
+
+      if (existing) {
+        existing.availableActions = available;
+      } else {
+        this.awaitingPlayers.push({
+          playerIndex: player.seat,
+          availableActions: available,
+          completed: false,
+        });
+      }
+    }
+  }
+
   private resumeSimultaneousAction(
     actionName: string,
     args: Record<string, unknown>,

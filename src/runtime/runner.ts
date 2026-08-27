@@ -30,6 +30,7 @@ import {
 import { ErrorCode } from '../types/protocol.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { isDevThrowEnabled } from '../utils/dev.js';
+import type { MessageEntry } from '../engine/index.js';
 
 /**
  * Re-exported so `boardsmith/runtime` keeps naming these policy types alongside
@@ -132,6 +133,30 @@ export interface PendingStepResult {
  * GameRunner manages game execution with action history tracking
  * and provides serialization utilities for client-server sync
  */
+/**
+ * The log as it stood at a checkpoint boundary (#25).
+ *
+ * The watermark is ABSOLUTE — entries ever written — so a log a game has pruned
+ * still restores exactly the lines that existed at the boundary and survive:
+ * front eviction shifts every position by a known amount, and that amount is
+ * what `evicted` carries.
+ *
+ * A checkpoint with no recorded watermark restores the whole log, which is the
+ * honest reading of no recorded boundary.
+ */
+function messagesUpTo(
+  log: MessageEntry[],
+  watermark: number | undefined,
+  evicted: number,
+): MessageEntry[] {
+  if (watermark === undefined) return log;
+  // The watermark counts entries EVER WRITTEN; `evicted` says how many of those
+  // are no longer in the log. The difference is the boundary's position in the
+  // log as it stands now — negative when every line from that boundary has
+  // since been evicted, which honestly restores nothing rather than guessing.
+  return log.slice(0, Math.max(0, watermark - evicted));
+}
+
 export class GameRunner<G extends Game = Game> {
   /** The game instance */
   readonly game: G;
@@ -446,7 +471,7 @@ export class GameRunner<G extends Game = Game> {
     }
 
     this.game.loadSerializedState(checkpoint.state, {
-      messageLog: (this.game.messages ?? []).slice(0, checkpoint.messageCount ?? 0),
+      messageLog: messagesUpTo(this.game.messages ?? [], checkpoint.messageCount, this.game.messagesEvicted),
     });
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
@@ -1096,9 +1121,10 @@ export class GameRunner<G extends Game = Game> {
     // A checkpoint predating the watermark has no recorded boundary, so the
     // honest restore is the whole log rather than a guess.
     const fullLog = snapshot.messageLog ?? [];
-    const messageLog = checkpoint.messageCount === undefined
-      ? fullLog
-      : fullLog.slice(0, checkpoint.messageCount);
+    // `messagesEvicted` rides in the snapshot's own state, which is where the
+    // log's position bookkeeping lives.
+    const evicted = (snapshot.state as { messagesEvicted?: number }).messagesEvicted ?? 0;
+    const messageLog = messagesUpTo(fullLog, checkpoint.messageCount, evicted);
 
     return GameRunner.fromSnapshot<G>(
       {

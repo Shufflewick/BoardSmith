@@ -24,6 +24,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { ref, nextTick } from 'vue';
 import TutorialOverlay from './TutorialOverlay.vue';
 import type { Annotation } from '../../../engine/tutorial/types.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // jsdom lacks matchMedia; modules that read it at import time would throw.
 vi.stubGlobal(
@@ -80,7 +81,7 @@ function mountOverlay(
 
   const wrapper = mount(TutorialOverlay, {
     global: {
-      provide: { gameState },
+      provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState },
       // Stub Teleport so overlay content renders inline (not teleported to body).
       // This keeps wrapper.find() assertions working in jsdom.
       stubs: { Teleport: true },
@@ -145,7 +146,7 @@ describe('TutorialOverlay', () => {
 
       const wrapper = mount(TutorialOverlay, {
         global: {
-          provide: { gameState },
+          provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState },
           stubs: { Teleport: true },
         },
         attachTo: fixture,
@@ -300,7 +301,7 @@ describe('TutorialOverlay', () => {
       ]);
       const wrapper = mount(TutorialOverlay, {
         global: {
-          provide: { gameState },
+          provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: gameState },
           stubs: { Teleport: true },
         },
         attachTo: boardRegion,

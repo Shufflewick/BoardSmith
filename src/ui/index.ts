@@ -103,6 +103,18 @@ export {
   type BoardActionBridgeOptions,
 } from './composables/useBoardActionBridge.js';
 
+// The typed contract between GameShell and everything it renders (#39). A
+// custom UI reads the game context through this instead of guessing at string
+// keys, and a misspelled field is a type error rather than a silent undefined.
+export {
+  useGameContext,
+  tryUseGameContext,
+  GAME_CONTEXT_KEYS,
+  type GameContext,
+  type GameContextPlayer,
+  type TimeTravelDiff,
+} from './composables/useGameContext.js';
+
 // Drag-and-drop composable for custom UIs
 export {
   useDragDrop,

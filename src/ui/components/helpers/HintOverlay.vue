@@ -37,6 +37,7 @@ import {
 import BoardMessage from './BoardMessage.vue';
 import type { Annotation } from '../../../engine/tutorial/types.js';
 import { buildSelector } from './overlay-utils.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,8 +62,11 @@ interface ResolvedAnnotation {
 
 // ── Inject ────────────────────────────────────────────────────────────────────
 
-const gameState = inject('gameState') as
-  | Ref<{ state: { hint?: { annotation: Annotation } } }>
+// The typed key, so a rename in GameShell is a compile error here rather than
+// a silently undefined ref (#39). Optional injection on purpose: an overlay
+// mounted outside a shell renders nothing rather than throwing.
+const gameState = inject(GAME_CONTEXT_KEYS.gameState, undefined) as
+  | Ref<{ state: { hint?: { annotation: Annotation } } } | null>
   | undefined;
 
 // ── Derived content ───────────────────────────────────────────────────────────
