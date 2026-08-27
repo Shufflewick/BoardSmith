@@ -25,6 +25,7 @@ import type { Track } from '../scoring/track.js';
 import { createInverseCommand } from './inverse.js';
 import type { Game } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
+import { RESERVED_ELEMENT_KEYS } from '../element/game-element.js';
 import type { Space } from '../element/space.js';
 import type { Piece } from '../element/piece.js';
 import type { ElementClass } from '../element/types.js';
@@ -157,6 +158,20 @@ function executeSetAttribute(game: Game, command: SetAttributeCommand): CommandR
   const element = game.getElementById(command.elementId);
   if (!element) {
     return { success: false, error: `Element not found: ${command.elementId}` };
+  }
+
+  // The cast is inherent: the attribute name is only known at runtime, so no
+  // type can check it (#52). What CAN be checked is that it is not one of the
+  // engine's own — `id` is what every reference, snapshot entry and atId()
+  // lookup keys on, and `_t`/`_ctx` are the element's internals. `create()`
+  // already refuses these (#49); a SET_ATTRIBUTE command is the other door in.
+  if (RESERVED_ELEMENT_KEYS.has(command.attribute)) {
+    return {
+      success: false,
+      error:
+        `Cannot set reserved property "${command.attribute}" on element ${command.elementId}. ` +
+        `It is owned by the engine — rename the attribute, or set it on your own class field.`,
+    };
   }
 
   (element as any)[command.attribute] = command.value;

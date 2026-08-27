@@ -181,7 +181,7 @@ function markNearestPartition(
  * own internals. A game that sets any of them does not get a slightly odd
  * element, it gets a tree whose identity system no longer holds.
  */
-const RESERVED_ELEMENT_KEYS: ReadonlySet<string> = new Set(['id', '_t', '_ctx']);
+export const RESERVED_ELEMENT_KEYS: ReadonlySet<string> = new Set(['id', '_t', '_ctx']);
 
 /**
  * Thrown when `create()`/`createMany()` is handed an attribute that would

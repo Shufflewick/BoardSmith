@@ -340,6 +340,24 @@ describe('executeCommand', () => {
       expect(game.messages.at(-1)).toEqual({ text: 'hello', data: undefined });
     });
 
+    it('refuses a reserved property, the other door into element identity (#52)', () => {
+      // `create()` already refuses these (#49); a SET_ATTRIBUTE command is the
+      // other way in, and `id` is what every reference and snapshot entry keys on.
+      const element = game;
+      for (const key of ['id', '_t', '_ctx']) {
+        const result = executeCommand(game, {
+          type: 'SET_ATTRIBUTE',
+          elementId: element.id,
+          attribute: key,
+          value: 999,
+        } as never);
+        expect(result.success, key).toBe(false);
+        expect(result.error, key).toMatch(/reserved/i);
+      }
+      // And the identity it was aimed at is untouched.
+      expect(typeof element.id).toBe('number');
+    });
+
     it('carries the audience for a private message', () => {
       executeCommand(game, { type: 'MESSAGE', text: 'psst', to: [1] });
       expect(game.messages.at(-1)?.to).toEqual([1]);
