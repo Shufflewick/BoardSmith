@@ -48,17 +48,17 @@ import { devWarn } from '../../utils/dev.js';
  * @returns Array of `{ action, args }` pairs (element args are GameElement
  *   objects, not numeric IDs)
  */
-export function enumerateLegalMoves(
-  game: Game,
-  seat: number,
-  options?: { maxPerAction?: number },
-): Array<{ action: string; args: Record<string, unknown> }> {
-  // Every refusal below is a THROW, never an empty array (#26). "This seat has
-  // no legal moves" is the one answer that stops a bot pump and wedges a
-  // simultaneous round for every seat at the table, so it must never also be
-  // how a bad argument or an unstarted game reports itself. A `Player` object
-  // handed in where a seat number belongs used to match nothing and come back
-  // as `[]`, indistinguishable from a correctly built game with nothing to do.
+/**
+ * Resolve the seat an enumeration was asked for, or say why it cannot be.
+ *
+ * Every refusal here is a THROW, never an empty array (#26). "This seat has no
+ * legal moves" is the one answer that stops a bot pump and wedges a
+ * simultaneous round for every seat at the table, so it must never also be how
+ * a bad argument or an unstarted game reports itself. A `Player` object handed
+ * in where a seat number belongs used to match nothing and come back as `[]`,
+ * indistinguishable from a correctly built game with nothing to do.
+ */
+function resolveSeat(game: Game, seat: number): { player: Player; flowState: NonNullable<ReturnType<Game['getFlowState']>> } {
   if (typeof seat !== 'number' || !Number.isInteger(seat)) {
     throw new TypeError(
       `enumerateLegalMoves expects a seat number, got ${typeof seat === 'object' ? 'an object' : typeof seat}. ` +
@@ -86,6 +86,16 @@ export function enumerateLegalMoves(
       `Seats are 1-indexed.`
     );
   }
+
+  return { player, flowState };
+}
+
+export function enumerateLegalMoves(
+  game: Game,
+  seat: number,
+  options?: { maxPerAction?: number },
+): Array<{ action: string; args: Record<string, unknown> }> {
+  const { player, flowState } = resolveSeat(game, seat);
 
   const actionNames = availableActionsForSeat(flowState, seat);
 
