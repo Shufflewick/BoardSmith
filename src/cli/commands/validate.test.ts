@@ -375,18 +375,7 @@ describe('platform-consumed blocks', () => {
   it('accepts a config carrying a valid persistent-world block', () => {
     const issues = checkMetadataIssues({
       ...validConfig(),
-      world: { resolveAction: { name: 'resolveRound' } },
-    });
-    expect(issues).toEqual([]);
-  });
-
-  it('accepts world.resolveAction args and the optional enrolAction', () => {
-    const issues = checkMetadataIssues({
-      ...validConfig(),
-      world: {
-        resolveAction: { name: 'resolveRound', args: { scope: 'all' } },
-        enrolAction: { name: 'enrol' },
-      },
+      world: { maxPlayers: 200 },
     });
     expect(issues).toEqual([]);
   });
@@ -394,37 +383,41 @@ describe('platform-consumed blocks', () => {
   it('rejects an unknown key INSIDE world, naming the key and suggesting the real one', () => {
     const issues = checkMetadataIssues({
       ...validConfig(),
-      world: { resolveAction: { name: 'resolveRound' }, resolvAction: { name: 'x' } },
+      world: { maxPlayers: 12, maxPlayer: 12 },
     });
     expect(issues).toHaveLength(1);
-    expect(issues[0]).toContain("Unknown key 'resolvAction'");
+    expect(issues[0]).toContain("Unknown key 'maxPlayer'");
     expect(issues[0]).toContain('world');
-    expect(issues[0]).toContain('resolveAction');
+    expect(issues[0]).toContain('maxPlayers');
   });
 
-  it('rejects an unknown key inside world.resolveAction', () => {
+  it('rejects the DELETED round-world keys rather than accepting them into a shape nothing reads', () => {
+    // `resolveAction` and `enrolAction` were the round architecture's, and it
+    // is gone. A game that still carries them is not half-configured: it is
+    // configured for a platform that no longer exists, and the unknown-key pass
+    // is what tells its author so.
     const issues = checkMetadataIssues({
       ...validConfig(),
-      world: { resolveAction: { name: 'resolveRound', arg: {} } },
+      world: { maxPlayers: 12, resolveAction: { name: 'resolveRound' } },
     });
     expect(issues).toHaveLength(1);
-    expect(issues[0]).toContain("Unknown key 'arg'");
-    expect(issues[0]).toContain('world.resolveAction');
-    expect(issues[0]).toContain("'args'");
+    expect(issues[0]).toContain("Unknown key 'resolveAction'");
   });
 
-  it('rejects a world block with no resolveAction — a world with no resolver can never advance', () => {
+  it('rejects a world block with no maxPlayers — a block that declares nothing says nothing', () => {
     const issues = checkMetadataIssues({ ...validConfig(), world: {} });
     expect(issues).toHaveLength(1);
-    expect(issues[0]).toContain('resolveAction');
-    expect(issues[0]).toContain('advance a round');
+    expect(issues[0]).toContain('maxPlayers');
   });
 
-  it('rejects a non-object world block and a resolveAction with an empty name', () => {
+  it('rejects a non-object world block and a maxPlayers that is not a whole roster', () => {
     expect(checkMetadataIssues({ ...validConfig(), world: true })[0]).toContain('"world" must be an object');
     expect(
-      checkMetadataIssues({ ...validConfig(), world: { resolveAction: { name: '' } } })[0],
-    ).toContain('"world.resolveAction.name"');
+      checkMetadataIssues({ ...validConfig(), world: { maxPlayers: 0 } })[0],
+    ).toContain('"world.maxPlayers"');
+    expect(
+      checkMetadataIssues({ ...validConfig(), world: { maxPlayers: 12.5 } })[0],
+    ).toContain('"world.maxPlayers"');
   });
 
   it('accepts the boolean platform flags and rejects non-boolean values', () => {

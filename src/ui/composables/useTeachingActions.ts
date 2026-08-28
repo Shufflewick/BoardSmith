@@ -13,10 +13,10 @@
  * @module
  */
 import type { Ref } from 'vue';
-import type { Toast } from './useToast.js';
+import type { useToast } from './useToast.js';
 
 /** Which control the player pressed. */
-export type TeachingAction =
+type TeachingAction =
   | 'hint'
   | 'demo-toggle'
   | 'heatmap-toggle'
@@ -44,23 +44,20 @@ export interface TeachingActionsOptions {
   /**
    * Show a message to the player. `duration: 0` means "until removed".
    *
-   * This is `useToast()`'s shape, stated in `useToast()`'s own types rather
-   * than approximated. The approximation did not typecheck: `type: string` is
-   * wider than the four toast kinds, and `remove(id: string | number)` is
-   * wider than the numeric ids `show` actually hands back, so under
-   * `strictFunctionTypes` the real toast was not assignable to the declared
-   * one. GameShell is a `.vue` file, so plain `tsc` never saw it -- only a
-   * consumer running `vue-tsc` did, which is every game running
-   * `boardsmith validate`.
+   * TAKEN FROM `useToast` RATHER THAN RESTATED. It was restated once, and the
+   * copy drifted: it widened `type` to `string`, made both options required and
+   * let `remove` take a string, none of which the real toast accepts. Under
+   * `strictFunctionTypes` the real toast was then not assignable to the
+   * declared one, so `GameShell.vue` failed `boardsmith validate`'s TypeScript
+   * pass for every game in the catalogue -- nothing could be published at all.
+   * `GameShell` is a `.vue` file, so plain `tsc` never saw it; only a consumer
+   * running `vue-tsc` did. Deriving the type is what keeps the copy from
+   * drifting again.
    */
-  toast: {
-    show: (text: string, options: { type?: Toast['type']; duration?: number }) => number;
-    error: (text: string) => void;
-    remove: (id: number) => void;
-  };
+  toast: Pick<ReturnType<typeof useToast>, 'show' | 'error' | 'remove'>;
 }
 
-export interface TeachingActionsReturn {
+interface TeachingActionsReturn {
   /** Run one teaching control. Never throws — a failure becomes a message. */
   handleTeachingAction: (action: TeachingAction) => Promise<void>;
 }

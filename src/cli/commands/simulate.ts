@@ -8,6 +8,7 @@ import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { parseGameOptionFlags } from './dev.js';
 import { validateGameOptionSelection, type DevOptionDef } from '../dev-host/config-types.js';
 import type { GameOptionDefinition } from '../../session/types.js';
+import { requireGameProject } from '../lib/game-project.js';
 
 interface SimulateOptions {
   games: string;
@@ -163,12 +164,7 @@ function printHumanReport(report: RunSimulationResult, gameOptionFlags: string[]
 export async function simulateCommand(options: SimulateOptions): Promise<void> {
   const cwd = process.cwd();
 
-  const configPath = join(cwd, 'boardsmith.json');
-  if (!existsSync(configPath)) {
-    console.error(chalk.red('Error: boardsmith.json not found'));
-    console.error(chalk.dim('Make sure you are in a BoardSmith game project directory'));
-    process.exit(1);
-  }
+  const configPath = requireGameProject(cwd);
 
   const config: BoardSmithConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
   const rulesPath = config.paths?.rules ? resolve(cwd, config.paths.rules) : join(cwd, 'src', 'rules');

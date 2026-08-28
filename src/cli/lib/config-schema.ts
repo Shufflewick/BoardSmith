@@ -88,7 +88,8 @@ export const ALLOWED_ROUND_DEADLINE_KEYS: readonly string[] = keysOf(
 
 /**
  * Legitimate keys inside a platform-submitted action declaration —
- * `idleAction`, `world.resolveAction`, `world.enrolAction`.
+ * `idleAction`. The world block used to declare two more; the round
+ * architecture that needed them is deleted.
  */
 export const ALLOWED_NAMED_ACTION_KEYS: readonly string[] = keysOf(
   rootSchema.definitions.namedAction,

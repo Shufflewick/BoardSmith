@@ -4,6 +4,7 @@ import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
 import type { TrainingProgress } from '../../bot-trainer/index.js';
+import { requireGameProject } from '../lib/game-project.js';
 
 interface EvolveBotWeightsOptions {
   generations?: string;
@@ -16,13 +17,7 @@ interface EvolveBotWeightsOptions {
 export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions): Promise<void> {
   const cwd = process.cwd();
 
-  // Validate project
-  const configPath = join(cwd, 'boardsmith.json');
-  if (!existsSync(configPath)) {
-    console.error(chalk.red('Error: boardsmith.json not found'));
-    console.error(chalk.dim('Make sure you are in a BoardSmith game project directory'));
-    process.exit(1);
-  }
+  const configPath = requireGameProject(cwd);
 
   const config = JSON.parse(readFileSync(configPath, 'utf-8'));
   const gameName = config.displayName || config.name;

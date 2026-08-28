@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import chalk from 'chalk';
 import { getProjectContext } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
+import { requireGameProject } from '../lib/game-project.js';
 
 interface TestOptions {
   watch?: boolean;
@@ -25,12 +26,7 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
   const context = getProjectContext(cwd);
 
   if (context === 'standalone') {
-    const configPath = join(cwd, 'boardsmith.json');
-    if (!existsSync(configPath)) {
-      console.error(chalk.red('Error: boardsmith.json not found'));
-      console.error(chalk.dim('Make sure you are in a BoardSmith game project directory'));
-      process.exit(1);
-    }
+    requireGameProject(cwd);
 
     if (!existsSync(join(cwd, 'tests'))) {
       console.log(chalk.yellow('No tests directory found.'));

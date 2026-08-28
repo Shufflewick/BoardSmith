@@ -15,7 +15,7 @@ function harness(overrides: Partial<TeachingActionsOptions> = {}) {
   const platformRequest = vi.fn().mockResolvedValue({});
   const errors: string[] = [];
   const shown: string[] = [];
-  const removed: Array<string | number> = [];
+  const removed: number[] = [];
   const setActionHelpEnabled = vi.fn();
 
   const options: TeachingActionsOptions = {
@@ -28,8 +28,10 @@ function harness(overrides: Partial<TeachingActionsOptions> = {}) {
     isActionHelpVisible: ref(false),
     setActionHelpEnabled,
     toast: {
-      show: (text) => { shown.push(text); return 'toast-1'; },
-      error: (text) => { errors.push(text); },
+      // The REAL `useToast` shape, now that the option is typed from it:
+      // `show` and `error` both answer the new toast's numeric id.
+      show: (text) => { shown.push(text); return 1; },
+      error: (text) => { errors.push(text); return 2; },
       remove: (id) => { removed.push(id); },
     },
     ...overrides,
@@ -49,13 +51,13 @@ describe('hint', () => {
     const h = harness();
     await h.handleTeachingAction('hint');
     expect(h.shown[0]).toMatch(/thinking/i);
-    expect(h.removed).toEqual(['toast-1']);
+    expect(h.removed).toEqual([1]);
   });
 
   it('clears the thinking toast even when the host refuses', async () => {
     const h = harness({ platformRequest: vi.fn().mockRejectedValue(new Error('no')) });
     await h.handleTeachingAction('hint');
-    expect(h.removed).toEqual(['toast-1']);
+    expect(h.removed).toEqual([1]);
     expect(h.errors[0]).toMatch(/hint unavailable/i);
   });
 });
