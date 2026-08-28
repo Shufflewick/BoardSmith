@@ -22,14 +22,9 @@ import { validateGameOptionSelection, type DevOptionDef } from './config-types.j
 import {
   PERSIST_KEY,
   PersistenceStore,
-  RESOLUTION_SEAT,
-  WORLD_ORDERS_ARG_KEY,
-  WORLD_ROSTER_ARG_KEY,
-  seatsHumans,
   takePrivateCommit,
   type PrivateChannelCarrier,
   type PersistPlayer,
-  type SessionKind,
 } from '../../persistence/index.js';
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 
@@ -181,18 +176,6 @@ export interface MultiplayerHostOptions {
   /** Seed source for a fresh game (defaults to a random 32-bit seed). */
   makeSeed?: () => string;
   /**
-   * What KIND of session this host is running (ShufflewickPub issue #41 item 3).
-   *
-   * Defaults to `match`, the kind every dev host was before kinds existed and
-   * the only one that is an ordinary bounded sitting. The other two exist so a
-   * world's machinery can be exercised before the game is published: an
-   * `orderEntry` session's commit is a round's ORDERS rather than store rows,
-   * and a `resolution` session SEATS NOBODY -- it is the resolver, and letting
-   * a developer sit down in one would emulate a session the platform never
-   * creates.
-   */
-  sessionKind?: SessionKind;
-  /**
    * The cross-session store this host reads at start and commits to at game
    * over (#41 item 2). Unset means the host behaves exactly as it always did:
    * nothing is injected, nothing is committed, and a game that never declared
@@ -249,7 +232,7 @@ interface DevPersistenceOptions {
  * start payload's `players` array and never hard-codes it, so nothing a
  * developer writes against this survives into production as a literal.
  */
-export function devPlayerToken(seat: number): string {
+function devPlayerToken(seat: number): string {
   return `dev-player-${seat}`;
 }
 
@@ -322,10 +305,6 @@ export class MultiplayerHost {
    * triggers seat reconciliation, `resizeSeats` does.
    */
   private appliedGameOptions: Record<string, unknown>;
-  /** This session's kind (#41 item 3). `match` when the CLI said nothing --
-   *  the same "absence means match" default the platform reads a kindless
-   *  session row with. */
-  private readonly sessionKind: SessionKind;
   /**
    * The seats this session ACTS FOR, in the shape the store's seal is checked
    * against. Recomputed by `startGame` and read by the commit that ends the
@@ -336,7 +315,6 @@ export class MultiplayerHost {
   private persistPlayers: PersistPlayer[] = [];
 
   constructor(private readonly opts: MultiplayerHostOptions) {
-    this.sessionKind = opts.sessionKind ?? 'match';
     for (let seat = 1; seat <= opts.playerCount; seat++) {
       this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
     }
@@ -353,16 +331,6 @@ export class MultiplayerHost {
    */
   async hello(clientId: string): Promise<void> {
     this.connected.add(clientId);
-
-    // A RESOLUTION seats nobody (#41 item 3). Its one seat is host-held, the
-    // round runs with no human in it, and a client that connects is a watcher.
-    // Falling through to the auto-seat block below would put a developer in the
-    // resolver's chair and prove nothing about the session the platform runs.
-    if (!seatsHumans(this.sessionKind)) {
-      if (this.phase === 'lobby' && !this.starting) await this.startGame();
-      this.send(clientId, this.lobbyMessage());
-      return;
-    }
 
     const existing = this.clientSeat.get(clientId);
     if (existing !== undefined) {
@@ -664,16 +632,6 @@ export class MultiplayerHost {
   /** Take over a seat (works mid-game: claim an open/bot seat → it stops being bot). */
   private handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): void {
     this.connected.add(clientId);
-    if (!seatsHumans(this.sessionKind)) {
-      this.send(clientId, {
-        type: 'error',
-        message:
-          `A ${this.sessionKind} session seats nobody — its seat is held by the platform and ` +
-          `the round runs with no player in it. Run \`boardsmith dev\` without ` +
-          `\`--kind ${this.sessionKind}\` to sit at a table.`,
-      });
-      return;
-    }
     const info = this.seats.get(msg.seat);
     if (!info) {
       this.send(clientId, { type: 'error', message: `Seat ${msg.seat} does not exist.` });
@@ -871,12 +829,6 @@ export class MultiplayerHost {
   /** Rebuild the shared bot-seat list in place from currently open seats. */
   private rebuildBotSeats(): void {
     this.botSeats.length = 0;
-    // A RESOLUTION's seat is PLATFORM-HELD, not open (#41 item 3). Covering it
-    // with a bot would let the bot pump play the round the moment the session
-    // starts -- the resolver would run before it was ever asked to, against
-    // inputs nothing had handed it, and `resolveRound` would then find the game
-    // already over.
-    if (!seatsHumans(this.sessionKind)) return;
     for (let seat = 1; seat <= this.opts.playerCount; seat++) {
       if (!this.heldByConnectedHuman(seat)) this.botSeats.push({ seat, level: this.opts.botLevel });
     }
@@ -911,7 +863,6 @@ export class MultiplayerHost {
     const persistence = this.opts.persistence;
     if (!persistence) return;
     const payload = persistence.store.readForSession(
-      this.sessionKind,
       persistence.sessionKey,
       this.persistPlayers,
     );
@@ -948,7 +899,6 @@ export class MultiplayerHost {
     if (!persistence || !stripped.success || !stripped.isComplete) return stripped;
 
     const outcome = persistence.store.commit({
-      kind: this.sessionKind,
       players: this.persistPlayers,
       spectatorView: stripped.spectatorView,
       persistPrivate: stripped.persistPrivate,
@@ -958,67 +908,6 @@ export class MultiplayerHost {
     if (!outcome.ok) return refusedCommit(outcome.reason);
     if (outcome.written > 0) persistence.onChange?.();
     return stripped;
-  }
-
-  /**
-   * RUN THE WORLD'S RESOLVER, ONCE (#41 items 2 and 3).
-   *
-   * This is the thing `boardsmith dev` could not do at all: a resolver reads a
-   * store, advances a world and writes it back, so with no store and no session
-   * kinds there was no way to run one until the game had been published. Now
-   * there is, and it runs through the SAME shape production composes -- an
-   * ordinary action, on the platform-held seat, carrying the round's inputs
-   * under the two reserved argument keys, which are spread LAST so a manifest
-   * that declares either name cannot supply its own roster.
-   *
-   * Returns a REASON rather than throwing, because every way this fails is
-   * something the game's author has to read: no store configured, the wrong
-   * session kind, a resolver the rules refused, or a commit the store refused.
-   */
-  async resolveRound(resolveAction: {
-    name: string;
-    args?: Record<string, unknown>;
-  }): Promise<{ ok: true; complete: boolean } | { ok: false; reason: string }> {
-    if (this.sessionKind !== 'resolution') {
-      return {
-        ok: false,
-        reason: `this host is running a ${this.sessionKind} session; a round is resolved by a session started with --kind resolution`,
-      };
-    }
-    const persistence = this.opts.persistence;
-    if (!persistence) {
-      return { ok: false, reason: 'this host has no persistence store, so there is no world to resolve' };
-    }
-    if (this.phase !== 'playing' || !this.session) {
-      return { ok: false, reason: 'the session has not started, so there is nothing to resolve against' };
-    }
-
-    const inputs = persistence.store.resolutionInputs();
-    const result = await this.session.host.handleOp(RESOLUTION_SEAT, {
-      type: 'action',
-      actionName: resolveAction.name,
-      player: RESOLUTION_SEAT,
-      args: {
-        ...(resolveAction.args ?? {}),
-        [WORLD_ROSTER_ARG_KEY]: inputs.roster,
-        [WORLD_ORDERS_ARG_KEY]: inputs.orders,
-      },
-      // SERVER-COMPOSED, and legitimately so: a resolution has no client, so
-      // there is no human intent to carry across a wire. Composing it from the
-      // host's own current view is what production does on the same op.
-      boundaryKey: boundaryKeyOf(this.session.viewForSeat(RESOLUTION_SEAT)),
-    });
-
-    if (!result.success) return { ok: false, reason: result.error ?? 'the resolve action was refused' };
-    // The round's orders are consumed by the resolution that COMMITTED, and by
-    // nothing else. A resolver that ran but did not finish the session has
-    // committed nothing, and dropping its inputs would resolve the round
-    // against a store that no longer holds them.
-    if (result.isComplete) {
-      persistence.store.clearOrders();
-      persistence.onChange?.();
-    }
-    return { ok: true, complete: result.isComplete };
   }
 
   // ── Game start ────────────────────────────────────────────────────────────
