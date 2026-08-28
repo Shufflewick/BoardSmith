@@ -178,10 +178,10 @@ export const PERSIST_MAX_COMMIT_BYTES = 2 * 1024 * 1024;
  * back verbatim on the way in, and COMPARES IT TO NOTHING -- see
  * `PersistedEntry` below and this file's `## Schema drift` section.
  *
- * A `null` value is a deletion of a persisted key. An ORDER commit (from an
- * `orderEntry` session, which Convex routes to `campaignIntents` instead of
- * the campaign store) rejects `null`: an order package has nothing to delete,
- * because each commit replaces that player's whole package for the round.
+ * A `null` value is a deletion of a persisted key -- in every scope and for
+ * every session kind. There is no commit shape that refuses one: the round
+ * era's order packages, the one case that did, went with the round
+ * architecture (ShufflewickPub #47).
  */
 export interface PersistCommitEntry {
   key: string;
@@ -212,8 +212,8 @@ export interface PersistCommitEntry {
  * game-authored migration.
  *
  * What bounds drift over a months-long campaign is the campaign's VERSION PIN
- * (`campaigns.gameVersion`), which a mission or a resolution runs against and
- * which only a deliberate publisher re-pin moves -- not a tag the platform
+ * (`campaigns.gameVersion`), which every session of the campaign runs against
+ * and which only a deliberate publisher re-pin moves -- not a tag the platform
  * checks.
  */
 export interface PersistedEntry {
@@ -222,27 +222,6 @@ export interface PersistedEntry {
   schemaTag?: string;
   gameVersion?: string;
   writtenAt: number;
-}
-
-/**
- * One player's ORDER for a round, as a RESOLUTION session receives it.
- *
- * Convex supplies it from `campaignIntents` for that session's round (epic
- * #24, issue #7), at the moment the round resolves. Every field is
- * platform-attributed: the game never says whose orders these are or which
- * round they belong to.
- *
- * `playerToken` is the stable per-player token this contract uses everywhere
- * -- the same token that appears in a `player:<token>/` campaign-store key, so
- * a resolver can write a per-player view addressed at an order's author.
- */
-export interface WorldOrder {
-  playerToken: string;
-  key: string;
-  value: unknown;
-  schemaTag?: string;
-  gameVersion?: string;
-  submittedAt: number;
 }
 
 /**
@@ -257,10 +236,11 @@ export interface WorldOrder {
  * (`key: \`death:${sessionKey}\``) instead of a race. It is not a secret: the
  * player already has it in their URL.
  *
- * A RESOLUTION session's orders and roster are deliberately NOT here (#26).
- * They are one round's INPUT, and this payload is assembled at START -- a full
- * cadence before the round it belongs to runs. They are fetched at the alarm
- * instead; see `ResolutionInputs` below.
+ * There is deliberately nothing here beyond the store, the session's own id
+ * and its seats. A resident world's SHARED state is the world object's own
+ * partitions and never rides this payload; what a session is handed is the
+ * store it may see, which is the shared rows plus its own players' sealed
+ * ones.
  */
 export interface PersistStartPayload {
   entries: PersistedEntry[];
@@ -279,10 +259,9 @@ export interface PersistStartPayload {
  * `docs/CAMPAIGNS.md` leads with was unreachable in the mode it was written
  * for. Issue #40's campaign example is what surfaced that -- prose could not.
  *
- * `playerId` is the same opaque token `WorldRosterEntry.playerId`,
- * `WorldOrder.playerToken` and `worldViews.playerId` carry: one vocabulary
- * across every mode, so a bundle that learns a token in one place may use it
- * in another.
+ * `playerId` is the same opaque token every other per-player handle carries:
+ * one vocabulary across every mode, so a bundle that learns a token in one
+ * place may use it in another.
  *
  * IT IS NULL FOR A SEAT WITH NO ACCOUNT BEHIND IT -- a bot, or a guest. Null
  * rather than an absent entry, so a game indexing seats gets an honest "this
@@ -570,9 +549,9 @@ export function toStartPayload(
   return { payload: { entries, sessionKey, players }, dropped };
 }
 
-/** The two OPTIONAL shape fields both a stored entry and an order carry, in
- *  the one form both projections need. Shared so "present only when a string"
- *  is written once rather than spelled out at each of four field sites. */
+/** The two OPTIONAL shape fields a stored entry carries, in
+ *  the one form the projection needs. Written once rather than spelled out
+ *  at each field site. */
 function shapeTags(row: Record<string, unknown>): {
   schemaTag?: string;
   gameVersion?: string;
@@ -581,283 +560,6 @@ function shapeTags(row: Record<string, unknown>): {
     ...(typeof row.schemaTag === "string" ? { schemaTag: row.schemaTag } : {}),
     ...(typeof row.gameVersion === "string" ? { gameVersion: row.gameVersion } : {}),
   };
-}
-
-function toOrder(row: unknown): WorldOrder | null {
-  if (!isPlainObject(row)) return null;
-  if (!isNonEmptyString(row.playerToken)) return null;
-  if (typeof row.key !== "string" || typeof row.value !== "string") return null;
-  if (typeof row.submittedAt !== "number") return null;
-  const parsed = parseStored(row.value);
-  if (parsed.ok === false) return null;
-  return {
-    playerToken: row.playerToken,
-    key: row.key,
-    value: parsed.value,
-    ...shapeTags(row),
-    submittedAt: row.submittedAt,
-  };
-}
-
-/**
- * One ENROLLED world player, as `gamePersistence:resolutionInputs` sends them.
- * Canonical home: `convex/worldRoster.ts`, restated here because the two units
- * have separate `node_modules` and cannot import from each other.
- *
- * `playerId` is the same opaque string the fan-out addresses views by and the
- * same one an order-entry session's `worldView.playerId` carries, so a bundle
- * that stores a roster id can look a view up by it without a mapping.
- */
-export interface WorldRosterEntry {
-  playerId: string;
-  displayName: string;
-}
-
-/**
- * ONE ROUND'S INPUTS, fetched at the instant it resolves (#26).
- *
- * `roster` is the world's ENROLLED players, not the set that submitted orders:
- * a resolver must emit a view for someone who ordered nothing, and enrolment
- * is a platform mutation the game structurally cannot observe, so it cannot be
- * derived from `orders`.
- *
- * Both arrays are always present, possibly empty. Empty means "nobody ordered"
- * and "nobody is enrolled" -- there is no absent case, because a resolution
- * that could not be told its inputs never reaches the executor at all
- * (`game-session.ts:attemptResolution` retries the round instead).
- */
-export interface ResolutionInputs {
-  orders: WorldOrder[];
-  roster: WorldRosterEntry[];
-}
-
-/**
- * WHERE THE NEXT PAGE OF A ROUND'S INPUTS STARTS, as Convex minted it.
- *
- * Opaque to this worker: it is round-tripped back to
- * `gamePersistence:resolutionInputs` unread. The shape is validated only far
- * enough to know it IS a cursor, so a wire disagreement refuses the round
- * instead of silently looking like the end of the drain.
- */
-export interface ResolutionCursor {
-  stream: "orders" | "roster";
-  position: string | null;
-}
-
-/**
- * How many pages one drain may fetch before it gives up and refuses the round.
- *
- * DERIVED from the platform's own caps rather than chosen, and held to them by
- * `scripts/world-capacity.test.mjs` across the unit boundary (this worker
- * cannot import Convex's constants). At `WORLD_MAX_PLAYERS` = 500 a full round
- * is 12,500 order rows at 1,024 per page (13 pages) plus a roster of up to
- * `convex/limits.ts:WORLD_MAX_PLAYERS` = 500 at 512 per page (1 page), plus one terminal
- * page per stream: 16. This is 6x that.
- *
- * The roster term used to read 10,000 (20 pages, and a needed total of 35),
- * because that cap was 20x the population a world can actually hold. Deriving
- * the roster cap from `WORLD_MAX_PLAYERS` shrank the term rather than this
- * number: the margin here is deliberate slack against a future cap change, and
- * `world-capacity.test.mjs` is what fails if one outgrows it.
- *
- * It is a REFUSAL, not a truncation. Hitting it means the platform's caps and
- * this number have drifted apart, and the round is retried and then declared
- * errored rather than resolved against a fraction of its orders.
- */
-export const RESOLUTION_INPUTS_MAX_PAGES = 96;
-
-/** What one call to `gamePersistence:resolutionInputs` may answer. */
-export type ResolutionPageFetch = (
-  cursor: ResolutionCursor | null,
-) => Promise<{ ok: true; value: unknown } | { ok: false; reason: string }>;
-
-/**
- * THE ONLY PRODUCER OF `ResolutionInputs` IN THIS WORKER.
- *
- * Fetch pages until Convex says `next: null`, and hand back the whole round --
- * or a REASON, and no round at all.
- *
- * ## Why this is a loop and not a parse
- *
- * `gamePersistence:resolutionInputs` is paged. MEASURED against the real
- * deployment: reading a world's ROSTER whole hard-failed at 5,000 players
- * ("Too many reads in a single function execution (limit: 4096)" -- Convex
- * counts individual document reads, and the query fetches a `users` row per
- * member), and a full round's 12,500 orders is a multi-megabyte single
- * response for a fetch this worker gives 5 seconds. So no single call answers
- * a round.
- *
- * That makes "did I get all of it?" a question this worker now has to answer,
- * and the answer must not be gettable wrong: a resolution that saw a fraction
- * of the round would advance the world as if the rest of the players had
- * passed, and the orders are deleted by the transaction that commits the
- * round, so nothing could ever notice. So the shape is deliberate:
- *
- *   - a `ResolutionInputs` value exists ONLY as this function's success
- *     result. There is no partial-inputs value for a caller to mistake for a
- *     round, because nothing else builds one;
- *   - `next === null` is the ONLY exit that produces inputs. A short page,
- *     an empty page, a transport failure and an unreadable page all produce a
- *     reason instead;
- *   - the page cap is a refusal too, for the same reason.
- *
- * ## The replacement race, and why the last package wins
- *
- * Orders are "replace, never merge": re-submitting deletes the player's live
- * rows and inserts a fresh package stamped with one `submittedAt`. Those two
- * writes are one Convex transaction, but a PAGED read spans many, so a
- * replacement landing mid-drain can put the old package (already read) and the
- * new one (appended past the cursor) into the same answer. Handing the
- * resolver both would merge two packages the platform promised never to merge.
- * `latestPackagePerPlayer` keeps, per player, only the rows carrying that
- * player's highest `submittedAt` -- which is exactly one package, because a
- * package is stamped atomically.
- */
-export async function drainResolutionInputs(
-  fetchPage: ResolutionPageFetch,
-): Promise<{ inputs: ResolutionInputs; dropped: string[] } | { reason: string }> {
-  const orders: WorldOrder[] = [];
-  const roster: WorldRosterEntry[] = [];
-  const dropped: string[] = [];
-  let cursor: ResolutionCursor | null = null;
-
-  for (let fetched = 0; fetched < RESOLUTION_INPUTS_MAX_PAGES; fetched += 1) {
-    const answer = await fetchPage(cursor);
-    if (!answer.ok) return { reason: answer.reason };
-
-    const page = toResolutionInputsPage(answer.value);
-    if (!page) {
-      return {
-        reason:
-          "Convex answered a page of this round's orders in a shape this worker cannot read, so the round would have resolved as if the players past that page had passed. " +
-          "Check that convex/gamePersistence.ts:resolutionInputs still returns { intents, players, next }",
-      };
-    }
-
-    orders.push(...page.orders);
-    roster.push(...page.roster);
-    dropped.push(...page.dropped);
-    if (page.next === null) {
-      return { inputs: { orders: latestPackagePerPlayer(orders), roster }, dropped };
-    }
-    cursor = page.next;
-  }
-
-  return {
-    reason:
-      `this round's orders did not end within ${RESOLUTION_INPUTS_MAX_PAGES} pages, so the round was not resolved rather than resolved against part of itself. ` +
-      "Either a world is holding more orders or players than convex/limits.ts allows, or RESOLUTION_INPUTS_MAX_PAGES has drifted from those caps",
-  };
-}
-
-/**
- * One player's LATEST order package, for every player in the drained set.
- *
- * A package is stamped with a single `submittedAt` at promotion, so "the rows
- * carrying this player's highest `submittedAt`" IS one package -- never a
- * blend of two. Players are otherwise left in the order Convex sent them.
- */
-function latestPackagePerPlayer(orders: WorldOrder[]): WorldOrder[] {
-  const newest = new Map<string, number>();
-  for (const order of orders) {
-    const seen = newest.get(order.playerToken);
-    if (seen === undefined || order.submittedAt > seen) {
-      newest.set(order.playerToken, order.submittedAt);
-    }
-  }
-  return orders.filter(
-    (order) => newest.get(order.playerToken) === order.submittedAt,
-  );
-}
-
-/**
- * ONE PAGE of a round's inputs, parsed.
- *
- * `null` for a page whose overall shape is unreadable -- that is a wire
- * disagreement, and the drain refuses the round rather than treating the
- * pages it already holds as the whole of it.
- *
- * A single malformed ROW is dropped individually and named in `dropped`,
- * rather than costing the round every other player's orders. A dropped order
- * is named `"<playerToken>/<key>"`: one player's key alone is ambiguous across
- * a round. A malformed roster entry is dropped by `playerId` for the same
- * reason.
- */
-function toResolutionInputsPage(value: unknown): {
-  orders: WorldOrder[];
-  roster: WorldRosterEntry[];
-  next: ResolutionCursor | null;
-  dropped: string[];
-} | null {
-  if (!isPlainObject(value)) return null;
-  if (!Array.isArray(value.intents) || !Array.isArray(value.players)) return null;
-  if (!("next" in value)) return null;
-  const next = toResolutionCursor(value.next);
-  if (next === undefined) return null;
-
-  const dropped: string[] = [];
-  const orders = parseWorldOrders(value.intents, dropped);
-  const roster = parseWorldRoster(value.players, dropped);
-  return { orders, roster, next, dropped };
-}
-
-/**
- * The cursor a page carries: a cursor, or `null` for "that was the last page".
- *
- * `undefined` means UNREADABLE, and is deliberately a third answer rather than
- * being folded into `null`: reading a malformed cursor as the end of the drain
- * is precisely the silent-partial-round failure this whole path is shaped
- * against.
- */
-function toResolutionCursor(value: unknown): ResolutionCursor | null | undefined {
-  if (value === null) return null;
-  if (!isPlainObject(value)) return undefined;
-  if (value.stream !== "orders" && value.stream !== "roster") return undefined;
-  if (value.position !== null && typeof value.position !== "string") return undefined;
-  return { stream: value.stream, position: value.position };
-}
-
-/** The round's orders. A row that will not parse is named `"<token>/<key>"`:
- *  one player's key alone is ambiguous across a round. */
-function parseWorldOrders(rows: unknown[], dropped: string[]): WorldOrder[] {
-  const orders: WorldOrder[] = [];
-  for (const row of rows) {
-    const order = toOrder(row);
-    if (order) orders.push(order);
-    else dropped.push(droppedOrderName(row));
-  }
-  return orders;
-}
-
-/** What an unreadable order row is called in the drop report. A row with no
- *  usable key at all is still named, by its author -- a silent skip here would
- *  be an order lost with nothing said about it. */
-function droppedOrderName(row: unknown): string {
-  if (!isPlainObject(row)) return "?/?";
-  const token = isNonEmptyString(row.playerToken) ? row.playerToken : "?";
-  return `${token}/${typeof row.key === "string" ? row.key : "?"}`;
-}
-
-/** The world's enrolled players. */
-function parseWorldRoster(rows: unknown[], dropped: string[]): WorldRosterEntry[] {
-  const roster: WorldRosterEntry[] = [];
-  for (const row of rows) {
-    const entry = toRosterEntry(row);
-    if (entry) roster.push(entry);
-    else dropped.push("roster/?");
-  }
-  return roster;
-}
-
-function toRosterEntry(row: unknown): WorldRosterEntry | null {
-  if (!isPlainObject(row)) return null;
-  if (!isNonEmptyString(row.playerId)) return null;
-  if (typeof row.displayName !== "string") return null;
-  return { playerId: row.playerId, displayName: row.displayName };
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
 }
 
 /** `JSON.parse` as a result rather than a throw, so a caller's shape checks
@@ -884,37 +586,3 @@ function toPersistedEntry(row: unknown): PersistedEntry | null {
     writtenAt: row.writtenAt,
   };
 }
-
-/**
- * THE TWO RESERVED ARGUMENT KEYS OF A RESOLVE ACTION, and the seat a
- * resolution acts from.
- *
- * A round's inputs reach the game as ordinary action arguments -- there is no
- * resolve op and no resolve wire field -- so the names are a contract, and
- * three places have to spell them identically: the host that composes the op
- * (`games/src/game-session.ts` in production, `MultiplayerHost` under
- * `boardsmith dev`), and the executor's `round-inputs.ts`, which strips them
- * back out of the snapshot the engine recorded them into. Without that strip a
- * world carries every past round's orders forever and is charged for them
- * twice.
- *
- * The executor keeps its own copy for the reason `private-channel.ts` records
- * -- one runner source is bundled against every archived engine -- and the two
- * are held equal by ShufflewickPub's `scripts/platform-limits.test.mjs`. The
- * HOSTS share this one.
- *
- * They are spread LAST into the action's args, so they beat a manifest that
- * declares either name: the platform owns both facts, and a publisher-supplied
- * roster would be a world enrolling whoever its own manifest said.
- */
-export const WORLD_ROSTER_ARG_KEY = "worldRoster";
-export const WORLD_ORDERS_ARG_KEY = "worldOrders";
-
-/**
- * The single, PLATFORM-HELD seat a resolution session acts from.
- *
- * A resolution seats no human -- see `session-kind.ts:seatsHumans` -- but the
- * engine still needs an acting seat for the op, and seat 1 is the one seat a
- * session of any size is guaranteed to have.
- */
-export const RESOLUTION_SEAT = 1;

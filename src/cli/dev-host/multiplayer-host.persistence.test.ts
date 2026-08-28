@@ -22,8 +22,8 @@ import { createDevHostClientMemory } from './test-client-memory.js';
 const clients = createDevHostClientMemory();
 
 /**
- * ShufflewickPub issue #41, items 2, 3 and 4: `boardsmith dev` gains a
- * persistence store, session kinds, and the `persistPrivate` strip.
+ * ShufflewickPub issue #41, items 2 and 4: `boardsmith dev` gains a
+ * persistence store and the `persistPrivate` strip.
  *
  * These cases drive the REAL host against the REAL engine and the REAL
  * validation core. Nothing here restates a rule: every refusal asserted below
@@ -81,7 +81,6 @@ const def: GameDefinitionLike = {
 function makeHost(options: {
   store: PersistenceStore;
   write?: { persist?: unknown; persistPrivate?: unknown };
-  sessionKind?: 'match' | 'orderEntry' | 'resolution';
   playerCount?: number;
 }): { host: MultiplayerHost; sent: HostOutbound[]; startOptions: () => Record<string, unknown> } {
   const sent: HostOutbound[] = [];
@@ -91,7 +90,6 @@ function makeHost(options: {
     minPlayers: 1,
     maxPlayers: 2,
     makeSeed: () => 'persist-seed',
-    sessionKind: options.sessionKind ?? 'match',
     persistence: {
       sessionKey: 'dev-session',
       gameVersion: 'dev',
@@ -252,171 +250,47 @@ describe('boardsmith dev — the persistPrivate strip (#41 item 4)', () => {
 
 });
 
-describe('boardsmith dev — session kinds (#41 item 3)', () => {
-  it('seats nobody in a resolution, so no client can play the resolver', async () => {
-    const store = new PersistenceStore();
-    const { host, sent } = makeHost({ store, sessionKind: 'resolution' });
-    await host.handleMessage('A', { type: 'hello' });
-
-    const lobby = sent.find((m) => m.type === 'lobby') as
-      | { seats: Array<{ clientId: string | null }> }
-      | undefined;
-    expect(lobby?.seats.every((s) => s.clientId === null)).toBe(true);
-  });
-
-  it('routes an orderEntry commit to the round ORDERS, not to the store', async () => {
-    const store = new PersistenceStore();
-    const { host, sent } = makeHost({
-      store,
-      sessionKind: 'orderEntry',
-      write: { persistPrivate: { entries: [{ key: 'orders', value: { move: 'north' } }] } },
-    });
-    await host.handleMessage('A', { type: 'hello' });
-    await playToEnd(host, sent);
-
-    const state = store.toState();
-    expect(state.rows).toEqual([]);
-    expect(state.orders.map((o) => ({ token: o.playerToken, key: o.key }))).toEqual([
-      { token: 'dev-player-1', key: 'orders' },
-    ]);
-  });
-
-  it('hands a RESOLUTION every sealed row, because it acts for the whole world', async () => {
+describe('boardsmith dev — the seal has no whole-world bypass (ShufflewickPub #47)', () => {
+  it('hands a session the shared rows plus only its OWN players\' sealed ones', async () => {
+    // The round era exempted one session from this: a seatless `resolution`
+    // was handed every sealed row, because it acted for the whole world. That
+    // kind is gone and the exemption went with it -- a resident world is
+    // seated at every write, and Convex gates a campaign-scope commit by scope
+    // rather than by kind, so a dev host that handed over a stranger's rows
+    // would be teaching a capability production refuses.
     const store = new PersistenceStore();
     store.commit({
-      kind: 'match',
       players: [{ seat: 1, playerId: 'someone' }],
       spectatorView: null,
       persistPrivate: { entries: [{ key: 'player:someone/sheet', value: { hp: 9 } }] },
       gameVersion: 'dev',
       now: () => 1,
     });
+    store.commit({
+      players: [],
+      spectatorView: { state: { view: { attributes: { persist: { entries: [{ key: 'weather', value: 'rain' }] } } } } },
+      persistPrivate: null,
+      gameVersion: 'dev',
+      now: () => 1,
+    });
 
-    const { host, startOptions } = makeHost({ store, sessionKind: 'resolution' });
+    const { host, startOptions } = makeHost({ store });
     await host.handleMessage('A', { type: 'hello' });
     const payload = startOptions()[PERSIST_KEY] as PersistStartPayload;
-    expect(payload.entries.map((e) => e.key)).toEqual(['player:someone/sheet']);
+    expect(payload.entries.map((e) => e.key)).toEqual(['weather']);
   });
-});
 
-/**
- * THE THING #41 SAYS IS IMPOSSIBLE TODAY: run a resolver once, locally, before
- * the game has ever been published.
- *
- * A world round is not a sitting. It reads the store, advances the world and
- * writes it back, on a seat no human holds -- so with no local store and no
- * seatless session kind there was nothing to run it against. This drives the
- * whole path: orders submitted by an order-entry session, a resolution session
- * started with nobody in it, the resolver handed those orders and the roster
- * under the reserved argument keys, and the world's new state committed.
- */
-class WorldGame extends Game<WorldGame, Player> {
-  persist: unknown = undefined;
-
-  constructor(options: GameOptions & { persist?: PersistStartPayload }) {
-    super(options);
-    const handed = options.persist ?? null;
-    this.registerAction(
-      Action.create('resolve').execute((args: Record<string, unknown>) => {
-        const round =
-          (handed?.entries.find((e) => e.key === 'round')?.value as number | undefined) ?? 0;
-        // The world's new state, plus what the PLATFORM handed this round --
-        // written through the store so the test asserts what the resolver
-        // actually received rather than reaching inside the game object.
-        this.persist = {
-          entries: [
-            { key: 'round', value: round + 1 },
-            { key: 'orders-seen', value: args.worldOrders },
-            { key: 'roster-seen', value: args.worldRoster },
-          ],
-        };
-        this.finish([this.getPlayer(1)!]);
-        return { success: true };
-      }),
-    );
-    this.setFlow(oneActionUntilFinished('resolve'));
-  }
-}
-
-const worldDef: GameDefinitionLike = {
-  gameClass: WorldGame as unknown as new (...args: unknown[]) => unknown,
-  gameType: 'world-game',
-  minPlayers: 1,
-  maxPlayers: 1,
-};
-
-describe('boardsmith dev — a resolver runs once, before first publish (#41)', () => {
-  it('resolves a round against the store and the round it was handed', async () => {
+  it('refuses a commit that seals a row for a player this session does not act for', async () => {
     const store = new PersistenceStore();
-    store.enrol({ playerId: 'dev-player-1', displayName: 'Player 1' });
-    store.commit({
-      kind: 'orderEntry',
-      players: [{ seat: 1, playerId: 'dev-player-1' }],
-      spectatorView: null,
-      persistPrivate: { entries: [{ key: 'orders', value: { move: 'north' } }] },
-      gameVersion: 'dev',
-      now: () => 5,
-    });
-
-    const host = new MultiplayerHost({
-      playerCount: 1,
-      minPlayers: 1,
-      maxPlayers: 1,
-      makeSeed: () => 'world-seed',
-      sessionKind: 'resolution',
-      persistence: { sessionKey: 'dev-round-1', gameVersion: 'dev', store, now: () => 7 },
-      executeOp: (gameOptions, snap, pend, op, hostOptions) =>
-        executeOp(worldDef, gameOptions, snap, pend, op, hostOptions),
-      send: () => {},
-    });
-
-    // The CLI standing in for the platform's alarm: a resolution seats nobody,
-    // so nothing else would ever start it.
-    await host.hello('boardsmith-dev-resolver');
-    const outcome = await host.resolveRound({ name: 'resolve' });
-
-    expect(outcome).toEqual({ ok: true, complete: true });
-    // The world advanced, and its new state is what the NEXT round will read.
-    const rows = Object.fromEntries(store.toState().rows.map((r) => [r.key, JSON.parse(r.value)]));
-    expect(rows.round).toBe(1);
-    // The round's orders reached the resolver, attributed by the PLATFORM: the
-    // game never says whose orders these are or which round they belong to.
-    expect(rows['orders-seen']).toEqual([
-      {
-        playerToken: 'dev-player-1',
-        key: 'orders',
-        value: { move: 'north' },
-        gameVersion: 'dev',
-        submittedAt: 5,
+    const { host, sent } = makeHost({
+      store,
+      write: {
+        persistPrivate: { entries: [{ key: 'player:someone-else/sheet', value: { hp: 1 } }] },
       },
-    ]);
-    // ...and so did the roster, which is enrolment -- a fact a game cannot
-    // observe and so cannot derive from the orders.
-    expect(rows['roster-seen']).toEqual([
-      { playerId: 'dev-player-1', displayName: 'Player 1' },
-    ]);
-    // The round's orders were consumed by the resolution that committed them,
-    // so the next round cannot resolve against them a second time.
-    expect(store.toState().orders).toEqual([]);
-  });
-
-  it('refuses to resolve from a session that is not a resolution', async () => {
-    const store = new PersistenceStore();
-    const host = new MultiplayerHost({
-      playerCount: 1,
-      minPlayers: 1,
-      maxPlayers: 1,
-      makeSeed: () => 'world-seed',
-      persistence: { sessionKey: 'dev-match', gameVersion: 'dev', store },
-      executeOp: (gameOptions, snap, pend, op, hostOptions) =>
-        executeOp(worldDef, gameOptions, snap, pend, op, hostOptions),
-      send: () => {},
     });
-    await host.hello('A');
-    expect(await host.resolveRound({ name: 'resolve' })).toEqual({
-      ok: false,
-      reason:
-        'this host is running a match session; a round is resolved by a session started with --kind resolution',
-    });
+    await host.handleMessage('A', { type: 'hello' });
+    await playToEnd(host, sent);
+    expect(refusalFrom(sent)).toContain('does not act');
+    expect(store.toState().rows).toEqual([]);
   });
 });

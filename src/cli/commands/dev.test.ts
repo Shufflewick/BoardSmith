@@ -16,7 +16,6 @@ import {
   parseGameOptionFlags,
   mergeGameOptionDefinitions,
   resolvePreset,
-  parseSessionKind,
 } from './dev.js';
 
 /**
@@ -27,26 +26,6 @@ import {
  * binding any real socket (no Vite server, no WebSocketServer) — matching
  * simulate.test.ts's arg-validation style (135-06-PLAN.md read_first).
  */
-
-describe('parseSessionKind (#41 item 3: --kind)', () => {
-  it('defaults to match, which is what boardsmith dev always was', () => {
-    expect(parseSessionKind(undefined)).toBe('match');
-  });
-
-  it('accepts every kind the platform can create', () => {
-    expect(parseSessionKind('match')).toBe('match');
-    expect(parseSessionKind('orderEntry')).toBe('orderEntry');
-    expect(parseSessionKind('resolution')).toBe('resolution');
-  });
-
-  it('names the WHOLE vocabulary on a bad value, not just the bad value', () => {
-    // A developer reaching for --kind is usually after the kind they cannot
-    // otherwise run; a bare "invalid kind" sends them to read source.
-    expect(() => parseSessionKind('resolve')).toThrow(DevFlagError);
-    expect(() => parseSessionKind('resolve')).toThrow(/match, orderEntry, resolution/);
-    expect(() => parseSessionKind('resolve')).toThrow(/"resolve"/);
-  });
-});
 
 describe('parsePositiveInt (CLIX-06: fail-fast numeric flags)', () => {
   it('throws an actionable DevFlagError on a non-numeric --players value', () => {
