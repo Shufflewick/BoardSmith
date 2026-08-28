@@ -1170,6 +1170,45 @@ describe('Action Executor', () => {
       expect(executor.executeAction(refused, game.getPlayer(1)!, {}).threw).toBeUndefined();
     });
 
+    it('refuses a `{ success: false }` that named no error, and says which field to set (#90)', () => {
+      // `message` is a log line and `error` is the refusal. Picking the wrong
+      // one used to reach the player as a SUCCESS carrying a sentence, because
+      // the flow and the runner both decide failure by reading `error`.
+      const action = Action.create('gather').execute(() => ({
+        success: false,
+        message: 'Nothing is standing on your holding.',
+      }));
+
+      const result = executor.executeAction(action, game.getPlayer(1)!, {});
+
+      expect(result.success).toBe(false);
+      expect(typeof result.error).toBe('string');
+      expect(result.error).not.toBe('');
+      expect(result.error).toContain('gather');
+    });
+
+    it('treats an empty `error` as no error at all, for the same reason (#90)', () => {
+      const action = Action.create('tend').execute(() => ({ success: false, error: '  ' }));
+
+      const result = executor.executeAction(action, game.getPlayer(1)!, {});
+
+      expect(result.success).toBe(false);
+      expect(result.error?.trim()).not.toBe('');
+      expect(result.error).toContain('tend');
+    });
+
+    it('leaves a well-formed refusal exactly as the rules wrote it (#90)', () => {
+      const action = Action.create('stoke').execute(() => ({
+        success: false,
+        error: 'Your woodpile holds 2.',
+      }));
+
+      const result = executor.executeAction(action, game.getPlayer(1)!, {});
+
+      expect(result.error).toBe('Your woodpile holds 2.');
+      expect(result.threw).toBeUndefined();
+    });
+
     it('should treat null as skipped for optional selections', () => {
       // When the UI skips an optional selection, it sends null.
       // The engine should treat null the same as undefined for optional selections:

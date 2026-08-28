@@ -69,6 +69,54 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
 }
 
 /**
+ * Take what an action's `execute()` returned and make it mean what it says.
+ *
+ * `ActionResult` has two adjacent, equally plausible string fields, and only
+ * one of them decides anything: `error` is the refusal, read by
+ * `FlowEngine.resume` and by `GameRunner.performAction`, and `message` is a log
+ * line. An action that refused with `message` therefore reported a SUCCESS that
+ * happened to carry a sentence -- the flow advanced, the turn was consumed, and
+ * the thing the rules refused to do was not done. Silently, and only in
+ * production-shaped states (#90).
+ *
+ * So a `{ success: false }` with nothing readable in `error` is refused HERE,
+ * at the one boundary the author's return value crosses into the engine. The
+ * action still fails, which is what its author meant; what changes is that the
+ * failure now carries the field everything downstream reads, and the author is
+ * told at the log which field they wanted.
+ *
+ * An EMPTY `error` counts as none: `if (flowState.actionError)` is the test
+ * downstream, and `''` fails it exactly as `undefined` does.
+ *
+ * Not `threw`. The author believed they were refusing cleanly, and a clean
+ * refusal mutated nothing, so there is nothing for the runner to roll back.
+ */
+function acceptExecuteResult(actionName: string, result: ActionResult): ActionResult {
+  if (result.success) return result;
+  if (typeof result.error === 'string' && result.error.trim() !== '') return result;
+
+  console.error(
+    `[BoardSmith] Action '${actionName}' returned { success: false } with no 'error'. ` +
+      "A refusal is reported by returning { success: false, error: 'why' } -- 'message' is a " +
+      'log line and does not stop the action. ' +
+      (typeof result.message === 'string' && result.message.trim() !== ''
+        ? `The sentence it did carry was: ${result.message}`
+        : 'It carried no sentence at all.'),
+  );
+
+  // The player is told the truth -- the rules said no -- without being handed
+  // the author's mistake to read. In dev the author IS the reader, so the fix
+  // travels with it. Same split as `failedExecute` above (#47).
+  const refusal = `The "${actionName}" action was refused by the game's rules, and they did not say why.`;
+  return {
+    success: false,
+    error: isDevThrowEnabled()
+      ? `${refusal} (Return { success: false, error: 'why' } -- 'message' is only a log line.)`
+      : refusal,
+  };
+}
+
+/**
  * A labeled predicate threw./**
  * A labeled predicate threw. Distinct from "the predicate returned false",
  * which is a normal game state — this is a bug in the predicate itself.
@@ -1292,7 +1340,7 @@ export class ActionExecutor {
 
     try {
       const result = action.execute(resolvedArgs, context);
-      return result ?? { success: true };
+      return result ? acceptExecuteResult(action.name, result) : { success: true };
     } catch (error) {
       return failedExecute(action.name, error);
     }
@@ -2069,7 +2117,7 @@ export class ActionExecutor {
 
     try {
       const result = action.execute(resolvedArgs, context);
-      return result ?? { success: true };
+      return result ? acceptExecuteResult(action.name, result) : { success: true };
     } catch (error) {
       return failedExecute(action.name, error);
     }
