@@ -1,7 +1,7 @@
 {
-  "revision": 26,
+  "revision": 27,
   "bundleProtocol": 1,
-  "surfaceHash": "0790c85715b5879d",
+  "surfaceHash": "ba3e5efa9cccf76e",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -211,6 +211,14 @@
       "surfaceHash": "0790c85715b5879d",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "Tracker sweep, two surface changes recorded together (they were originally r25 and r26 on the pre-rebase branch, renumbered because that branch forked before boardsmith/persistence existed): (1) a withheld attribute now restores as unknown and throws on read (RedactedAttributeError, GameElement.isAttributeRedacted / redactedAttributes) instead of silently holding its class-field default; (2) actionStep gains turnScope, and FlowPosition/FlowState gain turnRun/turnScopeUndeclared, so undo reach can span the frame boundary a loop iteration or a sibling action step creates."
+    },
+    {
+      "revision": 27,
+      "date": "2026-08-28",
+      "bundleProtocol": 1,
+      "surfaceHash": "ba3e5efa9cccf76e",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "World mode is declared at construction: GameOptions.worldMode replaces Game#enableWorldMode(), so a world is what a game IS rather than something switched on afterwards, and a world's seats are no longer capped by the size of the player palette."
     }
   ]
 }

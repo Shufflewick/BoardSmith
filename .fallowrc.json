@@ -1,7 +1,10 @@
 {
-  "ignoreDependencies": ["postcss-html"],
+  "ignoreDependencies": [
+    "postcss-html"
+  ],
   "audit": {
     "deadCodeBaseline": ".fallow-dead-code-baseline.json",
-    "healthBaseline": ".fallow-health-baseline.json"
+    "healthBaseline": ".fallow-health-baseline.json",
+    "dupesBaseline": ".fallow-dupes-baseline.json"
   }
 }

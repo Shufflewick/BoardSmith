@@ -43,7 +43,7 @@
       "complexity_critical": {
         "count": 1
       },
-      "complexity_moderate": {
+      "complexity_high": {
         "count": 1
       },
       "crap_critical": {
@@ -113,6 +113,11 @@
       }
     },
     "src/bot-trainer/weight-evolver.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/bot/determinization.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -235,9 +240,6 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "src/cli/commands/pack.ts": {
@@ -256,6 +258,11 @@
         "count": 1
       },
       "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/cli/commands/simulate.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -410,14 +417,6 @@
         "count": 1
       }
     },
-    "src/client/vue.ts": {
-      "complexity_moderate": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "src/engine/action/action.ts": {
       "complexity_critical": {
         "count": 7
@@ -426,7 +425,7 @@
         "count": 2
       },
       "complexity_moderate": {
-        "count": 2
+        "count": 3
       },
       "crap_critical": {
         "count": 7
@@ -435,7 +434,7 @@
         "count": 2
       },
       "crap_moderate": {
-        "count": 3
+        "count": 4
       }
     },
     "src/engine/action/helpers.ts": {
@@ -466,33 +465,39 @@
     },
     "src/engine/element/game-element.ts": {
       "complexity_critical": {
-        "count": 2
+        "count": 3
       },
       "complexity_high": {
         "count": 2
       },
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       },
       "crap_critical": {
-        "count": 2
+        "count": 3
       },
       "crap_high": {
         "count": 2
       },
       "crap_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/engine/element/game.ts": {
       "complexity_critical": {
         "count": 3
       },
+      "complexity_high": {
+        "count": 1
+      },
       "complexity_moderate": {
         "count": 2
       },
       "crap_critical": {
         "count": 3
+      },
+      "crap_high": {
+        "count": 1
       },
       "crap_moderate": {
         "count": 4
@@ -521,7 +526,7 @@
     },
     "src/engine/flow/engine.ts": {
       "complexity_critical": {
-        "count": 2
+        "count": 4
       },
       "complexity_high": {
         "count": 3
@@ -530,13 +535,13 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 2
+        "count": 4
       },
       "crap_high": {
-        "count": 6
+        "count": 8
       },
       "crap_moderate": {
-        "count": 7
+        "count": 5
       }
     },
     "src/engine/tutorial/progress.ts": {
@@ -592,15 +597,18 @@
       }
     },
     "src/runtime/runner.ts": {
-      "crap_high": {
+      "complexity_high": {
         "count": 1
       },
+      "crap_high": {
+        "count": 2
+      },
       "crap_moderate": {
-        "count": 4
+        "count": 3
       }
     },
     "src/session/bot-controller.ts": {
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -621,7 +629,7 @@
         "count": 3
       },
       "crap_moderate": {
-        "count": 5
+        "count": 6
       }
     },
     "src/session/lobby-manager.ts": {
@@ -678,6 +686,9 @@
       "complexity_high": {
         "count": 2
       },
+      "complexity_moderate": {
+        "count": 1
+      },
       "crap_critical": {
         "count": 1
       },
@@ -695,13 +706,10 @@
     },
     "src/session/stateless-ops.ts": {
       "complexity_high": {
-        "count": 2
-      },
-      "complexity_moderate": {
-        "count": 1
+        "count": 3
       },
       "crap_high": {
-        "count": 2
+        "count": 3
       },
       "crap_moderate": {
         "count": 1
@@ -781,17 +789,8 @@
       }
     },
     "src/ui/components/DebugPanel.vue": {
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
       "crap_moderate": {
-        "count": 3
+        "count": 1
       }
     },
     "src/ui/components/GameLobby.vue": {
@@ -803,14 +802,8 @@
       "complexity_critical": {
         "count": 1
       },
-      "complexity_high": {
-        "count": 2
-      },
       "crap_critical": {
         "count": 1
-      },
-      "crap_high": {
-        "count": 3
       }
     },
     "src/ui/components/auto-ui/ActionPanel.vue": {
@@ -870,6 +863,11 @@
         "count": 2
       }
     },
+    "src/ui/components/debug/debug-view-tree.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/ui/components/dice/Die3D.vue": {
       "complexity_critical": {
         "count": 1
@@ -927,16 +925,16 @@
     },
     "src/ui/composables/useActionController.ts": {
       "complexity_critical": {
-        "count": 6
+        "count": 5
       },
       "complexity_high": {
-        "count": 2
+        "count": 3
       },
       "crap_critical": {
-        "count": 6
+        "count": 5
       },
       "crap_high": {
-        "count": 5
+        "count": 6
       },
       "crap_moderate": {
         "count": 2
@@ -1018,6 +1016,14 @@
         "count": 1
       }
     },
+    "src/ui/composables/useLobby.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
     "src/ui/composables/useZoomPreview.ts": {
       "complexity_high": {
         "count": 1
@@ -1035,52 +1041,50 @@
   },
   "production_coverage_findings": [],
   "target_keys": [
+    "src/engine/command/executor.ts:circular dependency",
+    "src/ui/components/debug/debug-format.ts:high impact",
     "src/contract/fingerprint.ts:dead code",
-    "src/engine/element/game.ts:circular dependency",
-    "src/cli/commands/doctor.ts:dead code",
+    "src/engine/element/game.ts:complexity",
     "src/engine/action/action.ts:circular dependency",
     "src/ui/composables/useActionController.ts:complexity",
+    "src/engine/element/game-element.ts:complexity",
+    "src/session/pick-handler.ts:complexity",
     "src/session/game-session.ts:complexity",
     "src/engine/tutorial/progress.ts:complexity",
     "src/session/stateless-ops.ts:complexity",
-    "src/session/pick-handler.ts:complexity",
-    "src/engine/element/game-element.ts:complexity",
-    "src/client/vue.ts:dead code",
+    "src/engine/command/inverse.ts:circular dependency",
+    "src/bot-trainer/benchmark.ts:complexity",
     "src/cli/commands/drift-check.ts:complexity",
     "src/session/snapshot-session-host.ts:complexity",
-    "src/cli/lib/config.ts:dead code",
-    "src/bot-trainer/benchmark.ts:complexity",
+    "src/ui/composables/useBoardActionBridge.ts:high impact",
+    "src/bot/mcts-bot.ts:complexity",
     "src/cli/commands/publish.ts:complexity",
+    "src/cli/commands/dev.ts:complexity",
     "src/cli/commands/chunk-provenance.ts:complexity",
     "src/ui/composables/useFlyingElements.ts:complexity",
-    "src/ui/components/GameShell.vue:complexity",
     "src/cli/commands/ingest-archive.ts:complexity",
     "src/cli/commands/verify-example-replay.ts:complexity",
-    "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/cli/commands/verify-derive-check.ts:circular dependency",
     "src/cli/commands/verify-run.ts:complexity",
-    "src/bot/mcts-bot.ts:complexity",
     "src/bot-trainer/feature-generator.ts:complexity",
     "src/cli/commands/verify-classify.ts:complexity",
     "src/session/pending-action-manager.ts:complexity",
     "src/bot-trainer/feature-templates.ts:complexity",
     "src/engine/tutorial/gate.ts:circular dependency",
-    "src/cli/commands/dev.ts:complexity",
     "src/cli/commands/example-test-emit.ts:complexity",
+    "src/cli/commands/lint.ts:complexity",
     "src/testing/debug.ts:complexity",
     "src/ui/components/auto-ui/auto-ui-helpers.ts:complexity",
-    "src/cli/commands/lint.ts:complexity",
+    "src/testing/dom-leak.ts:complexity",
     "src/bot-trainer/introspector.ts:complexity",
     "src/testing/simulate-action.ts:complexity",
-    "src/engine/element/volatile-state.ts:circular dependency",
-    "src/testing/dom-leak.ts:complexity",
     "src/cli/commands/verify-enumerate.ts:complexity",
     "src/cli/lib/asset-scan.ts:complexity",
     "src/cli/commands/trace-check.ts:complexity",
     "src/testing/random-simulation.ts:complexity",
     "src/session/lobby-manager.ts:complexity",
     "src/cli/commands/evolve-bot-weights.ts:complexity",
-    "src/bot-trainer/code-generator.ts:complexity",
-    "src/ui/components/dice/Die3D.vue:complexity"
+    "src/ui/components/dice/Die3D.vue:complexity",
+    "src/bot-trainer/code-generator.ts:complexity"
   ]
 }

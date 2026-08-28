@@ -28,6 +28,7 @@ import {
   type ElementJSON,
   type ElementContext,
   type GameOptions,
+  DEFAULT_COLOR_PALETTE,
 } from '../index.js';
 
 class WorldGame extends Game<WorldGame, Player> {
@@ -85,8 +86,7 @@ function buildWorld(game: WorldGame) {
 
 describe('world mode: element references are id-based, not positional', () => {
   it('serializes element attribute refs as __elementId in world mode', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'world-refs' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'world-refs' , worldMode: true });
     const { roomB, b1, b2 } = buildWorld(game);
     b2.link = b1;
 
@@ -108,8 +108,7 @@ describe('world mode: element references are id-based, not positional', () => {
   });
 
   it('an id-based ref survives a round trip through a PARTIAL, reordered tree', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'world-partial' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'world-partial' , worldMode: true });
     const { roomA, roomB, roomC, b1, b2 } = buildWorld(game);
     b2.link = b1;
 
@@ -135,9 +134,13 @@ describe('world mode: element references are id-based, not positional', () => {
   });
 
   it('proves the hazard: a branch-path ref resolves to a DIFFERENT element in the same partial tree', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'branch-hazard' });
-    // Serialized BEFORE world mode, so the JSON carries branch paths.
-    const { roomA, roomB, roomC, a1, b1, b2 } = buildWorld(game);
+    // The bytes come from a SNAPSHOT-MODE donor, which is now the only way this
+    // hazard can arise at all: world mode is declared at construction, so a
+    // game cannot serialize half of itself with branch paths and then start
+    // adopting. That is the point of the option -- this case documents what it
+    // made unreachable, using a second game to produce the bytes.
+    const donor = new WorldGame({ playerCount: 2, seed: 'branch-hazard' });
+    const { roomA, roomB, roomC, a1, b1, b2 } = buildWorld(donor);
     b2.link = b1;
 
     const aJson = roundTripJson(roomA.toJSON() as ElementJSON);
@@ -147,10 +150,7 @@ describe('world mode: element references are id-based, not positional', () => {
       .link as { __elementRef: string }).__elementRef;
     expect(recordedBranch).toBe(b1.branch());
 
-    game.enableWorldMode();
-    game.evictSubtree(roomA.id);
-    game.evictSubtree(roomB.id);
-    game.evictSubtree(roomC.id);
+    const game = new WorldGame({ playerCount: 2, seed: 'branch-hazard', worldMode: true });
     game.adoptSubtree(game.id, cJson);
     const adoptedA = game.adoptSubtree(game.id, aJson);
     const adoptedB = game.adoptSubtree(game.id, bJson);
@@ -165,8 +165,7 @@ describe('world mode: element references are id-based, not positional', () => {
   });
 
   it('preserves a ref into a NON-RESIDENT partition instead of nulling it', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'dangling-ref' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'dangling-ref' , worldMode: true });
     const { roomA, roomB, roomC, a1, b2 } = buildWorld(game);
     b2.link = a1;
     const aId = a1.id;
@@ -193,8 +192,7 @@ describe('world mode: element references are id-based, not positional', () => {
 
 describe('Game.adoptSubtree', () => {
   it('grafts a serialized subtree under the named parent', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'adopt-basic' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'adopt-basic' , worldMode: true });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
@@ -209,16 +207,14 @@ describe('Game.adoptSubtree', () => {
   });
 
   it('raises the id counter so a later create() cannot collide with an adopted id', () => {
-    const donor = new WorldGame({ playerCount: 2, seed: 'donor' });
-    donor.enableWorldMode();
+    const donor = new WorldGame({ playerCount: 2, seed: 'donor' , worldMode: true });
     for (let i = 0; i < 40; i++) donor.create(Space, `filler-${i}`);
     const highRoom = donor.create(Space, 'high-room');
     const highToken = highRoom.create(Token, 'high-token', { label: 'high' });
     const highJson = roundTripJson(highRoom.toJSON() as ElementJSON);
 
     // A fresh game whose counter is far BELOW the adopted ids.
-    const game = new WorldGame({ playerCount: 2, seed: 'collide' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'collide' , worldMode: true });
     expect(highToken.id).toBeGreaterThan(20);
 
     const adopted = game.adoptSubtree(game.id, highJson);
@@ -231,8 +227,7 @@ describe('Game.adoptSubtree', () => {
   });
 
   it('refuses an adoption whose ids are already resident', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'dupe-ids' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'dupe-ids' , worldMode: true });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
 
@@ -241,8 +236,7 @@ describe('Game.adoptSubtree', () => {
   });
 
   it('names the missing parent when parentId is not resident', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'missing-parent' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'missing-parent' , worldMode: true });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
@@ -256,12 +250,11 @@ describe('Game.adoptSubtree', () => {
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
 
-    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(/enableWorldMode/);
+    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(/worldMode: true/);
   });
 
   it('keeps a Space handler registered in its own class constructor', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'handlers' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'handlers' , worldMode: true });
     const room = game.create(Room, 'kitchen');
     const outside = game.create(Space, 'outside');
     const token = outside.create(Token, 'spoon', { label: 'spoon' });
@@ -277,8 +270,7 @@ describe('Game.adoptSubtree', () => {
 
 describe('Game.evictSubtree', () => {
   it('detaches the subtree so it costs nothing to traverse', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'evict' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'evict' , worldMode: true });
     const { roomB, b1 } = buildWorld(game);
     const bId = roomB.id;
 
@@ -290,22 +282,19 @@ describe('Game.evictSubtree', () => {
   });
 
   it('refuses to evict the game root', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'evict-root' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'evict-root' , worldMode: true });
     expect(() => game.evictSubtree(game.id)).toThrow(/game root/i);
   });
 
   it('names an id that is not resident', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'evict-missing' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'evict-missing' , worldMode: true });
     expect(() => game.evictSubtree(4242)).toThrow(/4242/);
   });
 });
 
 describe('moveToInternal partition marking', () => {
   function worldWithPartitions(seed: string) {
-    const game = new WorldGame({ playerCount: 2, seed });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed , worldMode: true });
     const built = buildWorld(game);
     game.definePartition(built.roomA.id);
     game.definePartition(built.roomB.id);
@@ -372,8 +361,7 @@ describe('moveToInternal partition marking', () => {
   });
 
   it('adoption itself does not add to the move-touched set', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'adopt-not-touched' });
-    game.enableWorldMode();
+    const game = new WorldGame({ playerCount: 2, seed: 'adopt-not-touched' , worldMode: true });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
@@ -393,5 +381,86 @@ describe('moveToInternal partition marking', () => {
     b0.putInto(roomA);
 
     expect(game.touchedPartitions.size).toBe(0);
+  });
+});
+
+/**
+ * WORLD MODE IS A CONSTRUCTOR OPTION, and a world's seat count is not a table's.
+ *
+ * Both of these are the same mistake found in two places. `enableWorldMode()`
+ * was a switch flipped after `new GameClass(...)` returned -- and a subclass
+ * constructor body runs before that, creating elements. Those elements were
+ * created in snapshot mode, where an element reference serializes as a
+ * positional branch path that resolves to the WRONG element once a partition is
+ * not resident. The engine caught it at serialize time, but only by refusing;
+ * the game author's mistake was three steps earlier and unrecoverable.
+ *
+ * `GameOptions.randomness` records exactly this argument for exactly this
+ * reason: "It arrives through the CONSTRUCTOR rather than a method called
+ * afterwards because a subclass constructor body runs after Game's and real
+ * games draw there." A world is the same shape of hazard with a worse failure.
+ */
+describe('world mode is declared at construction', () => {
+  it('is on before a subclass constructor body runs', () => {
+    // The property `enableWorldMode()` could not have. Anything the subclass
+    // built is already world-mode, so its references are id-based.
+    class EarlyWorld extends Game<EarlyWorld, Player> {
+      readonly builtInWorldMode: boolean;
+      constructor(options: GameOptions) {
+        super(options);
+        this.builtInWorldMode = this.worldMode;
+      }
+    }
+
+    const game = new EarlyWorld({ playerCount: 2, seed: 'early', worldMode: true });
+    expect(game.builtInWorldMode).toBe(true);
+  });
+
+  it('is OFF by default, so every published board game feels none of it', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'snapshot' });
+    expect(game.worldMode).toBe(false);
+  });
+
+  it('SEATS A WORLD PAST THE PALETTE, cycling colours instead of refusing', () => {
+    // A table's palette is a UI affordance: sixteen colours a person can tell
+    // apart in a legend. A 500-player world renders no legend, and refusing to
+    // construct one is the engine declining to run the mode it just added.
+    //
+    // Colour is never the sole carrier of player identity here -- every entry
+    // has a `colorLabel` -- so two players in a large world sharing "Red" is
+    // honest rather than lossy, and it is a fact about the world's size.
+    const game = new WorldGame({ playerCount: 40, seed: 'crowd', worldMode: true });
+
+    expect(game.players).toHaveLength(40);
+    expect(game.players[0]!.color).toBe(DEFAULT_COLOR_PALETTE[0]);
+    // Seat 17 wraps to the first colour, and says so with the same label.
+    expect(game.players[16]!.color).toBe(DEFAULT_COLOR_PALETTE[0]);
+    expect(game.players[16]!.colorLabel).toBe(game.players[0]!.colorLabel);
+  });
+
+  it('still REFUSES to overrun the palette in snapshot mode', () => {
+    // The negative control. A table asking for more seats than any host will
+    // run is a mistake worth failing on, and world mode must not relax it.
+    expect(() => new WorldGame({ playerCount: 40, seed: 'table' })).toThrow(
+      /the default palette covers/,
+    );
+  });
+
+  it("a world's own colours are still honoured, and still cycle", () => {
+    // A game that supplied a palette meant it. Cycling a two-colour palette
+    // over eight seats is what that game asked for -- two teams of four -- and
+    // refusing it would make `colors` unusable in the one mode where a short
+    // palette is a deliberate statement rather than an oversight.
+    const game = new WorldGame({
+      playerCount: 8,
+      seed: 'teams',
+      worldMode: true,
+      colors: ['#111111', '#222222'],
+    });
+
+    expect(game.players.map((p) => p.color)).toEqual([
+      '#111111', '#222222', '#111111', '#222222',
+      '#111111', '#222222', '#111111', '#222222',
+    ]);
   });
 });

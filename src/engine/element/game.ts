@@ -219,6 +219,35 @@ export type GameOptions = {
    * `new GameClass(...)` returned would let exactly those draws through.
    */
   randomness?: RandomnessPolicy;
+  /**
+   * Whether this game runs in WORLD MODE: the residency model where only named
+   * partitions are resident and the engine reports which a move dirtied.
+   * Default: `false` -- every published board game is a snapshot game.
+   *
+   * It arrives through the CONSTRUCTOR for the same reason `randomness` does,
+   * and with a worse failure if it does not. A subclass constructor body runs
+   * after `Game`'s and real games BUILD THERE -- a board, a deck, a map. In
+   * snapshot mode an element reference serializes as a positional branch path,
+   * which resolves to the WRONG element once a partition is not resident, so a
+   * world switched on after `new GameClass(...)` returned has already built the
+   * half of itself most likely to hold references.
+   *
+   * The two things it changes:
+   *
+   *   Element references serialize as `{ __elementId }` rather than a branch
+   *   path, which is what makes a partition adoptable at all.
+   *
+   *   The colour palette CYCLES rather than capping the seat count. A table's
+   *   palette is a legend a person reads; a world of hundreds renders no
+   *   legend, and refusing to construct one would be the engine declining to
+   *   run the mode it offers.
+   *
+   * There is deliberately no way back out, and no way in afterwards. A tree
+   * that emitted id refs and then started emitting branch refs would carry both
+   * formats, and the branch half would resolve against whatever happened to be
+   * resident.
+   */
+  worldMode?: boolean;
 };
 
 /**
@@ -880,6 +909,12 @@ export class Game<
     // post-construction switch would miss.
     if (options.randomness === 'forbidden') this.forbidRandomness();
 
+    // WORLD MODE, before any element exists. Applied here, beside `randomness`
+    // and for the same recorded reason: a subclass constructor body runs after
+    // this one and builds the game's furniture, and in snapshot mode every
+    // element reference it writes serializes as a positional branch path.
+    if (options.worldMode === true) this._ctx._worldMode = true;
+
     // Store all constructor options for snapshot restoration, EXCLUDING
     // tutorial and randomness. This enables MCTS clones and other restores to
     // receive full options.
@@ -943,7 +978,15 @@ export class Game<
     // that actually ran out, because the fix differs: a game that supplied its
     // own palette must lengthen it, whereas overrunning the default means asking
     // for more seats than any platform will host.
-    if (options.playerCount > colorPalette.length) {
+    //
+    // NOT A CAP IN WORLD MODE. The palette is a legend -- sixteen colours a
+    // person can tell apart when a table shows them side by side -- and a world
+    // of hundreds shows no legend. Colour is never the sole carrier of player
+    // identity here (every entry has a `colorLabel`), so seats past the end
+    // wrap: two players in a large world sharing "Red" is a true fact about its
+    // size rather than a loss. A game that supplied its OWN short palette meant
+    // it, and cycling two colours over eight seats is two teams of four.
+    if (!this.worldMode && options.playerCount > colorPalette.length) {
       throw new Error(
         options.colors
           ? `Cannot create ${options.playerCount} players: gameOptions.colors supplies only ${colorPalette.length} colors. ` +
@@ -983,8 +1026,10 @@ export class Game<
         playerName,
         playerAttributes as ElementAttributes<P>,
       );
-      // Auto-assign color from palette (seat 1 = index 0, seat 2 = index 1, etc.)
-      const hex = colorPalette[i];
+      // Auto-assign color from palette (seat 1 = index 0, seat 2 = index 1, etc.).
+      // The modulo is a no-op outside world mode, where the check above has
+      // already refused any seat the palette cannot reach.
+      const hex = colorPalette[i % colorPalette.length];
       player.color = hex;
       // Human-readable name for the assigned color (e.g. "Red") for player-facing text.
       player.colorLabel = colorLabels?.[hex] ?? DEFAULT_COLOR_LABELS[hex];
@@ -1141,7 +1186,7 @@ export class Game<
   // ============================================
 
   /**
-   * Switch this game into WORLD MODE.
+   * Is this game in WORLD MODE?
    *
    * A world is too large to hold in memory at once, so the platform keeps only
    * the partitions a command names resident and every other partition is
@@ -1149,22 +1194,14 @@ export class Game<
    * `atId`, `all()` and `toJSON` costing O(resident) with no change to
    * traversal, and it is the whole point of the mode.
    *
-   * The one behaviour it changes is reference serialization: an element
-   * reference in an attribute is written as `{ __elementId }`, because branch
-   * paths are positional and absence shifts every later sibling index. Call
-   * this BEFORE serializing anything you intend to adopt back.
-   *
-   * There is deliberately no way back out. A tree that has emitted id refs and
-   * then starts emitting branch refs would carry both formats, and the branch
-   * half would resolve against whatever happened to be resident.
+   * Declared at construction ({@link GameOptions.worldMode}) and never after —
+   * the reason is written out on the option itself, and it is that a subclass
+   * constructor body builds the game's furniture before any post-construction
+   * switch could run.
    *
    * Snapshot mode — every published board game — is untouched by all of this.
    */
-  enableWorldMode(): void {
-    this._ctx._worldMode = true;
-  }
-
-  /** True once {@link enableWorldMode} has been called. */
+  /** True when this game was constructed with `GameOptions.worldMode`. */
   get worldMode(): boolean {
     return this._ctx._worldMode === true;
   }
@@ -1359,9 +1396,10 @@ export class Game<
     if (this._ctx._worldMode) return;
     throw new Error(
       `Game#${method}() is world mode only, and this game is in snapshot mode. ` +
-        `Call game.enableWorldMode() before serializing anything you intend to adopt: ` +
-        `snapshot mode records element references as positional branch paths, which resolve ` +
-        `to the wrong element once a partition is not resident.`
+        `Construct it with \`new GameClass({ ..., worldMode: true })\`: snapshot mode records ` +
+        `element references as positional branch paths, which resolve to the wrong element ` +
+        `once a partition is not resident. It is a construction option and not a switch ` +
+        `because a subclass constructor builds the game's furniture before any switch could run.`
     );
   }
 
