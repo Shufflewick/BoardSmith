@@ -1,7 +1,7 @@
 {
-  "revision": 26,
+  "revision": 27,
   "bundleProtocol": 1,
-  "surfaceHash": "6e1dfd417d1a9856",
+  "surfaceHash": "81874ea071785266",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -211,6 +211,14 @@
       "surfaceHash": "6e1dfd417d1a9856",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "actionStep gains turnScope, and FlowPosition/FlowState gain turnRun/turnScopeUndeclared, so undo reach can span the frame boundary a loop iteration or a sibling action step creates."
+    },
+    {
+      "revision": 27,
+      "date": "2026-08-28",
+      "bundleProtocol": 1,
+      "surfaceHash": "81874ea071785266",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "r27: world mode is declared at CONSTRUCTION, and a world's seats are not capped by the colour palette. GameOptions.worldMode replaces Game#enableWorldMode(), which is REMOVED -- a breaking surface change. The switch could only run after new GameClass(...) returned, and a subclass constructor body runs before that and builds the game's furniture, so exactly the elements most likely to hold references were created in snapshot mode and serialized positional branch paths that resolve to the WRONG element in a partial tree. GameOptions.randomness records this same argument for this same reason. In world mode the colour palette now CYCLES instead of capping playerCount: a table's sixteen colours are a legend read side by side, a world of hundreds shows no legend, and colour is never the sole carrier of player identity (every entry has a colorLabel). Snapshot mode still refuses to overrun its palette."
     }
   ]
 }

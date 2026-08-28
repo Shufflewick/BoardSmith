@@ -426,7 +426,9 @@ O(resident) rather than O(world), with no change to how traversal or actions
 behave.
 
 ```typescript
-game.enableWorldMode();          // one-way switch; do it before serializing
+// World mode is declared at CONSTRUCTION, never switched on afterwards.
+const game = new MyWorld({ playerCount: 200, seed, worldMode: true });
+
 game.definePartition(regionId);  // this subtree loads/checkpoints/evicts as a unit
 
 // hydrate a partition the platform has in storage
@@ -441,13 +443,22 @@ game.evictSubtree(regionId);     // residency change, not a game move: no onExit
 
 Three things to know before using it:
 
-- **The switch is one-way and must come first.** World mode writes element
-  references in attributes as `{ __elementId }` instead of a positional branch
-  path, because absence shifts every later sibling index. A tree that emitted
-  branch refs and then switched would carry both formats, and the branch half
-  would resolve against whatever happened to be resident. `enableWorldMode()`
-  has no counterpart, and world-mode calls throw in snapshot mode rather than
-  quietly working.
+- **It is a construction option, and there is no switch.** World mode writes
+  element references in attributes as `{ __elementId }` instead of a positional
+  branch path, because absence shifts every later sibling index. A tree that
+  emitted branch refs and then switched would carry both formats, and the branch
+  half would resolve against whatever happened to be resident. It cannot be
+  turned on afterwards for the reason `GameOptions.randomness` cannot: a
+  subclass constructor body runs after `Game`'s and builds the game's furniture,
+  which is exactly the half most likely to hold references. World-mode calls
+  throw in snapshot mode rather than quietly working.
+- **The colour palette cycles rather than capping the seat count.** A table's
+  sixteen colours are a legend a person reads side by side; a world of hundreds
+  shows no legend, so seats past the end of the palette wrap. Colour is never
+  the sole carrier of player identity — every entry also has a `colorLabel` —
+  so two players sharing "Red" is a true fact about the world's size. Snapshot
+  mode still refuses to overrun its palette, because a table asking for more
+  seats than any host will run is a mistake worth failing on.
 - **A partition's `Space` handlers belong in its own constructor.** `adoptSubtree`
   runs the grafted class's constructor; it has no earlier incarnation to
   re-capture `onEnter`/`onExit` from. A handler registered in the `Game`

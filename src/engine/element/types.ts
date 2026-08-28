@@ -67,14 +67,17 @@ export type ElementContext = {
    */
   _builtinSeededNames?: Set<string>;
   /**
-   * Internal: true once `Game#enableWorldMode()` has been called. World mode
+   * Internal: true when the game was constructed with `GameOptions.worldMode`.
+   * World mode
    * changes exactly one thing about the element tree's behaviour: an element
    * reference held in an attribute serializes as `{ __elementId }` rather than
    * as the positional `{ __elementRef: branch }`, because in a world the
    * partitions that are not resident are ABSENT from the tree and every branch
-   * index after them has shifted. One-way: a tree that has emitted id refs
-   * must never start emitting branch refs again. Not public API — read it
-   * through `Game#worldMode`.
+   * index after them has shifted. Set once, at construction, and never after:
+   * a subclass constructor body builds the game's furniture, so a
+   * post-construction switch would have missed exactly the elements most
+   * likely to hold references. Not public API — read it through
+   * `Game#worldMode`.
    */
   _worldMode?: boolean;
   /**

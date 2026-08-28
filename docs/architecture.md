@@ -257,7 +257,7 @@ serialized whole and restored whole. That is what every published board game
 uses.
 
 The engine also has **world mode** (contract r17) for worlds too large to hold
-in memory: `enableWorldMode`, `definePartition`, `adoptSubtree`, `evictSubtree`,
+in memory: `GameOptions.worldMode`, `definePartition`, `adoptSubtree`, `evictSubtree`,
 `touchedPartitions`, `clearTouchedPartitions`. Only the named partitions are
 resident, the rest are absent from the tree, and the engine reports which
 partitions a move dirtied so the platform can checkpoint just those. See
