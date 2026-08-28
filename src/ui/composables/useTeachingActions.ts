@@ -13,6 +13,7 @@
  * @module
  */
 import type { Ref } from 'vue';
+import type { Toast } from './useToast.js';
 
 /** Which control the player pressed. */
 export type TeachingAction =
@@ -40,11 +41,22 @@ export interface TeachingActionsOptions {
   isActionHelpVisible: Ref<boolean>;
   /** Persist the help preference. */
   setActionHelpEnabled: (enabled: boolean) => void;
-  /** Show a message to the player. `duration: 0` means "until removed". */
+  /**
+   * Show a message to the player. `duration: 0` means "until removed".
+   *
+   * This is `useToast()`'s shape, stated in `useToast()`'s own types rather
+   * than approximated. The approximation did not typecheck: `type: string` is
+   * wider than the four toast kinds, and `remove(id: string | number)` is
+   * wider than the numeric ids `show` actually hands back, so under
+   * `strictFunctionTypes` the real toast was not assignable to the declared
+   * one. GameShell is a `.vue` file, so plain `tsc` never saw it -- only a
+   * consumer running `vue-tsc` did, which is every game running
+   * `boardsmith validate`.
+   */
   toast: {
-    show: (text: string, options: { type: string; duration: number }) => string | number;
+    show: (text: string, options: { type?: Toast['type']; duration?: number }) => number;
     error: (text: string) => void;
-    remove: (id: string | number) => void;
+    remove: (id: number) => void;
   };
 }
 
