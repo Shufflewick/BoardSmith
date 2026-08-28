@@ -19,6 +19,19 @@ import { createDevSession, type DevSession } from './bridge.js';
 import type { Op, OpResult, GamePreset } from '../../session/index.js';
 import { dueSeats, type SeatActivityState, type GameStateSnapshot } from '../../engine/index.js';
 import { validateGameOptionSelection, type DevOptionDef } from './config-types.js';
+import {
+  PERSIST_KEY,
+  PersistenceStore,
+  RESOLUTION_SEAT,
+  WORLD_ORDERS_ARG_KEY,
+  WORLD_ROSTER_ARG_KEY,
+  seatsHumans,
+  takePrivateCommit,
+  type PrivateChannelCarrier,
+  type PersistPlayer,
+  type SessionKind,
+} from '../../persistence/index.js';
+import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 
 /** A fresh random 32-bit seed for a new game. */
 function defaultSeed(): string {
@@ -167,6 +180,103 @@ export interface MultiplayerHostOptions {
   send: (clientId: string, message: HostOutbound) => void;
   /** Seed source for a fresh game (defaults to a random 32-bit seed). */
   makeSeed?: () => string;
+  /**
+   * What KIND of session this host is running (ShufflewickPub issue #41 item 3).
+   *
+   * Defaults to `match`, the kind every dev host was before kinds existed and
+   * the only one that is an ordinary bounded sitting. The other two exist so a
+   * world's machinery can be exercised before the game is published: an
+   * `orderEntry` session's commit is a round's ORDERS rather than store rows,
+   * and a `resolution` session SEATS NOBODY -- it is the resolver, and letting
+   * a developer sit down in one would emulate a session the platform never
+   * creates.
+   */
+  sessionKind?: SessionKind;
+  /**
+   * The cross-session store this host reads at start and commits to at game
+   * over (#41 item 2). Unset means the host behaves exactly as it always did:
+   * nothing is injected, nothing is committed, and a game that never declared
+   * persistence is affected in no way.
+   */
+  persistence?: DevPersistenceOptions;
+}
+
+/**
+ * How this dev host reaches its store.
+ *
+ * `store` is the pure `PersistenceStore` from `boardsmith/persistence` -- the
+ * SAME object the platform's own validation core is built around. Saving it to
+ * disk between runs is the CLI's job, not this class's: keeping the host
+ * transport-free and filesystem-free is what makes every case above testable
+ * without a dev server.
+ */
+interface DevPersistenceOptions {
+  store: PersistenceStore;
+  /**
+   * This session's own id. It is what a game uses to name an APPEND
+   * collision-free (`death:${sessionKey}`), so it must be stable for the life
+   * of the session and different from the next one's.
+   */
+  sessionKey: string;
+  /**
+   * The version stamped onto every row this session writes. `boardsmith dev`
+   * has no published version, so the CLI passes a marker that says so rather
+   * than inventing a plausible-looking one -- a game migrating on `gameVersion`
+   * must be able to tell a dev row from a published one.
+   */
+  gameVersion: string;
+  /** Clock for `writtenAt`/`submittedAt`. Injected so a test can order two
+   *  commits without sleeping. */
+  now?: () => number;
+  /**
+   * Called after the store has CHANGED, so the CLI can write it to disk.
+   *
+   * The host does not save, and deliberately: it is transport-free and
+   * filesystem-free, which is what makes every persistence case above testable
+   * without a dev server. Saving is the one thing that genuinely belongs to
+   * whoever owns the file.
+   */
+  onChange?: () => void;
+}
+
+/**
+ * The token a dev seat's sealed rows are named after.
+ *
+ * Production seals a row to the seated user's account id. `boardsmith dev` has
+ * no accounts, so the seat NUMBER is the identity -- stable across restarts,
+ * which is exactly what makes the store cross-session, and distinct per seat,
+ * which is what makes the seal testable at all. A game reads it out of the
+ * start payload's `players` array and never hard-codes it, so nothing a
+ * developer writes against this survives into production as a literal.
+ */
+export function devPlayerToken(seat: number): string {
+  return `dev-player-${seat}`;
+}
+
+/**
+ * The failure frame a REFUSED COMMIT returns to `SnapshotSessionHost`.
+ *
+ * Mirrors production's `game-session.ts:refuseOp` field for field, which in
+ * turn mirrors the session layer's own error frame: nulled state, empty views,
+ * `isComplete: false`. Those fields are never read -- the host returns the
+ * result untouched before `apply()` sees it -- and echoing the pre-action state
+ * instead would invent a second convention for the same thing.
+ *
+ * `category: 'executor'` because the refusal came from the platform's rules,
+ * not from the game's own.
+ */
+function refusedCommit(reason: string): OpResult {
+  return {
+    success: false,
+    error: `This game cannot finish because the record it tried to store was refused: ${reason}.`,
+    category: 'executor',
+    snapshot: null,
+    pendingState: null,
+    flowState: null,
+    playerViews: [],
+    isComplete: false,
+    winners: [],
+  };
 }
 
 export class MultiplayerHost {
@@ -212,8 +322,21 @@ export class MultiplayerHost {
    * triggers seat reconciliation, `resizeSeats` does.
    */
   private appliedGameOptions: Record<string, unknown>;
+  /** This session's kind (#41 item 3). `match` when the CLI said nothing --
+   *  the same "absence means match" default the platform reads a kindless
+   *  session row with. */
+  private readonly sessionKind: SessionKind;
+  /**
+   * The seats this session ACTS FOR, in the shape the store's seal is checked
+   * against. Recomputed by `startGame` and read by the commit that ends the
+   * session, so a seat taken over mid-game is reflected in what may be sealed
+   * only from the next start -- the same freeze production has, where the
+   * roster is fixed when the session starts.
+   */
+  private persistPlayers: PersistPlayer[] = [];
 
   constructor(private readonly opts: MultiplayerHostOptions) {
+    this.sessionKind = opts.sessionKind ?? 'match';
     for (let seat = 1; seat <= opts.playerCount; seat++) {
       this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
     }
@@ -230,6 +353,16 @@ export class MultiplayerHost {
    */
   async hello(clientId: string): Promise<void> {
     this.connected.add(clientId);
+
+    // A RESOLUTION seats nobody (#41 item 3). Its one seat is host-held, the
+    // round runs with no human in it, and a client that connects is a watcher.
+    // Falling through to the auto-seat block below would put a developer in the
+    // resolver's chair and prove nothing about the session the platform runs.
+    if (!seatsHumans(this.sessionKind)) {
+      if (this.phase === 'lobby' && !this.starting) await this.startGame();
+      this.send(clientId, this.lobbyMessage());
+      return;
+    }
 
     const existing = this.clientSeat.get(clientId);
     if (existing !== undefined) {
@@ -387,6 +520,8 @@ export class MultiplayerHost {
    * rejects the WHOLE selection with an actionable error and never reaches
    * the start op.
    */
+  // surfaced only because this file changed.
+  // fallow-ignore-next-line complexity
   private async handleConfigure(
     clientId: string,
     msg: Extract<ClientInbound, { type: 'configure' }>,
@@ -512,6 +647,16 @@ export class MultiplayerHost {
   /** Take over a seat (works mid-game: claim an open/bot seat → it stops being bot). */
   private handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): void {
     this.connected.add(clientId);
+    if (!seatsHumans(this.sessionKind)) {
+      this.send(clientId, {
+        type: 'error',
+        message:
+          `A ${this.sessionKind} session seats nobody — its seat is held by the platform and ` +
+          `the round runs with no player in it. Run \`boardsmith dev\` without ` +
+          `\`--kind ${this.sessionKind}\` to sit at a table.`,
+      });
+      return;
+    }
     const info = this.seats.get(msg.seat);
     if (!info) {
       this.send(clientId, { type: 'error', message: `Seat ${msg.seat} does not exist.` });
@@ -702,13 +847,160 @@ export class MultiplayerHost {
   /** Rebuild the shared bot-seat list in place from currently open seats. */
   private rebuildBotSeats(): void {
     this.botSeats.length = 0;
+    // A RESOLUTION's seat is PLATFORM-HELD, not open (#41 item 3). Covering it
+    // with a bot would let the bot pump play the round the moment the session
+    // starts -- the resolver would run before it was ever asked to, against
+    // inputs nothing had handed it, and `resolveRound` would then find the game
+    // already over.
+    if (!seatsHumans(this.sessionKind)) return;
     for (let seat = 1; seat <= this.opts.playerCount; seat++) {
       if (!this.heldByConnectedHuman(seat)) this.botSeats.push({ seat, level: this.opts.botLevel });
     }
   }
 
+  // ── Persistence (#41 items 2 and 4) ───────────────────────────────────────
+
+  /**
+   * The READ half (#41 item 2): freeze this session's roster, and put the store
+   * it may see into the START options.
+   *
+   * The roster is frozen HERE and the same array decides two things -- what the
+   * store hands over now, and what the commit at the end is allowed to seal.
+   * One array, so those two can never disagree about who this session acts for.
+   *
+   * Injected as one more field in a bag the bundle already receives, under the
+   * reserved key the validation core owns, which is exactly how production
+   * injects it. A game that declared no persistence gets no key at all.
+   */
+  private injectPersistedStore(
+    startGameOptions: Record<string, unknown>,
+    humanSeats: Set<number>,
+    playerCount: number,
+  ): void {
+    this.persistPlayers = Array.from({ length: playerCount }, (_, i) => ({
+      seat: i + 1,
+      // A bot seat owns no sealed row -- the same `null` production uses for a
+      // bot or a guest, and for the same reason: a row sealed to an identity
+      // that does not outlive the session can never be read or deleted again.
+      playerId: humanSeats.has(i + 1) ? devPlayerToken(i + 1) : null,
+    }));
+    const persistence = this.opts.persistence;
+    if (!persistence) return;
+    const payload = persistence.store.readForSession(
+      this.sessionKind,
+      persistence.sessionKey,
+      this.persistPlayers,
+    );
+    if (payload !== null) startGameOptions[PERSIST_KEY] = payload;
+  }
+
+  /**
+   * Both durable channels, on the way OUT of one op.
+   *
+   * Two things happen here and the ORDER is the whole guarantee, because it is
+   * production's order (`games/src/game-session.ts:runOp` ->
+   * `stageCompletionCommit`), and this function sits at the same seam: after
+   * the op ran, before `SnapshotSessionHost` has applied or broadcast anything.
+   *
+   *   STRIP  -- `persistPrivate` comes off the spectator view and off every
+   *             player view, on EVERY successful op, and is re-emitted as a
+   *             top-level field. Unconditional and not gated on completion or
+   *             on any opt-in: the attribute name is reserved, and a strip that
+   *             depended on a flag would leak for exactly the game that got the
+   *             flag wrong.
+   *   COMMIT -- on the op that ENDS the game, the store is handed both channels
+   *             and may REFUSE. A refused commit refuses the op: the snapshot
+   *             does not advance, nobody is told the game is over, and the
+   *             acting player is given the reason. Without that a developer
+   *             would watch a game finish locally and then watch the identical
+   *             move be refused in production.
+   */
+  private applyPersistenceChannels(result: OpResult): OpResult {
+    // `persistPrivate` is not an `OpResult` field: the executor re-emits it as a
+    // top-level one on the way out, and the session layer's type has no reason
+    // to know about a channel it never reads. The carrier type is what names it.
+    const stripped = takePrivateCommit(result as OpResult & PrivateChannelCarrier);
+    const persistence = this.opts.persistence;
+    if (!persistence || !stripped.success || !stripped.isComplete) return stripped;
+
+    const outcome = persistence.store.commit({
+      kind: this.sessionKind,
+      players: this.persistPlayers,
+      spectatorView: stripped.spectatorView,
+      persistPrivate: stripped.persistPrivate,
+      gameVersion: persistence.gameVersion,
+      now: persistence.now ?? Date.now,
+    });
+    if (!outcome.ok) return refusedCommit(outcome.reason);
+    if (outcome.written > 0) persistence.onChange?.();
+    return stripped;
+  }
+
+  /**
+   * RUN THE WORLD'S RESOLVER, ONCE (#41 items 2 and 3).
+   *
+   * This is the thing `boardsmith dev` could not do at all: a resolver reads a
+   * store, advances a world and writes it back, so with no store and no session
+   * kinds there was no way to run one until the game had been published. Now
+   * there is, and it runs through the SAME shape production composes -- an
+   * ordinary action, on the platform-held seat, carrying the round's inputs
+   * under the two reserved argument keys, which are spread LAST so a manifest
+   * that declares either name cannot supply its own roster.
+   *
+   * Returns a REASON rather than throwing, because every way this fails is
+   * something the game's author has to read: no store configured, the wrong
+   * session kind, a resolver the rules refused, or a commit the store refused.
+   */
+  async resolveRound(resolveAction: {
+    name: string;
+    args?: Record<string, unknown>;
+  }): Promise<{ ok: true; complete: boolean } | { ok: false; reason: string }> {
+    if (this.sessionKind !== 'resolution') {
+      return {
+        ok: false,
+        reason: `this host is running a ${this.sessionKind} session; a round is resolved by a session started with --kind resolution`,
+      };
+    }
+    const persistence = this.opts.persistence;
+    if (!persistence) {
+      return { ok: false, reason: 'this host has no persistence store, so there is no world to resolve' };
+    }
+    if (this.phase !== 'playing' || !this.session) {
+      return { ok: false, reason: 'the session has not started, so there is nothing to resolve against' };
+    }
+
+    const inputs = persistence.store.resolutionInputs();
+    const result = await this.session.host.handleOp(RESOLUTION_SEAT, {
+      type: 'action',
+      actionName: resolveAction.name,
+      player: RESOLUTION_SEAT,
+      args: {
+        ...(resolveAction.args ?? {}),
+        [WORLD_ROSTER_ARG_KEY]: inputs.roster,
+        [WORLD_ORDERS_ARG_KEY]: inputs.orders,
+      },
+      // SERVER-COMPOSED, and legitimately so: a resolution has no client, so
+      // there is no human intent to carry across a wire. Composing it from the
+      // host's own current view is what production does on the same op.
+      boundaryKey: boundaryKeyOf(this.session.viewForSeat(RESOLUTION_SEAT)),
+    });
+
+    if (!result.success) return { ok: false, reason: result.error ?? 'the resolve action was refused' };
+    // The round's orders are consumed by the resolution that COMMITTED, and by
+    // nothing else. A resolver that ran but did not finish the session has
+    // committed nothing, and dropping its inputs would resolve the round
+    // against a store that no longer holds them.
+    if (result.isComplete) {
+      persistence.store.clearOrders();
+      persistence.onChange?.();
+    }
+    return { ok: true, complete: result.isComplete };
+  }
+
   // ── Game start ────────────────────────────────────────────────────────────
 
+  // extracted into `injectPersistedStore` rather than inlined here.
+  // fallow-ignore-next-line complexity
   private async startGame(): Promise<void> {
     // ENDGAME-02 / F-12: single-chokepoint concurrency guard. Two near-
     // simultaneous (re)start triggers (restart + configure, or two restarts)
@@ -774,6 +1066,8 @@ export class MultiplayerHost {
         ...perSeatOptions[i],
       })),
     };
+    this.injectPersistedStore(startGameOptions, humanSeats, playerCount);
+
     const baseOptions = { playerCount };
     // teachingDisabled travels in hostOptions, NOT gameOptions (WR-04/D-01):
     // gameOptions is handed to the Game constructor on `start` and persists
@@ -782,8 +1076,20 @@ export class MultiplayerHost {
     // FEAT-01/168-02: seedSnapshot rides here too (never gameOptions) so a
     // `--seed` restart still starts from the seed, not a fresh game.
     const hostOptions = { teachingDisabled: this.opts.teachingDisabled, seedSnapshot: this.opts.seedSnapshot };
-    const executeOp = (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) =>
-      this.opts.executeOp(op.type === 'start' ? startGameOptions : baseOptions, snapshot, pendingState, op, hostOptions);
+    const executeOp = async (
+      snapshot: unknown,
+      pendingState: Record<string, unknown> | null,
+      op: Op,
+    ) => {
+      const raw = await this.opts.executeOp(
+        op.type === 'start' ? startGameOptions : baseOptions,
+        snapshot,
+        pendingState,
+        op,
+        hostOptions,
+      );
+      return this.applyPersistenceChannels(raw);
+    };
 
     const session = createDevSession({
       playerCount,

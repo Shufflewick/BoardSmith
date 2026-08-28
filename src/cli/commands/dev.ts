@@ -12,6 +12,10 @@ import type { GameDefinition, Op, OpResult } from '../../session/index.js';
 import { DEFAULT_COLOR_PALETTE, type GameStateSnapshot } from '../../engine/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
+import { devPlayerToken } from '../dev-host/multiplayer-host.js';
+import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
+import type { PersistenceStore } from '../../persistence/index.js';
+import { SESSION_KINDS, isSessionKind, type SessionKind } from '../../persistence/index.js';
 import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { parseBotLevel } from '../../bot/index.js';
@@ -46,6 +50,16 @@ interface DevOptions {
   preset?: string;
   /** FEAT-01/168-02: path to a recorded GameStateSnapshot JSON file to seed the initial state from. */
   seed?: string;
+  /**
+   * ShufflewickPub #41 item 3: what KIND of session this run is. `match` (the
+   * default) is an ordinary sitting; `orderEntry` submits one player's orders
+   * for a world round; `resolution` runs the resolver, seats nobody, and is
+   * the only way to exercise a world's round before the game is published.
+   */
+  kind?: string;
+  /** The action `--kind resolution` runs. Defaults to the game definition's
+   *  own `world.resolveAction`. */
+  resolveAction?: string;
 }
 
 /** Thrown by the pure dev.ts flag/host validators below; `devCommand` catches
@@ -53,6 +67,25 @@ interface DevOptions {
  * distinct class (not a bare Error) so devCommand's catch can distinguish an
  * intentional validation failure from an unexpected bug. */
 export class DevFlagError extends Error {}
+
+/**
+ * Fail-fast `--kind` parser (#41 item 3).
+ *
+ * Names the WHOLE vocabulary on a bad value rather than just rejecting the one
+ * given: a developer reaching for this flag is usually looking for the kind
+ * they cannot otherwise run, and a bare "invalid kind" makes them go read
+ * source to find out what the choices are. Pure, like every other flag parser
+ * in this file, so it is unit-testable without a dev server.
+ */
+export function parseSessionKind(raw: string | undefined): SessionKind {
+  if (raw === undefined) return 'match';
+  if (!isSessionKind(raw)) {
+    throw new DevFlagError(
+      `Error: --kind must be one of ${SESSION_KINDS.join(', ')}, got "${raw}"`,
+    );
+  }
+  return raw;
+}
 
 /**
  * Fail-fast positive-integer parser for `--port`/`--players` (CLIX-06),
@@ -436,6 +469,9 @@ async function loadGameRuntime(
   tempDir: string,
   context: 'monorepo' | 'standalone',
 ): Promise<{ gameDefinition: GameDefinition; executeOp: RuntimeExecuteOp }> {
+  // with the other CLI commands. Surfaced only because #41 touched this file;
+  // extracting it is a CLI-wide refactor, not part of this change.
+  // fallow-ignore-next-line code-duplication
   const rulesIndexPath = join(rulesPath, 'index.ts');
   const entryPath = join(tempDir, 'runtime-entry.ts');
   writeFileSync(
@@ -447,6 +483,9 @@ async function loadGameRuntime(
   );
   const bundlePath = join(tempDir, 'runtime-bundle.mjs');
 
+  // with the other CLI commands. Surfaced only because #41 touched this file;
+  // extracting it is a CLI-wide refactor, not part of this change.
+  // fallow-ignore-next-line code-duplication
   await build({
     entryPoints: [entryPath],
     bundle: true,
@@ -597,6 +636,109 @@ function exitOnDevFlagError<T>(fn: () => T): T {
   }
 }
 
+/**
+ * The cross-session store for this run, or `null` for a game that declares no
+ * persistence (#41 item 2).
+ *
+ * A game that does not opt in is affected in no way: nothing is read, nothing
+ * is injected into the start op, nothing is committed, and no file is written.
+ * That is the platform's own opt-in rule, kept here so a local run and a
+ * published one differ in nothing.
+ */
+function openDevStore(
+  gameDefinition: GameDefinition,
+  storeFile: string,
+  playerCount: number,
+): { store: PersistenceStore; save: () => void } | null {
+  if (gameDefinition.persistence !== true) return null;
+  const devStore = loadDevStore(storeFile);
+  // Every seat this run can seat is enrolled, so a resolver has a roster to
+  // emit views for. Enrolment is a PLATFORM fact a game cannot observe, so a
+  // world whose roster was empty would resolve its rounds for nobody.
+  for (let seat = 1; seat <= playerCount; seat++) {
+    devStore.store.enrol({ playerId: devPlayerToken(seat), displayName: `Player ${seat}` });
+  }
+  devStore.save();
+  return devStore;
+}
+
+/**
+ * Say what kind of session this is, and -- for a resolution -- run the round.
+ */
+async function announceAndRunSession(args: {
+  mpHost: MultiplayerHost;
+  sessionKind: SessionKind;
+  storeFile: string;
+  hasStore: boolean;
+  resolveActionName: string | undefined;
+}): Promise<void> {
+  if (args.hasStore) {
+    console.log(
+      chalk.cyan(`  Cross-session store: ${args.storeFile} (session kind: ${args.sessionKind}).`),
+    );
+  } else if (args.sessionKind !== 'match') {
+    console.log(
+      chalk.yellow(
+        `  --kind ${args.sessionKind} has no store to work against: this game's definition does not set \`persistence: true\`.`,
+      ),
+    );
+  }
+  if (args.sessionKind !== 'resolution') return;
+  await runDevResolution(args);
+}
+
+/**
+ * Run a world's round once, and SAY WHAT HAPPENED (#41 items 2 and 3).
+ *
+ * Every failure below is printed and the server keeps running, deliberately:
+ * the developer's next move is to fix the rules and let Vite reload, and
+ * exiting the dev server on a refused resolution would take away the board they
+ * need to look at to understand the refusal.
+ */
+async function runDevResolution(args: {
+  mpHost: MultiplayerHost;
+  resolveActionName: string | undefined;
+  hasStore: boolean;
+}): Promise<void> {
+  if (!args.hasStore) {
+    console.error(
+      chalk.red(
+        '  Cannot resolve a round: this game does not declare `persistence: true`, so it has no world state to advance.',
+      ),
+    );
+    return;
+  }
+  if (!args.resolveActionName) {
+    console.error(
+      chalk.red(
+        '  Cannot resolve a round: no resolve action is declared. Set `world.resolveAction` on your gameDefinition, or pass --resolve-action <name>.',
+      ),
+    );
+    return;
+  }
+
+  // The resolver's session has to be STARTED before it can act, and a
+  // resolution seats nobody -- so nothing else will ever start it. This
+  // connection is the CLI standing in for the platform's alarm.
+  await args.mpHost.hello('boardsmith-dev-resolver');
+  const outcome = await args.mpHost.resolveRound({ name: args.resolveActionName });
+  if (!outcome.ok) {
+    console.error(chalk.red(`  Round not resolved: ${outcome.reason}`));
+    return;
+  }
+  console.log(
+    outcome.complete
+      ? chalk.green(`  Round resolved by \`${args.resolveActionName}\` — the store was advanced and this round's orders were consumed.`)
+      : chalk.yellow(
+          `  \`${args.resolveActionName}\` ran but did not finish the session, so nothing was committed. A resolution commits when it ends.`,
+        ),
+  );
+}
+
+// a 460-line entrypoint over every threshold before #41 added --kind; the flag
+// wiring it gained lives in `openDevStore`/`announceAndRunSession` rather than
+// inline. Splitting the command itself is its own change.
+// fallow-ignore-next-line complexity
 export async function devCommand(options: DevOptions): Promise<void> {
   // Fail-fast on non-numeric --port/--players/--bot (CLIX-06) — actionable
   // errors before any server work, matching simulate.ts's Number.isInteger idiom.
@@ -632,11 +774,20 @@ export async function devCommand(options: DevOptions): Promise<void> {
     ? exitOnDevFlagError(() => parseSeedFile(resolve(process.cwd(), options.seed as string)))
     : undefined;
 
+  // #41 item 3. Parsed with the other flag validators so a typo fails before
+  // any server work, and NOT defaulted from the game's own declarations: an
+  // ordinary sitting is what `boardsmith dev` has always been, and a world game
+  // must still be openable as one.
+  const sessionKind = exitOnDevFlagError(() => parseSessionKind(options.kind));
+
   // NOTE: --bot seat validation is intentionally NOT done here (Pitfall 3 /
   // F34) — it must run against the EFFECTIVE post-resolution player count,
   // which is only known once gameDefinition's minPlayers/maxPlayers are
   // loaded below. See the `validateBotSeats` call after `resolveEffectivePlayerCount`.
 
+  // with the other CLI commands. Surfaced only because #41 touched this file;
+  // extracting it is a CLI-wide refactor, not part of this change.
+  // fallow-ignore-next-line code-duplication
   const configPath = join(cwd, 'boardsmith.json');
   if (!existsSync(configPath)) {
     console.error(chalk.red('Error: boardsmith.json not found'));
@@ -895,6 +1046,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
     const optionDefaults = Object.fromEntries(devConfig.gameOptions.map((o) => [o.id, o.default]));
     const baseGameOptions = { ...optionDefaults, ...selectedGameOptions };
     const clients = new Map<string, WebSocket>();
+
+    const storeFile = devStorePath(cwd);
+    const devStore = openDevStore(gameDefinition, storeFile, effectivePlayerCount);
+
     const mpHost = new MultiplayerHost({
       playerCount: effectivePlayerCount,
       minPlayers,
@@ -909,6 +1064,23 @@ export async function devCommand(options: DevOptions): Promise<void> {
       presets: devConfig.presets,
       teachingDisabled,
       seedSnapshot,
+      sessionKind,
+      ...(devStore
+        ? {
+            persistence: {
+              store: devStore.store,
+              // One dev run is one session, and the key has to be unique per
+              // session: it is what a game uses to name an APPEND without
+              // colliding with another sitting's row.
+              sessionKey: `dev-${Date.now()}`,
+              // Never a plausible-looking version number. A game migrating on
+              // `gameVersion` must be able to tell a row a local run wrote from
+              // one a published build did.
+              gameVersion: 'dev',
+              onChange: devStore.save,
+            },
+          }
+        : {}),
       executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
         runExecuteOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),
       send: (clientId, message) => {
@@ -972,6 +1144,16 @@ export async function devCommand(options: DevOptions): Promise<void> {
     if (seedSnapshot) {
       console.log(chalk.cyan(`  Seeded start (--seed ${options.seed}): initial state loaded from the recorded snapshot instead of a fresh start.`));
     }
+
+    // #41 items 2 and 3. The resolver runs HERE, before any client connects and
+    // before the game has ever been published -- the thing that was impossible.
+    await announceAndRunSession({
+      mpHost,
+      sessionKind,
+      storeFile,
+      hasStore: devStore !== null,
+      resolveActionName: options.resolveAction ?? gameDefinition.world?.resolveAction,
+    });
 
     if (shouldOpenBrowser(options)) {
       await open(hostUrl);

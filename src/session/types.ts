@@ -84,6 +84,33 @@ export interface GameDefinition {
   displayName?: string;
   /** bot configuration (objectives and threat response hooks) */
   bot?: BotStrategy;
+  /**
+   * Whether this game keeps CROSS-SESSION state -- a hall of fame, a campaign's
+   * character sheets, a persistent world's board between rounds.
+   *
+   * The platform gates every persistence read and write on the same flag in a
+   * published manifest, and a game that does not set it makes no extra call on
+   * either path. `boardsmith dev` reads it here so a game's local runs behave
+   * the way its published ones will: without it there is no store to hand the
+   * `start` op and nothing is committed at game over.
+   */
+  persistence?: boolean;
+  /**
+   * A PERSISTENT WORLD's two platform-called actions.
+   *
+   * `resolveAction` is the action the platform runs, on its own held seat and
+   * with no human present, to advance the world one round. It is the whole
+   * reason `boardsmith dev --kind resolution` exists: before it, a resolver
+   * could not be run even once until the game was published, because nothing
+   * local knew which action resolved a round or had a store for it to read.
+   *
+   * `enrolAction` is run when a player joins a running world, so their board
+   * opens without waiting for the next resolution.
+   */
+  world?: {
+    resolveAction: string;
+    enrolAction?: string;
+  };
   /** Game-level configurable options */
   gameOptions?: Record<string, GameOptionDefinition>;
   /** Per-player configurable options */
