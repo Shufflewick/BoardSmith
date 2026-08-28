@@ -13,6 +13,7 @@ import {
 } from '../lib/config-schema.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
+import { requireGameProject } from '../lib/game-project.js';
 
 interface ValidationResult {
   name: string;
@@ -24,13 +25,7 @@ interface ValidationResult {
 export async function validateCommand(): Promise<void> {
   const cwd = process.cwd();
 
-  // Validate project exists
-  const configPath = join(cwd, 'boardsmith.json');
-  if (!existsSync(configPath)) {
-    console.error(chalk.red('Error: boardsmith.json not found'));
-    console.error(chalk.dim('Make sure you are in a BoardSmith game project directory'));
-    process.exit(1);
-  }
+  const configPath = requireGameProject(cwd);
 
   console.log(chalk.cyan('\nValidating game...\n'));
 
@@ -255,8 +250,8 @@ function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
 
 /**
  * Shape check for an action the platform submits on the game's behalf —
- * `idleAction`, `world.resolveAction`, `world.enrolAction`. One
- * implementation, because they are one shape.
+ * `idleAction`, and nothing else today. It stays a named helper because the
+ * shape is a platform contract rather than one key's private business.
  */
 function checkNamedActionShape(raw: unknown, path: string, names: string): string[] {
   if (!isPlainObject(raw)) {
@@ -276,34 +271,32 @@ function checkNamedActionShape(raw: unknown, path: string, names: string): strin
 }
 
 /**
- * Shape check for the persistent-world block. `resolveAction` is REQUIRED
- * once `world` is present — a world that declares no resolver can never
- * advance a round, and the platform refuses such a bundle at upload.
+ * Shape check for the persistent-world block. `maxPlayers` is REQUIRED once
+ * `world` is present — it is the whole of what a resident world declares, and
+ * a block that omits it says nothing about the world.
+ *
+ * THE ROUND-WORLD SHAPE THIS REPLACES. `world` used to require a
+ * `resolveAction` and accept an `enrolAction`, because a world advanced one
+ * round at a time and the platform submitted the action that resolved it. That
+ * architecture is deleted: a resident world runs continuously in one Durable
+ * Object, so there is no round to resolve and no enrolment action to submit —
+ * a joiner is seated by the world itself. Both keys are gone from
+ * `boardsmith.schema.json`, so writing either now fails the unknown-key pass
+ * above with a did-you-mean rather than being silently accepted and then
+ * refused at upload.
  */
 function checkWorldShape(raw: unknown): string[] {
-  const example = '{ "resolveAction": { "name": "resolveRound" } }';
+  const example = '{ "maxPlayers": 200 }';
   if (!isPlainObject(raw)) {
     return [`"world" must be an object, e.g. ${example} — remove the key entirely if this game is not a persistent world.`];
   }
 
   const issues = checkBlockKeys(raw, 'world', ALLOWED_WORLD_KEYS);
 
-  if (raw.resolveAction === undefined) {
-    issues.push(`"world" must declare a "resolveAction" naming the action one round resolution submits, e.g. ${example}. A world with no resolver can never advance a round.`);
-  } else {
-    issues.push(...checkNamedActionShape(
-      raw.resolveAction,
-      'world.resolveAction',
-      'the action one round resolution submits',
-    ));
-  }
-
-  if (raw.enrolAction !== undefined) {
-    issues.push(...checkNamedActionShape(
-      raw.enrolAction,
-      'world.enrolAction',
-      'the action that enrols an arriving player into the world',
-    ));
+  if (raw.maxPlayers === undefined) {
+    issues.push(`"world" must declare a "maxPlayers" naming the largest roster this game's rules are built for, e.g. ${example}. A world block that declares nothing says nothing about the world.`);
+  } else if (!Number.isInteger(raw.maxPlayers) || (raw.maxPlayers as number) < 1) {
+    issues.push(`"world.maxPlayers" must be a whole number of players of at least 1, e.g. ${example}; got ${JSON.stringify(raw.maxPlayers)}.`);
   }
 
   return issues;

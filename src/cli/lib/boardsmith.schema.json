@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://boardsmith.io/schemas/boardsmith.schema.json",
   "title": "boardsmith.json",
-  "description": "Single source of truth for the set of top-level keys a boardsmith.json project config may legitimately carry. `src/cli/lib/config-schema.ts` derives ALLOWED_TOP_LEVEL_KEYS from `Object.keys(properties)` below, and `boardsmith validate` / `boardsmith dev` startup use that list to reject unknown/misspelled keys with a did-you-mean suggestion. Do NOT add a key here unless it has a real read site: either a command in src/cli/commands consumes it (see the file:line trace in 135-05-PLAN.md's read_first), or the PUBLISHING PLATFORM consumes it out of the manifest that build.ts's deriveManifest produces by spreading this config. The platform has two manifest sinks, and reaching either one takes MORE than listing a key here. (1) The Convex sink, which is what platform-level flags like `asyncPlay` are read from (`convex/games.ts` `parseAsyncPlayFlag`): `convex/publish.ts` `initiatePublishServer` stores verbatim what it is SENT, but what it is sent is an allow-list projection built by `buildInitiateManifest` in `src/cli/lib/publish-api.ts` \u2014 a key absent from that function never arrives, silently, however well it is declared here. (2) The R2 sink the runtime session host reads: the bundle zip carries `dist/manifest.json` whole, and the games worker rebuilds an R2 copy through its own allowlist (`games/src/manifest-schema.ts`), silently dropping keys that allowlist does not name. So a key needs a named reader on at least one sink AND a place on that sink's forwarding list; a key only the Convex sink carries is invisible to the runtime session host by design. EVERY property below therefore carries a REQUIRED `x-convex-sink` boolean saying whether sink (1) consumes it. `config-schema.ts` derives CONVEX_SINK_KEYS from it and `buildInitiateManifest` forwards exactly that set, so `marked true but not forwarded` cannot be written; `validate.test.ts` refuses a property that declares neither, so `added and never decided` cannot be committed. Sink (2)'s allowlist lives in another repository and is NOT expressible here — do not add a second annotation claiming to govern it.",
+  "description": "Single source of truth for the set of top-level keys a boardsmith.json project config may legitimately carry. `src/cli/lib/config-schema.ts` derives ALLOWED_TOP_LEVEL_KEYS from `Object.keys(properties)` below, and `boardsmith validate` / `boardsmith dev` startup use that list to reject unknown/misspelled keys with a did-you-mean suggestion. Do NOT add a key here unless it has a real read site: either a command in src/cli/commands consumes it (see the file:line trace in 135-05-PLAN.md's read_first), or the PUBLISHING PLATFORM consumes it out of the manifest that build.ts's deriveManifest produces by spreading this config. The platform has two manifest sinks, and reaching either one takes MORE than listing a key here. (1) The Convex sink, which is what platform-level flags like `asyncPlay` are read from (`convex/games.ts` `parseAsyncPlayFlag`): `convex/publish.ts` `initiatePublishServer` stores verbatim what it is SENT, but what it is sent is an allow-list projection built by `buildInitiateManifest` in `src/cli/lib/publish-api.ts` \u2014 a key absent from that function never arrives, silently, however well it is declared here. (2) The R2 sink the runtime session host reads: the bundle zip carries `dist/manifest.json` whole, and the games worker rebuilds an R2 copy through its own allowlist (`games/src/manifest-schema.ts`), silently dropping keys that allowlist does not name. So a key needs a named reader on at least one sink AND a place on that sink's forwarding list; a key only the Convex sink carries is invisible to the runtime session host by design. EVERY property below therefore carries a REQUIRED `x-convex-sink` boolean saying whether sink (1) consumes it. `config-schema.ts` derives CONVEX_SINK_KEYS from it and `buildInitiateManifest` forwards exactly that set, so `marked true but not forwarded` cannot be written; `validate.test.ts` refuses a property that declares neither, so `added and never decided` cannot be committed. Sink (2)'s allowlist lives in another repository and is NOT expressible here \u2014 do not add a second annotation claiming to govern it.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -156,7 +156,7 @@
     "asyncPlay": {
       "x-convex-sink": true,
       "type": "boolean",
-      "description": "May this game be played asynchronously — one move at a time, over hours or days, with nobody else connected? Absence is the 'no' answer; only a game whose rules survive long gaps between moves should set it. Consumed by the platform (ShufflewickPub convex/games.ts parseAsyncPlayFlag, which gates async table creation in convex/sessions.ts)."
+      "description": "May this game be played asynchronously \u2014 one move at a time, over hours or days, with nobody else connected? Absence is the 'no' answer; only a game whose rules survive long gaps between moves should set it. Consumed by the platform (ShufflewickPub convex/games.ts parseAsyncPlayFlag, which gates async table creation in convex/sessions.ts)."
     },
     "idleAction": {
       "x-convex-sink": false,
@@ -193,23 +193,20 @@
       "description": "How long one round may sit before the platform intervenes. Consumed by the platform (manifest-schema.ts `roundDeadline`), which also enforces its own hour bounds and requires either `bot: true` or an `idleAction` alongside it."
     },
     "world": {
-      "x-convex-sink": false,
+      "x-convex-sink": true,
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "resolveAction"
+        "maxPlayers"
       ],
       "properties": {
-        "resolveAction": {
-          "$ref": "#/definitions/namedAction",
-          "description": "The single action one round resolution submits, from the platform's seat, against the stored world snapshot with nobody connected."
-        },
-        "enrolAction": {
-          "$ref": "#/definitions/namedAction",
-          "description": "Optional. The action the platform submits to enrol an arriving player into the world."
+        "maxPlayers": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The largest roster THIS game's rules are built for. It governs the world's capacity: a publisher may size a world smaller, never larger, and the platform clamps it to its own ceiling too."
         }
       },
-      "description": "The persistent-world block. Absent on every ordinary game — its absence means 'this game is not a persistent world'. Consumed by the platform (manifest-schema.ts `world`), which REQUIRES resolveAction once the block is present: a world with no resolver can never advance a round."
+      "description": "The persistent-world block. Absent on every ordinary game \u2014 its absence means 'this game is not a persistent world'. Consumed by the platform (manifest-schema.ts `world`), which requires maxPlayers once the block is present. The round-world shape this replaces (resolveAction/enrolAction) went with the round architecture: a resident world runs continuously and has no round to resolve."
     }
   },
   "definitions": {
@@ -227,7 +224,7 @@
         },
         "args": {
           "type": "object",
-          "description": "Optional literal arguments submitted with the action. Opaque to the platform — what constitutes a legal action is the game's business."
+          "description": "Optional literal arguments submitted with the action. Opaque to the platform \u2014 what constitutes a legal action is the game's business."
         }
       },
       "description": "An action the PLATFORM submits on a game's behalf, named as the game's rules register it."

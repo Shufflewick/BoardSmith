@@ -13,9 +13,10 @@
  * @module
  */
 import type { Ref } from 'vue';
+import type { useToast } from './useToast.js';
 
 /** Which control the player pressed. */
-export type TeachingAction =
+type TeachingAction =
   | 'hint'
   | 'demo-toggle'
   | 'heatmap-toggle'
@@ -40,15 +41,20 @@ export interface TeachingActionsOptions {
   isActionHelpVisible: Ref<boolean>;
   /** Persist the help preference. */
   setActionHelpEnabled: (enabled: boolean) => void;
-  /** Show a message to the player. `duration: 0` means "until removed". */
-  toast: {
-    show: (text: string, options: { type: string; duration: number }) => string | number;
-    error: (text: string) => void;
-    remove: (id: string | number) => void;
-  };
+  /**
+   * Show a message to the player. `duration: 0` means "until removed".
+   *
+   * TAKEN FROM `useToast` RATHER THAN RESTATED. It was restated once, and the
+   * copy drifted: it widened `type` to `string`, made both options required and
+   * let `remove` take a string, none of which the real toast accepts. Every
+   * game in the catalogue then failed `boardsmith validate`'s TypeScript pass
+   * on `GameShell.vue` handing the real thing to this parameter, which meant
+   * nothing could be published at all.
+   */
+  toast: Pick<ReturnType<typeof useToast>, 'show' | 'error' | 'remove'>;
 }
 
-export interface TeachingActionsReturn {
+interface TeachingActionsReturn {
   /** Run one teaching control. Never throws — a failure becomes a message. */
   handleTeachingAction: (action: TeachingAction) => Promise<void>;
 }
