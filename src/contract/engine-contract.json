@@ -1,7 +1,7 @@
 {
-  "revision": 27,
+  "revision": 28,
   "bundleProtocol": 1,
-  "surfaceHash": "ba3e5efa9cccf76e",
+  "surfaceHash": "06dcb0a6b6a5fdcb",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -219,6 +219,14 @@
       "surfaceHash": "ba3e5efa9cccf76e",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "World mode is declared at construction: GameOptions.worldMode replaces Game#enableWorldMode(), so a world is what a game IS rather than something switched on afterwards, and a world's seats are no longer capped by the size of the player palette."
+    },
+    {
+      "revision": 28,
+      "date": "2026-08-28",
+      "bundleProtocol": 1,
+      "surfaceHash": "06dcb0a6b6a5fdcb",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "The session-kind vocabulary is match | world, and a refusal that names no error is a refusal (ShufflewickPub #47 and #90). BREAKING, by deletion: the two round-era kinds are gone, and so is everything that existed only for them -- seatsHumans; the store's order routing, roster and enrol; ResolutionInputs / drainResolutionInputs / RESOLUTION_SEAT and the two reserved resolve-action argument keys; MultiplayerHost.resolveRound; and the --kind / --resolve-action dev flags, which after the deletion selected no behaviour at all. store.commit and store.readForSession no longer take a kind, because neither reads one any more. The sealed-key rule for world is allow:'seated', the same as a match: the resolver's write-any-player's-key bypass was a consequence of SEATLESSNESS, not of authority, and a resident world is seated at every write, so there is nothing for a bypass to rescue. Separately, acceptExecuteResult now REFUSES a { success: false } carrying no error (an empty string counts as none) instead of inverting it into a success -- a game that refused a move without saying why used to have the refusal silently become an accepted move."
     }
   ]
 }
