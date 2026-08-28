@@ -142,6 +142,32 @@ class LongGame extends Game<LongGame, Player> {
 }
 
 
+// A game whose one action REFUSES by returning `message` instead of `error`
+// (#90). The two fields sit next to each other on `ActionResult`, both are
+// plausible, and only `error` is what the flow and the runner read -- so this
+// used to be reported to the player as a SUCCESS that carried a sentence,
+// with the turn consumed and nothing done.
+class MisdeclaredRefusalGame extends Game<MisdeclaredRefusalGame, Player> {
+  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
+    super(options);
+    this.registerActions(
+      Action.create('refuse')
+        .prompt('Refuse')
+        .execute(() => ({ success: false, message: 'The wagon is worn through.' })),
+      Action.create('refuseSilently')
+        .prompt('Refuse with an empty error')
+        .execute(() => ({ success: false, error: '   ' })),
+    );
+    this.setFlow(defineFlow({
+      root: loop({
+        while: () => true,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['refuse', 'refuseSilently'] }) }),
+      }),
+    }));
+  }
+}
+
 // Minimal game whose entire flow is a single simultaneous-action-step with a
 // validated action, for ENG-03 (failed simultaneous action must not be
 // recorded in actionHistory).
@@ -332,6 +358,38 @@ describe('GameRunner', () => {
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe(ErrorCode.ACTION_EXECUTION_ERROR);
       expect(result.error).toContain('nonexistent-action');
+    });
+
+    it('reports a refusal that named no error as a FAILURE, not a success (#90)', () => {
+      const refusingRunner = new GameRunner({
+        GameClass: MisdeclaredRefusalGame,
+        gameType: 'misdeclared-refusal-game',
+        gameOptions: { playerCount: 1, seed: 'test' },
+      });
+      refusingRunner.start();
+
+      const result = refusingRunner.performAction('refuse', 1, {});
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe(ErrorCode.ACTION_EXECUTION_ERROR);
+      expect(result.error).toContain('refuse');
+      // The turn was not consumed: a refused action is not a played one.
+      expect(refusingRunner.actionHistory).toHaveLength(0);
+    });
+
+    it('treats an EMPTY error the same way -- it is as unreadable as none (#90)', () => {
+      const refusingRunner = new GameRunner({
+        GameClass: MisdeclaredRefusalGame,
+        gameType: 'misdeclared-refusal-game',
+        gameOptions: { playerCount: 1, seed: 'test' },
+      });
+      refusingRunner.start();
+
+      const result = refusingRunner.performAction('refuseSilently', 1, {});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('refuseSilently');
+      expect(refusingRunner.actionHistory).toHaveLength(0);
     });
 
     it('WR-02: records the committed action in history when the flow halts on an unmatched switchOn value', () => {
