@@ -59,6 +59,13 @@ export const PLATFORM_ENTRYPOINTS = [
     specifier: 'boardsmith/session-host',
     module: () => import('../session/snapshot-session-host.js'),
   },
+  // Imported directly by the games worker as its persistence validation core:
+  // `games/src/persistence.ts` re-exports this entrypoint rather than restating
+  // it, so a rename here silently removes the platform's commit validator.
+  {
+    specifier: 'boardsmith/persistence',
+    module: () => import('../persistence/index.js'),
+  },
 ] as const;
 
 /**

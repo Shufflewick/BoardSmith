@@ -1,7 +1,7 @@
 {
-  "revision": 24,
+  "revision": 25,
   "bundleProtocol": 1,
-  "surfaceHash": "6848a30448bd2096",
+  "surfaceHash": "63d698a6f5d7552b",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -195,6 +195,14 @@
       "surfaceHash": "6848a30448bd2096",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "r23: NotSimulableError lets a game say a move is legal but unresolvable from a bot's redacted information state, so MCTS drops it from the search instead of logging a stack per rollout; enumerateLegalMoves re-checks condition and validate rather than trusting the flow state's frozen availableActions."
+    },
+    {
+      "revision": 25,
+      "date": "2026-08-28",
+      "bundleProtocol": 1,
+      "surfaceHash": "63d698a6f5d7552b",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "r25: boardsmith/persistence is a new platform entrypoint carrying the persistence validation core -- the reserved persist/persistPrivate channel names, PERSIST_MAX_COMMIT_BYTES, readPersistCommit, toStartPayload, drainResolutionInputs, the session-kind vocabulary and a pure cross-session store. ShufflewickPub's games worker now re-exports it from games/src/persistence.ts instead of restating it, so boardsmith dev's MultiplayerHost runs the SAME validators the platform's Durable Object does (ShufflewickPub #41)."
     }
   ]
 }

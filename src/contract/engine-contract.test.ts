@@ -49,6 +49,7 @@ describe('engine contract', () => {
       'boardsmith',
       'boardsmith/session',
       'boardsmith/session-host',
+      'boardsmith/persistence',
     ]);
   });
 

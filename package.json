@@ -27,6 +27,10 @@
       "types": "./src/session/index.ts",
       "import": "./src/session/index.ts"
     },
+    "./persistence": {
+      "types": "./src/persistence/index.ts",
+      "import": "./src/persistence/index.ts"
+    },
     "./session-host": {
       "types": "./src/session/snapshot-session-host.ts",
       "import": "./src/session/snapshot-session-host.ts"
