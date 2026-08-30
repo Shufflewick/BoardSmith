@@ -9,6 +9,14 @@ import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import type { GameDefinition } from '../../session/index.js';
 
+/**
+ * The project-root HTML file that, when present, makes this bundle's world
+ * surface (ShufflewickPub #128). Named here rather than inline so the build,
+ * the manifest flag it derives, and the error that explains it all say the same
+ * filename.
+ */
+const WORLD_ENTRY_HTML = 'world.html';
+
 interface BuildOptions {
   outDir?: string;
 }
@@ -29,6 +37,7 @@ export function deriveManifest(
   config: Record<string, unknown>,
   gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>,
   engine: { protocol: number; revision: number },
+  artifacts: { worldUi: boolean },
 ): Record<string, unknown> {
   const { minPlayers, maxPlayers } = gameDefinition;
   // The platform syncs playerCount on every publish (the catalog must never
@@ -41,8 +50,34 @@ export function deriveManifest(
     );
   }
 
+  // WHETHER THIS BUNDLE SHIPS A WORLD UI (ShufflewickPub #128).
+  //
+  // Derived from what the build actually produced, and it OVERWRITES anything
+  // an author wrote, exactly as `playerCount` does. A host reads this to decide
+  // between mounting the bundle's own world surface and showing its generic
+  // one, and that decision has to be a fact about the bundle rather than a
+  // probe: a host that treated a missing `world.html` as "this game ships no
+  // world UI" could not tell that apart from a UI that failed to deploy, and
+  // would answer a broken publish with a surface that looks deliberate.
+  //
+  // A world UI in a bundle that declares no `world` block is refused here.
+  // Nothing could ever mount it -- `campaigns:createWorld` refuses a game whose
+  // manifest has no world block -- so it is bytes in every download for a
+  // surface no player can reach, and the author almost certainly meant to
+  // declare the block.
+  const world = config.world as Record<string, unknown> | undefined;
+  if (artifacts.worldUi && (world === undefined || world === null)) {
+    throw new Error(
+      'This project has a world.html entry but boardsmith.json declares no "world" block, '
+      + 'so nothing could ever mount it. Add e.g. "world": { "maxPlayers": 40 }, or delete world.html.',
+    );
+  }
+
   return {
     ...config,
+    ...(world === undefined || world === null
+      ? {}
+      : { world: { ...world, ui: artifacts.worldUi } }),
     buildTime: new Date().toISOString(),
     version: (config.version as string | undefined) || '1.0.0',
     // Stamp the engine ABI version so the executor can reject a bundle built
@@ -144,7 +179,21 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     spinner.succeed('Game rules built');
 
     // Build UI (Vue -> JS bundle)
-    spinner.start('Building UI...');
+    //
+    // TWO ENTRY POINTS WHEN THE GAME HAS TWO SURFACES (ShufflewickPub #128).
+    // `index.html` mounts `GameShell` and is what a TABLE loads. `world.html`,
+    // when the project has one, mounts `WorldShell` and is what a RESIDENT
+    // WORLD loads -- a different shell because a world has no turn, no flow
+    // position and no action table, and a table shell can only render one by
+    // being told things that are not true (`src/ui/world/worldProtocol.ts`).
+    //
+    // Both land at the bundle root (`src/cli/lib/zip.ts` strips the `ui/`
+    // prefix), so the host asks for `.../index.html` or `.../world.html` and
+    // gets the surface it meant. Vite is only told about the second entry when
+    // it exists: naming a missing input fails the build.
+    const worldEntry = join(cwd, WORLD_ENTRY_HTML);
+    const hasWorldUi = existsSync(worldEntry);
+    spinner.start(hasWorldUi ? 'Building UI (table and world)...' : 'Building UI...');
     await viteBuild({
       root: cwd,
       base: './',
@@ -152,10 +201,20 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
         outDir: join(outDir, 'ui'),
         copyPublicDir: false,
         emptyOutDir: true,
+        ...(hasWorldUi
+          ? {
+              rollupOptions: {
+                input: {
+                  index: join(cwd, 'index.html'),
+                  world: worldEntry,
+                },
+              },
+            }
+          : {}),
       },
       logLevel: 'warn',
     });
-    spinner.succeed('UI built');
+    spinner.succeed(hasWorldUi ? 'UI built (table and world)' : 'UI built');
 
     // Copy public/ assets once to dist root (not into each sub-build)
     const publicDir = join(cwd, 'public');
@@ -189,10 +248,15 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
       }
     }
 
-    const manifest = deriveManifest(config, gameDefinition, {
-      protocol: BUNDLE_PROTOCOL_VERSION,
-      revision: ENGINE_REVISION,
-    });
+    const manifest = deriveManifest(
+      config,
+      gameDefinition,
+      {
+        protocol: BUNDLE_PROTOCOL_VERSION,
+        revision: ENGINE_REVISION,
+      },
+      { worldUi: hasWorldUi },
+    );
 
     mkdirSync(join(cwd, outDir), { recursive: true });
     writeFileSync(
@@ -206,6 +270,10 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     console.log(chalk.dim(`  Output: ${outDir}/`));
     console.log(chalk.dim(`    rules/  - Game logic bundle`));
     console.log(chalk.dim(`    ui/     - User interface bundle`));
+    if (hasWorldUi) {
+      console.log(chalk.dim(`      index.html - the table surface (GameShell)`));
+      console.log(chalk.dim(`      world.html - the resident-world surface (WorldShell)`));
+    }
     console.log(chalk.dim(`    manifest.json - Game metadata\n`));
 
     console.log(chalk.cyan('Next steps:'));

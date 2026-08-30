@@ -26,7 +26,7 @@ describe('deriveManifest', () => {
     const config = { name: 'fixture', displayName: 'Fixture Game' };
     const gameDefinition = makeGameDefinition(2, 4);
 
-    const manifest = deriveManifest(config, gameDefinition, { protocol: 1, revision: 7 });
+    const manifest = deriveManifest(config, gameDefinition, { protocol: 1, revision: 7 }, { worldUi: false });
 
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
   });
@@ -47,9 +47,11 @@ describe('deriveManifest', () => {
       roundDeadline: { defaultHours: 24, minHours: 6, maxHours: 72, mindingSafe: true },
     };
 
-    const manifest = deriveManifest(config, makeGameDefinition(2, 4), { protocol: 1, revision: 7 });
+    const manifest = deriveManifest(config, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
 
-    expect(manifest.world).toEqual(config.world);
+    // `world.ui` is the one key inside the block the BUILD owns rather than the
+    // author (ShufflewickPub #128); everything else the author wrote survives.
+    expect(manifest.world).toEqual({ ...config.world, ui: false });
     expect(manifest.persistence).toBe(true);
     expect(manifest.bot).toBe(true);
     expect(manifest.joinInProgress).toBe(true);
@@ -66,7 +68,7 @@ describe('deriveManifest', () => {
     const config = { name: 'fixture', playerCount: { min: 9, max: 9 } };
     const gameDefinition = makeGameDefinition(2, 4);
 
-    const manifest = deriveManifest(config, gameDefinition, { protocol: 1, revision: 7 });
+    const manifest = deriveManifest(config, gameDefinition, { protocol: 1, revision: 7 }, { worldUi: false });
 
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
     expect(manifest.playerCount).not.toEqual({ min: 9, max: 9 });
@@ -81,7 +83,7 @@ describe('deriveManifest', () => {
     };
     const gameDefinition = makeGameDefinition(1, 8);
 
-    const manifest = deriveManifest(config, gameDefinition, { protocol: 3, revision: 7 });
+    const manifest = deriveManifest(config, gameDefinition, { protocol: 3, revision: 7 }, { worldUi: false });
 
     expect(manifest.name).toBe('fixture');
     expect(manifest.displayName).toBe('Fixture Game');
@@ -100,7 +102,7 @@ describe('deriveManifest', () => {
     // platform's skew check — so the derived values must overwrite, not merge.
     const config = { name: 'fixture', engineProtocol: 99, engineRevision: 99 };
 
-    const manifest = deriveManifest(config, makeGameDefinition(2, 2), { protocol: 1, revision: 7 });
+    const manifest = deriveManifest(config, makeGameDefinition(2, 2), { protocol: 1, revision: 7 }, { worldUi: false });
 
     expect(manifest.engineProtocol).toBe(1);
     expect(manifest.engineRevision).toBe(7);
@@ -110,7 +112,7 @@ describe('deriveManifest', () => {
     const config = { name: 'fixture' };
     const gameDefinition = makeGameDefinition(2, 2);
 
-    const manifest = deriveManifest(config, gameDefinition, { protocol: 1, revision: 7 });
+    const manifest = deriveManifest(config, gameDefinition, { protocol: 1, revision: 7 }, { worldUi: false });
 
     expect(manifest.version).toBe('1.0.0');
   });
@@ -124,7 +126,7 @@ describe('deriveManifest', () => {
       cooperative: false,
     };
 
-    const manifest = deriveManifest(config, makeGameDefinition(2, 4), { protocol: 1, revision: 7 });
+    const manifest = deriveManifest(config, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
 
     expect(manifest.audience).toBe('casual');
     expect(manifest.tags).toEqual(['abstract', 'classic']);
@@ -159,5 +161,46 @@ describe('build temp-dir scoping (WR-02)', () => {
   it('only rmSyncs the scoped tempDir, never the shared .boardsmith parent', () => {
     const rmTargets = [...src.matchAll(/rmSync\(([^,)]+)/g)].map((m) => m[1].trim());
     expect(rmTargets).toEqual(['tempDir']);
+  });
+});
+
+/**
+ * WHETHER THIS BUNDLE SHIPS A WORLD UI (ShufflewickPub #128).
+ *
+ * DERIVED FROM THE BUILD, NEVER AUTHORED. A host that had to guess -- probe
+ * for `world.html` and treat a 404 as "no UI" -- could not tell a bundle that
+ * ships none from a bundle whose UI failed to deploy, and would answer both
+ * with the same generic surface. The manifest says which, so the host can show
+ * the generic surface deliberately in the first case and complain in the
+ * second.
+ */
+describe('deriveManifest — the world UI flag', () => {
+  const worldConfig = { name: 'fixture', displayName: 'Fixture', world: { maxPlayers: 40 } };
+
+  it('records a world UI when the build produced one', () => {
+    const manifest = deriveManifest(worldConfig, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: true });
+    expect(manifest.world).toEqual({ maxPlayers: 40, ui: true });
+  });
+
+  it('records its absence rather than leaving it unsaid', () => {
+    const manifest = deriveManifest(worldConfig, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
+    expect(manifest.world).toEqual({ maxPlayers: 40, ui: false });
+  });
+
+  it('overwrites a hand-written flag, because the build is the only thing that knows', () => {
+    const config = { ...worldConfig, world: { maxPlayers: 40, ui: true } };
+    const manifest = deriveManifest(config, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
+    expect(manifest.world).toEqual({ maxPlayers: 40, ui: false });
+  });
+
+  it('leaves a game that is not a world alone', () => {
+    const manifest = deriveManifest({ name: 'fixture' }, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
+    expect(manifest.world).toBeUndefined();
+  });
+
+  it('refuses a world UI in a bundle that declares no world, rather than shipping dead bytes', () => {
+    expect(() =>
+      deriveManifest({ name: 'fixture' }, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: true }),
+    ).toThrow(/world\.html/);
   });
 });

@@ -399,3 +399,24 @@ export {
 
 // Re-export animation event types from engine for convenience
 export type { AnimationEvent } from '../engine/index.js';
+
+// A RESIDENT WORLD'S OWN SURFACE (ShufflewickPub #128).
+//
+// `WorldShell` is `GameShell`'s twin, not a mode of it: a world has no turn, no
+// flow position and no action table, so a table shell can only render one by
+// being told things that are not true. A bundle that can be hosted as a world
+// mounts this from a second entry point (`world.html`); `src/ui/world/
+// worldProtocol.ts` carries the whole reasoning and the wire format.
+export { default as WorldShell } from './world/WorldShell.vue';
+export { useWorld, WORLD_CONTEXT_KEY, type WorldContext } from './world/useWorld.js';
+export { useWorldHost, type WorldHost, type WorldHostOptions } from './world/useWorldHost.js';
+export {
+  WORLD_HOST_SOURCE,
+  WORLD_UI_SOURCE,
+  type WorldActionOutcome,
+  type WorldCommandArgument,
+  type WorldCommandChoice,
+  type WorldCommandOffer,
+  type WorldPhase,
+  type WorldHostMessage,
+} from './world/worldProtocol.js';
