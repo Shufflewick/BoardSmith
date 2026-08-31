@@ -1237,25 +1237,70 @@ export class Game<
     }
     if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Set<number>();
     this._ctx._partitionRoots.add(id);
+    this._baselinePartition(id);
   }
 
   /**
-   * The partition roots whose subtree has been physically re-parented since
-   * the last {@link clearTouchedPartitions}.
+   * The partition roots CHANGED since the last {@link clearTouchedPartitions},
+   * by either of the two ways a partition can change:
    *
-   * BOTH endpoints of every move are in here, source and destination, because
-   * a cross-partition move dirties a destination the command's reads never
-   * hydrated. Combine it with the partitions the platform hydrated to get the
-   * checkpoint's dirty set.
+   * - **A move.** `moveToInternal` marks BOTH endpoints, source and
+   *   destination, because a cross-partition move dirties a destination the
+   *   command's reads never hydrated. The move record is also the only carrier
+   *   for a re-parented partition ROOT: a whole partition that changes parent
+   *   keeps its own serialized bytes identical (a subtree does not serialize
+   *   its parent), so the comparison below cannot see it.
+   * - **An attribute change**, detected by comparing each resident partition's
+   *   serialized form against the baseline captured at
+   *   `definePartition`/`adoptSubtree`/`clearTouchedPartitions`. There is no
+   *   write chokepoint to instrument instead: an attribute is a bare instance
+   *   property, and its value can be mutated deeper still
+   *   (`token.tags.push(...)`) with no assignment to the element at all. The
+   *   serialized form is the one thing every persistable change must alter --
+   *   a change it cannot see is a change no checkpoint could have carried.
+   *
+   * Combine it with the partitions the platform hydrated to get the
+   * checkpoint's dirty set. Reading this serializes every resident partition
+   * once, so read it at a checkpoint boundary, not in a loop.
    */
   get touchedPartitions(): ReadonlySet<number> {
-    if (!this._ctx._touchedPartitions) this._ctx._touchedPartitions = new Set<number>();
-    return this._ctx._touchedPartitions;
+    const touched = new Set(this._ctx._touchedPartitions);
+    const baselines = this._ctx._partitionBaselines;
+    if (baselines) {
+      for (const [id, baseline] of baselines) {
+        if (!touched.has(id) && this._partitionFingerprint(id) !== baseline) touched.add(id);
+      }
+    }
+    return touched;
   }
 
-  /** Forget every move-touch. Called by the platform after a checkpoint. */
+  /**
+   * Forget every touch and re-baseline every resident partition. Called by the
+   * platform after a checkpoint, so what {@link touchedPartitions} reports next
+   * belongs to the commands after this moment.
+   */
   clearTouchedPartitions(): void {
     this._ctx._touchedPartitions = new Set<number>();
+    const baselines = new Map<number, string>();
+    for (const id of this._ctx._partitionRoots ?? []) {
+      const fingerprint = this._partitionFingerprint(id);
+      if (fingerprint !== undefined) baselines.set(id, fingerprint);
+    }
+    this._ctx._partitionBaselines = baselines;
+  }
+
+  /** One resident partition's serialized form, or undefined when not resident. */
+  private _partitionFingerprint(id: number): string | undefined {
+    const root = this.getElementById(id);
+    if (!root) return undefined;
+    return JSON.stringify(root.toJSON());
+  }
+
+  /** Capture one partition's baseline at the moment it becomes (or is declared) resident. */
+  private _baselinePartition(id: number): void {
+    if (!this._ctx._partitionBaselines) this._ctx._partitionBaselines = new Map<number, string>();
+    const fingerprint = this._partitionFingerprint(id);
+    if (fingerprint !== undefined) this._ctx._partitionBaselines.set(id, fingerprint);
   }
 
   /**
@@ -1337,6 +1382,10 @@ export class Game<
 
     if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Set<number>();
     this._ctx._partitionRoots.add(element._t.id);
+    // Baselined from the GRAFTED tree, not from the incoming bytes: the two
+    // can differ in key order, and a baseline that disagreed with the live
+    // serialization would report a fresh adoption dirty before anything wrote.
+    this._baselinePartition(element._t.id);
 
     return element;
   }
@@ -1379,11 +1428,21 @@ export class Game<
       );
     }
 
+    // A content change not yet checkpointed must not leave with the subtree:
+    // promote it into the kept touch-marks before the baseline is dropped,
+    // exactly as a move-touch is kept (see the docblock above).
+    const baseline = this._ctx._partitionBaselines?.get(id);
+    if (baseline !== undefined && this._partitionFingerprint(id) !== baseline) {
+      if (!this._ctx._touchedPartitions) this._ctx._touchedPartitions = new Set<number>();
+      this._ctx._touchedPartitions.add(id);
+    }
+
     const index = parent._t.children.indexOf(element);
     parent._t.children.splice(index, 1);
     element._t.parent = undefined;
 
     this._ctx._partitionRoots?.delete(id);
+    this._ctx._partitionBaselines?.delete(id);
   }
 
   /**

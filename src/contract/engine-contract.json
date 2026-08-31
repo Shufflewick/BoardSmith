@@ -1,7 +1,7 @@
 {
-  "revision": 28,
+  "revision": 29,
   "bundleProtocol": 1,
-  "surfaceHash": "06dcb0a6b6a5fdcb",
+  "surfaceHash": "b5c60e0e62fa5544",
   "payloadHash": "378262a5b0efe0f4",
   "history": [
     {
@@ -227,6 +227,14 @@
       "surfaceHash": "06dcb0a6b6a5fdcb",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "The session-kind vocabulary is match | world, and a refusal that names no error is a refusal (ShufflewickPub #47 and #90). BREAKING, by deletion: the two round-era kinds are gone, and so is everything that existed only for them -- seatsHumans; the store's order routing, roster and enrol; ResolutionInputs / drainResolutionInputs / RESOLUTION_SEAT and the two reserved resolve-action argument keys; MultiplayerHost.resolveRound; and the --kind / --resolve-action dev flags, which after the deletion selected no behaviour at all. store.commit and store.readForSession no longer take a kind, because neither reads one any more. The sealed-key rule for world is allow:'seated', the same as a match: the resolver's write-any-player's-key bypass was a consequence of SEATLESSNESS, not of authority, and a resident world is seated at every write, so there is nothing for a bypass to rescue. Separately, acceptExecuteResult now REFUSES a { success: false } carrying no error (an empty string counts as none) instead of inverting it into a success -- a game that refused a move without saying why used to have the refusal silently become an accepted move."
+    },
+    {
+      "revision": 29,
+      "date": "2026-08-31",
+      "bundleProtocol": 1,
+      "surfaceHash": "b5c60e0e62fa5544",
+      "payloadHash": "378262a5b0efe0f4",
+      "summary": "The dev host's persistPrivate strip now refuses a divergent per-player secret with the same actionable error production's executor throws (previously it silently committed the first defined value), and in world mode Game#touchedPartitions now reports attribute-level changes to resident partitions -- detected by comparing each partition's serialized form against a baseline captured at definePartition/adoptSubtree/clearTouchedPartitions -- so a write reached through an element.game or element.parent walk into an undeclared partition is checkpointed instead of silently reverting on eviction; clearTouchedPartitions re-baselines, and evictSubtree preserves a not-yet-checkpointed content change as a kept touch-mark."
     }
   ]
 }
