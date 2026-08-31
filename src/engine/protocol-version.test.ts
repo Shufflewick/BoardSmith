@@ -52,7 +52,8 @@ describe('the pair the build stamps', () => {
     const manifest = deriveManifest(
       { name: 'test-game' },
       { minPlayers: 2, maxPlayers: 4 },
-      { protocol: BUNDLE_PROTOCOL_VERSION, revision: ENGINE_REVISION }
+      { protocol: BUNDLE_PROTOCOL_VERSION, revision: ENGINE_REVISION },
+      { worldUi: false }
     );
     expect(manifest.engineProtocol).toBe(BUNDLE_PROTOCOL_VERSION);
     expect(manifest.engineRevision).toBe(ENGINE_REVISION);
