@@ -86,6 +86,29 @@ export interface PrivateChannelCarrier {
 }
 
 /**
+ * Structural equality over the JSON-serializable values `toJSONForPlayer`
+ * emits. Written out rather than `JSON.stringify` comparison because two views
+ * built by different code paths may order one object's keys differently while
+ * carrying the same value -- and a false "divergent" here refuses an op that
+ * lost nothing.
+ */
+function jsonValueEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, i) => jsonValueEqual(item, b[i]));
+  }
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    return (
+      aKeys.length === bKeys.length &&
+      aKeys.every((key) => key in b && jsonValueEqual(a[key], b[key]))
+    );
+  }
+  return false;
+}
+
+/**
  * Lift the private commit off every outgoing view and re-emit it as a
  * top-level field.
  *
@@ -94,24 +117,52 @@ export interface PrivateChannelCarrier {
  * reserved platform-wide, and a strip that depended on a manifest flag would
  * leak for exactly the game that got the flag wrong.
  *
- * The spectator view is preferred as the source because it is the one view
- * guaranteed to exist on every state-mutating op; the player views are read as
- * a fallback so an op that produced only per-seat views still strips (and
- * still commits). Returns the result UNCHANGED when the attribute is absent.
+ * ## ONE value per op, refused loudly when the views disagree
+ *
+ * The channel is single-valued: whatever is lifted here becomes the whole of
+ * this op's private commit. A game whose `playerView` filtering projects the
+ * attribute DIFFERENTLY per seat has therefore written something no single
+ * commit can carry -- committing any one projection silently discards every
+ * other seat's, and the loss is undetectable until those players wake to
+ * nothing next session. So every view that carries the attribute must carry
+ * the SAME value; a defined-but-different pair is refused with the message
+ * below. The production host refuses this identically (ShufflewickPub's
+ * `executor/src/persist-private.ts`); a dev host that picked one value would
+ * hide in development exactly the bug production surfaces. A view the game
+ * HID the attribute from entirely is fine: committing the value the remaining
+ * views agree on discards nothing.
+ *
+ * Returns the result UNCHANGED when the attribute is absent everywhere.
  */
 export function takePrivateCommit<T extends PrivateChannelCarrier>(result: T): T {
   const spectator = stripReserved(result.spectatorView);
-  const players = result.playerViews?.map(stripReserved);
-  const value =
-    spectator.value !== undefined
-      ? spectator.value
-      : players?.find((p) => p.value !== undefined)?.value;
-  if (value === undefined) return result;
+  const players = result.playerViews?.map(stripReserved) ?? [];
+
+  const carried = [
+    { label: 'the spectator view', value: spectator.value },
+    ...players.map((p, i) => ({ label: `player ${i + 1}'s view`, value: p.value })),
+  ].filter((source) => source.value !== undefined);
+  if (carried.length === 0) return result;
+
+  const first = carried[0]!;
+  const divergent = carried.find((source) => !jsonValueEqual(source.value, first.value));
+  if (divergent) {
+    throw new Error(
+      `The reserved '${PERSIST_PRIVATE_KEY}' attribute is not identical across this op's ` +
+        `outgoing views: ${first.label} and ${divergent.label} carry different values. The ` +
+        `private channel commits ONE value per op, so committing either would silently ` +
+        `discard the other seat's data. Emit the same '${PERSIST_PRIVATE_KEY}' value in ` +
+        `every view (exempt it from your playerView filtering — the platform strips it ` +
+        `off every view before anything is broadcast, so per-view differences protect ` +
+        `nothing); per-player secrecy belongs in the commit's own entries, sealed with a ` +
+        `'player:<userId>/' key.`,
+    );
+  }
 
   return {
     ...result,
     ...(result.spectatorView !== undefined ? { spectatorView: spectator.view } : {}),
-    ...(players ? { playerViews: players.map((p) => p.view) } : {}),
-    persistPrivate: value,
+    ...(result.playerViews ? { playerViews: players.map((p) => p.view) } : {}),
+    persistPrivate: first.value,
   };
 }

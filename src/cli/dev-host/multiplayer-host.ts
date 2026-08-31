@@ -248,10 +248,10 @@ function devPlayerToken(seat: number): string {
  * `category: 'executor'` because the refusal came from the platform's rules,
  * not from the game's own.
  */
-function refusedCommit(reason: string): OpResult {
+function refusedOp(error: string): OpResult {
   return {
     success: false,
-    error: `This game cannot finish because the record it tried to store was refused: ${reason}.`,
+    error,
     category: 'executor',
     snapshot: null,
     pendingState: null,
@@ -260,6 +260,33 @@ function refusedCommit(reason: string): OpResult {
     isComplete: false,
     winners: [],
   };
+}
+
+function refusedCommit(reason: string): OpResult {
+  return refusedOp(
+    `This game cannot finish because the record it tried to store was refused: ${reason}.`,
+  );
+}
+
+/**
+ * The STRIP half of the private channel, fail-closed.
+ *
+ * `persistPrivate` is not an `OpResult` field: the executor re-emits it as a
+ * top-level one on the way out, and the session layer's type has no reason to
+ * know about a channel it never reads. The carrier type is what names it.
+ *
+ * The strip THROWS on a divergent per-player secret (the views disagree about
+ * the value, so no single commit can carry it). Production's runner surfaces
+ * that throw as a failed op; the same fail-closed answer is returned here, so
+ * nothing is applied, broadcast or persisted and the acting player reads the
+ * same refusal they would read in production.
+ */
+function stripPrivateChannel(result: OpResult): OpResult & PrivateChannelCarrier {
+  try {
+    return takePrivateCommit(result as OpResult & PrivateChannelCarrier);
+  } catch (error) {
+    return refusedOp(error instanceof Error ? error.message : String(error));
+  }
 }
 
 export class MultiplayerHost {
@@ -891,10 +918,7 @@ export class MultiplayerHost {
    *             move be refused in production.
    */
   private applyPersistenceChannels(result: OpResult): OpResult {
-    // `persistPrivate` is not an `OpResult` field: the executor re-emits it as a
-    // top-level one on the way out, and the session layer's type has no reason
-    // to know about a channel it never reads. The carrier type is what names it.
-    const stripped = takePrivateCommit(result as OpResult & PrivateChannelCarrier);
+    const stripped = stripPrivateChannel(result);
     const persistence = this.opts.persistence;
     if (!persistence || !stripped.success || !stripped.isComplete) return stripped;
 
