@@ -9,7 +9,7 @@
  * `PlayerGameState` -- `isMyTurn`, `availableActions`, `actionMetadata`, a flow
  * boundary key stamped on every outbound op. A world has none of those and must
  * not invent them: its verbs are COMMANDS declared by the bundle's `world`
- * block, its projection is `{player, state, messages, phase}` computed from the
+ * block, its projection is `{player, state, phase}` computed from the
  * partitions a seat can see, and it runs no flow at all. Feeding a world's view
  * into `GameShell` would mean fabricating a turn, a flow position and an action
  * table -- a lie the auto-UI would then render as buttons the world refuses.
