@@ -42,6 +42,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import type { WorldHostMessage, WorldUiMessage } from '../ui/world/worldProtocol.js';
 
 /**
  * The entrypoints the platform can reach, and why each one counts.
@@ -49,6 +50,14 @@ import { createHash } from 'node:crypto';
  * Anything NOT in this list is invisible to the contract by design — the UI
  * package, the CLI, and the trainer ship inside a game's own bundle or run on
  * a developer's machine, so they cannot cause platform/game engine skew.
+ *
+ * ONE EXCEPTION, covered by `payloadHash` rather than here: the world wire
+ * (`src/ui/world/worldProtocol.ts`). Its bundle half compiles into every
+ * `world.html`, but its HOST half is hand-written in ShufflewickPub
+ * (`app/components/WorldFrame.vue`) — so a wire change out of step with the
+ * platform is exactly the skew this contract exists to catch, and it is all
+ * types, which `surfaceHash` cannot see. `WORLD_WIRE_FIXTURE` below makes it
+ * visible.
  */
 export const PLATFORM_ENTRYPOINTS = [
   // Supplied to game rules at runtime by the executor's `sandboxedRequire`.
@@ -67,6 +76,71 @@ export const PLATFORM_ENTRYPOINTS = [
     module: () => import('../persistence/index.js'),
   },
 ] as const;
+
+/**
+ * The world wire, one canonical message per shape, both directions.
+ *
+ * `satisfies` is the mechanism: each literal is checked against the protocol
+ * type, so ADDING a required field to any message refuses to compile until the
+ * fixture carries it — and the moment it does, `payloadHash` moves and
+ * `boardsmith contract --update` is demanded. An optional field is the known
+ * limit stated at the top of this file: extend this fixture by hand when you
+ * add one.
+ *
+ * The values are arbitrary but fixed; only their shape and their canonical
+ * serialization matter.
+ */
+const WORLD_WIRE_FIXTURE = {
+  world_state: {
+    source: 'shufflewick-world',
+    type: 'world_state',
+    phase: 'watching',
+    view: { player: 2, state: { id: 0, className: 'Game' }, phase: 'started' },
+    seat: 2,
+    commands: [
+      {
+        name: 'move',
+        prompt: 'Walk somewhere',
+        args: [
+          {
+            name: 'to',
+            prompt: 'Which way?',
+            kind: 'choice',
+            choices: [{ value: 'cellar', label: 'The cellar' }],
+          },
+          { name: 'paces', prompt: 'How far?', kind: 'number', min: 1, max: 9, integer: true },
+          { name: 'note', prompt: 'Say why', kind: 'text' },
+        ],
+      },
+    ],
+    notice: 'The fire is low.',
+    worldName: 'Contract Fixture World',
+    presence: [2, 5],
+  },
+  world_response: {
+    source: 'shufflewick-world',
+    type: 'world_response',
+    requestId: 'wc-1',
+    ok: false,
+    message: 'There is no door that way.',
+  },
+  world_command: {
+    source: 'shufflewick-world-ui',
+    type: 'world_command',
+    requestId: 'wc-1',
+    command: 'move',
+    args: { to: 'cellar' },
+  },
+  world_ready: {
+    source: 'shufflewick-world-ui',
+    type: 'world_ready',
+  },
+} satisfies {
+  world_state: Extract<WorldHostMessage, { type: 'world_state' }>;
+  world_response: Extract<WorldHostMessage, { type: 'world_response' }>;
+  world_command: Extract<WorldUiMessage, { type: 'world_command' }>;
+  world_ready: Extract<WorldUiMessage, { type: 'world_ready' }>;
+};
 
 /**
  * Deterministically serialize a value with object keys sorted.
@@ -442,11 +516,12 @@ export async function computePayloadHash(): Promise<string> {
   const flowPosition = game.getFlowState()?.position;
   assertCoversElementBindings(flowPosition);
 
-  // Both halves are hashed together: the per-player payload the platform ships,
-  // and the serialized flow position the platform STORES and restores. The
-  // second is not reachable from the first (createPlayerView omits `position`),
-  // so a flow-serialization regression was previously invisible here.
-  return sha256(canonicalize({ views, flowPosition }));
+  // Three parts hashed together: the per-player payload the platform ships,
+  // the serialized flow position the platform STORES and restores (not
+  // reachable from the views — createPlayerView omits `position` — so a
+  // flow-serialization regression was previously invisible here), and the
+  // world wire the platform's host page speaks to a bundle's world UI.
+  return sha256(canonicalize({ views, flowPosition, worldWire: WORLD_WIRE_FIXTURE }));
 }
 
 export interface ComputedFingerprints {

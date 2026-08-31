@@ -1,8 +1,8 @@
 {
-  "revision": 29,
+  "revision": 30,
   "bundleProtocol": 1,
   "surfaceHash": "b5c60e0e62fa5544",
-  "payloadHash": "378262a5b0efe0f4",
+  "payloadHash": "32f56b0af8269931",
   "history": [
     {
       "revision": 1,
@@ -235,6 +235,14 @@
       "surfaceHash": "b5c60e0e62fa5544",
       "payloadHash": "378262a5b0efe0f4",
       "summary": "The dev host's persistPrivate strip now refuses a divergent per-player secret with the same actionable error production's executor throws (previously it silently committed the first defined value), and in world mode Game#touchedPartitions now reports attribute-level changes to resident partitions -- detected by comparing each partition's serialized form against a baseline captured at definePartition/adoptSubtree/clearTouchedPartitions -- so a write reached through an element.game or element.parent walk into an undeclared partition is checkpointed instead of silently reverting on eviction; clearTouchedPartitions re-baselines, and evictSubtree preserves a not-yet-checkpointed content change as a kept touch-mark."
+    },
+    {
+      "revision": 30,
+      "date": "2026-08-31",
+      "bundleProtocol": 1,
+      "surfaceHash": "b5c60e0e62fa5544",
+      "payloadHash": "32f56b0af8269931",
+      "summary": "The world wire's world_state message now carries presence: number[] | null -- the platform-composed live present-seat set, per seat, derived and never stored, empty after a park, null when the host page has no live claim (left vs reconnecting not distinguished) -- and WorldShell/useWorldHost hand it to a bundle's world UI as the presence prop and useWorld().presence. Host pages must include the field when composing world_state; the whole wire is now part of payloadHash."
     }
   ]
 }

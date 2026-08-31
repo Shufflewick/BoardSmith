@@ -14,7 +14,7 @@ import type { WorldHost } from './useWorldHost.js';
  */
 export type WorldContext = Pick<
   WorldHost,
-  'phase' | 'view' | 'seat' | 'commands' | 'notice' | 'worldName' | 'acting' | 'act'
+  'phase' | 'view' | 'seat' | 'commands' | 'notice' | 'worldName' | 'presence' | 'acting' | 'act'
 >;
 
 export const WORLD_CONTEXT_KEY: InjectionKey<WorldContext> = Symbol('boardsmith-world');

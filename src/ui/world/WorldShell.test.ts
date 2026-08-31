@@ -23,12 +23,14 @@ const Rooms = defineComponent({
     commands: { type: Array, required: true },
     acting: { type: Boolean, required: true },
     worldName: { type: null, required: true },
+    presence: { type: null, required: true },
   },
   emits: ['act'],
   setup(props, { emit }) {
     return () =>
       h('div', { class: 'rooms' }, [
         h('p', { class: 'seat' }, String(props.seat)),
+        h('p', { class: 'awake' }, ((props.presence as number[] | null) ?? []).join(',')),
         h('p', { class: 'title' }, String(props.worldName)),
         h('p', { class: 'verbs' }, props.commands.map((c: any) => c.name).join(',')),
         h('p', { class: 'said' }, String((props.view as any)?.said ?? '')),
@@ -47,6 +49,7 @@ function stateFrame(over: Record<string, unknown> = {}) {
     commands: [{ name: 'look', args: [] }, { name: 'move', args: [] }],
     notice: null,
     worldName: 'Gloamhall Rooms',
+    presence: [2, 4],
     ...over,
   };
 }
@@ -78,6 +81,24 @@ describe('WorldShell', () => {
     expect(wrapper.find('.title').text()).toBe('Gloamhall Rooms');
     expect(wrapper.find('.verbs').text()).toBe('look,move');
     expect(wrapper.find('.said').text()).toBe('the fire is low');
+    expect(wrapper.find('.awake').text()).toBe('2,4');
+    wrapper.unmount();
+  });
+
+  it('hands presence to a nested component through useWorld()', async () => {
+    const Nested = defineComponent({
+      setup() {
+        const world = useWorld();
+        return () => h('span', { class: 'nested-awake' }, (world.presence.value ?? []).join(','));
+      },
+    });
+    const Outer = defineComponent({
+      setup: () => () => h('div', [h(Nested)]),
+    });
+    const wrapper = mount(WorldShell, { props: { ui: Outer, displayName: 'Gloamhall' } });
+    tell(wrapper, stateFrame());
+    await nextTick();
+    expect(wrapper.find('.nested-awake').text()).toBe('2,4');
     wrapper.unmount();
   });
 

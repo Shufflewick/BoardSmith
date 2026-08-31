@@ -45,6 +45,7 @@
         :commands="host.commands.value"
         :acting="host.acting.value"
         :world-name="host.worldName.value"
+        :presence="host.presence.value"
         @act="onAct"
       />
     </template>
@@ -72,8 +73,8 @@ import { WORLD_CONTEXT_KEY } from './useWorld.js';
  * they are in, which is the `ui` component and the whole point of the ticket.
  */
 const props = defineProps<{
-  /** The game's own world UI. Handed `view`, `seat`, `commands`, `acting` and
-   *  `worldName`, and expected to emit `act(command, args)`. */
+  /** The game's own world UI. Handed `view`, `seat`, `commands`, `acting`,
+   *  `worldName` and `presence`, and expected to emit `act(command, args)`. */
   ui: Component;
   /** What to call this game before the host has said what this world is called. */
   displayName: string;
@@ -94,6 +95,7 @@ provide(WORLD_CONTEXT_KEY, {
   commands: host.commands,
   notice: host.notice,
   worldName: host.worldName,
+  presence: host.presence,
   acting: host.acting,
   act: host.act,
 });

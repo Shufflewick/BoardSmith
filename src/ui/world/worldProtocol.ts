@@ -101,6 +101,20 @@ interface WorldStateMessage {
   readonly notice: string | null;
   /** What the world's name is, for a UI that wants to say it. */
   readonly worldName: string | null;
+  /**
+   * The seats holding at least one open connection to this world right now,
+   * platform-composed, or `null` when the host has no live claim to make
+   * (before its socket has said anything, and from the moment it closes).
+   *
+   * The promise is exactly the platform's own (ShufflewickPub #144/#174), no
+   * more: per seat, so a second tab changes nothing; derived from the open
+   * sockets at each use and never stored, so a parked world reports an empty
+   * set rather than a stale one; and a seat that left is indistinguishable
+   * from one that dropped and is reconnecting. `null` is not `[]`: an empty
+   * array says "nobody is here" and a UI must not say that on a dead socket,
+   * where the truth is "this page no longer knows".
+   */
+  readonly presence: readonly number[] | null;
 }
 
 /** The host's answer to one command this UI sent. */
