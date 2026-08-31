@@ -30,6 +30,10 @@ export interface WorldHost {
   commands: Ref<readonly WorldCommandOffer[]>;
   notice: Ref<string | null>;
   worldName: Ref<string | null>;
+  /** Who holds an open connection right now, or `null` when the host has no
+   *  live claim. The contract, in full, is on `world_state` in
+   *  `worldProtocol.ts`; this is that field, copied and nothing more. */
+  presence: Ref<readonly number[] | null>;
   /** True once the host has sent one frame this UI understood. */
   heardFromHost: Ref<boolean>;
   /** True when the hello window passed with nothing from the host at all. */
@@ -87,6 +91,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   const commands = ref<readonly WorldCommandOffer[]>([]);
   const notice = ref<string | null>(null);
   const worldName = ref<string | null>(null);
+  const presence = ref<readonly number[] | null>(null);
   const heardFromHost = ref(false);
   const hostSilent = ref(false);
   const acting = ref(false);
@@ -132,6 +137,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     commands.value = data.commands ?? [];
     notice.value = data.notice;
     worldName.value = data.worldName;
+    presence.value = data.presence;
   }
 
   async function act(
@@ -202,6 +208,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     commands,
     notice,
     worldName,
+    presence,
     heardFromHost,
     hostSilent,
     acting,

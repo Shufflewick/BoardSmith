@@ -27,6 +27,7 @@ function stateFrame(over: Partial<WorldStateMessage> = {}): WorldStateMessage {
     commands: [{ name: 'look', prompt: 'Look around', args: [] }],
     notice: null,
     worldName: 'Gloamhall Rooms',
+    presence: [3, 5],
     ...over,
   };
 }
@@ -59,6 +60,7 @@ describe('useWorldHost', () => {
     expect(host.view.value).toBeNull();
     expect(host.seat.value).toBeNull();
     expect(host.commands.value).toEqual([]);
+    expect(host.presence.value).toBeNull();
     expect(host.heardFromHost.value).toBe(false);
   });
 
@@ -76,7 +78,20 @@ describe('useWorldHost', () => {
     expect(host.seat.value).toBe(3);
     expect(host.commands.value).toHaveLength(1);
     expect(host.worldName.value).toBe('Gloamhall Rooms');
+    expect(host.presence.value).toEqual([3, 5]);
     expect(host.heardFromHost.value).toBe(true);
+  });
+
+  it('lets the host withdraw the presence claim, because "online now" has no last-known value', () => {
+    // The platform nulls its own presence ref the moment the socket closes: a
+    // kept view is a true picture of a world that existed, but a kept
+    // who-is-online list is an active lie. The wire carries that null through
+    // rather than flattening it into "nobody is here", which would be a claim.
+    const host = make();
+    deliver(host, stateFrame());
+    expect(host.presence.value).toEqual([3, 5]);
+    deliver(host, stateFrame({ phase: 'lost', presence: null }));
+    expect(host.presence.value).toBeNull();
   });
 
   it('drops a frame from an origin the host never named', () => {
