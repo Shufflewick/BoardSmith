@@ -89,12 +89,22 @@ export type ElementContext = {
   _partitionRoots?: Set<number>;
   /**
    * Internal: partition roots whose subtree has been physically re-parented
-   * since the last `Game#clearTouchedPartitions()`. This is the half of the
+   * since the last `Game#clearTouchedPartitions()`, plus marks preserved for
+   * partitions that were content-dirty at eviction time. This is part of the
    * platform's dirty set the platform cannot compute for itself, because it
    * never sees a move. Not public API — read it through
    * `Game#touchedPartitions`.
    */
   _touchedPartitions?: Set<number>;
+  /**
+   * Internal: each resident partition root's serialized form, captured at
+   * `definePartition`/`adoptSubtree` and re-captured by
+   * `Game#clearTouchedPartitions()`. `Game#touchedPartitions` compares the
+   * live serialization against this to report ATTRIBUTE changes — writes that
+   * never re-parent anything and so never pass through `moveToInternal`. Not
+   * public API.
+   */
+  _partitionBaselines?: Map<number, string>;
 };
 
 /**

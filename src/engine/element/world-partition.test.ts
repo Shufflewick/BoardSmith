@@ -44,6 +44,8 @@ class Token extends Piece<WorldGame> {
   label!: string;
   /** An element reference held in an attribute: the thing branch paths break. */
   link?: Token;
+  /** A mutable container attribute: the thing a write-site interceptor misses. */
+  tags?: string[];
 }
 
 /** A Space that registers its own handler in ITS OWN constructor. */
@@ -82,6 +84,17 @@ function buildWorld(game: WorldGame) {
   roomC.create(Token, 'c0', { label: 'c0' });
 
   return { roomA, roomB, roomC, a0, a1, b0, b1, b2 };
+}
+
+/** A world whose three rooms are declared partitions, freshly baselined. */
+function worldWithPartitions(seed: string) {
+  const game = new WorldGame({ playerCount: 2, seed, worldMode: true });
+  const built = buildWorld(game);
+  game.definePartition(built.roomA.id);
+  game.definePartition(built.roomB.id);
+  game.definePartition(built.roomC.id);
+  game.clearTouchedPartitions();
+  return { game, ...built };
 }
 
 describe('world mode: element references are id-based, not positional', () => {
@@ -293,16 +306,6 @@ describe('Game.evictSubtree', () => {
 });
 
 describe('moveToInternal partition marking', () => {
-  function worldWithPartitions(seed: string) {
-    const game = new WorldGame({ playerCount: 2, seed , worldMode: true });
-    const built = buildWorld(game);
-    game.definePartition(built.roomA.id);
-    game.definePartition(built.roomB.id);
-    game.definePartition(built.roomC.id);
-    game.clearTouchedPartitions();
-    return { game, ...built };
-  }
-
   it('marks BOTH endpoints of a cross-partition move', () => {
     const { game, roomA, roomB, b0 } = worldWithPartitions('cross-move');
 
@@ -330,6 +333,9 @@ describe('moveToInternal partition marking', () => {
   it('marks nothing for a REJECTED move', () => {
     const { game, roomA, roomB, b0 } = worldWithPartitions('rejected-move');
     roomB.sealed = true;
+    // Sealing the room is itself an attribute change and is rightly reported
+    // dirty; re-baseline so what is measured below is the rejected moves alone.
+    game.clearTouchedPartitions();
 
     expect(() => b0.putInto(roomA)).toThrow(/sealed/i);
     expect(() => b0.putInto(b0)).toThrow(/into itself/i);
@@ -379,6 +385,119 @@ describe('moveToInternal partition marking', () => {
     const { roomA, b0 } = buildWorld(game);
 
     b0.putInto(roomA);
+
+    expect(game.touchedPartitions.size).toBe(0);
+  });
+});
+
+/**
+ * ATTRIBUTE WRITES MARK THE PARTITION THEY LAND IN.
+ *
+ * The dirty set's contract is "everything a command may have changed is
+ * reported dirty". Moves were tracked (`moveToInternal` marks both endpoints)
+ * but a plain attribute write was not -- so a handler holding a legitimate
+ * element reference could walk `element.game` into a partition its command
+ * never declared, write an attribute there, and the write was shown to every
+ * client and then silently reverted on the next eviction-and-reload cycle.
+ *
+ * The engine has no attribute write chokepoint to instrument: an attribute is
+ * a bare instance property (`token.label = 'x'`), and its VALUE can be
+ * mutated deeper still (`token.tags.push('x')`) without any assignment to the
+ * element at all. So dirtiness is derived from the one thing every persistable
+ * change must alter -- the partition's serialized form -- against a baseline
+ * taken at `definePartition`/`adoptSubtree`/`clearTouchedPartitions`. Complete
+ * by construction: a change serialization cannot see is by definition a change
+ * no checkpoint could have carried.
+ */
+describe('attribute writes mark the partition they land in', () => {
+  it('marks the partition an attribute write reached through an element.game walk', () => {
+    const { game, roomA, b0, a0 } = worldWithPartitions('attr-walk');
+
+    // The #173 shape: the handler legitimately holds b0 (its declared
+    // partition), walks out through the game handle every element carries,
+    // and writes into a partition its command never declared.
+    const reached = b0.game.getElementById(a0.id)! as Token;
+    reached.label = 'rewritten';
+
+    expect([...game.touchedPartitions]).toEqual([roomA.id]);
+  });
+
+  it('marks a DEEP mutation of an attribute value, which no write-site hook could see', () => {
+    const { game, roomB, b0 } = worldWithPartitions('attr-deep');
+    game.clearTouchedPartitions();
+
+    b0.tags = b0.tags ?? [];
+    game.clearTouchedPartitions();
+    b0.tags!.push('cursed');
+
+    expect([...game.touchedPartitions]).toEqual([roomB.id]);
+  });
+
+  it('marks the partition an element was CREATED in', () => {
+    const { game, roomC } = worldWithPartitions('attr-create');
+
+    roomC.create(Token, 'c1', { label: 'c1' });
+
+    expect([...game.touchedPartitions]).toEqual([roomC.id]);
+  });
+
+  it('the written value SURVIVES an eviction-and-reload cycle when the dirty set drives the checkpoint', () => {
+    const { game, roomA, roomB, roomC, b0, a0 } = worldWithPartitions('attr-survive');
+    const rooms = new Map([
+      [roomA.id, roomA],
+      [roomB.id, roomB],
+      [roomC.id, roomC],
+    ]);
+    // The platform's steady state: every partition has a checkpoint on file.
+    const store = new Map<number, ElementJSON>();
+    for (const [id, room] of rooms) store.set(id, roundTripJson(room.toJSON() as ElementJSON));
+    game.clearTouchedPartitions();
+
+    // The undeclared write, reached through an element reference.
+    (b0.game.getElementById(a0.id)! as Token).label = 'smuggled';
+
+    // Checkpoint exactly what the engine reports dirty -- nothing else.
+    for (const id of game.touchedPartitions) {
+      store.set(id, roundTripJson(rooms.get(id)!.toJSON() as ElementJSON));
+    }
+
+    // Eviction and reload, from the store alone.
+    for (const id of rooms.keys()) game.evictSubtree(id);
+    const restoredA = game.adoptSubtree(game.id, store.get(roomA.id)!);
+
+    const restoredA0 = restoredA.all(Token).find((t) => t.name === 'a0')!;
+    expect(restoredA0.label).toBe('smuggled');
+  });
+
+  it('clearTouchedPartitions re-baselines: an already-checkpointed write is not re-reported', () => {
+    const { game, a0 } = worldWithPartitions('attr-rebaseline');
+
+    a0.label = 'once';
+    expect(game.touchedPartitions.size).toBe(1);
+
+    game.clearTouchedPartitions();
+    expect(game.touchedPartitions.size).toBe(0);
+
+    a0.label = 'twice';
+    expect(game.touchedPartitions.size).toBe(1);
+  });
+
+  it('keeps an attribute-dirty mark through eviction, like a move-touch', () => {
+    const { game, roomA, a0 } = worldWithPartitions('attr-evict-keep');
+
+    a0.label = 'dirtied';
+    game.evictSubtree(roomA.id);
+
+    // The partition was dirtied while resident; dropping the mark because it
+    // left memory would lose a checkpoint.
+    expect([...game.touchedPartitions]).toEqual([roomA.id]);
+  });
+
+  it('reading attributes marks nothing', () => {
+    const { game, b0, a0 } = worldWithPartitions('attr-read-only');
+
+    void (b0.game.getElementById(a0.id)! as Token).label;
+    void a0.link;
 
     expect(game.touchedPartitions.size).toBe(0);
   });
