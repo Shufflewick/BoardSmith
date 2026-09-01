@@ -70,4 +70,27 @@ describe('takePrivateCommit refuses a divergent private commit', () => {
     const result = { spectatorView: viewWith({ score: 1 }) };
     expect(takePrivateCommit(result)).toBe(result);
   });
+
+  /**
+   * The lifted commit has to be READABLE by the caller that asked for it. An
+   * `OpResult` does not declare `persistPrivate` -- lifting it onto the result
+   * is this function's whole job -- so a return type of plain `T` says the
+   * field the function just added is not there, and every caller that reads it
+   * fails to compile. That is what example-legacy's campaign test hit the
+   * moment its tests were type-checked (ShufflewickPub #260).
+   */
+  it('declares the lifted commit on its return type, for a caller whose own type has no such field', () => {
+    interface OpResultLike {
+      spectatorView?: unknown;
+      playerViews?: unknown[];
+      success: boolean;
+    }
+    const result: OpResultLike = {
+      success: true,
+      spectatorView: viewWith({ persistPrivate: { sealed: 'scenario' } }),
+    };
+    const lifted = takePrivateCommit(result);
+    expect(lifted.persistPrivate).toEqual({ sealed: 'scenario' });
+    expect(lifted.success).toBe(true);
+  });
 });

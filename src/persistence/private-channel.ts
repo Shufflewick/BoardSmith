@@ -132,9 +132,15 @@ function jsonValueEqual(a: unknown, b: unknown): boolean {
  * HID the attribute from entirely is fine: committing the value the remaining
  * views agree on discards nothing.
  *
- * Returns the result UNCHANGED when the attribute is absent everywhere.
+ * Returns the result UNCHANGED when the attribute is absent everywhere, which
+ * is why the lifted field is OPTIONAL on the return type. It is named there at
+ * all because lifting it is this function's whole job: an `OpResult` does not
+ * declare `persistPrivate`, so a plain `T` return told every caller the field
+ * it had just asked for was not there.
  */
-export function takePrivateCommit<T extends PrivateChannelCarrier>(result: T): T {
+export function takePrivateCommit<T extends PrivateChannelCarrier>(
+  result: T,
+): T & { persistPrivate?: unknown } {
   const spectator = stripReserved(result.spectatorView);
   const players = result.playerViews?.map(stripReserved) ?? [];
 
