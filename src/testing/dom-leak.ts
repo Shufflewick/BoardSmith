@@ -110,7 +110,18 @@ function loadMount(): Promise<typeof import('@vue/test-utils').mount> {
  * What to render for a seat. `component` is the seam that lets this utility
  * check a game's OWN board instead of AutoUI — see {@link renderAsSeat}.
  */
-export interface RenderAsSeatOptions {
+/**
+ * The instance type of the component `renderAsSeat` mounted.
+ *
+ * A game passing its own board gets a wrapper over THAT board -- so
+ * `wrapper.props('actionController')` names a prop the board declares. Before
+ * this the return type was hard-wired to AutoUI's instance no matter what was
+ * mounted, which made every custom-board caller's `props()` call a type error
+ * the moment its tests were type-checked (ShufflewickPub #260).
+ */
+type RenderedInstance<C> = C extends abstract new (...args: never[]) => infer I ? I : unknown;
+
+export interface RenderAsSeatOptions<C extends Component = Component> {
   /**
    * TESTING-ONLY: render this view instead of the real per-seat view.
    *
@@ -129,7 +140,7 @@ export interface RenderAsSeatOptions {
    * by a custom renderer. Pass the component a real client mounts (the one
    * `src/ui/uis.ts` registers) and the scan runs against that instead.
    */
-  component?: Component;
+  component?: C;
   /**
    * Props merged OVER the standard contract props this function supplies
    * (`gameView`, `playerSeat`, `isMyTurn`, `availableActions`,
@@ -157,11 +168,11 @@ export interface RenderAsSeatOptions {
  *   own `// @vitest-environment jsdom` pragma only applies to tests IN THIS
  *   FILE, not to a caller's test file.
  */
-export async function renderAsSeat<G extends Game>(
+export async function renderAsSeat<G extends Game, C extends Component = typeof AutoUIComponent>(
   testGame: TestGame<G>,
   seat: number,
-  options: RenderAsSeatOptions = {},
-): Promise<VueWrapper<InstanceType<typeof AutoUIComponent>>> {
+  options: RenderAsSeatOptions<C> = {},
+): Promise<VueWrapper<RenderedInstance<C>>> {
   if (typeof document === 'undefined') {
     throw new Error(
       'renderAsSeat/assertNoHiddenInfoLeak require a DOM environment. ' +
@@ -170,7 +181,7 @@ export async function renderAsSeat<G extends Game>(
   }
 
   const mount = await loadMount();
-  const component = options.component ?? (await loadAutoUI());
+  const component: Component = options.component ?? (await loadAutoUI());
 
   const gameView =
     options.gameViewOverride !== undefined
@@ -196,7 +207,12 @@ export async function renderAsSeat<G extends Game>(
       }
     : { gameView, playerSeat: seat };
 
-  return mount(component, { props }) as VueWrapper<InstanceType<typeof AutoUIComponent>>;
+  // The props are assembled at runtime (filtered to what the component declares),
+  // so they cannot be checked against one component's prop type -- hence mount's
+  // own generic pinned to the base `Component`. The wrapper is then re-stated as
+  // being over the component that was passed, which is what the signature promises
+  // and what a caller inspecting its own board's props needs.
+  return mount<Component>(component, { props }) as VueWrapper<RenderedInstance<C>>;
 }
 
 /**
