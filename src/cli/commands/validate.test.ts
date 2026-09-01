@@ -525,6 +525,20 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     expect(result.passed).toBe(true);
   });
 
+  it('catches absolute public/ path style in the built rules bundle', async () => {
+    mkdirSync(join(projectDir, 'public', 'cards'), { recursive: true });
+    mkdirSync(join(projectDir, 'dist', 'rules'), { recursive: true });
+    writeFileSync(
+      join(projectDir, 'dist', 'rules', 'rules.js'),
+      'card.$images = { face: { sprite: "/cards/deck-sprite.svg" } };',
+    );
+    writeConfig({ name: 'x' });
+
+    const result = await validateAssetPaths(projectDir);
+    expect(result.passed).toBe(false);
+    expect((result.details ?? []).join('\n')).toContain('dist/rules/rules.js');
+  });
+
   it('still catches absolute public/ path style in data JSON', async () => {
     mkdirSync(join(projectDir, 'public', 'cards'), { recursive: true });
     mkdirSync(join(projectDir, 'data'), { recursive: true });

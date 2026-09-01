@@ -617,10 +617,15 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
         .map(e => e.name)
     : [];
 
-  // Built UI JS, plus source data files (JSON carrying image paths).
+  // Built UI JS, the built RULES bundle, plus source data files (JSON carrying
+  // image paths). Rules code names assets too -- an element's `$images` sprite
+  // sheet is set in `src/rules/game.ts`, not in a component -- so a scan that
+  // opened only the UI bundle passed cribbage while it shipped
+  // `sprite: '/cards/deck-sprite.svg'` (ShufflewickPub #260).
   const filesToScan = publicDirs.length > 0
     ? [
         ...listFilesWithExtension(join(cwd, 'dist', 'ui', 'assets'), '.js'),
+        ...listFilesWithExtension(join(cwd, 'dist', 'rules'), '.js'),
         ...listFilesWithExtension(join(cwd, 'data'), '.json'),
       ]
     : [];
