@@ -22,6 +22,46 @@ interface BuildOptions {
 }
 
 /**
+ * THE GAME VERSION (ShufflewickPub #240).
+ *
+ * package.json is the single source of truth, because it is the version the
+ * PLATFORM already pins a release under: `boardsmith publish` reads
+ * `pkg.version` and refuses to publish without it. A manifest version taken
+ * from anywhere else can only ever agree with that by coincidence.
+ *
+ * There is no default. This used to fall back to the literal '1.0.0' when
+ * boardsmith.json omitted a version, which labelled eleven games in the
+ * catalogue as a version they were not, and a bundle that states the wrong
+ * version is worse than a build that stops and says so.
+ *
+ * Pure and cheap, so `buildCommand` calls it before Vite runs (a project that
+ * cannot state its version should hear about it in a second, not after a full
+ * compile) and `deriveManifest` calls it again, which keeps the rule true for
+ * every caller rather than only for the CLI path.
+ */
+function resolveGameVersion(
+  config: Record<string, unknown>,
+  pkg: Record<string, unknown>,
+): string {
+  if (config.version !== undefined) {
+    throw new Error(
+      `boardsmith.json declares "version": ${JSON.stringify(config.version)}, but a game's version comes only `
+      + `from package.json (currently ${JSON.stringify(pkg.version ?? null)}). `
+      + 'Delete the "version" key from boardsmith.json so the two can never disagree.',
+    );
+  }
+  const version = typeof pkg.version === 'string' ? pkg.version.trim() : '';
+  if (version === '') {
+    throw new Error(
+      'Cannot determine the game version: package.json has no usable "version" field. '
+      + 'package.json is the one place a game states its version, and it is what `boardsmith publish` '
+      + 'sends to the platform. Add one to package.json, e.g. "version": "1.0.0".',
+    );
+  }
+  return version;
+}
+
+/**
  * Pure manifest-derivation function (T-135-07). Takes the raw parsed
  * `boardsmith.json` config and the COMPILED `gameDefinition`, and returns the
  * publish manifest with `playerCount` explicitly computed from
@@ -32,9 +72,13 @@ interface BuildOptions {
  * Keeps the existing `playerCount: { min, max }` key name and shape to
  * preserve the external publish-platform contract (135-RESEARCH.md Open
  * Question A1).
+ *
+ * The version comes from `package.json` and is likewise never copied from the
+ * config spread; `resolveGameVersion` above is the whole rule.
  */
 export function deriveManifest(
   config: Record<string, unknown>,
+  pkg: Record<string, unknown>,
   gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>,
   engine: { protocol: number; revision: number },
   artifacts: { worldUi: boolean },
@@ -49,6 +93,8 @@ export function deriveManifest(
       + 'Declare both as integers in your gameDefinition (src/rules/index.ts), e.g. minPlayers: 2, maxPlayers: 4.',
     );
   }
+
+  const version = resolveGameVersion(config, pkg);
 
   // WHETHER THIS BUNDLE SHIPS A WORLD UI (ShufflewickPub #128).
   //
@@ -79,7 +125,7 @@ export function deriveManifest(
       ? {}
       : { world: { ...world, ui: artifacts.worldUi } }),
     buildTime: new Date().toISOString(),
-    version: (config.version as string | undefined) || '1.0.0',
+    version,
     // Stamp the engine ABI version so the executor can reject a bundle built
     // against an incompatible BoardSmith (INFRA-04). Automatic — authors never
     // set this; it comes from the BoardSmith building the bundle.
@@ -144,6 +190,24 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
   }
 
   const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+
+  // The manifest's version comes from here, never from boardsmith.json
+  // (ShufflewickPub #240). Read before anything is compiled so a project that
+  // cannot state its version fails in a second rather than after a full build.
+  const pkgPath = join(cwd, 'package.json');
+  if (!existsSync(pkgPath)) {
+    console.error(chalk.red('Error: package.json not found'));
+    console.error(chalk.dim('A BoardSmith game states its version in package.json, and the build reads it from there.'));
+    process.exit(1);
+  }
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  try {
+    resolveGameVersion(config, pkg);
+  } catch (error) {
+    console.error(chalk.red(`Error: ${(error as Error).message}`));
+    process.exit(1);
+  }
+
   console.log(chalk.cyan(`\nBuilding ${config.displayName || config.name}...\n`));
 
   const spinner = ora('Building game rules...').start();
@@ -250,6 +314,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
 
     const manifest = deriveManifest(
       config,
+      pkg,
       gameDefinition,
       {
         protocol: BUNDLE_PROTOCOL_VERSION,

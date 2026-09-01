@@ -134,11 +134,6 @@
       "type": "string",
       "description": "Stable platform publisher identifier, written back into boardsmith.json by `boardsmith publish`. Read by publish.ts."
     },
-    "version": {
-      "x-convex-sink": false,
-      "type": "string",
-      "description": "Optional manifest version override consumed by build.ts's deriveManifest (defaults to '1.0.0' when absent)."
-    },
     "persistence": {
       "x-convex-sink": false,
       "type": "boolean",

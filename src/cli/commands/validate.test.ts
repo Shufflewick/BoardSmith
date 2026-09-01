@@ -113,10 +113,16 @@ describe('config-schema', () => {
       colorPalette: [],
       paths: { rules: 'src/rules' },
       gameId: 'abc123',
-      version: '1.0.0',
       asyncPlay: true,
     });
     expect(result).toEqual([]);
+  });
+
+  it('findUnknownKeys rejects a "version" key, because a game states its version in package.json', () => {
+    // ShufflewickPub #240: two places to state a version is one place too
+    // many. The build refuses one as well; this is the earlier of the two
+    // gates, so the key is caught before anything is compiled.
+    expect(findUnknownKeys({ name: 'x', version: '1.0.0' })).toEqual([{ key: 'version' }]);
   });
 
   it('findUnknownKeys reports an unknown key with no suggestion when nothing is close', () => {

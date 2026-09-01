@@ -51,6 +51,7 @@ describe('the pair the build stamps', () => {
     const { deriveManifest } = await import('../cli/commands/build.js');
     const manifest = deriveManifest(
       { name: 'test-game' },
+      { name: 'test-game', version: '1.0.0' },
       { minPlayers: 2, maxPlayers: 4 },
       { protocol: BUNDLE_PROTOCOL_VERSION, revision: ENGINE_REVISION },
       { worldUi: false }
