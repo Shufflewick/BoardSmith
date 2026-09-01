@@ -100,7 +100,10 @@ boardsmith validate
 
 This runs:
 - Configuration validation (unknown `boardsmith.json` keys are rejected with did-you-mean suggestions)
-- TypeScript compilation checks (`tsc --noEmit`)
+- TypeScript compilation checks (`vue-tsc --noEmit`)
+- Test type coverage: every file `boardsmith test` runs must be in the program
+  that type-check just compiled, so a test file excluded from `tsconfig.json`'s
+  `include` cannot run in one gate while being invisible to the other
 - Security scan for forbidden APIs (network, timers, non-determinism, eval)
 - Asset path check (absolute paths break on the publishing platform)
 - Bundle size limits (rules.js 1MB; compressed bundle zip 50MB)

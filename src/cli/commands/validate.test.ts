@@ -9,7 +9,14 @@ import {
   findUnknownKeys,
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
-import { checkMetadataIssues, checkTaxonomyShape, validateBundleSize, validateAssetPaths } from './validate.js';
+import {
+  checkMetadataIssues,
+  checkTaxonomyShape,
+  validateBundleSize,
+  validateAssetPaths,
+  parseProgramFiles,
+  findUntypedTestFiles,
+} from './validate.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 
 describe('config-schema', () => {
@@ -551,5 +558,72 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     const result = await validateAssetPaths(projectDir);
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('/cards/');
+  });
+});
+
+/**
+ * THE SPLIT THIS EXISTS TO CLOSE (ShufflewickPub #260).
+ *
+ * `boardsmith test` runs whatever vitest globs; `boardsmith validate`
+ * type-checks whatever the game's `tsconfig.json` includes. Eight of thirteen
+ * catalogue games named only `src/**` in that include, so every one of their
+ * test files ran in a gate that never compiled it, and 240 real type errors sat
+ * there for as long as anyone had been running both commands and believing them.
+ *
+ * The compiler is asked rather than the config: `--listFiles` reports the
+ * program from the SAME run that reports the errors, so no glob is
+ * reinterpreted here and the two can never disagree.
+ */
+describe('validate.ts test-type-coverage', () => {
+  describe('parseProgramFiles', () => {
+    it('keeps the compiled files and drops the diagnostics they are printed beside', () => {
+      const output = [
+        '/repo/src/rules/game.ts',
+        '/repo/tests/game.test.ts',
+        '/repo/tests/game.test.ts(12,5): error TS2345: Argument of type X.',
+        '',
+        'Found 1 error in 1 file.',
+      ].join('\n');
+
+      expect(parseProgramFiles(output)).toEqual([
+        '/repo/src/rules/game.ts',
+        '/repo/tests/game.test.ts',
+      ]);
+    });
+
+    it('reads a Windows drive-letter path as a file, not as prose', () => {
+      const output = ['C:\\repo\\src\\rules\\game.ts', 'Found 0 errors.'].join('\r\n');
+      expect(parseProgramFiles(output)).toEqual(['C:\\repo\\src\\rules\\game.ts']);
+    });
+  });
+
+  describe('findUntypedTestFiles', () => {
+    const cwd = '/repo';
+
+    it('names every test file vitest runs that the compiler never opened', () => {
+      const program = ['/repo/src/rules/game.ts', '/repo/tests/covered.test.ts'];
+      const tests = ['tests/covered.test.ts', 'tests/orphan.test.ts', 'tests/second.test.ts'];
+
+      expect(findUntypedTestFiles(program, tests, cwd)).toEqual([
+        'tests/orphan.test.ts',
+        'tests/second.test.ts',
+      ]);
+    });
+
+    it('finds nothing when the program covers every file vitest runs', () => {
+      const program = ['/repo/src/rules/game.ts', '/repo/tests/a.test.ts', '/repo/tests/b.test.ts'];
+      expect(findUntypedTestFiles(program, ['tests/a.test.ts', 'tests/b.test.ts'], cwd)).toEqual([]);
+    });
+
+    it('matches whether vitest reported a path relative or absolute', () => {
+      const program = ['/repo/tests/a.test.ts'];
+      expect(findUntypedTestFiles(program, ['/repo/tests/a.test.ts'], cwd)).toEqual([]);
+    });
+
+    it('reports a file outside the project relative to it, rather than losing it', () => {
+      expect(findUntypedTestFiles([], ['/elsewhere/a.test.ts'], cwd)).toEqual([
+        '../elsewhere/a.test.ts',
+      ]);
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
-import { join, resolve as resolvePath } from 'node:path';
+import { join, relative, sep, resolve as resolvePath } from 'node:path';
 import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -23,6 +23,12 @@ interface ValidationResult {
   details?: string[];
 }
 
+/** One `vue-tsc --noEmit --listFiles` run: its verdict, and the program it compiled. */
+interface TypeCheckRun {
+  result: ValidationResult;
+  programFiles: string[];
+}
+
 export async function validateCommand(): Promise<void> {
   const cwd = process.cwd();
 
@@ -36,7 +42,11 @@ export async function validateCommand(): Promise<void> {
   results.push(await validateMetadata(cwd));
 
   // 2. TypeScript compilation
-  results.push(await validateTypeScript(cwd));
+  const typeCheck = await validateTypeScript(cwd);
+  results.push(typeCheck.result);
+
+  // 2b. Every file vitest runs is in the program that just type-checked.
+  results.push(await validateTestTypeCoverage(cwd, typeCheck.programFiles));
 
   // 3. Security checks (forbidden APIs)
   results.push(await validateSecurity(cwd));
@@ -410,9 +420,9 @@ async function validateMetadata(cwd: string): Promise<ValidationResult> {
  * `vue-tsc` compiles SFCs for real: props are checked, and each file's `vue`
  * resolves from its own location, so a game can upgrade vue whenever it likes.
  */
-async function validateTypeScript(cwd: string): Promise<ValidationResult> {
+async function validateTypeScript(cwd: string): Promise<TypeCheckRun> {
   return new Promise((resolve) => {
-    const child = spawn('npx', ['vue-tsc', '--noEmit'], {
+    const child = spawn('npx', ['vue-tsc', '--noEmit', '--listFiles'], {
       cwd,
       shell: true,
       stdio: 'pipe',
@@ -423,11 +433,11 @@ async function validateTypeScript(cwd: string): Promise<ValidationResult> {
     child.stderr?.on('data', (data) => { output += data; });
 
     child.on('close', (code) => {
+      const programFiles = parseProgramFiles(output);
       if (code === 0) {
         resolve({
-          name: 'TypeScript',
-          passed: true,
-          message: '',
+          result: { name: 'TypeScript', passed: true, message: '' },
+          programFiles,
         });
       } else {
         const allErrors = output.split('\n').filter(line =>
@@ -441,21 +451,150 @@ async function validateTypeScript(cwd: string): Promise<ValidationResult> {
         }
 
         resolve({
-          name: 'TypeScript',
-          passed: false,
-          message: 'TypeScript compilation failed',
-          details: shown.length > 0 ? shown : ['Run `npx vue-tsc --noEmit` for details'],
+          result: {
+            name: 'TypeScript',
+            passed: false,
+            message: 'TypeScript compilation failed',
+            details: shown.length > 0 ? shown : ['Run `npx vue-tsc --noEmit` for details'],
+          },
+          programFiles,
         });
       }
     });
 
     child.on('error', () => {
       resolve({
-        name: 'TypeScript',
-        passed: false,
-        message: 'Failed to run TypeScript compiler',
+        result: {
+          name: 'TypeScript',
+          passed: false,
+          message: 'Failed to run TypeScript compiler',
+        },
+        programFiles: [],
       });
     });
+  });
+}
+
+/**
+ * The files `--listFiles` reports the compiler actually opened.
+ *
+ * `vue-tsc` prints them one per line, interleaved with its diagnostics, which
+ * are `path(line,col): error TSxxxx: ...`. Everything that is not an absolute
+ * path on its own line is prose or a diagnostic.
+ */
+export function parseProgramFiles(output: string): string[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => ABSOLUTE_PATH_RE.test(line) && !DIAGNOSTIC_RE.test(line));
+}
+
+/** A POSIX absolute path, or a Windows drive-letter one. */
+const ABSOLUTE_PATH_RE = /^(\/|[A-Za-z]:\\)/;
+
+/** `path(line,col): error TS1234: message` — a diagnostic, not a file. */
+const DIAGNOSTIC_RE = /\(\d+,\d+\): (error|warning) TS\d+:/;
+
+/**
+ * The test files vitest will run that the TypeScript program never compiled,
+ * named relative to the project so the message points at something the author
+ * can open.
+ */
+export function findUntypedTestFiles(
+  programFiles: string[],
+  testFiles: string[],
+  cwd: string,
+): string[] {
+  const compiled = new Set(programFiles.map((file) => resolvePath(cwd, file)));
+  return testFiles
+    .map((file) => resolvePath(cwd, file))
+    .filter((file) => !compiled.has(file))
+    .map((file) => relative(cwd, file).split(sep).join('/'));
+}
+
+/**
+ * REFUSE A PROJECT WHOSE TYPE-CHECK DOES NOT COVER WHAT ITS TESTS RUN.
+ *
+ * `boardsmith test` runs whatever vitest globs and type-checks nothing;
+ * `boardsmith validate` type-checks whatever `tsconfig.json` includes. When the
+ * two disagree, a real type error survives in whichever gate nobody runs, and
+ * both commands stay green. Eight of the thirteen catalogue games were in that
+ * state, hiding 240 errors between them (ShufflewickPub #241, #260).
+ *
+ * Both sides are ASKED rather than inferred: the program comes from
+ * `--listFiles` on the run that just reported the errors, and the test list from
+ * `vitest list --filesOnly`, so neither vitest's globs nor tsconfig's includes
+ * are reinterpreted here.
+ */
+async function validateTestTypeCoverage(
+  cwd: string,
+  programFiles: string[],
+): Promise<ValidationResult> {
+  const name = 'Test Type Coverage';
+
+  if (!existsSync(join(cwd, 'tests'))) {
+    return { name, passed: true, message: '' };
+  }
+
+  const listing = await listVitestFiles(cwd);
+  if (!listing.ok) {
+    return {
+      name,
+      passed: false,
+      message: 'Could not ask vitest which test files it runs',
+      details: [
+        'Run `npx vitest list --filesOnly` to see why.',
+        'A tests/ directory that vitest cannot enumerate means `boardsmith test` runs nothing this check could cover.',
+      ],
+    };
+  }
+
+  const untyped = findUntypedTestFiles(programFiles, listing.files, cwd);
+  if (untyped.length === 0) {
+    return { name, passed: true, message: '' };
+  }
+
+  const shown = untyped.slice(0, 20);
+  const remaining = untyped.length - shown.length;
+  if (remaining > 0) {
+    shown.push(`... and ${remaining} more file${remaining === 1 ? '' : 's'}.`);
+  }
+
+  return {
+    name,
+    passed: false,
+    message: `${untyped.length} file${untyped.length === 1 ? '' : 's'} vitest runs ${untyped.length === 1 ? 'is' : 'are'} never type-checked`,
+    details: [
+      ...shown,
+      'Add them to `include` in tsconfig.json (usually `"include": ["src/**/*", "tests/**/*"]`).',
+      'If tsconfig sets `rootDir: "./src"`, remove it: an include reaching outside it is a TS6059 config error.',
+    ],
+  };
+}
+
+/** Ask vitest for the files it would run, without running them. */
+async function listVitestFiles(cwd: string): Promise<{ ok: boolean; files: string[] }> {
+  return new Promise((resolve) => {
+    const child = spawn('npx', ['vitest', 'list', '--filesOnly'], {
+      cwd,
+      shell: true,
+      stdio: 'pipe',
+    });
+
+    let output = '';
+    child.stdout?.on('data', (data) => { output += data; });
+
+    child.on('close', (code) => {
+      resolve({
+        ok: code === 0,
+        files: output
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0),
+      });
+    });
+
+    child.on('error', () => resolve({ ok: false, files: [] }));
   });
 }
 
