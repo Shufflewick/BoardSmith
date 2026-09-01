@@ -83,6 +83,7 @@ export {
 // Per-seat view diffing (VIS-02)
 export {
   diffPlayerViews,
+  type DiffableView,
   type ViewDiffResult,
 } from './view-diff.js';
 

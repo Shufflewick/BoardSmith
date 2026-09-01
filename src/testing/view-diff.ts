@@ -27,8 +27,25 @@
  */
 
 import type { ElementJSON, Game } from '../engine/index.js';
-import type { PlayerStateView } from '../runtime/index.js';
 import type { TestGame } from './test-game.js';
+
+/**
+ * The two fields the view-pair overload actually reads: whose view it is, and
+ * the payload to walk.
+ *
+ * Narrower than `PlayerStateView` on purpose. A caller holding a game rather
+ * than a `TestGame` builds the pair itself -- `{ player, state:
+ * game.toJSONForPlayer(seat) }` -- and demanding `messages`, `phase` and the
+ * rest made that caller fabricate fields this function never opens
+ * (ShufflewickPub #260). A real `PlayerStateView` is still accepted, which is
+ * what the atomic overload passes.
+ */
+export interface DiffableView {
+  /** The seat this view was built for; named in the diff's own description. */
+  player: number;
+  /** The per-seat payload to walk. */
+  state: ElementJSON;
+}
 
 /**
  * Result of {@link diffPlayerViews}.
@@ -172,7 +189,7 @@ function walk(
  * expect(result.onlyInA).not.toContain('opponent-hand-card'); // opponent's card never leaks
  * ```
  */
-export function diffPlayerViews(viewA: PlayerStateView, viewB: PlayerStateView): ViewDiffResult;
+export function diffPlayerViews(viewA: DiffableView, viewB: DiffableView): ViewDiffResult;
 /**
  * Atomic overload (WR-02): captures both seats' views back-to-back from
  * `testGame` in the SAME call, eliminating the caller footgun of diffing
@@ -190,12 +207,12 @@ export function diffPlayerViews<G extends Game>(
   seatB: number,
 ): ViewDiffResult;
 export function diffPlayerViews<G extends Game>(
-  viewAOrTestGame: PlayerStateView | TestGame<G>,
-  viewBOrSeatA: PlayerStateView | number,
+  viewAOrTestGame: DiffableView | TestGame<G>,
+  viewBOrSeatA: DiffableView | number,
   seatB?: number,
 ): ViewDiffResult {
-  let viewA: PlayerStateView;
-  let viewB: PlayerStateView;
+  let viewA: DiffableView;
+  let viewB: DiffableView;
 
   if (typeof viewBOrSeatA === 'number') {
     // Atomic overload: fetch both views back-to-back, right here, with no
@@ -204,7 +221,7 @@ export function diffPlayerViews<G extends Game>(
     viewA = testGame.getPlayerView(viewBOrSeatA);
     viewB = testGame.getPlayerView(seatB as number);
   } else {
-    viewA = viewAOrTestGame as PlayerStateView;
+    viewA = viewAOrTestGame as DiffableView;
     viewB = viewBOrSeatA;
   }
 
