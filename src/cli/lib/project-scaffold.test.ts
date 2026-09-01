@@ -537,3 +537,40 @@ describe('no ambient *.vue shim (SFCs are type-checked by vue-tsc)', () => {
     expect(pkg.devDependencies).toHaveProperty('vue-tsc');
   });
 });
+
+describe('generateTsConfig — the type-checked project is the project vitest runs (ShufflewickPub #241)', () => {
+  // `boardsmith validate` type-checks with the game's own tsconfig, and
+  // `boardsmith test` runs `tests/**` with vitest. When the tsconfig's
+  // `include` names only `src/**`, those two look at different projects: every
+  // test file is executed but never type-checked, and a real error hides in
+  // whichever gate nobody happens to run. Three catalogue games were failing
+  // validate for weeks on exactly this split.
+  it('type-checks tests/ as well as src/', () => {
+    const parsed = JSON.parse(generateTsConfig());
+    expect(parsed.include).toContain('src/**/*');
+    expect(parsed.include).toContain('tests/**/*');
+  });
+
+  // COUPLING with `types`: naming `types` at all switches tsc from
+  // "auto-include every @types/*" to "include ONLY these", so a test that
+  // reads a file — the manifest tests every game carries do — fails TS2307 on
+  // `node:fs` unless "node" is listed here AND @types/node is installed.
+  it('includes "node" in compilerOptions.types, because tests read files', () => {
+    const parsed = JSON.parse(generateTsConfig());
+    expect(parsed.compilerOptions.types).toContain('node');
+  });
+
+  // `rootDir: './src'` and an include reaching outside it is a TS6059 CONFIG
+  // error, which stops tsc before it checks a single file while exiting 0.
+  it('declares no rootDir, which an include reaching outside src/ would violate', () => {
+    const parsed = JSON.parse(generateTsConfig());
+    expect(parsed.compilerOptions.rootDir).toBeUndefined();
+  });
+});
+
+describe('generatePackageJson — @types/node scaffold devDependency (ShufflewickPub #241)', () => {
+  it('includes @types/node, without which "node" in tsconfig types resolves to nothing', () => {
+    const parsed = JSON.parse(generatePackageJson(config, PROJECT_PATH));
+    expect(parsed.devDependencies).toHaveProperty('@types/node');
+  });
+});

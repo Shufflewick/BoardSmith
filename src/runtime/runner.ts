@@ -43,15 +43,26 @@ import type { MessageEntry } from '../engine/index.js';
 export type { CheckpointPolicy, UndoPolicy, RandomnessPolicy };
 
 /**
- * Options for creating a game runner
+ * Options for creating a game runner.
+ *
+ * `O` is the OPTIONS TYPE THE GAME CLASS ITSELF DECLARES, inferred from
+ * `GameClass`'s constructor. A game that widens `GameOptions` with its own
+ * rules knobs (Hex's `boardSize`, say) can therefore be constructed through the
+ * runner with those knobs set. Typing `gameOptions` as the bare `GameOptions`
+ * instead rejected every such option as an excess property (TS2353), which left
+ * a game no way to start its own game through the runner.
+ *
+ * `NoInfer` on `gameOptions` keeps the object literal from being a second
+ * inference source: the game class is the one declaration of what this game
+ * accepts, and the literal is checked against it rather than widening it.
  */
-export interface GameRunnerOptions<G extends Game> {
+export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameOptions> {
   /** Game class constructor */
-  GameClass: new (options: GameOptions) => G;
+  GameClass: new (options: O) => G;
   /** Game type identifier */
   gameType: string;
   /** Options passed to game constructor */
-  gameOptions: GameOptions;
+  gameOptions: NoInfer<O>;
   /** Serialization options */
   serializeOptions?: SerializeOptions;
   /** Per-action undo checkpoint retention. Default: retain everything. */
@@ -157,7 +168,7 @@ function messagesUpTo(
   return log.slice(0, Math.max(0, watermark - evicted));
 }
 
-export class GameRunner<G extends Game = Game> {
+export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptions> {
   /** The game instance */
   readonly game: G;
 
@@ -289,7 +300,7 @@ export class GameRunner<G extends Game = Game> {
   /** Serialization options */
   private readonly serializeOptions: SerializeOptions;
 
-  constructor(options: GameRunnerOptions<G>) {
+  constructor(options: GameRunnerOptions<G, O>) {
     this.gameType = options.gameType;
     this.serializeOptions = options.serializeOptions ?? { useBranchPaths: true };
     this.checkpointPolicy_ = {

@@ -185,6 +185,10 @@ export function generatePackageJson(config: ProjectConfig, projectPath: string):
       jsdom: '^29.1.1',
       'axe-core': '^4.12.1',
       '@vue/test-utils': '^2.4.11',
+      // Tests are type-checked (tsconfig `include` names `tests/**`), and a
+      // test that reads a file imports `node:fs`. Paired with `node` in the
+      // tsconfig's `types`: one without the other resolves to nothing.
+      '@types/node': '^22.0.0',
     },
   };
 
@@ -212,12 +216,18 @@ export function generateTsConfig(): string {
       //
       // COUPLING (WR-04): listing `types` at all switches tsc from
       // "auto-include every @types/* in node_modules" to "include ONLY these".
-      // Any future scaffold/game file that relies on ambient globals — Node
-      // `process`/`Buffer` (@types/node), vitest globals via `globals: true`,
-      // extra `@types/web` — will silently fail to type-check until its package
-      // is appended here explicitly (and added as a devDependency). Keep this
-      // array in sync when introducing such a dependency.
-      types: ['vite/client'],
+      // Any future scaffold/game file that relies on ambient globals — vitest
+      // globals via `globals: true`, extra `@types/web` — will silently fail
+      // to type-check until its package is appended here explicitly (and added
+      // as a devDependency). Keep this array in sync when introducing such a
+      // dependency.
+      //
+      // `node` is here because `tests/**` is type-checked (see `include`) and a
+      // test that reads a file — every game's manifest test does — imports
+      // `node:fs`. Without it those imports fail TS2307 under
+      // `boardsmith validate` while the same files run green under
+      // `boardsmith test` (ShufflewickPub #241).
+      types: ['vite/client', 'node'],
       // Resolve `vue` (and its @vue/* internals) from THIS project, whatever
       // version is installed. NOT a version pin — it names a LOCATION, never a
       // version, so vue can be upgraded freely; this is what MAKES that safe.
@@ -242,9 +252,18 @@ export function generateTsConfig(): string {
       declarationMap: true,
       sourceMap: true,
       outDir: './dist',
-      rootDir: './src',
     },
-    include: ['src/**/*'],
+    // `tests/**` IS PART OF THE PROJECT, not an afterthought. `boardsmith
+    // validate` type-checks whatever this `include` names, and `boardsmith
+    // test` runs `tests/**` with vitest; naming only `src/**` makes those two
+    // commands look at different projects, so every test file is executed
+    // without ever being type-checked and a real error survives in whichever
+    // gate nobody runs (ShufflewickPub #241).
+    //
+    // This is also why there is no `rootDir`: an include reaching outside it is
+    // a TS6059 CONFIG error, which stops tsc before it checks a single file
+    // while still exiting 0. See docs/typecheck.md.
+    include: ['src/**/*', 'tests/**/*'],
     exclude: ['node_modules', 'dist'],
   };
   return JSON.stringify(config, null, 2);
