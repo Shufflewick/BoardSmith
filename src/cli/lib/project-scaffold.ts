@@ -185,9 +185,11 @@ export function generatePackageJson(config: ProjectConfig, projectPath: string):
       jsdom: '^29.1.1',
       'axe-core': '^4.12.1',
       '@vue/test-utils': '^2.4.11',
-      // Tests are type-checked (tsconfig `include` names `tests/**`), and a
-      // test that reads a file imports `node:fs`. Paired with `node` in the
-      // tsconfig's `types`: one without the other resolves to nothing.
+      // Tests are type-checked (tsconfig `include` names `tests/**`) and a test
+      // that reads a file imports `node:fs`. Without this those imports fail
+      // TS2307 under `boardsmith validate` while the same file runs green under
+      // `boardsmith test`, because vitest never type-checks (ShufflewickPub
+      // #241). Not paired with a `types` entry: see the note there.
       '@types/node': '^22.0.0',
     },
   };
@@ -217,17 +219,16 @@ export function generateTsConfig(): string {
       // COUPLING (WR-04): listing `types` at all switches tsc from
       // "auto-include every @types/* in node_modules" to "include ONLY these".
       // Any future scaffold/game file that relies on ambient globals — vitest
-      // globals via `globals: true`, extra `@types/web` — will silently fail
-      // to type-check until its package is appended here explicitly (and added
-      // as a devDependency). Keep this array in sync when introducing such a
+      // globals via `globals: true`, extra `@types/web` — will silently fail to
+      // type-check until its package is appended here explicitly (and added as
+      // a devDependency). Keep this array in sync when introducing such a
       // dependency.
       //
-      // `node` is here because `tests/**` is type-checked (see `include`) and a
-      // test that reads a file — every game's manifest test does — imports
-      // `node:fs`. Without it those imports fail TS2307 under
-      // `boardsmith validate` while the same files run green under
-      // `boardsmith test` (ShufflewickPub #241).
-      types: ['vite/client', 'node'],
+      // `node` is deliberately NOT listed. This array governs AMBIENT types; an
+      // explicit `import ... from 'node:fs'` in a test resolves through ordinary
+      // module resolution as long as @types/node is installed, which is why that
+      // package is a scaffold devDependency and this line is unchanged.
+      types: ['vite/client'],
       // Resolve `vue` (and its @vue/* internals) from THIS project, whatever
       // version is installed. NOT a version pin — it names a LOCATION, never a
       // version, so vue can be upgraded freely; this is what MAKES that safe.

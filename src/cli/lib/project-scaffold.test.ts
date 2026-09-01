@@ -551,15 +551,6 @@ describe('generateTsConfig — the type-checked project is the project vitest ru
     expect(parsed.include).toContain('tests/**/*');
   });
 
-  // COUPLING with `types`: naming `types` at all switches tsc from
-  // "auto-include every @types/*" to "include ONLY these", so a test that
-  // reads a file — the manifest tests every game carries do — fails TS2307 on
-  // `node:fs` unless "node" is listed here AND @types/node is installed.
-  it('includes "node" in compilerOptions.types, because tests read files', () => {
-    const parsed = JSON.parse(generateTsConfig());
-    expect(parsed.compilerOptions.types).toContain('node');
-  });
-
   // `rootDir: './src'` and an include reaching outside it is a TS6059 CONFIG
   // error, which stops tsc before it checks a single file while exiting 0.
   it('declares no rootDir, which an include reaching outside src/ would violate', () => {
@@ -569,7 +560,7 @@ describe('generateTsConfig — the type-checked project is the project vitest ru
 });
 
 describe('generatePackageJson — @types/node scaffold devDependency (ShufflewickPub #241)', () => {
-  it('includes @types/node, without which "node" in tsconfig types resolves to nothing', () => {
+  it('includes @types/node, without which a test\'s `import ... from "node:fs"` fails TS2307', () => {
     const parsed = JSON.parse(generatePackageJson(config, PROJECT_PATH));
     expect(parsed.devDependencies).toHaveProperty('@types/node');
   });
