@@ -144,7 +144,10 @@
     },
     "src/cli/commands/analyze.ts": {
       "complexity_high": {
-        "count": 3
+        "count": 2
+      },
+      "complexity_moderate": {
+        "count": 1
       },
       "crap_high": {
         "count": 3
@@ -195,9 +198,6 @@
     },
     "src/cli/commands/evolve-bot-weights.ts": {
       "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
         "count": 1
       }
     },
@@ -1029,13 +1029,12 @@
   },
   "production_coverage_findings": [],
   "target_keys": [
-    "src/contract/fingerprint.ts:dead code",
     "src/engine/command/executor.ts:circular dependency",
     "src/ui/components/debug/debug-format.ts:high impact",
     "src/engine/element/game.ts:complexity",
     "src/engine/action/action.ts:circular dependency",
-    "src/ui/composables/useActionController.ts:complexity",
     "src/engine/element/game-element.ts:complexity",
+    "src/ui/composables/useActionController.ts:complexity",
     "src/session/pick-handler.ts:complexity",
     "src/session/game-session.ts:complexity",
     "src/engine/tutorial/progress.ts:complexity",
@@ -1046,6 +1045,7 @@
     "src/session/snapshot-session-host.ts:complexity",
     "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/bot/mcts-bot.ts:complexity",
+    "src/contract/fingerprint.ts:dead code",
     "src/cli/commands/publish.ts:complexity",
     "src/cli/commands/dev.ts:complexity",
     "src/cli/commands/chunk-provenance.ts:complexity",
@@ -1062,16 +1062,16 @@
     "src/cli/commands/example-test-emit.ts:complexity",
     "src/cli/commands/lint.ts:complexity",
     "src/testing/debug.ts:complexity",
-    "src/ui/components/auto-ui/auto-ui-helpers.ts:complexity",
     "src/testing/dom-leak.ts:complexity",
+    "src/ui/components/auto-ui/auto-ui-helpers.ts:complexity",
     "src/bot-trainer/introspector.ts:complexity",
     "src/testing/simulate-action.ts:complexity",
     "src/cli/commands/verify-enumerate.ts:complexity",
     "src/cli/lib/asset-scan.ts:complexity",
     "src/cli/commands/trace-check.ts:complexity",
     "src/testing/random-simulation.ts:complexity",
-    "src/session/lobby-manager.ts:complexity",
     "src/cli/commands/evolve-bot-weights.ts:complexity",
+    "src/session/lobby-manager.ts:complexity",
     "src/ui/components/dice/Die3D.vue:complexity",
     "src/bot-trainer/code-generator.ts:complexity"
   ]
