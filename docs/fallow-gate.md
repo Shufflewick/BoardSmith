@@ -84,6 +84,40 @@ git worktree remove /tmp/bs-baseline
 Generating from a clean `main` worktree is the point: a baseline taken from a
 dirty tree bakes in the very findings the gate is supposed to catch.
 
+## Drift is checked, not scheduled
+
+The baselines are generated files and nothing keeps them in sync, so they drift.
+When they do, the gate stops excluding a file's long-standing debt and reports
+all of it against whatever change happened to touch that file. Measured on
+`main`: one appended comment line in `src/engine/action/action.ts` produced
+seven critical complexity findings, none of them introduced by the change, and
+the commit was blocked (issue #159). That reads as a gate catching something
+rather than as a stale generated file — which is exactly the shape that teaches
+people to bypass gates.
+
+The answer is neither a regeneration schedule (a cron that rots quietly is the
+same failure one step removed) nor `// fallow-ignore-next-line complexity` on
+each hotspot (which hides the debt the baseline exists to record, and needs
+re-adding for every hotspot that comes after). Drift is made into a named
+finding of its own:
+
+```bash
+boardsmith audit --health-baseline
+```
+
+It saves a fresh `fallow health` baseline from the working tree, compares it
+against the committed one entry by entry, and reports every drifted
+(file, category) with which direction it drifted:
+
+- **the tree has more than the baseline forgives** — the next edit to that file
+  is blocked on debt it did not add. This is the false-block mechanism above.
+- **the baseline still forgives debt that is gone** — a real regression could
+  slip back in under the old allowance.
+
+Either way the report names the regeneration command. It runs as part of a bare
+`boardsmith audit`, so the drift surfaces on the sweep you already run after a
+refactor rather than on whoever next edits a drifted file.
+
 ## A `duplicate_exports` key can fail while already being baselined
 
 Recognise this one before you go hunting for new duplication, because the
