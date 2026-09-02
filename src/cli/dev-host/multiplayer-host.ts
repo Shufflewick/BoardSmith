@@ -139,6 +139,20 @@ export interface MultiplayerHostOptions {
    */
   presets?: GamePreset[];
   /**
+   * True when the project's manifest declares a `world` block (#158). A world
+   * is what a game IS, declared at CONSTRUCTION via `GameOptions.worldMode`,
+   * so it travels in the start op's gameOptions rather than being selected per
+   * run: there is no `--world` flag, because the manifest already says it and
+   * two ways to say "this is a world" is one too many.
+   *
+   * Unlike `teachingDisabled` and `seedSnapshot`, this belongs in gameOptions
+   * rather than hostOptions precisely BECAUSE gameOptions persists into
+   * `snapshot.gameOptions`: a restored world has to come back resident, or its
+   * element references deserialize against a different residency model than
+   * the one that wrote them.
+   */
+  worldMode?: boolean;
+  /**
    * When true, teaching/assist features (hint, heatmap, demo, tutorial) are rejected
    * fail-loud for this session. Set by `boardsmith dev --lock-teaching`.
    * Threaded as executeOp's dedicated `hostOptions` parameter (NOT the
@@ -988,6 +1002,10 @@ export class MultiplayerHost {
       // reads to set `player.color`. Placed after appliedGameOptions so lobby
       // color selections win, mirroring the production per-seat override.
       ...this.buildColorGameOptions(),
+      // Placed after the applied selection: the manifest's `world` block is
+      // the only authority on whether this game is a world, so a game option
+      // that happens to be called `worldMode` cannot turn one off (#158).
+      ...(this.opts.worldMode === true ? { worldMode: true } : {}),
       playerOptions: perSeatOptions,
       playerIsBot: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
       // Mirror the production lobby's playerConfigs (game-session.ts builds the

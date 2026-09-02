@@ -267,6 +267,26 @@ interface BoardSmithConfig {
   playerOptions?: ConfigOptionDefinition[];
   /** Custom color palette (hex strings or objects with hex/value + label) */
   colorPalette?: Array<string | Record<string, unknown>>;
+  /**
+   * The persistent-world block. Its PRESENCE is what makes this game a world
+   * (`boardsmith.schema.json`); `maxPlayers` is the capacity the platform
+   * sizes the world against.
+   */
+  world?: { maxPlayers?: number };
+}
+
+/**
+ * Is this project a persistent world (#158)?
+ *
+ * A world is what a game IS, not something a run selects, so the manifest's
+ * `world` block is the single declaration and `boardsmith dev` reads it rather
+ * than offering a flag. The dev host then constructs the game with
+ * `GameOptions.worldMode`, which is where a world is declared engine-side --
+ * so the local host runs the same residency model production does, instead of
+ * silently running a world as an ordinary snapshot game.
+ */
+export function resolveWorldMode(config: { world?: unknown }): boolean {
+  return config.world !== undefined && config.world !== null;
 }
 
 /**
@@ -857,6 +877,16 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const effectivePlayerCount = exitOnDevFlagError(() => resolvePlayerCount(rawPlayers, minPlayers, maxPlayers));
   exitOnDevFlagError(() => validateBotSeats(botPlayers, effectivePlayerCount));
 
+  // #158: the manifest's `world` block is the whole declaration -- no flag.
+  const worldMode = resolveWorldMode(config);
+  if (worldMode) {
+    console.log(
+      chalk.dim(
+        `  Persistent world: running resident (worldMode), capacity ${config.world?.maxPlayers ?? 'unset'}.`,
+      ),
+    );
+  }
+
   const devConfig = buildDevConfig({
     gameDefinition,
     minPlayers,
@@ -1003,6 +1033,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       presets: devConfig.presets,
       teachingDisabled,
       seedSnapshot,
+      worldMode,
       ...(devStore
         ? {
             persistence: {

@@ -470,6 +470,21 @@ Three things to know before using it:
   half `touchedPartitions` supplies. Union it with the partitions you hydrated
   to get the checkpoint's dirty set.
 
+**Running one locally.** `boardsmith dev` stands a world up resident when the
+project's `boardsmith.json` declares a `world` block:
+
+```json
+{ "name": "gloamhall", "world": { "maxPlayers": 200 } }
+```
+
+There is no `--world` flag. The block's PRESENCE is what makes a game a world
+(its absence means "this game is not a persistent world"), so the dev host
+reads it and constructs the game with `worldMode: true` — one way to say it
+rather than two. World mode then travels in the start op's gameOptions and so
+into the snapshot, which is what makes a restored world come back resident
+rather than reading its `{ __elementId }` references against a residency model
+that never wrote them.
+
 ## Game Lifecycle
 
 ```

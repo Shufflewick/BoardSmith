@@ -16,6 +16,7 @@ import {
   parseGameOptionFlags,
   mergeGameOptionDefinitions,
   resolvePreset,
+  resolveWorldMode,
 } from './dev.js';
 
 /**
@@ -325,5 +326,15 @@ describe('shouldOpenBrowser (138: --no-open opts out of auto-launching a real br
 
   it('stays true when options.open is explicitly true', () => {
     expect(shouldOpenBrowser({ open: true })).toBe(true);
+  });
+});
+
+describe('resolveWorldMode (#158: the manifest\'s `world` block is the only way to say "this is a world")', () => {
+  it('is false for an ordinary game, which declares no world block', () => {
+    expect(resolveWorldMode({})).toBe(false);
+  });
+
+  it('is true once the manifest declares a world block', () => {
+    expect(resolveWorldMode({ world: { maxPlayers: 200 } })).toBe(true);
   });
 });
