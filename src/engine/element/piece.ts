@@ -3,8 +3,6 @@ import { Space } from './space.js';
 import type { ElementClass, ElementAttributes, ElementContext } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
-import type { VisibilityMode } from '../command/visibility.js';
-import { visibilityFromMode } from '../command/visibility.js';
 
 /**
  * Movable game element. Pieces represent items that can be relocated during play.
@@ -18,7 +16,8 @@ import { visibilityFromMode } from '../command/visibility.js';
  * **Key features:**
  * - Movement: Relocate via `putInto(destination)`
  * - Removal: Remove from play via `remove()` (goes to game.pile)
- * - Visibility: Override zone visibility via `showToAll()`, `hideFromAll()`, etc.
+ * - Visibility: element-level visibility is inherited from `GameElement`
+ *   (`showToAll()`, `hideFromAll()`, `showOnlyTo()`, ...).
  *
  * @example
  * ```typescript
@@ -112,77 +111,6 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
     if (this.game.pile) {
       this.putInto(this.game.pile);
     }
-  }
-
-  // ============================================
-  // Visibility Control (explicit overrides of zone default)
-  // ============================================
-
-  /**
-   * Explicitly set this piece's visibility (overrides zone default)
-   */
-  setVisibility(mode: VisibilityMode): void {
-    this._visibility = visibilityFromMode(mode);
-  }
-
-  /**
-   * Make this piece visible to all (overrides zone default)
-   */
-  showToAll(): void {
-    this.setVisibility('all');
-  }
-
-  /**
-   * Make this piece visible only to owner (overrides zone default)
-   */
-  showToOwner(): void {
-    this.setVisibility('owner');
-  }
-
-  /**
-   * Hide this piece from all (overrides zone default)
-   */
-  hideFromAll(): void {
-    this.setVisibility('hidden');
-  }
-
-  /**
-   * Add specific players who can see this piece (beyond inherited visibility)
-   */
-  addVisibleTo(...players: (Player | number)[]): void {
-    const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
-    this.addVisibleToInternal(positions);
-  }
-
-  /**
-   * Show this piece only to a specific player (hide from all others)
-   */
-  showOnlyTo(player: Player | number): void {
-    const seat = typeof player === 'number' ? player : player.seat;
-    this._visibility = {
-      mode: 'hidden',
-      addPlayers: [seat],
-      explicit: true,
-    };
-  }
-
-  /**
-   * Hide this piece from specific players (visible to all others)
-   */
-  hideFrom(...players: (Player | number)[]): void {
-    const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
-    this._visibility = {
-      mode: 'all',
-      exceptPlayers: positions,
-      explicit: true,
-    };
-  }
-
-  /**
-   * Clear explicit visibility, reverting to inherited zone visibility
-   */
-  clearVisibility(): void {
-    this._visibility = undefined;
   }
 
   // ============================================

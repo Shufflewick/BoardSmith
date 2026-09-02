@@ -202,13 +202,21 @@ not treat it as an audit log (see [core-concepts.md](./core-concepts.md)).
 
 ### Visibility Control
 
-Game elements can have visibility restrictions:
+Every game element — `Piece` and `Space` alike — carries the element-level
+visibility API, because it lives on `GameElement`:
 
 ```typescript
 card.hideFromAll();           // Hidden from everyone
-card.showTo(player);          // Visible to specific player
+card.addVisibleTo(player);    // Add a player to the visibility list
 card.showOnlyTo(player);      // Visible ONLY to that player
+
+room.showOnlyTo(occupant);    // A Space can say who may see THE SPACE ITSELF
 ```
+
+A `Space` also has the ZONE half, which governs its CONTENTS rather than the
+space: `contentsHidden()`, `addZoneVisibleTo()`, `hideContentsFrom()`. The two
+halves are independent — hiding a room from a seat does not hide what is in it,
+and hiding a room's contents does not hide the room.
 
 The `playerView()` method filters state based on these visibility rules.
 

@@ -11,8 +11,14 @@ import type {
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import { PersistentMap } from './persistent-map.js';
-import type { VisibilityState } from '../command/visibility.js';
-import { DEFAULT_VISIBILITY, canPlayerSee, copyVisibilityState, resolveVisibility } from '../command/visibility.js';
+import type { VisibilityMode, VisibilityState } from '../command/visibility.js';
+import {
+  DEFAULT_VISIBILITY,
+  canPlayerSee,
+  copyVisibilityState,
+  resolveVisibility,
+  visibilityFromMode,
+} from '../command/visibility.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { RedactedAttributeError, type RedactionReason } from '../errors.js';
 import {
@@ -1030,6 +1036,77 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   isVisible(): boolean {
     if (!this._ctx.player) return true;
     return this.isVisibleTo(this._ctx.player);
+  }
+
+  /**
+   * Explicitly set this element's visibility, overriding the zone default it
+   * would otherwise inherit from its parent Space.
+   *
+   * On a Space this governs the SPACE ITSELF, not its contents — use
+   * `contentsHidden()` / `addZoneVisibleTo()` for those.
+   */
+  setVisibility(mode: VisibilityMode): void {
+    this._visibility = visibilityFromMode(mode);
+  }
+
+  /**
+   * Make this element visible to all (overrides zone default)
+   */
+  showToAll(): void {
+    this.setVisibility('all');
+  }
+
+  /**
+   * Make this element visible only to its owner (overrides zone default)
+   */
+  showToOwner(): void {
+    this.setVisibility('owner');
+  }
+
+  /**
+   * Hide this element from all (overrides zone default)
+   */
+  hideFromAll(): void {
+    this.setVisibility('hidden');
+  }
+
+  /**
+   * Add specific players who can see this element (beyond inherited visibility)
+   */
+  addVisibleTo(...players: (Player | number)[]): void {
+    const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
+    this.addVisibleToInternal(positions);
+  }
+
+  /**
+   * Show this element only to a specific player (hide from all others)
+   */
+  showOnlyTo(player: Player | number): void {
+    const seat = typeof player === 'number' ? player : player.seat;
+    this._visibility = {
+      mode: 'hidden',
+      addPlayers: [seat],
+      explicit: true,
+    };
+  }
+
+  /**
+   * Hide this element from specific players (visible to all others)
+   */
+  hideFrom(...players: (Player | number)[]): void {
+    const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
+    this._visibility = {
+      mode: 'all',
+      exceptPlayers: positions,
+      explicit: true,
+    };
+  }
+
+  /**
+   * Clear explicit visibility, reverting to inherited zone visibility
+   */
+  clearVisibility(): void {
+    this._visibility = undefined;
   }
 
   /**

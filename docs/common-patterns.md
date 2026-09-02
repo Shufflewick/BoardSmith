@@ -293,6 +293,18 @@ card.setVisibility('owner');   // Only owner sees
 card.setVisibility('hidden');  // No one sees
 ```
 
+### Hiding a Space Itself
+
+The same methods are on every element, so a `Space` can declare its own
+audience — useful when a room's occupancy IS its visibility:
+
+```typescript
+room.hideFromAll();
+room.addVisibleTo(...occupants);   // Only people in the room see the room
+
+room.contentsHidden();             // Separate: governs what is INSIDE the room
+```
+
 ---
 
 ## 6. Piece Promotion

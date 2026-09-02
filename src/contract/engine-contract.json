@@ -1,7 +1,7 @@
 {
-  "revision": 30,
+  "revision": 31,
   "bundleProtocol": 1,
-  "surfaceHash": "b5c60e0e62fa5544",
+  "surfaceHash": "30f72b732a0ae15d",
   "payloadHash": "32f56b0af8269931",
   "history": [
     {
@@ -243,6 +243,14 @@
       "surfaceHash": "b5c60e0e62fa5544",
       "payloadHash": "32f56b0af8269931",
       "summary": "The world wire's world_state message now carries presence: number[] | null -- the platform-composed live present-seat set, per seat, derived and never stored, empty after a park, null when the host page has no live claim (left vs reconnecting not distinguished) -- and WorldShell/useWorldHost hand it to a bundle's world UI as the presence prop and useWorld().presence. Host pages must include the field when composing world_state; the whole wire is now part of payloadHash."
+    },
+    {
+      "revision": 31,
+      "date": "2026-09-02",
+      "bundleProtocol": 1,
+      "surfaceHash": "30f72b732a0ae15d",
+      "payloadHash": "32f56b0af8269931",
+      "summary": "Element-level visibility lives on GameElement rather than only on Piece (issue #162): setVisibility, showToAll, showToOwner, hideFromAll, addVisibleTo, showOnlyTo, hideFrom and clearVisibility moved up from Piece, which keeps every one of them by inheritance. Purely additive -- no behaviour changes for any existing game -- and a Space now has both halves: hideFromAll/showOnlyTo govern THE SPACE ITSELF, contentsHidden/addZoneVisibleTo govern its CONTENTS. A game modelling occupancy as a room's own visibility no longer has to hand-write a VisibilityState literal against setVisibilityInternal."
     }
   ]
 }
