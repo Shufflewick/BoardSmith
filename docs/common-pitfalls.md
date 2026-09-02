@@ -1917,6 +1917,57 @@ Handlers that only touch game-level state (`this.enterCount++`) or query via `el
 
 ---
 
+## 22. A Dispatch That Matches Nothing Reports Nothing
+
+### The Problem
+
+A per-item dispatch written as a chain of `if (...) { ...; continue; }` has no
+answer for an item that matches no branch:
+
+```typescript
+// PROBLEMATIC - a card whose type matches nothing is announced and then
+// silently does nothing
+for (const card of played) {
+  game.message(`${player.name} resolves ${card.name}`);
+  if (card.type === 'draw') { draw(card); continue; }
+  if (card.type === 'strike') { strike(card); continue; }
+}
+```
+
+To a player the card was played and had no effect. Nothing in the suite fails,
+because nothing asserts that every card type produces an outcome. This is the
+same defect as returning `{ success: false }` with no `error`: a code path
+whose failure mode is silence.
+
+### The Solution
+
+Return an outcome from a `switch`, so TypeScript proves the dispatch
+exhaustive and a new card type is a compile error rather than a quiet no-op:
+
+```typescript
+function resolveCard(card: Card): CardOutcome {
+  switch (card.type) {
+    case 'draw': return draw(card);
+    case 'strike': return strike(card);
+  }
+  // No default: TypeScript reports a missing return when a type is unhandled.
+}
+```
+
+Back it with a test that iterates the type union and asserts each one produces
+an outcome — verify that test fails when a branch is removed.
+
+> **Lint guard:** the `no-silent-dispatch-fallthrough` ESLint rule flags a loop
+> whose last statements are two or more `if (...) { ...; continue; }` branches
+> with nothing after them. `boardsmith validate` enforces it project-wide.
+
+### Symptoms of This Bug
+
+- The log announces a thing resolving, and the board does not change
+- An action reports neither success nor refusal for some inputs
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -1945,6 +1996,7 @@ Handlers that only touch game-level state (`this.enterCount++`) or query via `el
 | **Mixing dice randomization** | `die.roll()` then `die.setValue(Math.random())` | Use only `die.roll()` for normal rolling |
 | **Element identity (lint)** | `el1 === el2` / `arr.includes(el)` | `no-element-identity-comparison` ESLint rule auto-fixes simple cases to `.id` |
 | **Element array state (lint)** | `class X { items: Card[] = game.all(Card); }` | `no-element-array-state` ESLint rule flags it — query at point of use or store ids |
+| **Silent dispatch (lint)** | `if (a) {...; continue} if (b) {...; continue}` and nothing after | `switch` returning an outcome; `no-silent-dispatch-fallthrough` flags the chain |
 
 ---
 

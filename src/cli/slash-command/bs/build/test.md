@@ -30,6 +30,7 @@ here.
    - `no-eval`
    - `no-element-identity-comparison`
    - `no-element-array-state`
+   - `no-silent-dispatch-fallthrough`
 
    These are the AST-based determinism/network/timer/filesystem/eval enforcement rules
    `src/cli/lib/sandbox-scan.ts` implements as the single source of truth for both

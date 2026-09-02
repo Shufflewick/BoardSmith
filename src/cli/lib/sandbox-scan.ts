@@ -69,6 +69,19 @@ const IDENTITY_RULES: Linter.RulesRecord = {
   'boardsmith/no-element-array-state': 'error',
 };
 
+/**
+ * Silence rules — guard against a code path whose failure mode is silence
+ * (#161). A per-item dispatch written as a chain of `if (...) { ...; continue; }`
+ * with nothing after it resolves an unmatched item to NOTHING: no outcome, no
+ * refusal, no record. To a player the card was played and simply had no
+ * effect, and no test fails, because nothing asserts that every item produces
+ * an outcome. Enforced project-wide: the shape is a defect wherever it is
+ * written, not only inside the executor sandbox.
+ */
+const SILENCE_RULES: Linter.RulesRecord = {
+  'boardsmith/no-silent-dispatch-fallthrough': 'error',
+};
+
 const FLAT_CONFIG: Linter.Config[] = [
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.vue'],
@@ -85,7 +98,7 @@ const FLAT_CONFIG: Linter.Config[] = [
     plugins: {
       boardsmith: plugin as unknown as NonNullable<Linter.Config['plugins']>[string],
     },
-    rules: { ...SECURITY_RULES, ...DETERMINISM_RULES, ...IDENTITY_RULES },
+    rules: { ...SECURITY_RULES, ...DETERMINISM_RULES, ...IDENTITY_RULES, ...SILENCE_RULES },
   },
   {
     // UI runs in the browser, not the executor sandbox: relax the determinism

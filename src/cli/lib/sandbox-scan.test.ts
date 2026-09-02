@@ -132,6 +132,25 @@ describe('scanSandboxViolations', () => {
     expect(files).toContain('src/rules/d.ts');
   });
 
+  // #161: a per-card dispatch that matches nothing reports nothing -- the card
+  // is announced in the log and then silently does nothing. The scan is where
+  // a game finds out before a player does.
+  it('flags a dispatch chain that falls through without recording an outcome', () => {
+    write(
+      'src/rules/game.ts',
+      'export function resolve(cards, outcomes) {\n' +
+        '  for (const card of cards) {\n' +
+        '    if (card.type === "draw") { outcomes.push("draw"); continue; }\n' +
+        '    if (card.type === "play") { outcomes.push("play"); continue; }\n' +
+        '  }\n' +
+        '}\n'
+    );
+    const violations = scanSandboxViolations(dir);
+    expect(violations.map((v) => v.ruleId)).toContain(
+      'boardsmith/no-silent-dispatch-fallthrough'
+    );
+  });
+
   // 178-06 Task 1: scanSourceForSandboxViolations is the per-file body scanSandboxViolations now
   // delegates to — one lint implementation, two entry points. They must agree on one fixture.
   it('scanSourceForSandboxViolations agrees with scanSandboxViolations on one fixture file', () => {
