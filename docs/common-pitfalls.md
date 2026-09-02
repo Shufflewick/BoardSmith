@@ -284,6 +284,51 @@ class MyGame extends Game {
 
 ---
 
+## 5.5. Hand-Built View Fixtures Drift Silently
+
+### The Problem
+
+The engine serializes a player-valued attribute as
+`{ __playerRef, seat, color, name }`. `__playerRef` is what makes it
+deserializable back into a `Player`; the other three exist so a board can
+render a name and a color without a lookup.
+
+A hand-written fixture almost always writes the short form:
+
+```typescript
+// PROBLEMATIC - renders identically, asserts against a shape production
+// stopped sending
+const view = { id: 1, className: 'Token', attributes: { player: { seat: 2 } } };
+```
+
+Boards typically read only `seat`, so the short form renders the same and the
+suite stays green while the fixture no longer describes production. Declaring
+the fixture's type locally instead of using the library's own view type hides
+it completely.
+
+### The Solution
+
+Build the attribute, and check the fixture:
+
+```typescript
+import { viewPlayerRef, assertViewFixtureShape } from 'boardsmith/testing';
+
+const view = {
+  id: 1,
+  className: 'Token',
+  attributes: { player: viewPlayerRef(2, { name: 'Alice' }) },
+};
+
+assertViewFixtureShape(view);  // throws, naming the element and attribute
+```
+
+`diffPlayerViews` runs the check on any view pair you hand it, so a drifted
+fixture fails there without opting in. Prefer capturing a view from a real
+game (`testGame.getPlayerView(seat)`, `renderAsSeat`) over hand-building one
+at all — a captured view cannot drift.
+
+---
+
 ## 6. Flow Loop Conditions (`maxIterations` is required)
 
 ### The Problem

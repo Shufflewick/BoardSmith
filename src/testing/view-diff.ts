@@ -28,6 +28,7 @@
 
 import type { ElementJSON, Game } from '../engine/index.js';
 import type { TestGame } from './test-game.js';
+import { assertViewFixtureShape } from './view-fixture.js';
 
 /**
  * The two fields the view-pair overload actually reads: whose view it is, and
@@ -223,6 +224,12 @@ export function diffPlayerViews<G extends Game>(
   } else {
     viewA = viewAOrTestGame as DiffableView;
     viewB = viewBOrSeatA;
+    // A view-pair caller may have hand-built either side. A player attribute
+    // written as `{ seat }` renders identically to the real
+    // `{ __playerRef, seat, color, name }`, so the drift is invisible unless
+    // something refuses it here (#160).
+    assertViewFixtureShape(viewA.state, `seat ${viewA.player} view`);
+    assertViewFixtureShape(viewB.state, `seat ${viewB.player} view`);
   }
 
   const onlyInA: string[] = [];

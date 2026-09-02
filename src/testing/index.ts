@@ -80,6 +80,14 @@ export {
   getVisibleElements,
 } from './visibility.js';
 
+// Hand-built view fixtures (#160) -- the real serialized player-reference
+// shape, and the check that refuses the short form that renders identically.
+export {
+  viewPlayerRef,
+  assertViewFixtureShape,
+  type ViewPlayerRef,
+} from './view-fixture.js';
+
 // Per-seat view diffing (VIS-02)
 export {
   diffPlayerViews,
