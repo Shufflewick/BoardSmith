@@ -45,7 +45,10 @@ describe('deriveManifest', () => {
     // spread, this is the test that catches the drop.
     const config = {
       name: 'fixture',
-      world: { resolveAction: { name: 'resolveRound', args: { scope: 'all' } }, enrolAction: { name: 'enrol' } },
+      // The live block, not the round architecture's: `validate` refuses that
+      // shape's keys by name, so a fixture written in it taught a manifest the
+      // toolchain rejects (#304).
+      world: { maxPlayers: 200 },
       persistence: true,
       bot: true,
       joinInProgress: true,
