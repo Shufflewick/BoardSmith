@@ -74,6 +74,18 @@ export type GameClass<G extends Game = Game> = new (options: {
 }) => G;
 
 /**
+ * The world half of a `GameDefinition`, carried for the hosting platform.
+ *
+ * An open record rather than a named shape, and that is the design: this engine
+ * neither calls nor validates a single member of it, so any shape it declared
+ * here would be a claim it cannot keep. `GameDefinition.world` says who can.
+ *
+ * Deliberately not exported: naming it in a game's own source would suggest
+ * this repo has something to say about the block's members, and it does not.
+ */
+type PlatformWorldBlock = Readonly<Record<string, unknown>>;
+
+/**
  * Game definition for registering games
  */
 export interface GameDefinition {
@@ -96,21 +108,26 @@ export interface GameDefinition {
    */
   persistence?: boolean;
   /**
-   * A PERSISTENT WORLD's two platform-called actions.
+   * THE PERSISTENT-WORLD HALF OF THIS DEFINITION, WHICH THIS ENGINE NEVER READS.
    *
-   * `resolveAction` is the action the platform runs, on its own held seat and
-   * with no human present, to advance the world one round. It is the whole
-   * reason `boardsmith dev --kind resolution` exists: before it, a resolver
-   * could not be run even once until the game was published, because nothing
-   * local knew which action resolved a round or had a store for it to read.
+   * A world's commands, its genesis, its per-seat view and its presence hooks
+   * are called by the HOSTING PLATFORM's world runner. Nothing in this repo
+   * reads this block -- `src/session/game-definition-world.test.ts` holds that
+   * true -- because the engine's whole share of a world is
+   * `GameOptions.worldMode` (docs/core-concepts.md, "Snapshot Mode and World
+   * Mode"), which unlocks the partition APIs and changes nothing else.
    *
-   * `enrolAction` is run when a player joins a running world, so their board
-   * opens without waiting for the next resolution.
+   * So its members are deliberately NOT typed here. The platform validates them
+   * on a world's first wake and owns the contract for their shape; a copy in
+   * this file would be a second authority, free to drift -- which is exactly
+   * what the declaration this replaces did. It required the deleted ROUND
+   * architecture's per-round resolver action by name, and went on requiring it
+   * for two architectures after that machinery was removed, so an author who
+   * annotated their definition was told to write a shape the platform refuses.
+   *
+   * docs/persistent-worlds.md says who owns the contract and where a world runs.
    */
-  world?: {
-    resolveAction: string;
-    enrolAction?: string;
-  };
+  world?: PlatformWorldBlock;
   /** Game-level configurable options */
   gameOptions?: Record<string, GameOptionDefinition>;
   /** Per-player configurable options */

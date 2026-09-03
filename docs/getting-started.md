@@ -58,6 +58,11 @@ play as bot until claimed).
 By default the server binds to `127.0.0.1` (local-only). Pass `--lan` to let
 other devices on your network join.
 
+**Building a persistent world?** `boardsmith dev` plays your project's table
+game. The world half of a game definition is run by the hosting platform, not by
+this CLI, so read [Persistent worlds](./persistent-worlds.md) first — it says
+which half is the engine's and where a world can actually be run.
+
 #### Dev Server Options
 
 ```bash
@@ -336,6 +341,7 @@ These issues cause silent failures that are hard to debug. Five minutes reading 
 - Learn about [Actions & Flow](./actions-and-flow.md) for complex game logic
 - Explore [UI Components](./ui-components.md) for building custom UIs
 - See [Game Examples](./game-examples.md) for real implementations
+- Writing a persistent world? [Persistent worlds](./persistent-worlds.md) says which half is this engine's
 - Reference [Nomenclature](./nomenclature.md) for standard terminology
 
 ## Example Games

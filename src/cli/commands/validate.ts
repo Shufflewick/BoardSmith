@@ -15,6 +15,7 @@ import {
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
 import { requireGameProject } from '../lib/game-project.js';
+import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
 
 interface ValidationResult {
   name: string;
@@ -65,7 +66,9 @@ export async function validateCommand(): Promise<void> {
     process.exit(1);
   }
 
-  printSuccessGuidance();
+  printSuccessGuidance(
+    resolveWorldMode(JSON.parse(readFileSync(configPath, 'utf-8')) as { world?: unknown }),
+  );
 }
 
 /** Prints every check's verdict and its failure detail. Returns whether all passed. */
@@ -88,12 +91,24 @@ function printResults(results: ValidationResult[]): boolean {
   return results.every((result) => result.passed);
 }
 
-function printSuccessGuidance(): void {
+function printSuccessGuidance(isWorld: boolean): void {
   console.log(chalk.green('All validation checks passed!\n'));
   console.log(chalk.cyan('Next steps:'));
   console.log(chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'));
   console.log(chalk.dim('  boardsmith build    - Build for production'));
   console.log(chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'));
+  // #304: this tip and getting-started.md are the two places an author is sent
+  // from, and `boardsmith dev` plays a world project's TABLE game. A world
+  // author who is not told that here has nowhere else to find it out.
+  if (isWorld) {
+    console.log(
+      chalk.yellow('World:') +
+        chalk.dim(
+          ` this game declares a persistent world. \`boardsmith dev\` plays its table half;\n` +
+            `       BoardSmith ${WORLD_AUTHORING_DOC} says where the world half runs.\n`,
+        ),
+    );
+  }
   console.log(chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'));
   console.log(chalk.dim('     The engine will warn about issues like:'));
   console.log(chalk.dim('     - Flow steps referencing non-existent actions'));

@@ -483,8 +483,8 @@ Three things to know before using it:
   the identical fingerprints, and a command paid for the whole resident world
   twice before its rollback copy paid a third time (ShufflewickPub #316).
 
-**Running one locally.** `boardsmith dev` stands a world up resident when the
-project's `boardsmith.json` declares a `world` block:
+**Declaring a world, and what `boardsmith dev` then does.** A project's
+`boardsmith.json` declares one with a `world` block:
 
 ```json
 { "name": "gloamhall", "world": { "maxPlayers": 200 } }
@@ -497,6 +497,14 @@ rather than two. World mode then travels in the start op's gameOptions and so
 into the snapshot, which is what makes a restored world come back resident
 rather than reading its `{ __elementId }` references against a residency model
 that never wrote them.
+
+That construction option is the whole of what the block causes here. `boardsmith
+dev` then plays the project's TABLE game under this residency model; it runs no
+part of the world half of the game definition, because the commands, genesis,
+per-seat view and presence hooks in `gameDefinition.world` are called by the
+hosting platform's world runner and this repo contains no such runner. See
+[persistent worlds](./persistent-worlds.md) for who owns that contract and
+where a world really runs.
 
 ## Game Lifecycle
 

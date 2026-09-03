@@ -16,6 +16,7 @@ import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.j
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
+import { resolveWorldMode, worldModeNotice, type WorldManifestBlock } from '../lib/world-project.js';
 import { parseBotLevel } from '../../bot/index.js';
 
 /** executeOp bundled from the SAME module graph as the rules (one engine). */
@@ -270,23 +271,10 @@ interface BoardSmithConfig {
   /**
    * The persistent-world block. Its PRESENCE is what makes this game a world
    * (`boardsmith.schema.json`); `maxPlayers` is the capacity the platform
-   * sizes the world against.
+   * sizes the world against. What this CLI does with it -- and, just as
+   * importantly, what it does not -- lives in `../lib/world-project.ts`.
    */
-  world?: { maxPlayers?: number };
-}
-
-/**
- * Is this project a persistent world (#158)?
- *
- * A world is what a game IS, not something a run selects, so the manifest's
- * `world` block is the single declaration and `boardsmith dev` reads it rather
- * than offering a flag. The dev host then constructs the game with
- * `GameOptions.worldMode`, which is where a world is declared engine-side --
- * so the local host runs the same residency model production does, instead of
- * silently running a world as an ordinary snapshot game.
- */
-export function resolveWorldMode(config: { world?: unknown }): boolean {
-  return config.world !== undefined && config.world !== null;
+  world?: WorldManifestBlock;
 }
 
 /**
@@ -878,13 +866,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
   exitOnDevFlagError(() => validateBotSeats(botPlayers, effectivePlayerCount));
 
   // #158: the manifest's `world` block is the whole declaration -- no flag.
+  // #304: what the run then IS gets stated accurately, in one place.
   const worldMode = resolveWorldMode(config);
-  if (worldMode) {
-    console.log(
-      chalk.dim(
-        `  Persistent world: running resident (worldMode), capacity ${config.world?.maxPlayers ?? 'unset'}.`,
-      ),
-    );
+  for (const line of worldModeNotice(config)) {
+    console.log(chalk.dim(`  ${line}`));
   }
 
   const devConfig = buildDevConfig({
