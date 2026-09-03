@@ -14,7 +14,19 @@ import type { WorldHost } from './useWorldHost.js';
  */
 export type WorldContext = Pick<
   WorldHost,
-  'phase' | 'view' | 'seat' | 'commands' | 'notice' | 'worldName' | 'presence' | 'acting' | 'act'
+  | 'phase'
+  | 'view'
+  | 'seat'
+  | 'commands'
+  | 'notice'
+  | 'worldName'
+  | 'presence'
+  // WHAT THE WORLD HAS NARRATED (ShufflewickPub #331), which is the half a
+  // view cannot carry: a view says what is here, and an event says what just
+  // happened -- including the things that leave no trace for a view to report.
+  | 'events'
+  | 'acting'
+  | 'act'
 >;
 
 export const WORLD_CONTEXT_KEY: InjectionKey<WorldContext> = Symbol('boardsmith-world');

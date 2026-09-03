@@ -117,6 +117,14 @@ const WORLD_WIRE_FIXTURE = {
     worldName: 'Contract Fixture World',
     presence: [2, 5],
   },
+  world_events: {
+    source: 'shufflewick-world',
+    type: 'world_events',
+    events: [
+      { scope: 'room:cellar', payload: { said: 'the fire is low', by: 2 } },
+      { scope: 'world', payload: { dawn: true } },
+    ],
+  },
   world_response: {
     source: 'shufflewick-world',
     type: 'world_response',
@@ -137,6 +145,7 @@ const WORLD_WIRE_FIXTURE = {
   },
 } satisfies {
   world_state: Extract<WorldHostMessage, { type: 'world_state' }>;
+  world_events: Extract<WorldHostMessage, { type: 'world_events' }>;
   world_response: Extract<WorldHostMessage, { type: 'world_response' }>;
   world_command: Extract<WorldUiMessage, { type: 'world_command' }>;
   world_ready: Extract<WorldUiMessage, { type: 'world_ready' }>;

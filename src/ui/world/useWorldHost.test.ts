@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useWorldHost } from './useWorldHost.js';
 import {
   WORLD_HOST_SOURCE,
+  WORLD_NARRATION_KEPT,
   WORLD_UI_SOURCE,
   type WorldStateMessage,
 } from './worldProtocol.js';
@@ -197,5 +198,103 @@ describe('useWorldHost', () => {
     deliver(host, stateFrame());
     expect(host.hostSilent.value).toBe(false);
     host.stop();
+  });
+});
+
+/**
+ * ShufflewickPub #331: A WORLD'S NARRATION, WHICH HAD NO CHANNEL AT ALL.
+ *
+ * The platform routes every event to the seats that can see it and puts them
+ * on the wire; the host page used to answer that frame with a view request and
+ * drop the payloads, and this protocol had no message for one. So anything a
+ * world narrates that leaves no residue in its tree -- an emote, combat text,
+ * a line somebody said -- reached no screen by any route, and a game wanting
+ * one had to write it into its own state and pay to store it.
+ *
+ * A LOG AND NOT A DELIVERY, here. The host page holds one delivery at a time
+ * because it draws nothing; this side is what a UI renders from, so keeping
+ * the lines is the thing that saves every world UI from writing the same
+ * bounded array.
+ */
+describe('useWorldHost — the world narrating (#331)', () => {
+  let posted: unknown[];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    posted = [];
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function make() {
+    return useWorldHost({ post: (message) => posted.push(message) });
+  }
+
+  function narrate(host: ReturnType<typeof useWorldHost>, events: unknown[]) {
+    deliver(host, { source: WORLD_HOST_SOURCE, type: 'world_events', events });
+  }
+
+  it('starts with nothing narrated', () => {
+    expect(make().events.value).toEqual([]);
+  });
+
+  it('keeps what the host delivered, in order', () => {
+    const host = make();
+    narrate(host, [
+      { scope: 'room:hall', payload: { said: 'hello', by: 2 } },
+      { scope: 'world', payload: { dawn: true } },
+    ]);
+    expect(host.events.value).toEqual([
+      { scope: 'room:hall', payload: { said: 'hello', by: 2 } },
+      { scope: 'world', payload: { dawn: true } },
+    ]);
+  });
+
+  it('APPENDS across deliveries, because a world narrates one thing at a time', () => {
+    const host = make();
+    narrate(host, [{ scope: 'world', payload: { n: 1 } }]);
+    narrate(host, [{ scope: 'world', payload: { n: 2 } }]);
+    expect(host.events.value.map((event) => event.payload)).toEqual([{ n: 1 }, { n: 2 }]);
+  });
+
+  it('bounds the log, dropping the oldest', () => {
+    // A world runs for months. An unbounded log inside a frame that is open all
+    // day is a leak with a game's name on it, and the newest lines are the ones
+    // a scrolling surface is showing.
+    const host = make();
+    for (let n = 0; n < WORLD_NARRATION_KEPT + 10; n += 1) {
+      narrate(host, [{ scope: 'world', payload: { n } }]);
+    }
+    expect(host.events.value).toHaveLength(WORLD_NARRATION_KEPT);
+    expect(host.events.value[0]!.payload).toEqual({ n: 10 });
+    expect(host.events.value[WORLD_NARRATION_KEPT - 1]!.payload).toEqual({
+      n: WORLD_NARRATION_KEPT + 9,
+    });
+  });
+
+  it('does not treat narration as having heard from the host about STATE', () => {
+    // `heardFromHost` is what tells a UI it has been told what the world IS.
+    // Narration says something happened and carries no view, no seat and no
+    // commands, so a frame of it must not silence the "nobody has spoken to
+    // this frame" warning -- which would replace an accurate complaint with a
+    // blank board.
+    const host = make();
+    narrate(host, [{ scope: 'world', payload: { dawn: true } }]);
+    expect(host.heardFromHost.value).toBe(false);
+    expect(host.view.value).toBeNull();
+  });
+
+  it('drops narration from an origin the host never named', () => {
+    const host = useWorldHost({
+      post: (message) => posted.push(message),
+      trustedOrigins: [HOST_ORIGIN],
+    });
+    deliver(
+      host,
+      { source: WORLD_HOST_SOURCE, type: 'world_events', events: [{ scope: 'world', payload: {} }] },
+      'https://evil.example.com',
+    );
+    expect(host.events.value).toEqual([]);
   });
 });

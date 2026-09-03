@@ -412,11 +412,13 @@ export { useWorld, WORLD_CONTEXT_KEY, type WorldContext } from './world/useWorld
 export { useWorldHost, type WorldHost, type WorldHostOptions } from './world/useWorldHost.js';
 export {
   WORLD_HOST_SOURCE,
+  WORLD_NARRATION_KEPT,
   WORLD_UI_SOURCE,
   type WorldActionOutcome,
   type WorldCommandArgument,
   type WorldCommandChoice,
   type WorldCommandOffer,
+  type WorldNarration,
   type WorldPhase,
   type WorldHostMessage,
 } from './world/worldProtocol.js';

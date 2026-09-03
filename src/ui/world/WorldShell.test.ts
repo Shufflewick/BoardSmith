@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import WorldShell from './WorldShell.vue';
-import { useWorld } from './useWorld.js';
+import { useWorld, type WorldContext } from './useWorld.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from './worldProtocol.js';
 
 /**
@@ -24,12 +24,18 @@ const Rooms = defineComponent({
     acting: { type: Boolean, required: true },
     worldName: { type: null, required: true },
     presence: { type: null, required: true },
+    events: { type: Array, required: true },
   },
   emits: ['act'],
   setup(props, { emit }) {
     return () =>
       h('div', { class: 'rooms' }, [
         h('p', { class: 'seat' }, String(props.seat)),
+        h(
+          'p',
+          { class: 'narration' },
+          props.events.map((event: any) => `${event.scope}:${JSON.stringify(event.payload)}`).join('|'),
+        ),
         h('p', { class: 'awake' }, ((props.presence as number[] | null) ?? []).join(',')),
         h('p', { class: 'title' }, String(props.worldName)),
         h('p', { class: 'verbs' }, props.commands.map((c: any) => c.name).join(',')),
@@ -56,6 +62,26 @@ function stateFrame(over: Record<string, unknown> = {}) {
 
 function tell(wrapper: ReturnType<typeof mount>, data: unknown) {
   (wrapper.vm as any).host.handleMessage({ origin: 'https://shufflewick.pub', data });
+}
+
+/**
+ * A shell whose UI is a component NESTED inside another, reading the world
+ * through `useWorld()` rather than through its props.
+ *
+ * The nesting is the point: `provide` reaches any depth, which is what saves a
+ * world UI from threading `view` and `act` through every component it is made
+ * of. `read` is what the nested component prints, so each case asserts on one
+ * class name and one value.
+ */
+function mountNested(className: string, read: (world: WorldContext) => string) {
+  const Nested = defineComponent({
+    setup() {
+      const world = useWorld();
+      return () => h('span', { class: className }, read(world));
+    },
+  });
+  const Outer = defineComponent({ setup: () => () => h('div', [h(Nested)]) });
+  return mount(WorldShell, { props: { ui: Outer, displayName: 'Gloamhall' } });
 }
 
 describe('WorldShell', () => {
@@ -86,16 +112,7 @@ describe('WorldShell', () => {
   });
 
   it('hands presence to a nested component through useWorld()', async () => {
-    const Nested = defineComponent({
-      setup() {
-        const world = useWorld();
-        return () => h('span', { class: 'nested-awake' }, (world.presence.value ?? []).join(','));
-      },
-    });
-    const Outer = defineComponent({
-      setup: () => () => h('div', [h(Nested)]),
-    });
-    const wrapper = mount(WorldShell, { props: { ui: Outer, displayName: 'Gloamhall' } });
+    const wrapper = mountNested('nested-awake', (world) => (world.presence.value ?? []).join(','));
     tell(wrapper, stateFrame());
     await nextTick();
     expect(wrapper.find('.nested-awake').text()).toBe('2,4');
@@ -146,16 +163,7 @@ describe('WorldShell', () => {
   });
 
   it('hands the same world to a nested component through useWorld()', async () => {
-    const Nested = defineComponent({
-      setup() {
-        const world = useWorld();
-        return () => h('span', { class: 'nested-seat' }, String(world.seat.value));
-      },
-    });
-    const Outer = defineComponent({
-      setup: () => () => h('div', [h(Nested)]),
-    });
-    const wrapper = mount(WorldShell, { props: { ui: Outer, displayName: 'Gloamhall' } });
+    const wrapper = mountNested('nested-seat', (world) => String(world.seat.value));
     tell(wrapper, stateFrame());
     await nextTick();
     expect(wrapper.find('.nested-seat').text()).toBe('4');
@@ -170,5 +178,61 @@ describe('WorldShell', () => {
       },
     });
     expect(() => mount(Loose)).toThrow(/outside a WorldShell/);
+  });
+});
+
+/**
+ * ShufflewickPub #331: A WORLD'S NARRATION REACHES THE GAME'S OWN UI.
+ *
+ * The shell is what turns the wire into props, and until #331 there was no
+ * wire to turn: the platform routed every event to the seats that could see
+ * it and the host page dropped the payloads. A game could not draw a line of
+ * chat, an emote or a blow landing without writing it into its own stored
+ * state first.
+ */
+describe('WorldShell — narration (#331)', () => {
+  function narrate(wrapper: ReturnType<typeof mount>, events: unknown[]) {
+    tell(wrapper, { source: WORLD_HOST_SOURCE, type: 'world_events', events });
+  }
+
+  it('hands the log to the game\'s UI as a prop, oldest first', async () => {
+    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    tell(wrapper, stateFrame());
+    narrate(wrapper, [{ scope: 'room:hall', payload: { said: 'hello' } }]);
+    narrate(wrapper, [{ scope: 'world', payload: { dawn: true } }]);
+    await nextTick();
+
+    expect(wrapper.find('.narration').text()).toBe(
+      'room:hall:{"said":"hello"}|world:{"dawn":true}',
+    );
+    wrapper.unmount();
+  });
+
+  it('hands it to a nested component through useWorld() as well', async () => {
+    const wrapper = mountNested('nested-narration', (world) =>
+      world.events.value.map((event) => event.scope).join(','),
+    );
+    tell(wrapper, stateFrame());
+    narrate(wrapper, [
+      { scope: 'room:hall', payload: {} },
+      { scope: 'world', payload: {} },
+    ]);
+    await nextTick();
+
+    expect(wrapper.find('.nested-narration').text()).toBe('room:hall,world');
+    wrapper.unmount();
+  });
+
+  it('does not draw a board on narration alone, because narration is not a view', async () => {
+    // A frame that has only been narrated at has been told nothing about what
+    // the world IS. Drawing the game's UI over a null view would put an empty
+    // room on screen for a world that simply has not answered yet.
+    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    narrate(wrapper, [{ scope: 'world', payload: { dawn: true } }]);
+    await nextTick();
+
+    expect(wrapper.find('.rooms').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Looking around');
+    wrapper.unmount();
   });
 });

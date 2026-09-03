@@ -32,6 +32,10 @@
         {{ host.notice.value ?? 'The connection to this world dropped. This is the last view it sent.' }}
       </p>
 
+      <!-- NO VIEW YET. Narration alone does not draw a board: a frame that has
+           only been narrated at has been told nothing about what the world IS,
+           and mounting the game's UI over a null view would put an empty room
+           on screen for a world that has simply not answered yet. -->
       <div v-if="host.view.value === null" class="world-shell__waiting">
         <h1>{{ worldTitle }}</h1>
         <p>Looking around…</p>
@@ -46,6 +50,7 @@
         :acting="host.acting.value"
         :world-name="host.worldName.value"
         :presence="host.presence.value"
+        :events="host.events.value"
         @act="onAct"
       />
     </template>
@@ -74,7 +79,8 @@ import { WORLD_CONTEXT_KEY } from './useWorld.js';
  */
 const props = defineProps<{
   /** The game's own world UI. Handed `view`, `seat`, `commands`, `acting`,
-   *  `worldName` and `presence`, and expected to emit `act(command, args)`. */
+   *  `worldName`, `presence` and `events`, and expected to emit
+   *  `act(command, args)`. */
   ui: Component;
   /** What to call this game before the host has said what this world is called. */
   displayName: string;
@@ -96,6 +102,7 @@ provide(WORLD_CONTEXT_KEY, {
   notice: host.notice,
   worldName: host.worldName,
   presence: host.presence,
+  events: host.events,
   acting: host.acting,
   act: host.act,
 });

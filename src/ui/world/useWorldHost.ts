@@ -4,10 +4,12 @@ import {
   WORLD_COMMAND_TIMEOUT_MS,
   WORLD_HELLO_TIMEOUT_MS,
   WORLD_HOST_SOURCE,
+  WORLD_NARRATION_KEPT,
   WORLD_UI_SOURCE,
   type WorldActionOutcome,
   type WorldCommandOffer,
   type WorldHostMessage,
+  type WorldNarration,
   type WorldPhase,
   type WorldUiMessage,
 } from './worldProtocol.js';
@@ -34,6 +36,21 @@ export interface WorldHost {
    *  live claim. The contract, in full, is on `world_state` in
    *  `worldProtocol.ts`; this is that field, copied and nothing more. */
   presence: Ref<readonly number[] | null>;
+  /**
+   * WHAT THE WORLD HAS NARRATED TO THIS SEAT, oldest first
+   * (ShufflewickPub #331).
+   *
+   * The log a world UI renders as lines that scroll past. It APPENDS -- every
+   * `world_events` message is news that has not been sent before -- and is
+   * bounded at `WORLD_NARRATION_KEPT`, dropping the oldest.
+   *
+   * IT IS NOT A HISTORY. It starts empty on every mount, holds only what
+   * arrived while this frame was listening, and is gone on reload. A game that
+   * wants a newcomer to hear what was said before they arrived keeps that in
+   * its own state, where it is durable and where the game decides what it
+   * costs.
+   */
+  events: Ref<readonly WorldNarration[]>;
   /** True once the host has sent one frame this UI understood. */
   heardFromHost: Ref<boolean>;
   /** True when the hello window passed with nothing from the host at all. */
@@ -92,6 +109,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   const notice = ref<string | null>(null);
   const worldName = ref<string | null>(null);
   const presence = ref<readonly number[] | null>(null);
+  const events = ref<readonly WorldNarration[]>([]);
   const heardFromHost = ref(false);
   const hostSilent = ref(false);
   const acting = ref(false);
@@ -112,18 +130,14 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     acting.value = pending.size > 0;
   }
 
-  function handleMessage(event: MessageEvent): void {
-    if (!isOriginAllowed(event.origin, options.trustedOrigins)) return;
-    const data = event.data as WorldHostMessage | undefined;
-    if (!data || data.source !== WORLD_HOST_SOURCE) return;
-
-    if (data.type === 'world_response') {
-      settle(data.requestId, { ok: data.ok === true, message: data.message });
-      return;
-    }
-
-    if (data.type !== 'world_state') return;
-
+  /**
+   * WHAT THE WORLD IS, taken whole.
+   *
+   * This is also the frame that ENDS THE SILENCE: `heardFromHost` is what
+   * stops `WorldShell` saying nobody has spoken to this frame, and only a
+   * state frame earns it.
+   */
+  function takeState(data: Extract<WorldHostMessage, { type: 'world_state' }>): void {
     heardFromHost.value = true;
     hostSilent.value = false;
     if (helloTimer !== null) {
@@ -138,6 +152,39 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     notice.value = data.notice;
     worldName.value = data.worldName;
     presence.value = data.presence;
+  }
+
+  /**
+   * WHAT JUST HAPPENED, WHICH IS NOT WHAT THE WORLD IS (ShufflewickPub #331).
+   *
+   * Appended, because every delivery is news that has not been sent before,
+   * and bounded from the front, because a world runs for months.
+   *
+   * Deliberately NOT counted as hearing from the host: narration carries no
+   * view, no seat and no commands, so treating it as state would replace
+   * `WorldShell`'s accurate "nobody has spoken to this frame" with a blank
+   * board.
+   */
+  function takeNarration(delivery: readonly WorldNarration[]): void {
+    const kept = [...events.value, ...delivery];
+    events.value =
+      kept.length > WORLD_NARRATION_KEPT ? kept.slice(kept.length - WORLD_NARRATION_KEPT) : kept;
+  }
+
+  function handleMessage(event: MessageEvent): void {
+    if (!isOriginAllowed(event.origin, options.trustedOrigins)) return;
+    const data = event.data as WorldHostMessage | undefined;
+    if (!data || data.source !== WORLD_HOST_SOURCE) return;
+
+    if (data.type === 'world_response') {
+      settle(data.requestId, { ok: data.ok === true, message: data.message });
+      return;
+    }
+    if (data.type === 'world_events') {
+      takeNarration(data.events);
+      return;
+    }
+    if (data.type === 'world_state') takeState(data);
   }
 
   async function act(
@@ -209,6 +256,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     notice,
     worldName,
     presence,
+    events,
     heardFromHost,
     hostSilent,
     acting,

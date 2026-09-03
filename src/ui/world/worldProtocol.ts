@@ -46,6 +46,21 @@ export const WORLD_HELLO_TIMEOUT_MS = 20_000;
 /** How long one command waits for its own answer before it is failed. */
 export const WORLD_COMMAND_TIMEOUT_MS = 20_000;
 
+/**
+ * How many narrated lines a world UI is handed at once.
+ *
+ * A resident world runs for months and narrates for as long as anybody is in
+ * it, so `useWorldHost`'s log is bounded rather than left to grow for the life
+ * of an open frame. The OLDEST go, which is the right end for something that
+ * scrolls: what a person is reading is the recent lines.
+ *
+ * It is the shell's bound and not a game's. A game that wants a longer memory
+ * of what was said keeps it in its own state, where it is durable and visible
+ * to somebody who was not connected -- which is a different promise from this
+ * one, and the reason both exist.
+ */
+export const WORLD_NARRATION_KEPT = 200;
+
 /** One value a `choice` argument offers, and how to say it to a person. */
 export interface WorldCommandChoice {
   readonly value: string;
@@ -75,6 +90,33 @@ export interface WorldCommandOffer {
   readonly name: string;
   readonly prompt?: string;
   readonly args: readonly WorldCommandArgument[];
+}
+
+/**
+ * ONE THING THAT HAPPENED, AS THE WORLD ADDRESSED IT (ShufflewickPub #331).
+ *
+ * A world's narration IS its routed events, and this is one of them: the scope
+ * the game named, and the payload the game wrote.
+ *
+ * THE AUDIENCE IS NOT ON THE WIRE. Which seats an event was addressed to is
+ * the platform's own routing fact; a UI that received it would learn who else
+ * is in the room from an event that was addressed to it. The platform has
+ * already decided this frame's reader is in the audience, and nothing here
+ * re-checks.
+ *
+ * `payload` IS THE GAME'S OWN SHAPE, and stays `unknown` the whole way here:
+ * it is written by the game's rules and read by the game's UI, and every layer
+ * between the two is deliberately incapable of interpreting it.
+ *
+ * NARRATION IS NOT STATE, which is why it has a message of its own rather than
+ * a field on `world_state`. State is re-pushed whenever any part of it moves,
+ * so a line carried on it would be re-delivered on every later push; and a
+ * view answers "what is here", while an event answers "what just happened" --
+ * a thing that leaves no trace in the tree for a view to report.
+ */
+export interface WorldNarration {
+  readonly scope: string;
+  readonly payload: unknown;
 }
 
 /**
@@ -117,6 +159,19 @@ interface WorldStateMessage {
   readonly presence: readonly number[] | null;
 }
 
+/**
+ * WHAT THE WORLD HAS JUST NARRATED to the seat this frame belongs to.
+ *
+ * ONE DELIVERY. Every message is news that has not been sent before, so a UI
+ * appends rather than replaces -- `useWorldHost` does that appending, and its
+ * `events` ref is the log a world UI renders.
+ */
+interface WorldEventsMessage {
+  readonly source: typeof WORLD_HOST_SOURCE;
+  readonly type: 'world_events';
+  readonly events: readonly WorldNarration[];
+}
+
 /** The host's answer to one command this UI sent. */
 interface WorldResponseMessage {
   readonly source: typeof WORLD_HOST_SOURCE;
@@ -129,12 +184,16 @@ interface WorldResponseMessage {
 /**
  * EVERYTHING THE HOST SENDS, and the only name the two halves share.
  *
- * The four message shapes above are not exported individually on purpose: a
- * reader of this protocol only ever handles the union -- one listener, one
- * switch -- and four exported names nothing imports are four things a future
- * change can leave behind.
+ * The message shapes above are not exported individually on purpose: a reader
+ * of this protocol only ever handles the union -- one listener, one switch --
+ * and exported names nothing imports are things a future change can leave
+ * behind. `WorldNarration` IS exported, because it is not a message: it is the
+ * item a game's own UI declares a prop of.
  */
-export type WorldHostMessage = WorldStateMessage | WorldResponseMessage;
+export type WorldHostMessage =
+  | WorldStateMessage
+  | WorldEventsMessage
+  | WorldResponseMessage;
 
 /** What one command becomes on the wire. */
 interface WorldCommandMessage {
