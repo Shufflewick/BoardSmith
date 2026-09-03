@@ -98,6 +98,16 @@ function worldWithPartitions(seed: string) {
   return { game, ...built };
 }
 
+/**
+ * THE PLATFORM'S DOOR, opened exactly as `dispatch`'s `partition(name)` opens
+ * it in `games/src/world-engine-boardsmith.ts`: look the root up, and say that
+ * it has been handed to game code (#295).
+ */
+function opened(game: WorldGame, id: number): GameElement {
+  game.reachPartition(id);
+  return game.partitionRoot(id) as GameElement;
+}
+
 describe('world mode: element references are id-based, not positional', () => {
   it('serializes element attribute refs as __elementId in world mode', () => {
     const game = new WorldGame({ playerCount: 2, seed: 'world-refs' , worldMode: true });
@@ -407,6 +417,15 @@ describe('moveToInternal partition marking', () => {
  * taken at `definePartition`/`adoptSubtree`/the previous
  * `takeTouchedPartitions`. Complete by construction: a change serialization
  * cannot see is by definition a change no checkpoint could have carried.
+ *
+ * The comparison is SCOPED to the partitions a command reached (#295, the
+ * block at the bottom of this file), so these cases take their elements the
+ * way a command does -- through `Game#partitionRoot`, which is what a
+ * command's `partition(name)` answers from -- rather than through a reference
+ * captured when the world was built. A captured reference is not a door and
+ * never was a supported one: partitions are evicted and re-adopted as new
+ * objects, so `moveToInternal`'s own detached-destination guard already calls
+ * one a bug.
  */
 describe('attribute writes mark the partition they land in', () => {
   it('marks the partition an attribute write reached through an element.game walk', () => {
@@ -422,11 +441,12 @@ describe('attribute writes mark the partition they land in', () => {
   });
 
   it('marks a DEEP mutation of an attribute value, which no write-site hook could see', () => {
-    const { game, roomB, b0 } = worldWithPartitions('attr-deep');
+    const { game, roomB } = worldWithPartitions('attr-deep');
+    const b0 = () => opened(game, roomB.id).first(Token, 'b0') as Token;
 
-    b0.tags = b0.tags ?? [];
+    b0().tags = [];
     game.takeTouchedPartitions();
-    b0.tags!.push('cursed');
+    b0().tags!.push('cursed');
 
     expect([...game.takeTouchedPartitions()]).toEqual([roomB.id]);
   });
@@ -434,7 +454,7 @@ describe('attribute writes mark the partition they land in', () => {
   it('marks the partition an element was CREATED in', () => {
     const { game, roomC } = worldWithPartitions('attr-create');
 
-    roomC.create(Token, 'c1', { label: 'c1' });
+    opened(game, roomC.id).create(Token, 'c1', { label: 'c1' });
 
     expect([...game.takeTouchedPartitions()]).toEqual([roomC.id]);
   });
@@ -468,20 +488,21 @@ describe('attribute writes mark the partition they land in', () => {
   });
 
   it('taking re-baselines: an already-checkpointed write is not re-reported', () => {
-    const { game, a0 } = worldWithPartitions('attr-rebaseline');
+    const { game, roomA } = worldWithPartitions('attr-rebaseline');
+    const a0 = () => opened(game, roomA.id).first(Token, 'a0') as Token;
 
-    a0.label = 'once';
+    a0().label = 'once';
     expect(game.takeTouchedPartitions().size).toBe(1);
     expect(game.takeTouchedPartitions().size).toBe(0);
 
-    a0.label = 'twice';
+    a0().label = 'twice';
     expect(game.takeTouchedPartitions().size).toBe(1);
   });
 
   it('keeps an attribute-dirty mark through eviction, like a move-touch', () => {
-    const { game, roomA, a0 } = worldWithPartitions('attr-evict-keep');
+    const { game, roomA } = worldWithPartitions('attr-evict-keep');
 
-    a0.label = 'dirtied';
+    (opened(game, roomA.id).first(Token, 'a0') as Token).label = 'dirtied';
     game.evictSubtree(roomA.id);
 
     // The partition was dirtied while resident; dropping the mark because it
@@ -549,12 +570,22 @@ describe('the dirty-set pass costs one serialization per partition, and no tree 
     return { game, rooms };
   }
 
-  it('serializes each resident partition exactly ONCE per take', () => {
-    const { game } = countedWorld('one-pass');
+  it('serializes each partition it compares exactly ONCE per take', () => {
+    const { game, rooms } = countedWorld('one-pass');
 
+    // Reached, so all three are compared -- and each is compared once.
+    for (const room of rooms) game.reachPartition(room.id);
     game.takeTouchedPartitions();
 
     expect(CountedRoom.serializations).toBe(3);
+  });
+
+  it('serializes nothing at all for a take that reached nothing (#295)', () => {
+    const { game } = countedWorld('no-reach');
+
+    game.takeTouchedPartitions();
+
+    expect(CountedRoom.serializations).toBe(0);
   });
 
   it('finds every root without searching the tree', () => {
@@ -692,5 +723,176 @@ describe('world mode is declared at construction', () => {
       '#111111', '#222222', '#111111', '#222222',
       '#111111', '#222222', '#111111', '#222222',
     ]);
+  });
+});
+
+/**
+ * WHAT A COMMAND PAYS TO FIND ITS DIRTY SET (ShufflewickPub #295).
+ *
+ * The comparison above is complete, and until #295 it was also whole-world:
+ * every resident partition was serialized on every take, so per-command CPU
+ * was O(the resident world) rather than O(the room the command was about.
+ * Measured on the platform's own instrument, 256 resident partitions of ~10 KB
+ * cost 11.5 ms per command against a 5 ms per-event budget.
+ *
+ * The fix is not a write barrier -- `games/src/world-engine.ts` retires that as
+ * INCORRECT, because a barrier never fires on a mutation INSIDE an attribute
+ * value. It is that the comparison is SCOPED to the partitions a command could
+ * have written, and the engine can know that set because it owns every door
+ * into the tree:
+ *
+ *   - the platform's own door, `Game#partitionRoot`, which is what a command's
+ *     `partition(name)` answers from;
+ *   - the queries and tree accessors an element hands out -- `all`, `first`,
+ *     `firstN`, `last`, `lastN`, `atId`, `atBranch`, `parent`, `children`, and
+ *     `Game#getElementById`;
+ *   - `moveToInternal`, which already marked both endpoints of a move;
+ *   - and element REFERENCES held in attributes, which are the one way to
+ *     reach another partition without asking for it. Those are harvested from
+ *     the serialization the comparison is already doing, so a partition that
+ *     is compared pulls in everything it points at.
+ *
+ * A retained raw reference from an earlier command is NOT a door, and it never
+ * was a supported one: partitions are evicted and re-adopted as new objects and
+ * the isolate is destroyed at hibernation, so `moveToInternal`'s own
+ * detached-destination guard already calls a captured element reference a bug.
+ */
+describe('the dirty-set comparison is scoped to what the command reached', () => {
+  /** Count `toJSON` calls per partition root, which is what the comparison costs. */
+  function countSerializations(roots: readonly GameElement[]) {
+    const counts = new Map<number, number>();
+    for (const root of roots) {
+      counts.set(root.id, 0);
+      const original = root.toJSON.bind(root);
+      // NON-ENUMERABLE, or `toJSON` becomes an own enumerable property and
+      // `GameElement.toJSON`'s own `Object.keys(this)` walk serializes the spy.
+      Object.defineProperty(root, 'toJSON', {
+        configurable: true,
+        enumerable: false,
+        value: () => {
+          counts.set(root.id, counts.get(root.id)! + 1);
+          return original();
+        },
+      });
+    }
+    return counts;
+  }
+
+  it('serializes the partition the command reached, and not the ones it did not', () => {
+    const { game, roomA, roomB, roomC } = worldWithPartitions('scope-reached');
+    const counts = countSerializations([roomA, roomB, roomC]);
+
+    (opened(game, roomB.id).first(Token, 'b0') as Token).label = 'rewritten';
+
+    expect([...game.takeTouchedPartitions()]).toEqual([roomB.id]);
+    expect(counts.get(roomB.id)).toBe(1);
+    expect(counts.get(roomA.id)).toBe(0);
+    expect(counts.get(roomC.id)).toBe(0);
+  });
+
+  it('leaves an untouched partition its baseline, so the NEXT reach still compares against it', () => {
+    const { game, roomA, roomB, a0 } = worldWithPartitions('scope-baseline-kept');
+
+    // A whole command that reached roomB and never roomA.
+    opened(game, roomB.id);
+    game.takeTouchedPartitions();
+
+    // Skipping a partition must not re-baseline it: a change made while it was
+    // unreached is still a change the next comparison has to see.
+    a0.label = 'changed while unreached';
+    opened(game, roomA.id);
+
+    expect([...game.takeTouchedPartitions()]).toEqual([roomA.id]);
+  });
+
+  it('follows an element reference into a partition the command never asked for', () => {
+    const { game, roomA, roomB, a0, b0 } = worldWithPartitions('scope-reference');
+    // A live cross-partition reference, the one way to reach another partition
+    // without asking the engine for it.
+    a0.link = b0;
+    opened(game, roomA.id);
+    game.takeTouchedPartitions();
+
+    const counts = countSerializations([roomA, roomB]);
+    // Raw following: `link` is a plain attribute, so nothing but the reference
+    // harvest makes roomB a candidate.
+    (opened(game, roomA.id).first(Token, 'a0') as Token).link!.label = 'reached by reference';
+
+    expect([...game.takeTouchedPartitions()].sort()).toEqual([roomB.id]);
+    expect(counts.get(roomB.id)).toBe(1);
+  });
+
+  it('follows a reference the GAME ROOT holds, which no partition serialization carries', () => {
+    const { game, roomC } = worldWithPartitions('scope-core-reference');
+    // The pattern `moveToInternal`'s own guard recommends: reach elements via
+    // game attributes. A game-root attribute is in no partition, so no
+    // partition's serialization records the edge -- the core is walked instead.
+    (game as unknown as { hearth?: GameElement }).hearth = roomC;
+    opened(game, roomC.id);
+    game.takeTouchedPartitions();
+
+    const counts = countSerializations([roomC]);
+    ((game as unknown as { hearth: Space }).hearth.first(Token, 'c0') as Token).label = 'via core';
+
+    expect([...game.takeTouchedPartitions()]).toEqual([roomC.id]);
+    expect(counts.get(roomC.id)).toBe(1);
+  });
+
+  it('marks every door an element hands out, not only the platform door', () => {
+    const { game, roomA, roomB, roomC, a0 } = worldWithPartitions('scope-doors');
+
+    // `children` off the game root is a walk of the world, and it is honest
+    // for it to cost one: every partition it handed over is a candidate.
+    const counts = countSerializations([roomA, roomB, roomC]);
+    void game.children;
+    a0.label = 'through the children door';
+
+    expect([...game.takeTouchedPartitions()]).toEqual([roomA.id]);
+    expect(counts.get(roomA.id)).toBe(1);
+    expect(counts.get(roomB.id)).toBe(1);
+    expect(counts.get(roomC.id)).toBe(1);
+  });
+
+  it('marks nothing for a read the platform declared cannot write', () => {
+    const { game, roomA, roomB, roomC } = worldWithPartitions('scope-reading-only');
+    const counts = countSerializations([roomA, roomB, roomC]);
+
+    // What a command's `partitions()` and a world's `view()` do: read the live
+    // tree to decide what to LOAD. They are handed a projection that refuses
+    // every write, so nothing they touch can be dirty -- and marking it would
+    // put every partition a declaration merely looked at into the next
+    // command's comparison.
+    const seen = game.readingOnly(() => game.children.map((child) => child.name));
+
+    expect(seen).toContain('roomA');
+    game.takeTouchedPartitions();
+    expect(counts.get(roomA.id)).toBe(0);
+    expect(counts.get(roomB.id)).toBe(0);
+    expect(counts.get(roomC.id)).toBe(0);
+  });
+
+  it('puts the reach window back when the read throws', () => {
+    const { game, roomA, a0 } = worldWithPartitions('scope-reading-only-throws');
+
+    expect(() =>
+      game.readingOnly(() => {
+        throw new Error('a declaration may refuse');
+      }),
+    ).toThrow('a declaration may refuse');
+
+    // The command after the refusal still has its doors.
+    (opened(game, roomA.id).first(Token, 'a0') as Token).label = 'after the refusal';
+    void a0;
+    expect([...game.takeTouchedPartitions()]).toEqual([roomA.id]);
+  });
+
+  it('a move still marks both endpoints without either being reached', () => {
+    const { game, roomA, roomC, a0 } = worldWithPartitions('scope-move');
+
+    a0.putInto(roomC);
+
+    expect([...game.takeTouchedPartitions()].sort((x, y) => x - y)).toEqual(
+      [roomA.id, roomC.id].sort((x, y) => x - y),
+    );
   });
 });

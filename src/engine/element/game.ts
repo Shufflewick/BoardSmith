@@ -176,6 +176,38 @@ function collectResidentIds(element: GameElement, into: Set<number>): void {
 }
 
 /**
+ * An element by id, WITHOUT marking anything reached (ShufflewickPub #295).
+ *
+ * `GameElement.atId` is a door: it marks the partition it answers from,
+ * because a command that looks an element up can write to it. The reference
+ * harvest below is the engine talking to itself about bytes it has already
+ * serialized, so it must not leave a mark behind -- a harvest that marked
+ * would make every partition a candidate for the next command and undo the
+ * whole scoping.
+ */
+function findById(from: GameElement, id: number): GameElement | undefined {
+  if (from._t.id === id) return from;
+  for (const child of from._t.children) {
+    const found = findById(child, id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** The partition an element sits in: the nearest ancestor-or-self that is a
+ *  declared partition root, or undefined for the game's own non-partitioned
+ *  core. */
+function nearestPartition(
+  from: GameElement,
+  roots: ReadonlyMap<number, GameElement>,
+): number | undefined {
+  for (let el: GameElement | undefined = from; el; el = el._t.parent) {
+    if (roots.has(el._t.id)) return el._t.id;
+  }
+  return undefined;
+}
+
+/**
  * Options for creating a new game
  */
 export type GameOptions = {
@@ -1166,6 +1198,8 @@ export class Game<
    * Find an element by its ID anywhere in the game tree
    */
   getElementById(id: number): GameElement | undefined {
+    // `atId` marks the partition it found the element in (ShufflewickPub
+    // #295): a lookup is a door, and a command can only write through a door.
     // Check main tree
     const found = this.atId(id);
     if (found) return found;
@@ -1235,8 +1269,7 @@ export class Game<
           `that can be evicted, and evicting the game would evict the world.`
       );
     }
-    if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Map<number, GameElement>();
-    this._ctx._partitionRoots.set(id, element);
+    this._partitionRootTable().set(id, element);
     this._baselinePartition(id);
   }
 
@@ -1282,19 +1315,172 @@ export class Game<
    */
   takeTouchedPartitions(): ReadonlySet<number> {
     const touched = this._ctx._touchedPartitions ?? new Set<number>();
+    this._ctx._touchedPartitions = new Set<number>();
+    // Copied, then CLEARED IN PLACE: the window object is what every door
+    // holds a route to, so replacing it would leave the doors marking a set
+    // nothing reads.
+    const window = this._ctx._reachedPartitions;
+    const reached = window ? [...window.partitions] : [];
+    window?.partitions.clear();
+
+    const roots = this._ctx._partitionRoots;
+    if (!roots || roots.size === 0) return touched;
+
+    if (!this._ctx._partitionBaselines) this._ctx._partitionBaselines = new Map<number, string>();
+    if (!this._ctx._partitionReferences) {
+      this._ctx._partitionReferences = new Map<number, ReadonlySet<number>>();
+    }
     const baselines = this._ctx._partitionBaselines;
-    const rebaselined = new Map<number, string>();
-    for (const [id, root] of this._ctx._partitionRoots ?? []) {
-      const fingerprint = JSON.stringify(root.toJSON());
-      rebaselined.set(id, fingerprint);
+    const references = this._ctx._partitionReferences;
+
+    // THE CANDIDATE SET: every partition this command could have written.
+    const queue: number[] = [];
+    const queued = new Set<number>();
+    const consider = (id: number): void => {
+      if (!roots.has(id) || queued.has(id)) return;
+      queued.add(id);
+      queue.push(id);
+    };
+    for (const id of reached) consider(id);
+    for (const id of touched) consider(id);
+    // The non-partitioned core -- the game root and whatever hangs off it
+    // outside every partition -- is reachable from every element through the
+    // `game` handle each one carries, so a reference IT holds is a door that
+    // is always open. Nothing serializes the core, so nothing else records it.
+    for (const id of this._coreReferences(roots)) consider(id);
+
+    const seenIds = new Map<number, number | undefined>();
+    while (queue.length > 0) {
+      const id = queue.shift() as number;
+      // BEFORE the comparison, from the references as of the last one: a
+      // command may follow a reference and then delete it, and the partition
+      // it wrote through has to be compared either way.
+      for (const target of references.get(id) ?? []) consider(target);
+
+      const root = roots.get(id) as GameElement;
+      const json = root.toJSON();
+      const fingerprint = JSON.stringify(json);
+      const outward = this._referencedPartitions(json, roots, seenIds);
+      references.set(id, outward);
+      for (const target of outward) consider(target);
       // A root with no baseline at all is reported dirty rather than skipped:
       // "not compared" and "unchanged" are different facts, and only one of
       // them is safe to answer with silence.
-      if (baselines?.get(id) !== fingerprint) touched.add(id);
+      if (baselines.get(id) !== fingerprint) touched.add(id);
+      baselines.set(id, fingerprint);
     }
-    this._ctx._partitionBaselines = rebaselined;
-    this._ctx._touchedPartitions = new Set<number>();
+
+    // Every partition NOT compared keeps the baseline and the reference set it
+    // already had. That is the whole saving, and it is only sound because it
+    // is also the whole claim: nothing handed that partition out, so nothing
+    // could have written through it, so its bytes are the bytes we hold.
     return touched;
+  }
+
+  /**
+   * Which partitions one partition's serialized form points INTO.
+   *
+   * In world mode an element reference serializes as `{ __elementId }`
+   * (`GameElement.serializeValue`), so the JSON the comparison just built
+   * carries every reference the partition holds. Ids belonging to this
+   * partition's own subtree are dropped -- following one of those reaches
+   * nothing new.
+   *
+   * Walked over the JSON OBJECT rather than scanned in its text: an attribute
+   * whose value is the string `{"__elementId":5}` is a string, and a scanner
+   * would read it as a reference.
+   */
+  private _referencedPartitions(
+    json: ElementJSON,
+    roots: ReadonlyMap<number, GameElement>,
+    resolved: Map<number, number | undefined>,
+  ): ReadonlySet<number> {
+    const own = new Set<number>();
+    const referenced = new Set<number>();
+    const collectElement = (node: ElementJSON): void => {
+      own.add(node.id);
+      for (const value of Object.values(node.attributes)) collectValue(value);
+      for (const child of node.children ?? []) collectElement(child);
+    };
+    const collectValue = (value: unknown): void => {
+      if (value === null || typeof value !== 'object') return;
+      if (Array.isArray(value)) {
+        for (const item of value) collectValue(item);
+        return;
+      }
+      const record = value as Record<string, unknown>;
+      if (typeof record.__elementId === 'number') {
+        referenced.add(record.__elementId);
+        return;
+      }
+      for (const item of Object.values(record)) collectValue(item);
+    };
+    collectElement(json);
+
+    const partitions = new Set<number>();
+    for (const id of referenced) {
+      if (own.has(id)) continue;
+      if (!resolved.has(id)) {
+        const target = findById(this, id) ?? findById(this.pile, id);
+        resolved.set(id, target === undefined ? undefined : nearestPartition(target, roots));
+      }
+      const partition = resolved.get(id);
+      if (partition !== undefined) partitions.add(partition);
+    }
+    return partitions;
+  }
+
+  /**
+   * The partitions the NON-PARTITIONED core holds live references into.
+   *
+   * `moveToInternal`'s own detached-destination guard tells authors to reach
+   * elements "via game attributes (this.scorePile) or queries" rather than via
+   * captured locals, so a game-root attribute holding a partition root is a
+   * pattern the engine recommends -- and it is a door no partition's
+   * serialization can record, because the core is in no partition and nothing
+   * serializes it. Walked live, and only over what is OUTSIDE every partition,
+   * so it costs the game's own furniture rather than the resident world.
+   */
+  private _coreReferences(roots: ReadonlyMap<number, GameElement>): ReadonlySet<number> {
+    const partitions = new Set<number>();
+    const visit = (element: GameElement): void => {
+      const unserializable = new Set(
+        (element.constructor as typeof GameElement).unserializableAttributes,
+      );
+      for (const [key, value] of Object.entries(element)) {
+        if (unserializable.has(key) || key.startsWith('_')) continue;
+        collect(value, 0);
+      }
+      for (const child of element._t.children) {
+        // A partition root's subtree is the partition's own business, and its
+        // references are harvested from its serialization.
+        if (!roots.has(child._t.id)) visit(child);
+      }
+    };
+    const collect = (value: unknown, depth: number): void => {
+      if (value === null || typeof value !== 'object') return;
+      if (depth > GameElement.MAX_SERIALIZE_DEPTH) return;
+      if (value instanceof GameElement) {
+        const partition = nearestPartition(value, roots);
+        if (partition !== undefined) partitions.add(partition);
+        return;
+      }
+      if (value instanceof Map) {
+        for (const [key, item] of value) {
+          collect(key, depth + 1);
+          collect(item, depth + 1);
+        }
+        return;
+      }
+      if (value instanceof Set || Array.isArray(value)) {
+        for (const item of value as Iterable<unknown>) collect(item, depth + 1);
+        return;
+      }
+      if (Object.getPrototypeOf(value) !== Object.prototype) return;
+      for (const item of Object.values(value)) collect(item, depth + 1);
+    };
+    visit(this);
+    return partitions;
   }
 
   /**
@@ -1333,6 +1519,76 @@ export class Game<
    */
   partitionRoot(id: number): GameElement | undefined {
     return this._ctx._partitionRoots?.get(id);
+  }
+
+  /**
+   * SAY THAT A PARTITION HAS BEEN HANDED TO GAME CODE (ShufflewickPub #295).
+   *
+   * `takeTouchedPartitions` compares only the partitions a command could have
+   * written, and it knows that set because it owns every door into the tree --
+   * every query and tree accessor an element hands out. The one door the
+   * ENGINE cannot see is the platform's own: a command's `partition(name)`
+   * answers with a root the platform looked up, and game code can write an
+   * attribute straight onto it without touching another accessor.
+   *
+   * So the platform says so, at the line where it hands the root over. It is
+   * deliberately NOT folded into {@link partitionRoot}: that is the reader the
+   * platform's own bookkeeping uses -- serializing a checkpoint, resolving an
+   * event's audience, both AFTER the command has finished -- and marking there
+   * would make every partition a command wrote a candidate for the NEXT
+   * command, which is comparison work with a known answer.
+   */
+  reachPartition(id: number): void {
+    const reached = this._ctx._reachedPartitions;
+    if (!reached || !reached.roots.has(id)) return;
+    reached.partitions.add(id);
+  }
+
+  /**
+   * Run a read that CANNOT WRITE, with reach-marking off (ShufflewickPub
+   * #295).
+   *
+   * The platform answers a command's `partitions()` and a world's `view()`
+   * against the live tree, and hands both a projection that REFUSES every
+   * write (`games/src/world-readonly.ts`, #219). Two things follow, and they
+   * are the whole reason this exists:
+   *
+   *   Nothing such a call reaches can become dirty, so marking what it touched
+   *     would put every partition a declaration merely LOOKED at into the next
+   *     command's comparison -- which is the O(resident) cost #295 removed.
+   *   The projection would refuse the mark anyway. `_reachedPartitions` is
+   *     reached through the projected element, so `add` on it is a write like
+   *     any other and the declaration would fail with a refusal about a set no
+   *     bundle author has heard of.
+   *
+   * Suspending is therefore both the cheap answer and the correct one -- but
+   * ONLY for a call that genuinely cannot write. A write made in here is a
+   * write the next comparison will not look for.
+   */
+  readingOnly<T>(read: () => T): T {
+    const suspended = this._ctx._reachedPartitions;
+    this._ctx._reachedPartitions = undefined;
+    try {
+      return read();
+    } finally {
+      this._ctx._reachedPartitions = suspended;
+    }
+  }
+
+  /**
+   * The root table, opening the reach window with it the first time a
+   * partition exists. The two are created together because the window's
+   * PRESENCE is what every door checks: a table without a window would make
+   * every accessor mark nothing, silently.
+   */
+  private _partitionRootTable(): Map<number, GameElement> {
+    let roots = this._ctx._partitionRoots;
+    if (!roots) {
+      roots = new Map<number, GameElement>();
+      this._ctx._partitionRoots = roots;
+      this._ctx._reachedPartitions = { roots, partitions: new Set<number>() };
+    }
+    return roots;
   }
 
   /** One resident partition's serialized form, or undefined when not resident. */
@@ -1426,8 +1682,7 @@ export class Game<
 
     element.resolveElementReferences(this);
 
-    if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Map<number, GameElement>();
-    this._ctx._partitionRoots.set(element._t.id, element);
+    this._partitionRootTable().set(element._t.id, element);
     // Baselined from the GRAFTED tree, not from the incoming bytes: the two
     // can differ in key order, and a baseline that disagreed with the live
     // serialization would report a fresh adoption dirty before anything wrote.
@@ -1489,6 +1744,7 @@ export class Game<
 
     this._ctx._partitionRoots?.delete(id);
     this._ctx._partitionBaselines?.delete(id);
+    this._ctx._partitionReferences?.delete(id);
   }
 
   /**

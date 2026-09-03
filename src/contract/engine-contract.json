@@ -1,7 +1,7 @@
 {
-  "revision": 32,
+  "revision": 33,
   "bundleProtocol": 1,
-  "surfaceHash": "859b13166e9ec1bf",
+  "surfaceHash": "82c8538fdca5837c",
   "payloadHash": "32f56b0af8269931",
   "history": [
     {
@@ -10,7 +10,7 @@
       "bundleProtocol": 1,
       "surfaceHash": "601ab669855fe0d5",
       "payloadHash": "39a105d8db41ec25",
-      "summary": "Baseline, taken at the state following the UI-registry work: Deck defaults to count-only so draw piles report their size again, AutoUI and Die3D moved off the boardsmith/ui barrel, and the board-side ValidElement became BoardTarget. Also introduces the contract itself — ENGINE_CONTRACT and ENGINE_REVISION are exported from the boardsmith root so the platform can read the vendored engine's revision at runtime."
+      "summary": "Baseline, taken at the state following the UI-registry work: Deck defaults to count-only so draw piles report their size again, AutoUI and Die3D moved off the boardsmith/ui barrel, and the board-side ValidElement became BoardTarget. Also introduces the contract itself \u2014 ENGINE_CONTRACT and ENGINE_REVISION are exported from the boardsmith root so the platform can read the vendored engine's revision at runtime."
     },
     {
       "revision": 2,
@@ -18,7 +18,7 @@
       "bundleProtocol": 1,
       "surfaceHash": "966f014fca003487",
       "payloadHash": "4e482261ddc4a6e9",
-      "summary": "Contract fingerprints widened after an adversarial review found them narrower than claimed: surfaceHash now includes prototype members (games call methods, and renaming one used to move neither hash), and the payload fixture now boots through GameRunner with a simultaneous opening step so flow state, isMyTurn and availableActions are covered — the blank-action-bar layer, previously invisible."
+      "summary": "Contract fingerprints widened after an adversarial review found them narrower than claimed: surfaceHash now includes prototype members (games call methods, and renaming one used to move neither hash), and the payload fixture now boots through GameRunner with a simultaneous opening step so flow state, isMyTurn and availableActions are covered \u2014 the blank-action-bar layer, previously invisible."
     },
     {
       "revision": 3,
@@ -42,7 +42,7 @@
       "bundleProtocol": 1,
       "surfaceHash": "db988455880ea279",
       "payloadHash": "bf22b8c168ab229d",
-      "summary": "Player gains a first-class status field ('active' | 'dormant' | 'eliminated', default 'active') plus an isActive getter — it serializes into the tree and is visible in every seat's player view, so hosts can read seat liveness directly, and TurnOrder.ACTIVE_ONLY now filters on it instead of an undeclared 'eliminated' property. Also: every enterText selection is now length-bounded (DEFAULT_TEXT_MAX_LENGTH = 256 when a game sets no maxLength), and CheckpointPolicy is exported from the boardsmith root and boardsmith/session so a published bundle can name the type for GameDefinition.checkpoints."
+      "summary": "Player gains a first-class status field ('active' | 'dormant' | 'eliminated', default 'active') plus an isActive getter \u2014 it serializes into the tree and is visible in every seat's player view, so hosts can read seat liveness directly, and TurnOrder.ACTIVE_ONLY now filters on it instead of an undeclared 'eliminated' property. Also: every enterText selection is now length-bounded (DEFAULT_TEXT_MAX_LENGTH = 256 when a game sets no maxLength), and CheckpointPolicy is exported from the boardsmith root and boardsmith/session so a published bundle can name the type for GameDefinition.checkpoints."
     },
     {
       "revision": 6,
@@ -114,7 +114,7 @@
       "bundleProtocol": 1,
       "surfaceHash": "715e016e6f9a9d57",
       "payloadHash": "7d7e5e0a4de161cb",
-      "summary": "Epic #24 engine changes, landed together: (1) a flow that completes inside startFlow() now publishes its winners, so a game that ends during setup reports a result instead of none; (2) checkpoints:{enabled:false} sheds an inherited checkpoint window rather than silently keeping it; (3) randomness policy moved to GameOptions.randomness, applied inside Game's own constructor, so 'forbidden' forbids draws from the game's FIRST instruction (subclass constructors included) and is stripped from _constructorOptions so no host policy persists into a snapshot — RandomnessPolicy is exported from boardsmith/runtime, forbidRandomness() is private, an undo random fence closes RNG scumming, and GameRunner.checkpointWindow() is public so the fence reports the real cause of a missing checkpoint; (4) an action's ActionResult.data now reaches its caller across engine/runtime/session/cli and the board on every transport, via useActionController.lastActionResult (BUG-017)."
+      "summary": "Epic #24 engine changes, landed together: (1) a flow that completes inside startFlow() now publishes its winners, so a game that ends during setup reports a result instead of none; (2) checkpoints:{enabled:false} sheds an inherited checkpoint window rather than silently keeping it; (3) randomness policy moved to GameOptions.randomness, applied inside Game's own constructor, so 'forbidden' forbids draws from the game's FIRST instruction (subclass constructors included) and is stripped from _constructorOptions so no host policy persists into a snapshot \u2014 RandomnessPolicy is exported from boardsmith/runtime, forbidRandomness() is private, an undo random fence closes RNG scumming, and GameRunner.checkpointWindow() is public so the fence reports the real cause of a missing checkpoint; (4) an action's ActionResult.data now reaches its caller across engine/runtime/session/cli and the board on every transport, via useActionController.lastActionResult (BUG-017)."
     },
     {
       "revision": 15,
@@ -122,7 +122,7 @@
       "bundleProtocol": 1,
       "surfaceHash": "41abffd19a6e961c",
       "payloadHash": "378262a5b0efe0f4",
-      "summary": "Phase 68 async/simultaneous play support. FOUR surface changes a consumer must react to: (1) SnapshotSessionAdapters.broadcast meta gains a REQUIRED turnBoundary { key, dueSeats } — an un-updated adapter is a COMPILE ERROR, deliberately, because the host is what must publish the round identity to each seat. (2) The action and selectionStep ops gain a REQUIRED boundaryKey naming the round a submission was composed against; ONE comparison site refuses a submission that names a closed round, with \"The round you acted in has closed; reload to see the current round.\" REQUIRED is a TYPE requirement only: at runtime the guard keys on the PRESENCE of the field, so an op that omits boundaryKey is passed through UNGUARDED. The guard is therefore INERT until the host stamps the key, and the host is where it must be stamped — echo back the key you sent on game_state. New exports flowBoundaryKey (boardsmith) and STALE_SUBMISSION_MESSAGE / SUBMISSION_OP_TYPES (boardsmith/session) are the pieces a host needs. (3) A new convertSeatToBot host lifecycle op converts a seat mid-game, acknowledges it as OpResult.convertedSeat and drives the existing bot pump; it is idempotent on re-wake and REFUSES a finished game rather than silently no-opping. It carries no difficulty level, on purpose: a host-held seat-to-bot level map is a privilege-escalation surface. (4) position.frameData is now serialized and relinked by the SAME general flow-variable serializer as position.variables; the previousPlayer / previousPlayerSeat special case is gone, so a live element in frame data survives a broadcast instead of throwing DataCloneError — and previousPlayerSeat no longer appears in the payload. That is what moved payloadHash. COMPATIBILITY, measured rather than assumed: revision, NOT bundleProtocol. Diffing the runtime export names of all three platform entrypoints against r14 shows ADDITIONS ONLY — nothing removed, nothing renamed. A published rules.js never composes an op (the executor builds ops from the wire body), so every already-built bundle keeps running. The two REQUIRED fields are a wire change for whatever COMPOSES an op or a broadcast — the games worker, and a published bundle own GameShell UI — not for the rules; and because an absent boundaryKey is unguarded, an un-updated host also keeps working and merely forfeits the protection until it stamps the key."
+      "summary": "Phase 68 async/simultaneous play support. FOUR surface changes a consumer must react to: (1) SnapshotSessionAdapters.broadcast meta gains a REQUIRED turnBoundary { key, dueSeats } \u2014 an un-updated adapter is a COMPILE ERROR, deliberately, because the host is what must publish the round identity to each seat. (2) The action and selectionStep ops gain a REQUIRED boundaryKey naming the round a submission was composed against; ONE comparison site refuses a submission that names a closed round, with \"The round you acted in has closed; reload to see the current round.\" REQUIRED is a TYPE requirement only: at runtime the guard keys on the PRESENCE of the field, so an op that omits boundaryKey is passed through UNGUARDED. The guard is therefore INERT until the host stamps the key, and the host is where it must be stamped \u2014 echo back the key you sent on game_state. New exports flowBoundaryKey (boardsmith) and STALE_SUBMISSION_MESSAGE / SUBMISSION_OP_TYPES (boardsmith/session) are the pieces a host needs. (3) A new convertSeatToBot host lifecycle op converts a seat mid-game, acknowledges it as OpResult.convertedSeat and drives the existing bot pump; it is idempotent on re-wake and REFUSES a finished game rather than silently no-opping. It carries no difficulty level, on purpose: a host-held seat-to-bot level map is a privilege-escalation surface. (4) position.frameData is now serialized and relinked by the SAME general flow-variable serializer as position.variables; the previousPlayer / previousPlayerSeat special case is gone, so a live element in frame data survives a broadcast instead of throwing DataCloneError \u2014 and previousPlayerSeat no longer appears in the payload. That is what moved payloadHash. COMPATIBILITY, measured rather than assumed: revision, NOT bundleProtocol. Diffing the runtime export names of all three platform entrypoints against r14 shows ADDITIONS ONLY \u2014 nothing removed, nothing renamed. A published rules.js never composes an op (the executor builds ops from the wire body), so every already-built bundle keeps running. The two REQUIRED fields are a wire change for whatever COMPOSES an op or a broadcast \u2014 the games worker, and a published bundle own GameShell UI \u2014 not for the rules; and because an absent boundaryKey is unguarded, an un-updated host also keeps working and merely forfeits the protection until it stamps the key."
     },
     {
       "revision": 16,
@@ -146,7 +146,7 @@
       "bundleProtocol": 1,
       "surfaceHash": "0b9c7505ca54e63e",
       "payloadHash": "378262a5b0efe0f4",
-      "summary": "r18: fail-loud authoring errors — ReservedAttributeError, ConditionEvaluationError and PlayerFacingError are exported; a crashing condition, an unknown flow action and detected tree corruption now throw; a failed execute() rolls back and its raw message no longer reaches players."
+      "summary": "r18: fail-loud authoring errors \u2014 ReservedAttributeError, ConditionEvaluationError and PlayerFacingError are exported; a crashing condition, an unknown flow action and detected tree corruption now throw; a failed execute() rolls back and its raw message no longer reaches players."
     },
     {
       "revision": 19,
@@ -154,7 +154,7 @@
       "bundleProtocol": 1,
       "surfaceHash": "304b3829682dd75e",
       "payloadHash": "378262a5b0efe0f4",
-      "summary": "r18: fail-loud authoring errors — ReservedAttributeError, ConditionEvaluationError and PlayerFacingError are exported; a crashing condition, an unknown flow action and detected tree corruption now throw; a failed execute() rolls back and its raw message no longer reaches players (a PlayerFacingError's does)."
+      "summary": "r18: fail-loud authoring errors \u2014 ReservedAttributeError, ConditionEvaluationError and PlayerFacingError are exported; a crashing condition, an unknown flow action and detected tree corruption now throw; a failed execute() rolls back and its raw message no longer reaches players (a PlayerFacingError's does)."
     },
     {
       "revision": 20,
@@ -186,7 +186,7 @@
       "bundleProtocol": 1,
       "surfaceHash": "46be1aab855efb2e",
       "payloadHash": "378262a5b0efe0f4",
-      "summary": "r21: game.refreshAwaitingActions() lets a simultaneous step's awaiting set grow for a seat that becomes eligible mid-step; game.pruneMessages() caps the log safely — ActionCheckpoint.messageCount is now the log's ABSOLUTE length and the game tracks how many entries were evicted, so pruning no longer corrupts earlier checkpoints."
+      "summary": "r21: game.refreshAwaitingActions() lets a simultaneous step's awaiting set grow for a seat that becomes eligible mid-step; game.pruneMessages() caps the log safely \u2014 ActionCheckpoint.messageCount is now the log's ABSOLUTE length and the game tracks how many entries were evicted, so pruning no longer corrupts earlier checkpoints."
     },
     {
       "revision": 24,
@@ -259,6 +259,14 @@
       "surfaceHash": "859b13166e9ec1bf",
       "payloadHash": "32f56b0af8269931",
       "summary": "World mode's dirty-set pass is one serialization per resident partition per command, not three, and no longer searches the tree for each root (ShufflewickPub #316). Game#touchedPartitions (an idempotent getter that serialized every resident partition) and Game#clearTouchedPartitions (which serialized them again to re-baseline) are REPLACED by a single consuming Game#takeTouchedPartitions(), which reports what changed and re-baselines from the fingerprints it just computed. Game#partitionBaseline(id) hands back the pre-command bytes and parent id the platform used to obtain by serializing the whole resident set a third time for its rollback copy, and Game#partitionRoot(id) returns a declared root without the depth-first getElementById walk that made every O(resident) pass O(resident squared). Behaviour of the dirty set is unchanged -- moves and attribute changes are reported exactly as before -- and snapshot mode is untouched."
+    },
+    {
+      "revision": 33,
+      "date": "2026-09-03",
+      "bundleProtocol": 1,
+      "surfaceHash": "82c8538fdca5837c",
+      "payloadHash": "32f56b0af8269931",
+      "summary": "The world-mode dirty-set comparison is scoped to the partitions a command REACHED, so per-command CPU is the room and not the resident world (ShufflewickPub #295). The engine marks every door it owns -- Game#getElementById and an element's all/first/firstN/last/lastN/atId/atBranch/parent/children -- the new Game#reachPartition lets the platform mark the one door it owns (the root a command's partition(name) answers with), and the new Game#readingOnly turns marking off for a read the platform guarantees cannot write, which is what a declaration and a view are. A partition nothing handed out keeps its baseline and is not serialized. Measured at 256 resident partitions of ~10 KB: 12.8 ms per command down to 0.28 ms."
     }
   ]
 }

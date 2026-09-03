@@ -111,6 +111,44 @@ export type ElementContext = {
    * second time to get one. Not public API.
    */
   _partitionBaselines?: Map<number, string>;
+  /**
+   * Internal: the OPEN REACH WINDOW -- partition roots whose elements have
+   * been handed out since the last `Game#takeTouchedPartitions()`, beside the
+   * root table to attribute them against.
+   *
+   * This is what makes the dirty-set comparison cost the ROOM rather than the
+   * resident world (ShufflewickPub #295): a partition no door handed out is a
+   * partition this command had nothing to write through, so its serialized
+   * form cannot have moved and comparing it would be work with a known answer.
+   * Doors are `Game#reachPartition` (the platform's own, the root a command's
+   * `partition(name)` answers with), every query and tree accessor an element
+   * hands out, and the element references a compared partition holds.
+   *
+   * ITS PRESENCE IS THE SWITCH, and it carries `roots` rather than reading
+   * `_partitionRoots` so that one read decides everything. Absent in snapshot
+   * mode, which is what keeps every accessor free for a published board game;
+   * absent again for the duration of `Game#readingOnly`, which is how the
+   * platform says a call cannot write. Not public API.
+   */
+  _reachedPartitions?: {
+    readonly roots: ReadonlyMap<number, GameElement>;
+    readonly partitions: Set<number>;
+  };
+  /**
+   * Internal: for each resident partition root, the OTHER partitions its live
+   * element-reference attributes point into, harvested from the same
+   * serialization the comparison already does.
+   *
+   * An element reference is the one way to reach another partition without
+   * asking the engine for it -- `roomA.exit.visits += 1` goes through no door
+   * at all -- so a partition that is a candidate makes everything it points at
+   * a candidate too, transitively. A world that names its neighbours by
+   * PARTITION NAME (which is what a declaration is for) has none of these and
+   * pays for its room; a world whose partitions hold live references into each
+   * other pays for the component it reached, which is what it built.
+   * Not public API.
+   */
+  _partitionReferences?: Map<number, ReadonlySet<number>>;
 };
 
 /**

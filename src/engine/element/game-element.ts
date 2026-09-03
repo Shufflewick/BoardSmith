@@ -184,6 +184,49 @@ function markNearestPartition(
 }
 
 /**
+ * Record the partition an element was HANDED OUT of (ShufflewickPub #295).
+ *
+ * The dirty-set comparison in `Game#takeTouchedPartitions` is scoped to the
+ * partitions a command could have written, and this is how the engine knows
+ * that set: every accessor that answers with an element is a door, and a
+ * command can only write through a door it was let in by. Marking here is
+ * deliberately blunt -- a partition merely LOOKED at becomes a candidate --
+ * because a candidate only costs the comparison, and the comparison is what
+ * decides dirtiness. Over-marking is slower; under-marking loses a write.
+ *
+ * Free in snapshot mode: no partitions, one map check.
+ */
+function reachPartition<T extends GameElement | undefined>(from: T): T {
+  if (!from) return from;
+  const ctx = from._ctx;
+  // THE SET IS THE SWITCH. It exists from the moment the game has a partition
+  // (`definePartition`) until it is suspended by `Game#readingOnly`, and this
+  // reads it rather than creating one: an accessor reached through a
+  // read-only projection of the tree (the platform's declaration surface)
+  // would be REFUSED if it tried to write, and it has nothing to mark anyway.
+  const reached = ctx?._reachedPartitions;
+  if (!reached) return from;
+  markNearestPartition(from, reached.roots, reached.partitions);
+  return from;
+}
+
+/**
+ * Every element a query answered with, marked at once.
+ *
+ * The residency check is hoisted OUT of the loop: a published board game has
+ * no partitions at all, and a `game.all(Card)` over a big table must not pay a
+ * call per result to be told so.
+ */
+function reachAll<T extends Iterable<GameElement>>(owner: GameElement, found: T): T {
+  const reached = owner._ctx?._reachedPartitions;
+  if (!reached) return found;
+  for (const element of found) {
+    markNearestPartition(element, reached.roots, reached.partitions);
+  }
+  return found;
+}
+
+/**
  * Attribute names `create()` refuses. `id` is what every element reference,
  * snapshot entry and `atId` lookup keys on; `_t` and `_ctx` are the element's
  * own internals. A game that sets any of them does not get a slightly odd
@@ -346,14 +389,14 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * Get the parent element
    */
   get parent(): GameElement | undefined {
-    return this._t.parent;
+    return reachPartition(this._t.parent);
   }
 
   /**
    * Get all direct children
    */
   get children(): ElementCollection<GameElement> {
-    return new ElementCollection(...this._t.children);
+    return reachAll(this, new ElementCollection(...this._t.children));
   }
 
   /**
@@ -403,16 +446,18 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       current = child;
     }
 
-    return current;
+    return reachPartition(current);
   }
 
   /**
    * Find an element by its immutable ID
    */
   atId(id: number): GameElement | undefined {
-    if (this._t.id === id) return this;
+    if (this._t.id === id) return reachPartition(this);
 
     for (const child of this._t.children) {
+      // Marked at the level that MATCHED, not here: the recursion hands the
+      // same element up every level, and one parent-chain walk is enough.
       const found = child.atId(id);
       if (found) return found;
     }
@@ -777,7 +822,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   ): ElementCollection<F> {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
-    return collection.all(classNameOrFinder as ElementClass<F>, ...finders);
+    return reachAll(this, collection.all(classNameOrFinder as ElementClass<F>, ...finders));
   }
 
   /**
@@ -813,7 +858,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   ): F | undefined {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
-    return collection.first(classNameOrFinder as ElementClass<F>, ...finders);
+    return reachPartition(collection.first(classNameOrFinder as ElementClass<F>, ...finders));
   }
 
   /**
@@ -846,7 +891,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   ): ElementCollection<F> {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
-    return collection.firstN(n, classNameOrFinder as ElementClass<F>, ...finders);
+    return reachAll(this, collection.firstN(n, classNameOrFinder as ElementClass<F>, ...finders));
   }
 
   /**
@@ -879,7 +924,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   ): F | undefined {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
-    return collection.last(classNameOrFinder as ElementClass<F>, ...finders);
+    return reachPartition(collection.last(classNameOrFinder as ElementClass<F>, ...finders));
   }
 
   /**
@@ -909,7 +954,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   ): ElementCollection<F> {
     recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
-    return collection.lastN(n, classNameOrFinder as ElementClass<F>, ...finders);
+    return reachAll(this, collection.lastN(n, classNameOrFinder as ElementClass<F>, ...finders));
   }
 
   /**

@@ -476,7 +476,7 @@
         "count": 3
       },
       "complexity_high": {
-        "count": 1
+        "count": 2
       },
       "complexity_moderate": {
         "count": 2
@@ -485,10 +485,10 @@
         "count": 3
       },
       "crap_high": {
-        "count": 1
+        "count": 2
       },
       "crap_moderate": {
-        "count": 4
+        "count": 5
       }
     },
     "src/engine/element/typed-array-codec.ts": {
