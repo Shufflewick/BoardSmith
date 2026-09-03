@@ -172,7 +172,7 @@ function recordQueriedClassIfActive(ctx: ElementContext, classNameOrFinder: unkn
  */
 function markNearestPartition(
   from: GameElement,
-  roots: Set<number>,
+  roots: ReadonlyMap<number, GameElement>,
   touched: Set<number>,
 ): void {
   for (let el: GameElement | undefined = from; el; el = el._t.parent) {

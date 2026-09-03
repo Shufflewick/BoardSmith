@@ -22,6 +22,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   Game,
+  GameElement,
   Space,
   Piece,
   Player,
@@ -93,7 +94,7 @@ function worldWithPartitions(seed: string) {
   game.definePartition(built.roomA.id);
   game.definePartition(built.roomB.id);
   game.definePartition(built.roomC.id);
-  game.clearTouchedPartitions();
+  game.takeTouchedPartitions();
   return { game, ...built };
 }
 
@@ -311,7 +312,7 @@ describe('moveToInternal partition marking', () => {
 
     b0.putInto(roomA);
 
-    expect([...game.touchedPartitions].sort()).toEqual([roomA.id, roomB.id].sort());
+    expect([...game.takeTouchedPartitions()].sort()).toEqual([roomA.id, roomB.id].sort());
   });
 
   it('marks one partition for a move that stays inside it', () => {
@@ -319,7 +320,7 @@ describe('moveToInternal partition marking', () => {
 
     b0.putInto(roomB, { position: 'last' });
 
-    expect([...game.touchedPartitions]).toEqual([roomB.id]);
+    expect([...game.takeTouchedPartitions()]).toEqual([roomB.id]);
   });
 
   it('marks the moved partition root itself when a whole partition re-parents', () => {
@@ -327,7 +328,7 @@ describe('moveToInternal partition marking', () => {
 
     roomC.reparent(roomA);
 
-    expect([...game.touchedPartitions].sort()).toEqual([roomA.id, roomC.id].sort());
+    expect([...game.takeTouchedPartitions()].sort()).toEqual([roomA.id, roomC.id].sort());
   });
 
   it('marks nothing for a REJECTED move', () => {
@@ -335,34 +336,32 @@ describe('moveToInternal partition marking', () => {
     roomB.sealed = true;
     // Sealing the room is itself an attribute change and is rightly reported
     // dirty; re-baseline so what is measured below is the rejected moves alone.
-    game.clearTouchedPartitions();
+    game.takeTouchedPartitions();
 
     expect(() => b0.putInto(roomA)).toThrow(/sealed/i);
     expect(() => b0.putInto(b0)).toThrow(/into itself/i);
     expect(() => roomA.reparent(roomA.first(Token)!)).toThrow(/descendant|itself/i);
 
-    expect([...game.touchedPartitions]).toEqual([]);
+    expect([...game.takeTouchedPartitions()]).toEqual([]);
   });
 
   it('records nothing for an element outside every partition', () => {
     const { game, roomA } = worldWithPartitions('outside-partitions');
     const loose = game.create(Space, 'loose');
     const drifter = loose.create(Token, 'drifter', { label: 'drifter' });
-    game.clearTouchedPartitions();
+    game.takeTouchedPartitions();
 
     drifter.putInto(roomA);
 
-    expect([...game.touchedPartitions]).toEqual([roomA.id]);
+    expect([...game.takeTouchedPartitions()]).toEqual([roomA.id]);
   });
 
-  it('clearTouchedPartitions empties the set without disturbing residency', () => {
-    const { game, roomA, b0 } = worldWithPartitions('clear-touched');
+  it('taking the set re-baselines, and leaves residency alone', () => {
+    const { game, roomA, b0 } = worldWithPartitions('take-touched');
     b0.putInto(roomA);
-    expect(game.touchedPartitions.size).toBe(2);
+    expect(game.takeTouchedPartitions().size).toBe(2);
 
-    game.clearTouchedPartitions();
-
-    expect(game.touchedPartitions.size).toBe(0);
+    expect(game.takeTouchedPartitions().size).toBe(0);
     expect(game.getElementById(b0.id)).toBe(b0);
   });
 
@@ -371,13 +370,13 @@ describe('moveToInternal partition marking', () => {
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
-    game.clearTouchedPartitions();
+    game.takeTouchedPartitions();
 
     game.adoptSubtree(game.id, bJson);
 
     // The platform already knows what it hydrated; the engine owes it only
     // the move-touched half.
-    expect([...game.touchedPartitions]).toEqual([]);
+    expect([...game.takeTouchedPartitions()]).toEqual([]);
   });
 
   it('negative control: snapshot mode records no partitions at all', () => {
@@ -386,7 +385,7 @@ describe('moveToInternal partition marking', () => {
 
     b0.putInto(roomA);
 
-    expect(game.touchedPartitions.size).toBe(0);
+    expect(game.takeTouchedPartitions().size).toBe(0);
   });
 });
 
@@ -405,9 +404,9 @@ describe('moveToInternal partition marking', () => {
  * mutated deeper still (`token.tags.push('x')`) without any assignment to the
  * element at all. So dirtiness is derived from the one thing every persistable
  * change must alter -- the partition's serialized form -- against a baseline
- * taken at `definePartition`/`adoptSubtree`/`clearTouchedPartitions`. Complete
- * by construction: a change serialization cannot see is by definition a change
- * no checkpoint could have carried.
+ * taken at `definePartition`/`adoptSubtree`/the previous
+ * `takeTouchedPartitions`. Complete by construction: a change serialization
+ * cannot see is by definition a change no checkpoint could have carried.
  */
 describe('attribute writes mark the partition they land in', () => {
   it('marks the partition an attribute write reached through an element.game walk', () => {
@@ -419,18 +418,17 @@ describe('attribute writes mark the partition they land in', () => {
     const reached = b0.game.getElementById(a0.id)! as Token;
     reached.label = 'rewritten';
 
-    expect([...game.touchedPartitions]).toEqual([roomA.id]);
+    expect([...game.takeTouchedPartitions()]).toEqual([roomA.id]);
   });
 
   it('marks a DEEP mutation of an attribute value, which no write-site hook could see', () => {
     const { game, roomB, b0 } = worldWithPartitions('attr-deep');
-    game.clearTouchedPartitions();
 
     b0.tags = b0.tags ?? [];
-    game.clearTouchedPartitions();
+    game.takeTouchedPartitions();
     b0.tags!.push('cursed');
 
-    expect([...game.touchedPartitions]).toEqual([roomB.id]);
+    expect([...game.takeTouchedPartitions()]).toEqual([roomB.id]);
   });
 
   it('marks the partition an element was CREATED in', () => {
@@ -438,7 +436,7 @@ describe('attribute writes mark the partition they land in', () => {
 
     roomC.create(Token, 'c1', { label: 'c1' });
 
-    expect([...game.touchedPartitions]).toEqual([roomC.id]);
+    expect([...game.takeTouchedPartitions()]).toEqual([roomC.id]);
   });
 
   it('the written value SURVIVES an eviction-and-reload cycle when the dirty set drives the checkpoint', () => {
@@ -451,13 +449,13 @@ describe('attribute writes mark the partition they land in', () => {
     // The platform's steady state: every partition has a checkpoint on file.
     const store = new Map<number, ElementJSON>();
     for (const [id, room] of rooms) store.set(id, roundTripJson(room.toJSON() as ElementJSON));
-    game.clearTouchedPartitions();
+    game.takeTouchedPartitions();
 
     // The undeclared write, reached through an element reference.
     (b0.game.getElementById(a0.id)! as Token).label = 'smuggled';
 
     // Checkpoint exactly what the engine reports dirty -- nothing else.
-    for (const id of game.touchedPartitions) {
+    for (const id of game.takeTouchedPartitions()) {
       store.set(id, roundTripJson(rooms.get(id)!.toJSON() as ElementJSON));
     }
 
@@ -469,17 +467,15 @@ describe('attribute writes mark the partition they land in', () => {
     expect(restoredA0.label).toBe('smuggled');
   });
 
-  it('clearTouchedPartitions re-baselines: an already-checkpointed write is not re-reported', () => {
+  it('taking re-baselines: an already-checkpointed write is not re-reported', () => {
     const { game, a0 } = worldWithPartitions('attr-rebaseline');
 
     a0.label = 'once';
-    expect(game.touchedPartitions.size).toBe(1);
-
-    game.clearTouchedPartitions();
-    expect(game.touchedPartitions.size).toBe(0);
+    expect(game.takeTouchedPartitions().size).toBe(1);
+    expect(game.takeTouchedPartitions().size).toBe(0);
 
     a0.label = 'twice';
-    expect(game.touchedPartitions.size).toBe(1);
+    expect(game.takeTouchedPartitions().size).toBe(1);
   });
 
   it('keeps an attribute-dirty mark through eviction, like a move-touch', () => {
@@ -490,7 +486,7 @@ describe('attribute writes mark the partition they land in', () => {
 
     // The partition was dirtied while resident; dropping the mark because it
     // left memory would lose a checkpoint.
-    expect([...game.touchedPartitions]).toEqual([roomA.id]);
+    expect([...game.takeTouchedPartitions()]).toEqual([roomA.id]);
   });
 
   it('reading attributes marks nothing', () => {
@@ -499,7 +495,122 @@ describe('attribute writes mark the partition they land in', () => {
     void (b0.game.getElementById(a0.id)! as Token).label;
     void a0.link;
 
-    expect(game.touchedPartitions.size).toBe(0);
+    expect(game.takeTouchedPartitions().size).toBe(0);
+  });
+});
+
+/**
+ * WHAT ONE COMMAND'S DIRTY-SET PASS IS ALLOWED TO COST (ShufflewickPub #316).
+ *
+ * The dirty set is derived by serialization, so it can only ever be O(the
+ * resident set). What it must NOT be is a multiple of that, and for a while it
+ * was three of them: an idempotent `touchedPartitions` getter, a
+ * `clearTouchedPartitions()` that recomputed the same fingerprints to
+ * re-baseline, and a platform-side rollback snapshot that serialized the same
+ * roots a third time. On top of that every pass re-found each root with
+ * `getElementById`, a depth-first walk of the whole resident world, which made
+ * each O(resident) pass O(resident squared). Measured on the platform's own
+ * instrument at 500 resident partitions: 19 ms per command against a 5 ms
+ * budget.
+ *
+ * These two cases pin the shape rather than a millisecond figure, because a
+ * timing assertion on a shared machine is noise. One serialization per
+ * partition per take, and no tree search at all.
+ */
+describe('the dirty-set pass costs one serialization per partition, and no tree walk', () => {
+  class CountedRoom extends Space<WorldGame> {
+    static serializations = 0;
+    override toJSON(): ElementJSON {
+      CountedRoom.serializations += 1;
+      return super.toJSON();
+    }
+  }
+
+  class CountingGame extends WorldGame {
+    lookups = 0;
+    override getElementById(id: number): GameElement | undefined {
+      this.lookups += 1;
+      return super.getElementById(id);
+    }
+  }
+
+  /** Three counted rooms, declared and baselined, with the counters zeroed. */
+  function countedWorld(seed: string) {
+    const game = new CountingGame({ playerCount: 2, seed, worldMode: true });
+    const rooms = ['one', 'two', 'three'].map((name) => {
+      const room = game.create(CountedRoom, name);
+      room.create(Token, `${name}-t`, { label: name });
+      return room;
+    });
+    for (const room of rooms) game.definePartition(room.id);
+    game.takeTouchedPartitions();
+    CountedRoom.serializations = 0;
+    game.lookups = 0;
+    return { game, rooms };
+  }
+
+  it('serializes each resident partition exactly ONCE per take', () => {
+    const { game } = countedWorld('one-pass');
+
+    game.takeTouchedPartitions();
+
+    expect(CountedRoom.serializations).toBe(3);
+  });
+
+  it('finds every root without searching the tree', () => {
+    const { game } = countedWorld('no-tree-walk');
+
+    game.takeTouchedPartitions();
+
+    expect(game.lookups).toBe(0);
+  });
+
+  it('hands the platform its rollback copy out of the baseline it already holds', () => {
+    const { game, rooms } = countedWorld('baseline-reuse');
+    const room = rooms[0]!;
+    const before = JSON.stringify(room.toJSON());
+    CountedRoom.serializations = 0;
+
+    const baseline = game.partitionBaseline(room.id);
+
+    // The bytes the previous take captured, at no cost: the pre-command copy
+    // and the comparison the next take makes are the same string.
+    expect(baseline).toEqual({ parentId: game.id, bytes: before });
+    expect(CountedRoom.serializations).toBe(0);
+  });
+
+  it('moves the baseline forward with the take, so a rollback restores to the last command', () => {
+    const { game, rooms } = countedWorld('baseline-moves');
+    const room = rooms[0]!;
+    const token = room.first(Token)!;
+
+    token.label = 'first command';
+    game.takeTouchedPartitions();
+    token.label = 'second command';
+
+    // Mid-second-command the copy on file is what the FIRST command left, not
+    // the world as it stood before the first one.
+    const baseline = JSON.parse(game.partitionBaseline(room.id)!.bytes) as ElementJSON;
+    expect(baseline.children![0]!.attributes.label).toBe('first command');
+  });
+
+  it('answers for a root it does not hold with undefined, not with stale bytes', () => {
+    const { game, rooms } = countedWorld('baseline-evicted');
+    const room = rooms[0]!;
+
+    game.evictSubtree(room.id);
+
+    expect(game.partitionBaseline(room.id)).toBeUndefined();
+  });
+
+  it('partitionRoot returns the declared root without a search', () => {
+    const { game, rooms } = countedWorld('root-lookup');
+
+    const root = game.partitionRoot(rooms[1]!.id);
+
+    expect(root).toBe(rooms[1]);
+    expect(game.lookups).toBe(0);
+    expect(game.partitionRoot(4242)).toBeUndefined();
   });
 });
 

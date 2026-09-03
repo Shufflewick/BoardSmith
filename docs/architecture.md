@@ -266,7 +266,7 @@ uses.
 
 The engine also has **world mode** (contract r17) for worlds too large to hold
 in memory: `GameOptions.worldMode`, `definePartition`, `adoptSubtree`, `evictSubtree`,
-`touchedPartitions`, `clearTouchedPartitions`. Only the named partitions are
+`takeTouchedPartitions`, `partitionBaseline`. Only the named partitions are
 resident, the rest are absent from the tree, and the engine reports which
 partitions a move dirtied so the platform can checkpoint just those. See
 [Core Concepts — Snapshot Mode and World Mode](./core-concepts.md#snapshot-mode-and-world-mode).

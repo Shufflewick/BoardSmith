@@ -1,7 +1,7 @@
 {
-  "revision": 31,
+  "revision": 32,
   "bundleProtocol": 1,
-  "surfaceHash": "30f72b732a0ae15d",
+  "surfaceHash": "859b13166e9ec1bf",
   "payloadHash": "32f56b0af8269931",
   "history": [
     {
@@ -251,6 +251,14 @@
       "surfaceHash": "30f72b732a0ae15d",
       "payloadHash": "32f56b0af8269931",
       "summary": "Element-level visibility lives on GameElement rather than only on Piece (issue #162): setVisibility, showToAll, showToOwner, hideFromAll, addVisibleTo, showOnlyTo, hideFrom and clearVisibility moved up from Piece, which keeps every one of them by inheritance. Purely additive -- no behaviour changes for any existing game -- and a Space now has both halves: hideFromAll/showOnlyTo govern THE SPACE ITSELF, contentsHidden/addZoneVisibleTo govern its CONTENTS. A game modelling occupancy as a room's own visibility no longer has to hand-write a VisibilityState literal against setVisibilityInternal."
+    },
+    {
+      "revision": 32,
+      "date": "2026-09-03",
+      "bundleProtocol": 1,
+      "surfaceHash": "859b13166e9ec1bf",
+      "payloadHash": "32f56b0af8269931",
+      "summary": "World mode's dirty-set pass is one serialization per resident partition per command, not three, and no longer searches the tree for each root (ShufflewickPub #316). Game#touchedPartitions (an idempotent getter that serialized every resident partition) and Game#clearTouchedPartitions (which serialized them again to re-baseline) are REPLACED by a single consuming Game#takeTouchedPartitions(), which reports what changed and re-baselines from the fingerprints it just computed. Game#partitionBaseline(id) hands back the pre-command bytes and parent id the platform used to obtain by serializing the whole resident set a third time for its rollback copy, and Game#partitionRoot(id) returns a declared root without the depth-first getElementById walk that made every O(resident) pass O(resident squared). Behaviour of the dirty set is unchanged -- moves and attribute changes are reported exactly as before -- and snapshot mode is untouched."
     }
   ]
 }

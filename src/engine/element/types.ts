@@ -81,28 +81,34 @@ export type ElementContext = {
    */
   _worldMode?: boolean;
   /**
-   * Internal: ids of the elements the platform has declared partition roots
-   * (`Game#definePartition`, which `Game#adoptSubtree` calls for every graft).
-   * Absent in snapshot mode, which is what keeps the marking in
-   * `moveToInternal` free for every published board game. Not public API.
+   * Internal: the elements the platform has declared partition roots
+   * (`Game#definePartition`, which `Game#adoptSubtree` calls for every graft),
+   * BY ID. A map rather than a set of ids because every pass over the roots
+   * used to re-find each one with `getElementById`, a depth-first walk of the
+   * whole resident world, which made a per-command O(resident) pass O(resident²)
+   * (ShufflewickPub #316). Absent in snapshot mode, which is what keeps the
+   * marking in `moveToInternal` free for every published board game. Not
+   * public API.
    */
-  _partitionRoots?: Set<number>;
+  _partitionRoots?: Map<number, GameElement>;
   /**
    * Internal: partition roots whose subtree has been physically re-parented
-   * since the last `Game#clearTouchedPartitions()`, plus marks preserved for
+   * since the last `Game#takeTouchedPartitions()`, plus marks preserved for
    * partitions that were content-dirty at eviction time. This is part of the
    * platform's dirty set the platform cannot compute for itself, because it
    * never sees a move. Not public API — read it through
-   * `Game#touchedPartitions`.
+   * `Game#takeTouchedPartitions`.
    */
   _touchedPartitions?: Set<number>;
   /**
    * Internal: each resident partition root's serialized form, captured at
    * `definePartition`/`adoptSubtree` and re-captured by
-   * `Game#clearTouchedPartitions()`. `Game#touchedPartitions` compares the
-   * live serialization against this to report ATTRIBUTE changes — writes that
-   * never re-parent anything and so never pass through `moveToInternal`. Not
-   * public API.
+   * `Game#takeTouchedPartitions()`, which compares the live serialization
+   * against this to report ATTRIBUTE changes -- writes that never re-parent
+   * anything and so never pass through `moveToInternal`. It is also the
+   * pre-command copy `Game#partitionBaseline` hands the platform to roll a
+   * refused command back to, so nothing has to serialize the resident set a
+   * second time to get one. Not public API.
    */
   _partitionBaselines?: Map<number, string>;
 };

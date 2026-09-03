@@ -434,9 +434,14 @@ game.definePartition(regionId);  // this subtree loads/checkpoints/evicts as a u
 // hydrate a partition the platform has in storage
 const region = game.adoptSubtree(parentId, storedRegionJson);
 
-// after a command runs, ask which partitions its moves dirtied
-const dirty = game.touchedPartitions;   // both endpoints of every cross-partition move
-game.clearTouchedPartitions();          // once the checkpoint is written
+// after a command runs, ask which partitions it dirtied. ONE call, and it
+// consumes: it reports what changed AND re-baselines from the same pass, so a
+// command cannot pay for the resident set twice.
+const dirty = game.takeTouchedPartitions();
+
+// the pre-command copy to roll a refused command back to, out of the baseline
+// the previous take already captured -- nothing is serialized to get it
+const point = game.partitionBaseline(regionId);   // { parentId, bytes }
 
 game.evictSubtree(regionId);     // residency change, not a game move: no onExit fires
 ```
@@ -467,8 +472,16 @@ Three things to know before using it:
 - **The engine tracks touches, not contents.** It stores no partition names and
   no partition contents — the platform already knows what it hydrated. What the
   platform cannot see is which partitions a *move* dirtied, so that is the one
-  half `touchedPartitions` supplies. Union it with the partitions you hydrated
-  to get the checkpoint's dirty set.
+  half `takeTouchedPartitions()` supplies. Union it with the partitions you
+  hydrated to get the checkpoint's dirty set.
+- **The dirty-set pass is once per command, and taking it is what re-baselines.**
+  Attribute changes have no write chokepoint to instrument, so they are found by
+  serializing each resident partition and comparing it against its baseline.
+  That is O(resident) and cannot be less, but it must not be a MULTIPLE of it:
+  there is deliberately no idempotent "just look" getter, because when there was
+  one the platform read it, then called a separate re-baseline that recomputed
+  the identical fingerprints, and a command paid for the whole resident world
+  twice before its rollback copy paid a third time (ShufflewickPub #316).
 
 **Running one locally.** `boardsmith dev` stands a world up resident when the
 project's `boardsmith.json` declares a `world` block:

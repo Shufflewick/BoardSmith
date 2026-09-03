@@ -1235,14 +1235,14 @@ export class Game<
           `that can be evicted, and evicting the game would evict the world.`
       );
     }
-    if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Set<number>();
-    this._ctx._partitionRoots.add(id);
+    if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Map<number, GameElement>();
+    this._ctx._partitionRoots.set(id, element);
     this._baselinePartition(id);
   }
 
   /**
-   * The partition roots CHANGED since the last {@link clearTouchedPartitions},
-   * by either of the two ways a partition can change:
+   * The partition roots CHANGED since the last take, RE-BASELINED in the same
+   * pass — by either of the two ways a partition can change:
    *
    * - **A move.** `moveToInternal` marks BOTH endpoints, source and
    *   destination, because a cross-partition move dirties a destination the
@@ -1252,46 +1252,92 @@ export class Game<
    *   its parent), so the comparison below cannot see it.
    * - **An attribute change**, detected by comparing each resident partition's
    *   serialized form against the baseline captured at
-   *   `definePartition`/`adoptSubtree`/`clearTouchedPartitions`. There is no
-   *   write chokepoint to instrument instead: an attribute is a bare instance
+   *   `definePartition`/`adoptSubtree`/the previous take. There is no write
+   *   chokepoint to instrument instead: an attribute is a bare instance
    *   property, and its value can be mutated deeper still
    *   (`token.tags.push(...)`) with no assignment to the element at all. The
    *   serialized form is the one thing every persistable change must alter --
    *   a change it cannot see is a change no checkpoint could have carried.
    *
    * Combine it with the partitions the platform hydrated to get the
-   * checkpoint's dirty set. Reading this serializes every resident partition
-   * once, so read it at a checkpoint boundary, not in a loop.
+   * checkpoint's dirty set.
+   *
+   * ## WHY THIS CONSUMES, AND WHY IT IS ONE CALL (ShufflewickPub #316)
+   *
+   * It used to be two: an idempotent `touchedPartitions` getter and a
+   * `clearTouchedPartitions()` that re-baselined. Both serialized every
+   * resident partition, and the platform called both once per command --
+   * so a single command paid TWO whole-residency serializations before its
+   * own rollback snapshot paid a third, and per-command CPU was O(the whole
+   * resident world) rather than O(what the command touched). Measured on the
+   * platform's own instrument at 500 resident partitions that was 19 ms per
+   * command against a 5 ms budget.
+   *
+   * The two calls always ran back to back over the same tree, and the second
+   * one recomputed exactly what the first had just computed. Folding them
+   * into one call that reports AND re-baselines from the fingerprints it has
+   * in hand is what makes that impossible to pay for twice — a getter that
+   * looks free is what invited the second pass, so there is deliberately no
+   * non-consuming read left to reintroduce it.
    */
-  get touchedPartitions(): ReadonlySet<number> {
-    const touched = new Set(this._ctx._touchedPartitions);
+  takeTouchedPartitions(): ReadonlySet<number> {
+    const touched = this._ctx._touchedPartitions ?? new Set<number>();
     const baselines = this._ctx._partitionBaselines;
-    if (baselines) {
-      for (const [id, baseline] of baselines) {
-        if (!touched.has(id) && this._partitionFingerprint(id) !== baseline) touched.add(id);
-      }
+    const rebaselined = new Map<number, string>();
+    for (const [id, root] of this._ctx._partitionRoots ?? []) {
+      const fingerprint = JSON.stringify(root.toJSON());
+      rebaselined.set(id, fingerprint);
+      // A root with no baseline at all is reported dirty rather than skipped:
+      // "not compared" and "unchanged" are different facts, and only one of
+      // them is safe to answer with silence.
+      if (baselines?.get(id) !== fingerprint) touched.add(id);
     }
+    this._ctx._partitionBaselines = rebaselined;
+    this._ctx._touchedPartitions = new Set<number>();
     return touched;
   }
 
   /**
-   * Forget every touch and re-baseline every resident partition. Called by the
-   * platform after a checkpoint, so what {@link touchedPartitions} reports next
-   * belongs to the commands after this moment.
+   * One resident partition AS OF THE LAST TAKE: where it hangs, and the bytes
+   * it had (ShufflewickPub #316).
+   *
+   * The platform needs a pre-command copy of every resident partition to roll
+   * a refused command back to, and used to serialize the whole resident set
+   * itself to get one. That was a third whole-residency pass over a tree this
+   * engine had ALREADY serialized twice on the same command — the baselines
+   * below are exactly those bytes, captured at exactly the moment the platform
+   * wants them (the end of the previous command), so handing them over costs
+   * nothing and cannot disagree with what the next take compares against.
+   *
+   * `undefined` when `id` is not a partition root, when nothing has baselined
+   * it, or when it hangs from nothing — a partition with no parent has no
+   * attachment point to restore it to, and the caller must say so rather than
+   * be handed bytes it cannot graft.
    */
-  clearTouchedPartitions(): void {
-    this._ctx._touchedPartitions = new Set<number>();
-    const baselines = new Map<number, string>();
-    for (const id of this._ctx._partitionRoots ?? []) {
-      const fingerprint = this._partitionFingerprint(id);
-      if (fingerprint !== undefined) baselines.set(id, fingerprint);
-    }
-    this._ctx._partitionBaselines = baselines;
+  partitionBaseline(id: number): { readonly parentId: number; readonly bytes: string } | undefined {
+    const root = this._ctx._partitionRoots?.get(id);
+    const bytes = this._ctx._partitionBaselines?.get(id);
+    if (!root || bytes === undefined) return undefined;
+    const parent = root._t.parent;
+    if (!parent) return undefined;
+    return { parentId: parent._t.id, bytes };
+  }
+
+  /**
+   * A partition root by id, without searching the tree.
+   *
+   * `getElementById` is a depth-first walk of the whole resident world, so a
+   * caller that looks up one root per resident partition pays O(world) per
+   * lookup and O(world²) per pass. A partition root is the one element this
+   * engine already holds a direct reference to.
+   */
+  partitionRoot(id: number): GameElement | undefined {
+    return this._ctx._partitionRoots?.get(id);
   }
 
   /** One resident partition's serialized form, or undefined when not resident. */
   private _partitionFingerprint(id: number): string | undefined {
-    const root = this.getElementById(id);
+    const root = this._ctx._partitionRoots?.get(id);
     if (!root) return undefined;
     return JSON.stringify(root.toJSON());
   }
@@ -1380,8 +1426,8 @@ export class Game<
 
     element.resolveElementReferences(this);
 
-    if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Set<number>();
-    this._ctx._partitionRoots.add(element._t.id);
+    if (!this._ctx._partitionRoots) this._ctx._partitionRoots = new Map<number, GameElement>();
+    this._ctx._partitionRoots.set(element._t.id, element);
     // Baselined from the GRAFTED tree, not from the incoming bytes: the two
     // can differ in key order, and a baseline that disagreed with the live
     // serialization would report a fresh adoption dirty before anything wrote.
