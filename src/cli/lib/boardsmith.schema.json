@@ -135,9 +135,9 @@
       "description": "Stable platform publisher identifier, written back into boardsmith.json by `boardsmith publish`. Read by publish.ts."
     },
     "persistence": {
-      "x-convex-sink": false,
+      "x-convex-sink": true,
       "type": "boolean",
-      "description": "Opt in to the platform's cross-session key/value store. Absent or false means the platform issues no persistence read at game start and no commit at game over. Consumed by the platform (manifest-schema.ts `persistence`)."
+      "description": "Opt in to the platform's cross-session key/value store. Absent or false means the platform issues no persistence read at game start and no commit at game over. Consumed on BOTH sinks. R2 sink: manifest-schema.ts `persistence` is what makes the running session read and commit at all. Convex sink (added for ShufflewickPub issue #323): a campaign is a series of sittings that carry, so convex/campaigns.ts refuses to create or re-pin one on a version that does not declare this, and convex/games.ts projects it as `supportsCampaigns` so the platform never offers a campaign it cannot honour. Both sinks are projections of the same dist/manifest.json, so they cannot disagree about one published version."
     },
     "bot": {
       "x-convex-sink": false,

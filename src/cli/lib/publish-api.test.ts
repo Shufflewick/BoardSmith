@@ -229,8 +229,29 @@ describe('initiatePublish manifest payload', () => {
       .toEqual(roundDeadline);
   });
 
+  // ShufflewickPub issue #323. `persistence` was an R2-sink key only: the
+  // Durable Object read it out of the bundle's own manifest and Convex never
+  // saw it at all. So Convex could not tell a campaign game from any other one,
+  // and `createCampaign` minted a campaign for chess while the UI promised the
+  // party it would remember. The platform gates the campaign on the pinned
+  // version's declaration now (ShufflewickPub convex/campaigns.ts
+  // `requireCarryCapableVersion`), which it can only do if the key reaches the
+  // Convex sink -- exactly as `world` already does for a world.
+  it('threads persistence through to the initiate body', async () => {
+    expect((await sentManifest({ displayName: 'Fixture', persistence: true })).persistence)
+      .toBe(true);
+  });
+
+  // Same reason the `asyncPlay: false` case above exists: a declared `false` is
+  // the author's answer and must arrive as `false`, not as an absent key the
+  // platform then reads its own default into.
+  it('carries a declared persistence: false through as false', async () => {
+    expect((await sentManifest({ displayName: 'Fixture', persistence: false })).persistence)
+      .toBe(false);
+  });
+
   /**
-   * The named cases above are the two keys that were actually lost. This one
+   * The named cases above are the three keys that were actually lost. This one
    * covers the ones nobody has thought of yet: it walks the schema's OWN
    * disposition list and demands each marked key survive the trip, so a future
    * key is proven to reach the wire the moment it is marked — no third
