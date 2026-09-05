@@ -32,8 +32,10 @@ So `GameDefinition.world` is typed here as an open record and no more
 (`src/session/types.ts`). The authoring contract — what a command handler
 receives, what `ctx.schedule` promises, what a view may read, what presence is,
 what a world may cost — belongs to the platform, and is written in
-**ShufflewickPub `docs/PERSISTENT-WORLDS.md`**. Read that before writing a
-world; nothing in this repo is allowed to restate it.
+**ShufflewickPub `docs/PERSISTENT-WORLDS.md`**. What `ctx.schedule` promises
+is its own short page there, **`docs/WORLD-SCHEDULE.md`**, worked through the
+Example RTS slow burn. Read those before writing a world; nothing in this repo
+is allowed to restate them.
 
 ## What `boardsmith dev` does with a world project
 
