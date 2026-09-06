@@ -299,17 +299,53 @@ writes no later round at all.
 **`.needs()` may be chained, and two of them in the same position are two
 rounds.** The second is answered with what the first loaded, and that is not a
 convenience -- it is how a declaration whose subject is *itself state* gets
-written. A MUD's `look` names the wanderer index, reads it, and names the room
-the index points at; with one declaration per position it would instead have to
-branch on whether its own partition happened to be resident yet, which is exactly
-the branch two-phase declaration exists to delete.
+written by an action that asks no question. An action with a selection hangs its
+second round on that selection; an action with none has only this place to write
+it.
+
+This is the shipped example, not a sketch of one. It is `look` in the Example
+MUD, at `~/BoardSmithGames/example-mud/src/rules/world.ts`:
 
 ```ts
-worldAction<MudGame>('look')
-  .needs(() => [WANDERERS])                              // nothing is resident
-  .needs(({ game, player }) => [roomOf(game, player)])   // reads what the last one loaded
+const theIndex = (): readonly string[] => [WANDERERS_PARTITION];
+
+const theRoomTheIndexNames = ({ game, player }: WorldNeedsContext<HallGame>): readonly string[] => [
+  roomPartition(standingKey(indexOf(game), player.seat)),
+];
+
+const look = worldAction<HallGame>('look')
+  .manual()
+  .needs(theIndex)              // round one: nothing is resident
+  .needs(theRoomTheIndexNames)  // round two: reads what round one loaded
   .execute((_args, ctx) => { /* ... */ });
 ```
+
+**`indexOf` throws when the register is absent, and that is the point.** Round
+two is asked only once round one is resident, so an author writes the read
+straight. The alternative -- one round that asks "is the index there yet?" and
+names less when it is not -- is a fixpoint in disguise: a single round re-asked
+until it stops changing its mind. The view path is allowed to be one, because a
+view has no steps. **A write is not**, because `walkDeclaration` has no ceiling:
+what bounds it is the number of rounds you wrote, and a round that re-answers
+differently every time it is asked is not that number.
+
+The same two rounds in a world whose seats are five hundred and whose rooms are
+1,600: `look` in `~/BoardSmithGames/sotf/src/rules/world.ts`. There the first
+round names the acting seat's own `Character`, and the second reads it for the
+one sector out of 1,600 the report is about. A seat nobody has been made on
+still HAS a `Character` -- `living: false` -- so the second round distinguishes
+"nothing loaded this" from "nobody lives here" instead of answering the same way
+to both.
+
+Both are held by tests that fail if the chain folds back to one round, and again
+if the second round guards its own read: `tests/world.test.ts` in the MUD and
+`tests/world-look.test.ts` in sotf.
+
+`tend` in `~/BoardSmithGames/example-rts/src/rules/world.ts` is the counterpart
+worth reading next to them. It also declares in two rounds, but its second round
+is arithmetic on the ring rather than a read of the first, so it would settle in
+either order. That is the common case; the two above are the case this mechanism
+exists for.
 
 A round that names a step the action does not have is refused at construction
 with `invalid-world-action`.

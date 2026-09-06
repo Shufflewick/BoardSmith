@@ -438,6 +438,13 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
     // Only reachable because the first round's partition is now in the tree.
     expect(engine.commandPartitions('p1', command)).toEqual([holdingPartition(1)]);
     expect(flatGuide).toContain('.needs() may be chained');
+    // AND THE GUIDE'S SAMPLE IS A SHIPPED VERB, NOT A SKETCH (#352). The
+    // fixture above proves the engine does it; only a citation proves an
+    // author can go and read one that is built, published and tested. The
+    // guide printed a toy `roomOf(game, player)` for long enough that both
+    // example worlds shipped the branching round it says the chain deletes.
+    expect(flatGuide).toContain('~/BoardSmithGames/example-mud/src/rules/world.ts');
+    expect(flatGuide).toContain('~/BoardSmithGames/sotf/src/rules/world.ts');
   });
 
   it('answers one round at a time, each answerable against the last', async () => {
