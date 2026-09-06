@@ -1,0 +1,317 @@
+// THE EXECUTABLE DEFINITION OF "THE ENGINE MODE IS DONE" (#35 item 2).
+//
+// The implementation is BoardSmith's; this is the platform's requirement of
+// it, and having it as a runnable suite is what lets the two be built
+// independently and still meet. Point it at any candidate:
+//
+//   describe("boardsmith world mode", () =>
+//     assertWorldEngineConformance(() => new BoardSmithWorldEngine(...)));
+//
+// It deliberately tests the COST PROPERTIES and not just the shape. An engine
+// that serialized the whole world on every checkpoint, or returned every
+// player the same view, would satisfy the TypeScript interface completely
+// while defeating the entire reason the mode exists -- so the cases below
+// measure that output shrinks with input, which a type cannot express.
+import { expect, it } from "vitest";
+import type { WorldEngine } from "./contract.js";
+
+/** Build a fresh engine holding at least the two named players and two
+ *  partitions. The suite supplies nothing: how a world is constructed is the
+ *  engine's business. */
+type WorldEngineFactory = () => Promise<WorldEngine> | WorldEngine;
+
+/** A stamped arrival instant. Every command carries one -- the PLATFORM's own,
+ *  never the caller's (#57) -- so the suite hands one down exactly as the
+ *  parent does. */
+const STAMP = {
+  now: 1_700_000_000_000,
+  allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+  // Nobody connected: the platform's presence stamp is derived from attached
+  // sockets, and this suite attaches none (#144).
+  presence: [],
+};
+
+const CONFORMANCE_PLAYERS = ["player-a", "player-b"] as const;
+
+/**
+ * Assert one candidate meets the contract. Call inside a `describe`.
+ */
+export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): void {
+  const [alice, bob] = CONFORMANCE_PLAYERS;
+
+  it("applyCommand reports what changed, not a snapshot", async () => {
+    // The single most important property. Returning the world would put the
+    // O(world) cost straight back, which is the thing #35 measured at 678ms.
+    const engine = await makeEngine();
+    const result = await engine.applyCommand(alice, { name: "touch", args: {} }, STAMP);
+
+    expect(Array.isArray(result.events)).toBe(true);
+    expect(Array.isArray(result.dirty)).toBe(true);
+    // A dirty set is partition IDS, not partitions -- if it carried content it
+    // would be a snapshot wearing a different name.
+    for (const id of result.dirty) expect(typeof id).toBe("string");
+  });
+
+  it("a command that touches ONE thing does not dirty everything", async () => {
+    // The scaling claim, measured. An engine that returned every partition
+    // here would typecheck perfectly and cost O(world) per action.
+    const engine = await makeEngine();
+    const all = await engine.serializePartitions(
+      (await engine.applyCommand(alice, { name: "touchAll", args: {} }, STAMP)).dirty,
+    );
+    const one = await engine.applyCommand(alice, { name: "touch", args: {} }, STAMP);
+
+    expect(one.dirty.length).toBeLessThan(Math.max(Object.keys(all).length, 2));
+  });
+
+  it("serializePartitions returns ONLY what was asked for", async () => {
+    // The checkpoint cost. An engine ignoring the argument would satisfy the
+    // type and re-serialize the world on every checkpoint.
+    const engine = await makeEngine();
+    const { dirty } = await engine.applyCommand(alice, { name: "touch", args: {} }, STAMP);
+    const written = await engine.serializePartitions(dirty);
+
+    expect(Object.keys(written).sort()).toEqual([...dirty].sort());
+  });
+
+  it("serializing NOTHING writes nothing", async () => {
+    // A command that changed no durable state must cost no checkpoint bytes --
+    // the boundary case an engine that always serializes gets wrong.
+    const engine = await makeEngine();
+    expect(await engine.serializePartitions([])).toEqual({});
+  });
+
+  it("SAYS WHAT A VIEW IS ABOUT, WITHOUT LOADING ANYTHING (#95)", async () => {
+    // The read path's `partitions()`, and the case that proves an engine has
+    // one. A world's partitions are ABSENT UNTIL LOADED, so a view that named
+    // nothing projected whatever a wake happened to have adopted -- the root --
+    // and a player who had only looked saw an empty world until they acted.
+    //
+    // ANSWERED WITHOUT LOADING, which is what the platform depends on: it calls
+    // this while the world is still absent, reads what it names out of storage
+    // and only then asks for the projection. An engine that consulted its own
+    // tree here would be answering in the one condition the question exists for.
+    const engine = await makeEngine();
+    const resident = engine.residency().map(({ name }) => name).sort();
+    const named = engine.viewPartitions(alice);
+
+    expect(Array.isArray(named)).toBe(true);
+    // ASKING LOADED NOTHING. The residency is exactly what it was, which is the
+    // half of the claim a type cannot make.
+    expect(engine.residency().map(({ name }) => name).sort()).toEqual(resident);
+    // The SAME answer twice: a declaration is a property of the seat, not of
+    // whatever the world happened to be doing the first time it was asked.
+    expect([...engine.viewPartitions(alice)]).toEqual([...named]);
+  });
+
+  it("SAYS WHAT A COMMAND IS ABOUT, FOR A PLAYER AND FOR THE CLOCK (#121)", async () => {
+    // The write path's half of the same declaration, and it takes the ACTING
+    // PLAYER -- which is the whole of #121. Before it, `partitions` was
+    // answered from the arguments alone, so no command could name "my own
+    // holding" and a per-player world had to make every player pass their own
+    // partition as an argument with exactly one legal answer.
+    //
+    // The seat is a fact the ENGINE already holds -- it owns the roster -- so
+    // nothing about absent-until-loaded changes: this is still answered with no
+    // partition loaded and no world to consult, which is the property asserted
+    // below rather than assumed.
+    const engine = await makeEngine();
+    const resident = engine.residency().map(({ name }) => name).sort();
+    const command = { name: "touch", args: {} };
+
+    const named = engine.commandPartitions(alice, command);
+    expect(Array.isArray(named)).toBe(true);
+    expect(engine.residency().map(({ name }) => name).sort()).toEqual(resident);
+
+    // EVERYTHING IT NAMES IS WHAT THE COMMAND THEN DIRTIES. The platform loads
+    // this set and no other, so a declaration narrower than the command's reach
+    // is a partition the handler will find absent.
+    const applied = await engine.applyCommand(alice, command, STAMP);
+    for (const name of named) expect(applied.dirty).toContain(name);
+
+    // AND THE CLOCK IS A LEGAL CALLER. A scheduled event has no seat, so `null`
+    // has to be answerable rather than a case an engine may assume away.
+    expect(Array.isArray(engine.commandPartitions(null, command))).toBe(true);
+  });
+
+  it("viewFor is PER PLAYER", async () => {
+    // Fog of war is the default in a world. Two players receiving the same
+    // object means the engine is handing out the world.
+    const engine = await makeEngine();
+    const seen = JSON.stringify(await engine.viewFor(alice));
+    const other = JSON.stringify(await engine.viewFor(bob));
+
+    expect(seen).not.toEqual(other);
+  });
+
+  it("OFFERS ITS COMMANDS, arguments and all, without applying anything (#85, #91)", async () => {
+    // The non-mutating half of the action protocol. Until it existed nothing
+    // could present a world's action to a player who did not already know its
+    // name, which is why a world's UI was a watching surface.
+    const engine = await makeEngine();
+    const before = JSON.stringify(await engine.viewFor(alice));
+
+    const offers = engine.commandOffers();
+    expect(offers.length).toBeGreaterThan(0);
+    // SORTED BY NAME, so a client renders the same list twice: object key order
+    // is an implementation detail of whichever literal the bundle wrote.
+    const names = offers.map((offer) => offer.name);
+    expect([...names]).toEqual([...names].sort());
+    // EVERY OFFER DESCRIBES ITS ARGUMENTS (#91). An engine that answered names
+    // and nothing else would satisfy the type and leave the platform with
+    // nothing to draw but a JSON box, which is the thing #91 removed.
+    for (const offer of offers) {
+      expect(Array.isArray(offer.args)).toBe(true);
+      for (const arg of offer.args) {
+        expect(arg.name).not.toBe("");
+        // A `now` argument is refused on the wire, so an offer that named one
+        // would describe an input no submission can carry.
+        expect(arg.name).not.toBe("now");
+        if (arg.kind === "choice") expect(arg.choices.length).toBeGreaterThan(0);
+      }
+    }
+    // Asking is not acting.
+    expect(JSON.stringify(await engine.viewFor(alice))).toEqual(before);
+  });
+
+  it("onEvent runs at its SCHEDULED due, not the wall clock", async () => {
+    // A world that drained late must produce the same state as one that
+    // drained on time -- the reason world-schedule.ts computes `due` and the
+    // platform passes it through rather than the engine reading a clock.
+    const engine = await makeEngine();
+    const early = await engine.onEvent(
+      { name: "tick", args: {} },
+      { due: 1_000, missedCount: 0 },
+      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [] },
+    );
+    const late = await engine.onEvent(
+      { name: "tick", args: {} },
+      { due: 1_000, missedCount: 0 },
+      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [] },
+    );
+
+    expect(late.events).toEqual(early.events);
+  });
+
+  it("onEvent accepts a COALESCED catch-up rather than demanding a replay", async () => {
+    // #35: "Catch-up integrates rather than replays." An engine that could
+    // only be driven one occurrence at a time would force the platform to run
+    // 72 iterations for three missed days.
+    //
+    // WHAT A CANDIDATE MUST SUPPLY (#210): a `tick` whose RESULT reflects the
+    // timing it was handed. Without that this obligation has no observable at
+    // all, and the case degenerates into asserting that a result carries an
+    // events array -- which every engine satisfies, including one that drops
+    // `missedCount` on the floor and demands exactly the replay this title
+    // forbids. The two engines this suite runs against both answer `tick` with
+    // its own `due` and `missedCount`, which is the cheapest honest way to
+    // make the fold visible from outside.
+    const eventStamp = {
+      allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+      presence: [],
+    };
+    // Two FRESH worlds, so the only difference between the two answers is the
+    // catch-up itself and not the order the suite drove them in.
+    const single = await (await makeEngine()).onEvent(
+      { name: "tick", args: {} },
+      { due: 5_000, missedCount: 0 },
+      eventStamp,
+    );
+    const coalesced = await (await makeEngine()).onEvent(
+      { name: "tick", args: {} },
+      { due: 5_000, missedCount: 68 },
+      eventStamp,
+    );
+
+    // THE FOLD REACHED THE HANDLER. Same event, same due, same fresh world:
+    // the 68 missed occurrences are the one thing that differs, so an engine
+    // whose answer is unchanged never saw them.
+    expect(JSON.stringify(coalesced.events)).not.toEqual(
+      JSON.stringify(single.events),
+    );
+
+    // AND IT WAS INTEGRATED IN ONE PASS. The catch-up costs O(1) in the number
+    // of missed occurrences -- one call in, one occurrence's worth of output
+    // back. An engine that looped internally would answer 69 events here,
+    // which is the same 69 iterations moved one layer down and none of the
+    // saving the mode exists for.
+    expect(coalesced.events.length).toBe(single.events.length);
+  });
+
+  it("SEATS A PLAYER WHO ARRIVES AFTER THE WORLD IS RUNNING", async () => {
+    // The one roster property a world needs and a table does not. A player who
+    // joins in week three attaches to an engine resident since week one, and
+    // rebuilding it to admit them would evict everything in it -- the exact
+    // cost this mode exists to avoid.
+    const engine = await makeEngine();
+    const latecomer = "player-c";
+
+    await expect(
+      engine.applyCommand(latecomer, { name: "touch", args: {} }, STAMP),
+    ).rejects.toThrow();
+
+    engine.seat(latecomer, 3);
+    const result = await engine.applyCommand(latecomer, { name: "touch", args: {} }, STAMP);
+    expect(Array.isArray(result.dirty)).toBe(true);
+  });
+
+  it("re-seating a player in the seat they already hold is free; moving them is refused", async () => {
+    // A reconnect looks exactly like a re-seat from here, so it must cost
+    // nothing. A MOVE is a different event: a seat is where a player's
+    // holdings are, and accepting one silently would hand somebody another
+    // person's.
+    const engine = await makeEngine();
+    engine.seat("player-d", 4);
+    expect(() => engine.seat("player-d", 4)).not.toThrow();
+    expect(() => engine.seat("player-d", 5)).toThrow();
+  });
+
+  it("reports NO ending for a command that did not declare one", async () => {
+    // Silence is the default, and it must be, because the platform settles a
+    // season on the strength of this field. An engine that reported an ending
+    // on every command would settle one per move.
+    const engine = await makeEngine();
+    const result = await engine.applyCommand(alice, { name: "touch", args: {} }, STAMP);
+    expect(result.ending).toBeUndefined();
+  });
+
+  it("reports residency in a form eviction can order", async () => {
+    // `planEviction` needs two things from every resident partition: its name,
+    // and a comparable stamp for when it was last needed. A clock would not do
+    // -- two commands in the same millisecond must still be ordered.
+    const engine = await makeEngine();
+    await engine.applyCommand(alice, { name: "touch", args: {} }, STAMP);
+
+    const residency = engine.residency();
+    expect(residency.length).toBeGreaterThan(0);
+    for (const partition of residency) {
+      expect(typeof partition.name).toBe("string");
+      expect(typeof partition.lastUsed).toBe("number");
+    }
+  });
+
+  it("evicts what it is asked to, and ignores what it does not hold", async () => {
+    // Both halves matter. Releasing residency is the point; tolerating a name
+    // it never had is what stops a routine housekeeping pass -- whose list came
+    // from a snapshot taken a moment earlier -- from parking a world.
+    const engine = await makeEngine();
+    await engine.applyCommand(alice, { name: "touch", args: {} }, STAMP);
+
+    const held = engine.residency().map((p) => p.name);
+    engine.evict(held);
+    expect(engine.residency().map((p) => p.name)).toEqual([]);
+
+    expect(() => engine.evict(["nothing:here"])).not.toThrow();
+  });
+
+  it("holds state ACROSS commands -- it is a resident instance, not a function", async () => {
+    // The property the stateless executor cannot provide, and the one the
+    // whole architecture replacement is for.
+    const engine = await makeEngine();
+    const before = JSON.stringify(await engine.viewFor(alice));
+    await engine.applyCommand(alice, { name: "touch", args: {} }, STAMP);
+    const after = JSON.stringify(await engine.viewFor(alice));
+
+    expect(after).not.toEqual(before);
+  });
+}
