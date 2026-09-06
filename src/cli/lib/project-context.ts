@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -32,10 +33,22 @@ export function getProjectContext(cwd: string): ProjectContext {
 /**
  * True when `cwd` is a real BoardSmith workspace, rather than the fallback
  * `standalone` guess `getProjectContext` returns for an unrelated directory.
- *
- * Commands that work in BOTH contexts use this to produce one actionable error
- * instead of letting an underlying tool fail with something cryptic.
  */
-export function isBoardsmithWorkspace(cwd: string): boolean {
+function isBoardsmithWorkspace(cwd: string): boolean {
   return existsSync(join(cwd, 'src', 'engine')) || existsSync(join(cwd, 'boardsmith.json'));
+}
+
+/**
+ * Stop the command with one actionable error when `cwd` is not a BoardSmith
+ * workspace.
+ *
+ * The commands that work in BOTH contexts (`lint`, `audit`) share this so the
+ * refusal reads the same wherever it comes from, instead of letting an
+ * underlying tool fail with something cryptic.
+ */
+export function requireBoardsmithWorkspace(cwd: string): void {
+  if (isBoardsmithWorkspace(cwd)) return;
+  console.error(chalk.red('Error: not a BoardSmith workspace'));
+  console.error(chalk.dim('Run this from a game project (has boardsmith.json) or the BoardSmith repo.'));
+  process.exit(1);
 }

@@ -83,7 +83,8 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 - Write at least one integration test per cross-layer boundary the change touches.
 
 # Code Quality Audits
-- Run `boardsmith audit --dead-code` (Fallow) after significant refactors to catch unused exports, dead files, and circular dependencies.
-- Run `boardsmith audit --duplication` (jscpd) when touching modules with similar patterns to catch copy-paste drift.
-- Run `boardsmith audit` for both at once.
+- Run `boardsmith audit` after significant refactors. **It checks the files your branch changed against its base branch, not the whole repository**, and it subtracts this repo's committed baselines (`.fallow-dead-code-baseline.json`, `.fallow-dupes-baseline.json`, `.fallow-health-baseline.json`). So it reports what your change introduced — unused exports, dead files, circular dependencies, complexity and duplication — and a clean branch passes it. See `docs/fallow-gate.md` for why the baselines exist.
+- It runs three checks: `--changes` (Fallow, changed files), `--duplication` (jscpd, whole repo), `--health-baseline` (baseline drift, #159). With no flag, all three run.
+- **A run with nothing in scope says so and gives no verdict.** On `main` right after a merge there is no diff against the base branch, so the audit checks nothing — that is not a pass. Widen it with `boardsmith audit --since <ref>` (e.g. `--since origin/main` in CI, or `--since HEAD~5`).
+- `boardsmith audit --backlog` reports the whole repository's dead code with the baselines set aside. That is the repo's accepted backlog (hundreds of findings, see `docs/fallow-gate.md`), so it is informational only — it never gates and always exits 0. Never treat it as the gate.
 - Note: Fallow's "unused class members" findings are mostly false positives for BoardSmith — our public API is consumed by external game projects, not internally. Focus on unused files, exports, and dependencies.
