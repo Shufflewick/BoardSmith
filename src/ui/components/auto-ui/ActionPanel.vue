@@ -17,6 +17,7 @@ import { ref, computed, watch, inject, nextTick } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import { resolveMultiSelectConfig } from '../../composables/actionControllerHelpers.js';
+import { startActionWithBoardReset } from '../../composables/useBoardActionBridge.js';
 import type {
   UseActionControllerReturn,
   PickMetadata,
@@ -28,6 +29,9 @@ import type {
 import DoneButton from './DoneButton.vue';
 import { splitAnchoredChoices, shouldDeferElementPickToBoard } from './action-panel-helpers.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
+// Type-only, so the log component's module (and its stylesheet) never enters
+// this graph -- `verbatimModuleSyntax` erases the import outright.
+import type { HistoryMessage } from '../GameHistory.vue';
 import { vDisabledReason, isDisabled, type DisabledReason } from '../../directives/vDisabledReason.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
@@ -43,6 +47,15 @@ const actionController = _actionController;
 export type { ChoiceWithRefs, ValidElement, ElementRef };
 /** A pick/choice the player must make */
 export type Pick = PickMetadata;
+/**
+ * A seat the panel names in "waiting for ..." during a simultaneous step.
+ *
+ * Exported because `PlayShell` forwards this prop straight through and must
+ * declare the SAME shape. It once declared `string[]`, which type-checked
+ * nowhere and would have rendered a row of blanks had anything ever passed
+ * bare names (#179).
+ */
+export interface AwaitingPlayer { seat: number; name: string; color?: string }
 export type ActionMetadata = ControllerActionMetadata;
 
 const props = defineProps<{
@@ -67,14 +80,16 @@ const props = defineProps<{
    * - Auto-executes actions with no selections when they're the only option
    */
   autoEndTurn?: boolean;
-  /** Game messages to display while waiting */
-  messages?: Array<{ text: string }>;
+  /** Game messages to display while waiting. The same shape the log renders:
+   *  a line is a bare string or a `{ text }` record, and `latestMessage` below
+   *  has always handled both -- only this declaration disagreed (#179). */
+  messages?: HistoryMessage[];
   /** Name of the player whose turn it is */
   currentPlayerName?: string;
   /** Color of the player whose turn it is */
   currentPlayerColor?: string;
   /** Players currently awaiting action during simultaneous steps */
-  awaitingPlayers?: Array<{ seat: number; name: string; color?: string }>;
+  awaitingPlayers?: AwaitingPlayer[];
   /** Global action-help visibility — driven by localStorage toggle in GameShell (Plan 03) */
   isActionHelpVisible?: boolean;
   /** Per-action disabled reasons from PlayerGameState.disabledActions */
@@ -768,15 +783,13 @@ async function startAction(
 
   const firstSel = meta.selections[0];
 
-  // Delegate to controller for core start logic
-  // Controller handles: clearing args, fetching choices for first selection
-  await actionController.start(actionName, options); // start clears any prior draft
-
-  // ActionPanel-specific state cleanup (controller doesn't know about these)
-  boardInteraction?.clear();
-
-  // Notify board interaction of action start (for custom GameBoard components)
-  boardInteraction?.setCurrentAction(actionName, 0, firstSel.name);
+  // The board half of the start is NOT the panel's to sequence (#185). It used
+  // to clear the board AFTER the await and then restore the action name alone,
+  // which wiped the valid elements and both selection callbacks the bridge had
+  // just installed from inside that await -- leaving a board that named an
+  // action it could not answer. `startActionWithBoardReset` is the single
+  // statement of the order; the bridge's watchers do the wiring.
+  await startActionWithBoardReset(actionController, boardInteraction, actionName, options);
 
   if (firstSel.type === 'element' || firstSel.type === 'elements') {
     emit('selectingElement', firstSel.name, firstSel.elementClassName);

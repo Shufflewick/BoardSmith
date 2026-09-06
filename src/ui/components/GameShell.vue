@@ -361,7 +361,7 @@ const connectionHealth = ref<'connecting' | 'connected' | 'stale'>('connecting')
  * board reads as a mystery speck (IA-01).
  */
 const connectionIndicator = computed<PlayConnection | null>(() => {
-  if (!props.platformMode || connectionHealth.value === 'connected') return null;
+  if (!platformMode.value || connectionHealth.value === 'connected') return null;
   return {
     tone: connectionHealth.value,
     title: connectionHealth.value === 'stale'
@@ -514,9 +514,15 @@ watch(state, (s) => {
   }
 });
 
-// Action metadata for auto-UI (selections, choices)
-const actionMetadata = computed(() => {
-  return state.value?.state?.actionMetadata as Record<string, ActionMetadata> | undefined;
+// Action metadata for auto-UI (selections, choices).
+// "No metadata" is an EMPTY RECORD, never `undefined`: every consumer -- the
+// panel, the bridge, the drag-drop orchestration -- only ever looks an action
+// name up in it, and a shell with no state yet has no metadata for any of them.
+// Modelling that as absent bought nothing and made the prop `PlayShell`
+// requires unfillable. Matches `useWorldPlay.actionMetadata`, which is the same
+// shape on the world side.
+const actionMetadata = computed<Record<string, ActionMetadata>>(() => {
+  return (state.value?.state?.actionMetadata as Record<string, ActionMetadata> | undefined) ?? {};
 });
 
 // Per-action disabled reasons from PlayerGameState.disabledActions.

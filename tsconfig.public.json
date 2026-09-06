@@ -1,0 +1,58 @@
+{
+  // THE COMPILATION EVERY GAME PERFORMS, PERFORMED HERE (BoardSmith #179).
+  //
+  // This package ships TypeScript SOURCE: `package.json`'s `exports` points
+  // both `types` and `import` straight at `src/**/*.ts`, and a game installs
+  // `boardsmith` as a SYMLINK to this checkout. So a game's own `vue-tsc`
+  // -- which `boardsmith validate` runs, and which `boardsmith publish`
+  // refuses to skip -- pulls these files in as ordinary source and reports
+  // OUR errors against the GAME. Nothing in a game repo can fix one.
+  //
+  // That is how four errors reached `main` and broke `validate` in all fifteen
+  // catalogue games at once: the repo's own `tsc -p tsconfig.json` cannot see
+  // inside a `.vue` file at all, so the shell's SFCs were checked by nobody
+  // here and by everybody downstream.
+  //
+  // This config is that downstream compilation: the entry points named in
+  // `exports`, and every file reachable from them, under a consumer's options.
+  // `src/contract/public-typecheck.test.ts` runs `vue-tsc` against it and
+  // requires ZERO errors. It is not a sample of the repo and not advisory --
+  // the fifth error fails the suite exactly as the first four would have.
+  //
+  // It is deliberately NOT `tsconfig.json`: that one includes `src/**/*`,
+  // whose tests and CLI carry a documented backlog (docs/typecheck.md). No
+  // game imports those, so they cannot break `validate`, and folding them in
+  // would mean a gate that can never be zero -- i.e. no gate.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // A game's own options, not the package's build options. `vite/client`
+    // supplies `import.meta.env`, which the shell reads.
+    "types": ["vite/client", "node"],
+    "jsx": "preserve",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noEmit": true
+  },
+  // `files` only: the reachable graph is the point, not a directory sweep.
+  "include": [],
+  "files": [
+    "src/engine/index.ts",
+    "src/ui/index.ts",
+    "src/ui/components/auto-ui/index.ts",
+    "src/ui/components/dice/index.ts",
+    "src/session/index.ts",
+    "src/persistence/index.ts",
+    "src/session/snapshot-session-host.ts",
+    "src/testing/index.ts",
+    "src/cli/lib/asset-scan.ts",
+    "src/eslint-plugin/index.ts",
+    "src/bot/index.ts",
+    "src/bot-trainer/index.ts",
+    "src/client/index.ts",
+    "src/runtime/index.ts",
+    "src/utils/index.ts",
+    "src/types/index.ts",
+    "src/world/index.ts"
+  ]
+}
