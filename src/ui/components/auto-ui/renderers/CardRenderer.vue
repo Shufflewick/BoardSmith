@@ -364,7 +364,6 @@ function handleDrop(event: DragEvent) {
         'has-image': !!(effectiveCardImage || presentationEntry?.image),
       },
     ]"
-    :data-element-id="element.id"
     :data-animatable="true"
     :draggable="isActionSelectable"
     v-bind="selectableAttrs"

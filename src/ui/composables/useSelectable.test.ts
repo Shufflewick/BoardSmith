@@ -13,14 +13,19 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { computed, nextTick, ref } from 'vue';
 import { useSelectable, useSelectableGrid } from './useSelectable.js';
-import type { BoardInteraction } from './useBoardInteraction.js';
+import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 
 function makeKeyEvent(key: string, shiftKey = false): KeyboardEvent {
   return new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true });
 }
 
-function makeMockInteraction(): Pick<BoardInteraction, 'triggerElementSelect'> {
-  return { triggerElementSelect: vi.fn() };
+// The REAL substrate with the one call under test spied: useSelectable now also
+// asks it what a candidate is called, so a partial stand-in would be asserting
+// against a shape the shell no longer has (docs/TEST-FIXTURES.md).
+function makeMockInteraction(): BoardInteraction {
+  const bi = createBoardInteraction();
+  bi.triggerElementSelect = vi.fn();
+  return bi;
 }
 
 // ---------------------------------------------------------------------------

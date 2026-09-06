@@ -175,7 +175,6 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
       'is-disabled': isDisabled,
     }"
     :style="layoutStyles"
-    :data-element-id="element.id"
     @click="onClick"
     @keydown="onKeydown"
     @dragover="handleDragOver"

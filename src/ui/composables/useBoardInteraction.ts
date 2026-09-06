@@ -52,6 +52,15 @@ export interface BoardTarget {
   ref: ElementRef;
   /** Disabled reason string, present only when element is disabled */
   disabled?: string;
+  /**
+   * The text the action panel would have shown for this candidate ("Holding 1"),
+   * as opposed to the element's internal name the board writes ("holding-1").
+   *
+   * #189: when the panel yields an element pick to the board, the board is the
+   * only surface the candidate appears on, so the player-facing wording has to
+   * travel with it or nothing outside the app can name what it is looking at.
+   */
+  display?: string;
 }
 
 /**
@@ -144,6 +153,15 @@ export interface BoardInteractionActions {
 
   /** Check if a board element is disabled for the current action selection. Returns reason string or false. */
   isDisabledElement: (element: { id?: number; name?: string; notation?: string }) => string | false;
+
+  /**
+   * The player-facing text for this element as a candidate of the pick in
+   * progress, or null when it is not one (#189).
+   *
+   * Feeds {@link candidateAttrs}, so every board renderer stamps the same hook
+   * from one place rather than each deciding for itself what a candidate is.
+   */
+  candidateLabel: (element: { id?: number; name?: string; notation?: string }) => string | null;
 
   /** Trigger element selection (called by board when clicking a valid element) */
   triggerElementSelect: (element: { id?: number; name?: string; notation?: string }) => void;
@@ -310,6 +328,12 @@ export function createBoardInteraction(): BoardInteraction {
       return validElem.disabled || false;
     },
 
+    candidateLabel(element) {
+      const validElem = state.validElements.find(ve => matchesRef(element, ve.ref));
+      if (!validElem) return null;
+      return validElem.display ?? String(validElem.id);
+    },
+
     triggerElementSelect(element) {
       // Find the matching valid element and trigger the callback (skip disabled elements)
       const validElem = state.validElements.find(ve => matchesRef(element, ve.ref));
@@ -432,8 +456,8 @@ export function createBoardInteraction(): BoardInteraction {
  * All values are String()-coerced so they are safe to bind as HTML attributes.
  *
  * This is the SINGLE SOURCE for all anchor attribute names — no other file may
- * define `data-bs-el-id`, `data-bs-el-notation`, or `data-bs-el-name` as
- * string literals. Overlay targeting queries only these attributes; emitting all
+ * define `data-bs-el-id`, `data-bs-el-notation`, `data-bs-el-name`, or the
+ * `data-element-id` animation alias as string literals. Overlay targeting queries only these attributes; emitting all
  * present keys means a notation- or name-keyed custom UI can still be matched by
  * the overlay without duplicating the matchesRef precedence logic here.
  *
@@ -453,7 +477,14 @@ export function createBoardInteraction(): BoardInteraction {
  */
 export function anchorAttrs(ref: ElementRef, type: string = 'unknown'): Record<string, string> {
   const attrs: Record<string, string> = {};
-  if (ref.id !== undefined) attrs['data-bs-el-id'] = String(ref.id);
+  if (ref.id !== undefined) {
+    attrs['data-bs-el-id'] = String(ref.id);
+    // FLIP / flying-element anchor. It used to be written inline by whichever
+    // renderer remembered to, which is why four of the eight had it and four
+    // did not; deriving it here means an element that can be animated or
+    // selected always carries it (#189).
+    attrs['data-element-id'] = String(ref.id);
+  }
   if (ref.notation !== undefined) attrs['data-bs-el-notation'] = String(ref.notation);
   if (ref.name !== undefined) attrs['data-bs-el-name'] = String(ref.name);
   if (Object.keys(attrs).length === 0) {
@@ -466,6 +497,30 @@ export function anchorAttrs(ref: ElementRef, type: string = 'unknown'): Record<s
     );
   }
   return attrs;
+}
+
+/**
+ * Map a candidate label to its stable `data-bs-candidate` attribute.
+ *
+ * Present ONLY while the element is a candidate of the pick in progress, and
+ * valued with the text the action panel would have shown for it. That makes an
+ * anchored candidate answerable by what a player reads — `[data-bs-candidate="Holding 1"]`
+ * — rather than by the internal element name the board happens to print, or by a
+ * pointer landing where someone already knows the candidate to be (#189).
+ *
+ * One attribute rather than two: the identity is already on the same node as
+ * `data-bs-el-id` via {@link anchorAttrs}, so a second copy of it would be a
+ * second thing to keep true. What was missing is the player-facing wording and
+ * a marker saying "this node answers the open selection", and this is both.
+ *
+ * This is the SINGLE SOURCE for the candidate attribute name — no other file may
+ * write `data-bs-candidate` as a string literal.
+ *
+ * @param label - Candidate display text from {@link BoardInteractionActions.candidateLabel},
+ *   or null when the element is not a candidate right now.
+ */
+export function candidateAttrs(label: string | null): Record<string, string> {
+  return label === null ? {} : { 'data-bs-candidate': label };
 }
 
 /**

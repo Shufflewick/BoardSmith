@@ -51,6 +51,7 @@ function makeSelectableMock(): {
     // --- query methods ---
     isSelectableElement: (): boolean => true,
     isDisabledElement: (): string | false => false,
+    candidateLabel: (): string | null => null,
     isSelected: (): boolean => false,
     isHighlighted: (): boolean => false,
     isDraggedElement: (): boolean => false,

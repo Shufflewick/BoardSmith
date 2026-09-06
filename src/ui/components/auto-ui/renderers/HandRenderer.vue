@@ -10,7 +10,7 @@
  */
 
 import { computed, inject, type Ref, type ComputedRef } from 'vue';
-import { tryUseBoardInteraction, anchorAttrs } from '../../../composables/useBoardInteraction.js';
+import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { resolvePresentation } from '../presentation.js';
@@ -272,11 +272,9 @@ void isBoardSelected;
 
 <template>
   <div
+    v-bind="selectableAttrs"
     role="group"
     :aria-label="`Your hand, ${childCountDisplay} cards`"
-    :tabindex="selectableAttrs.tabindex"
-    :aria-disabled="selectableAttrs['aria-disabled']"
-    v-bind="anchorAttrs(elementIdentity(), 'hand')"
     :class="[
       'hand-container',
       {

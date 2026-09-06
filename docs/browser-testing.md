@@ -9,7 +9,7 @@ It has three pieces:
 
 1. **Stable selectors** — `data-bs-el-id` (and its FLIP alias
    `data-element-id`) on every selectable element, in both custom UIs and
-   AutoUI.
+   AutoUI, plus `data-bs-candidate` on the ones the open selection will accept.
 2. **`window.__BOARDSMITH_DEVTOOLS`** — a synchronous, read-only snapshot of
    game state, available actions, and the current valid selection, exposed on
    the **outer dev-host page**.
@@ -44,16 +44,15 @@ the bridge:
 Every selectable board element carries `data-bs-el-id="<elementId>"`, emitted
 by the single-source `anchorAttrs()` helper
 (`src/ui/composables/useBoardInteraction.ts`). This attribute is identical in
-custom UIs (via `useSelectable`/`useSelectableGrid`) and in every AutoUI
-renderer (`CardRenderer`, `PieceRenderer`, `SpaceRenderer`, `DieRenderer`) — so
-the same selector works regardless of which UI is currently rendering the
-game.
+custom UIs (via `useSelectable`/`useSelectableGrid`) and in **all eight** AutoUI
+renderers — so the same selector works regardless of which UI is currently
+rendering the game.
 
-AutoUI renderers additionally emit `data-element-id` — the older attribute
+`anchorAttrs()` emits `data-element-id` from the same id — the older attribute
 consumed by FLIP animation (`useFLIP`'s default selector is
 `[data-element-id]`). Treat `data-bs-el-id` as canonical for selection;
-`data-element-id` is present alongside it as the FLIP alias, not a
-replacement.
+`data-element-id` is its animation alias, not a replacement. Both come from the
+one helper, so an element never has one without the other.
 
 ```js
 // Find element 42 inside the active game iframe, regardless of UI mode:
@@ -63,6 +62,37 @@ const el = iframe.contentDocument.querySelector('[data-bs-el-id="42"]');
 Never select by CSS position, class name churn, or pixel coordinates — those
 are cosmetic and change with theme/layout. `data-bs-el-id` is the only
 selector contract.
+
+### `data-bs-candidate`: naming a candidate by what a player reads
+
+An element pick belongs to the board, not the panel: when a step is fully
+board-anchored the panel is absent from the DOM (#172), and since #185 the panel
+hands element candidates to the board and keeps showing the action list. So the
+board is the ONLY surface the candidate appears on, and the board writes the
+element's internal name (`holding-1`) where the panel would have written its
+display text (`Holding 1`).
+
+While a pick is open, every element the pick will accept carries
+`data-bs-candidate="<the text the panel would have shown>"` — from
+`candidateAttrs()`, alongside the anchor attributes, in all eight AutoUI
+renderers and in any custom board using `useSelectable`/`useSelectableGrid`.
+The attribute is present only while that element is a live candidate and
+disappears with the pick, so `[data-bs-candidate]` is also the answer to "what
+can I press right now".
+
+```js
+// Answer an open element pick by the wording a player would read:
+const doc = iframe.contentDocument;
+doc.querySelector('[data-bs-candidate="Holding 1"]').click();
+
+// Or enumerate what the open pick will accept:
+[...doc.querySelectorAll('[data-bs-candidate]')].map(el => el.dataset.bsCandidate);
+```
+
+A candidate the action refuses is still a candidate: it carries the hook and
+`aria-disabled="true"`, matching `data-bs-disabled-reason` on the panel's own
+refusals. When a pick supplies no wording, the label falls back to the element
+id, so a candidate is never unmarked.
 
 ## 2. `window.__BOARDSMITH_DEVTOOLS`
 

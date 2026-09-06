@@ -115,7 +115,6 @@ const ariaLabel = computed(() => {
       'is-board-selected': isBoardSelected,
       'is-disabled': isDisabled,
     }"
-    :data-element-id="element.id"
     :data-animatable="true"
     :data-die-preview="JSON.stringify(dieProps)"
     @click="onClick"
