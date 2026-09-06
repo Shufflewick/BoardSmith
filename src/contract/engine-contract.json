@@ -1,8 +1,8 @@
 {
-  "revision": 35,
+  "revision": 36,
   "bundleProtocol": 1,
-  "surfaceHash": "faa6a2ffe25a9784",
-  "payloadHash": "a6ec38d2eb2ae3cd",
+  "surfaceHash": "475a587c20948b74",
+  "payloadHash": "1d3a21bebd77753c",
   "history": [
     {
       "revision": 1,
@@ -283,6 +283,14 @@
       "surfaceHash": "faa6a2ffe25a9784",
       "payloadHash": "a6ec38d2eb2ae3cd",
       "summary": "boardsmith/world ships the world runner core: residency, rollback baselines, dirty-set accumulation, per-seat view, event routing, schedule semantics, the partition-store interface, the refusals and the declaration types. The platform runs this instead of its own copy, and a launched world pins the revision that carries it."
+    },
+    {
+      "revision": 36,
+      "date": "2026-09-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "475a587c20948b74",
+      "payloadHash": "1d3a21bebd77753c",
+      "summary": "A world's verbs are Actions. worldAction() and worldClockAction() replace the flat command table; the seat's offer is its enumerated actions as ActionMetadata; ActionDefinition gains an optional world block carrying needs and seatless; ScheduleRequest names an action rather than a command and takes scalar args only. The world command contract types are deleted."
     }
   ]
 }
