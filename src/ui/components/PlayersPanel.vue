@@ -47,11 +47,42 @@ const props = withDefaults(defineProps<{
    * constraint in a game with many players.
    */
   showTurnStatus?: boolean;
+  /**
+   * The seats holding an open connection right now, THREE-VALUED exactly as the
+   * world wire is (`worldProtocol.ts` on `world_state.presence`):
+   *
+   * - an array — the truth; every other seat is away;
+   * - `null` — the host has no live claim, so nothing is marked. `null` is not
+   *   `[]`: an empty array says nobody is here, and a UI must not say that on a
+   *   dead socket;
+   * - absent — this backend has no presence at all. A table passes nothing.
+   *
+   * It is a marking on the seat row, not a second list, and it shares the row's
+   * one indicator with `Player.connected`. Where a caller supplies both, the
+   * per-player flag wins: it is the more specific claim.
+   */
+  presentSeats?: readonly number[] | null;
+  /**
+   * The most seat cards this panel will draw (#170 R1).
+   *
+   * A world runs 500 seats, and one card each is 4,505 DOM nodes re-patched on
+   * every state push — the O(world) term #169 spent a ticket deleting, put back
+   * in the sidebar. Virtualising it would make it cheap and still useless: the
+   * panel's job is seat IDENTITY, and a list nobody reads to the end of does not
+   * do that job.
+   *
+   * So the panel caps and SAYS SO. Twelve is above every table game in the
+   * catalogue — no table's behaviour changes — and far below the point where a
+   * column of cards is something a person reads. Which rows survive the cap is
+   * `visiblePlayers`.
+   */
+  maxRows?: number;
 }>(), {
   // Vue CASTS an absent Boolean prop to `false`, not `undefined` — so an
   // opt-OUT flag silently defaults to opted-out unless the default is stated
   // here. Every consumer that omits the prop must get the sentence.
   showTurnStatus: true,
+  maxRows: 12,
 });
 
 /**
@@ -98,6 +129,52 @@ const activePlayer = computed(() =>
   props.players.find(p => isPlayerActive(p.seat)) ?? null
 );
 
+/**
+ * Is this seat here right now, or is that not a question this backend answers?
+ *
+ * `undefined` means "do not draw an indicator" and is returned for both reasons
+ * a row can have no answer: a backend with no presence at all, and a host that
+ * has lost its live claim (`presentSeats === null`). Presence is never
+ * fabricated — an absent marking says nothing, which is the truth in both cases.
+ */
+function isSeatPresent(player: Player): boolean | undefined {
+  if (player.connected !== undefined) return player.connected;
+  if (!Array.isArray(props.presentSeats)) return undefined;
+  return props.presentSeats.includes(player.seat);
+}
+
+/**
+ * The rows that survive the cap, in the order they were given.
+ *
+ * Selection is by what a row ANSWERS, not by position: the viewer's own seat and
+ * every acting seat are why the panel exists at all, and a seat that is here is
+ * a better answer to "who is in this world" than one that is not. What is left
+ * over fills the remaining rows in the caller's order.
+ *
+ * The survivors are then re-sorted back into the given order, because that order
+ * is a claim — turn order, at a table — and a panel that reshuffled it while
+ * capping would be answering a question nobody asked.
+ */
+const visiblePlayers = computed<Player[]>(() => {
+  if (props.players.length <= props.maxRows) return [...props.players];
+
+  const index = new Map(props.players.map((p, i) => [p.seat, i]));
+  const chosen = new Set<number>();
+  const take = (p: Player) => { if (chosen.size < props.maxRows) chosen.add(p.seat); };
+
+  for (const p of props.players) if (p.seat === props.playerSeat) take(p);
+  for (const p of props.players) if (isPlayerActive(p.seat)) take(p);
+  for (const p of props.players) if (isSeatPresent(p) === true) take(p);
+  for (const p of props.players) take(p);
+
+  return props.players
+    .filter(p => chosen.has(p.seat))
+    .sort((a, b) => (index.get(a.seat) ?? 0) - (index.get(b.seat) ?? 0));
+});
+
+/** How many seats the cap left out. Zero when nothing was cut. */
+const hiddenCount = computed(() => props.players.length - visiblePlayers.value.length);
+
 defineSlots<{
   /** Custom stats for each player — rendered at the end of the info column. */
   'player-stats'(props: { player: Player }): any;
@@ -117,7 +194,7 @@ defineSlots<{
     <!-- All player tokens inline -->
     <div class="strip-tokens" aria-hidden="true">
       <span
-        v-for="player in players"
+        v-for="player in visiblePlayers"
         :key="player.seat"
         class="pt"
         :class="{ 'strip-active': isPlayerActive(player.seat) }"
@@ -135,12 +212,13 @@ defineSlots<{
     <span v-if="activePlayer" class="strip-status">
       {{ turnStatus(activePlayer) }}
     </span>
+    <span v-if="hiddenCount > 0" class="players-overflow">and {{ hiddenCount }} others</span>
   </div>
 
   <!-- ── Standard mode: full per-player cards ──────────────────────────────── -->
   <div v-else class="players-panel" role="list" aria-label="Players">
     <div
-      v-for="player in players"
+      v-for="player in visiblePlayers"
       :key="player.seat"
       class="player-card"
       :class="{ current: isPlayerActive(player.seat) }"
@@ -175,11 +253,11 @@ defineSlots<{
                dot vs hollow ring — not color alone, plus an accessible label). Only
                rendered when connection status is actually known. -->
           <span
-            v-if="player.connected !== undefined"
+            v-if="isSeatPresent(player) !== undefined"
             class="conn-status"
-            :class="player.connected ? 'is-online' : 'is-offline'"
+            :class="isSeatPresent(player) ? 'is-online' : 'is-offline'"
             role="img"
-            :aria-label="player.connected ? `${player.name} connected` : `${player.name} disconnected`"
+            :aria-label="isSeatPresent(player) ? `${player.name} connected` : `${player.name} disconnected`"
           ></span>
         </div>
         <!-- Turn-status sentence: active player only (IA-02 reconciliation),
@@ -190,6 +268,10 @@ defineSlots<{
         <slot name="player-stats" :player="player"></slot>
       </div>
     </div>
+
+    <!-- WHAT THE CAP LEFT OUT (#170 R1). A bounded list that does not say it is
+         bounded is a list that quietly lies about how many people are here. -->
+    <p v-if="hiddenCount > 0" class="players-overflow">and {{ hiddenCount }} others</p>
   </div>
 </template>
 
@@ -394,5 +476,15 @@ defineSlots<{
 
 .strip-status {
   display: none;
+}
+
+/* The capped-list footer. Deliberately not a card: it is not a seat, and drawing
+   it as one would make the panel look like it holds one more player than it
+   does. */
+.players-overflow {
+  margin: 2px 0 0;
+  padding: 0 9px;
+  font-size: 12px;
+  color: var(--bsg-muted, #8b8b8b);
 }
 </style>
