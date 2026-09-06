@@ -32,6 +32,7 @@ const PROJECT_PATH = '/tmp/boardsmith-scaffold-fixture/my-game';
 
 const config: ProjectConfig = {
   name: 'my-game',
+  backend: 'table',
   displayName: 'My Game',
   description: 'A test game',
   playerCount: { min: 2, max: 4 },

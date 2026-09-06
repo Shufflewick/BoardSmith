@@ -7,7 +7,6 @@ import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 import {
   findUnknownKeys,
   findUnknownKeysIn,
-  ALLOWED_WORLD_KEYS,
   ALLOWED_ROUND_DEADLINE_KEYS,
   ALLOWED_NAMED_ACTION_KEYS,
   ASSET_PATH_KEYS,
@@ -16,6 +15,7 @@ import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.
 import { readDistDir, createZip } from '../lib/zip.js';
 import { requireGameProject } from '../lib/game-project.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
+import { GAME_BACKENDS, isGameBackend } from '../../session/index.js';
 import {
   auditChoiceCardinality,
   describeUnboundedChoiceStep,
@@ -57,11 +57,11 @@ export async function validateCommand(): Promise<void> {
 
   const results: ValidationResult[] = [];
 
-  // Which BACKEND this game declares, read once. The manifest's `world` block
-  // is the single declaration, and what it changes below is which entry point
-  // the project must have.
+  // Which BACKEND this game declares, read once. `backend` is the single
+  // declaration (#171), and what it changes below is which entry point the
+  // project must have.
   const worldMode = resolveWorldMode(
-    JSON.parse(readFileSync(configPath, 'utf-8')) as { world?: unknown },
+    JSON.parse(readFileSync(configPath, 'utf-8')) as { backend?: unknown },
   );
 
   // 1. Check metadata completeness
@@ -164,7 +164,7 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
 
   // Required fields. audience/tags/playtime/cooperative seed the platform's
   // game record on first publish, so a manifest without them can't publish.
-  const required = ['name', 'displayName', 'description', 'audience', 'tags', 'playtime', 'cooperative'];
+  const required = ['name', 'backend', 'displayName', 'description', 'audience', 'tags', 'playtime', 'cooperative'];
   for (const field of required) {
     if (config[field] === undefined || config[field] === null || config[field] === '') {
       issues.push(`Missing required field: ${field}`);
@@ -187,6 +187,27 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
     } else if (key === 'playerCount') {
       issues.push(
         "Unknown key 'playerCount' — player count is now derived from your gameDefinition (compiled rules), remove this key from boardsmith.json.",
+      );
+    } else if (key === 'world') {
+      issues.push(
+        "Unknown key 'world' — a project says it is a persistent world with \"backend\": \"world\", "
+        + 'and the world\'s capacity is declared in your gameDefinition\'s `world: { maxPlayers }` '
+        + '(compiled rules), which is the number the runtime actually enforces. The manifest\'s copy '
+        + 'is derived from it at build. Remove this key from boardsmith.json.',
+      );
+    } else if (key === 'bot') {
+      issues.push(
+        "Unknown key 'bot' — whether a seat may be played by a bot is DERIVED from your "
+        + 'gameDefinition\'s `bot` block (compiled rules) and published as `capabilities.bots`, so a '
+        + 'manifest can no longer claim a bot the bundle does not ship. It is a table capability: a '
+        + 'world backend has no bots. Remove this key from boardsmith.json.',
+      );
+    } else if (key === 'persistence') {
+      issues.push(
+        "Unknown key 'persistence' — whether state survives a sitting is DERIVED from your "
+        + 'gameDefinition\'s `persistence` (compiled rules), which is what `boardsmith dev` already '
+        + 'read, and published as `capabilities.crossSessionState`. Remove this key from '
+        + 'boardsmith.json.',
       );
     } else if (key === 'categories') {
       issues.push(
@@ -279,9 +300,25 @@ function checkBlockKeys(
 function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
   const issues: string[] = [];
 
+  // THE BACKEND, and it is the one declaration everything else follows from
+  // (#171). Only its VALUE is checked here: whether it agrees with the compiled
+  // rules is `deriveManifest`'s check, because nothing reading a config can see
+  // inside a game's code.
+  if (config.backend !== undefined && !isGameBackend(config.backend)) {
+    issues.push(
+      `"backend" must be ${GAME_BACKENDS.map((b) => `"${b}"`).join(' or ')} — "table" holds the `
+      + 'whole element tree resident, snapshots per action, and keeps history, undo, bots and '
+      + 'spectators; "world" keeps only named partitions resident and runs continuously. '
+      + `Got ${JSON.stringify(config.backend)}.`,
+    );
+  }
+
+  // THE TWO CAPABILITIES AN AUTHOR STILL DECLARES. Everything else in the
+  // manifest's `capabilities` object is derived from the backend and the
+  // compiled rules; these two are judgments about a game's rules that no code
+  // can answer. Both are TABLE-ONLY — `deriveManifest` refuses either on a
+  // world, where the backend already answers them.
   const booleans: Record<string, string> = {
-    persistence: 'true when the game opts into the platform\'s cross-session key/value store',
-    bot: 'true when the bundle ships a gameDefinition.bot block',
     joinInProgress: 'true when a player may join a session already underway',
     asyncPlay: 'true when the game can be played asynchronously over hours or days',
   };
@@ -300,9 +337,6 @@ function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
   }
   if (config.roundDeadline !== undefined) {
     issues.push(...checkRoundDeadlineShape(config.roundDeadline));
-  }
-  if (config.world !== undefined) {
-    issues.push(...checkWorldShape(config.world));
   }
 
   return issues;
@@ -325,38 +359,6 @@ function checkNamedActionShape(raw: unknown, path: string, names: string): strin
   }
   if (raw.args !== undefined && !isPlainObject(raw.args)) {
     issues.push(`"${path}.args" must be an object of literal action arguments if present (e.g. { "count": 1 }).`);
-  }
-
-  return issues;
-}
-
-/**
- * Shape check for the persistent-world block. `maxPlayers` is REQUIRED once
- * `world` is present — it is the whole of what a resident world declares, and
- * a block that omits it says nothing about the world.
- *
- * THE ROUND-WORLD SHAPE THIS REPLACES. `world` used to require a
- * `resolveAction` and accept an `enrolAction`, because a world advanced one
- * round at a time and the platform submitted the action that resolved it. That
- * architecture is deleted: a resident world runs continuously in one Durable
- * Object, so there is no round to resolve and no enrolment action to submit —
- * a joiner is seated by the world itself. Both keys are gone from
- * `boardsmith.schema.json`, so writing either now fails the unknown-key pass
- * above with a did-you-mean rather than being silently accepted and then
- * refused at upload.
- */
-function checkWorldShape(raw: unknown): string[] {
-  const example = '{ "maxPlayers": 200 }';
-  if (!isPlainObject(raw)) {
-    return [`"world" must be an object, e.g. ${example} — remove the key entirely if this game is not a persistent world.`];
-  }
-
-  const issues = checkBlockKeys(raw, 'world', ALLOWED_WORLD_KEYS);
-
-  if (raw.maxPlayers === undefined) {
-    issues.push(`"world" must declare a "maxPlayers" naming the largest roster this game's rules are built for, e.g. ${example}. A world block that declares nothing says nothing about the world.`);
-  } else if (!Number.isInteger(raw.maxPlayers) || (raw.maxPlayers as number) < 1) {
-    issues.push(`"world.maxPlayers" must be a whole number of players of at least 1, e.g. ${example}; got ${JSON.stringify(raw.maxPlayers)}.`);
   }
 
   return issues;

@@ -50,11 +50,11 @@ describe('the pair the build stamps', () => {
   it('are the two numbers a published manifest carries', async () => {
     const { deriveManifest } = await import('../cli/commands/build.js');
     const manifest = deriveManifest(
-      { name: 'test-game' },
+      { name: 'test-game', backend: 'table' },
       { name: 'test-game', version: '1.0.0' },
       { minPlayers: 2, maxPlayers: 4 },
       { protocol: BUNDLE_PROTOCOL_VERSION, revision: ENGINE_REVISION },
-      { worldUi: false }
+      { tableUi: true, worldUi: false }
     );
     expect(manifest.engineProtocol).toBe(BUNDLE_PROTOCOL_VERSION);
     expect(manifest.engineRevision).toBe(ENGINE_REVISION);

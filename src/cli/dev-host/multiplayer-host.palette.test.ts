@@ -25,12 +25,12 @@ class PassGame extends Game<PassGame, Player> {
   }
 }
 
-const def: GameDefinitionLike = {
+const def = {
   gameClass: PassGame,
   gameType: 'pass',
   minPlayers: 1,
   maxPlayers: 4,
-};
+} satisfies GameDefinitionLike;
 
 describe('MultiplayerHost — declared color palette reaches per-seat color (D16/DEVHOST-04)', () => {
   it('threads an explicit colorPalette into the start op playerOptions[seat].color (characterization: host already threads it)', async () => {

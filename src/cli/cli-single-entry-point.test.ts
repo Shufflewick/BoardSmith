@@ -68,6 +68,7 @@ describe('the CLI is the only entry point', () => {
       generatePackageJson(
         {
           name: 'test-game',
+          backend: 'table' as const,
           displayName: 'Test Game',
           description: 'x',
           playerCount: { min: 2, max: 4 },

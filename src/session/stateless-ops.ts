@@ -290,8 +290,14 @@ export interface GameDefinitionLike {
    */
   gameClass: GameClass;
   gameType: string;
-  minPlayers: number;
-  maxPlayers: number;
+  /**
+   * The TABLE's seat range, optional for the same reason it is optional on
+   * {@link GameDefinition}: a world game has no table roster. Every op in this
+   * module runs a table, so a caller that reaches one has already established
+   * the counts exist.
+   */
+  minPlayers?: number;
+  maxPlayers?: number;
   /**
    * Optional tutorial definition — threaded un-serialized into each runner
    * (mirrors how game-session.ts re-supplies it after fromSnapshot/fromCheckpoint).
@@ -1375,6 +1381,17 @@ export async function executeOp(
     const randomness: RandomnessPolicy = hostOptions?.randomness ?? 'allowed';
     const def: RunnerDef = { ...definition, randomness };
     const { playerCount } = gameOptions;
+    // A BUNDLE WITH NO SEAT RANGE HAS NO TABLE, and is refused by name rather
+    // than compared against `undefined` -- `playerCount < undefined` is false,
+    // so every bound check here would pass and a world-only bundle would be run
+    // as a table until it failed somewhere deep in game code (#354).
+    if (def.minPlayers === undefined || def.maxPlayers === undefined) {
+      return errorResult(
+        `Game "${def.gameType}" declares no minPlayers/maxPlayers, so it has no table to seat ` +
+          'anybody at. This is a world-only bundle: create a world of it instead of a session.',
+        'protocol',
+      );
+    }
     if (playerCount < def.minPlayers || playerCount > def.maxPlayers) {
       return errorResult(
         `playerCount ${playerCount} is outside the allowed range (${def.minPlayers}-${def.maxPlayers})`,

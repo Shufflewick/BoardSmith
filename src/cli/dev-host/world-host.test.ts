@@ -86,6 +86,7 @@ const VILLAGE_ACTIONS: readonly ActionDefinition[] = [chop, bank, burn];
 
 function worldBlock(overrides: Partial<WorldDefinition> = {}): WorldDefinition {
   return {
+    maxPlayers: 4,
     genesis: (game) => ({ [HEARTH]: game.create(Hearth, 'hearth') as GameElement }),
     view: () => [HEARTH],
     actions: VILLAGE_ACTIONS,
@@ -98,8 +99,6 @@ function bundle(overrides: Record<string, unknown> = {}) {
     gameClass: Village,
     gameType: 'village',
     displayName: 'Village',
-    minPlayers: 1,
-    maxPlayers: 4,
     world: worldBlock(),
     ...overrides,
   } as ConstructorParameters<typeof LocalWorldHost>[0]['definition'];

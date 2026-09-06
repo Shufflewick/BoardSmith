@@ -71,12 +71,12 @@ class PassGame extends Game<PassGame, Player> {
   }
 }
 
-const gameDef: GameDefinitionLike = {
+const gameDef = {
   gameClass: PassGame,
   gameType: 'pass',
   minPlayers: 1,
   maxPlayers: 2,
-};
+} satisfies GameDefinitionLike;
 
 /** Poll until `predicate()` is true or `timeoutMs` elapses (host state changes asynchronously). */
 async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 2000): Promise<void> {

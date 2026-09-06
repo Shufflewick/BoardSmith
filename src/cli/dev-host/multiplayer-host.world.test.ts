@@ -30,12 +30,12 @@ class WorldGame extends Game<WorldGame, Player> {
   }
 }
 
-const def: GameDefinitionLike = {
+const def = {
   gameClass: WorldGame,
   gameType: 'world-game',
   minPlayers: 1,
   maxPlayers: 4,
-};
+} satisfies GameDefinitionLike;
 
 function makeHost(worldMode: boolean | undefined) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

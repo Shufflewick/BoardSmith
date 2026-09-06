@@ -12,26 +12,48 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+import type { GameBackend } from '../../session/index.js';
+
 /**
- * Project configuration
+ * Project configuration.
+ *
+ * A DISCRIMINATED UNION on `backend` (#171), so the two shapes cannot be
+ * confused: a table has a seat range and a world has a lifetime seat count, and
+ * neither has the other's. That is what makes `generateRulesIndexTs` able to
+ * read `config.playerCount` without a fallback, and it is the same rule the
+ * built manifest keeps -- a world-only bundle carries no `playerCount` at all.
  */
-export interface ProjectConfig {
+interface ProjectConfigBase {
   name: string;
   displayName: string;
   description: string;
-  playerCount: { min: number; max: number };
   audience?: string;
   tags?: string[];
   ui?: string;
-  /**
-   * The `world` block, present exactly when this project is a persistent world
-   * (`boardsmith init --world`). Its PRESENCE in `boardsmith.json` is how a
-   * game says it is a world -- there is no second declaration and no flag at
-   * run time -- so this field decides both the manifest and which rules,
-   * tests and entry point the scaffold writes.
-   */
-  world?: { maxPlayers: number };
 }
+
+/**
+ * WHICH BACKEND RUNS THIS PROJECT (#171), and the only place it is said.
+ * `boardsmith init --world` is what writes `'world'`, once, into a project that
+ * does not exist yet; every command after it reads the declaration and nothing
+ * asks again. It decides the manifest and which rules, tests and entry point
+ * the scaffold writes.
+ */
+interface TableProjectConfig extends ProjectConfigBase {
+  backend: Extract<GameBackend, 'table'>;
+  /** The table's seat range. */
+  playerCount: { min: number; max: number };
+}
+
+interface WorldProjectConfig extends ProjectConfigBase {
+  backend: Extract<GameBackend, 'world'>;
+  /** A world's lifetime seat count. It lives in the COMPILED rules
+   *  (`gameDefinition.world.maxPlayers`), which is the number the runtime
+   *  enforces; the manifest's copy is derived from it at build. */
+  worldSeats: number;
+}
+
+export type ProjectConfig = TableProjectConfig | WorldProjectConfig;
 
 /**
  * Generated file with path and content
@@ -130,6 +152,14 @@ export function toDisplayName(str: string): string {
 export function generateBoardsmithJson(config: ProjectConfig): string {
   const json = {
     name: config.name,
+    // WHICH BACKEND RUNS THIS GAME (#171), and the only place it is declared.
+    // Everything that follows from it -- whether the game has a table, whether
+    // a move can be taken back, whether a seat may be a bot -- is resolved by
+    // `boardsmith build` into the manifest's `capabilities` object, which is
+    // what the shell and the platform read. There is no world BLOCK here: a
+    // world's capacity lives in the compiled rules, which is the number the
+    // runtime enforces.
+    backend: config.backend,
     displayName: config.displayName,
     description: config.description,
     audience: config.audience || 'casual',
@@ -144,11 +174,6 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
     // Add it once there is art behind it; `boardsmith validate` now fails on a
     // declared asset path that resolves to nothing.
     scoreboard: { stats: ['score'] },
-    // The `world` block, and only for a world project. Its PRESENCE is the
-    // declaration that this game is a persistent world (#158); its absence
-    // means it is not one. `boardsmith validate` requires `world.maxPlayers`,
-    // and the compiled rules must declare the same number.
-    ...(config.world ? { world: config.world } : {}),
     // No `ui` field, deliberately. A game's UIs are declared in src/ui/uis.ts
     // (defineGameUIs) — the one place. The manifest used to carry a `"ui"` key
     // that nothing read after scaffolding, so it rotted: most games dropped it,
@@ -346,7 +371,7 @@ app.mount('#app');
 /**
  * Generate src/rules/index.ts
  */
-export function generateRulesIndexTs(config: ProjectConfig): string {
+export function generateRulesIndexTs(config: TableProjectConfig): string {
   const pascal = toPascalCase(config.name);
   return `export { ${pascal}Game, ${pascal}Player } from './game.js';
 export * from './elements.js';
@@ -431,7 +456,7 @@ export default defineGameUIs({
  *   "auto" (default) → single AutoUI import
  *   relative path    → single custom component import (no AutoUI)
  */
-export function generateAppVue(config: ProjectConfig): string {
+export function generateAppVue(config: TableProjectConfig): string {
   return `<script setup lang="ts">
 import { GameShell } from 'boardsmith/ui';
 import uis from './uis.js';
@@ -666,7 +691,7 @@ export function generateScaffoldFiles(config: ProjectConfig, projectPath: string
   // none of the three. Scaffolding them anyway would hand every new world the
   // vestigial table half the existing world games are being stripped of
   // (BoardSmith #174), and would teach the wrong model on the first day.
-  if (config.world) return shared;
+  if (config.backend === 'world') return shared;
 
   return [
     ...shared,

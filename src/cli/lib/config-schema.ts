@@ -78,9 +78,6 @@ export const ASSET_PATH_KEYS: readonly string[] = Object.freeze(
     .map(([key]) => key),
 );
 
-/** Legitimate keys inside the persistent-world block. */
-export const ALLOWED_WORLD_KEYS: readonly string[] = keysOf(rootSchema.properties.world);
-
 /** Legitimate keys inside the `roundDeadline` block. */
 export const ALLOWED_ROUND_DEADLINE_KEYS: readonly string[] = keysOf(
   rootSchema.properties.roundDeadline,

@@ -104,6 +104,7 @@ interface ProjectScaffold {
 const TABLE_SCAFFOLD: ProjectScaffold = {
   config: (name) => ({
     name,
+    backend: 'table',
     displayName: toDisplayName(name),
     description: 'A fun game for 2-4 players',
     playerCount: { min: 2, max: 4 },
@@ -144,12 +145,14 @@ ${chalk.cyan('Everything else runs through the same CLI:')}
 const WORLD_SCAFFOLD: ProjectScaffold = {
   config: (name) => ({
     name,
+    backend: 'world',
     displayName: toDisplayName(name),
     description: 'A persistent world: a place that keeps going while nobody is looking.',
-    playerCount: { min: 1, max: WORLD_SCAFFOLD_SEATS },
+    // NO `playerCount`: a world has no table roster. Its seats are a lifetime
+    // count declared in the compiled rules (#171 / ShufflewickPub #354).
+    worldSeats: WORLD_SCAFFOLD_SEATS,
     audience: 'casual',
     tags: ['persistent-world'],
-    world: { maxPlayers: WORLD_SCAFFOLD_SEATS },
   }),
 
   writeSources: async (projectPath, config) => {

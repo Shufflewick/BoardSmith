@@ -158,6 +158,7 @@ describe('config-schema', () => {
 function validConfig(): Record<string, unknown> {
   return {
     name: 'x',
+    backend: 'table',
     displayName: 'X',
     description: 'desc',
     audience: 'casual',
@@ -379,73 +380,56 @@ describe('validateBundleSize measures the real publish zip, not the raw dist (WR
 });
 
 /**
- * The platform-consumed blocks (`world`, `roundDeadline`, `idleAction`, `bot`,
- * `persistence`, `joinInProgress`). Every one of them reaches the publishing
- * platform through build.ts's `deriveManifest` config spread, and until this
- * change none of them was in `boardsmith.schema.json` — so `boardsmith
- * validate` / `boardsmith dev` flagged an author for writing exactly the block
- * the platform requires. The shapes below mirror ShufflewickPub
- * `games/src/manifest-schema.ts`, which is the upload-time authority.
+ * The platform-consumed blocks (`backend`, `roundDeadline`, `idleAction`,
+ * `joinInProgress`, `asyncPlay`). Every one of them reaches the publishing
+ * platform through build.ts's `deriveManifest` -- the two capability flags
+ * inside the resolved `capabilities` object, the rest through the config
+ * spread -- and until this change none of them was in
+ * `boardsmith.schema.json`, so `boardsmith validate` / `boardsmith dev` flagged
+ * an author for writing exactly the block the platform requires. The shapes
+ * below mirror ShufflewickPub `games/src/manifest-schema.ts`, which is the
+ * upload-time authority.
  */
 describe('platform-consumed blocks', () => {
-  it('accepts a config carrying a valid persistent-world block', () => {
-    const issues = checkMetadataIssues({
-      ...validConfig(),
-      world: { maxPlayers: 200 },
-    });
-    expect(issues).toEqual([]);
+  it('requires a backend, because a default is a backend nobody chose', () => {
+    const { backend: _backend, ...noBackend } = validConfig();
+    expect(checkMetadataIssues(noBackend)).toContain('Missing required field: backend');
   });
 
-  it('rejects an unknown key INSIDE world, naming the key and suggesting the real one', () => {
-    const issues = checkMetadataIssues({
-      ...validConfig(),
-      world: { maxPlayers: 12, maxPlayer: 12 },
-    });
-    expect(issues).toHaveLength(1);
-    expect(issues[0]).toContain("Unknown key 'maxPlayer'");
-    expect(issues[0]).toContain('world');
-    expect(issues[0]).toContain('maxPlayers');
+  it('accepts either backend and rejects a name this engine does not run', () => {
+    expect(checkMetadataIssues({ ...validConfig(), backend: 'world' })).toEqual([]);
+    const [message] = checkMetadataIssues({ ...validConfig(), backend: 'tables' });
+    expect(message).toContain('"backend" must be "table" or "world"');
   });
 
-  it('rejects the DELETED round-world keys rather than accepting them into a shape nothing reads', () => {
-    // `resolveAction` and `enrolAction` were the round architecture's, and it
-    // is gone. A game that still carries them is not half-configured: it is
-    // configured for a platform that no longer exists, and the unknown-key pass
-    // is what tells its author so.
-    const issues = checkMetadataIssues({
-      ...validConfig(),
-      world: { maxPlayers: 12, resolveAction: { name: 'resolveRound' } },
-    });
-    expect(issues).toHaveLength(1);
-    expect(issues[0]).toContain("Unknown key 'resolveAction'");
+  it('rejects the world block, which is now the compiled rules\' to declare (#171)', () => {
+    // A world's capacity was hand-written here AND in the rules, and only the
+    // rules' copy was ever enforced at run time.
+    const [message] = checkMetadataIssues({ ...validConfig(), world: { maxPlayers: 200 } });
+    expect(message).toContain("Unknown key 'world'");
+    expect(message).toContain('"backend": "world"');
+    expect(message).toContain('maxPlayers');
   });
 
-  it('rejects a world block with no maxPlayers — a block that declares nothing says nothing', () => {
-    const issues = checkMetadataIssues({ ...validConfig(), world: {} });
-    expect(issues).toHaveLength(1);
-    expect(issues[0]).toContain('maxPlayers');
+  it('rejects `bot`, which is now derived from the compiled rules', () => {
+    const [message] = checkMetadataIssues({ ...validConfig(), bot: true });
+    expect(message).toContain("Unknown key 'bot'");
+    expect(message).toContain('capabilities.bots');
+    expect(message).toContain('world backend has no bots');
   });
 
-  it('rejects a non-object world block and a maxPlayers that is not a whole roster', () => {
-    expect(checkMetadataIssues({ ...validConfig(), world: true })[0]).toContain('"world" must be an object');
-    expect(
-      checkMetadataIssues({ ...validConfig(), world: { maxPlayers: 0 } })[0],
-    ).toContain('"world.maxPlayers"');
-    expect(
-      checkMetadataIssues({ ...validConfig(), world: { maxPlayers: 12.5 } })[0],
-    ).toContain('"world.maxPlayers"');
+  it('rejects `persistence`, which is now derived from the compiled rules', () => {
+    const [message] = checkMetadataIssues({ ...validConfig(), persistence: true });
+    expect(message).toContain("Unknown key 'persistence'");
+    expect(message).toContain('capabilities.crossSessionState');
   });
 
-  it('accepts the boolean platform flags and rejects non-boolean values', () => {
+  it('accepts the two capability flags an author still declares, and rejects non-boolean values', () => {
     expect(checkMetadataIssues({
       ...validConfig(),
-      persistence: true,
-      bot: true,
       joinInProgress: false,
       asyncPlay: true,
     })).toEqual([]);
-    expect(checkMetadataIssues({ ...validConfig(), persistence: 'yes' })[0]).toContain('"persistence" must be a boolean');
-    expect(checkMetadataIssues({ ...validConfig(), bot: 1 })[0]).toContain('"bot" must be a boolean');
     expect(checkMetadataIssues({ ...validConfig(), joinInProgress: 'true' })[0]).toContain('"joinInProgress" must be a boolean');
     expect(checkMetadataIssues({ ...validConfig(), asyncPlay: 'yes' })[0]).toContain('"asyncPlay" must be a boolean');
   });

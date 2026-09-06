@@ -286,20 +286,20 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     world: true,
   });
 
-  it('declares the world in boardsmith.json, which is how a game says it is one', async () => {
+  it('declares the world BACKEND in boardsmith.json, which is how a game says it is one', async () => {
     await scaffoldWorld();
     const config = JSON.parse(read('boardsmith.json'));
-    expect(config.world).toEqual({ maxPlayers: WORLD_SCAFFOLD_SEATS });
+    expect(config.backend).toBe('world');
+    // And no world BLOCK: a world's capacity is the compiled rules' to declare
+    // (#171), and the manifest's copy is derived from it at build.
+    expect(config.world).toBeUndefined();
+    expect(config.playerCount).toBeUndefined();
   });
 
-  it('declares the same seat count in the compiled rules as in the manifest', async () => {
+  it('declares the seat count once, in the compiled rules the runtime enforces', async () => {
     await scaffoldWorld();
-    // Two doors, and they must agree: `boardsmith validate` reads the manifest
-    // and the runtime reads the rules, so a world whose numbers differ is
-    // refused at whichever one the host happens to check.
-    const config = JSON.parse(read('boardsmith.json'));
     expect(read('src/rules/world.ts')).toContain(
-      `export const WORLD_SEATS = ${config.world.maxPlayers};`,
+      `export const WORLD_SEATS = ${WORLD_SCAFFOLD_SEATS};`,
     );
   });
 
@@ -356,7 +356,7 @@ describe('initCommand --world — a persistent world project (#168)', () => {
   it('registers the world block on gameDefinition, typed by GameDefinition', async () => {
     await scaffoldWorld();
     const index = read('src/rules/index.ts');
-    expect(index).toContain('world: { actions: worldActions, genesis: worldGenesis, view: worldView }');
+    expect(index).toContain('world: { maxPlayers: WORLD_SEATS, actions: worldActions, genesis: worldGenesis, view: worldView }');
     expect(index).toContain('GameDefinition');
   });
 

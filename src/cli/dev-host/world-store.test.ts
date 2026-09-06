@@ -309,7 +309,7 @@ describe('the local world store', () => {
 
     it('is refused on a project that declares no world, rather than quietly doing nothing', () => {
       expect(() => assertWorldProjectForReset(true)).not.toThrow();
-      expect(() => assertWorldProjectForReset(false)).toThrow(/declares no .world. block/);
+      expect(() => assertWorldProjectForReset(false)).toThrow(/does not declare "backend": "world"/);
     });
   });
 
