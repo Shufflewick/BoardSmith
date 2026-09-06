@@ -8,15 +8,8 @@ import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { requireGameProjectManifests } from '../lib/game-project.js';
+import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import type { GameDefinition } from '../../session/index.js';
-
-/**
- * The project-root HTML file that, when present, makes this bundle's world
- * surface (ShufflewickPub #128). Named here rather than inline so the build,
- * the manifest flag it derives, and the error that explains it all say the same
- * filename.
- */
-const WORLD_ENTRY_HTML = 'world.html';
 
 interface BuildOptions {
   outDir?: string;
@@ -82,7 +75,6 @@ export function deriveManifest(
   pkg: Record<string, unknown>,
   gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>,
   engine: { protocol: number; revision: number },
-  artifacts: { worldUi: boolean },
 ): Record<string, unknown> {
   const { minPlayers, maxPlayers } = gameDefinition;
   // The platform syncs playerCount on every publish (the catalog must never
@@ -97,34 +89,32 @@ export function deriveManifest(
 
   const version = resolveGameVersion(config, pkg);
 
-  // WHETHER THIS BUNDLE SHIPS A WORLD UI (ShufflewickPub #128).
+  // THE `world.ui` FLAG IS GONE (BoardSmith #170), and its absence is the
+  // point.
   //
-  // Derived from what the build actually produced, and it OVERWRITES anything
-  // an author wrote, exactly as `playerCount` does. A host reads this to decide
-  // between mounting the bundle's own world surface and showing its generic
-  // one, and that decision has to be a fact about the bundle rather than a
-  // probe: a host that treated a missing `world.html` as "this game ships no
-  // world UI" could not tell that apart from a UI that failed to deploy, and
-  // would answer a broken publish with a surface that looks deliberate.
+  // It said whether the build had produced a world surface, so a host could
+  // choose between mounting the bundle's own and showing a generic one of its
+  // own. ShufflewickPub #128 is the reason that could not hold: a host reading
+  // "no world.html" as "this game ships no world UI" cannot tell that apart
+  // from a UI that failed to deploy, and answers a broken publish with a
+  // surface that looks deliberate.
   //
-  // A world UI in a bundle that declares no `world` block is refused here.
-  // Nothing could ever mount it -- `campaigns:createWorld` refuses a game whose
-  // manifest has no world block -- so it is bytes in every download for a
-  // surface no player can reach, and the author almost certainly meant to
-  // declare the block.
+  // So the entry is ALWAYS emitted for a world project (`ensureWorldEntry`),
+  // the flag would be constant-true, and a constant-true flag is worse than no
+  // flag: it invites a branch on a question with one answer. A `world` block
+  // implies a surface. `uiUrl === null` now means the publish is broken, which
+  // is the one thing the platform needs it to mean (ShufflewickPub #357).
   const world = config.world as Record<string, unknown> | undefined;
-  if (artifacts.worldUi && (world === undefined || world === null)) {
-    throw new Error(
-      'This project has a world.html entry but boardsmith.json declares no "world" block, '
-      + 'so nothing could ever mount it. Add e.g. "world": { "maxPlayers": 40 }, or delete world.html.',
-    );
-  }
+  // A stale hand-written `ui` is dropped rather than carried: the build owned
+  // that key, the build no longer derives anything, and a manifest that still
+  // carried it would be publishing a claim nothing makes and nothing reads.
+  const worldBlock = world === undefined || world === null
+    ? undefined
+    : Object.fromEntries(Object.entries(world).filter(([key]) => key !== 'ui'));
 
   return {
     ...config,
-    ...(world === undefined || world === null
-      ? {}
-      : { world: { ...world, ui: artifacts.worldUi } }),
+    ...(worldBlock === undefined ? {} : { world: worldBlock }),
     buildTime: new Date().toISOString(),
     version,
     // Stamp the engine ABI version so the executor can reject a bundle built
@@ -188,6 +178,26 @@ async function buildLibrary(repoRoot: string): Promise<void> {
  * `input` is left undefined for a table alone, which is Vite's own default and
  * the case that must keep behaving identically.
  */
+/**
+ * Give a world project its entry if it has none, and say so.
+ *
+ * Its own function so `buildCommand` stays readable, and because the same two
+ * files are written by `boardsmith dev` and `boardsmith init --world` from the
+ * same generator -- one definition of what a world's entry is.
+ */
+async function writeWorldEntryIfMissing(
+  cwd: string,
+  config: Record<string, unknown>,
+): Promise<void> {
+  if (config.world === undefined || config.world === null) return;
+  const { created } = await ensureWorldEntry(cwd, String(config.displayName || config.name));
+  for (const file of created) {
+    console.log(
+      chalk.dim(`  Wrote ${file} - a world project needs an entry, and this one had none.`),
+    );
+  }
+}
+
 export function resolveUiBuild(
   cwd: string,
   hasTableUi: boolean,
@@ -279,12 +289,18 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     //
     // Both land at the bundle root (`src/cli/lib/zip.ts` strips the `ui/`
     // prefix), so the host asks for `.../index.html` or `.../world.html` and
-    // gets the surface it meant. Vite is told about each entry only when it
-    // exists -- in EITHER direction, since a world-only project has no
-    // index.html -- because naming a missing input fails the build.
+    // gets the surface it meant.
+    //
+    // A WORLD PROJECT ALWAYS EMITS THE WORLD ENTRY (#170). If the author never
+    // wrote one, it is written into their project here -- ordinary files, in
+    // source control, identical to what `boardsmith init --world` scaffolds --
+    // rather than conjured at build time, so what `boardsmith dev` serves is
+    // what production loads. `world.ui` is gone from the manifest with the
+    // branch it fed; see `deriveManifest`.
     const tableEntry = join(cwd, 'index.html');
     const worldEntry = join(cwd, WORLD_ENTRY_HTML);
     const hasTableUi = existsSync(tableEntry);
+    await writeWorldEntryIfMissing(cwd, config);
     const hasWorldUi = existsSync(worldEntry);
     const ui = resolveUiBuild(cwd, hasTableUi, hasWorldUi);
     spinner.start(`Building UI${ui.surfaces === '' ? '' : ` (${ui.surfaces})`}...`);
@@ -341,7 +357,6 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
         protocol: BUNDLE_PROTOCOL_VERSION,
         revision: ENGINE_REVISION,
       },
-      { worldUi: hasWorldUi },
     );
 
     mkdirSync(join(cwd, outDir), { recursive: true });

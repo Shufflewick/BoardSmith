@@ -39,7 +39,7 @@ function derive(
   config: Record<string, unknown>,
   gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'> = makeGameDefinition(2, 4),
 ): Record<string, unknown> {
-  return deriveManifest(config, PKG, gameDefinition, { protocol: 1, revision: 7 }, { worldUi: false });
+  return deriveManifest(config, PKG, gameDefinition, { protocol: 1, revision: 7 });
 }
 
 describe('deriveManifest', () => {
@@ -70,9 +70,10 @@ describe('deriveManifest', () => {
 
     const manifest = derive(config);
 
-    // `world.ui` is the one key inside the block the BUILD owns rather than the
-    // author (ShufflewickPub #128); everything else the author wrote survives.
-    expect(manifest.world).toEqual({ ...config.world, ui: false });
+    // Every key the author wrote survives, and the build adds none: `world.ui`
+    // was the one the build owned, and #170 deleted it along with the branch it
+    // fed (a world project always emits its entry now).
+    expect(manifest.world).toEqual(config.world);
     expect(manifest.persistence).toBe(true);
     expect(manifest.bot).toBe(true);
     expect(manifest.joinInProgress).toBe(true);
@@ -100,7 +101,7 @@ describe('deriveManifest', () => {
     };
     const gameDefinition = makeGameDefinition(1, 8);
 
-    const manifest = deriveManifest(config, { version: '2.0.0' }, gameDefinition, { protocol: 3, revision: 7 }, { worldUi: false });
+    const manifest = deriveManifest(config, { version: '2.0.0' }, gameDefinition, { protocol: 3, revision: 7 });
 
     expect(manifest.name).toBe('fixture');
     expect(manifest.displayName).toBe('Fixture Game');
@@ -171,7 +172,6 @@ describe('deriveManifest - the game version', () => {
       { name: 'fixture', version: '1.1.12' },
       makeGameDefinition(2, 2),
       { protocol: 1, revision: 7 },
-      { worldUi: false },
     );
 
     expect(manifest.version).toBe('1.1.12');
@@ -184,8 +184,7 @@ describe('deriveManifest - the game version', () => {
         { name: 'fixture' },
         makeGameDefinition(2, 2),
         { protocol: 1, revision: 7 },
-        { worldUi: false },
-      ),
+        ),
     ).toThrow(/package\.json.*"version"/s);
   });
 
@@ -197,8 +196,7 @@ describe('deriveManifest - the game version', () => {
         { name: 'fixture' },
         makeGameDefinition(2, 2),
         { protocol: 1, revision: 7 },
-        { worldUi: false },
-      );
+        );
     } catch {
       manifest = undefined;
     }
@@ -212,8 +210,7 @@ describe('deriveManifest - the game version', () => {
         { name: 'fixture', version: '  ' },
         makeGameDefinition(2, 2),
         { protocol: 1, revision: 7 },
-        { worldUi: false },
-      ),
+        ),
     ).toThrow(/package\.json.*"version"/s);
   });
 
@@ -226,8 +223,7 @@ describe('deriveManifest - the game version', () => {
         { name: 'fixture', version: '1.1.12' },
         makeGameDefinition(2, 2),
         { protocol: 1, revision: 7 },
-        { worldUi: false },
-      ),
+        ),
     ).toThrow(/boardsmith\.json.*"version".*package\.json/s);
   });
 });
@@ -252,43 +248,37 @@ describe('build temp-dir scoping (WR-02)', () => {
 });
 
 /**
- * WHETHER THIS BUNDLE SHIPS A WORLD UI (ShufflewickPub #128).
+ * THE WORLD UI FLAG IS GONE (BoardSmith #170).
  *
- * DERIVED FROM THE BUILD, NEVER AUTHORED. A host that had to guess -- probe
- * for `world.html` and treat a 404 as "no UI" -- could not tell a bundle that
- * ships none from a bundle whose UI failed to deploy, and would answer both
- * with the same generic surface. The manifest says which, so the host can show
- * the generic surface deliberately in the first case and complain in the
- * second.
+ * It said whether the build had produced a world surface, so a host could
+ * choose between mounting the bundle's own and showing a generic one. #170
+ * makes the entry ALWAYS emitted for a world project, which is what
+ * ShufflewickPub #128 actually needed: a host reading "no world.html" as "this
+ * game ships no world UI" cannot tell that apart from a UI that failed to
+ * deploy, and answers a broken publish with a surface that looks deliberate.
+ *
+ * A constant-true flag is worse than no flag -- it invites a branch on a
+ * question with one answer -- so the field went with the branch. A `world`
+ * block implies a surface, and `uiUrl === null` now means the publish is broken
+ * (ShufflewickPub #357).
  */
-describe('deriveManifest — the world UI flag', () => {
+describe('deriveManifest — the world block', () => {
   const worldConfig = { name: 'fixture', displayName: 'Fixture', world: { maxPlayers: 40 } };
 
-  it('records a world UI when the build produced one', () => {
-    const manifest = deriveManifest(worldConfig, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: true });
-    expect(manifest.world).toEqual({ maxPlayers: 40, ui: true });
+  it('carries the world block through untouched, with no derived ui flag', () => {
+    const manifest = deriveManifest(worldConfig, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 });
+    expect(manifest.world).toEqual({ maxPlayers: 40 });
   });
 
-  it('records its absence rather than leaving it unsaid', () => {
-    const manifest = deriveManifest(worldConfig, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
-    expect(manifest.world).toEqual({ maxPlayers: 40, ui: false });
-  });
-
-  it('overwrites a hand-written flag, because the build is the only thing that knows', () => {
+  it('strips a hand-written ui flag nowhere reads any more', () => {
     const config = { ...worldConfig, world: { maxPlayers: 40, ui: true } };
-    const manifest = deriveManifest(config, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
-    expect(manifest.world).toEqual({ maxPlayers: 40, ui: false });
+    const manifest = deriveManifest(config, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 });
+    expect((manifest.world as Record<string, unknown>).ui).toBeUndefined();
   });
 
   it('leaves a game that is not a world alone', () => {
-    const manifest = deriveManifest({ name: 'fixture' }, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
+    const manifest = deriveManifest({ name: 'fixture' }, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 });
     expect(manifest.world).toBeUndefined();
-  });
-
-  it('refuses a world UI in a bundle that declares no world, rather than shipping dead bytes', () => {
-    expect(() =>
-      deriveManifest({ name: 'fixture' }, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: true }),
-    ).toThrow(/world\.html/);
   });
 });
 

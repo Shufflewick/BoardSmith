@@ -62,7 +62,6 @@ const CONFIG: WorldDevConfig = {
   displayName: 'Example MUD',
   seatCount: 4,
   worldUrl: '/__boardsmith-world',
-  ownWorldUi: false,
   storePath: '/p/.boardsmith-dev-world/world.db',
 };
 
@@ -313,17 +312,13 @@ describe('#167: the bar bridges the socket to the world frame and back', () => {
   });
 });
 
-describe('#167: which surface is on screen is said out loud', () => {
-  it("warns when it is the shell's own surface and not the bundle's", async () => {
-    // The two look different, and an author who does not know which they are
-    // looking at reads the generic one as their own UI failing to render.
+describe('#170: one surface, and it is always the bundle\'s own', () => {
+  it("frames the bundle's own world.html and says nothing about a second one", async () => {
+    // There used to be a warning here for a project with no `world.html`, and a
+    // second document to warn about. Both are gone: a world project always has
+    // an entry now, so the dev host frames the same surface production loads
+    // and has nothing to disambiguate.
     const wrapper = await open();
-    expect(wrapper.text()).toContain("no world.html — showing the shell's own surface");
-    wrapper.unmount();
-  });
-
-  it('says nothing when the bundle ships its own world.html', async () => {
-    const wrapper = await open({ ...CONFIG, ownWorldUi: true });
     expect(wrapper.text()).not.toContain('showing the shell');
     expect(wrapper.find('iframe').attributes('src')).toBe('/__boardsmith-world');
     wrapper.unmount();

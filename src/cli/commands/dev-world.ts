@@ -18,13 +18,16 @@
  *
  * ## WHAT IT SERVES
  *
- * The bundle's `world.html` when the project has one. When it does not --
- * `example-rts` and `example-mud` are both that shape -- it serves the SHELL'S
- * OWN SURFACE (`world-fallback.html`), which mounts the same `WorldShell` over
- * the same wire and draws a board of its own. It is not a debug console wired
- * to the socket: a world with no UI is exercised through the code path a world
- * with one takes, or local behaviour stops predicting published behaviour for
- * exactly the games most likely to be prototypes.
+ * The bundle's `world.html`, and only ever that. There used to be a second
+ * document with a debug board in it for a project that had written none, and
+ * with it two code paths, only one of which production takes.
+ *
+ * #170 deleted the branch instead: a world project ALWAYS has an entry, written
+ * into the author's own repository by `ensureWorldEntry` the first time it is
+ * built or run, mounting `WorldShell` over `src/ui/uis.ts` exactly as a table's
+ * `index.html` mounts `GameShell`. A world with no board of its own gets AutoUI
+ * from its registry -- a real board, in the bundle, on the platform too, not a
+ * surface only `boardsmith dev` could show.
  */
 
 import { existsSync, readFileSync, rmSync } from 'node:fs';
@@ -40,6 +43,7 @@ import { worldBudgets } from '../../world/index.js';
 import { LocalWorldHost, type WorldDevRequest } from '../dev-host/world-host.js';
 import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
+import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import type { GameDefinition } from '../../session/index.js';
 import { toPosix } from './game-runtime.js';
 import {
@@ -68,16 +72,12 @@ export const WORLD_IFRAME_PATH = '/__boardsmith-world';
  *  never half-consume each other's frames. */
 export const WORLD_WS_PATH = '/__boardsmith/world';
 
-/** The world entry a bundle writes, if it has written one. */
-export const WORLD_ENTRY_HTML = 'world.html';
-
 /** The lines `boardsmith dev` prints before a world starts. Returned rather
  *  than printed so their wording is testable. */
 export function worldDevBanner(args: {
   worldName: string;
   seatCount: number;
   launched: boolean;
-  ownWorldUi: boolean;
   storePath: string;
 }): string[] {
   return [
@@ -85,30 +85,11 @@ export function worldDevBanner(args: {
     args.launched
       ? `  Reopening the world already in ${args.storePath}. Genesis has already run.`
       : `  This world has never been played. Genesis runs into ${args.storePath} at startup.`,
-    args.ownWorldUi
-      ? `  Serving your ${WORLD_ENTRY_HTML}.`
-      : `  This project has no ${WORLD_ENTRY_HTML}, so the shell's own surface is served instead: ` +
-        'the same WorldShell your world UI would mount, with a generic board inside it.',
+    `  Serving your ${WORLD_ENTRY_HTML}.`,
     '  The dev bar switches seats, fires due events without waiting for them, and wakes the',
     '  world from parked so the rehydration path is exercised rather than assumed.',
     '  `boardsmith dev --reset` deletes this world and runs genesis again.',
   ];
-}
-
-/**
- * Whether this project ships its own world surface, and what to serve.
- *
- * Answered as a pair rather than as a boolean, because the two facts travel
- * together everywhere: what document to read, and what to say about it.
- */
-export function resolveWorldSurface(
-  uiPath: string,
-  devHostDir: string,
-): { path: string; ownWorldUi: boolean } {
-  const own = join(uiPath, WORLD_ENTRY_HTML);
-  return existsSync(own)
-    ? { path: own, ownWorldUi: true }
-    : { path: join(devHostDir, 'world-fallback.html'), ownWorldUi: false };
 }
 
 /**
@@ -123,14 +104,12 @@ function boardsmithWorldDevPlugin(args: {
   devHostDir: string;
   uiPath: string;
   surfacePath: string;
-  ownWorldUi: boolean;
   config: WorldDevConfig;
 }): VitePlugin {
   const VIRTUAL_CONFIG = 'virtual:boardsmith-world-dev-config';
   const RESOLVED_CONFIG = '\0' + VIRTUAL_CONFIG;
   const hostHtmlPath = join(args.devHostDir, 'world-host.html');
   const hostMainPath = join(args.devHostDir, 'world-host-main.ts');
-  const fallbackMainPath = join(args.devHostDir, 'world-fallback-main.ts');
 
   return {
     name: 'boardsmith-world-dev-host',
@@ -153,12 +132,12 @@ function boardsmithWorldDevPlugin(args: {
         const isHostPage = url === '/' || url === '/index.html';
         if (!isHostPage) {
           if (url !== WORLD_IFRAME_PATH) return null;
-          const source = readFileSync(args.surfacePath, 'utf-8');
-          // A bundle's own `world.html` is served exactly as the author wrote
-          // it; only the fallback carries a placeholder.
-          return args.ownWorldUi
-            ? source
-            : source.replace('__WORLD_MAIN_SRC__', `/@fs/${toPosix(fallbackMainPath)}`);
+          // ONE PATH FROM AUTHOR TO PRODUCTION (#170): the bundle's own
+          // `world.html`, served exactly as written, because a world project
+          // always has one -- `ensureWorldEntry` wrote it if the author had not.
+          // The second document this used to have, with a debug board inside it,
+          // was a surface only `boardsmith dev` could ever show.
+          return readFileSync(args.surfacePath, 'utf-8');
         }
         return readFileSync(hostHtmlPath, 'utf-8').replace(
           '__HOST_MAIN_SRC__',
@@ -200,7 +179,12 @@ interface WorldDevServerOptions {
 export async function startWorldDevServer(options: WorldDevServerOptions): Promise<void> {
   const devHostDir = resolveDevHostDir(__dirname, 'world-host.html');
   const boardsmithRoot = resolve(devHostDir, '..', '..', '..');
-  const surface = resolveWorldSurface(options.uiPath, devHostDir);
+  // A world project always has an entry, and this is where a project that did
+  // not have one gets it -- the same files `boardsmith init --world` writes, in
+  // the author's own repository, so what `boardsmith dev` serves is what
+  // production loads.
+  const { created } = await ensureWorldEntry(options.cwd, options.displayName);
+  const surfacePath = join(options.uiPath, WORLD_ENTRY_HTML);
 
   // THE ONE PLACE THE BUDGETS ARE DECIDED, and they are the library's defaults
   // rather than numbers this file invents. A laptop running different ceilings
@@ -234,7 +218,6 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
     displayName: options.displayName,
     seatCount: worldHost.seatCount,
     worldUrl: WORLD_IFRAME_PATH,
-    ownWorldUi: surface.ownWorldUi,
     storePath: store.path,
   };
 
@@ -242,18 +225,19 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
     worldName: options.displayName,
     seatCount: worldHost.seatCount,
     launched: launchedBefore,
-    ownWorldUi: surface.ownWorldUi,
     storePath: store.path,
   })) {
     console.log(chalk.dim(`  ${line}`));
+  }
+  for (const file of created) {
+    console.log(chalk.dim(`  Wrote ${file} -- a world project needs an entry, and this one had none.`));
   }
 
   const plugins: VitePlugin[] = [
     boardsmithWorldDevPlugin({
       devHostDir,
       uiPath: options.uiPath,
-      surfacePath: surface.path,
-      ownWorldUi: surface.ownWorldUi,
+      surfacePath,
       config,
     }),
   ];

@@ -27,11 +27,7 @@
  * `WORLD_HELLO_TIMEOUT_MS` rather than sitting blank forever.
  */
 
-import type { ActionMetadata, PickMetadata } from '../../session/types.js';
-
-/** Re-exported because a world UI renders a `WorldActionOffer` selection by
- *  selection, and the item type is the shape it declares a prop of. */
-export type { PickMetadata };
+import type { ActionMetadata } from '../../session/types.js';
 
 /** What the HOST page stamps on everything it sends into the world frame. */
 export const WORLD_HOST_SOURCE = 'shufflewick-world';

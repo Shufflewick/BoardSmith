@@ -47,7 +47,6 @@ describe('#167: what a world run says about itself', () => {
     worldName: 'Example MUD',
     seatCount: 40,
     launched: false,
-    ownWorldUi: false,
     storePath: '/tmp/p/.boardsmith-dev-world/world.db',
   }).join('\n');
 
@@ -64,23 +63,15 @@ describe('#167: what a world run says about itself', () => {
         worldName: 'x',
         seatCount: 2,
         launched: true,
-        ownWorldUi: true,
         storePath: '/tmp/w',
       }).join('\n'),
     ).toContain('Genesis has already run');
   });
 
-  it('says which surface it is serving, because the two look different', () => {
-    expect(banner).toContain('no world.html');
-    expect(
-      worldDevBanner({
-        worldName: 'x',
-        seatCount: 2,
-        launched: true,
-        ownWorldUi: true,
-        storePath: '/tmp/w',
-      }).join('\n'),
-    ).toContain('Serving your world.html');
+  it('names the one surface it serves', () => {
+    // There is one, now: #170 deleted the second document a project without a
+    // `world.html` used to get, because a world project always has an entry.
+    expect(banner).toContain('Serving your world.html');
   });
 
   it('names the three controls an author cannot discover by looking at a board', () => {
