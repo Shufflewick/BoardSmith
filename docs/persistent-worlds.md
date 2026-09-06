@@ -51,8 +51,8 @@ Read this before you plan your week.
   same sentences. What a host owns is its own lifecycle policy -- sockets,
   hibernation, eviction timing, rate limits, the park ladder -- and the table
   further down this page says which is which.
-- **`boardsmith build` ALWAYS builds a world's UI.** A project whose manifest has
-  a `world` block gets a second bundle mounting `WorldShell` over your
+- **`boardsmith build` ALWAYS builds a world's UI.** A project whose manifest
+  declares `"backend": "world"` gets a second bundle mounting `WorldShell` over your
   `src/ui/uis.ts`, which is what a world loads on the hosting platform. It is
   emitted whether or not you wrote the entry, because a host that reads "no
   `world.html`" as "this game ships no world UI" cannot tell that apart from a UI

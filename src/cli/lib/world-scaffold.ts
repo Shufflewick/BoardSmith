@@ -589,11 +589,20 @@ export function generateWorldBoardVue(): string {
  * partitions your \`world.view\` declaration named -- the same shape a table's
  * board renders, which is why the shell's own AutoUI can draw it too.
  *
- * TO MAKE SOMETHING CLICKABLE, give it \`v-bind="boardRef(element)"\` from
- * \`useBoardInteraction()\`: the action panel and the board are two
- * representations of one state, and the bridge keeps them in step. Do not read
- * the offers and draw your own buttons -- that is the panel's job, and a second
- * copy is how the two drift apart.
+ * TO MAKE SOMETHING CLICKABLE, ask \`useBoardInteraction()\` about it and tell
+ * it when it is clicked. Its element-facing surface is four calls, each taking
+ * the element you are drawing:
+ *
+ *   const boardInteraction = useBoardInteraction();
+ *   \`boardInteraction.isSelectableElement(element)\` -- may this seat pick it now
+ *   \`boardInteraction.isSelected(element)\`           -- is it the current pick
+ *   \`boardInteraction.isDisabledElement(element)\`    -- a reason string, or false
+ *   \`boardInteraction.triggerElementSelect(element)\` -- the click itself
+ *
+ * The action panel and the board are two representations of one state, and
+ * those calls are the bridge that keeps them in step. Do not read the offers
+ * and draw your own buttons -- that is the panel's job, and a second copy is
+ * how the two drift apart.
  */
 const props = defineProps<{
   gameView: unknown;
@@ -692,7 +701,7 @@ contains.
 
 | File | What it is |
 | --- | --- |
-| \`boardsmith.json\` | the \`world\` block, which is how this game says it is a world |
+| \`boardsmith.json\` | \`"backend": "world"\`, which is how this game says it is a world |
 | \`src/rules/world.ts\` | the world half: actions, genesis, and the per-seat view |
 | \`src/rules/elements.ts\` | the furniture a partition is made of |
 | \`src/rules/index.ts\` | \`gameDefinition\`, where the world block is registered |

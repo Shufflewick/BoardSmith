@@ -74,7 +74,7 @@ npm install
 boardsmith test
 ```
 
-That scaffolds the `world` block in `boardsmith.json`, a `src/rules/world.ts`
+That scaffolds `"backend": "world"` in `boardsmith.json`, a `src/rules/world.ts`
 whose contract types are imported from `boardsmith/world` (never hand-copied), a
 `world.html` mounting `WorldShell` over your `src/ui/uis.ts` (a world declares
 its boards exactly as a table does), and a `tests/world.test.ts` that drives your
@@ -187,6 +187,7 @@ boardsmith publish --dev     # a local platform at http://localhost:3006
 ```json
 {
   "name": "my-game",
+  "backend": "table",
   "displayName": "My Game",
   "description": "A fun game for 2-4 players",
   "audience": "casual",

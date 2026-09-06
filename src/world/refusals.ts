@@ -93,7 +93,7 @@ export const WORLD_REFUSALS = {
   },
   "clock-only-command": {
     owner: "caller",
-    why: "a player sent a command the bundle declared `clockOnly` (#120) -- the clock's own, reached by a scheduled event and by nothing else. The world is unaffected: the refusal is issued before the handler is reached, and a client that never offered the command cannot have sent it by accident",
+    why: "a player sent a verb the bundle built with `worldClockAction()` -- the clock's own, reached by a scheduled event and by nothing else. The world is unaffected: the refusal is issued before the handler is reached, and a client that never offered the command cannot have sent it by accident",
   },
   "world-full": {
     owner: "caller",
