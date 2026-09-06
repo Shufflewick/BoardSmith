@@ -38,9 +38,10 @@ Read this before you plan your week.
   what each round named before running the action, enumerates what each seat can
   do, projects `view(seat)` for each attached seat and pushes it when it changes,
   fires your scheduled events on their due time, and reports presence from the
-  seats it has open. It serves your `world.html`; a project that has not written
-  one gets the shell's own surface, which mounts the same `WorldShell` over the
-  same wire. Three controls exist because a person is watching: a **seat
+  seats it has open. It serves your `world.html` -- and only that: a project that
+  has not written one is GIVEN one (#170), the same two files
+  `boardsmith init --world` scaffolds, so what you run locally is what production
+  loads. Three controls exist because a person is watching: a **seat
   switcher**, so one author can be several players; **fire due events now**,
   which moves the world's clock forward to the instant the next event was due
   rather than making you wait for it; and **wake from parked**, which drops
@@ -50,9 +51,12 @@ Read this before you plan your week.
   same sentences. What a host owns is its own lifecycle policy -- sockets,
   hibernation, eviction timing, rate limits, the park ladder -- and the table
   further down this page says which is which.
-- **`boardsmith build` builds a world's UI.** A project with a `world.html`
-  entry gets a second bundle mounting `WorldShell`, which is what a world loads
-  on the hosting platform.
+- **`boardsmith build` ALWAYS builds a world's UI.** A project whose manifest has
+  a `world` block gets a second bundle mounting `WorldShell` over your
+  `src/ui/uis.ts`, which is what a world loads on the hosting platform. It is
+  emitted whether or not you wrote the entry, because a host that reads "no
+  `world.html`" as "this game ships no world UI" cannot tell that apart from a UI
+  that failed to deploy (ShufflewickPub #128).
 - **A world's verbs are Actions** (#169), so a world is enumerated, clickable
   from the board and drawn by the shared action panel. See the next section.
 
