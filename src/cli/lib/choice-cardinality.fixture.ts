@@ -17,11 +17,16 @@ import {
 
 const VERBS = Array.from({ length: 40 }, (_, i) => `verb-${i}`);
 
+/** A game whose length is measured by a turn counter. */
+interface TurnCounted {
+  turns: number;
+}
+
 /** Four turns of the named actions, then the game ends. */
 function shortFlow(actions: string[]) {
   return defineFlow({
     root: loop({
-      while: (ctx) => (ctx.game as { turns: number }).turns < 4,
+      while: (ctx) => (ctx.game as unknown as TurnCounted).turns < 4,
       maxIterations: 20,
       do: eachPlayer({ do: actionStep({ actions }) }),
     }),
@@ -29,7 +34,7 @@ function shortFlow(actions: string[]) {
 }
 
 /** Every action here does the same thing: burn a turn so the flow advances. */
-function burnTurn(_args: unknown, ctx: { game: { turns: number } }) {
+function burnTurn(_args: unknown, ctx: { game: TurnCounted }) {
   ctx.game.turns++;
   return { success: true };
 }
