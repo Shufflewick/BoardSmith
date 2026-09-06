@@ -36,7 +36,7 @@
  * a platform test break, so the shell names its own surfaces and keeps the names.
  */
 import { computed, ref } from 'vue';
-import ActionPanel from './auto-ui/ActionPanel.vue';
+import ActionPanel, { type AwaitingPlayer } from './auto-ui/ActionPanel.vue';
 import GameHistory, { type HistoryMessage } from './GameHistory.vue';
 import PlayersPanel, { type Player } from './PlayersPanel.vue';
 import PlayerToken from './PlayerToken.vue';
@@ -94,8 +94,9 @@ const props = withDefaults(defineProps<{
   panelToken?: { name: string; seat: number; color?: string } | null;
   /** The sentence over the action bar, when the board or a pick supplies one. */
   prompt?: string | null;
-  /** Names still to act in a simultaneous step. A world passes none. */
-  awaitingPlayers?: string[];
+  /** Seats still to act in a simultaneous step, by name and colour -- the shape
+   *  the panel names them in. A world passes none. */
+  awaitingPlayers?: AwaitingPlayer[];
   /** Whose go it is, by name and colour, for the panel's own sentence. */
   currentPlayerName?: string;
   currentPlayerColor?: string;

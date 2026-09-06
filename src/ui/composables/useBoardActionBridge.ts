@@ -105,6 +105,35 @@ function elementClickRef(ve: ValidElement): ElementRef {
 }
 
 /**
+ * THE ONE ORDERING RULE FOR STARTING AN ACTION, IN THE ONE PLACE THAT STATES IT.
+ *
+ * Clear stale board state BEFORE starting, never after. `controller.start()`
+ * awaits a choice/element fetch, and that fetch bumps `snapshotVersion` from
+ * INSIDE the await -- which is what makes the bridge's watchers populate
+ * `validElements` and install `onElementSelect` / `onChoiceSelect`. A
+ * `board.clear()` after the await wipes all of that, and no watcher re-runs,
+ * because from their point of view nothing changed: the board goes dead for the
+ * whole action while `currentAction` still reads the action's name.
+ *
+ * This existed as a comment on the bridge's own `startAction` and as a second,
+ * WRONG copy inside `ActionPanel.startAction` -- which is how sotf's compass
+ * rose became read-only and example-rts's `tend` pick stopped opening (#185).
+ * Both callers now go through here, so there is nothing left to disagree with.
+ */
+export async function startActionWithBoardReset(
+  controller: Pick<UseActionControllerReturn, 'start'>,
+  board: Pick<BoardInteraction, 'clear'> | undefined,
+  actionName: string,
+  options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> },
+): Promise<void> {
+  board?.clear();
+  await controller.start(actionName, options);
+  // `setCurrentAction` and `setValidElements` are NOT called here: the bridge's
+  // watchers do that reactively off `controller.currentAction` / `snapshotVersion`.
+  // Re-setting them by hand is how a caller ends up restoring one field of four.
+}
+
+/**
  * Wire the action controller to the board-interaction substrate. Call ONCE from
  * GameShell setup; it sets up reactive watchers that live for the GameShell
  * lifetime. No-op when boardInteraction is undefined.
@@ -233,14 +262,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       await executeAction(actionName, {});
       return;
     }
-    // Clear any stale board state BEFORE starting (not after). The async fetch inside
-    // controller.start() triggers snapshotVersion++ which causes watcher D to fire and
-    // populate board.validElements. If board.clear() ran AFTER the await, it would wipe
-    // the already-populated validElements and watcher D would not re-run (sources unchanged).
-    board.clear();
-    await controller.start(actionName, options);
-    // board.setCurrentAction and board.setValidElements are handled reactively by
-    // watchers E and D in response to controller.currentAction / snapshotVersion changes.
+    await startActionWithBoardReset(controller, board, actionName, options);
   }
 
   async function executeAction(actionName: string, args: Record<string, unknown>) {
