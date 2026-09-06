@@ -14,8 +14,8 @@
  * ## Why the checks are here and not at publish time
  *
  * Nothing that reads a game's manifest can see inside its compiled rules. A
- * bundle whose `boardsmith.json` declares a world and whose code exports no
- * `world.commands` passes every validation a build can run, and then fails as a
+ * bundle whose `boardsmith.json` declares `"backend": "world"` and whose code
+ * exports no `world.actions` passes every validation a build can run, and then fails as a
  * runtime TypeError on somebody's first command. `readWorldDefinition` is the
  * first moment anything CAN check, so it is where the refusals live, and every
  * one of them is written for the game author rather than for whoever is reading
@@ -145,7 +145,7 @@ export function readWorldDefinition(definition: {
       "This bundle's gameDefinition has no `world.actions`, so it cannot run as a resident " +
         "world. A world game exports `world: { actions, view }` alongside `gameClass`, where " +
         "each action is built with `worldAction()` from `boardsmith/world` -- the manifest's " +
-        "`world` block declares the intent, and this is what implements it.",
+        '`"backend": "world"` declares the intent, and this is what implements it.',
     );
   }
   if (!Number.isInteger(world.maxPlayers) || world.maxPlayers < 1) {
@@ -232,7 +232,7 @@ export function assertSeatWithinWorld(player: string, seat: number, seatCount: n
       "same lifetime seats, so a joiner should have been refused before reaching this door: " +
       "what puts the two out of step is a stored player count declaring more players than the " +
       "compiled rules build. Rebuild so the declared player count matches " +
-      "gameDefinition.maxPlayers, or raise gameDefinition.maxPlayers and rebuild.",
+      "gameDefinition.world.maxPlayers, or raise gameDefinition.world.maxPlayers and rebuild.",
   );
 }
 

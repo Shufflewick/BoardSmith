@@ -172,7 +172,7 @@ interface WorldDevServerOptions {
  * START THE WORLD.
  *
  * The store is opened and the world launched BEFORE the browser is pointed at
- * anything, so an author whose bundle cannot run a world -- no `world.commands`,
+ * anything, so an author whose bundle cannot run a world -- no `world.actions`,
  * no `view`, a `maxPlayers` the host will not hold -- meets the library's own
  * refusal in the terminal instead of a blank frame.
  */

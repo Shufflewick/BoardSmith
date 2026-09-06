@@ -386,7 +386,7 @@ export class LocalWorldHost {
   /**
    * A SEAT ARRIVED, and the world is told through its own command table.
    *
-   * The declaration names a `clockOnly` command, so a transition is the CLOCK
+   * The declaration names a `worldClockAction()` verb, so a transition is the CLOCK
    * issuing one of the world's verbs and a world still has exactly one way to
    * change. What is the host's is when: on a laptop an attach is an arrival the
    * instant it happens, because a socket here is unambiguous.

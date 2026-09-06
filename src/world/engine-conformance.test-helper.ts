@@ -154,7 +154,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // AND THE CLOCK IS NOT A CALLER FOR THIS ONE. `touch` acts for a seat, and
     // a scheduled event has no seat -- so `null` is refused here BY NAME rather
     // than reaching `player.seat` on nothing and answering with a TypeError out
-    // of game code. The clock's own verbs are seatless, and `clockOnly is
+    // of game code. The clock's own verbs are seatless, and `worldClockAction()` is
     // enforced on BOTH roads` below is where the pair is asserted.
     expect(() => engine.commandPartitions(null, command)).toThrow(/no player/);
   });
