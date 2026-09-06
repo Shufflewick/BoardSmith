@@ -325,7 +325,7 @@ describe("createWorld — one construction, every host", () => {
         ctx.world.schedule({ delayMs: 60_000, key: "raid", action: "rearm" });
       });
     const { runner } = createWorld({
-      definition: bundle({ world: { view: () => [], actions: [rearm] } }),
+      definition: bundle({ world: { maxPlayers: 2, view: () => [], actions: [rearm] } }),
       seed: "s",
       seats: new Map([["p1", 1]]),
     });
@@ -352,7 +352,7 @@ describe("createWorld — one construction, every host", () => {
         ctx.world.cancel("");
       });
     const { runner } = createWorld({
-      definition: bundle({ world: { view: () => [], actions: [forget] } }),
+      definition: bundle({ world: { maxPlayers: 2, view: () => [], actions: [forget] } }),
       seed: "s",
       seats: new Map([["p1", 1]]),
     });

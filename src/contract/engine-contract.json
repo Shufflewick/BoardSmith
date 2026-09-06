@@ -1,7 +1,7 @@
 {
-  "revision": 37,
+  "revision": 38,
   "bundleProtocol": 1,
-  "surfaceHash": "6bcfaf5333f02205",
+  "surfaceHash": "cff09a3012ba8835",
   "payloadHash": "1d3a21bebd77753c",
   "history": [
     {
@@ -299,6 +299,14 @@
       "surfaceHash": "6bcfaf5333f02205",
       "payloadHash": "1d3a21bebd77753c",
       "summary": "A world action can take back a keyed timer with ctx.world.cancel(key), and boardsmith/world exports resumeDueOf() -- the inverse of catchUpPlan's fold, which a host stamps a failed occurrence's retry with so the fold is not lost."
+    },
+    {
+      "revision": 38,
+      "date": "2026-09-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "cff09a3012ba8835",
+      "payloadHash": "1d3a21bebd77753c",
+      "summary": "One backend interface with a declared capability set. boardsmith.json declares backend: table or world; the manifest carries a resolved capabilities object whose members (table, world, undo, spectators, bots, asyncPlay, joinInProgress, crossSessionState) replace the per-flag fields. GameDefinition.minPlayers and maxPlayers are optional and a world-only bundle carries no playerCount."
     }
   ]
 }
