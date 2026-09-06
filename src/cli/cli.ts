@@ -92,6 +92,7 @@ program
   .option('--lock-teaching', 'Disable bot hint, move-quality heatmap, bot-vs-bot demo, and tutorial (action help stays enabled)')
   .option('--seed <file>', 'Seed the initial game state from a recorded GameStateSnapshot JSON file instead of a fresh start (FEAT-01)')
   .option('--no-open', 'Do not auto-launch a browser tab (use when driving the dev host from a script/CI, so an uncontrolled tab does not claim seat 1)')
+  .option('--reset', 'Delete this persistent world\'s local store (partitions, schedule and roster) and start it again from genesis. Never happens on shutdown -- a world is only erased by asking.')
   .action(devCommand);
 
 // Testing

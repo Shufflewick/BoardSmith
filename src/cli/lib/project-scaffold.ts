@@ -636,6 +636,15 @@ dist/
 # deletions, and it is where throwaway repro/debug scripts belong so they can
 # never become tracked litter in the project root.
 .boardsmith/
+
+# The dev host's DURABLE stores: the table game's cross-session persistence and,
+# for a persistent world, its partitions, schedule and roster. Both live beside
+# boardsmith.json rather than under .boardsmith/, because that directory is
+# deleted on shutdown and these have to survive exactly that. Neither is ever
+# carried by \`boardsmith publish\`, which ships dist/ and nothing else — they are
+# ignored because a local world is one author's playthrough, not the game.
+.boardsmith-dev-store.json
+.boardsmith-dev-world/
 `;
 }
 

@@ -18,7 +18,7 @@ this path still being built: a world's rules run locally today under
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22.5+ (BoardSmith keeps a persistent world's local store in SQLite through Node's own `node:sqlite`, which arrived in 22.5)
 - npm, pnpm, or yarn
 
 ## Quick Start

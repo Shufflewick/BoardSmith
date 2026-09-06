@@ -13,6 +13,7 @@ import { DEFAULT_COLOR_PALETTE, type GameStateSnapshot } from '../../engine/inde
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
+import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
@@ -55,6 +56,8 @@ interface DevOptions {
   preset?: string;
   /** FEAT-01/168-02: path to a recorded GameStateSnapshot JSON file to seed the initial state from. */
   seed?: string;
+  /** #166: delete this project's local persistent world before starting. */
+  reset?: boolean;
 }
 
 /** Thrown by the pure dev.ts flag/host validators below; `devCommand` catches
@@ -62,6 +65,23 @@ interface DevOptions {
  * distinct class (not a bare Error) so devCommand's catch can distinguish an
  * intentional validation failure from an unexpected bug. */
 export class DevFlagError extends Error {}
+
+/**
+ * Refuse `--reset` on a project that has no world to reset.
+ *
+ * A flag that silently did nothing on three quarters of projects is a flag an
+ * author uses in the wrong place and believes worked. The `world` block is the
+ * whole declaration, so its absence is a complete answer.
+ */
+export function assertWorldProjectForReset(worldMode: boolean): void {
+  if (worldMode) return;
+  throw new DevFlagError(
+    'Error: --reset deletes a PERSISTENT WORLD\'s local store, and this project declares no ' +
+      '`world` block in boardsmith.json, so it has no world to delete. A table game\'s ' +
+      'cross-session state lives in .boardsmith-dev-store.json; delete that file directly if ' +
+      'that is what you meant.',
+  );
+}
 
 /**
  * Fail-fast positive-integer parser for `--port`/`--players` (CLIX-06),
@@ -781,6 +801,26 @@ export async function devCommand(options: DevOptions): Promise<void> {
     console.warn(chalk.yellow(`  ${warning}`));
   }
 
+  // #158: the manifest's `world` block is the whole declaration -- no flag.
+  const worldMode = resolveWorldMode(config);
+
+  // #166: the local world store is deleted ONLY here, by somebody asking. A
+  // persistent world that erased itself on shutdown would be a session, and
+  // closing the laptop is the one thing an author has to be able to do.
+  //
+  // BEFORE the game is loaded and bundled, because deleting a world must not
+  // depend on the project building: the state an author most wants to throw
+  // away is the one their half-written rules left behind.
+  //
+  // The store is not CONSTRUCTED yet -- #167 is what makes `boardsmith dev` run
+  // a world's genesis, commands, schedule and views -- but the deletion is
+  // whole and belongs with the store rather than with the host that will use
+  // it, so it lands here in one piece.
+  if (options.reset === true) {
+    exitOnDevFlagError(() => assertWorldProjectForReset(worldMode));
+    console.log(chalk.dim(`  ${worldResetNotice(resetWorldStore(cwd), worldStoreDir(cwd))}`));
+  }
+
   // CLIX-04 (T-135-12): loud, unmissable banner whenever the effective bind
   // host is non-localhost — exposure to the LAN must never be silent.
   if (isNonLocal) {
@@ -890,10 +930,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const effectivePlayerCount = exitOnDevFlagError(() => resolvePlayerCount(rawPlayers, minPlayers, maxPlayers));
   exitOnDevFlagError(() => validateBotSeats(botPlayers, effectivePlayerCount));
 
-  // #158: the manifest's `world` block is the whole declaration -- no flag.
-  // #304: what the run then IS gets stated accurately, in one place.
-  const worldMode = resolveWorldMode(config);
-
+  // `worldMode` is resolved once above, before --reset, because #166's reset
+  // has to know whether this is a world before any rules are loaded.
   const tableEntry = join(uiPath, 'src', 'main.ts');
   const refusal = worldWithoutTableRefusal(worldMode, existsSync(tableEntry), relative(cwd, tableEntry));
   if (refusal !== null) {
