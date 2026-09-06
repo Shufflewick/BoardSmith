@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { nextTick, watch } from 'vue';
 import {
   createBoardInteraction,
   useBoardInteraction,
@@ -84,5 +85,40 @@ describe('board interaction injection (F21)', () => {
 
   it('tryUseBoardInteraction returns undefined (no throw) outside a GameShell', () => {
     expect(tryUseBoardInteraction()).toBeUndefined();
+  });
+});
+
+/**
+ * #172: when the panel yields a large choice to the board, something has to
+ * carry FOCUS across that handoff, or the player who pressed the panel's button
+ * is left on a control that just unmounted.
+ */
+describe('requestBoardFocus', () => {
+  it('starts at zero', () => {
+    expect(createBoardInteraction().boardFocusRequest).toBe(0);
+  });
+
+  it('bumps on every request, so a repeat handoff still fires', () => {
+    const bi = createBoardInteraction();
+    bi.requestBoardFocus();
+    expect(bi.boardFocusRequest).toBe(1);
+    bi.requestBoardFocus();
+    expect(bi.boardFocusRequest).toBe(2);
+  });
+
+  it('is reactive so a board can watch it', async () => {
+    const bi = createBoardInteraction();
+    const seen: number[] = [];
+    watch(() => bi.boardFocusRequest, (v) => seen.push(v));
+    bi.requestBoardFocus();
+    await nextTick();
+    expect(seen).toEqual([1]);
+  });
+
+  it('clear() does not rewind the counter — a stale watcher must not re-fire', () => {
+    const bi = createBoardInteraction();
+    bi.requestBoardFocus();
+    bi.clear();
+    expect(bi.boardFocusRequest).toBe(1);
   });
 });

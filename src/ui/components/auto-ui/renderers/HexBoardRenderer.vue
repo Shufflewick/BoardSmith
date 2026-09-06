@@ -20,7 +20,7 @@
  * each hex cell using position:absolute within a position:relative container.
  */
 
-import { computed, inject, nextTick, type ComputedRef } from 'vue';
+import { computed, inject, nextTick, watch, type ComputedRef } from 'vue';
 import { hexToPixel, getHexPolygonPoints } from '../../../composables/useHexGrid.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
@@ -254,12 +254,22 @@ const hexRows = computed(() => {
   return maxR - minR + 1;
 });
 
-const { currentIdx, focusCell, handleGridKeydown: _composableKeydown, cellAttrs } = useSelectableGrid(
+const {
+  currentIdx,
+  focusCell,
+  handleGridKeydown: _composableKeydown,
+  cellAttrs,
+  focusFirstCandidate,
+} = useSelectableGrid(
   hexCells,
   hexCols,
   cellIdentity,
   boardInteraction,
   'hex-cell',
+  // #172: the roving cursor has to know which cells the current choice accepts.
+  // Hex is the case this exists for: ~50 empty cells, and a cursor parked on
+  // cell 0 leaves a keyboard player arrowing across squares nobody can pick.
+  isCellActionSelectable,
 );
 
 // DOM refs for each hex <g> cell — needed to call .focus() after arrow navigation
@@ -294,6 +304,19 @@ function handleSvgKeydown(e: KeyboardEvent) {
     hexCellRefs[currentIdx.value]?.focus();
   });
 }
+
+// #172: when the Action Panel hands a large board-anchored choice to the board,
+// the board is the ONLY path into it, so focus has to make the journey too.
+watch(
+  () => boardInteraction?.boardFocusRequest,
+  (tick) => {
+    if (!tick) return;
+    if (!focusFirstCandidate()) return;
+    void nextTick(() => {
+      hexCellRefs[currentIdx.value]?.focus();
+    });
+  },
+);
 
 // Per-cell aria-label: coord + occupant names + state
 function hexCellAriaLabel(cell: GameElement): string {

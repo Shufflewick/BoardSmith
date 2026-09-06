@@ -699,6 +699,63 @@ in the game's wiring, not a reason to suppress one of them. Drive both from the
 same `useBoardInteraction` / action-controller state and they cannot drift —
 see [Custom UI Guide](./custom-ui-guide.md).
 
+#### The panel offers hierarchy, never free text
+
+The panel presents choices as **a hierarchy a person walks with a few buttons**.
+It has no search box, no typed coordinate entry, and no filter field, and it is
+not getting one.
+
+**Why the free-text door stays shut:** a search box is a *second* enumeration.
+It has to decide what matches, and the moment it decides differently from the
+engine, the panel is offering a different game from the board and the bots. A
+list you scroll can only ever show what the engine enumerated; a box you type
+into invites a UI-side rule about what to show. That is the divergence this
+whole surface exists to prevent.
+
+**So cardinality is yours to shape, not the panel's to survive.** There are
+exactly two authored answers, and both live inside the action system:
+
+1. **Anchor the step on the board.** Give the step a `boardRef` and the board
+   draws every candidate in the geometry the choice actually has. Hex's fifty
+   empty cells are unreadable as a button list and obvious as a board.
+2. **Narrow it with an earlier step.** `dependsOn` turns one flat list of
+   hundreds into two or three short ones — build, then category, then building.
+   The panel walks that hierarchy one readable screen at a time.
+
+```typescript
+// Cardinality shaped by dependency: neither step is ever long.
+Action.create('build')
+  .chooseFrom('category', { choices: ['military', 'civic', 'wonder'] })
+  .chooseElement('building', {
+    dependsOn: 'category',
+    elements: (ctx) => buildingsInCategory(ctx.args.category as string),
+    boardRef: (b) => ({ id: b.id }),
+  })
+```
+
+**Scoping by selection is authored HERE, never in the UI.** "Only show me things
+near this unit" is a first `chooseElement` step with a dependent `filter` — so
+the panel, the board, and move enumeration (and therefore bots) all read one
+enumeration. A UI-side filter that hides options the engine allows is a
+**divergence bug** and is not permitted, whatever it improves about the layout:
+the player is then shown fewer moves than they legally have, the bot plays the
+ones they were not shown, and nothing in the game can explain the difference.
+
+**What the panel does when a step is still too big.** Above 24 candidates, if
+every candidate carries a board ref, the panel stops listing them and offers one
+control — "Choose on the board (N)" — that moves keyboard focus onto the board's
+first valid target. This is a change of *surface*, not of content: the board
+offers the identical enumeration, arrow keys move between candidates and Enter
+chooses, so the keyboard path is continuous. It is not a filter and not a hidden
+option; nothing is dropped. If even one candidate has no board ref the panel
+keeps every button, because deferring would leave that candidate reachable from
+neither surface.
+
+`boardsmith validate` reports a step that has neither answer: more than 24
+candidates, no board anchor, no dependent narrowing. It finds them by playing a
+few seeded random games and reading the engine's own move enumeration, because a
+candidate count does not exist until a game is running.
+
 The one thing you may remove is a **redundant start button**, below. Note what
 that is not: it hides one button while the panel keeps rendering everything
 else, including every choice of the action once it is under way. The panel never

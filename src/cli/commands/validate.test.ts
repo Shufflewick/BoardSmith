@@ -16,6 +16,8 @@ import {
   validateAssetPaths,
   parseProgramFiles,
   findUntypedTestFiles,
+  hasBlockingFailure,
+  buildChoiceCardinalityResult,
 } from './validate.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 
@@ -625,5 +627,43 @@ describe('validate.ts test-type-coverage', () => {
         '../elsewhere/a.test.ts',
       ]);
     });
+  });
+});
+
+describe('validate.ts choice cardinality (#172)', () => {
+  it('hasBlockingFailure ignores a failed check marked as a warning', () => {
+    expect(
+      hasBlockingFailure([
+        { name: 'Metadata', passed: true, message: '' },
+        { name: 'Choice cardinality', passed: false, message: 'x', severity: 'warning' },
+      ]),
+    ).toBe(false);
+  });
+
+  it('hasBlockingFailure still blocks on an ordinary failed check', () => {
+    expect(
+      hasBlockingFailure([
+        { name: 'Choice cardinality', passed: false, message: 'x', severity: 'warning' },
+        { name: 'TypeScript', passed: false, message: 'boom' },
+      ]),
+    ).toBe(true);
+  });
+
+  it('reports a pass when nothing offers too much', () => {
+    const result = buildChoiceCardinalityResult([]);
+    expect(result.passed).toBe(true);
+    expect(result.details ?? []).toEqual([]);
+  });
+
+  it('reports each unbounded step as a warning with the count and both fixes', () => {
+    const result = buildChoiceCardinalityResult([
+      { action: 'shout', selection: 'verb', maxCandidates: 40 },
+    ]);
+    expect(result.passed).toBe(false);
+    expect(result.severity).toBe('warning');
+    expect(result.details).toHaveLength(1);
+    expect(result.details![0]).toContain('40');
+    expect(result.details![0]).toContain('boardRef');
+    expect(result.details![0]).toContain('dependsOn');
   });
 });

@@ -806,7 +806,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /**
    * True when the board can offer EVERY current choice as a real, clickable board
-   * target. When true, GameShell omits the ActionPanel footer entirely (D-02).
+   * target.
+   *
+   * NOTE: nothing in the shipped UI unmounts the ActionPanel on this. The panel
+   * stays on and stays in parity with the board; what it does do for an oversized
+   * board-anchored element pick is swap fifty buttons for one control that hands
+   * keyboard focus to the board (#172, `shouldDeferElementPickToBoard`). This
+   * flag is exposed for custom UIs that want the same signal.
    *
    * Anchoring rules:
    * - No action in progress (currentPick === null) → false. Show the panel so the
@@ -2078,7 +2084,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // availableActions as "stale, cancel it" — doing so cancels live followUp chains
     // (e.g. explore -> take equipment) the instant a state broadcast arrives.
     pendingOnServer: readonly(pendingOnServer),
-    // True when every choice for the current pick is board-anchored → GameShell hides footer (D-02).
+    // True when the board can offer every current choice as a real click target.
+    // Read by custom UIs deciding how much of their own chrome to draw; the auto
+    // ActionPanel does NOT hide itself on it (#172 — the panel yields a single
+    // oversized element pick to the board and keeps everything else).
     allCurrentChoicesAnchored,
     // Reactive choices for the current pick (re-runs when async-fetched choices arrive).
     currentChoices,

@@ -17,7 +17,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick } from 'vue';
 import HexBoardRenderer from './HexBoardRenderer.vue';
 import {
   createBoardInteraction,
@@ -72,7 +72,7 @@ function mountHex(element: GameElement, interaction = createBoardInteraction()) 
     props: { element: { type: Object, required: true } },
   });
   return {
-    wrapper: mount(Wrapper, { props: { element } }),
+    wrapper: mount(Wrapper, { props: { element }, attachTo: document.body }),
     interaction,
   };
 }
@@ -138,5 +138,47 @@ describe('HexBoardRenderer a11y — role=gridcell + roving tabindex (partial —
     const cells = wrapper.findAll('[role="gridcell"]');
     expect(cells[0].attributes('tabindex')).toBe('-1');
     expect(cells[1].attributes('tabindex')).toBe('0');
+  });
+});
+
+/**
+ * #172 — Hex is the case this ticket is about: ~50 empty cells that the panel
+ * hands to the board. The board is then the only path into the choice.
+ */
+describe('HexBoardRenderer candidate focus (#172)', () => {
+  function hexWithCandidates(candidateIds: number[]) {
+    const interaction = createBoardInteraction();
+    interaction.setValidElements(
+      candidateIds.map((id) => ({ id, ref: { id } })),
+      () => {},
+    );
+    return mountHex(buildHexElement(6), interaction);
+  }
+
+  it('parks the roving tab stop on the first valid target, not on cell 0', async () => {
+    const { wrapper } = hexWithCandidates([103, 105]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+    expect(cells[0].attributes('tabindex')).toBe('-1');
+    expect(cells[3].attributes('tabindex')).toBe('0');
+  });
+
+  it('moves DOM focus onto that cell when the panel hands the choice over', async () => {
+    const { wrapper, interaction } = hexWithCandidates([103, 105]);
+    await nextTick();
+
+    interaction.requestBoardFocus();
+    await nextTick();
+    await nextTick();
+
+    const cells = wrapper.findAll('[role="gridcell"]');
+    expect(document.activeElement).toBe(cells[3].element);
+  });
+
+  it('leaves the tab stop alone when there is nothing to pick', async () => {
+    const { wrapper } = hexWithCandidates([]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+    expect(cells[0].attributes('tabindex')).toBe('0');
   });
 });

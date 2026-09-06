@@ -16,7 +16,7 @@
  * so the composable degrades gracefully when used outside a <GameShell>
  * (caller uses tryUseBoardInteraction() which returns undefined outside provider).
  */
-import { computed, type ComputedRef } from 'vue';
+import { computed, watch, type ComputedRef } from 'vue';
 import { ref } from 'vue';
 import { anchorAttrs } from './useBoardInteraction.js';
 import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
@@ -96,11 +96,17 @@ export function useSelectable(
  *   `'grid-cell'`, `'hex-cell'`), forwarded to `anchorAttrs()`'s missing-anchor
  *   dev-warning dedup key so distinct grid renderers each warn once instead of
  *   collapsing into one shared `'unknown'` bucket.
+ * @param isCandidate     Optional predicate: is this cell a valid target for the
+ *   choice currently being made? Supplying it makes the roving cursor
+ *   candidate-aware (#172) — see `focusFirstCandidate` below. Omit it and the
+ *   grid behaves exactly as it did: a plain spatial cursor over every cell.
  *
- * @returns { currentIdx, focusCell, handleGridKeydown }
- *   - currentIdx        — reactive index of the cell that owns tabindex="0"
- *   - focusCell(i)      — move cursor to cell i (clamped to valid range)
- *   - handleGridKeydown — bind to @keydown on the grid container element
+ * @returns { currentIdx, focusCell, handleGridKeydown, cellAttrs, candidateIndices, focusFirstCandidate }
+ *   - currentIdx          — reactive index of the cell that owns tabindex="0"
+ *   - focusCell(i)        — move cursor to cell i (clamped to valid range)
+ *   - handleGridKeydown   — bind to @keydown on the grid container element
+ *   - candidateIndices    — indices of the cells that are valid targets right now
+ *   - focusFirstCandidate — put the cursor on the first of them; returns whether it could
  */
 export function useSelectableGrid<T>(
   cells: ComputedRef<T[]>,
@@ -108,8 +114,49 @@ export function useSelectableGrid<T>(
   getIdentity: (cell: T) => ElementRef,
   boardInteraction: BoardInteraction | null | undefined,
   elementType?: string,
+  isCandidate?: (cell: T) => boolean,
 ) {
   const currentIdx = ref(0);
+
+  /**
+   * Indices of the cells the current choice will actually accept.
+   *
+   * #172: when the panel yields to the board for a large choice, the board is
+   * the ONLY path into it. A cursor parked on cell 0 of a 121-cell board leaves
+   * a keyboard player arrowing blind through squares that cannot be chosen, so
+   * the cursor has to know which cells are real.
+   */
+  const candidateIndices = computed<number[]>(() => {
+    if (!isCandidate) return [];
+    const out: number[] = [];
+    cells.value.forEach((cell, i) => {
+      if (isCandidate(cell)) out.push(i);
+    });
+    return out;
+  });
+
+  /**
+   * Move the cursor to the first cell the current choice accepts. Returns false
+   * (and leaves the cursor alone) when there is nothing to move to, so a caller
+   * can fall back rather than silently doing nothing.
+   */
+  function focusFirstCandidate(): boolean {
+    const first = candidateIndices.value[0];
+    if (first === undefined) return false;
+    currentIdx.value = first;
+    return true;
+  }
+
+  // When a pick starts, candidates appear. Land the cursor on one — unless it
+  // already sits on a candidate, in which case moving it would fight the player.
+  // Immediate, because a board can be mounted with a pick already in progress
+  // (a followUp, a reconnect, a time-travel jump), and that cursor is just as
+  // stranded as one that never moved.
+  watch(candidateIndices, (indices) => {
+    if (indices.length === 0) return;
+    if (indices.includes(currentIdx.value)) return;
+    currentIdx.value = indices[0];
+  }, { immediate: true });
 
   /**
    * Move the roving-tabindex cursor to cell i, clamped to [0, cells.length - 1].
@@ -162,5 +209,5 @@ export function useSelectableGrid<T>(
     return anchorAttrs(getIdentity(cell), elementType);
   }
 
-  return { currentIdx, focusCell, handleGridKeydown, cellAttrs };
+  return { currentIdx, focusCell, handleGridKeydown, cellAttrs, candidateIndices, focusFirstCandidate };
 }

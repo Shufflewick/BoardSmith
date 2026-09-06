@@ -13,7 +13,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick } from 'vue';
 import GridBoardRenderer from './GridBoardRenderer.vue';
 import {
   createBoardInteraction,
@@ -74,7 +74,7 @@ function mountGrid(element: GameElement, interaction = createBoardInteraction())
     props: { element: { type: Object, required: true } },
   });
   return {
-    wrapper: mount(Wrapper, { props: { element } }),
+    wrapper: mount(Wrapper, { props: { element }, attachTo: document.body }),
     interaction,
   };
 }
@@ -146,5 +146,50 @@ describe('GridBoardRenderer a11y — role=grid/gridcell + roving tabindex', () =
     // triggerElementSelect -> onElementSelect(100) -> selectSpy(100)
     expect(selectSpy).toHaveBeenCalledTimes(1);
     expect(selectSpy).toHaveBeenCalledWith(100);
+  });
+});
+
+/**
+ * #172 — the board is the only path into a board-anchored choice, so it has to
+ * accept keyboard focus and park it on a cell the player can actually choose.
+ */
+describe('GridBoardRenderer candidate focus (#172)', () => {
+  function gridWithCandidates(candidateIds: number[]) {
+    const element = buildGridElement(4, 3);
+    const interaction = createBoardInteraction();
+    interaction.setValidElements(
+      candidateIds.map((id) => ({ id, ref: { id } })),
+      () => {},
+    );
+    return { ...mountGrid(element, interaction), element };
+  }
+
+  it('parks the roving tab stop on the first valid target, not on cell 0', async () => {
+    // Candidates are cells 105 and 108 — indices 5 and 8 of a 4x3 grid.
+    const { wrapper } = gridWithCandidates([105, 108]);
+    await nextTick();
+
+    const cells = wrapper.findAll('[role="gridcell"]');
+    expect(cells[0].attributes('tabindex')).toBe('-1');
+    expect(cells[5].attributes('tabindex')).toBe('0');
+  });
+
+  it('moves DOM focus onto that cell when the panel hands the choice over', async () => {
+    const { wrapper, interaction } = gridWithCandidates([105, 108]);
+    await nextTick();
+
+    interaction.requestBoardFocus();
+    await nextTick();
+    await nextTick();
+
+    const cells = wrapper.findAll('[role="gridcell"]');
+    expect(document.activeElement).toBe(cells[5].element);
+  });
+
+  it('leaves the tab stop alone when there is nothing to pick', async () => {
+    const { wrapper } = gridWithCandidates([]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+    expect(cells[0].attributes('tabindex')).toBe('0');
   });
 });

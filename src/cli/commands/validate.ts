@@ -16,12 +16,30 @@ import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.
 import { readDistDir, createZip } from '../lib/zip.js';
 import { requireGameProject } from '../lib/game-project.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
+import {
+  auditChoiceCardinality,
+  describeUnboundedChoiceStep,
+  MAX_FLAT_CHOICE_CANDIDATES,
+  type UnboundedChoiceStep,
+} from '../lib/choice-cardinality.js';
+import type { Game, GameOptions } from '../../engine/index.js';
 
 interface ValidationResult {
   name: string;
   passed: boolean;
   message: string;
   details?: string[];
+  /**
+   * `'warning'` marks a check that reports without blocking. Everything else
+   * blocks, so a new check has to opt IN to being advisory — the default stays
+   * "a failed check fails validation".
+   */
+  severity?: 'error' | 'warning';
+}
+
+/** Whether any FAILED check is severe enough to fail the command. */
+export function hasBlockingFailure(results: ValidationResult[]): boolean {
+  return results.some((r) => !r.passed && r.severity !== 'warning');
 }
 
 /** One `vue-tsc --noEmit --listFiles` run: its verdict, and the program it compiled. */
@@ -61,7 +79,11 @@ export async function validateCommand(): Promise<void> {
   // 6. Required files check
   results.push(await validateRequiredFiles(cwd));
 
-  if (!printResults(results)) {
+  // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
+  results.push(await validateChoiceCardinality(cwd));
+
+  printResults(results);
+  if (hasBlockingFailure(results)) {
     console.log(chalk.red('Validation failed. Please fix the issues above.\n'));
     process.exit(1);
   }
@@ -71,13 +93,21 @@ export async function validateCommand(): Promise<void> {
   );
 }
 
-/** Prints every check's verdict and its failure detail. Returns whether all passed. */
-function printResults(results: ValidationResult[]): boolean {
+/** One check's icon and status word: pass, advisory warning, or failure. */
+function verdictLabel(result: ValidationResult): { icon: string; status: string } {
+  if (result.passed) return { icon: chalk.green('✓'), status: chalk.green('PASS') };
+  if (result.severity === 'warning') {
+    return { icon: chalk.yellow('⚠'), status: chalk.yellow('WARN') };
+  }
+  return { icon: chalk.red('✗'), status: chalk.red('FAIL') };
+}
+
+/** Prints every check's verdict and its failure detail. */
+function printResults(results: ValidationResult[]): void {
   console.log(chalk.cyan('\nValidation Results:\n'));
 
   for (const result of results) {
-    const icon = result.passed ? chalk.green('✓') : chalk.red('✗');
-    const status = result.passed ? chalk.green('PASS') : chalk.red('FAIL');
+    const { icon, status } = verdictLabel(result);
     console.log(`  ${icon} ${result.name}: ${status}`);
     if (result.passed) continue;
 
@@ -88,7 +118,6 @@ function printResults(results: ValidationResult[]): boolean {
   }
 
   console.log('');
-  return results.every((result) => result.passed);
 }
 
 function printSuccessGuidance(isWorld: boolean): void {
@@ -846,4 +875,83 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ---------------------------------------------------------------------------
+// Choice cardinality (#172)
+// ---------------------------------------------------------------------------
+
+/** Turn the audit's findings into a validation result. Pure — the report shape only. */
+export function buildChoiceCardinalityResult(
+  findings: UnboundedChoiceStep[],
+): ValidationResult {
+  if (findings.length === 0) {
+    return {
+      name: 'Choice cardinality',
+      passed: true,
+      message: 'No choice step offers an unshaped list.',
+    };
+  }
+
+  return {
+    name: 'Choice cardinality',
+    passed: false,
+    severity: 'warning',
+    message:
+      `${findings.length} choice step(s) offer more than ${MAX_FLAT_CHOICE_CANDIDATES} options ` +
+      `as one flat list. The Action Panel presents choices as a hierarchy a person walks — ` +
+      `it has no search box and no typed input, so a list this long has no way to be read.`,
+    details: findings.map(describeUnboundedChoiceStep),
+  };
+}
+
+/**
+ * Play a few seeded random games and report any choice step that presents a
+ * large flat list with no board anchor and no dependent narrowing.
+ *
+ * This check runs the game because a candidate count does not exist until a
+ * game is running: the source text of `chooseElement('cell', { elementClass:
+ * Cell })` says nothing about whether that is three cells or three hundred.
+ * The counts here come from the engine's own move enumeration, which is the
+ * same enumeration the panel, the board and the bots read.
+ *
+ * It never blocks. A game that cannot be loaded or randomly driven reports a
+ * pass with a note, because "the random simulator could not play your game" is
+ * a fact about the simulator, not a cardinality defect.
+ */
+async function validateChoiceCardinality(cwd: string): Promise<ValidationResult> {
+  const spinner = ora('Checking choice cardinality...').start();
+
+  const configPath = join(cwd, 'boardsmith.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { paths?: { rules?: string } };
+  const rulesPath = config.paths?.rules
+    ? resolvePath(cwd, config.paths.rules)
+    : join(cwd, 'src', 'rules');
+
+  const tempDir = join(cwd, '.boardsmith');
+  try {
+    const { loadGameDefinition, getProjectContext } = await import('./game-runtime.js');
+    const { gameDefinition } = await loadGameDefinition(
+      rulesPath,
+      tempDir,
+      getProjectContext(cwd),
+    );
+
+    const findings = await auditChoiceCardinality(
+      gameDefinition.gameClass as new (options: GameOptions) => Game,
+      { seed: 'choice-cardinality', games: 2, timeout: 5000 },
+    );
+
+    const result = buildChoiceCardinalityResult(findings);
+    if (result.passed) spinner.succeed('Choice cardinality OK');
+    else spinner.warn('Choice cardinality: large flat choice lists found');
+    return result;
+  } catch (error) {
+    spinner.info('Choice cardinality: skipped');
+    return {
+      name: 'Choice cardinality',
+      passed: true,
+      message: `Skipped — the game could not be driven headlessly: ${(error as Error).message}`,
+    };
+  }
 }

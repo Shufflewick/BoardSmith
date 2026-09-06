@@ -4,8 +4,9 @@
  *
  * WHY THIS EXISTS (Phase 94 board-centric playability):
  * Board-centric is the zero-config default — when every active choice is board
- * anchored, GameShell makes the footer ActionPanel ABSENT from the DOM (D-02).
- * Previously the controller→board sync (auto-start, setValidElements, the choice
+ * anchored the board is the primary surface, and for a candidate set too large
+ * for the panel to list the panel hands the choice (and keyboard focus) to the
+ * board outright (#172). Previously the controller→board sync (auto-start, setValidElements, the choice
  * callback, board-click dispatch) lived INSIDE ActionPanel, so it died exactly
  * when the panel was hidden: clicking a hex/cell/piece only highlighted it and
  * never became selectable, because `validElements` was never populated.

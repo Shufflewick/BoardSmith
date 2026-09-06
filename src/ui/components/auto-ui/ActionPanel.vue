@@ -26,7 +26,7 @@ import type {
   ElementRef,
 } from '../../composables/useActionController';
 import DoneButton from './DoneButton.vue';
-import { splitAnchoredChoices } from './action-panel-helpers.js';
+import { splitAnchoredChoices, shouldDeferElementPickToBoard } from './action-panel-helpers.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 import { vDisabledReason, isDisabled, type DisabledReason } from '../../directives/vDisabledReason.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
@@ -413,6 +413,27 @@ const filteredValidElements = computed(() => {
 
   return validElements.filter(elem => !alreadySelectedIds.has(elem.id));
 });
+
+/**
+ * #172: a candidate set too large for the panel to read, every one of which the
+ * board is already drawing. The panel keeps the prompt and offers ONE control
+ * that hands keyboard focus to the board, instead of a wall of buttons nobody
+ * can scan.
+ *
+ * This is a change of SURFACE, not of content: the board offers the identical
+ * enumeration, and requestBoardFocus() carries focus across so the keyboard path
+ * is continuous. It is emphatically not a filter — see
+ * shouldDeferElementPickToBoard for why every candidate must be board-drawable
+ * before the panel will yield.
+ */
+const deferPickToBoard = computed(() =>
+  shouldDeferElementPickToBoard(currentPick.value?.type, filteredValidElements.value),
+);
+
+/** Send keyboard focus to the board's first valid target for this pick. */
+function handOffToBoard() {
+  boardInteraction?.requestBoardFocus();
+}
 
 // Skip an optional selection
 function skipOptionalSelection() {
@@ -1047,8 +1068,39 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 
       <!-- Current selection input -->
       <div v-if="currentPick" class="selection-input">
+        <!-- #172: too many candidates to read as a list, and the board draws every
+             one of them. Prompt + a single control that hands focus to the board. -->
+        <template v-if="deferPickToBoard">
+          <div class="selection-prompt">
+            {{ currentPick.prompt || `Select ${currentPick.elementClassName || currentPick.name}` }}
+            <span v-if="currentMultiSelect" class="multi-select-count">{{ multiSelectCountDisplay }}</span>
+            <span v-else-if="currentPick.optional" class="optional-label">(optional)</span>
+          </div>
+          <div class="choice-buttons board-handoff">
+            <button
+              class="choice-btn board-handoff-btn"
+              :aria-label="`Choose on the board — ${filteredValidElements.length} options. Use the arrow keys to move between them and Enter to choose.`"
+              @click="handOffToBoard"
+            >
+              Choose on the board ({{ filteredValidElements.length }})
+            </button>
+            <DoneButton
+              v-if="showMultiSelectDoneButton"
+              :disabled-reason="multiSelectDoneDisabledReason"
+              @click="confirmMultiSelect"
+            />
+            <button
+              v-if="currentPick.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+            </button>
+          </div>
+        </template>
+
         <!-- Element selection with validElements (shows buttons for each valid element) -->
-        <template v-if="currentPick.type === 'element' && filteredValidElements.length">
+        <template v-else-if="currentPick.type === 'element' && filteredValidElements.length">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.elementClassName || 'element'}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
@@ -1604,6 +1656,16 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 }
 
 .anchored-choice-btn:hover:not([aria-disabled='true']) {
+  background: var(--bsg-selectable);
+}
+
+/* Issue 172: the one control that stands in for a candidate set too large to
+   list. Accented like an anchored choice, because that is what it leads to. */
+.board-handoff-btn {
+  border-color: var(--bsg-accent);
+}
+
+.board-handoff-btn:hover {
   background: var(--bsg-selectable);
 }
 
