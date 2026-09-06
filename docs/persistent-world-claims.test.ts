@@ -1,46 +1,91 @@
 /**
- * #304 regression guard: the docs must not tell a world author that this
- * toolchain runs their world.
+ * WHAT `docs/persistent-worlds.md` IS ALLOWED TO SAY, AND WHAT IT MUST SAY.
  *
- * `core-concepts.md` said "`boardsmith dev` stands a world up resident when the
- * project's boardsmith.json declares a `world` block", and the CLI printed the
- * same claim. What the block really causes is `worldMode: true` on the game the
- * dev host constructs -- the engine's residency model for the project's TABLE
- * game -- and nothing else. Commands, genesis, the per-seat view, scheduled
- * events and presence are called by the hosting platform's world runner, which
- * is not in this repo.
+ * ## Why this file changed shape (#165)
  *
- * That is drift a reader cannot detect, which is why it is asserted here rather
- * than trusted to review: the failure message tells the next editor why the
- * sentence they just wrote is false, and where the true one lives.
+ * It used to gate a POINTER page. `docs/persistent-worlds.md` said the world
+ * contract lived in the hosting platform's repository and sent the reader
+ * there, and this test asserted the page contained the strings that made it a
+ * good pointer.
+ *
+ * That is a test that proves a page is STALE, not that it is TRUE, and it
+ * proved exactly that: when the world runtime moved into `src/world/` and
+ * `boardsmith/world`, two of the page's sentences became false --
+ *
+ *   "Nothing in this repo reads it", of `gameDefinition.world`, which
+ *     `src/world/definition.ts:readWorldDefinition` reads; and
+ *   "`GameDefinition.world` is typed here as an open record and no more",
+ *     which `src/session/types.ts` types with `WorldDefinition`
+ *
+ * -- and every assertion here stayed green, because none of them was tied to a
+ * fact about the code.
+ *
+ * So the assertions below are tied to the code wherever a fact exists to tie
+ * them to: the refusal table, the budget defaults, the declaration ceiling and
+ * the two ownership facts above are all read out of `src/` and checked against
+ * the prose. A change that falsifies the guide fails a test rather than
+ * silently teaching an author something untrue.
+ *
+ * ## What stays from the #304 guard
+ *
+ * The FALSE_CLAIMS sweep over every prose doc. A world still does not run under
+ * `boardsmith dev` at this commit -- #167 is the ticket that makes it -- and a
+ * doc that says it does sends an author to spend a day on a loop that does not
+ * exist. The patterns are matched against every `docs/*.md`, because the
+ * sentence is free to move.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { WORLD_REFUSALS, worldBudgets, WORLD_DECLARATION_ROUNDS } from '../src/world/index.js';
 
 const DOCS = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(DOCS, '..');
 const read = (name: string) => readFileSync(join(DOCS, name), 'utf-8');
+const readSrc = (...parts: string[]) => readFileSync(join(REPO_ROOT, ...parts), 'utf-8');
 
-/** The pointer page every other doc sends a world author to. */
-const POINTER = 'persistent-worlds.md';
+/** The authoring guide every other doc sends a world author to. */
+const GUIDE = 'persistent-worlds.md';
+const guide = read(GUIDE);
 
 /**
- * Claims that say this toolchain runs a world. Matched case-insensitively
- * against every prose doc, because the sentence is free to move.
+ * Claims no doc may make. Matched case-insensitively against every prose doc.
+ *
+ * The first three are #304's: this toolchain does not run a world. The rest are
+ * #165's: the contract is no longer somebody else's, and the two sentences that
+ * went stale unnoticed are named so they cannot be written again by anyone who
+ * half-remembers the old page.
  */
 const FALSE_CLAIMS: Array<{ pattern: RegExp; why: string }> = [
   {
     pattern: /stands? (a|the|this|your) world up/i,
-    why: 'Nothing here stands a world up. `boardsmith dev` constructs the project\'s table game with worldMode, which unlocks the partition APIs and changes nothing about how ops run.',
+    why: 'Nothing here stands a world up. `boardsmith dev` constructs the project\'s table game with worldMode, which unlocks the partition APIs and changes nothing about how ops run. #167 is the ticket that changes this.',
   },
   {
     pattern: /(running|runs) resident/i,
     why: 'Residency here means the engine\'s partition model, not a running world. Say which one you mean.',
   },
   {
-    pattern: /`?boardsmith dev`? (runs|hosts|serves) (a|the|this|your) world\b/i,
-    why: 'The CLI dispatches no world command, runs no genesis, projects no world view, fires no scheduled event and reports no presence. See ' + POINTER + '.',
+    pattern: /`?boardsmith dev`? (runs|hosts|serves|plays) (a|the|this|your) world\b/i,
+    why: 'The CLI dispatches no world command, runs no genesis, projects no world view, fires no scheduled event and reports no presence. It plays the project\'s TABLE game. #167 is the ticket that changes this; until it lands, do not write a guide that implies a local run works.',
+  },
+  {
+    pattern: /nothing in this repo reads it/i,
+    why: '`src/world/definition.ts:readWorldDefinition` reads `gameDefinition.world`, `createWorld` builds a runner over it, and `BoardSmithWorldEngine` calls every member. This sentence was true before #165 and is the first of the two the old pointer page kept saying afterwards.',
+  },
+  {
+    pattern: /world[^.]{0,60}\b(typed|declared)\b[^.]{0,60}open record/i,
+    why: '`GameDefinition.world` is typed by `WorldDefinition` from `boardsmith/world` (`src/session/types.ts`). This is the second sentence the old pointer page kept saying after it stopped being true.',
+  },
+  {
+    pattern: /(belongs to|lives in|is owned by|is written in) (the platform|the hosting platform|ShufflewickPub)/i,
+    why: 'The authoring contract is in this repository, under src/world/, exported as `boardsmith/world`. What belongs to a host is its LIFECYCLE POLICY -- sockets, hibernation, eviction timing, the park ladder, rate limits, the presence ledger -- and the guide has a table that says so.',
+  },
+  {
+    pattern: /nothing in this repo(sitory)? is allowed to restate/i,
+    why: 'That sentence deferred the whole authoring contract to another repository. It is here now, and this page is the one that states it.',
   },
 ];
 
@@ -48,79 +93,324 @@ const proseDocs = readdirSync(DOCS)
   .filter((name) => name.endsWith('.md'))
   .sort();
 
-describe('#304: no BoardSmith doc claims this toolchain runs a world', () => {
+describe('no BoardSmith doc makes a claim about worlds that the code contradicts', () => {
   it('reads the docs directory it thinks it is reading', () => {
     expect(proseDocs.length).toBeGreaterThan(10);
     expect(proseDocs).toContain('core-concepts.md');
+    expect(proseDocs).toContain(GUIDE);
   });
 
   it.each(proseDocs)('%s makes none of the claims', (doc) => {
-    const text = read(doc);
+    // ONE LINE, so a claim broken across a wrap is still the same claim. Every
+    // doc here is hard-wrapped, and a pattern that stopped at a newline would
+    // pass on exactly the sentences it was written to catch.
+    const text = read(doc).replace(/\s+/g, ' ');
     for (const { pattern, why } of FALSE_CLAIMS) {
       expect(pattern.test(text), `docs/${doc}: ${why}`).toBe(false);
     }
   });
 });
 
-describe(`#304: docs/${POINTER} is the pointer, and points somewhere real`, () => {
-  it('exists', () => {
+/**
+ * The two ownership facts, read out of `src/`.
+ *
+ * These are the assertions the old test did not have, and their absence is the
+ * whole reason the page went stale in place. If either stops being true, the
+ * guide is wrong and this fails at the source rather than at the prose.
+ */
+describe('#165: the world contract is in THIS repository', () => {
+  it('`GameDefinition.world` is typed by boardsmith/world', () => {
+    const types = readSrc('src', 'session', 'types.ts');
     expect(
-      existsSync(join(DOCS, POINTER)),
-      'A world author is sent here by the dev notice, by `boardsmith validate` and by core-concepts.md.',
+      /import type \{[^}]*WorldDefinition[^}]*\} from ['"]\.\.\/world\/definition\.js['"]/.test(types),
+      'src/session/types.ts must import WorldDefinition from the world module. One declaration ' +
+        'both a bundle and a host import is the whole point of `boardsmith/world`; an open ' +
+        'record here is what let three world games hand-copy the contract and drift.',
+    ).toBe(true);
+    expect(types).toContain('world?: WorldDefinition;');
+  });
+
+  it('this repository reads the world block rather than pointing at whoever does', () => {
+    const definition = readSrc('src', 'world', 'definition.ts');
+    expect(definition).toContain('export function readWorldDefinition');
+    expect(definition).toContain('definition.world');
+    expect(definition).toContain('export function createWorld');
+  });
+
+  it('the guide says the contract is here, and names the module', () => {
+    expect(guide).toContain('boardsmith/world');
+    expect(guide).toContain('src/world/');
+    expect(guide).toContain('WorldDefinition');
+  });
+});
+
+/**
+ * A WORLD DOES NOT RUN LOCALLY YET, AND THE GUIDE HAS TO SAY SO.
+ *
+ * The FALSE_CLAIMS sweep stops the page claiming a local run. This stops the
+ * opposite failure: a page that is silent about it, which an author reads as a
+ * loop that works. #167 must come back and rewrite what these assert.
+ */
+describe('#167: the guide is honest that no host here runs a world yet', () => {
+  it('names the ticket, so the sentences to revisit are findable', () => {
+    expect(
+      guide.includes('#167'),
+      'The guide must name #167 where it says a world does not run locally, so whoever lands ' +
+        'that ticket can find every sentence it falsifies.',
     ).toBe(true);
   });
 
-  const pointer = existsSync(join(DOCS, POINTER)) ? read(POINTER) : '';
-
-  it('names the engine\'s own share of a world, and links where it is documented', () => {
-    expect(pointer).toContain('worldMode');
-    expect(pointer).toContain('core-concepts.md');
+  it('says what `boardsmith dev` actually does with a world project', () => {
+    expect(guide).toContain('boardsmith dev');
+    expect(
+      /table (game|half)/i.test(guide),
+      '`boardsmith dev` plays the project\'s TABLE game, constructed with worldMode. Saying so ' +
+        'is what stops an author looking for a world that is not there.',
+    ).toBe(true);
   });
 
-  it('says who owns the world block, and names that authority\'s document', () => {
+  it('names a way to run the world contract that DOES work today', () => {
     expect(
-      pointer,
-      'The block\'s members are the hosting platform\'s to call. A reader has to be told whose contract to read.',
-    ).toContain('docs/PERSISTENT-WORLDS.md');
+      guide.includes('createWorld'),
+      'A guide that lists no runnable procedure repeats the defect the pointer page had. ' +
+        '`createWorld` drives genesis, declaration, dispatch, views and checkpoints from an ' +
+        'ordinary test file, and that is the loop an author has at this commit.',
+    ).toBe(true);
+    expect(guide).toContain('tests/world.test.ts');
+  });
+});
+
+/**
+ * THE TRANSITIONAL SURFACE IS MARKED (#169).
+ *
+ * `WorldCommandHandler` and everything shaped around it is deleted when a
+ * world's verbs become Actions. An author who was not told writes against it
+ * and is surprised; a guide that documented the Action shape as though it
+ * existed would be worse still.
+ */
+describe('#169: the command surface is marked transitional', () => {
+  it('the guide warns about it and names the ticket', () => {
+    expect(guide).toContain('#169');
+    expect(/transitional/i.test(guide)).toBe(true);
+    for (const type of [
+      'WorldCommandHandler',
+      'WorldCommandContext',
+      'WorldCommandArgument',
+      'WorldCommandOffer',
+    ]) {
+      expect(
+        guide.includes(type),
+        `${type} is deleted by #169 and an author writes against it today. The guide must name ` +
+          'it in the transitional table rather than leaving the reader to find out at migration.',
+      ).toBe(true);
+    }
   });
 
-  it('names a way to actually run a world, because that is what the reader came for', () => {
-    expect(
-      pointer,
-      'The example worlds run their whole world contract under plain vitest (`tests/world.test.ts` in each project). ' +
-        'A pointer page that lists no runnable procedure repeats the defect it replaces.',
-    ).toContain('tests/world.test.ts');
+  it('the source still marks them, so the guide and the code agree', () => {
+    const engine = readSrc('src', 'world', 'engine.ts');
+    expect(engine).toContain('TRANSITIONAL');
+    expect(readSrc('src', 'world', 'definition.ts')).toContain('TRANSITIONAL');
+  });
+
+  it('does not document the Action shape as though it exists', () => {
+    for (const premature of ['WorldAction', 'worldAction(', 'action registry API']) {
+      expect(
+        guide.includes(premature),
+        `${premature} does not exist at this commit. #169 designs it; documenting it now would ` +
+          'send an author to write against nothing.',
+      ).toBe(false);
+    }
   });
 
   it('does not restate the deleted round architecture', () => {
     for (const gone of ['resolveAction', 'enrolAction', '--kind resolution']) {
       expect(
-        pointer.includes(gone),
+        guide.includes(gone),
         `${gone} belongs to the round architecture, which was deleted.`,
       ).toBe(false);
     }
   });
 });
 
-describe('#304: the pages an author is actually sent to carry the pointer', () => {
+/**
+ * THE GUIDE IS COMPLETE AGAINST THE CONTRACT IT DOCUMENTS.
+ *
+ * Every one of these is a member of the authoring surface an author has to
+ * write, and a guide missing one leaves that member documented nowhere at all
+ * -- which is the state the whole page was in before #165.
+ */
+describe('#165: the guide covers the authoring contract', () => {
+  const required: Array<[string, string]> = [
+    ['genesis', 'the partitions a brand-new world starts with'],
+    ['partitions(', 'the declaration that decides what a command may reach'],
+    ['run(', 'the handler that changes the world'],
+    ['view(', 'what one seat is shown'],
+    ['presence', 'the arrive and depart hooks, and ctx.presence'],
+    ['ctx.now', 'the only clock a handler may read'],
+    ['ctx.schedule', 'the eager half of the timer primitive'],
+    ['complete()', 'the one ending a game may declare'],
+    ['clockOnly', 'the commands no player may send'],
+    ['scope', 'what decides who hears an event'],
+    ['dirty', 'what a checkpoint writes'],
+    ['maxPlayers', 'the seat count, declared twice and bounded by the host'],
+    ['WorldBudgets', 'the ceilings, owned here and configured by a host'],
+    ['WorldPartitionStore', 'where partitions live, as an interface'],
+  ];
+
+  it.each(required)('documents `%s` (%s)', (member) => {
+    expect(guide.includes(member), `docs/${GUIDE} must document ${member}.`).toBe(true);
+  });
+
+  it('documents the two-phase declaration and its ceiling', () => {
+    expect(
+      guide.includes(String(WORLD_DECLARATION_ROUNDS)),
+      `A declaration is asked at most ${WORLD_DECLARATION_ROUNDS} times before ` +
+        '`declaration-unsettled`. An author whose declaration reads an index needs the number.',
+    ).toBe(true);
+    expect(guide).toContain('declaration-unsettled');
+  });
+});
+
+/**
+ * EVERY REFUSAL A WORLD CAN ISSUE IS EXPLAINED SOMEWHERE AN AUTHOR READS.
+ *
+ * Read out of the table rather than listed here, so a refusal added to
+ * `src/world/refusals.ts` fails this until the guide says what it means. That
+ * is the assertion that keeps a reference section from rotting, and it is the
+ * shape the old test had no equivalent of.
+ */
+describe('#165: the guide explains every refusal', () => {
+  const codes = Object.keys(WORLD_REFUSALS).sort();
+
+  it('has refusals to check', () => {
+    expect(codes.length).toBeGreaterThan(20);
+  });
+
+  it.each(codes)('names `%s`', (code) => {
+    expect(
+      guide.includes(code),
+      `docs/${GUIDE} does not mention the \`${code}\` refusal. Every way a world can refuse is ` +
+        'something an author can hit, and a code with no prose is a failure nobody can act on. ' +
+        `Its owner is "${WORLD_REFUSALS[code as keyof typeof WORLD_REFUSALS].owner}".`,
+    ).toBe(true);
+  });
+
+  it('names all four owners, because the owner is what decides the consequence', () => {
+    for (const owner of ['caller', 'game', 'platform', 'infrastructure']) {
+      expect(guide).toContain(owner);
+    }
+  });
+});
+
+/**
+ * THE BUDGET TABLE MATCHES `worldBudgets()`.
+ *
+ * A number in prose beside a number in code is the classic silent drift, and
+ * these numbers are the ones an author sizes a data model against. A host
+ * raising a default without touching the guide fails here.
+ */
+describe('#165: the guide states the real budget defaults', () => {
+  const defaults = worldBudgets();
+
+  it.each(Object.entries(defaults))('states `%s` as %d', (field, value) => {
+    expect(guide).toContain(`\`${field}\``);
+    expect(
+      guide.includes(String(value)),
+      `docs/${GUIDE} must state the default for ${field} (${value}). An author sizes a partition ` +
+        'and a timer against these, and a stale number is a world that cannot be created.',
+    ).toBe(true);
+  });
+
+  it('teaches the partition-budget rule at the seat cap, not at the expected roster', () => {
+    expect(guide).toContain('partition-too-large');
+    expect(
+      /measure at `?maxPlayers`?, not at the roster/i.test(guide),
+      'This is the highest-value paragraph in the document for a new world author: an ' +
+        'over-budget partition is not a world that degrades later, it is a world that cannot be ' +
+        'created. It has to say to measure at the cap.',
+    ).toBe(true);
+  });
+});
+
+/**
+ * EVERY CITATION POINTS AT SOMETHING THAT EXISTS (ShufflewickPub #351).
+ *
+ * That issue is two reviewers independently trying to copy a worked example
+ * from a doc's most useful paragraph and finding the files were not there. The
+ * remedy is not to be careful; it is to check.
+ *
+ * In-repo links are always checkable. The `~/BoardSmithGames` citations are in
+ * another checkout, so they are verified when it is present and reported as
+ * unverified when it is not -- which is honest about what this run proved,
+ * rather than silently passing.
+ */
+describe('ShufflewickPub #351: the guide cites nothing that does not exist', () => {
+  const relativeLinks = [...guide.matchAll(/\]\((\.\/[^)#]+)/g)].map((match) => match[1]!);
+
+  it('links to at least one sibling doc', () => {
+    expect(relativeLinks.length).toBeGreaterThan(0);
+  });
+
+  it.each(relativeLinks)('%s exists', (link) => {
+    expect(existsSync(join(DOCS, link)), `docs/${GUIDE} links to ${link}, which is not there.`).toBe(
+      true,
+    );
+  });
+
+  const gamePaths = [...guide.matchAll(/~\/BoardSmithGames\/[A-Za-z0-9._/-]+/g)].map(
+    (match) => match[0],
+  );
+  const gamesRoot = join(homedir(), 'BoardSmithGames');
+
+  it('cites the example projects', () => {
+    expect(gamePaths.length).toBeGreaterThan(0);
+  });
+
+  it.each(gamePaths)('%s exists, when that checkout is present', (cited) => {
+    if (!existsSync(gamesRoot)) {
+      // Nothing to check against. Recorded rather than asserted, because a
+      // pass here would claim a verification this run did not perform.
+      console.warn(`~/BoardSmithGames is not present; ${cited} was not verified.`);
+      return;
+    }
+    expect(
+      existsSync(join(homedir(), cited.slice('~/'.length))),
+      `docs/${GUIDE} cites ${cited}, which is not in the BoardSmithGames checkout. This is ` +
+        'exactly ShufflewickPub #351: a worked example named in prose and missing on disk.',
+    ).toBe(true);
+  });
+
+  it('does not send a reader to another repository for the contract', () => {
+    for (const moved of ['docs/PERSISTENT-WORLDS.md', 'docs/WORLD-SCHEDULE.md']) {
+      expect(
+        guide.includes(moved),
+        `${moved} is the hosting platform's page and is no longer where the authoring contract ` +
+          'lives. This guide is. Redirecting to it is how the two came to disagree.',
+      ).toBe(false);
+    }
+  });
+});
+
+/** The pages an author is actually sent from still carry the pointer. */
+describe('the guide is reachable from where an author starts', () => {
   it('getting-started.md points a world author at it', () => {
     expect(
       read('getting-started.md'),
-      'getting-started.md is where an author starts and it never said the word "world". ' +
-        `The pointer to docs/${POINTER} has to start here.`,
-    ).toContain(POINTER);
+      `getting-started.md is where an author starts. The pointer to docs/${GUIDE} has to start here.`,
+    ).toContain(GUIDE);
   });
 
   it('core-concepts.md sends the world-mode section on to it', () => {
-    expect(read('core-concepts.md')).toContain(POINTER);
+    expect(read('core-concepts.md')).toContain(GUIDE);
   });
 
   it('`boardsmith validate` ends a world project\'s run with it', () => {
-    const validate = readFileSync(join(DOCS, '..', 'src', 'cli', 'commands', 'validate.ts'), 'utf-8');
+    const validate = readSrc('src', 'cli', 'commands', 'validate.ts');
     expect(
       validate,
-      'validate\'s success guidance is the other place an author is sent from, so a world project ' +
-        `has to leave that run knowing where docs/${POINTER} is.`,
+      'validate\'s success guidance is the other place an author is sent from, so a world ' +
+        `project has to leave that run knowing where docs/${GUIDE} is.`,
     ).toContain('WORLD_AUTHORING_DOC');
+    expect(readSrc('src', 'cli', 'lib', 'world-project.ts')).toContain(`'docs/${GUIDE}'`);
   });
 });
