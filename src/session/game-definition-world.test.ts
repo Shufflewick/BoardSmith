@@ -1,34 +1,39 @@
 /**
- * #304: `GameDefinition.world` WAS THE DELETED ROUND SHAPE, AND STILL IS UNTIL
- * THIS FILE IS GREEN.
+ * #165: `GameDefinition.world` IS TYPED BY `boardsmith/world`, AND THAT
+ * DELIBERATELY REVERSES #304.
  *
- * The field required `resolveAction`, accepted `enrolAction`, and its comment
- * advertised a `boardsmith dev --kind resolution` flag. All three belonged to
- * the round architecture, which was deleted: `src/cli/commands/validate.ts`
- * refuses both keys in `boardsmith.json` with a did-you-mean, and the flag is
- * recorded as removed in `docs/api/engine-contract.json`. The live block a
- * world bundle exports is a different thing entirely, and the platform's world
- * runner is what calls it.
+ * #304 made the field an open record and this file held it that way, on an
+ * argument that was true at the time: the engine neither called nor validated a
+ * member of the block, so any shape declared here would have been a claim it
+ * could not keep. What changed is the premise. The world runtime is in this
+ * repository now (`src/world/`), so the shape is not a claim about somebody
+ * else's runner -- it IS the runner's declaration, and `src/world/definition.ts`
+ * reads the block and refuses a bundle that gets it wrong.
  *
- * So the two facts this file holds are:
+ * That is the whole reason the reversal is right rather than a relapse. The
+ * open record had a cost, and it was paid three times over: example-rts,
+ * example-mud and LacunaExpanse each hand-copied the contract types because
+ * there was nothing to import, and three copies of a contract is three places
+ * for it to drift. One declaration both sides import cannot.
  *
- *   1. The round shape is gone from the type, comment and all.
- *   2. The type accepts what a world bundle really exports. The annotation
- *      below is the whole test for that: it is checked by `tsc -p
- *      tsconfig.json` (docs/typecheck.md), and before the fix it failed with
- *      "Property 'resolveAction' is missing" -- which is what an author who
- *      annotated their own definition was told.
+ * What this file holds:
  *
- * What this file deliberately does NOT do is assert the block's members. The
- * platform owns that contract and validates it on a world's first wake; a
- * second copy here would be free to drift, and drifting is precisely what the
- * shape this replaces did for two architectures.
+ *   1. The deleted ROUND shape is still gone -- `resolveAction`, `enrolAction`,
+ *      and the removed `--kind resolution` flag. That regression is what #304
+ *      was, and nothing here should bring it back.
+ *   2. A real world bundle's definition ANNOTATES. The declaration below is
+ *      checked by `tsc -p tsconfig.json` (docs/typecheck.md); before #304 it
+ *      failed with "Property 'resolveAction' is missing", and after #165 it
+ *      must go on compiling against the library's own type.
+ *   3. The field is typed by `boardsmith/world` and by nothing else. A second
+ *      copy of the shape in this file would be exactly the drift the reversal
+ *      exists to end.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { Game, Player } from '../engine/index.js';
+import { Game, Player, type GameElement } from '../engine/index.js';
 import type { GameDefinition } from './types.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -47,8 +52,14 @@ const definition: GameDefinition = {
   minPlayers: 2,
   maxPlayers: 40,
   world: {
-    commands: { walk: () => undefined },
-    genesis: () => undefined,
+    commands: {
+      walk: {
+        args: [{ name: 'to', prompt: 'Where to?', kind: 'text' }],
+        partitions: (args) => [`room:${String(args.to)}`],
+        run: () => [],
+      },
+    },
+    genesis: () => ({}) as Record<string, GameElement>,
     view: () => [] as readonly string[],
   },
 };
@@ -82,34 +93,34 @@ describe('#304: the round-world shape is gone from GameDefinition', () => {
   it('sends the reader to the document that owns the contract', () => {
     expect(
       types,
-      'The engine does not define the world block, so the type has to name who does.',
+      'A world author needs to be told where the authoring guide is.',
     ).toContain('docs/persistent-worlds.md');
   });
 });
 
 /**
- * The comment on that field says the engine never reads the block. That is a
- * claim about this repo, so it is checked against this repo rather than
- * trusted: the moment something here reads `gameDefinition.world`, the engine
- * has taken a share of a contract it does not document, and the comment is
- * false.
+ * #165: ONE DECLARATION, IMPORTED. The field's type must come from the world
+ * module, because the alternative -- a shape restated in this file -- is the
+ * second authority that #304 was right to refuse and that the extraction exists
+ * to make unnecessary.
  */
-describe('#304: nothing in the engine reads the world block it carries', () => {
-  const sources = readdirSync(SRC, { recursive: true, encoding: 'utf-8' })
-    .filter((path) => path.endsWith('.ts') && !path.endsWith('.test.ts'))
-    .filter((path) => !path.includes('__fixtures__'));
-
-  it('reads the source tree it thinks it is reading', () => {
-    expect(sources.length).toBeGreaterThan(200);
+describe('#165: the world block is typed by boardsmith/world', () => {
+  it('imports the shape rather than restating it', () => {
+    expect(
+      /import type \{ WorldDefinition \} from '\.\.\/world\/definition\.js';/.test(types),
+      'GameDefinition.world must be typed by the module that runs it. A local copy of the ' +
+        'shape is a second authority, free to drift from the runtime that enforces it.',
+    ).toBe(true);
+    expect(types).toContain('world?: WorldDefinition;');
   });
 
-  it.each(sources)('%s reads no world block', (relative) => {
-    const code = readFileSync(join(SRC, relative), 'utf-8');
+  it('declares no world shape of its own', () => {
+    // The open record #304 introduced, and any successor to it. A block typed
+    // as an untyped record is the state this ticket reverses.
+    expect(types).not.toContain('PlatformWorldBlock');
     expect(
-      /\b(gameDefinition|definition|gameDef)\.world\b/.test(code),
-      `${relative} reads the game definition's world block. Nothing in this engine may: ` +
-        'its members are the hosting platform\'s to call, and typing them here would create ' +
-        'a second authority for a contract this repo cannot enforce.',
+      /world\?: Readonly<Record<string, unknown>>/.test(types),
+      'An open record here would put the contract back where three games had to hand-copy it.',
     ).toBe(false);
   });
 });

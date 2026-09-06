@@ -1,0 +1,507 @@
+// Issue #37 item 3: `ctx.schedule()`, the parent's half.
+//
+// §7 puts this in the PARENT so "the abusive path cannot reach the queue
+// rather than failing a check". These cases are about that sentence: what a
+// bundle can ask for, what it cannot cause, and what the parent stamps rather
+// than believes.
+import { describe, expect, it } from "vitest";
+import {
+  WORLD_OWNER,
+  planSchedules,
+  type PlannedEvent,
+  type ScheduleRequest,
+} from "./schedule-api.js";
+import { worldBudgets } from "./budgets.js";
+
+// The ceilings this file plans against. Passed into every plan rather than read
+// from a module constant, which is what lets a laptop host and a hosting
+// platform run different numbers and still be the same world.
+const BUDGETS = worldBudgets();
+const WORLD_MAX_KEYED_PENDING_PER_PLAYER = BUDGETS.maxKeyedPendingPerPlayer;
+const WORLD_MAX_PENDING_EVENTS = BUDGETS.maxPendingEvents;
+const WORLD_MAX_SCHEDULES_PER_COMMAND = BUDGETS.maxSchedulesPerCommand;
+const WORLD_MAX_UNKEYED_PENDING_PER_PLAYER = BUDGETS.maxUnkeyedPendingPerPlayer;
+
+const ARRIVED = 1_000_000;
+
+/**
+ * Plan against a queue held as a plain array.
+ *
+ * `planSchedules` is told ABOUT the queue rather than handed it (#74: one
+ * storage key per event, so there is no whole-queue value and reading one
+ * would be O(queue) per command). This is the parent's two point-addressed
+ * lookups, done the slow obvious way over an array -- which is exactly what a
+ * test wants, because it makes the queue visible.
+ *
+ * An event's own id stands in for its storage key here: the only thing
+ * `replaced` is ever used for is naming the row to delete.
+ */
+function plan(
+  queue: readonly PlannedEvent[],
+  requests: readonly ScheduleRequest[],
+  owner: string | null = "p1",
+  /** What the world holds that this array does not -- the only way to reach a
+   *  ceiling no test can afford to build event by event. */
+  over: Partial<{ worldPending: number }> = {},
+) {
+  const charged = owner ?? WORLD_OWNER;
+  return planSchedules(requests, {
+    owner,
+    budgets: BUDGETS,
+    arrivedAt: ARRIVED,
+    nextSeq: queue.length,
+    mintId: (index) => `evt-${queue.length + index}`,
+    allowance: {
+      unkeyed: queue.filter((e) => e.owner === charged && e.key === undefined).length,
+      keys: queue.flatMap((e) => (e.owner === charged && e.key !== undefined ? [e.key] : [])),
+      worldPending: queue.length,
+      ...over,
+    },
+    replaces: (key) => queue.find((e) => e.owner === charged && e.key === key)?.id,
+  });
+}
+
+/** The queue after a plan lands: displaced rows out, planned events in. */
+function applied(
+  queue: readonly PlannedEvent[],
+  result: ReturnType<typeof plan>,
+): readonly PlannedEvent[] {
+  if (!result.ok) return queue;
+  return [
+    ...queue.filter((e) => !result.replaced.includes(e.id)),
+    ...result.events,
+  ];
+}
+
+/** `n` distinct one-shot events already pending for `owner`. */
+function unkeyed(owner: string, n: number): PlannedEvent[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `old-${owner}-${i}`,
+    due: ARRIVED,
+    seq: i,
+    attempts: 0,
+    command: "tick",
+    args: {},
+    owner,
+  }));
+}
+
+describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
+  it("schedules from the command's ARRIVAL, not from wall clock", () => {
+    // A world that woke late must not schedule everything late in turn, or a
+    // parked world drifts further from its own clock at every wake. Same
+    // reason a drained event's handler receives its scheduled `due`.
+    const result = plan([], [{ delayMs: 5_000, command: "tick", args: { tick: 1 } }]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events[0]!.due).toBe(ARRIVED + 5_000);
+  });
+
+  it("STAMPS the owner from the acting player -- a request cannot claim one", () => {
+    // The cap is decorative if a bundle can charge its events to somebody
+    // else's budget, so the owner is never taken from the request. There is no
+    // field on `ScheduleRequest` to put one in, and this is that as a fact.
+    const result = plan([], [{ delayMs: 1, command: "tick" }], "p2");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events[0]!.owner).toBe("p2");
+  });
+
+  it("charges a due event's own schedules to the WORLD, not to whoever acted last", () => {
+    // A scheduled event has no acting player. Leaving it unowned would leave
+    // it uncapped, and a recurring handler re-arming itself without a key is
+    // exactly the shape that would then grow the queue forever.
+    const result = plan([], [{ delayMs: 1, command: "tick" }], null);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events[0]!.owner).toBe(WORLD_OWNER);
+    // Unforgeable: no platform user id contains a colon, so a player can never
+    // be charged for the world's events nor the world for theirs.
+    expect(WORLD_OWNER).toContain(":");
+  });
+
+  it("REFUSES a player's 33rd unkeyed event, and names the three ways forward", () => {
+    // #35's single refusal, stated as "a player's 33rd unkeyed pending event".
+    const full = unkeyed("p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER);
+    const result = plan(full, [{ delayMs: 1, command: "tick" }]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.message).toContain("give the schedule a KEY");
+    expect(result.refusal.message).toContain("cancel one");
+    expect(result.refusal.message).toContain("LAZY");
+  });
+
+  it("admits the 32nd, so the cap is the 33rd and not the 32nd", () => {
+    const nearlyFull = unkeyed("p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER - 1);
+    expect(plan(nearlyFull, [{ delayMs: 1, command: "tick" }]).ok).toBe(true);
+  });
+
+  it("counts the cap PER PLAYER, so one player cannot exhaust another's budget", () => {
+    // The abuse this shape exists to make impossible: a queue full of p2's
+    // events must not refuse p1.
+    const full = unkeyed("p2", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER);
+    expect(plan(full, [{ delayMs: 1, command: "tick" }], "p1").ok).toBe(true);
+  });
+
+  it("a KEYED schedule can never hit the cap, because it replaces rather than adds", () => {
+    // The exemption the refusal's first suggestion depends on. Scheduling the
+    // same key many times over a full queue must always succeed and must never
+    // grow it.
+    const full = unkeyed("p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER);
+    let queue: readonly PlannedEvent[] = full;
+    for (let i = 0; i < 10; i++) {
+      const result = plan(queue, [{ delayMs: i, key: "respawn", command: "respawn", args: { i } }]);
+      expect(result.ok).toBe(true);
+      queue = applied(queue, result);
+    }
+
+    expect(queue).toHaveLength(WORLD_MAX_UNKEYED_PENDING_PER_PLAYER + 1);
+    const keyed = queue.filter((e) => e.key === "respawn");
+    expect(keyed).toHaveLength(1);
+    // The LATEST wins: an upsert replaces, so the pending event is the last one asked for.
+    expect(keyed[0]!.args).toEqual({ i: 9 });
+  });
+
+  it("a key is scoped to its owner: two players may hold the same key", () => {
+    const mine = plan([], [{ delayMs: 1, key: "respawn", command: "tick", args: { tag: "p1" } }], "p1");
+    expect(mine.ok).toBe(true);
+    if (!mine.ok) return;
+
+    const queue = applied([], mine);
+    const theirs = plan(queue, [{ delayMs: 1, key: "respawn", command: "tick", args: { tag: "p2" } }], "p2");
+    expect(theirs.ok).toBe(true);
+    if (!theirs.ok) return;
+    // Nothing displaced: a key is scoped to its owner, so p2's respawn is not
+    // p1's and both stay pending.
+    expect(theirs.replaced).toEqual([]);
+    expect(applied(queue, theirs)).toHaveLength(2);
+  });
+
+  it("REFUSES the WHOLE batch when one request is refused", () => {
+    // A command whose third schedule was refused must not leave the first two
+    // behind: the handler ran to completion believing all three were taken, and
+    // a world holding two of them is a state the bundle never anticipated.
+    const nearlyFull = unkeyed("p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER - 1);
+    const result = plan(nearlyFull, [
+      { delayMs: 1, command: "tick", args: { tag: "first" } },
+      { delayMs: 2, command: "tick", args: { tag: "second" } },
+    ]);
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("REFUSES a negative or non-finite delay, and says what to do instead", () => {
+    const bad = plan([], [{ delayMs: -1, command: "tick" }]);
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    expect(bad.refusal.message).toContain("zero or more milliseconds");
+    // The code, not the prose, is what the park ladder reads.
+    expect(bad.refusal.code).toBe("invalid-schedule-delay");
+    expect(bad.refusal.owner).toBe("game");
+    expect(plan([], [{ delayMs: Number.NaN, command: "tick" }]).ok).toBe(false);
+    // Zero is legal: "now" is a delay, not an error.
+    expect(plan([], [{ delayMs: 0, command: "tick" }]).ok).toBe(true);
+  });
+
+  it("carries a RECURRENCE's interval into the stored event (#127)", () => {
+    // The whole shape change. Without the interval on the row the parent holds
+    // one due time and cannot tell a tick that fell three days behind from 73
+    // unrelated one-shots, which is why the catch-up had no caller.
+    const result = plan([], [
+      { delayMs: 1000, everyMs: 60_000, key: "tick", command: "collectIncome" },
+      { delayMs: 1000, command: "resolveRaid" },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events[0]!.everyMs).toBe(60_000);
+    // A one-shot carries no interval at all rather than a zero one: absent is
+    // the shape `occurrencesDue` branches on.
+    expect(result.events[1]!.everyMs).toBeUndefined();
+    expect("everyMs" in result.events[1]!).toBe(false);
+  });
+
+  it("REFUSES a non-positive or non-finite interval (#127)", () => {
+    // A recurrence with no gap is a wake that re-arms instantly, forever. It is
+    // refused here so it lands in the handler like every other schedule
+    // refusal, rather than as a throw out of `catchUpPlan` on some later drain
+    // -- which would be a platform-owned failure climbing the park ladder for a
+    // bundle's typo.
+    const bad = plan([], [{ delayMs: 1000, everyMs: 0, command: "tick" }]);
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    expect(bad.refusal.code).toBe("invalid-schedule-interval");
+    expect(bad.refusal.owner).toBe("game");
+    expect(bad.refusal.message).toContain("positive number of");
+    expect(plan([], [{ delayMs: 1000, everyMs: -1, command: "tick" }]).ok).toBe(false);
+    expect(plan([], [{ delayMs: 1000, everyMs: Number.NaN, command: "tick" }]).ok).toBe(false);
+  });
+
+  it("gives every event a distinct seq, so ties within a millisecond are ordered", () => {
+    // `nextDueBatch` orders on (due, seq) precisely so a world's behaviour does
+    // not depend on how storage returns ties. Two events scheduled with the
+    // same delay in one command must therefore differ.
+    const result = plan([], [
+      { delayMs: 10, command: "tick", args: { tag: "a" } },
+      { delayMs: 10, command: "tick", args: { tag: "b" } },
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [a, b] = result.events;
+    expect(a!.due).toBe(b!.due);
+    expect(a!.seq).not.toBe(b!.seq);
+  });
+
+  it("leaves the queue untouched when a command schedules nothing", () => {
+    const existing = unkeyed("p1", 3);
+    const result = plan(existing, []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events).toEqual([]);
+    expect(result.replaced).toEqual([]);
+    expect(applied(existing, result)).toEqual(existing);
+  });
+
+  it("NAMES the row a keyed upsert displaces, so the queue cannot hold two", () => {
+    // "Its count never grows" is what exempts a keyed schedule from the cap. A
+    // plan that added beside its predecessor instead of naming it for deletion
+    // would make that exemption a lie -- and the caller cannot work the row out
+    // for itself, because the old event is under a key built from the `due` it
+    // no longer has.
+    const first = plan([], [{ delayMs: 1, key: "respawn", command: "tick", args: { tag: "old" } }]);
+    const queue = applied([], first);
+    const second = plan(queue, [{ delayMs: 9, key: "respawn", command: "tick", args: { tag: "new" } }]);
+
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.replaced).toEqual([queue[0]!.id]);
+    expect(applied(queue, second)).toHaveLength(1);
+  });
+
+  it("upserts a key against ITSELF within one command", () => {
+    // Two requests under one key in a single handler. The second replaces the
+    // first, which has not been written yet -- an append would leave the world
+    // holding two events for a key that promises one.
+    const result = plan([], [
+      { delayMs: 1, key: "respawn", command: "tick", args: { tag: "first" } },
+      { delayMs: 2, key: "respawn", command: "tick", args: { tag: "second" } },
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]!.args).toEqual({ tag: "second" });
+  });
+});
+
+/**
+ * Issue #89: THE ENVELOPE IS NAMED ON THE REQUEST, and `payload` is gone.
+ *
+ * `ScheduleRequest.payload` documented itself as "the game's own payload, the
+ * platform never parses inside it" while `world-session.ts:runEvent` read
+ * `payload.command` and `payload.args` out of it. A payload that named no
+ * command bought a wake and did nothing at all -- no refusal, no log, and the
+ * queue advanced. The type now says what the platform always decided.
+ */
+describe("#89 — a scheduled event names its command on the request", () => {
+  it("carries the command and its args as named fields", () => {
+    const result = plan([], [{ delayMs: 5_000, command: "resolveRaid", args: { raid: "north" } }]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events[0]!.command).toBe("resolveRaid");
+    expect(result.events[0]!.args).toEqual({ raid: "north" });
+  });
+
+  it("REFUSES a request that names no command, at the offending line", () => {
+    // The Pit of Success half. A game author who writes
+    // `schedule({ delayMs, raid: raid.name })` used to buy a wake that did
+    // nothing; now `ctx.schedule()` throws inside the handler, the command
+    // unwinds, and the player is told over a world that did not change.
+    const result = plan(
+      [],
+      [{ delayMs: 1 } as unknown as ScheduleRequest],
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("invalid-schedule-command");
+    expect(result.refusal.message).toContain("command");
+  });
+
+  it("refuses an empty command name too", () => {
+    const result = plan([], [{ delayMs: 1, command: "" }]);
+    expect(result.ok).toBe(false);
+  });
+
+  it("defaults absent args to an empty object rather than leaving them undefined", () => {
+    // A command that takes no arguments is the common case, and a handler must
+    // not have to tell "no args" from "args I could not see".
+    const result = plan([], [{ delayMs: 1, command: "tick" }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events[0]!.args).toEqual({});
+  });
+});
+
+/** `n` distinct KEYED events already pending for `owner`, keyed `k-0`.. */
+function keyed(owner: string, n: number): PlannedEvent[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `key-${owner}-${i}`,
+    due: ARRIVED,
+    seq: i,
+    attempts: 0,
+    command: "tick",
+    args: {},
+    owner,
+    key: `k-${i}`,
+  }));
+}
+
+describe("#105 — a key is not a way around the cap", () => {
+  it("REFUSES a NEW key past the per-owner keyed cap", () => {
+    // The hole this issue is about: `admitSchedule` returned early for every
+    // request carrying a key, so a handler minting `raid-1`, `raid-2`,
+    // `raid-3` grew the queue forever. "Its count never grows" is true per
+    // key and false per owner.
+    const full = keyed("p1", WORLD_MAX_KEYED_PENDING_PER_PLAYER);
+    const result = plan(full, [{ delayMs: 1, key: "brand-new", command: "tick" }]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-key-cap");
+    // GAME-owned: a bundle's own doing, so it dead-letters rather than
+    // climbing the park ladder and killing a 500-player world.
+    expect(result.refusal.owner).toBe("game");
+    expect(result.refusal.message).toContain(String(WORLD_MAX_KEYED_PENDING_PER_PLAYER));
+    expect(result.refusal.message).toContain("REUSE a key you already hold");
+  });
+
+  it("admits the LAST key under the cap, so the cap is the 65th and not the 64th", () => {
+    const nearlyFull = keyed("p1", WORLD_MAX_KEYED_PENDING_PER_PLAYER - 1);
+    expect(plan(nearlyFull, [{ delayMs: 1, key: "one-more", command: "tick" }]).ok).toBe(true);
+  });
+
+  it("still admits an UPSERT of a key already pending, at the cap", () => {
+    // The whole point of the exemption, kept: a keyed schedule under a key the
+    // owner already holds replaces rather than adds, so it cannot grow
+    // anything and must never be refused. A cap that refused it would break
+    // every game the docs steer toward keys.
+    const full = keyed("p1", WORLD_MAX_KEYED_PENDING_PER_PLAYER);
+    const result = plan(full, [{ delayMs: 5, key: "k-0", command: "tick", args: { again: true } }]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.replaced).toEqual(["key-p1-0"]);
+    expect(applied(full, result)).toHaveLength(WORLD_MAX_KEYED_PENDING_PER_PLAYER);
+  });
+
+  it("counts distinct keys PER OWNER, so one player cannot exhaust another's", () => {
+    const full = keyed("p2", WORLD_MAX_KEYED_PENDING_PER_PLAYER);
+    expect(plan(full, [{ delayMs: 1, key: "mine", command: "tick" }], "p1").ok).toBe(true);
+  });
+
+  it("counts the keys THIS COMMAND has already minted, not just the durable ones", () => {
+    // Requests are not durable until the parent writes them, so a command that
+    // asked for the cap's worth in one breath would otherwise land the lot.
+    const one = keyed("p1", WORLD_MAX_KEYED_PENDING_PER_PLAYER - 1);
+    const result = plan(one, [
+      { delayMs: 1, key: "new-a", command: "tick" },
+      { delayMs: 2, key: "new-b", command: "tick" },
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-key-cap");
+  });
+});
+
+describe("#105 — a command may not ask for an unbounded number of events", () => {
+  it("REFUSES a batch past the per-command cap, which only UPSERTS can reach (#170)", () => {
+    // `applySchedules` wrote every request in one loop with no ceiling: a
+    // command answering 50,000 requests was 100,000 storage puts inside one
+    // message. The batch cap is the bound on that WALK, and upserts are what
+    // make it its own cap rather than a restatement of the holding caps: an
+    // upsert grows nothing the depth caps measure, so a handler looping
+    // thousands of times over one held key is bounded by this and nothing
+    // else.
+    const held = keyed("p1", 1);
+    const requests = Array.from({ length: WORLD_MAX_SCHEDULES_PER_COMMAND + 1 }, () => ({
+      delayMs: 1,
+      key: "k-0",
+      command: "tick",
+    }));
+    const result = plan(held, requests);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-batch-cap");
+    expect(result.refusal.owner).toBe("game");
+    expect(result.refusal.message).toContain(String(WORLD_MAX_SCHEDULES_PER_COMMAND));
+  });
+
+  it("admits a batch exactly AT the per-command cap", () => {
+    const held = keyed("p1", 1);
+    const requests = Array.from({ length: WORLD_MAX_SCHEDULES_PER_COMMAND }, () => ({
+      delayMs: 1,
+      key: "k-0",
+      command: "tick",
+    }));
+    expect(plan(held, requests).ok).toBe(true);
+  });
+
+  it("admits the ENCOURAGED shape whole: a keyed setup batch past the unkeyed cap (#170)", () => {
+    // The cap used to be derived from the unkeyed holding cap (32), so a setup
+    // command arming 40 named building timers -- one key per NAMED thing, the
+    // exact shape the platform steers authors to -- was refused at request 33
+    // with advice to use stable keys: what its author had already done. The
+    // batch cap now agrees with the keyed holding cap the requests are checked
+    // against anyway.
+    const requests = Array.from({ length: 40 }, (_, i) => ({
+      delayMs: 1,
+      key: `building-${i}`,
+      command: "tick",
+    }));
+    expect(plan([], requests).ok).toBe(true);
+  });
+});
+
+describe("#105 — the per-world ceiling is the backstop", () => {
+  it("REFUSES an event once the WORLD is at its ceiling, whoever asks", () => {
+    // Below the sum of the per-owner caps deliberately: a ceiling only a
+    // fully-seated world of maxed-out players could reach is a ceiling that
+    // never trips.
+    const result = plan([], [{ delayMs: 1, command: "tick" }], "p1", {
+      worldPending: WORLD_MAX_PENDING_EVENTS,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-world-cap");
+    expect(result.refusal.owner).toBe("game");
+    expect(result.refusal.message).toContain(String(WORLD_MAX_PENDING_EVENTS));
+  });
+
+  it("still admits an UPSERT at the ceiling, because it replaces rather than adds", () => {
+    // The ceiling counts the queue, and an upsert leaves it exactly as deep as
+    // it was. Refusing it would strand a full world with no way to re-arm the
+    // timers it already holds.
+    const held = keyed("p1", 1);
+    const result = plan(held, [{ delayMs: 5, key: "k-0", command: "tick" }], "p1", {
+      worldPending: WORLD_MAX_PENDING_EVENTS,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("admits the event that brings the world exactly TO the ceiling", () => {
+    const result = plan([], [{ delayMs: 1, command: "tick" }], "p1", {
+      worldPending: WORLD_MAX_PENDING_EVENTS - 1,
+    });
+    expect(result.ok).toBe(true);
+  });
+});
