@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import type { GameDefinition } from '../../session/index.js';
 import { Game, Player } from '../../engine/index.js';
-import { deriveManifest } from './build.js';
+import { deriveManifest, resolveUiBuild } from './build.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -281,5 +281,40 @@ describe('deriveManifest — the world UI flag', () => {
     expect(() =>
       deriveManifest({ name: 'fixture' }, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: true }),
     ).toThrow(/world\.html/);
+  });
+});
+
+
+/**
+ * BoardSmith #168: a project may have either UI entry point, or both.
+ *
+ * Naming an input that does not exist fails the build with rollup's
+ * `UNRESOLVED_ENTRY` and a stack trace, which is not a sentence anybody can act
+ * on. The world direction was the one that broke: `world.html` was named only
+ * when it existed, but `index.html` was assumed always to, so the first
+ * world-only project ever scaffolded could not be built at all.
+ */
+describe('resolveUiBuild — which surfaces a project has (#168)', () => {
+  it('leaves a table game on Vite\'s own default input, unchanged', () => {
+    expect(resolveUiBuild('/game', true, false)).toEqual({ surfaces: '' });
+  });
+
+  it('names both entries for a game that has a table and a world', () => {
+    expect(resolveUiBuild('/game', true, true)).toEqual({
+      surfaces: 'table and world',
+      input: { index: join('/game', 'index.html'), world: join('/game', 'world.html') },
+    });
+  });
+
+  it('names only world.html for a world with no table half', () => {
+    expect(resolveUiBuild('/game', false, true)).toEqual({
+      surfaces: 'world',
+      input: { world: join('/game', 'world.html') },
+    });
+  });
+
+  it('refuses a project with no surface at all, in a sentence naming both entries', () => {
+    expect(() => resolveUiBuild('/game', false, false)).toThrow(/index\.html/);
+    expect(() => resolveUiBuild('/game', false, false)).toThrow(/world\.html/);
   });
 });

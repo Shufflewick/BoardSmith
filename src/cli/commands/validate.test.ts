@@ -16,6 +16,7 @@ import {
   validateAssetPaths,
   parseProgramFiles,
   findUntypedTestFiles,
+  validateRequiredFiles,
 } from './validate.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 
@@ -625,5 +626,64 @@ describe('validate.ts test-type-coverage', () => {
         '../elsewhere/a.test.ts',
       ]);
     });
+  });
+});
+
+
+/**
+ * BoardSmith #168: a world and a table have different entry points.
+ *
+ * `Required Files` demanded `src/ui/App.vue` and `src/ui/uis.ts` of every
+ * project, so the first world-only project ever scaffolded could not pass
+ * validate -- and the only way to make it pass would have been to give it the
+ * vestigial table half #174 is taking out of the worlds that have one.
+ */
+describe('validateRequiredFiles — a world has a different entry point (#168)', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'bs-required-files-'));
+    mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
+    mkdirSync(join(dir, 'src', 'ui'), { recursive: true });
+    for (const file of ['boardsmith.json', 'package.json']) writeFileSync(join(dir, file), '{}');
+    for (const file of ['index.ts', 'game.ts']) writeFileSync(join(dir, 'src', 'rules', file), '');
+  });
+
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  function writeTableUi(): void {
+    writeFileSync(join(dir, 'src', 'ui', 'App.vue'), '');
+    writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), '');
+  }
+
+  function writeWorldUi(): void {
+    writeFileSync(join(dir, 'world.html'), '');
+    writeFileSync(join(dir, 'src', 'world-main.ts'), '');
+    writeFileSync(join(dir, 'src', 'ui', 'WorldApp.vue'), '');
+    writeFileSync(join(dir, 'src', 'rules', 'world.ts'), '');
+  }
+
+  it('passes a table game with the table entry point', async () => {
+    writeTableUi();
+    expect((await validateRequiredFiles(dir, false)).passed).toBe(true);
+  });
+
+  it('passes a world with the world entry point and no table half', async () => {
+    writeWorldUi();
+    expect((await validateRequiredFiles(dir, true)).passed).toBe(true);
+  });
+
+  it('fails a world that declares one and has no world surface', async () => {
+    writeTableUi();
+    const result = await validateRequiredFiles(dir, true);
+    expect(result.passed).toBe(false);
+    expect(result.details).toContain('world.html');
+    expect(result.details).toContain('src/rules/world.ts');
+  });
+
+  it('still fails a table game missing its UI registry', async () => {
+    const result = await validateRequiredFiles(dir, false);
+    expect(result.passed).toBe(false);
+    expect(result.details).toContain('src/ui/uis.ts');
   });
 });

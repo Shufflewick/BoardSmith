@@ -12,6 +12,22 @@ import {
   toDisplayName,
   type ProjectConfig,
 } from '../lib/project-scaffold.js';
+import {
+  WORLD_SCAFFOLD_SEATS,
+  generateWorldA11yTestTs,
+  generateWorldAppVue,
+  generateWorldBoardVue,
+  generateWorldElementsTs,
+  generateWorldGameTs,
+  generateWorldHtml,
+  generateWorldMainTs,
+  generateWorldReadme,
+  generateWorldRulesIndexTs,
+  generateWorldTestTs,
+  generateWorldTs,
+  generateWorldUiIndexTs,
+  worldScaffoldStatus,
+} from '../lib/world-scaffold.js';
 import { ingestArchiveCommand } from './ingest-archive.js';
 import { installIngestHook } from '../lib/ingest-hook.js';
 
@@ -41,6 +57,29 @@ export interface InitOptions {
    * missing archive is always a deliberate choice rather than an omission nobody noticed.
    */
   withoutRulebook?: boolean;
+  /**
+   * Scaffold a PERSISTENT WORLD rather than a table game.
+   *
+   * A FLAG AND NOT A PROMPT, for the same reason `--rulebook` is one: almost
+   * nothing that runs `boardsmith init` is a person at a terminal. The bs-
+   * skills invoke it from a subagent, CI invokes it with no TTY, and a prompt
+   * in either place either hangs or needs a silent default -- which is a
+   * fallback, and a fallback here decides the shape of somebody's whole game.
+   * A flag is also the only form of the decision that survives: it is in the
+   * shell history and in the README the scaffold writes, where a prompt's
+   * answer is gone the moment the terminal scrolls.
+   *
+   * It is not the same kind of decision as `--rulebook`, which is REQUIRED
+   * because omitting it was silently wrong -- the archive was simply missing
+   * and nobody found out until a later verify pass. Omitting `--world` is
+   * loudly wrong instead: you get a card game, and you can see that you did.
+   * So it takes a default, and the default is the game most people are making.
+   *
+   * A world is what a game IS, so the flag writes the `world` block into
+   * `boardsmith.json` and is never needed again -- the block is the single
+   * declaration every later command reads.
+   */
+  world?: boolean;
 }
 
 export async function initCommand(name: string, options: InitOptions = {}): Promise<void> {
@@ -89,14 +128,24 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     }
 
     // Create project config
-    const config: ProjectConfig = {
-      name,
-      displayName: toDisplayName(name),
-      description: 'A fun game for 2-4 players',
-      playerCount: { min: 2, max: 4 },
-      audience: 'casual',
-      tags: ['card-game'],
-    };
+    const config: ProjectConfig = options.world
+      ? {
+          name,
+          displayName: toDisplayName(name),
+          description: 'A persistent world: a place that keeps going while nobody is looking.',
+          playerCount: { min: 1, max: WORLD_SCAFFOLD_SEATS },
+          audience: 'casual',
+          tags: ['persistent-world'],
+          world: { maxPlayers: WORLD_SCAFFOLD_SEATS },
+        }
+      : {
+          name,
+          displayName: toDisplayName(name),
+          description: 'A fun game for 2-4 players',
+          playerCount: { min: 2, max: 4 },
+          audience: 'casual',
+          tags: ['card-game'],
+        };
 
     // Generate scaffold files
     const scaffoldFiles = generateScaffoldFiles(config, projectPath);
@@ -106,11 +155,31 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
 
     // Generate game-specific files
     const pascal = toPascalCase(name);
-    await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateGameTs(pascal));
-    await writeFile(join(projectPath, 'src', 'rules', 'elements.ts'), generateElementsTs());
-    await writeFile(join(projectPath, 'src', 'rules', 'actions.ts'), generateActionsTs(pascal));
-    await writeFile(join(projectPath, 'src', 'rules', 'flow.ts'), generateFlowTs(pascal));
-    await writeFile(join(projectPath, 'tests', 'game.test.ts'), generateTestTs(pascal));
+    if (options.world) {
+      // A world has no actions and no flow: its verbs are a command table and
+      // its clock is a schedule, so there is nothing for either file to hold.
+      await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateWorldGameTs(pascal));
+      await writeFile(join(projectPath, 'src', 'rules', 'elements.ts'), generateWorldElementsTs());
+      await writeFile(join(projectPath, 'src', 'rules', 'world.ts'), generateWorldTs(pascal));
+      await writeFile(join(projectPath, 'src', 'rules', 'index.ts'), generateWorldRulesIndexTs(config));
+      await writeFile(join(projectPath, 'tests', 'world.test.ts'), generateWorldTestTs());
+      await writeFile(join(projectPath, 'tests', 'a11y.example.test.ts'), generateWorldA11yTestTs());
+      await writeFile(join(projectPath, 'world.html'), generateWorldHtml(config));
+      await writeFile(join(projectPath, 'src', 'world-main.ts'), generateWorldMainTs());
+      await writeFile(join(projectPath, 'src', 'ui', 'index.ts'), generateWorldUiIndexTs());
+      await writeFile(join(projectPath, 'src', 'ui', 'WorldApp.vue'), generateWorldAppVue(config));
+      await writeFile(
+        join(projectPath, 'src', 'ui', 'components', 'WorldBoard.vue'),
+        generateWorldBoardVue(),
+      );
+      await writeFile(join(projectPath, 'README.md'), generateWorldReadme(config));
+    } else {
+      await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateGameTs(pascal));
+      await writeFile(join(projectPath, 'src', 'rules', 'elements.ts'), generateElementsTs());
+      await writeFile(join(projectPath, 'src', 'rules', 'actions.ts'), generateActionsTs(pascal));
+      await writeFile(join(projectPath, 'src', 'rules', 'flow.ts'), generateFlowTs(pascal));
+      await writeFile(join(projectPath, 'tests', 'game.test.ts'), generateTestTs(pascal));
+    }
 
     // Log if using local dev
     const deps = getDependencyPaths(projectPath);
@@ -177,7 +246,26 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       });
     }
 
-    console.log(`
+    if (options.world) {
+      // THE HONEST FIRST COMMAND. `boardsmith dev` does not run a world yet
+      // (BoardSmith #167), so it is not what a world project is sent to first;
+      // the status below says so in the same breath, and the README the
+      // scaffold wrote keeps saying it after this scrolls away.
+      console.log(`
+${chalk.cyan('Next steps:')}
+
+  cd ${name}
+  npm install
+  boardsmith test
+
+${worldScaffoldStatus()
+  .map((line) => chalk.dim(line))
+  .join('\n')}
+
+  ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
+`);
+    } else {
+      console.log(`
 ${chalk.cyan('Next steps:')}
 
   cd ${name}
@@ -194,6 +282,7 @@ ${chalk.cyan('Everything else runs through the same CLI:')}
   ${chalk.dim('boardsmith validate')}  ${chalk.dim('- run pre-publish checks')}
   ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
 `);
+    }
   } catch (error) {
     spinner.fail(chalk.red('Failed to create project'));
     console.error(error);

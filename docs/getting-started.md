@@ -58,6 +58,31 @@ my-game/
     └── game.test.ts         # Game tests
 ```
 
+#### Starting a persistent world instead
+
+A **persistent world** is the other backend: named partitions rather than a
+whole resident tree, a checkpoint of what a command dirtied rather than a
+snapshot per action, and a clock that acts on its own rather than a turn order.
+It is what a game IS, not something a run selects, so it is chosen once, when
+the project is created:
+
+```bash
+npx boardsmith init my-world --world
+cd my-world
+npm install
+boardsmith test
+```
+
+That scaffolds the `world` block in `boardsmith.json`, a `src/rules/world.ts`
+whose contract types are imported from `boardsmith/world` (never hand-copied), a
+`world.html` mounting `WorldShell`, and a `tests/world.test.ts` that drives your
+world through the same library a host runs — genesis, a command, the clock and
+one seat's view, with no host and no network.
+
+`boardsmith dev` does not run a world yet; that is BoardSmith #167. The
+scaffolded project's README says exactly what does and does not work today, and
+[Persistent worlds](./persistent-worlds.md) is the authoring guide.
+
 ### 2. Start Development Server
 
 ```bash

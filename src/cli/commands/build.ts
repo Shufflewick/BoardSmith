@@ -168,6 +168,47 @@ async function buildLibrary(repoRoot: string): Promise<void> {
   console.log(chalk.dim('  Inside this repo the CLI always runs from source, so you rarely need it.\n'));
 }
 
+
+/**
+ * WHICH SURFACES THIS PROJECT HAS, AND WHAT VITE MUST BE TOLD ABOUT THEM.
+ *
+ * A game can have either entry point or both, and naming one that does not
+ * exist fails the build with rollup's `UNRESOLVED_ENTRY` rather than a sentence
+ * anybody can act on. `index.html` mounts `GameShell` and is what a TABLE
+ * loads; `world.html` mounts `WorldShell` and is what a persistent WORLD loads
+ * -- a different shell because a world has no turn, no flow position and no
+ * action table, and a table shell can only render one by being told things that
+ * are not true (`src/ui/world/worldProtocol.ts`).
+ *
+ * A WORLD-ONLY PROJECT IS THE NORMAL SHAPE, not a broken one: `boardsmith init
+ * --world` scaffolds exactly that, because a vestigial table half is what
+ * BoardSmith #174 is taking OUT of the world games that have one.
+ *
+ * `input` is left undefined for a table alone, which is Vite's own default and
+ * the case that must keep behaving identically.
+ */
+export function resolveUiBuild(
+  cwd: string,
+  hasTableUi: boolean,
+  hasWorldUi: boolean,
+): { surfaces: string; input?: Record<string, string> } {
+  if (!hasTableUi && !hasWorldUi) {
+    throw new Error(
+      `This project has no UI entry point: neither index.html nor ${WORLD_ENTRY_HTML} exists, so ` +
+        'there is no surface for a player to load. A table game mounts GameShell from ' +
+        `index.html; a persistent world mounts WorldShell from ${WORLD_ENTRY_HTML}.`,
+    );
+  }
+  if (hasTableUi && !hasWorldUi) return { surfaces: '' };
+  return {
+    surfaces: hasTableUi ? 'table and world' : 'world',
+    input: {
+      ...(hasTableUi ? { index: join(cwd, 'index.html') } : {}),
+      ...(hasWorldUi ? { world: join(cwd, WORLD_ENTRY_HTML) } : {}),
+    },
+  };
+}
+
 export async function buildCommand(options: BuildOptions): Promise<void> {
   const cwd = process.cwd();
   const outDir = options.outDir || 'dist';
@@ -253,11 +294,15 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     //
     // Both land at the bundle root (`src/cli/lib/zip.ts` strips the `ui/`
     // prefix), so the host asks for `.../index.html` or `.../world.html` and
-    // gets the surface it meant. Vite is only told about the second entry when
-    // it exists: naming a missing input fails the build.
+    // gets the surface it meant. Vite is told about each entry only when it
+    // exists -- in EITHER direction, since a world-only project has no
+    // index.html -- because naming a missing input fails the build.
+    const tableEntry = join(cwd, 'index.html');
     const worldEntry = join(cwd, WORLD_ENTRY_HTML);
+    const hasTableUi = existsSync(tableEntry);
     const hasWorldUi = existsSync(worldEntry);
-    spinner.start(hasWorldUi ? 'Building UI (table and world)...' : 'Building UI...');
+    const ui = resolveUiBuild(cwd, hasTableUi, hasWorldUi);
+    spinner.start(`Building UI${ui.surfaces === '' ? '' : ` (${ui.surfaces})`}...`);
     await viteBuild({
       root: cwd,
       base: './',
@@ -265,20 +310,11 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
         outDir: join(outDir, 'ui'),
         copyPublicDir: false,
         emptyOutDir: true,
-        ...(hasWorldUi
-          ? {
-              rollupOptions: {
-                input: {
-                  index: join(cwd, 'index.html'),
-                  world: worldEntry,
-                },
-              },
-            }
-          : {}),
+        ...(ui.input === undefined ? {} : { rollupOptions: { input: ui.input } }),
       },
       logLevel: 'warn',
     });
-    spinner.succeed(hasWorldUi ? 'UI built (table and world)' : 'UI built');
+    spinner.succeed(`UI built${ui.surfaces === '' ? '' : ` (${ui.surfaces})`}`);
 
     // Copy public/ assets once to dist root (not into each sub-build)
     const publicDir = join(cwd, 'public');
@@ -336,7 +372,9 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     console.log(chalk.dim(`    rules/  - Game logic bundle`));
     console.log(chalk.dim(`    ui/     - User interface bundle`));
     if (hasWorldUi) {
-      console.log(chalk.dim(`      index.html - the table surface (GameShell)`));
+      if (hasTableUi) {
+        console.log(chalk.dim(`      index.html - the table surface (GameShell)`));
+      }
       console.log(chalk.dim(`      world.html - the resident-world surface (WorldShell)`));
     }
     console.log(chalk.dim(`    manifest.json - Game metadata\n`));
