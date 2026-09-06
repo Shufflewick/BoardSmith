@@ -87,6 +87,11 @@ export {
   createBoardInteraction,
   provideBoardInteraction,
   anchorAttrs,
+  // #189: the hook that makes an anchored candidate findable by the wording the
+  // panel would have shown. A custom board spreads it beside anchorAttrs (or
+  // gets both free from useSelectable) so its candidates are as answerable as
+  // AutoUI's.
+  candidateAttrs,
   type BoardInteraction,
   type BoardInteractionState,
   type BoardInteractionActions,

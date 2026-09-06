@@ -4,6 +4,7 @@
  *
  * Tests:
  *   - anchorAttrs returns exactly the present-key subset for each ref shape
+ *     (an id also emits the data-element-id animation alias — #189)
  *   - useSelectable.attrs includes data-bs-el-* keys for its identity
  *   - useSelectableGrid returns cellAttrs that returns data-bs-el-* keys
  *   - Negative guard: attribute names exist only in anchorAttrs (single source)
@@ -12,15 +13,16 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { computed } from 'vue';
-import { anchorAttrs } from './useBoardInteraction.js';
+import { anchorAttrs, createBoardInteraction } from './useBoardInteraction.js';
 import { useSelectable, useSelectableGrid } from './useSelectable.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 import type { BoardInteraction } from './useBoardInteraction.js';
 
-function makeMockInteraction(): Pick<BoardInteraction, 'triggerElementSelect'> {
-  return {
-    triggerElementSelect: () => {},
-  };
+// The REAL substrate, not a hand-built stand-in: useSelectable now asks it what
+// a candidate is called, and a partial mock would answer for a shape the shell
+// no longer has (docs/TEST-FIXTURES.md).
+function makeMockInteraction(): BoardInteraction {
+  return createBoardInteraction();
 }
 
 // ---------------------------------------------------------------------------
@@ -30,7 +32,7 @@ function makeMockInteraction(): Pick<BoardInteraction, 'triggerElementSelect'> {
 describe('anchorAttrs', () => {
   it('id-only ref emits only data-bs-el-id', () => {
     const attrs = anchorAttrs({ id: 5 });
-    expect(attrs).toEqual({ 'data-bs-el-id': '5' });
+    expect(attrs).toEqual({ 'data-bs-el-id': '5', 'data-element-id': '5' });
   });
 
   it('notation-only ref emits only data-bs-el-notation', () => {
@@ -47,6 +49,7 @@ describe('anchorAttrs', () => {
     const attrs = anchorAttrs({ id: 5, notation: 'd4', name: 'Militia' });
     expect(attrs).toEqual({
       'data-bs-el-id': '5',
+      'data-element-id': '5',
       'data-bs-el-notation': 'd4',
       'data-bs-el-name': 'Militia',
     });
@@ -59,7 +62,7 @@ describe('anchorAttrs', () => {
 
   it('undefined keys are omitted (partial ref)', () => {
     const attrs = anchorAttrs({ id: 7, name: undefined });
-    expect(attrs).toEqual({ 'data-bs-el-id': '7' });
+    expect(attrs).toEqual({ 'data-bs-el-id': '7', 'data-element-id': '7' });
     expect('data-bs-el-name' in attrs).toBe(false);
   });
 
@@ -128,7 +131,7 @@ describe('anchorAttrs dev-warning', () => {
 
   it('a non-empty ref (id: 5) produces data-bs-el-id and emits NO warning', () => {
     const attrs = anchorAttrs({ id: 5 });
-    expect(attrs).toEqual({ 'data-bs-el-id': '5' });
+    expect(attrs).toEqual({ 'data-bs-el-id': '5', 'data-element-id': '5' });
     expect(warnSpy).not.toHaveBeenCalled();
   });
 });
@@ -201,8 +204,8 @@ describe('useSelectableGrid.cellAttrs returns anchorAttrs for cell identity', ()
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
     );
-    expect(cellAttrs(cells[0])).toEqual({ 'data-bs-el-id': '100' });
-    expect(cellAttrs(cells[1])).toEqual({ 'data-bs-el-id': '101' });
+    expect(cellAttrs(cells[0])).toEqual({ 'data-bs-el-id': '100', 'data-element-id': '100' });
+    expect(cellAttrs(cells[1])).toEqual({ 'data-bs-el-id': '101', 'data-element-id': '101' });
   });
 
   it('cellAttrs returns data-bs-el-notation for a notation-keyed cell', () => {
@@ -222,7 +225,7 @@ describe('useSelectableGrid.cellAttrs returns anchorAttrs for cell identity', ()
 // Negative guard: attribute names live only in anchorAttrs (single source)
 // ---------------------------------------------------------------------------
 
-describe('single-source guard: data-bs-el-* only in anchorAttrs', () => {
+describe('single-source guard: anchor and candidate attribute names live in one place', () => {
   const REPO_ROOT = join(import.meta.dirname, '../../..');
   const RENDERER_FILES = [
     'src/ui/components/auto-ui/renderers/CardRenderer.vue',
@@ -241,8 +244,10 @@ describe('single-source guard: data-bs-el-* only in anchorAttrs', () => {
       const content = readFileSync(fullPath, 'utf-8');
       const hasLiteral = content.includes('data-bs-el-id') ||
         content.includes('data-bs-el-notation') ||
-        content.includes('data-bs-el-name');
-      expect(hasLiteral, `${relPath} must not define data-bs-el-* directly (use anchorAttrs)`).toBe(false);
+        content.includes('data-bs-el-name') ||
+        content.includes('data-element-id') ||
+        content.includes('data-bs-candidate');
+      expect(hasLiteral, `${relPath} must not define data-bs-el-*, data-element-id or data-bs-candidate directly (use anchorAttrs / candidateAttrs)`).toBe(false);
     }
   });
 
@@ -250,7 +255,9 @@ describe('single-source guard: data-bs-el-* only in anchorAttrs', () => {
     const content = readFileSync(join(REPO_ROOT, 'src/ui/composables/useSelectable.ts'), 'utf-8');
     const hasLiteral = content.includes('data-bs-el-id') ||
       content.includes('data-bs-el-notation') ||
-      content.includes('data-bs-el-name');
-    expect(hasLiteral, 'useSelectable.ts must not define data-bs-el-* directly (use anchorAttrs)').toBe(false);
+      content.includes('data-bs-el-name') ||
+      content.includes('data-element-id') ||
+      content.includes('data-bs-candidate');
+    expect(hasLiteral, 'useSelectable.ts must not define these attributes directly (use anchorAttrs / candidateAttrs)').toBe(false);
   });
 });

@@ -18,7 +18,7 @@
  */
 import { computed, watch, type ComputedRef } from 'vue';
 import { ref } from 'vue';
-import { anchorAttrs } from './useBoardInteraction.js';
+import { anchorAttrs, candidateAttrs } from './useBoardInteraction.js';
 import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
 
 // ---------------------------------------------------------------------------
@@ -60,6 +60,7 @@ export function useSelectable(
     tabindex: isActionSelectable.value ? '0' : '-1',
     'aria-disabled': isDisabled.value || undefined,
     ...anchorAttrs(identity(), elementType),
+    ...candidateAttrs(boardInteraction?.candidateLabel(identity()) ?? null),
   }));
 
   return {
@@ -201,12 +202,17 @@ export function useSelectableGrid<T>(
   }
 
   /**
-   * Return the anchor attributes for a single grid cell via anchorAttrs.
-   * Delegates entirely to anchorAttrs — the single source of attribute names.
+   * Return the anchor and candidate attributes for a single grid cell.
+   * Delegates entirely to anchorAttrs and candidateAttrs — the single sources
+   * of those attribute names.
    * Bind via `v-bind="cellAttrs(cell)"` on each cell root element.
    */
   function cellAttrs(cell: T): Record<string, string> {
-    return anchorAttrs(getIdentity(cell), elementType);
+    const identity = getIdentity(cell);
+    return {
+      ...anchorAttrs(identity, elementType),
+      ...candidateAttrs(boardInteraction?.candidateLabel(identity) ?? null),
+    };
   }
 
   return { currentIdx, focusCell, handleGridKeydown, cellAttrs, candidateIndices, focusFirstCandidate };

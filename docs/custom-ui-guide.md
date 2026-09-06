@@ -591,11 +591,37 @@ each composable's `isDevThrowEnabled()` check — a positive signal (dev mode
 and not explicitly suppressed), never a default-throw.
 
 `data-bs-el-id` is the canonical anchor attribute for both selection and
-animation targeting; AutoUI additionally emits `data-element-id` as a FLIP
-alias for backward compatibility — treat `data-bs-el-id` as the one you
-target from custom code (see
+animation targeting; `anchorAttrs()` emits `data-element-id` from the same id
+as the FLIP alias, so an element never carries one without the other — target
+`data-bs-el-id` from custom code (see
 [Browser Testing](./browser-testing.md#1-stable-selectors-data-bs-el-id) for
 the full selector-parity story across custom UI and AutoUI).
+
+### Naming a Candidate a Player Can See
+
+A board-anchored element pick has no panel button to press — that is the point
+of anchoring it. So every element the open pick will accept also carries
+`data-bs-candidate="<the text the panel would have shown>"`, from
+`candidateAttrs()` (`boardsmith/ui`). Binding `useSelectable()`'s `attrs`, or
+`useSelectableGrid()`'s `cellAttrs(cell)`, gives your board this for free
+alongside the anchors. Hand-rolling the attributes instead:
+
+```vue
+<div
+  v-for="holding in holdings"
+  :key="holding.id"
+  v-bind="{
+    ...anchorAttrs({ id: holding.id }, 'holding'),
+    ...candidateAttrs(board.candidateLabel({ id: holding.id })),
+  }"
+>{{ holding.name }}</div>
+```
+
+`board.candidateLabel(ref)` returns the pick's display text for that element,
+or `null` when it is not a candidate right now — so the hook appears with the
+pick and leaves with it. Without it your board renders the element's internal
+name and nothing outside the app can tell which of your nodes answers the open
+selection.
 
 ## Step 6: Handling Dependent Selections
 

@@ -540,7 +540,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       board.setCurrentPick(idx, selection.name);
     }
 
-    let validElems: { id: number; ref: ElementRef; disabled?: string }[] = [];
+    let validElems: { id: number; ref: ElementRef; disabled?: string; display?: string }[] = [];
     let onSelect: ((id: number) => void) | null = null;
 
     if (selection.type === 'element' || selection.type === 'elements') {
@@ -548,6 +548,9 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         id: ve.id,
         ref: elementClickRef(ve),
         disabled: ve.disabled,
+        // The wording the panel would have used, carried to the board because
+        // the board is now the only surface this candidate appears on (#189).
+        display: ve.display ?? String(ve.id),
       }));
       onSelect = (elementId: number) => {
         const multiSelect = currentMultiSelect.value;
@@ -565,7 +568,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       const choices = choicesForBoard.value;
       const choicesWithRefs = choices.filter((c: ChoiceWithRefs) => (c.refs ?? []).length > 0);
       if (choicesWithRefs.length > 0) {
-        const refToChoice = new Map<number, { value: unknown; ref: ElementRef; disabled?: string }>();
+        const refToChoice = new Map<number, { value: unknown; ref: ElementRef; disabled?: string; display: string }>();
         // Synthetic key for notation-only (or name-only) target refs that carry no
         // element id (e.g. Checkers destination squares). The key is only a token
         // used to route the click back to its choice; matchesRef matches the clicked
@@ -576,9 +579,9 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
           const ref = (choice.refs ?? []).find(r => r.role === 'target')?.ref ?? (choice.refs ?? [])[0]?.ref;
           if (!ref) continue;
           const key = ref.id ?? syntheticKey--;
-          refToChoice.set(key, { value: choice.value, ref, disabled: choice.disabled });
+          refToChoice.set(key, { value: choice.value, ref, disabled: choice.disabled, display: choice.display });
         }
-        validElems = Array.from(refToChoice.entries()).map(([id, { ref, disabled }]) => ({ id, ref, disabled }));
+        validElems = Array.from(refToChoice.entries()).map(([id, { ref, disabled, display }]) => ({ id, ref, disabled, display }));
         onSelect = (elementId: number) => {
           const entry = refToChoice.get(elementId);
           if (entry === undefined || entry.disabled) return;

@@ -175,7 +175,6 @@ watch(effectivePieceImage, () => {
         'is-dragging': isDragged,
       },
     ]"
-    :data-element-id="element.id"
     :data-animatable="true"
     :draggable="isActionSelectable"
     v-bind="selectableAttrs"
