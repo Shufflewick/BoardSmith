@@ -44,14 +44,23 @@ const FALSE_CLAIMS: Array<{ pattern: RegExp; why: string }> = [
   },
 ];
 
-const proseDocs = readdirSync(DOCS)
-  .filter((name) => name.endsWith('.md'))
-  .sort();
+/**
+ * Every prose doc, plus the root README, which is the page a stranger arriving
+ * from GitHub or npm reads first and which now carries the product pitch
+ * (#168). A false world claim is no less false for living one directory up.
+ */
+const proseDocs = [
+  '../README.md',
+  ...readdirSync(DOCS)
+    .filter((name) => name.endsWith('.md'))
+    .sort(),
+];
 
 describe('#304: no BoardSmith doc claims this toolchain runs a world', () => {
   it('reads the docs directory it thinks it is reading', () => {
     expect(proseDocs.length).toBeGreaterThan(10);
     expect(proseDocs).toContain('core-concepts.md');
+    expect(proseDocs).toContain('../README.md');
   });
 
   it.each(proseDocs)('%s makes none of the claims', (doc) => {
