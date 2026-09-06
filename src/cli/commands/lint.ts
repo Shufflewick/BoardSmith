@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import chalk from 'chalk';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
-import { isBoardsmithWorkspace } from '../lib/project-context.js';
+import { requireBoardsmithWorkspace } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
 import { selectChecks } from '../lib/select-checks.js';
 
@@ -441,11 +441,7 @@ function hasAnyConfig(cwd: string, candidates: string[]): boolean {
 export async function lintCommand(options: LintOptions): Promise<void> {
   const cwd = process.cwd();
 
-  if (!isBoardsmithWorkspace(cwd)) {
-    console.error(chalk.red('Error: not a BoardSmith workspace'));
-    console.error(chalk.dim('Run this from a game project (has boardsmith.json) or the BoardSmith repo.'));
-    process.exit(1);
-  }
+  requireBoardsmithWorkspace(cwd);
 
   const wants = selectChecks({
     eslint: options.eslint,

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { runHealthBaselineCheck } from './audit.js';
+import { runChangedFilesAudit, runHealthBaselineCheck } from './audit.js';
 
 /**
  * Issue #159: a drifted health baseline must report ITSELF as drifted, with
@@ -78,5 +78,114 @@ describe('runHealthBaselineCheck', () => {
       });
       expect(result.code).toBe(0);
     });
+  });
+});
+
+/**
+ * Issue #176: `boardsmith audit` ran a bare `fallow`, which reads none of the
+ * three baselines in `.fallowrc.json` and is scoped to the whole repository —
+ * so it reported the entire accepted backlog and exited 1 on every tree. The
+ * gate everyone is told to run was the one that could never pass.
+ *
+ * The check now runs `fallow audit`: baseline-aware, scoped to the files the
+ * branch changed. Its verdict is read from fallow's JSON report rather than
+ * from its human output, so a rewording of that output cannot silently turn the
+ * gate green.
+ */
+describe('runChangedFilesAudit', () => {
+  /** A fake `fallow audit` that records the arguments each mode was given. */
+  function fakeFallow(json: unknown, streamCode = 1) {
+    const captured: string[][] = [];
+    const streamed: string[][] = [];
+    return {
+      captured,
+      streamed,
+      runner: {
+        capture: async (args: string[]) => {
+          captured.push(args);
+          return { code: 0, stdout: typeof json === 'string' ? json : JSON.stringify(json) };
+        },
+        stream: async (args: string[]) => {
+          streamed.push(args);
+          return streamCode;
+        },
+      },
+    };
+  }
+
+  const verdict = (over: Record<string, unknown> = {}) => ({
+    verdict: 'pass',
+    changed_files_count: 4,
+    base_ref: 'main',
+    ...over,
+  });
+
+  it('runs `fallow audit`, so the repo\'s baselines and changed-file scope apply', async () => {
+    const fallow = fakeFallow(verdict());
+
+    const result = await runChangedFilesAudit(fallow.runner);
+
+    expect(result.outcome).toBe('pass');
+    expect(fallow.captured).toHaveLength(1);
+    expect(fallow.captured[0]).toContain('--format');
+    expect(fallow.captured[0]).toContain('json');
+    expect(result.report).toContain('4 changed files');
+    expect(result.report).toContain('main');
+  });
+
+  // A pass over nothing is not a pass. On `main` straight after a merge there
+  // is no diff against the base branch, and a green tick there teaches people
+  // the gate means something it does not.
+  it('reports that it checked nothing when no file changed against the base', async () => {
+    const fallow = fakeFallow(verdict({ changed_files_count: 0 }));
+
+    const result = await runChangedFilesAudit(fallow.runner);
+
+    expect(result.outcome).toBe('nothing-to-check');
+    expect(result.report).toMatch(/checked nothing/i);
+    expect(result.report).toContain('--since');
+    // Nothing to audit means nothing to print a report about.
+    expect(fallow.streamed).toHaveLength(0);
+  });
+
+  it('fails and streams the human report when the verdict is a fail', async () => {
+    const fallow = fakeFallow(verdict({ verdict: 'fail' }));
+
+    const result = await runChangedFilesAudit(fallow.runner);
+
+    expect(result.outcome).toBe('fail');
+    expect(fallow.streamed).toHaveLength(1);
+    expect(fallow.streamed[0]).not.toContain('--format');
+  });
+
+  // fallow itself exits 0 on `warn`. Blocking on one here would make the gate
+  // stricter than the tool it delegates to, which is how a gate becomes noise.
+  it('shows a warn verdict without failing on it', async () => {
+    const fallow = fakeFallow(verdict({ verdict: 'warn' }));
+
+    const result = await runChangedFilesAudit(fallow.runner);
+
+    expect(result.outcome).toBe('pass');
+    expect(result.report).toContain('warn');
+    expect(fallow.streamed).toHaveLength(1);
+  });
+
+  it('widens the scope to an explicit ref when one is given', async () => {
+    const fallow = fakeFallow(verdict());
+
+    await runChangedFilesAudit(fallow.runner, 'origin/main');
+
+    expect(fallow.captured[0]).toEqual(expect.arrayContaining(['--changed-since', 'origin/main']));
+  });
+
+  it('fails with an actionable message when fallow returned no readable verdict', async () => {
+    const result = await runChangedFilesAudit({
+      capture: async () => ({ code: 127, stdout: 'command not found' }),
+      stream: async () => 127,
+    });
+
+    expect(result.outcome).toBe('fail');
+    expect(result.report).toContain('fallow audit');
+    expect(result.report).toContain('127');
   });
 });
