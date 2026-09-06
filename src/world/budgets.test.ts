@@ -24,7 +24,10 @@ describe('world budgets', () => {
     // is the O(world) read the partitioned model exists to delete. A host that
     // keeps its worlds small may allow a wider choice than one running 500-seat
     // worlds; what neither may do is discover the other's number silently.
-    expect(worldBudgets({ maxCandidatesPerSelection: 20 }).maxCandidatesPerSelection).toBe(20);
+    // 30 rather than 20: #170 R2 fixed the floor at the Action Panel's reading
+    // threshold, because a host below it makes the panel's board handoff
+    // unreachable for worlds. See `aboveReadingThreshold`.
+    expect(worldBudgets({ maxCandidatesPerSelection: 30 }).maxCandidatesPerSelection).toBe(30);
     expect(() => worldBudgets({ maxCandidatesPerSelection: 0 })).toThrow(
       /maxCandidatesPerSelection/,
     );
