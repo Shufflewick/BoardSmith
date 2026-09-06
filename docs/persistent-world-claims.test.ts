@@ -111,7 +111,11 @@ const tend: ActionDefinition = worldAction<VillageFixture>('tend')
   .execute(({ neighbour }, ctx) => {
     ctx.game.holdingOf(ctx.player.seat).woodpile -= 1;
     neighbour.standing += 2;
-    ctx.world.emit(holdingPartition(neighbour.seat), { tended: 2 });
+    ctx.world.emit(
+      holdingPartition(neighbour.seat),
+      { tended: 2 },
+      `Seat ${ctx.player.seat} put timber back on your land.`,
+    );
   });
 
 /** The eager half of the timer primitive, and the shape of a schedule request
@@ -504,7 +508,7 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
       'ctx.world.timing',
       'ctx.world.presence',
       'ctx.world.partition(name)',
-      'ctx.world.emit(scope, payload)',
+      'ctx.world.emit(scope, payload, line?)',
       'ctx.world.complete()',
     ]) {
       expect(guide.includes(member), `The guide must document ${member}.`).toBe(true);
@@ -519,9 +523,18 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
       args: { neighbour: await holdingId(engine, game, 3) },
     });
     expect(result.events).toEqual([
-      { scope: holdingPartition(3), payload: { tended: 2 }, seats: [3] },
+      {
+        scope: holdingPartition(3),
+        payload: { tended: 2 },
+        // THE SENTENCE, WHICH IS WHAT THE SHARED SHELL SAYS OUT LOUD (#186).
+        // Emitted beside the payload rather than dug out of it, because
+        // nothing between the rules and the game's own UI may read a payload.
+        text: 'Seat 2 put timber back on your land.',
+        seats: [3],
+      },
     ]);
     expect(flatGuide).toContain('Events are emitted, not returned');
+    expect(flatGuide).toContain('optional, and absent means silence');
   });
 
   it('a seatless action is filtered from the offer AND refused on submit', async () => {

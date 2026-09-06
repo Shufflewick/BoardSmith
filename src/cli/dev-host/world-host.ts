@@ -894,8 +894,11 @@ export class LocalWorldHost {
       this.#send(clientId, {
         type: 'world_events',
         // THE AUDIENCE DOES NOT GO ON THE WIRE. A UI that received it would
-        // learn who else is in the room from an event addressed to it.
-        events: mine.map((event) => ({ scope: event.scope, payload: event.payload })),
+        // learn who else is in the room from an event addressed to it. That is
+        // the ONE field this drops -- and it used to drop the narration with it
+        // (#186), which left the shared shell's log empty in every world there
+        // has ever been.
+        events: mine.map(({ seats: _audience, ...narration }) => narration),
       });
     }
   }

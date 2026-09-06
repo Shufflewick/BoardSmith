@@ -241,7 +241,11 @@ export const tend = worldAction<VillageGame>('tend')
   .execute(({ neighbour }, ctx) => {
     ctx.game.holdingOf(ctx.player.seat).woodpile -= 1;
     neighbour.standing += 2;
-    ctx.world.emit(holdingPartition(neighbour.seat), { tended: 2 });
+    ctx.world.emit(
+      holdingPartition(neighbour.seat),
+      { tended: 2 },
+      `Seat ${ctx.player.seat} put timber back on your land.`,
+    );
   });
 ```
 
@@ -401,7 +405,7 @@ ctx.world.now                    // the host's stamped instant
 ctx.world.timing                 // {due, missedCount} for a clock action, else null
 ctx.world.presence               // ReadonlySet<number> of connected seats
 ctx.world.partition(name)        // the resident root of a partition this walk declared
-ctx.world.emit(scope, payload)   // narration, routed by scope
+ctx.world.emit(scope, payload, line?) // narration, routed by scope
 ctx.world.schedule(request)      // ask the host to wake this world later
 ctx.world.cancel(key)            // ask the host to forget a keyed timer
 ctx.world.complete()             // declare the season over
@@ -529,6 +533,27 @@ nobody can be in reaches nobody, and it is better refused than delivered silentl
 to no one.
 
 Nothing reads inside `payload`. It is yours.
+
+### The line, which is what the shell says out loud
+
+`emit`'s third argument is the sentence, and it is separate from `payload` for
+the reason nothing reads `payload`: the shared shell's log would otherwise have
+to print JSON, which is a debug console rather than chrome.
+
+```ts
+ctx.world.emit(roomPartition(here.key), { said: seat, text }, `${who} says: ${text}`);
+ctx.world.emit(HEARTH, { lit: true }, { text: 'The hearth is lit.', type: 'highlight' });
+```
+
+A bare string or `{ text, type }` -- exactly what a table's `game.messages`
+takes, because a world's log and a table's are the same log with two transports.
+It is **optional, and absent means silence**: an event with no line moves the
+board and says nothing, which is most events. `type` is presentation only; no
+layer between your rules and the shell reads it as a rule.
+
+The line goes to the same seats the event does. There is no way to say something
+to a scope without emitting to it, which is the point: an audience is a fact
+about the world, and the world is what resolves it.
 
 **Events are a world's narration, and there is no second channel.** The game
 root's message log lives outside every partition, so a checkpoint never persists
@@ -695,6 +720,16 @@ to exactly the partitions this declaration named**. Pruning matters: residency i
 everybody's doing, and a view built from the raw resident tree grew with the
 world's popularity rather than with what the seat asked for. What a seat sees is
 a function of its own declaration.
+
+**The roster is pruned to the viewer too.** The game root's player list is in no
+partition, so a 500-seat world used to ship 500 serialized `Player` elements in
+every seat's view. A view carries the looking seat's own player and nobody
+else's. Nothing dangles: a player-valued attribute serializes as
+`{ __playerRef, seat, color, name }`, which resolves by seat and carries what a
+board reads inline, so `holding.player` says everything it ever said. And there
+was nothing else on those elements to carry -- a player is in no partition, so
+nothing checkpoints a write to one. **Do not keep world state on a `Player`;**
+put it in a partition, exactly as the candidate rule above already requires.
 
 There is no turn, no message log and no available-action list inside a world's
 view. A world's flow does not run, its narration is its events, and its verbs

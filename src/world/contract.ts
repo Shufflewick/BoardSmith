@@ -316,7 +316,33 @@ export interface WorldCommand {
 interface WorldEvent {
   readonly scope: string;
   readonly payload: unknown;
+  /**
+   * THE SENTENCE THE GAME WROTE, IF IT WROTE ONE (#186).
+   *
+   * `payload` is the board's and is read by nothing between the rules and the
+   * game's own UI, so it cannot be what the shared shell's log renders -- a log
+   * built out of it would print JSON, which is the debug console #170 removed.
+   * This is the line itself, in the shape `GameHistory` already takes, carried
+   * beside the payload rather than dug out of it.
+   *
+   * ABSENT MEANS SILENCE. Most events say nothing: they tell a board that
+   * something moved, and the log stays as it was.
+   */
+  readonly text?: string;
+  /** The line's kind, verbatim to `GameHistory` -- presentation only, and no
+   *  layer between the rules and the shell reads it as a rule. */
+  readonly type?: string;
 }
+
+/**
+ * WHAT A WORLD SAYS, AS A GAME WRITES IT (#186).
+ *
+ * A bare string is the whole of the common case, so it is the whole of what a
+ * game has to write; the object form exists for the one extra thing a table's
+ * log already carries. Exactly `GameHistory`'s own shape, because a world's log
+ * and a table's are the same log with two transports.
+ */
+export type WorldNarrationLine = string | { readonly text: string; readonly type?: string };
 
 /**
  * ONE EVENT WITH ITS AUDIENCE ALREADY WORKED OUT (#58).

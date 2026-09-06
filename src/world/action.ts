@@ -84,6 +84,7 @@ import type {
 import type { ConditionConfig } from "../engine/action/types.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
+import type { WorldNarrationLine } from "./contract.js";
 import { worldRefusal } from "./refusals.js";
 
 /**
@@ -137,8 +138,18 @@ export interface WorldFacilities {
    *
    * Refused outside a real dispatch, for the reason `schedule` is: an offer is
    * a question, and answering it must not narrate anything.
+   *
+   * AND `narration` IS THE SENTENCE, IF THERE IS ONE (#186). `payload` is the
+   * board's and stays uninterpretable by every layer between the rules and the
+   * game's own UI -- so a shell that had to render the log out of it would be
+   * printing JSON, which is the debug console #170 removed. The line is
+   * therefore its own argument: the game writes what it wants SAID, in the
+   * shape `GameHistory` already takes, and the shell says exactly that.
+   *
+   * OMITTED MEANS SILENCE, and it is the common case: an event with no
+   * narration puts no line in the log rather than an invented one.
    */
-  emit(scope: string, payload: unknown): void;
+  emit(scope: string, payload: unknown, narration?: WorldNarrationLine): void;
   /**
    * ASK THE HOST TO WAKE THIS WORLD LATER.
    *

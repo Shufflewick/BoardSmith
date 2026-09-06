@@ -25,6 +25,8 @@ import { assertWorldEngineConformance } from "./engine-conformance.test-helper.j
 import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
+import { worldBudgets } from "./budgets.js";
+import { newVillageEngine } from "./village.test-helper.js";
 
 class Token extends Piece<WorldFixtureGame> {}
 
@@ -1403,5 +1405,152 @@ describe("#183 — a view is scoped to what the seat's declaration named", () =>
     const view = JSON.stringify(await engine.viewFor("player-a"));
     expect(view).toContain("room-one");
     expect(view).toContain("room-two");
+  });
+});
+
+describe("#181 — a view carries the seat it is for, not the world's roster", () => {
+  // #183 made a view's content a function of the seat's DECLARATION rather
+  // than of what other players left resident, and one thing escaped it: the
+  // game root's player list is in no partition, so pruning partitions never
+  // touched it. Measured on example-rts at 500 seats, a seat whose declaration
+  // named two partitions got a view whose root had 502 children -- 500
+  // `Player`s, the commons, and one holding. That is O(world) per view, per
+  // look, which is the exact cost the partitioned model exists to delete.
+  //
+  // What makes dropping them safe is that a player-valued attribute is not a
+  // pointer at a node: example-rts writes
+  // `holding.player = this.players[seat - 1]`, and that serializes as
+  // `{ __playerRef, seat, color, name }` -- resolved by SEAT, with the facts a
+  // board reads carried inline. The two tests below are the two halves of that:
+  // the roster is gone, and the reference into it still says everything it said.
+  const POPULATION = 500;
+
+  async function villageView(seat: number): Promise<ElementJSON> {
+    const { engine } = newVillageEngine([], worldBudgets(), POPULATION);
+    const view = (await engine.viewFor(`p${seat}`)) as { state: ElementJSON };
+    return view.state;
+  }
+
+  const playersIn = (state: ElementJSON): ElementJSON[] =>
+    (state.children ?? []).filter((child) => child.className === "Player");
+
+  it("a 500-seat village's view root does not grow with the village", async () => {
+    const state = await villageView(1);
+    // The commons, this seat's holding, and this seat. Before the fix: 502.
+    expect(state.children).toHaveLength(3);
+    expect(playersIn(state).map((player) => player.attributes.seat)).toEqual([1]);
+  });
+
+  it("a view's size is the same at 500 seats as at 6", async () => {
+    // The claim stated as a measurement rather than a number: two villages
+    // whose only difference is population project the same root.
+    const { engine: small } = newVillageEngine([], worldBudgets(), 6);
+    const smallView = (await small.viewFor("p1")) as { state: ElementJSON };
+    expect((await villageView(1)).children).toHaveLength(smallView.state.children?.length ?? 0);
+  });
+
+  it("a dropped player's reference still carries who they were", async () => {
+    // Seat 7's holding names seat 7, and seat 3's names seat 3. Looking as
+    // seat 7, seat 3's element is gone -- and nothing about seat 7's own
+    // reference lost anything, because the reference never pointed at a node.
+    const state = await villageView(7);
+    const holding = (state.children ?? []).find((child) => child.className === "Holding");
+    expect(holding?.attributes.player).toMatchObject({ __playerRef: 7, seat: 7 });
+  });
+
+  it("keeps a player that a named partition was adopted underneath", async () => {
+    // The path rule, which is the one shape a roster prune must not break: a
+    // partition living under a player element would go with the player.
+    const game = newWorldGame();
+    const roomOne = game.create(Room, "room-one");
+    const underPlayer = game.players[1].create(Room, "room-two");
+    const engine = new BoardSmithWorldEngine({
+      game,
+      seats: new Map([
+        ["player-a", 1],
+        ["player-b", 2],
+      ]),
+      store: new CountingStore(new Map()),
+      actions: ACTIONS,
+      view: () => [ROOM_ONE, ROOM_TWO],
+    });
+    engine.registerResident(ROOM_ONE, roomOne);
+    engine.registerResident(ROOM_TWO, underPlayer);
+
+    const view = (await engine.viewFor("player-a")) as { state: ElementJSON };
+    expect(JSON.stringify(view.state)).toContain("room-two");
+  });
+});
+
+describe("#186 — a world can say something a player reads", () => {
+  // `WorldNarration.text` has documented the shared shell's log since #170 and
+  // no world could ever fill it: `emit` took a scope and a payload, the engine
+  // recorded exactly those two keys, and the shell's log filters on a `text`
+  // that was `undefined` on every event any world could produce. Measured in
+  // sotf: three narrations with sentences in their payloads, and a LOG of 0.
+  //
+  // The payload stays the board's and stays uninterpretable between the rules
+  // and the game's own UI -- so the sentence is its own argument, and a world
+  // that writes one is saying it to the SHELL rather than hoping the shell
+  // parses the board's shape.
+  const say = worldAction<WorldFixtureGame>("say")
+    .needs(() => [ROOM_ONE])
+    .execute((_args, ctx) => {
+      const room = ctx.game.room("room-one");
+      room.visits += 1;
+      ctx.world.emit(ROOM_ONE, { visits: room.visits }, "Somebody swept the room.");
+    });
+
+  const proclaim = worldAction<WorldFixtureGame>("proclaim")
+    .needs(() => [ROOM_ONE])
+    .execute((_args, ctx) => {
+      ctx.world.emit(
+        ROOM_ONE,
+        {},
+        { text: "The hearth is lit.", type: "highlight" },
+      );
+    });
+
+  function sayingEngine() {
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [say, proclaim, touch],
+      view: () => [ROOM_ONE],
+    });
+  }
+
+  it("carries the sentence out with the routed event", async () => {
+    const engine = sayingEngine();
+    await engine.hydrate([ROOM_ONE]);
+    const result = await engine.applyCommand("player-a", { name: "say", args: {} }, STAMP);
+
+    expect(result.events[0]).toMatchObject({
+      scope: ROOM_ONE,
+      payload: { visits: 1 },
+      text: "Somebody swept the room.",
+    });
+    // The audience is still the engine's answer, unchanged by the sentence.
+    expect(result.events[0]?.seats).toEqual([1]);
+  });
+
+  it("carries the line's kind when the game names one", async () => {
+    const engine = sayingEngine();
+    await engine.hydrate([ROOM_ONE]);
+    const result = await engine.applyCommand("player-a", { name: "proclaim", args: {} }, STAMP);
+
+    expect(result.events[0]).toMatchObject({ text: "The hearth is lit.", type: "highlight" });
+  });
+
+  it("says nothing when the game wrote nothing -- absent, not empty", async () => {
+    // The shell puts no line in the log for an event with no `text`, and an
+    // empty string would be a blank line rather than silence.
+    const engine = sayingEngine();
+    await engine.hydrate([ROOM_ONE]);
+    const result = await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+
+    expect(result.events[0]).not.toHaveProperty("text");
+    expect(result.events[0]).not.toHaveProperty("type");
   });
 });

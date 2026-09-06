@@ -93,8 +93,10 @@ import type {
   WorldCommandStamp,
   WorldEngine,
   WorldEventStamp,
+  WorldNarrationLine,
   WorldOfferStamp,
   WorldPartitionSource,
+  RoutedEvent,
 } from "./contract.js";
 import {
   scheduleBudget,
@@ -121,17 +123,6 @@ import { worldBudgets, type WorldBudgets } from "./budgets.js";
  * drift, and it drifted. One declaration both sides import is the whole point
  * of `boardsmith/world`.
  */
-
-/**
- * The events one command's HANDLER produced, before they are routed.
- *
- * Deliberately NOT `WorldCommandResult["events"]` any more (#58). What the
- * engine answers is a `RoutedEvent` -- the same event with its audience
- * resolved -- and resolving it is this engine's job, not the game author's. A
- * handler says WHERE something happened; who can see that place is a fact
- * about the world, and the world is what this class holds.
- */
-export type WorldEvents = readonly { readonly scope: string; readonly payload: unknown }[];
 
 /**
  * THE ONE SCOPE THE PLATFORM RESERVES: everybody in this world (#58).
@@ -987,15 +978,26 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (const [name, id] of this.residentIds) {
       (namedNames.has(name) ? namedIds : unnamedIds).add(id);
     }
+    // AND THE ROSTER GOES WITH IT (#181). The game root's player list is in no
+    // partition, so the prune above never reached it: a 500-seat world shipped
+    // 500 serialized `Player` elements to every seat on every look, which is
+    // O(world) per view and the one cost the partitioned model exists to
+    // delete. What survives is the seat doing the looking; see
+    // `pruneRosterToViewer` for why nothing dangles when the rest go.
     return {
       player: seat,
-      state: pruneUnnamedPartitions(state, unnamedIds, namedIds),
+      state: pruneRosterToViewer(
+        pruneUnnamedPartitions(state, unnamedIds, namedIds),
+        new Set(this.game.players.map((player) => player.id)),
+        this.game.players.find((player) => player.seat === seat)?.id,
+        namedIds,
+      ),
       phase: this.game.phase,
     };
   }
 
-  // (pruneUnnamedPartitions, the module-scope helper `viewFor` ends with, is
-  // defined at the bottom of this file.)
+  // (pruneUnnamedPartitions and pruneRosterToViewer, the two module-scope
+  // helpers `viewFor` ends with, are defined at the bottom of this file.)
 
   async serializePartitions(
     dirty: readonly string[],
@@ -1291,8 +1293,21 @@ export class BoardSmithWorldEngine implements WorldEngine {
         this.game.reachPartition(root.id);
         return root;
       },
-      emit: (scope: string, payload: unknown) => {
-        ledger.events.push({ scope, payload });
+      emit: (scope: string, payload: unknown, narration?: WorldNarrationLine) => {
+        // NORMALIZED HERE AND NOWHERE ELSE (#186). A game may write a bare
+        // string or the `{ text, type }` `GameHistory` takes; everything
+        // downstream -- the routing, the host, the shell's filter -- reads one
+        // shape. And ABSENT rather than `undefined`: these travel as JSON, and
+        // a key whose value is `undefined` vanishes on the way, which makes
+        // "the game said nothing" and "the game said nothing HERE" the same
+        // frame with two spellings.
+        const line = typeof narration === "string" ? { text: narration } : narration;
+        ledger.events.push({
+          scope,
+          payload,
+          ...(line === undefined ? {} : { text: line.text }),
+          ...(line?.type === undefined ? {} : { type: line.type }),
+        });
       },
       schedule: (request: ScheduleArm) => {
         // REFUSED AT THE OFFENDING LINE. The host is still the authority and
@@ -1729,6 +1744,60 @@ function pruneUnnamedPartitions(
 }
 
 /**
+ * Drop every player this view is not about (#181).
+ *
+ * The roster is not a partition, so `pruneUnnamedPartitions` never saw it, and
+ * a view's size stayed a function of how many people the WORLD holds rather
+ * than of what the seat declared: 500 serialized `Player` elements on every
+ * look, in a view whose declaration named two rooms. That is the O(world) cost
+ * the partitioned model exists to delete, paid on the read path by everybody.
+ *
+ * NOTHING DANGLES WHEN THEY GO. A player-valued attribute does not serialize as
+ * a pointer at a node: `GameElement.serializeValue` writes
+ * `{ __playerRef, seat, color, name }` for one, which resolves BY SEAT and
+ * carries the three facts a board reads inline. So example-rts's
+ * `holding.player` is answered in full by the holding's own bytes, and the
+ * roster it points into is not part of the answer.
+ *
+ * AND THERE IS NOTHING ELSE ON THEM TO SHIP. A player element is in no
+ * partition, so nothing checkpoints a write to one -- the same fact that makes
+ * an element outside every partition an illegal candidate (see
+ * `docs/persistent-worlds.md`). A world's Player carries what its constructor
+ * gave it and no more, which is exactly what the reference already inlined.
+ *
+ * TWO SURVIVE, and only two shapes of one.
+ *
+ *   THE VIEWER. The seat doing the looking is the one player a view is
+ *   definitionally about -- the envelope says so in `player` -- and it is what
+ *   a board renders as `mine`. One element, whatever the world's population.
+ *
+ *   WHOEVER HOLDS A NAMED PARTITION. The same path rule the partition prune
+ *   keeps: a partition adopted under a player element must survive wherever the
+ *   game put it, because dropping the player would drop the room.
+ */
+function pruneRosterToViewer(
+  json: ElementJSON,
+  roster: ReadonlySet<number>,
+  viewer: number | undefined,
+  named: ReadonlySet<number>,
+): ElementJSON {
+  if (roster.size === 0) return json;
+
+  const holdsNamed = (node: ElementJSON): boolean =>
+    named.has(node.id) || (node.children?.some(holdsNamed) ?? false);
+
+  const prune = (node: ElementJSON): void => {
+    if (node.children === undefined) return;
+    node.children = node.children.filter(
+      (child) => !roster.has(child.id) || child.id === viewer || holdsNamed(child),
+    );
+    for (const child of node.children) prune(child);
+  };
+  prune(json);
+  return json;
+}
+
+/**
  * A question with no answer.
  *
  * Every candidate greyed out counts as none: a selection whose only options
@@ -1771,7 +1840,10 @@ function offerOf(
 interface DispatchLedger {
   completed: boolean;
   readonly schedules: ScheduleRequest[];
-  readonly events: { scope: string; payload: unknown }[];
+  /** The events the handler produced, BEFORE the engine resolves who saw them
+   *  -- which is why this is a `RoutedEvent` without its audience. Typed off
+   *  the routed shape so a field added to one is carried by the other. */
+  readonly events: Omit<RoutedEvent, "seats">[];
   /** The classified refusal a facility raised, kept so the failure path can
    *  rethrow the object rather than a fresh Error carrying only its message. */
   refused: WorldRefusal | null;
