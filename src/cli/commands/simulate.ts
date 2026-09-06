@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import chalk from 'chalk';
 
 import type { Game, GameOptions } from '../../engine/index.js';
@@ -8,7 +8,7 @@ import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { parseGameOptionFlags } from './dev.js';
 import { validateGameOptionSelection, type DevOptionDef } from '../dev-host/config-types.js';
 import type { GameOptionDefinition } from '../../session/types.js';
-import { requireGameProject } from '../lib/game-project.js';
+import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 
 interface SimulateOptions {
   games: string;
@@ -167,14 +167,8 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
   const configPath = requireGameProject(cwd);
 
   const config: BoardSmithConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
-  const rulesPath = config.paths?.rules ? resolve(cwd, config.paths.rules) : join(cwd, 'src', 'rules');
-
-  const rulesIndexPath = join(rulesPath, 'index.ts');
-  if (!existsSync(rulesIndexPath)) {
-    console.error(chalk.red(`Error: Rules not found at ${rulesIndexPath}`));
-    console.error(chalk.dim('Make sure your game has a src/rules/index.ts that exports gameDefinition'));
-    process.exit(1);
-  }
+  const rulesPath = resolveRulesDir(cwd, config);
+  requireRulesIndex(rulesPath);
 
   const gamesCount = Number(options.games);
   const playersCount = Number(options.players);

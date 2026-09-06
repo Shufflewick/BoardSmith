@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, relative, dirname } from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import type { Plugin as VitePlugin } from 'vite';
 import { build } from 'esbuild';
@@ -16,7 +16,13 @@ import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.j
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
-import { resolveWorldMode, worldModeNotice, type WorldManifestBlock } from '../lib/world-project.js';
+import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
+import {
+  WORLD_AUTHORING_DOC,
+  resolveWorldMode,
+  worldModeNotice,
+  type WorldManifestBlock,
+} from '../lib/world-project.js';
 import { parseBotLevel } from '../../bot/index.js';
 
 /** executeOp bundled from the SAME module graph as the rules (one engine). */
@@ -683,6 +689,39 @@ function openDevStore(
   return devStore;
 }
 
+/**
+ * A WORLD WITH NO TABLE HALF HAS NOTHING FOR THIS COMMAND TO SERVE.
+ *
+ * What the dev host serves is the TABLE game, mounted from `src/main.ts`, and a
+ * game that is only a world does not have one -- `boardsmith init --world`
+ * scaffolds exactly that shape, because a vestigial table half is what
+ * BoardSmith #174 is taking OUT of the world games that have one.
+ *
+ * Without this the host started, the notice printed, and the browser opened on
+ * a page whose one script was a 404: a blank screen, which looks exactly like a
+ * world with nothing in it. That is the confusion #304's notice exists to
+ * prevent, arriving by a different road, so the answer is the same one --
+ * say what this command is and is not, and name what does exercise a world.
+ *
+ * Returns the sentence, or null when there is nothing to refuse.
+ */
+export function worldWithoutTableRefusal(
+  worldMode: boolean,
+  tableEntryExists: boolean,
+  tableEntryPath: string,
+): string | null {
+  if (!worldMode || tableEntryExists) return null;
+  return (
+    '\nThis project is a persistent world with no table half, and `boardsmith dev` serves the table.\n' +
+    `  There is no ${tableEntryPath}, so this command has no surface to open.\n` +
+    '  Running a world locally is BoardSmith #167 and is not built yet: nothing here dispatches a\n' +
+    '  world command, runs its genesis, projects a world view or fires a scheduled event.\n' +
+    '\n  What DOES exercise your world today, with no host and no network:\n' +
+    '    boardsmith test   drives tests/world.test.ts through the `boardsmith/world` library\n' +
+    `\n  ${WORLD_AUTHORING_DOC} is the authoring guide.\n`
+  );
+}
+
 // a 460-line entrypoint over every threshold before #41 added the dev store;
 // the wiring it gained lives in `openDevStore` rather than inline. Splitting
 // the command itself is its own change.
@@ -732,16 +771,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // which is only known once gameDefinition's minPlayers/maxPlayers are
   // loaded below. See the `validateBotSeats` call after `resolveEffectivePlayerCount`.
 
-  // with the other CLI commands. Surfaced only because #41 touched this file;
-  // extracting it is a CLI-wide refactor, not part of this change.
-  // fallow-ignore-next-line code-duplication
-  const configPath = join(cwd, 'boardsmith.json');
-  if (!existsSync(configPath)) {
-    console.error(chalk.red('Error: boardsmith.json not found'));
-    console.error(chalk.dim('Make sure you are in a BoardSmith game project directory'));
-    process.exit(1);
-  }
-
+  const configPath = requireGameProject(cwd);
   const config: BoardSmithConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
   console.log(chalk.cyan(`\nStarting development server for ${config.displayName || config.name}...`));
 
@@ -764,19 +794,14 @@ export async function devCommand(options: DevOptions): Promise<void> {
   }
 
   const uiPath = config.paths?.ui ? resolve(cwd, config.paths.ui) : cwd;
-  const rulesPath = config.paths?.rules ? resolve(cwd, config.paths.rules) : join(cwd, 'src', 'rules');
+  const rulesPath = resolveRulesDir(cwd, config);
 
   if (!existsSync(uiPath)) {
     console.error(chalk.red(`Error: UI path not found: ${uiPath}`));
     process.exit(1);
   }
 
-  const rulesIndexPath = join(rulesPath, 'index.ts');
-  if (!existsSync(rulesIndexPath)) {
-    console.error(chalk.red(`Error: Rules not found at ${rulesIndexPath}`));
-    console.error(chalk.dim('Make sure your game has a src/rules/index.ts that exports gameDefinition'));
-    process.exit(1);
-  }
+  const rulesIndexPath = requireRulesIndex(rulesPath);
 
   // Temp dir for the Node-side rules metadata bundle.
   const tempDir = join(cwd, '.boardsmith');
@@ -868,6 +893,14 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // #158: the manifest's `world` block is the whole declaration -- no flag.
   // #304: what the run then IS gets stated accurately, in one place.
   const worldMode = resolveWorldMode(config);
+
+  const tableEntry = join(uiPath, 'src', 'main.ts');
+  const refusal = worldWithoutTableRefusal(worldMode, existsSync(tableEntry), relative(cwd, tableEntry));
+  if (refusal !== null) {
+    console.error(chalk.red(refusal));
+    process.exit(1);
+  }
+
   for (const line of worldModeNotice(config)) {
     console.log(chalk.dim(`  ${line}`));
   }

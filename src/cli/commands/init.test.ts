@@ -18,7 +18,57 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { generateGameTs, generateTestTs, initCommand } from './init.js';
+import { generateGameTs, generateTestTs, initCommand, type InitOptions } from './init.js';
+
+/**
+ * Scaffold a real project into a fresh temp directory and chdir into its
+ * parent, which is what `initCommand` reads the destination from.
+ *
+ * Both scaffold suites below drive the actual command rather than a fixture:
+ * these tests exist because the scaffold's OUTPUT was wrong, so a fake of it
+ * would assert nothing.
+ */
+async function scaffoldProject(
+  prefix: string,
+  name: string,
+  options: InitOptions,
+): Promise<{ parentDir: string; projectPath: string }> {
+  const parentDir = mkdtempSync(join(tmpdir(), prefix));
+  process.chdir(parentDir);
+  await initCommand(name, options);
+  return { parentDir, projectPath: join(parentDir, name) };
+}
+
+/**
+ * A suite whose every test scaffolds a real project. It owns the temp
+ * directory, the chdir into it, and the cleanup afterwards.
+ *
+ * Each suite below carried its own copy of those three, and the copy that
+ * matters most is the `process.chdir` BACK: a suite that skips it leaves every
+ * test file running after it inside a directory that has been deleted.
+ */
+function scaffoldSuite(prefix: string, defaultName: string, defaultOptions: InitOptions) {
+  const originalCwd = process.cwd();
+  const project = { path: '' };
+  let parentDir = '';
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (parentDir) rmSync(parentDir, { recursive: true, force: true });
+  });
+
+  /** Scaffold the suite's project (or, given arguments, a different one). */
+  async function scaffold(name = defaultName, options = defaultOptions): Promise<string> {
+    ({ parentDir, projectPath: project.path } = await scaffoldProject(prefix, name, options));
+    return project.path;
+  }
+
+  const read = (relative: string): string => readFileSync(join(project.path, relative), 'utf-8');
+  const has = (relative: string): boolean => existsSync(join(project.path, relative));
+
+  return { scaffold, read, has };
+}
+import { WORLD_SCAFFOLD_SEATS } from '../lib/world-scaffold.js';
 import { validateAssetPaths } from './validate.js';
 import { ASSET_PATH_KEYS } from '../lib/config-schema.js';
 
@@ -170,26 +220,13 @@ describe('initCommand — git init on scaffold (Phase 149 Finding 1)', () => {
  * created.
  */
 describe('initCommand — a scaffolded project is portable and has no dangling assets (issue 142)', () => {
-  const originalCwd = process.cwd();
-  let parentDir: string;
-  let projectPath: string;
-
-  afterEach(() => {
-    process.chdir(originalCwd);
-    if (parentDir) rmSync(parentDir, { recursive: true, force: true });
+  const { scaffold, read } = scaffoldSuite('bs-init-scaffold-', 'scaffold-defects-game', {
+    withoutRulebook: true,
   });
 
-  async function scaffold(): Promise<void> {
-    parentDir = mkdtempSync(join(tmpdir(), 'bs-init-scaffold-'));
-    process.chdir(parentDir);
-    await initCommand('scaffold-defects-game', { withoutRulebook: true });
-    projectPath = join(parentDir, 'scaffold-defects-game');
-  }
-
   it('writes a relative boardsmith dependency path, never an absolute one', async () => {
-    await scaffold();
-    const pkg = JSON.parse(readFileSync(join(projectPath, 'package.json'), 'utf-8'));
-    const link: string = pkg.dependencies.boardsmith;
+    const projectPath = await scaffold();
+    const link: string = JSON.parse(read('package.json')).dependencies.boardsmith;
 
     expect(link.startsWith('file:')).toBe(true);
     expect(link.startsWith('file:/')).toBe(false);
@@ -199,27 +236,163 @@ describe('initCommand — a scaffolded project is portable and has no dangling a
 
   it('declares no manifest asset it did not create', async () => {
     await scaffold();
-    const config = JSON.parse(readFileSync(join(projectPath, 'boardsmith.json'), 'utf-8'));
+    const config = JSON.parse(read('boardsmith.json'));
     for (const key of ASSET_PATH_KEYS) {
       expect(config).not.toHaveProperty(key);
     }
   });
 
   it('passes the Asset Paths gate that now opens boardsmith.json', async () => {
-    await scaffold();
-    const result = await validateAssetPaths(projectPath);
+    const result = await validateAssetPaths(await scaffold());
     expect(result.passed).toBe(true);
   });
 
   it('and that gate fails the moment a dangling asset path is added back', async () => {
-    await scaffold();
+    const projectPath = await scaffold();
     const configPath = join(projectPath, 'boardsmith.json');
-    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+    const config = JSON.parse(read('boardsmith.json'));
     config.thumbnail = './public/thumbnail.png';
     writeFileSync(configPath, JSON.stringify(config, null, 2));
 
     const result = await validateAssetPaths(projectPath);
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('thumbnail');
+  });
+});
+
+
+/**
+ * BoardSmith #168: `boardsmith init --world` SCAFFOLDS A WORLD.
+ *
+ * The pitch is one npm install, one `boardsmith init`, and a game you develop
+ * on your own laptop. It did not hold for the kind of game the whole
+ * persistent-worlds effort is about: there was no world scaffold at all, so the
+ * four world games that exist were each hand-built, and each hand-copied the
+ * authoring contract into its own source (#164, #165).
+ *
+ * These assertions are on the three things that made those copies happen and
+ * one thing that would make a new author's first hour a lie:
+ *
+ *   1. the manifest declares the world, since the block IS the declaration;
+ *   2. the rules IMPORT the contract from `boardsmith/world` and re-declare
+ *      none of it;
+ *   3. the test drives the library rather than a hand-rolled fake runner;
+ *   4. the project says what does and does not work yet, because `boardsmith
+ *      dev` does not run a world until #167.
+ */
+describe('initCommand --world — a persistent world project (#168)', () => {
+  const { scaffold: scaffoldWorld, read, has } = scaffoldSuite('bs-init-world-', 'tiny-world', {
+    withoutRulebook: true,
+    world: true,
+  });
+
+  it('declares the world in boardsmith.json, which is how a game says it is one', async () => {
+    await scaffoldWorld();
+    const config = JSON.parse(read('boardsmith.json'));
+    expect(config.world).toEqual({ maxPlayers: WORLD_SCAFFOLD_SEATS });
+  });
+
+  it('declares the same seat count in the compiled rules as in the manifest', async () => {
+    await scaffoldWorld();
+    // Two doors, and they must agree: `boardsmith validate` reads the manifest
+    // and the runtime reads the rules, so a world whose numbers differ is
+    // refused at whichever one the host happens to check.
+    const config = JSON.parse(read('boardsmith.json'));
+    expect(read('src/rules/world.ts')).toContain(
+      `export const WORLD_SEATS = ${config.world.maxPlayers};`,
+    );
+  });
+
+  it('writes the four files a world project is', async () => {
+    await scaffoldWorld();
+    for (const file of [
+      'src/rules/world.ts',
+      'world.html',
+      'tests/world.test.ts',
+      'src/ui/components/WorldBoard.vue',
+    ]) {
+      expect(has(file), `${file} is missing`).toBe(true);
+    }
+  });
+
+  it('writes no table half — a world has no turn order, flow or action table', async () => {
+    await scaffoldWorld();
+    // The vestigial table halves the existing world games carry are what #174
+    // is stripping out. A new world must not be handed one.
+    for (const file of [
+      'src/rules/actions.ts',
+      'src/rules/flow.ts',
+      'src/ui/uis.ts',
+      'src/ui/App.vue',
+      'index.html',
+      'src/main.ts',
+      'tests/game.test.ts',
+    ]) {
+      expect(has(file), `${file} should not be scaffolded`).toBe(false);
+    }
+  });
+
+  it('IMPORTS the contract from boardsmith/world and re-declares none of it', async () => {
+    await scaffoldWorld();
+    const world = read('src/rules/world.ts');
+    expect(world).toContain("from 'boardsmith/world'");
+    // The exact defect #165 exists to end: every world game written before it
+    // hand-copied these declarations, and the copies drifted from the runtime.
+    for (const copied of [
+      'interface WorldCommandHandler',
+      'interface WorldCommandContext',
+      'type WorldCommandArgument',
+      'interface WorldEvent',
+    ]) {
+      expect(world, `${copied} is hand-copied instead of imported`).not.toContain(copied);
+    }
+  });
+
+  it('registers the world block on gameDefinition, typed by GameDefinition', async () => {
+    await scaffoldWorld();
+    const index = read('src/rules/index.ts');
+    expect(index).toContain('world: { commands: worldCommands, genesis: worldGenesis, view: worldView }');
+    expect(index).toContain('GameDefinition');
+  });
+
+  it('scaffolds a test that DRIVES the library, not a hand-rolled runner', async () => {
+    await scaffoldWorld();
+    const test = read('tests/world.test.ts');
+    // `createWorld` is the one function every host calls — the platform's
+    // runner and, once #167 lands, `boardsmith dev`. A test that called the
+    // command handlers itself would prove only that the author can call their
+    // own functions, which is what all four existing world games do.
+    expect(test).toContain("import { createWorld } from 'boardsmith/world'");
+    expect(test).toContain('runner.genesis()');
+    expect(test).toContain('runner.declare(');
+    expect(test).toContain('runner.apply(');
+    expect(test).toContain('runner.serialize(');
+    expect(test).toContain('runner.viewsFor(');
+    // The shape of a hand-rolled runner: reaching into the command table and
+    // calling `run` with a context the test invented.
+    expect(test).not.toContain('worldCommands[');
+  });
+
+  it("serves the world's own surface from world.html, not the table's index.html", async () => {
+    await scaffoldWorld();
+    expect(read('world.html')).toContain('/src/world-main.ts');
+    expect(read('src/ui/WorldApp.vue')).toContain('WorldShell');
+  });
+
+  it('tells the author, in the project itself, that `boardsmith dev` does not run a world yet', async () => {
+    await scaffoldWorld();
+    // The terminal scrolls; the README keeps. An author who is not told this
+    // finds it out by watching a genesis that never runs.
+    const readme = read('README.md');
+    expect(readme).toContain('boardsmith test');
+    expect(readme).toContain('#167');
+    expect(readme.toLowerCase()).toContain('does not work yet');
+  });
+
+  it('leaves an ordinary game project untouched', async () => {
+    await scaffoldWorld('table-game', { withoutRulebook: true });
+    expect(JSON.parse(read('boardsmith.json')).world).toBeUndefined();
+    expect(has('src/rules/world.ts')).toBe(false);
+    expect(has('index.html')).toBe(true);
   });
 });

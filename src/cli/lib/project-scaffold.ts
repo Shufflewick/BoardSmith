@@ -23,6 +23,14 @@ export interface ProjectConfig {
   audience?: string;
   tags?: string[];
   ui?: string;
+  /**
+   * The `world` block, present exactly when this project is a persistent world
+   * (`boardsmith init --world`). Its PRESENCE in `boardsmith.json` is how a
+   * game says it is a world -- there is no second declaration and no flag at
+   * run time -- so this field decides both the manifest and which rules,
+   * tests and entry point the scaffold writes.
+   */
+  world?: { maxPlayers: number };
 }
 
 /**
@@ -136,6 +144,11 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
     // Add it once there is art behind it; `boardsmith validate` now fails on a
     // declared asset path that resolves to nothing.
     scoreboard: { stats: ['score'] },
+    // The `world` block, and only for a world project. Its PRESENCE is the
+    // declaration that this game is a persistent world (#158); its absence
+    // means it is not one. `boardsmith validate` requires `world.maxPlayers`,
+    // and the compiled rules must declare the same number.
+    ...(config.world ? { world: config.world } : {}),
     // No `ui` field, deliberately. A game's UIs are declared in src/ui/uis.ts
     // (defineGameUIs) — the one place. The manifest used to carry a `"ui"` key
     // that nothing read after scaffolding, so it rotted: most games dropped it,
@@ -630,11 +643,24 @@ dist/
  * Generate all scaffold files for a project
  */
 export function generateScaffoldFiles(config: ProjectConfig, projectPath: string): GeneratedFile[] {
-  return [
+  const shared: GeneratedFile[] = [
     { path: 'boardsmith.json', content: generateBoardsmithJson(config) },
     { path: 'package.json', content: generatePackageJson(config, projectPath) },
     { path: 'tsconfig.json', content: generateTsConfig() },
     { path: 'vite.config.ts', content: generateViteConfig() },
+    { path: '.gitignore', content: generateGitignore() },
+  ];
+
+  // A WORLD PROJECT GETS NO TABLE HALF. Everything below this line -- the
+  // table entry point, the game shell, the auto-UI registry -- describes a game
+  // with a turn order, a flow position and an action table, and a world has
+  // none of the three. Scaffolding them anyway would hand every new world the
+  // vestigial table half the existing world games are being stripped of
+  // (BoardSmith #174), and would teach the wrong model on the first day.
+  if (config.world) return shared;
+
+  return [
+    ...shared,
     { path: 'index.html', content: generateIndexHtml(config) },
     { path: 'src/main.ts', content: generateMainTs() },
     { path: 'src/rules/index.ts', content: generateRulesIndexTs(config) },
@@ -643,7 +669,6 @@ export function generateScaffoldFiles(config: ProjectConfig, projectPath: string
     { path: 'src/ui/App.vue', content: generateAppVue(config) },
     { path: 'src/ui/components/GameTable.vue', content: generateGameTableVue() },
     { path: 'tests/a11y.example.test.ts', content: generateA11yExampleTestTs() },
-    { path: '.gitignore', content: generateGitignore() },
   ];
 }
 

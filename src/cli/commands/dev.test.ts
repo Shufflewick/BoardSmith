@@ -16,6 +16,7 @@ import {
   parseGameOptionFlags,
   mergeGameOptionDefinitions,
   resolvePreset,
+  worldWithoutTableRefusal,
 } from './dev.js';
 
 /**
@@ -325,5 +326,43 @@ describe('shouldOpenBrowser (138: --no-open opts out of auto-launching a real br
 
   it('stays true when options.open is explicitly true', () => {
     expect(shouldOpenBrowser({ open: true })).toBe(true);
+  });
+});
+
+
+/**
+ * BoardSmith #168: a project scaffolded by `boardsmith init --world` has no
+ * table half, and this command serves the table.
+ *
+ * The failure mode this closes is the one #304 is about, reached by another
+ * road: the host started, the world notice printed, and the browser opened on a
+ * page whose one script was a 404. A blank screen looks exactly like a world
+ * with nothing in it, so an author would have concluded their genesis was
+ * broken. Running a world locally is #167 and is not built.
+ */
+describe('worldWithoutTableRefusal (#168)', () => {
+  it('says nothing about a table game, which is what this command serves', () => {
+    expect(worldWithoutTableRefusal(false, true, 'src/main.ts')).toBeNull();
+  });
+
+  it('says nothing about a world that DOES carry a table half', () => {
+    // The existing world games each ship one; they keep working exactly as
+    // they did, and get the notice rather than a refusal.
+    expect(worldWithoutTableRefusal(true, true, 'src/main.ts')).toBeNull();
+  });
+
+  it('refuses a world with no table entry, and names what does exercise a world', () => {
+    const refusal = worldWithoutTableRefusal(true, false, 'src/main.ts');
+    expect(refusal).not.toBeNull();
+    expect(refusal).toContain('src/main.ts');
+    // An error message that only says no is not actionable.
+    expect(refusal).toContain('boardsmith test');
+    expect(refusal).toContain('#167');
+  });
+
+  it('does not claim the thing #304 forbids: that this command runs a world', () => {
+    const refusal = worldWithoutTableRefusal(true, false, 'src/main.ts') ?? '';
+    expect(/running resident/i.test(refusal)).toBe(false);
+    expect(/(runs|hosts|serves) (a|the|this|your) world\b/i.test(refusal)).toBe(false);
   });
 });

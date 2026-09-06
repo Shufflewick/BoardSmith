@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import type { GameDefinition } from '../../session/index.js';
 import { Game, Player } from '../../engine/index.js';
-import { deriveManifest } from './build.js';
+import { deriveManifest, resolveUiBuild } from './build.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,12 +28,23 @@ function makeGameDefinition(minPlayers: number, maxPlayers: number): GameDefinit
  */
 const PKG = { name: 'fixture', version: '1.0.0' };
 
+/**
+ * `deriveManifest` under the ordinary stamp: a stated version, the current
+ * engine, and no world UI. The tests that are ABOUT one of those three
+ * arguments (the version suite, the world-UI suite) still call `deriveManifest`
+ * directly, so an explicit call in this file always means "this argument is the
+ * subject".
+ */
+function derive(
+  config: Record<string, unknown>,
+  gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'> = makeGameDefinition(2, 4),
+): Record<string, unknown> {
+  return deriveManifest(config, PKG, gameDefinition, { protocol: 1, revision: 7 }, { worldUi: false });
+}
+
 describe('deriveManifest', () => {
   it('derives playerCount from gameDefinition.minPlayers/maxPlayers', () => {
-    const config = { name: 'fixture', displayName: 'Fixture Game' };
-    const gameDefinition = makeGameDefinition(2, 4);
-
-    const manifest = deriveManifest(config, PKG, gameDefinition, { protocol: 1, revision: 7 }, { worldUi: false });
+    const manifest = derive({ name: 'fixture', displayName: 'Fixture Game' });
 
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
   });
@@ -57,7 +68,7 @@ describe('deriveManifest', () => {
       roundDeadline: { defaultHours: 24, minHours: 6, maxHours: 72, mindingSafe: true },
     };
 
-    const manifest = deriveManifest(config, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
+    const manifest = derive(config);
 
     // `world.ui` is the one key inside the block the BUILD owns rather than the
     // author (ShufflewickPub #128); everything else the author wrote survives.
@@ -75,10 +86,7 @@ describe('deriveManifest', () => {
     // compiled rules (gameDefinition) say 2-4. This is exactly the drift
     // scenario T-135-07 must prevent: a raw `{ ...config }` spread would let
     // the stale 9/9 ride into the manifest unchanged.
-    const config = { name: 'fixture', playerCount: { min: 9, max: 9 } };
-    const gameDefinition = makeGameDefinition(2, 4);
-
-    const manifest = deriveManifest(config, PKG, gameDefinition, { protocol: 1, revision: 7 }, { worldUi: false });
+    const manifest = derive({ name: 'fixture', playerCount: { min: 9, max: 9 } });
 
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
     expect(manifest.playerCount).not.toEqual({ min: 9, max: 9 });
@@ -111,7 +119,7 @@ describe('deriveManifest', () => {
     // platform's skew check — so the derived values must overwrite, not merge.
     const config = { name: 'fixture', engineProtocol: 99, engineRevision: 99 };
 
-    const manifest = deriveManifest(config, PKG, makeGameDefinition(2, 2), { protocol: 1, revision: 7 }, { worldUi: false });
+    const manifest = derive(config, makeGameDefinition(2, 2));
 
     expect(manifest.engineProtocol).toBe(1);
     expect(manifest.engineRevision).toBe(7);
@@ -126,7 +134,7 @@ describe('deriveManifest', () => {
       cooperative: false,
     };
 
-    const manifest = deriveManifest(config, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
+    const manifest = derive(config);
 
     expect(manifest.audience).toBe('casual');
     expect(manifest.tags).toEqual(['abstract', 'classic']);
@@ -140,7 +148,7 @@ describe('deriveManifest', () => {
     // whose playerCount silently serialized to nothing.
     const gameDefinition = {} as Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>;
 
-    expect(() => deriveManifest({ name: 'fixture' }, PKG, gameDefinition, { protocol: 1, revision: 7 }, { worldUi: false }))
+    expect(() => derive({ name: 'fixture' }, gameDefinition))
       .toThrow(/minPlayers\/maxPlayers.*src\/rules\/index\.ts/s);
   });
 });
@@ -281,5 +289,40 @@ describe('deriveManifest — the world UI flag', () => {
     expect(() =>
       deriveManifest({ name: 'fixture' }, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: true }),
     ).toThrow(/world\.html/);
+  });
+});
+
+
+/**
+ * BoardSmith #168: a project may have either UI entry point, or both.
+ *
+ * Naming an input that does not exist fails the build with rollup's
+ * `UNRESOLVED_ENTRY` and a stack trace, which is not a sentence anybody can act
+ * on. The world direction was the one that broke: `world.html` was named only
+ * when it existed, but `index.html` was assumed always to, so the first
+ * world-only project ever scaffolded could not be built at all.
+ */
+describe('resolveUiBuild — which surfaces a project has (#168)', () => {
+  it('leaves a table game on Vite\'s own default input, unchanged', () => {
+    expect(resolveUiBuild('/game', true, false)).toEqual({ surfaces: '' });
+  });
+
+  it('names both entries for a game that has a table and a world', () => {
+    expect(resolveUiBuild('/game', true, true)).toEqual({
+      surfaces: 'table and world',
+      input: { index: join('/game', 'index.html'), world: join('/game', 'world.html') },
+    });
+  });
+
+  it('names only world.html for a world with no table half', () => {
+    expect(resolveUiBuild('/game', false, true)).toEqual({
+      surfaces: 'world',
+      input: { world: join('/game', 'world.html') },
+    });
+  });
+
+  it('refuses a project with no surface at all, in a sentence naming both entries', () => {
+    expect(() => resolveUiBuild('/game', false, false)).toThrow(/index\.html/);
+    expect(() => resolveUiBuild('/game', false, false)).toThrow(/world\.html/);
   });
 });

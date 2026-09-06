@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -19,6 +19,21 @@ import {
 import { buildCommand } from './build.js';
 import { validateCommand } from './validate.js';
 import { describeZipSizeViolation } from '../lib/bundle-limits.js';
+import { requireGameProjectManifests } from '../lib/game-project.js';
+
+/**
+ * END A FAILED PUBLISH.
+ *
+ * The platform states its own reason when it has one, and that reason is
+ * always more useful than the exception's `toString`; anything else is
+ * reported verbatim rather than swallowed. Three stages -- init, upload and
+ * finalize -- each ended this way, and never returns, so the caller cannot
+ * carry on with a half-published version.
+ */
+function reportPublishFailure(err: unknown): never {
+  console.error(chalk.red(isPublishError(err) ? err.message : String(err)));
+  process.exit(1);
+}
 
 interface PublishOptions {
   apiKey?: string;
@@ -114,22 +129,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   }
 
   // -- Validate project --
-  const configPath = join(cwd, 'boardsmith.json');
-  if (!existsSync(configPath)) {
-    console.error(chalk.red('boardsmith.json not found.'));
-    console.error(chalk.dim('Run this command from a BoardSmith game project directory.'));
-    process.exit(1);
-  }
-
-  const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-
-  const pkgPath = join(cwd, 'package.json');
-  if (!existsSync(pkgPath)) {
-    console.error(chalk.red('package.json not found.'));
-    process.exit(1);
-  }
-
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  const { configPath, config, pkg } = requireGameProjectManifests(cwd);
   const version = pkg.version;
   if (!version) {
     console.error(chalk.red('No version field in package.json.'));
@@ -289,12 +289,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
         process.exit(1);
       }
       spinner.fail('Publish failed');
-      if (isPublishError(err)) {
-        console.error(chalk.red(err.message));
-      } else {
-        console.error(chalk.red(String(err)));
-      }
-      process.exit(1);
+      reportPublishFailure(err);
     }
   }
 
@@ -335,12 +330,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   } catch (err: unknown) {
     spinner.fail('Upload failed');
     await abortInFlightPublish(platformUrl, apiKey, initResult.versionId);
-    if (isPublishError(err)) {
-      console.error(chalk.red(err.message));
-    } else {
-      console.error(chalk.red(String(err)));
-    }
-    process.exit(1);
+    reportPublishFailure(err);
   }
 
   // -- Complete --
@@ -355,12 +345,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   } catch (err: unknown) {
     spinner.fail('Finalize failed');
     await abortInFlightPublish(platformUrl, apiKey, initResult.versionId);
-    if (isPublishError(err)) {
-      console.error(chalk.red(err.message));
-    } else {
-      console.error(chalk.red(String(err)));
-    }
-    process.exit(1);
+    reportPublishFailure(err);
   }
 }
 

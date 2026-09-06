@@ -12,6 +12,22 @@ import {
   toDisplayName,
   type ProjectConfig,
 } from '../lib/project-scaffold.js';
+import {
+  WORLD_SCAFFOLD_SEATS,
+  generateWorldA11yTestTs,
+  generateWorldAppVue,
+  generateWorldBoardVue,
+  generateWorldElementsTs,
+  generateWorldGameTs,
+  generateWorldHtml,
+  generateWorldMainTs,
+  generateWorldReadme,
+  generateWorldRulesIndexTs,
+  generateWorldTestTs,
+  generateWorldTs,
+  generateWorldUiIndexTs,
+  worldScaffoldStatus,
+} from '../lib/world-scaffold.js';
 import { ingestArchiveCommand } from './ingest-archive.js';
 import { installIngestHook } from '../lib/ingest-hook.js';
 
@@ -41,6 +57,189 @@ export interface InitOptions {
    * missing archive is always a deliberate choice rather than an omission nobody noticed.
    */
   withoutRulebook?: boolean;
+  /**
+   * Scaffold a PERSISTENT WORLD rather than a table game.
+   *
+   * A FLAG AND NOT A PROMPT, for the same reason `--rulebook` is one: almost
+   * nothing that runs `boardsmith init` is a person at a terminal. The bs-
+   * skills invoke it from a subagent, CI invokes it with no TTY, and a prompt
+   * in either place either hangs or needs a silent default -- which is a
+   * fallback, and a fallback here decides the shape of somebody's whole game.
+   * A flag is also the only form of the decision that survives: it is in the
+   * shell history and in the README the scaffold writes, where a prompt's
+   * answer is gone the moment the terminal scrolls.
+   *
+   * It is not the same kind of decision as `--rulebook`, which is REQUIRED
+   * because omitting it was silently wrong -- the archive was simply missing
+   * and nobody found out until a later verify pass. Omitting `--world` is
+   * loudly wrong instead: you get a card game, and you can see that you did.
+   * So it takes a default, and the default is the game most people are making.
+   *
+   * A world is what a game IS, so the flag writes the `world` block into
+   * `boardsmith.json` and is never needed again -- the block is the single
+   * declaration every later command reads.
+   */
+  world?: boolean;
+}
+
+/**
+ * THE TWO KINDS OF PROJECT `boardsmith init` CAN CREATE.
+ *
+ * A table game and a persistent world differ in three places and nowhere else:
+ * the manifest they declare, the sources they write, and the first command an
+ * author is honestly sent to. Threading a `world` boolean through `initCommand`
+ * put those three decisions in three different paragraphs of one function, so
+ * "what is a world project" could only be answered by reading the whole thing —
+ * and a fourth difference would have been a fourth place to remember.
+ */
+interface ProjectScaffold {
+  /** The `boardsmith.json` this kind of project declares. */
+  config(name: string): ProjectConfig;
+  /** The rules, tests and UI that make it that kind of project. */
+  writeSources(projectPath: string, config: ProjectConfig): Promise<void>;
+  /** What to run next, which is not the same command for both. */
+  printNextSteps(name: string): void;
+}
+
+const TABLE_SCAFFOLD: ProjectScaffold = {
+  config: (name) => ({
+    name,
+    displayName: toDisplayName(name),
+    description: 'A fun game for 2-4 players',
+    playerCount: { min: 2, max: 4 },
+    audience: 'casual',
+    tags: ['card-game'],
+  }),
+
+  writeSources: async (projectPath, config) => {
+    const pascal = toPascalCase(config.name);
+    await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateGameTs(pascal));
+    await writeFile(join(projectPath, 'src', 'rules', 'elements.ts'), generateElementsTs());
+    await writeFile(join(projectPath, 'src', 'rules', 'actions.ts'), generateActionsTs(pascal));
+    await writeFile(join(projectPath, 'src', 'rules', 'flow.ts'), generateFlowTs(pascal));
+    await writeFile(join(projectPath, 'tests', 'game.test.ts'), generateTestTs(pascal));
+  },
+
+  printNextSteps: (name) => {
+    console.log(`
+${chalk.cyan('Next steps:')}
+
+  cd ${name}
+  npm install
+  boardsmith dev
+
+${chalk.dim('This will start the development server and open player tabs in your browser.')}
+
+${chalk.cyan('Everything else runs through the same CLI:')}
+
+  ${chalk.dim('boardsmith test')}      ${chalk.dim("- run your game's tests")}
+  ${chalk.dim('boardsmith lint')}      ${chalk.dim('- check for BoardSmith pitfalls')}
+  ${chalk.dim('boardsmith build')}     ${chalk.dim('- build the publishable bundle')}
+  ${chalk.dim('boardsmith validate')}  ${chalk.dim('- run pre-publish checks')}
+  ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
+`);
+  },
+};
+
+const WORLD_SCAFFOLD: ProjectScaffold = {
+  config: (name) => ({
+    name,
+    displayName: toDisplayName(name),
+    description: 'A persistent world: a place that keeps going while nobody is looking.',
+    playerCount: { min: 1, max: WORLD_SCAFFOLD_SEATS },
+    audience: 'casual',
+    tags: ['persistent-world'],
+    world: { maxPlayers: WORLD_SCAFFOLD_SEATS },
+  }),
+
+  writeSources: async (projectPath, config) => {
+    // A world has no actions and no flow: its verbs are a command table and
+    // its clock is a schedule, so there is nothing for either file to hold.
+    const pascal = toPascalCase(config.name);
+    await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateWorldGameTs(pascal));
+    await writeFile(join(projectPath, 'src', 'rules', 'elements.ts'), generateWorldElementsTs());
+    await writeFile(join(projectPath, 'src', 'rules', 'world.ts'), generateWorldTs(pascal));
+    await writeFile(join(projectPath, 'src', 'rules', 'index.ts'), generateWorldRulesIndexTs(config));
+    await writeFile(join(projectPath, 'tests', 'world.test.ts'), generateWorldTestTs());
+    await writeFile(join(projectPath, 'tests', 'a11y.example.test.ts'), generateWorldA11yTestTs());
+    await writeFile(join(projectPath, 'world.html'), generateWorldHtml(config));
+    await writeFile(join(projectPath, 'src', 'world-main.ts'), generateWorldMainTs());
+    await writeFile(join(projectPath, 'src', 'ui', 'index.ts'), generateWorldUiIndexTs());
+    await writeFile(join(projectPath, 'src', 'ui', 'WorldApp.vue'), generateWorldAppVue(config));
+    await writeFile(
+      join(projectPath, 'src', 'ui', 'components', 'WorldBoard.vue'),
+      generateWorldBoardVue(),
+    );
+    await writeFile(join(projectPath, 'README.md'), generateWorldReadme(config));
+  },
+
+  // THE HONEST FIRST COMMAND. `boardsmith dev` does not run a world yet
+  // (BoardSmith #167), so it is not what a world project is sent to first;
+  // the status below says so in the same breath, and the README the
+  // scaffold wrote keeps saying it after this scrolls away.
+  printNextSteps: (name) => {
+    console.log(`
+${chalk.cyan('Next steps:')}
+
+  cd ${name}
+  npm install
+  boardsmith test
+
+${worldScaffoldStatus()
+  .map((line) => chalk.dim(line))
+  .join('\n')}
+
+  ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
+`);
+  },
+};
+
+/**
+ * Give the new project a git repo, an initial commit, and the ingest synthesis
+ * hook.
+ *
+ * The `/bs-build-chunk` skill's Git Protocol commits at every step
+ * (chunk-<slug>/step-<name>) — without a repo here, the very first commit that
+ * protocol calls for fails outright (Phase 149 dry-run Finding 1). Every
+ * failure is non-fatal and reported: scaffolding must not fail because git
+ * setup did (no git on PATH, or the project dir is nested in a repo the user
+ * manages themselves).
+ *
+ * Init/staging is split from the commit so the skip message names the actual
+ * failure point (WR-03). If `git init`/`git add` fail, the remedy is "run git
+ * init manually". If only the commit fails (the common "no git identity
+ * configured" case), the repo already exists and staging succeeded — telling
+ * the user to run `git init` again would be misleading.
+ */
+async function initVersionControl(projectPath: string): Promise<void> {
+  try {
+    execSync('git init', { cwd: projectPath, stdio: 'ignore' });
+    execSync('git add -A', { cwd: projectPath, stdio: 'ignore' });
+  } catch {
+    console.log(
+      chalk.dim('  (skipped git init — git not available; run `git init` manually if you want version control)')
+    );
+    return;
+  }
+
+  try {
+    execSync('git commit -m "chore: scaffold project via boardsmith init"', {
+      cwd: projectPath,
+      stdio: 'ignore',
+    });
+  } catch {
+    console.log(
+      chalk.dim('  (git repo created but initial commit skipped — set `git config user.name` / `user.email`, then run `git commit`)')
+    );
+  }
+
+  // Install the ingest synthesis hook BEFORE the archive, so it exists for every subsequent
+  // commit including the ones the bs- build protocol makes during chunk work.
+  if ((await installIngestHook(projectPath)) === 'skipped-existing') {
+    console.log(
+      chalk.dim('  (left your existing .git/hooks/pre-commit alone — run `boardsmith ingest-gaps` manually after transcription)'),
+    );
+  }
 }
 
 export async function initCommand(name: string, options: InitOptions = {}): Promise<void> {
@@ -72,6 +271,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     process.exit(1);
   }
 
+  const scaffold: ProjectScaffold = options.world ? WORLD_SCAFFOLD : TABLE_SCAFFOLD;
   const projectPath = join(process.cwd(), name);
 
   if (existsSync(projectPath)) {
@@ -88,29 +288,15 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       await mkdir(join(projectPath, dir), { recursive: true });
     }
 
-    // Create project config
-    const config: ProjectConfig = {
-      name,
-      displayName: toDisplayName(name),
-      description: 'A fun game for 2-4 players',
-      playerCount: { min: 2, max: 4 },
-      audience: 'casual',
-      tags: ['card-game'],
-    };
+    const config = scaffold.config(name);
 
-    // Generate scaffold files
-    const scaffoldFiles = generateScaffoldFiles(config, projectPath);
-    for (const file of scaffoldFiles) {
+    // Files every project gets, from the manifest down.
+    for (const file of generateScaffoldFiles(config, projectPath)) {
       await writeFile(join(projectPath, file.path), file.content);
     }
 
-    // Generate game-specific files
-    const pascal = toPascalCase(name);
-    await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateGameTs(pascal));
-    await writeFile(join(projectPath, 'src', 'rules', 'elements.ts'), generateElementsTs());
-    await writeFile(join(projectPath, 'src', 'rules', 'actions.ts'), generateActionsTs(pascal));
-    await writeFile(join(projectPath, 'src', 'rules', 'flow.ts'), generateFlowTs(pascal));
-    await writeFile(join(projectPath, 'tests', 'game.test.ts'), generateTestTs(pascal));
+    // Files that are the whole difference between the two kinds of project.
+    await scaffold.writeSources(projectPath, config);
 
     // Log if using local dev
     const deps = getDependencyPaths(projectPath);
@@ -118,52 +304,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       console.log(chalk.dim(`  Using local BoardSmith from monorepo`));
     }
 
-    // Initialize a git repository with an initial commit. The `/bs-build-chunk`
-    // skill's Git Protocol commits at every step (chunk-<slug>/step-<name>) —
-    // without this, a freshly scaffolded project has no git repo at all and
-    // the very first commit that protocol calls for fails outright (Phase 149
-    // dry-run Finding 1). Non-fatal on failure (e.g. no git on PATH, or the
-    // project dir is already nested in a repo the user manages themselves) —
-    // scaffolding must not fail because git setup did.
-    // Split init/staging from the commit so the skip message names the actual
-    // failure point (WR-03). If `git init`/`git add` fail (no git on PATH), the
-    // remedy is "run git init manually". If only the commit fails (the common
-    // "no git identity configured" case), the repo already exists and staging
-    // succeeded — telling the user to run `git init` again would be misleading;
-    // they need to set their git identity and commit.
-    let gitRepoInitialized = false;
-    try {
-      execSync('git init', { cwd: projectPath, stdio: 'ignore' });
-      execSync('git add -A', { cwd: projectPath, stdio: 'ignore' });
-      gitRepoInitialized = true;
-    } catch {
-      console.log(
-        chalk.dim('  (skipped git init — git not available; run `git init` manually if you want version control)')
-      );
-    }
-    if (gitRepoInitialized) {
-      try {
-        execSync('git commit -m "chore: scaffold project via boardsmith init"', {
-          cwd: projectPath,
-          stdio: 'ignore',
-        });
-      } catch {
-        console.log(
-          chalk.dim('  (git repo created but initial commit skipped — set `git config user.name` / `user.email`, then run `git commit`)')
-        );
-      }
-    }
-
-    // Install the ingest synthesis hook BEFORE the archive, so it exists for every subsequent
-    // commit including the ones the bs- build protocol makes during chunk work.
-    if (gitRepoInitialized) {
-      const hookResult = await installIngestHook(projectPath);
-      if (hookResult === 'skipped-existing') {
-        console.log(
-          chalk.dim('  (left your existing .git/hooks/pre-commit alone — run `boardsmith ingest-gaps` manually after transcription)'),
-        );
-      }
-    }
+    await initVersionControl(projectPath);
 
     spinner.succeed(chalk.green(`Created ${name} successfully!`));
 
@@ -177,23 +318,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       });
     }
 
-    console.log(`
-${chalk.cyan('Next steps:')}
-
-  cd ${name}
-  npm install
-  boardsmith dev
-
-${chalk.dim('This will start the development server and open player tabs in your browser.')}
-
-${chalk.cyan('Everything else runs through the same CLI:')}
-
-  ${chalk.dim('boardsmith test')}      ${chalk.dim('- run your game\'s tests')}
-  ${chalk.dim('boardsmith lint')}      ${chalk.dim('- check for BoardSmith pitfalls')}
-  ${chalk.dim('boardsmith build')}     ${chalk.dim('- build the publishable bundle')}
-  ${chalk.dim('boardsmith validate')}  ${chalk.dim('- run pre-publish checks')}
-  ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
-`);
+    scaffold.printNextSteps(name);
   } catch (error) {
     spinner.fail(chalk.red('Failed to create project'));
     console.error(error);

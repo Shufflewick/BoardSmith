@@ -1,6 +1,6 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   ALLOWED_TOP_LEVEL_KEYS,
@@ -18,6 +18,7 @@ import {
   findUntypedTestFiles,
   hasBlockingFailure,
   buildChoiceCardinalityResult,
+  validateRequiredFiles,
 } from './validate.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 
@@ -504,6 +505,19 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     writeFileSync(join(projectDir, 'boardsmith.json'), JSON.stringify(config, null, 2));
   }
 
+  /**
+   * Ship one file containing an absolute `/public`-rooted path and run the
+   * scan. The path STYLE is the defect; which shipped file carries it is the
+   * only thing the cases below differ on, so that is all each one states.
+   */
+  async function scanShippedFile(relativePath: string, content: string) {
+    mkdirSync(join(projectDir, 'public', 'cards'), { recursive: true });
+    mkdirSync(dirname(join(projectDir, relativePath)), { recursive: true });
+    writeFileSync(join(projectDir, relativePath), content);
+    writeConfig({ name: 'x' });
+    return validateAssetPaths(projectDir);
+  }
+
   it('fails on a thumbnail path that resolves to nothing', async () => {
     writeConfig({ name: 'x', thumbnail: './public/thumbnail.png' });
     const result = await validateAssetPaths(projectDir);
@@ -535,29 +549,21 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
   });
 
   it('catches absolute public/ path style in the built rules bundle', async () => {
-    mkdirSync(join(projectDir, 'public', 'cards'), { recursive: true });
-    mkdirSync(join(projectDir, 'dist', 'rules'), { recursive: true });
-    writeFileSync(
-      join(projectDir, 'dist', 'rules', 'rules.js'),
+    const result = await scanShippedFile(
+      join('dist', 'rules', 'rules.js'),
       'card.$images = { face: { sprite: "/cards/deck-sprite.svg" } };',
     );
-    writeConfig({ name: 'x' });
 
-    const result = await validateAssetPaths(projectDir);
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('dist/rules/rules.js');
   });
 
   it('still catches absolute public/ path style in data JSON', async () => {
-    mkdirSync(join(projectDir, 'public', 'cards'), { recursive: true });
-    mkdirSync(join(projectDir, 'data'), { recursive: true });
-    writeFileSync(
-      join(projectDir, 'data', 'cards.json'),
+    const result = await scanShippedFile(
+      join('data', 'cards.json'),
       JSON.stringify([{ image: '/cards/one.png' }]),
     );
-    writeConfig({ name: 'x' });
 
-    const result = await validateAssetPaths(projectDir);
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('/cards/');
   });
@@ -665,5 +671,63 @@ describe('validate.ts choice cardinality (#172)', () => {
     expect(result.details![0]).toContain('40');
     expect(result.details![0]).toContain('boardRef');
     expect(result.details![0]).toContain('dependsOn');
+  });
+});
+
+/**
+ * BoardSmith #168: a world and a table have different entry points.
+ *
+ * `Required Files` demanded `src/ui/App.vue` and `src/ui/uis.ts` of every
+ * project, so the first world-only project ever scaffolded could not pass
+ * validate -- and the only way to make it pass would have been to give it the
+ * vestigial table half #174 is taking out of the worlds that have one.
+ */
+describe('validateRequiredFiles — a world has a different entry point (#168)', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'bs-required-files-'));
+    mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
+    mkdirSync(join(dir, 'src', 'ui'), { recursive: true });
+    for (const file of ['boardsmith.json', 'package.json']) writeFileSync(join(dir, file), '{}');
+    for (const file of ['index.ts', 'game.ts']) writeFileSync(join(dir, 'src', 'rules', file), '');
+  });
+
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  function writeTableUi(): void {
+    writeFileSync(join(dir, 'src', 'ui', 'App.vue'), '');
+    writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), '');
+  }
+
+  function writeWorldUi(): void {
+    writeFileSync(join(dir, 'world.html'), '');
+    writeFileSync(join(dir, 'src', 'world-main.ts'), '');
+    writeFileSync(join(dir, 'src', 'ui', 'WorldApp.vue'), '');
+    writeFileSync(join(dir, 'src', 'rules', 'world.ts'), '');
+  }
+
+  it('passes a table game with the table entry point', async () => {
+    writeTableUi();
+    expect((await validateRequiredFiles(dir, false)).passed).toBe(true);
+  });
+
+  it('passes a world with the world entry point and no table half', async () => {
+    writeWorldUi();
+    expect((await validateRequiredFiles(dir, true)).passed).toBe(true);
+  });
+
+  it('fails a world that declares one and has no world surface', async () => {
+    writeTableUi();
+    const result = await validateRequiredFiles(dir, true);
+    expect(result.passed).toBe(false);
+    expect(result.details).toContain('world.html');
+    expect(result.details).toContain('src/rules/world.ts');
+  });
+
+  it('still fails a table game missing its UI registry', async () => {
+    const result = await validateRequiredFiles(dir, false);
+    expect(result.passed).toBe(false);
+    expect(result.details).toContain('src/ui/uis.ts');
   });
 });

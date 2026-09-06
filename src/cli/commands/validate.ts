@@ -57,6 +57,13 @@ export async function validateCommand(): Promise<void> {
 
   const results: ValidationResult[] = [];
 
+  // Which BACKEND this game declares, read once. The manifest's `world` block
+  // is the single declaration, and what it changes below is which entry point
+  // the project must have.
+  const worldMode = resolveWorldMode(
+    JSON.parse(readFileSync(configPath, 'utf-8')) as { world?: unknown },
+  );
+
   // 1. Check metadata completeness
   results.push(await validateMetadata(cwd));
 
@@ -77,7 +84,7 @@ export async function validateCommand(): Promise<void> {
   results.push(await validateBundleSize(cwd));
 
   // 6. Required files check
-  results.push(await validateRequiredFiles(cwd));
+  results.push(await validateRequiredFiles(cwd, worldMode));
 
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
   results.push(await validateChoiceCardinality(cwd));
@@ -88,9 +95,7 @@ export async function validateCommand(): Promise<void> {
     process.exit(1);
   }
 
-  printSuccessGuidance(
-    resolveWorldMode(JSON.parse(readFileSync(configPath, 'utf-8')) as { world?: unknown }),
-  );
+  printSuccessGuidance(worldMode);
 }
 
 /** One check's icon and status word: pass, advisory warning, or failure. */
@@ -844,15 +849,21 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
   };
 }
 
-async function validateRequiredFiles(cwd: string): Promise<ValidationResult> {
+export async function validateRequiredFiles(cwd: string, isWorld: boolean): Promise<ValidationResult> {
   const required = [
     'boardsmith.json',
     'package.json',
     'src/rules/index.ts',
     'src/rules/game.ts',
-    'src/ui/App.vue',
-    // The UI registry — without it a game has no board to render.
-    'src/ui/uis.ts',
+    // A WORLD AND A TABLE HAVE DIFFERENT ENTRY POINTS, and requiring both would
+    // require every world to carry a table half it does not have. A table
+    // mounts GameShell from index.html and picks its board out of the UI
+    // registry; a world mounts WorldShell from world.html, and has no registry
+    // because it has no turn, no flow position and no action table to switch
+    // boards over.
+    ...(isWorld
+      ? ['world.html', 'src/world-main.ts', 'src/ui/WorldApp.vue', 'src/rules/world.ts']
+      : ['src/ui/App.vue', 'src/ui/uis.ts']),
   ];
 
   const missing: string[] = [];
