@@ -32,10 +32,33 @@
  * - The package `exports` map is not covered. Remapping `./session` in
  *   package.json is platform-visible and moves neither hash, because this
  *   module imports the entrypoint files directly.
- * - `payloadHash` covers what the fixture exercises. It is broad (board
- *   serialization, visibility, flow state, available actions, both sequential
- *   and simultaneous turns) but it is not the whole engine. Engine behaviour
- *   the fixture never reaches is not fingerprinted.
+ * - `payloadHash` covers what the fixture exercises. It is broad but it is not
+ *   the whole engine, and the boundary is worth knowing precisely:
+ *
+ *   COVERED, TABLE SIDE: board serialization, every visibility mode the
+ *   platform depends on, flow state, available actions, both sequential and
+ *   simultaneous turns, and the serialized flow POSITION with its element
+ *   bindings.
+ *
+ *   COVERED, WORLD SIDE (#181): one seat's PROJECTED WORLD VIEW, from a
+ *   multi-seat world with a declaration that names a subset of its partitions
+ *   and one resident partition it does not name. So the view's two prunes are
+ *   both fingerprinted -- unnamed resident partitions (#183) and the game
+ *   root's roster (#181) -- along with the shape a player reference takes on
+ *   the wire and the world envelope's own `{ player, state, phase }`. Before
+ *   #181 the fixture never projected a world view at all, which is how a
+ *   change to what every seat in every world receives minted no revision.
+ *
+ *   NOT COVERED, WORLD SIDE: everything a world DOES rather than shows. The
+ *   fixture registers no actions, so dispatch, event routing, the dirty set,
+ *   scheduling and refusals move neither hash. `WORLD_WIRE_FIXTURE` covers the
+ *   world WIRE's shape, including an event's narration `text`/`type`, but it
+ *   is a hand-written literal rather than something the engine produced.
+ *
+ * - The world fixture is defined HERE rather than imported from
+ *   `src/world/village.test-helper.ts`, for the reason the table fixture is:
+ *   a shared test helper is reshaped by whoever is writing tests, and this
+ *   hash must move for engine reasons alone.
  *
  * When you make a platform-visible change none of the fingerprints can see,
  * extend the fixture so it can, then record the revision.
@@ -403,6 +426,190 @@ function hasElementMarker(value: unknown): boolean {
 }
 
 /**
+ * Fail loudly if the world fixture stopped exercising a world PROJECTION.
+ *
+ * The third instance of the same guard, and for the same reason as the first
+ * two: a fixture that quietly narrows converts "unverified" into "verified",
+ * and the hash goes on moving for other reasons while covering nothing. What
+ * a world view costs is the whole argument for the partitioned model, so the
+ * three things that make this projection a real one are asserted rather than
+ * assumed.
+ *
+ * These are COVERAGE assertions and not correctness ones. Whether the prunes
+ * are RIGHT is what `payloadHash` records; this only pins that they were asked.
+ */
+function assertCoversWorldView(
+  view: unknown,
+  facts: {
+    seats: number;
+    residentNames: readonly string[];
+    declaredNames: readonly string[];
+    state: unknown;
+  },
+): void {
+  const projected = (view ?? {}) as { player?: unknown; state?: { children?: unknown[] } };
+  // A resident partition this seat's declaration does not name is the
+  // busy-world state the #183 prune exists for; without one the fixture cannot
+  // tell a pruned view from an unpruned one.
+  const unnamedResident = facts.residentNames.filter(
+    (name) => !facts.declaredNames.includes(name),
+  );
+
+  // A TABLE OF WHAT MUST STILL BE TRUE, rather than a chain of ifs: each row is
+  // one thing this projection covers, and the reader sees the whole list at
+  // once instead of reconstructing it from control flow.
+  const covers: readonly (readonly [string, boolean])[] = [
+    ['the world envelope (no `player`)', typeof projected.player === 'number'],
+    ['a projected tree (the view has no children)', (projected.state?.children ?? []).length > 0],
+    // A one-seat world cannot show whether the roster is projected or shipped
+    // whole, which is the #181 regression this exists to catch.
+    [`a multi-seat world (it has ${facts.seats})`, facts.seats >= 2],
+    ['a resident partition the declaration does NOT name', unnamedResident.length > 0],
+    // The roster question is only live while something in the view points at a
+    // player: that reference is what makes dropping the others safe, and a
+    // fixture that stopped holding one would fingerprint the prune without
+    // fingerprinting the thing it must not break.
+    ['a player reference inside a named partition', hasPlayerReference(facts.state)],
+  ];
+
+  const missing = covers.filter(([, held]) => !held).map(([what]) => what);
+
+  if (missing.length === 0) return;
+
+  throw new Error(
+    `The engine-contract fixture is no longer exercising a world projection (missing: ${missing.join(', ')}).\n`
+    + 'payloadHash would still change and still look healthy while covering what every seat '
+    + 'in every world receives not at all.\n'
+    + 'Fix the fixture in src/contract/fingerprint.ts rather than removing this check.',
+  );
+}
+
+/** True when `value` contains a serialized player reference anywhere inside.
+ *  A player-valued attribute serializes as `{ __playerRef, seat, color, name }`
+ *  -- resolved by SEAT, which is why a pruned roster leaves nothing dangling. */
+function hasPlayerReference(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.__playerRef === 'number') return true;
+  return Object.values(record).some(hasPlayerReference);
+}
+
+/**
+ * ONE SEAT'S VIEW OF A WORLD, which is the other backend's whole read path.
+ *
+ * A world is not a table with different storage: a table holds its tree
+ * resident and ships a `PlayerState.view`, while a world keeps only named
+ * partitions resident and answers `{ player, state, phase }` per seat, pruned
+ * to what that seat's declaration named. `games/src/world-session.ts` calls
+ * this path for every watcher of every world, so a change to what it produces
+ * reaches every seat in production -- and until #181 no fingerprint could see
+ * it.
+ *
+ * A VILLAGE, because the smallest world that makes the read cost measurable is
+ * one where seats own land: five holdings, a shared commons, and each holding
+ * naming its owner. Five seats rather than five hundred -- the fixture is a
+ * fingerprint and not a benchmark, and the roster prune is as visible at five
+ * as at five hundred.
+ *
+ * COLD, like the table fixture is booted through `GameRunner`: genesis runs on
+ * one game and only its BYTES survive, and the engine under fingerprint adopts
+ * them. A fixture that handed the engine live objects would fingerprint a path
+ * no world takes after its first hour.
+ */
+async function computeWorldViewFixture(): Promise<unknown> {
+  const engine = await import('../engine/index.js');
+  const { BoardSmithWorldEngine } = await import('../world/index.js');
+  const { Game, Player, Space } = engine as any;
+
+  const SEATS = 5;
+  const COMMONS = 'commons';
+  const LOOKER = 'p1';
+  const holdingPartition = (seat: number): string => `holding:${seat}`;
+
+  class WorldFixtureHolding extends Space<any> {
+    seat = 0;
+    standing = 0;
+  }
+  class WorldFixtureCommons extends Space<any> {
+    embers = 0;
+  }
+  class WorldFixtureWorld extends Game<any, any> {
+    constructor(options: any) {
+      super(options);
+      // Registered in the CLASS constructor: world mode has no handler re-bind
+      // pass on adoption, so anything a grafted element needs must come from
+      // its own class.
+      this.registerElements([WorldFixtureHolding, WorldFixtureCommons]);
+    }
+  }
+
+  const newWorld = (): any =>
+    new WorldFixtureWorld({
+      playerCount: SEATS,
+      seed: 'engine-contract-world-fixture',
+      worldMode: true,
+    });
+
+  // Genesis, kept as bytes only.
+  const born = newWorld();
+  const stored = new Map<string, { parentId: number; json: unknown }>();
+  const commons = born.create(WorldFixtureCommons, 'commons', { embers: 3 });
+  stored.set(COMMONS, { parentId: born.id, json: throughStorage(commons.toJSON()) });
+  for (let seat = 1; seat <= SEATS; seat += 1) {
+    const holding = born.create(WorldFixtureHolding, `holding-${seat}`, { seat, standing: seat });
+    // THE REFERENCE THAT MAKES THE ROSTER PRUNE A REAL QUESTION (#181), and the
+    // one example-rts writes: a holding names its owner.
+    holding.player = born.players[seat - 1];
+    stored.set(holdingPartition(seat), {
+      parentId: born.id,
+      json: throughStorage(holding.toJSON()),
+    });
+  }
+
+  const seats = new Map<string, number>();
+  for (let seat = 1; seat <= SEATS; seat += 1) seats.set(`p${seat}`, seat);
+
+  const live = newWorld();
+  const world = new BoardSmithWorldEngine({
+    game: live,
+    seats,
+    store: {
+      async read(name: string) {
+        return stored.get(name);
+      },
+      forget() {},
+    },
+    // No verbs: a world's DISPATCH is not fingerprinted, and registering
+    // actions here would put game logic of this file's own invention into the
+    // hash. See KNOWN LIMITS.
+    actions: [],
+    // A SUBSET, which is the point: the commons and the looker's own land, and
+    // never anybody else's.
+    view: (seat: number) => [COMMONS, holdingPartition(seat)],
+  });
+
+  // THE BUSY-WORLD STATE. Another seat looked at their own land a moment ago,
+  // so it is resident and seat one's declaration still does not name it. Before
+  // #183 it rode along in seat one's view; the fixture is what keeps that from
+  // coming back unrecorded.
+  await world.hydrate([holdingPartition(4)]);
+
+  const view = (await world.viewFor(LOOKER)) as { state?: unknown };
+  assertCoversWorldView(view, {
+    seats: live.players.length,
+    residentNames: world.residency().map((partition: { name: string }) => partition.name),
+    declaredNames: world.viewPartitions(LOOKER),
+    state: view.state,
+  });
+  return view;
+}
+
+/** A cold-storage round trip, which is what a world's engine is really fed. */
+function throughStorage(json: unknown): unknown {
+  return JSON.parse(JSON.stringify(json));
+}
+
+/**
  * Render the fixture game's per-player views and hash them.
  *
  * The fixture is defined here rather than borrowed from an example game on
@@ -562,12 +769,17 @@ export async function computePayloadHash(): Promise<string> {
   const flowPosition = game.getFlowState()?.position;
   assertCoversElementBindings(flowPosition);
 
-  // Three parts hashed together: the per-player payload the platform ships,
-  // the serialized flow position the platform STORES and restores (not
-  // reachable from the views — createPlayerView omits `position` — so a
-  // flow-serialization regression was previously invisible here), and the
-  // world wire the platform's host page speaks to a bundle's world UI.
-  return sha256(canonicalize({ views, flowPosition, worldWire: WORLD_WIRE_FIXTURE }));
+  // Four parts hashed together: the per-player payload the platform ships, the
+  // serialized flow position the platform STORES and restores (not reachable
+  // from the views — createPlayerView omits `position` — so a
+  // flow-serialization regression was previously invisible here), the world
+  // wire the platform's host page speaks to a bundle's world UI, and ONE SEAT'S
+  // PROJECTED WORLD VIEW (#181), which is what every watcher of every world
+  // receives and what nothing here could see until it was added.
+  const worldView = await computeWorldViewFixture();
+  return sha256(
+    canonicalize({ views, flowPosition, worldWire: WORLD_WIRE_FIXTURE, worldView }),
+  );
 }
 
 export interface ComputedFingerprints {

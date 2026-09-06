@@ -64,12 +64,29 @@ every test run:
   game rules by the executor's `sandboxedRequire`) and
   `boardsmith/session-host` (imported directly by the games worker). Catches
   added, removed, and renamed API.
-- **`payloadHash`** — a canonical per-player view rendered from a fixed fixture
-  game in `src/contract/fingerprint.ts`. Catches semantic changes that leave the
-  API identical but alter what the platform ships to clients. The fixture
-  deliberately includes a default `Deck`, an owner-visible hand, an explicitly
-  count-only pile and an explicitly hidden pile, because those are the shapes
-  whose defaults have actually bitten us.
+- **`payloadHash`** — what a fixed fixture in `src/contract/fingerprint.ts`
+  ships to clients, on **both backends**. Catches semantic changes that leave
+  the API identical but alter what a player receives.
+
+  On the TABLE side it is a canonical per-player view: a default `Deck`, an
+  owner-visible hand, an explicitly count-only pile and an explicitly hidden
+  pile, because those are the shapes whose defaults have actually bitten us —
+  plus the serialized flow position the platform stores and restores.
+
+  On the WORLD side it is **one seat's projected view** of a five-seat village
+  whose declaration names a subset of its partitions, with one resident
+  partition it does not name and a holding that references its owner. A world
+  view is pruned twice — to the partitions the seat declared, and to the seat's
+  own player — and those prunes decide what every watcher of every world
+  receives. Before BoardSmith #181 no fixture projected a world view at all, so
+  a change to that minted no revision.
+
+  What the world side does NOT cover is everything a world *does* rather than
+  shows: the fixture registers no actions, so dispatch, event routing, the
+  dirty set, scheduling and refusals move neither hash. The world *wire*'s
+  shape — including an event's narration `text`/`type` — is covered by
+  `WORLD_WIRE_FIXTURE`, but as a hand-written literal rather than something the
+  engine produced.
 
 If either moves and the contract was not updated, the test fails with the
 command to run. **That is the whole enforcement story** — you cannot land a
