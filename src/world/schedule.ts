@@ -193,6 +193,56 @@ export function catchUpPlan(
 }
 
 /**
+ * THE DUE A RETRY MUST CARRY so the fold is not lost (#155, #178).
+ *
+ * The INVERSE of `catchUpPlan`'s fold. That function turns a stored due into
+ * occurrences; this turns one of those occurrences back into the due a host
+ * must stamp its retry row with, when the occurrence failed and the host means
+ * to try it again.
+ *
+ * ## Why the answer is not simply the occurrence's own due
+ *
+ * A coalesced call's `missedCount` exists nowhere but in the in-memory plan
+ * that produced it, and a retry recomputes its plan from the stored row. So a
+ * retry stamped at the coalesced call's own due -- the LAST occurrence it
+ * stands for -- recomputes to one occurrence carrying nothing, and one
+ * transient failure durably erases everything the call was carrying, with no
+ * error anywhere.
+ *
+ * Stamped at the FIRST occurrence it stood for, recomputation regenerates
+ * exactly what is still owed: the real occurrences before it ran atomically and
+ * stand, and every folded one is at or after the recovered instant.
+ *
+ * ## It lives here rather than in a host
+ *
+ * Both hosts retry, and recurrence arithmetic in two places is precisely the
+ * drift that made a world's local behaviour a poor guide to its published
+ * behaviour. This is the one rule on the retry path that is a fact about the
+ * SCHEDULE rather than about a host's lifecycle policy, and it has to agree
+ * with `catchUpPlan` -- so it is compiled against it rather than held beside it
+ * by a comment.
+ *
+ * `intervalMs` is the event's own `everyMs`, absent for a one-shot. A one-shot
+ * cannot fold, so its answer is its own due and needs no interval; a fold
+ * WITHOUT an interval is a contradiction and throws rather than guessing one.
+ */
+export function resumeDueOf(
+  occurrence: { readonly due: number; readonly missedCount: number },
+  intervalMs: number | undefined,
+): number {
+  if (occurrence.missedCount === 0) return occurrence.due;
+  if (intervalMs === undefined) {
+    throw new Error(
+      "A one-shot event cannot fold, so it cannot be resumed from a folded occurrence: " +
+        `only a recurrence can fold, and this occurrence claims ${occurrence.missedCount} ` +
+        "missed with no interval to unwind them.",
+    );
+  }
+  if (intervalMs <= 0) throw new Error("A recurring event's interval must be positive.");
+  return occurrence.due - occurrence.missedCount * intervalMs;
+}
+
+/**
  * HOW ONE DUE EVENT SHOULD ACTUALLY BE RUN, and where its recurrence goes next.
  *
  * The drain's whole view of the difference between a one-shot and a recurrence

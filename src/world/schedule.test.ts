@@ -9,6 +9,7 @@ import { describe, expect, test } from "vitest";
 import {
   catchUpPlan,
   occurrencesDue,
+  resumeDueOf,
   nextDueBatch,
   rearmAt,
   scheduleBatchRefusal,
@@ -193,6 +194,83 @@ describe("catchUpPlan — integrate, never replay", () => {
   test("refuses a non-positive interval rather than looping forever", () => {
     expect(() => catchUpPlan(0, 0, 1000, WORLD_CATCHUP_MAX_REAL_ITERATIONS)).toThrow(/interval must be positive/);
     expect(() => catchUpPlan(0, -1, 1000, WORLD_CATCHUP_MAX_REAL_ITERATIONS)).toThrow(/interval must be positive/);
+  });
+});
+
+describe("resumeDueOf — the INVERSE of the fold (#178)", () => {
+  const HOUR = 3_600_000;
+
+  test("a REAL iteration resumes at its own due, because it folded nothing", () => {
+    expect(resumeDueOf({ due: 5 * HOUR, missedCount: 0 }, HOUR)).toBe(5 * HOUR);
+  });
+
+  test("a COALESCED call resumes at the FIRST occurrence it stood for", () => {
+    // The coalesced call is stamped with the LAST occurrence's due and carries
+    // the count that got no call of their own. Unwinding that count is what
+    // recovers the instant the fold started from.
+    expect(resumeDueOf({ due: 72 * HOUR, missedCount: 68 }, HOUR)).toBe(4 * HOUR);
+  });
+
+  test("a ONE-SHOT resumes at its own due, and needs no interval to say so", () => {
+    // A one-shot cannot fold, so the question has an answer without an
+    // interval -- which is what lets a drain ask it of every occurrence
+    // without a non-null assertion on `everyMs` at the call site.
+    expect(resumeDueOf({ due: 1000, missedCount: 0 }, undefined)).toBe(1000);
+  });
+
+  test("REFUSES a fold with no interval to unwind it, rather than guessing", () => {
+    expect(() => resumeDueOf({ due: 1000, missedCount: 3 }, undefined)).toThrow(
+      /only a recurrence can fold/i,
+    );
+  });
+
+  test("refuses a non-positive interval, exactly as the fold does", () => {
+    expect(() => resumeDueOf({ due: 1000, missedCount: 1 }, 0)).toThrow(
+      /interval must be positive/,
+    );
+  });
+
+  test("FOLD, FAIL, RESUME: the recovered due regenerates everything still owed", () => {
+    // The property the platform's retry rests on, driven end to end.
+    //
+    // An hourly recurrence first due at 0 is drained at hour 72: four real
+    // occurrences and one coalesced call standing for the remaining 69. Say
+    // the coalesced call throws. `resumeDueOf` recovers the due its retry row
+    // must carry, and re-planning from that row must produce exactly the
+    // occurrences that never ran -- no fewer (the fold would be erased) and no
+    // more (the four that ran atomically would run twice).
+    const maxReal = WORLD_CATCHUP_MAX_REAL_ITERATIONS;
+    const now = 72 * HOUR;
+    const first = catchUpPlan(0, HOUR, now, maxReal);
+    const failed = first.at(-1)!;
+    expect(failed.missedCount).toBeGreaterThan(0);
+
+    const resume = resumeDueOf(failed, HOUR);
+    const retry = catchUpPlan(resume, HOUR, now, maxReal);
+
+    // What the whole sequence covers, unfolded: every occurrence due at or
+    // after the resume instant, and nothing before it.
+    const unfolded = retry.flatMap((call) =>
+      Array.from({ length: 1 + call.missedCount }, (_, i) => call.due - i * HOUR),
+    );
+    expect(new Set(unfolded)).toEqual(
+      new Set(
+        Array.from({ length: 69 }, (_, i) => resume + i * HOUR),
+      ),
+    );
+    // And the occurrences that DID run are not among them.
+    for (const ran of first.slice(0, -1)) expect(unfolded).not.toContain(ran.due);
+  });
+
+  test("a resume that is retried again converges rather than sliding backwards", () => {
+    // Each retry recomputes its own fold from the resume row, so a world that
+    // fails twice must not walk its due further into the past every time --
+    // that is how a fold-preserving resume turns into an infinite one.
+    const maxReal = WORLD_CATCHUP_MAX_REAL_ITERATIONS;
+    const now = 72 * HOUR;
+    const once = resumeDueOf(catchUpPlan(0, HOUR, now, maxReal).at(-1)!, HOUR);
+    const twice = resumeDueOf(catchUpPlan(once, HOUR, now, maxReal).at(-1)!, HOUR);
+    expect(twice).toBeGreaterThan(once);
   });
 });
 
