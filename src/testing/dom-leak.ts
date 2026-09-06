@@ -312,9 +312,8 @@ const INERT_REF_MEMBERS: Record<string, unknown> = {
   multiSelectDraft: null,
   actionSnapshot: null,
   validElements: [],
-  // Computed gates a board consults before offering anything. Both were missing.
+  // A computed gate a board consults before offering anything; it was missing.
   lastActionResult: null,
-  allCurrentChoicesAnchored: false,
   animationsPending: false,
   // `false` rather than `true`: an inert controller must never invite a
   // submission it cannot carry out.

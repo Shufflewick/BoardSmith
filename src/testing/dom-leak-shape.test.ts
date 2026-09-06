@@ -154,7 +154,7 @@ describe('the inert controller cannot drift behind the real one', () => {
       'selectableElementIds', 'validElements', 'repeatingState',
       'pendingFollowUp', 'pendingOnServer', 'actionCompletedTick',
       'multiSelectDraft', 'actionSnapshot', 'lastActionResult',
-      'allCurrentChoicesAnchored', 'animationsPending', 'showActionPanel',
+      'animationsPending', 'showActionPanel',
       'snapshotVersion',
       'start', 'fill', 'skip', 'clear', 'cancel', 'execute', 'undo',
       'toggleMultiSelect', 'confirmMultiSelect', 'isMultiSelectSelected',
