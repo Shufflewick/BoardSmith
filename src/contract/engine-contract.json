@@ -1,6 +1,6 @@
 {
-  "revision": 39,
-  "bundleProtocol": 1,
+  "revision": 40,
+  "bundleProtocol": 2,
   "surfaceHash": "cff09a3012ba8835",
   "payloadHash": "197ca272284235c1",
   "history": [
@@ -315,6 +315,14 @@
       "surfaceHash": "cff09a3012ba8835",
       "payloadHash": "197ca272284235c1",
       "summary": "One shell for tables and worlds: PlayShell owns the shared chrome (sidebar, board region, action bar) and WorldShell mounts the action controller over it, so a world is drawn by the bundle's shell rather than by a generic surface. WorldNarration carries text and type, world_state carries players, and a world resolves its own pick choices locally. The world.ui manifest field is gone: boardsmith build always emits the world entry, and a world backend that built no world surface is refused."
+    },
+    {
+      "revision": 40,
+      "date": "2026-09-06",
+      "bundleProtocol": 2,
+      "surfaceHash": "cff09a3012ba8835",
+      "payloadHash": "197ca272284235c1",
+      "summary": "ABI break, recorded late: r38 made world.maxPlayers required inside the world block, so readWorldDefinition refuses every world bundle built before it. That invalidates published world bundles, which is exactly what bundleProtocol exists to signal, and r38 left the number alone. Bundle protocol 1 becomes 2 here. Every world bundle must be rebuilt and republished."
     }
   ]
 }
