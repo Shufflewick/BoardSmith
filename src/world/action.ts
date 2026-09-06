@@ -83,7 +83,7 @@ import type {
 } from "../engine/index.js";
 import type { ConditionConfig } from "../engine/action/types.js";
 import type { WorldBudgets } from "./budgets.js";
-import type { ScheduleRequest } from "./schedule-api.js";
+import type { ScheduleArm } from "./schedule-api.js";
 import { worldRefusal } from "./refusals.js";
 
 /**
@@ -153,7 +153,28 @@ export interface WorldFacilities {
    * command -- reach the same facilities object, and a schedule escapes the
    * tree and cannot be rolled back with it.
    */
-  schedule(request: ScheduleRequest): void;
+  schedule(request: ScheduleArm): void;
+  /**
+   * ASK THE HOST TO FORGET A TIMER THIS SEAT ARMED (#177).
+   *
+   * The inverse of `schedule`, and a request in exactly the same way: it rides
+   * home on this action's result and the host is the only writer.
+   *
+   * KEYED, because a key is the only handle a cancel has -- a pending event is
+   * addressed by `(owner, key)` and the owner is stamped from the acting seat,
+   * so a bundle can no more forget somebody else's timer than charge one to
+   * them. An unkeyed event cannot be cancelled at all, which is one more reason
+   * a keyed schedule is the shape to write.
+   *
+   * IDEMPOTENT. Cancelling a key nothing holds does nothing, because the
+   * pattern this exists for is a deadline a seat can beat: whoever arrives
+   * first clears the obligation and the loser finds it cleared. The loser is
+   * the caller whose timer already fired, and a handler cannot read the queue
+   * to know which it is.
+   *
+   * Refused outside a real dispatch, for the reason `schedule` is.
+   */
+  cancel(key: string): void;
   /**
    * DECLARE THIS SEASON OVER. Takes no argument so it cannot name any other
    * ending. Refused outside a real dispatch, for the reason `schedule` is.

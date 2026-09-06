@@ -327,6 +327,7 @@ ctx.world.presence               // ReadonlySet<number> of connected seats
 ctx.world.partition(name)        // the resident root of a partition this walk declared
 ctx.world.emit(scope, payload)   // narration, routed by scope
 ctx.world.schedule(request)      // ask the host to wake this world later
+ctx.world.cancel(key)            // ask the host to forget a keyed timer
 ctx.world.complete()             // declare the season over
 ```
 
@@ -695,6 +696,42 @@ primitive and it is the one you should reach for first.
 offending line, so the whole action unwinds and the player is told no over a
 world that did not change.
 
+### Taking a timer back
+
+```ts
+ctx.world.cancel("raid");
+```
+
+A request in exactly the same way, and the inverse of an arm. It forgets the
+pending event this seat holds under that key.
+
+- **Keyed, because a key is the only handle a cancel has.** A pending event is
+  addressed by `(owner, key)`, and the owner is stamped from the acting seat --
+  so a bundle can no more forget somebody else's timer than charge one to them.
+  An **unkeyed event cannot be cancelled at all**, because it has no name to
+  address it by. That is one more reason a keyed schedule is the shape to write,
+  and it is why the unkeyed cap's first suggestion has always been to use a key.
+- **Idempotent.** Cancelling a key nothing holds does nothing. A wake can always
+  be late, and your handler cannot read the queue, so a cancel that refused what
+  it could not find would unwind a perfectly good answer over a race the author
+  can neither observe nor avoid.
+- **It gives the budget back**, which is what makes the cap refusals' advice
+  true: cancel a keyed timer and the key is free to be spent again in the same
+  command.
+
+**Cancel is what an obligation is built on.** The pattern is three parts and one
+rule. The obligation is a field on an element **in the partition of the seat it
+binds**, so partition fog is the whole fog rule. The deadline is **one keyed
+schedule naming a seatless action**, cancelled when the seat answers first. And
+the rule: **whoever arrives first clears the field, and the loser finds it
+cleared and returns.** Every world action must tolerate arriving after the thing
+it was armed for is gone, because a wake can always be late -- which is why the
+cancel is idempotent rather than a refusal.
+
+An arm and a cancel ride home on **one ordered list**, in the order your handler
+wrote them: cancel-then-arm under one key leaves a timer, arm-then-cancel leaves
+none.
+
 ## Ending a season
 
 `ctx.world.complete()` declares this season over. It takes no argument, so it cannot
@@ -749,6 +786,7 @@ thing next time.
 | `invalid-schedule-delay` | A negative or non-finite `delayMs`. |
 | `invalid-schedule-interval` | A non-positive or non-finite `everyMs`, which is a wake that re-arms instantly forever. |
 | `invalid-schedule-command` | A schedule request that names no action, names a seated one, or carries an argument that is not a JSON scalar. |
+| `invalid-schedule-cancel` | A cancel that names no key. A cancel is keyed the way arming is keyed, so a nameless one addresses nothing; cancelling a key nothing holds is a no-op rather than this. |
 | `engine-not-world-mode` | The engine was built over a game that is not in world mode. |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
 **`platform`**: a host's own bookkeeping broke. Not yours to fix, and

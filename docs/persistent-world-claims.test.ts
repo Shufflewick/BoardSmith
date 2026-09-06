@@ -130,6 +130,15 @@ const kindle: ActionDefinition = worldAction<VillageFixture>('kindle')
     ctx.world.emit(holdingPartition(holding.seat), { banked: holding.woodpile });
   });
 
+/** The guide's "Taking a timer back": the obligation's other half, which
+ *  forgets the deadline when the seat answers first. */
+const douse: ActionDefinition = worldAction<VillageFixture>('douse')
+  .prompt('Call the burn off before it reaches the fire')
+  .needs(({ player }) => [holdingPartition(player.seat)])
+  .execute((_args, ctx) => {
+    ctx.world.cancel(`burn:${ctx.player.seat}`);
+  });
+
 /** The clock's own, from the guide's `worldClockAction()` section. */
 const settleBurn: ActionDefinition = worldClockAction<VillageFixture>('settleBurn')
   .prompt('The clock: a slow burn reaching the fire')
@@ -711,6 +720,20 @@ describe('#169: a schedule names a seatless action and carries scalars', () => {
     expect(flatGuide).toContain('partition name');
   });
 
+  it('#177: a cancel rides home the same way, keyed the way the arm was', async () => {
+    // The guide says a timer can be taken back and that a key is the only
+    // handle a cancel has. Driven rather than asserted about, because the two
+    // cap refusals promised this remedy for months while the request type had
+    // no cancel on it at all.
+    const { engine } = newEngine([kindle, douse, settleBurn]);
+    await apply(engine, 'p1', { name: 'kindle', args: {} });
+    const result = await apply(engine, 'p1', { name: 'douse', args: {} });
+
+    expect(result.schedules).toEqual([{ cancel: 'burn:1' }]);
+    expect(flatGuide).toContain('ctx.world.cancel("raid")');
+    expect(flatGuide).toContain('An unkeyed event cannot be cancelled at all');
+  });
+
   it('the clock runs the seatless action it named, with no player at all', async () => {
     const { engine, game } = newEngine();
     await apply(engine, 'p1', { name: 'kindle', args: {} });
@@ -775,6 +798,7 @@ describe('#165: the guide covers the authoring contract', () => {
     ['presence', 'the arrive and depart hooks, and ctx.world.presence'],
     ['ctx.world.now', 'the only clock an action may read'],
     ['ctx.world.schedule', 'the eager half of the timer primitive'],
+    ['ctx.world.cancel', 'taking a keyed timer back, which an obligation rests on'],
     ['complete()', 'the one ending a game may declare'],
     ['seatless', 'the actions no player may send'],
     ['scope', 'what decides who hears an event'],

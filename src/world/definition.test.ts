@@ -278,4 +278,64 @@ describe("createWorld — one construction, every host", () => {
       }),
     ).rejects.toThrow(/already has 1 unkeyed events pending, which is this world's limit/);
   });
+
+  /**
+   * #177: `ctx.world.cancel(key)` rides home the way `schedule` does.
+   *
+   * The end-to-end half of the cancel: what a handler calls, what a host is
+   * handed, and that the two arrive in the order the handler wrote them. The
+   * planning half -- which rows are named for deletion, and what a cancel gives
+   * back to the caps -- is `schedule-api.test.ts`.
+   */
+  it("carries a CANCEL home beside the arms, in the order the handler wrote them", async () => {
+    const rearm = worldAction<TinyWorld>("rearm")
+      .needs(() => [])
+      .execute((_args, ctx) => {
+        ctx.world.cancel("raid");
+        ctx.world.schedule({ delayMs: 60_000, key: "raid", action: "rearm" });
+      });
+    const { runner } = createWorld({
+      definition: bundle({ world: { view: () => [], actions: [rearm] } }),
+      seed: "s",
+      seats: new Map([["p1", 1]]),
+    });
+
+    const result = await runner.apply({
+      player: "p1",
+      command: { name: "rearm", args: {} },
+      timing: null,
+      arrivedAt: 0,
+      allowance: { unkeyed: 0, keys: ["raid"], worldPending: 1 },
+      presence: [],
+    });
+
+    expect(result.schedules).toEqual([
+      { cancel: "raid" },
+      { delayMs: 60_000, key: "raid", action: "rearm" },
+    ]);
+  });
+
+  it("REFUSES a cancel with no key, at the offending line, so the command unwinds", async () => {
+    const forget = worldAction<TinyWorld>("forget")
+      .needs(() => [])
+      .execute((_args, ctx) => {
+        ctx.world.cancel("");
+      });
+    const { runner } = createWorld({
+      definition: bundle({ world: { view: () => [], actions: [forget] } }),
+      seed: "s",
+      seats: new Map([["p1", 1]]),
+    });
+
+    await expect(
+      runner.apply({
+        player: "p1",
+        command: { name: "forget", args: {} },
+        timing: null,
+        arrivedAt: 0,
+        allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+        presence: [],
+      }),
+    ).rejects.toThrow(/must name the key its timer was armed under/);
+  });
 });

@@ -164,6 +164,10 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "a handler asked for a wake that runs nothing -- a schedule request that names no command (#89). It is the bundle's own doing and the same bundle will do it again, so it dead-letters rather than parking the world",
   },
+  "invalid-schedule-cancel": {
+    owner: "game",
+    why: "a handler asked to cancel a timer without naming the key it was armed under (#177) -- a cancel is keyed the way arming is keyed, so a nameless one addresses nothing",
+  },
   "bundle-not-a-world": {
     owner: "game",
     why: "a bundle reached a world isolate without `world.actions`, or asked to require a module the child does not have -- the manifest declared a world and the compiled rules do not implement one, which upload validation cannot see",

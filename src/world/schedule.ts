@@ -250,7 +250,8 @@ export function unkeyedScheduleRefusal(
     `Player ${owner} already has ${pendingUnkeyed} unkeyed events pending, which is this world's limit. ` +
     `Three ways forward, and the first is almost always the right one: ` +
     `(1) give the schedule a KEY -- a keyed schedule upserts, so its count never grows; ` +
-    `(2) cancel one of the pending events; ` +
+    `(2) cancel a timer you no longer need with \`ctx.world.cancel(key)\` -- which is another ` +
+    `reason for (1), because a key is the only handle a cancel has; ` +
     `(3) make the effect LAZY -- if it is only visible when someone next looks, write a ` +
     `completesAt timestamp into state and compute it on read, which costs no wake at all.`
   );
@@ -280,7 +281,7 @@ export function keyedScheduleRefusal(
     `world just refused the ${pendingKeyed + 1}th of them. Three ways forward: ` +
     `(1) REUSE a key you already hold -- scheduling under it replaces the pending timer and ` +
     `costs nothing new, which is what keys are for; ` +
-    `(2) cancel a pending timer you no longer need; ` +
+    `(2) call \`ctx.world.cancel(key)\` on a pending timer you no longer need; ` +
     `(3) make the effect LAZY -- if it is only visible when someone next looks, write a ` +
     `completesAt timestamp into state and compute it on read, which costs no wake at all.`
   );

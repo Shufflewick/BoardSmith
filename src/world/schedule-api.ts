@@ -87,7 +87,7 @@ export const WORLD_OWNER = "world:self";
  * decides them. A world's drain runs a COMMAND, the same dispatch a player's
  * frame reaches, and the only thing that was ever opaque is `args`.
  */
-export interface ScheduleRequest {
+export interface ScheduleArm {
   /**
    * How far in the future, in milliseconds. Measured from the command's
    * ARRIVAL rather than from wall clock at application time, so a world that
@@ -155,6 +155,62 @@ export interface ScheduleRequest {
    * due, each still carrying its own `due`.
    */
   readonly everyMs?: number;
+}
+
+/**
+ * TAKE BACK A KEYED TIMER THIS OWNER HOLDS (#177).
+ *
+ * ## Why this exists at all
+ *
+ * `keyedScheduleRefusal` and `unkeyedScheduleRefusal` have told an author to
+ * "cancel a pending timer you no longer need" since the caps existed, and no
+ * such verb was on this type. A refusal naming a remedy the API does not offer
+ * is the trap this repo's own rule forbids, and it is the whole reason a
+ * catalogue game hand-rolled a scheduler: a request could arm and re-arm and
+ * never forget.
+ *
+ * ## KEYED THE WAY ARMING IS KEYED, and that is the anti-abuse property
+ *
+ * A pending event is addressed by `(owner, key)`, and the owner is STAMPED from
+ * the acting seat rather than named by the request -- exactly as it is for an
+ * arm. Read forwards that sentence says a bundle cannot charge its events to
+ * somebody else's budget; read backwards it says a bundle cannot forget
+ * somebody else's timer either, because it has no way to write one down.
+ *
+ * An UNKEYED event therefore cannot be cancelled, and that is not an omission:
+ * it has no name, so there is nothing to address it by. It is also why the
+ * unkeyed cap's first suggestion has always been to use a key -- a keyed timer
+ * is the one you can take back.
+ *
+ * ## IDEMPOTENT, and it must be
+ *
+ * Cancelling a key nothing holds is a no-op rather than a refusal. The pattern
+ * a keyed deadline exists for is "whoever arrives first clears the obligation;
+ * the loser finds it cleared and returns", and the loser is precisely the
+ * caller whose timer has already fired. A handler cannot read the queue -- the
+ * queue is the host's -- so refusing here would unwind a seat's perfectly good
+ * answer over a race it can neither observe nor avoid.
+ */
+export interface ScheduleCancel {
+  /** The key the timer was armed under. This owner's; there is no other. */
+  readonly cancel: string;
+}
+
+/**
+ * What one handler asked the host to do to the queue: arm something, or forget
+ * something.
+ *
+ * ONE ORDERED LIST AND NOT TWO, because the order is load-bearing within a
+ * single command: cancel-then-arm under one key leaves a timer, and
+ * arm-then-cancel leaves none. Two lists would make that depend on which the
+ * host walked first, which is the kind of difference that shows up as one world
+ * diverging from another months later.
+ */
+export type ScheduleRequest = ScheduleArm | ScheduleCancel;
+
+/** Whether this request forgets a timer rather than arming one. */
+function isCancel(request: ScheduleRequest): request is ScheduleCancel {
+  return "cancel" in request;
 }
 
 /**
@@ -254,8 +310,14 @@ export function planSchedules(
   // charged to the world. Never to whoever happened to act last.
   const owner = context.owner ?? WORLD_OWNER;
 
-  const events: PlannedEvent[] = [];
-  const replaced: string[] = [];
+  // A HOLE FOR AN EVENT THIS BATCH TOOK BACK. `plannedByKey` indexes into this
+  // list, so a cancel blanks its entry rather than splicing it out and sliding
+  // every later key's index one to the left.
+  const planned: Array<PlannedEvent | null> = [];
+  // The durable rows this batch displaces, as a SET: an arm and a later cancel
+  // under one key both name the same row, and asking the host twice to delete
+  // one key is asking it to delete a key it has already deleted.
+  const replaced = new Set<string>();
   // Which planned event this batch has already made for a key, so two requests
   // under one key upsert against each other rather than both landing.
   const plannedByKey = new Map<string, number>();
@@ -266,7 +328,20 @@ export function planSchedules(
     const refusal = budget.admit(request);
     if (refusal !== null) return { ok: false, refusal };
 
-    const planned: PlannedEvent = {
+    if (isCancel(request)) forget(request.cancel);
+    else arm(request, index);
+  }
+
+  return {
+    ok: true,
+    events: planned.filter((event): event is PlannedEvent => event !== null),
+    replaced: [...replaced],
+  };
+
+  /** Mint one event and put it where a later request under its key can find
+   *  it. */
+  function arm(request: ScheduleArm, index: number): void {
+    const armed: PlannedEvent = {
       id: context.mintId(index),
       due: context.arrivedAt + request.delayMs,
       seq: seq++,
@@ -282,8 +357,8 @@ export function planSchedules(
     };
 
     if (request.key === undefined) {
-      events.push(planned);
-      continue;
+      planned.push(armed);
+      return;
     }
 
     // A KEYED schedule UPSERTS. Against this batch it replaces in place;
@@ -291,16 +366,32 @@ export function planSchedules(
     // events with one key is what "its count never grows" forbids.
     const already = plannedByKey.get(request.key);
     if (already !== undefined) {
-      events[already] = planned;
-      continue;
+      planned[already] = armed;
+      return;
     }
     const durable = context.replaces(request.key);
-    if (durable !== undefined) replaced.push(durable);
-    plannedByKey.set(request.key, events.length);
-    events.push(planned);
+    if (durable !== undefined) replaced.add(durable);
+    plannedByKey.set(request.key, planned.length);
+    planned.push(armed);
   }
 
-  return { ok: true, events, replaced };
+  /**
+   * Take back what this batch armed under `key`, and name what the queue holds
+   * under it.
+   *
+   * BOTH, because a command may have armed under this key a line ago: the
+   * planned event has to go, and so does the durable row that arming already
+   * displaced.
+   */
+  function forget(key: string): void {
+    const mine = plannedByKey.get(key);
+    if (mine !== undefined) {
+      planned[mine] = null;
+      plannedByKey.delete(key);
+    }
+    const durable = context.replaces(key);
+    if (durable !== undefined) replaced.add(durable);
+  }
 }
 
 /**
@@ -382,6 +473,14 @@ export function scheduleBudget(
       if (refusal !== null) return refusal;
 
       requested += 1;
+      // A CANCEL RELEASES, WHICH IS WHAT MAKES THE CAPS' ADVICE TRUE. Both cap
+      // refusals tell an author to cancel a timer they no longer need; a cancel
+      // that did not give the key back would leave them refused again in the
+      // same breath, having done exactly as they were told.
+      if (isCancel(request)) {
+        if (keys.delete(request.cancel)) worldPending -= 1;
+        return null;
+      }
       // AN UPSERT COSTS NOTHING. A request under a key the owner already holds
       // replaces the pending event, so neither the owner's count nor the
       // world's depth moves -- which is the exemption keys are worth having
@@ -401,6 +500,12 @@ export function scheduleBudget(
     const malformed = shapeRefusal(request);
     if (malformed !== null) return malformed;
 
+    // A CANCEL PASSES EVERY DEPTH CAP, because it only ever makes the queue
+    // shallower. It still reaches the batch cap: that one bounds the ASKING,
+    // and a handler looping a million times over one cancel writes no row and
+    // still hands the host a million requests to carry and walk.
+    if (isCancel(request)) return batchRefusal();
+
     // AN UPSERT IS ADMITTED BY EVERY DEPTH CAP. It replaces a pending event
     // rather than adding one, so nothing those caps measure moves -- and a cap
     // that refused it would strand a full world with no way to re-arm the
@@ -419,13 +524,18 @@ export function scheduleBudget(
     // unkeyed cap at the same request, and "you already hold 32 unkeyed events,
     // use a key" is the sentence that tells its author what to change -- #35's
     // single refusal has to stay reachable from one command.
+    return batchRefusal();
+  }
+
+  /** The one cap every request reaches, arm or cancel. */
+  function batchRefusal(): WorldRefusal | null {
     const batched = scheduleBatchRefusal(requested, budgets.maxSchedulesPerCommand);
     return batched === null ? null : worldRefusal("schedule-batch-cap", batched);
   }
 
   /** The three caps that are about how deep a queue is, asked only of a request
    *  that would actually make it deeper. */
-  function depthRefusal(request: ScheduleRequest): WorldRefusal | null {
+  function depthRefusal(request: ScheduleArm): WorldRefusal | null {
     const full = worldQueueRefusal(worldPending, budgets.maxPendingEvents);
     if (full !== null) return worldRefusal("schedule-world-cap", full);
 
@@ -446,54 +556,89 @@ export function scheduleBudget(
  * refused, for the same reason.
  */
 function shapeRefusal(request: ScheduleRequest): WorldRefusal | null {
-  // A WAKE THAT RUNS NOTHING IS THE ONE THING A SCHEDULE MUST NOT BUY (#89).
-  if (typeof request.action !== "string" || request.action.length === 0) {
-    return worldRefusal(
-      "invalid-schedule-command",
-      "A scheduled event must name the action the world runs when it comes due, and this one " +
-        `named ${JSON.stringify((request as { action?: unknown }).action)}. Write ` +
-        "`schedule({ delayMs, action: \"resolveRaid\", args: { raid: raid.name } })` -- the " +
-        "arguments are yours, the action name is how the world knows what to do with them.",
-    );
-  }
-  // ARGUMENTS THAT SURVIVE A HIBERNATION, AND NOTHING ELSE (#169).
+  if (isCancel(request)) return cancelShapeRefusal(request);
+  return (
+    actionRefusal(request) ??
+    argumentRefusal(request) ??
+    intervalRefusal(request) ??
+    delayRefusal(request)
+  );
+}
+
+/** A WAKE THAT RUNS NOTHING IS THE ONE THING A SCHEDULE MUST NOT BUY (#89). */
+function actionRefusal(request: ScheduleArm): WorldRefusal | null {
+  if (typeof request.action === "string" && request.action.length > 0) return null;
+  return worldRefusal(
+    "invalid-schedule-command",
+    "A scheduled event must name the action the world runs when it comes due, and this one " +
+      `named ${JSON.stringify((request as { action?: unknown }).action)}. Write ` +
+      "`schedule({ delayMs, action: \"resolveRaid\", args: { raid: raid.name } })` -- the " +
+      "arguments are yours, the action name is how the world knows what to do with them.",
+  );
+}
+
+/** ARGUMENTS THAT SURVIVE A HIBERNATION, AND NOTHING ELSE (#169). */
+function argumentRefusal(request: ScheduleArm): WorldRefusal | null {
   const unstorable = unstorableArg(request.args);
-  if (unstorable !== null) {
-    return worldRefusal(
-      "invalid-schedule-command",
-      `A scheduled event's "${unstorable}" argument is not a JSON scalar. A schedule row ` +
-        "outlives eviction and rehydration, so an element -- or anything holding one -- names " +
-        "something that may not be resident when the event comes due, and may have been " +
-        "re-minted since. Pass the partition's NAME and let the action read inside it.",
-    );
-  }
-  // A RECURRENCE WITH NO GAP IS A WAKE THAT RE-ARMS INSTANTLY, FOREVER (#127).
-  // Refused here so it lands in the handler like every other schedule refusal,
-  // rather than as a throw out of `catchUpPlan` on some later drain -- which is
-  // a platform-owned failure, and would climb the park ladder for a bundle's
-  // typo.
-  if (
-    request.everyMs !== undefined &&
-    (!Number.isFinite(request.everyMs) || request.everyMs <= 0)
-  ) {
-    return worldRefusal(
-      "invalid-schedule-interval",
-      `A recurring schedule repeats every \`everyMs\` milliseconds, and this one asked for ` +
-        `${JSON.stringify(request.everyMs)}. An interval must be a positive number of ` +
-        `milliseconds: write \`schedule({ delayMs: HOUR, everyMs: HOUR, key: "tick", ` +
-        `action: "collectIncome" })\` for an hourly tick, or leave \`everyMs\` off entirely ` +
-        `for a one-shot.`,
-    );
-  }
-  if (!Number.isFinite(request.delayMs) || request.delayMs < 0) {
-    return worldRefusal(
-      "invalid-schedule-delay",
-      `A schedule needs a delay of zero or more milliseconds, and got ` +
-        `${JSON.stringify(request.delayMs)}. To make something happen now, do it now; ` +
-        `to make it happen in the past, it already did.`,
-    );
-  }
-  return null;
+  if (unstorable === null) return null;
+  return worldRefusal(
+    "invalid-schedule-command",
+    `A scheduled event's "${unstorable}" argument is not a JSON scalar. A schedule row ` +
+      "outlives eviction and rehydration, so an element -- or anything holding one -- names " +
+      "something that may not be resident when the event comes due, and may have been " +
+      "re-minted since. Pass the partition's NAME and let the action read inside it.",
+  );
+}
+
+/**
+ * A RECURRENCE WITH NO GAP IS A WAKE THAT RE-ARMS INSTANTLY, FOREVER (#127).
+ *
+ * Refused here so it lands in the handler like every other schedule refusal,
+ * rather than as a throw out of `catchUpPlan` on some later drain -- which is a
+ * platform-owned failure, and would climb the park ladder for a bundle's typo.
+ */
+function intervalRefusal(request: ScheduleArm): WorldRefusal | null {
+  if (request.everyMs === undefined) return null;
+  if (Number.isFinite(request.everyMs) && request.everyMs > 0) return null;
+  return worldRefusal(
+    "invalid-schedule-interval",
+    `A recurring schedule repeats every \`everyMs\` milliseconds, and this one asked for ` +
+      `${JSON.stringify(request.everyMs)}. An interval must be a positive number of ` +
+      `milliseconds: write \`schedule({ delayMs: HOUR, everyMs: HOUR, key: "tick", ` +
+      `action: "collectIncome" })\` for an hourly tick, or leave \`everyMs\` off entirely ` +
+      `for a one-shot.`,
+  );
+}
+
+/** A delay the clock cannot reach forwards. */
+function delayRefusal(request: ScheduleArm): WorldRefusal | null {
+  if (Number.isFinite(request.delayMs) && request.delayMs >= 0) return null;
+  return worldRefusal(
+    "invalid-schedule-delay",
+    `A schedule needs a delay of zero or more milliseconds, and got ` +
+      `${JSON.stringify(request.delayMs)}. To make something happen now, do it now; ` +
+      `to make it happen in the past, it already did.`,
+  );
+}
+
+/**
+ * What is wrong with a CANCEL, which addresses exactly one thing: a key.
+ *
+ * There is nothing else on it to be wrong. A cancel of a key nothing holds is
+ * NOT refused here -- that is a no-op, deliberately, because the queue is the
+ * host's and a handler cannot read it to know whether its timer has already
+ * fired.
+ */
+function cancelShapeRefusal(request: ScheduleCancel): WorldRefusal | null {
+  if (typeof request.cancel === "string" && request.cancel.length > 0) return null;
+  return worldRefusal(
+    "invalid-schedule-cancel",
+    "A cancel must name the key its timer was armed under, and this one named " +
+      `${JSON.stringify(request.cancel)}. A cancel is keyed the way arming is keyed -- ` +
+      'write `cancel("raid")` for the timer you armed as ' +
+      '`schedule({ delayMs, key: "raid", action: "resolveRaid" })`. An UNKEYED event ' +
+      "cannot be cancelled, because it has no name to address it by.",
+  );
 }
 
 /**

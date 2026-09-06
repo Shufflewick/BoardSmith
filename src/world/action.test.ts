@@ -294,6 +294,24 @@ describe("what stops an author writing an O(world) enumeration", () => {
     expect(() => newEngine([searching])).toThrow(/names no candidates/);
   });
 
+  it("REFUSES ctx.world.cancel() during an offer, as it does schedule (#177)", async () => {
+    // The bot boundary. An MCTS search rolls the tree back many times inside
+    // one real dispatch, and a cancel escapes the tree exactly as an arm does
+    // -- a search that forgot a real timer while it was only thinking would
+    // leave the world holding the consequence of a move nobody made.
+    const forgetful = worldAction<VillageFixture>("forgetful")
+      .needs(() => [])
+      .disabled((ctx) => {
+        (ctx as unknown as { world: { cancel(key: string): void } }).world.cancel("burn:1");
+        return false;
+      })
+      .execute(() => {});
+    const { engine } = newEngine([forgetful]);
+    await expect(engine.offersFor("p1", OFFER)).rejects.toThrow(
+      /called ctx\.world\.cancel\(\) while the world was deciding what to OFFER/,
+    );
+  });
+
   it("refuses a candidate outside what the step declared", async () => {
     const straying = worldAction<VillageFixture>("straying")
       .needs(({ player }) => [holdingPartition(player.seat)])
