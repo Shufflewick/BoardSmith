@@ -40,32 +40,116 @@
  *   simultaneous turns, and the serialized flow POSITION with its element
  *   bindings.
  *
- *   COVERED, WORLD SIDE (#181): one seat's PROJECTED WORLD VIEW, from a
- *   multi-seat world with a declaration that names a subset of its partitions
- *   and one resident partition it does not name. So the view's two prunes are
- *   both fingerprinted -- unnamed resident partitions (#183) and the game
- *   root's roster (#181) -- along with the shape a player reference takes on
- *   the wire and the world envelope's own `{ player, state, phase }`. Before
- *   #181 the fixture never projected a world view at all, which is how a
- *   change to what every seat in every world receives minted no revision.
+ *   COVERED, WORLD SIDE -- BOTH HALVES OF WHAT A SEAT RECEIVES, and no more.
  *
- *   NOT COVERED, WORLD SIDE: everything a world DOES rather than shows. The
- *   fixture registers no actions, so dispatch, event routing, the dirty set,
- *   scheduling and refusals move neither hash. `WORLD_WIRE_FIXTURE` covers the
- *   world WIRE's shape, including an event's narration `text`/`type`, but it
- *   is a hand-written literal rather than something the engine produced.
+ *   THE VIEW (#181): one seat's PROJECTED WORLD VIEW, from a multi-seat world
+ *   with a declaration that names a subset of its partitions and one resident
+ *   partition it does not name. So the view's two prunes are both
+ *   fingerprinted -- unnamed resident partitions (#183) and the game root's
+ *   roster (#181) -- along with the shape a player reference takes on the wire
+ *   and the world envelope's own `{ player, state, phase }`.
  *
- * - The world fixture is defined HERE rather than imported from
- *   `src/world/village.test-helper.ts`, for the reason the table fixture is:
- *   a shared test helper is reshaped by whoever is writing tests, and this
- *   hash must move for engine reasons alone.
+ *   THE OFFER (#187): the same seat's ENUMERATED VERBS, driven the way a host
+ *   drives one -- `offerPartitions`, supply, ask again, `offersFor` -- so the
+ *   declaration walk an offer performs is fingerprinted along with its answer.
+ *   The fixture's four verbs are chosen to reach every decision `offerOf`
+ *   makes: an action with no selection, one whose selection is a number (which
+ *   can never be candidateless), one DISABLED whose every element candidate is
+ *   greyed, and one ENABLED whose every element candidate is greyed. The last
+ *   two are #187's two halves -- the first is offered with its reason and its
+ *   greyed candidates, the second is still dropped -- and the hash therefore
+ *   carries which verbs a seat is offered, each verb's prompt and disabled
+ *   reason, and each candidate's id, display, refs and own greying.
  *
- * When you make a platform-visible change none of the fingerprints can see,
+ *   Before #181 the fixture projected no world view, and before #187 no world
+ *   offer. Each absence is how a change to what every seat in every world
+ *   receives minted no revision.
+ *
+ *   NOT COVERED, WORLD SIDE: everything a world DOES rather than shows.
+ *   Nothing here dispatches, so `applyCommand` and `onEvent` and everything
+ *   downstream of them -- the dirty set, rollback, event routing by scope,
+ *   scheduling and recurrence, keyed cancellation, refusals, and the bytes
+ *   `serializePartitions` writes -- move neither hash. Nor does eviction, nor a
+ *   seat taken or left. Those are not a guess: `WORLD_FIXTURE_COVERAGE` below
+ *   states one of exactly two things about every verb of `WorldEngine`, and
+ *   `engine-contract.test.ts` instruments the engine and proves both directions
+ *   on every run. `WORLD_WIRE_FIXTURE` covers the world WIRE's shape, including
+ *   an event's narration `text`/`type`, but it is a hand-written literal rather
+ *   than something the engine produced.
+ *
+ * - The world fixture and its verbs are defined HERE rather than imported from
+ *   `src/world/village.test-helper.ts` or from an example game, for the reason
+ *   the table fixture is: a shared test helper is reshaped by whoever is
+ *   writing tests and an example game by its designer, and this hash must move
+ *   for engine reasons alone.
+ *
+ * WHAT REMAINS PROSE, AND CANNOT BE MADE TO FAIL. `WORLD_FIXTURE_COVERAGE`
+ * decides "is this verb driven at all", which is the shape of all three misses
+ * so far. It cannot decide "does the fixture's own world stand in the state
+ * that reaches the branch you just changed" -- #187 needed a disabled action
+ * whose every candidate was greyed before any hash could see it. That is what
+ * the `assertCovers*` guards pin, one state at a time, and adding a state to
+ * one of them is still a judgement nobody can automate.
+ *
+ * So: when you make a platform-visible change none of the fingerprints can see,
  * extend the fixture so it can, then record the revision.
  */
 
 import { createHash } from 'node:crypto';
 import type { WorldHostMessage, WorldUiMessage } from '../ui/world/worldProtocol.js';
+import { WORLD_ENGINE_METHODS } from '../world/contract.js';
+import type { WorldEngine } from '../world/contract.js';
+
+/**
+ * WHICH OF THE WORLD ENGINE'S PLATFORM-FACING VERBS THE PAYLOAD FIXTURE
+ * ACTUALLY DRIVES — the KNOWN LIMITS above, made mechanical.
+ *
+ * The limits were true, complete and well written on all three occasions a
+ * platform-visible world change shipped with no revision. Prose does not fail,
+ * so this does instead: `true` is a CLAIM that the fixture calls the verb, and
+ * `engine-contract.test.ts` proves every claim by instrumenting the engine's
+ * prototype and re-running the fixture. A string is the reason it is out of
+ * scope, and the test proves THAT too, by failing if the fixture calls it
+ * anyway — a limit that quietly became untrue is as misleading as a claim that
+ * quietly became false.
+ *
+ * The set of keys is not this file's to choose: `WORLD_ENGINE_METHODS` is
+ * `keyof WorldEngine` as values, so a verb added to the platform's engine
+ * interface arrives here as a missing key and stops the suite until somebody
+ * decides which of the two things it is.
+ *
+ * WHAT THIS CANNOT CATCH: a change inside a verb the fixture DOES call, on a
+ * path the fixture's own world never walks. #187 is that shape once `offersFor`
+ * is covered — the fixture had to stand in the exact state (an action disabled
+ * for the looker whose every candidate is greyed) before the hash could see it,
+ * which is what `assertCoversWorldOffer` pins and what no table can decide for
+ * you.
+ */
+export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number], true | string> = {
+  hydrate: true,
+  offerPartitions: true,
+  offersFor: true,
+  residency: true,
+  viewFor: true,
+  viewPartitions: true,
+
+  applyCommand: 'A world\'s write path. The fixture dispatches nothing, so the dirty set, '
+    + 'rollback and the checkpoint bytes are unfingerprinted.',
+  commandPartitions: 'The declaration walk a DISPATCH drives, and the fixture drives none. '
+    + "The offer's own walk -- the same two-round shape -- is covered.",
+  evict: 'Residency policy is the host\'s, not the world\'s. The fixture never drops a '
+    + 'partition, so what eviction leaves behind is unfingerprinted.',
+  onEvent: 'The clock\'s road: scheduling, recurrence, keyed cancellation and event routing '
+    + 'by scope. Nothing here schedules and nothing here is due.',
+  seat: 'Seats are handed to the constructor. Nobody sits down or stands up mid-fixture.',
+  serializePartitions: 'What a checkpoint WRITES. Nothing here writes, so the stored form of '
+    + 'a dirtied partition moves neither hash.',
+};
+
+/** The verbs above that the fixture claims to drive, in a fixed order. */
+export const WORLD_VERBS_THE_FIXTURE_DRIVES: readonly (keyof WorldEngine)[] = WORLD_ENGINE_METHODS
+  .filter((name) => WORLD_FIXTURE_COVERAGE[name] === true)
+  .sort();
 
 /**
  * The entrypoints the platform can reach, and why each one counts.
@@ -426,6 +510,31 @@ function hasElementMarker(value: unknown): boolean {
 }
 
 /**
+ * The shape both world guards share: a TABLE of what must still be true, read
+ * whole rather than reconstructed from a chain of ifs, and one error naming
+ * every row that no longer holds.
+ *
+ * The message says what stopped being covered and what that costs, because a
+ * guard whose failure reads as a hash mismatch is a guard somebody blesses with
+ * `contract --update` -- which cannot work here anyway, since `--update`
+ * recomputes through this same function.
+ */
+function assertCovers(
+  what: string,
+  covers: readonly (readonly [string, boolean])[],
+  consequence: string,
+): void {
+  const missing = covers.filter(([, held]) => !held).map(([label]) => label);
+  if (missing.length === 0) return;
+
+  throw new Error(
+    `The engine-contract fixture is no longer exercising ${what} (missing: ${missing.join(', ')}).\n`
+    + `${consequence}\n`
+    + 'Fix the fixture in src/contract/fingerprint.ts rather than removing this check.',
+  );
+}
+
+/**
  * Fail loudly if the world fixture stopped exercising a world PROJECTION.
  *
  * The third instance of the same guard, and for the same reason as the first
@@ -472,15 +581,11 @@ function assertCoversWorldView(
     ['a player reference inside a named partition', hasPlayerReference(facts.state)],
   ];
 
-  const missing = covers.filter(([, held]) => !held).map(([what]) => what);
-
-  if (missing.length === 0) return;
-
-  throw new Error(
-    `The engine-contract fixture is no longer exercising a world projection (missing: ${missing.join(', ')}).\n`
-    + 'payloadHash would still change and still look healthy while covering what every seat '
-    + 'in every world receives not at all.\n'
-    + 'Fix the fixture in src/contract/fingerprint.ts rather than removing this check.',
+  assertCovers(
+    'a world projection',
+    covers,
+    'payloadHash would still change and still look healthy while covering what every seat '
+    + 'in every world receives not at all.',
   );
 }
 
@@ -495,7 +600,67 @@ function hasPlayerReference(value: unknown): boolean {
 }
 
 /**
- * ONE SEAT'S VIEW OF A WORLD, which is the other backend's whole read path.
+ * Fail loudly if the world fixture stopped exercising a seat's OFFER.
+ *
+ * The fourth instance of the same guard, and the third time the gap it closes
+ * shipped unrecorded: `offersFor` has been a world's whole action surface since
+ * #169 and no fingerprint reached it until #187, so an engine change that
+ * decided which verbs every seat is offered moved neither hash.
+ *
+ * COVERAGE, NOT CORRECTNESS -- the same distinction `assertCoversWorldView`
+ * draws. What is asserted is that the fixture's WORLD is still standing in the
+ * four states that make an offer's decisions visible; WHICH verbs the engine
+ * then offers is what `payloadHash` records. That split is deliberate: a
+ * regression in the engine must move the hash and be minted, not trip a guard
+ * that tells the reader to go fix the fixture.
+ *
+ * The four states, and why each is here:
+ *
+ *  - NO SELECTION AT ALL. The offer's floor. An action with nothing to ask can
+ *    never be candidateless, so it is the control against which the other three
+ *    are read.
+ *  - A NUMBER. `candidateless` is defined over `validElements ?? choices`, so a
+ *    number selection can never be one -- which is exactly why `kindle` sat
+ *    correctly greyed in the field while `tend` vanished. Without a number in
+ *    the fixture the two roads through `offerOf` are one road.
+ *  - EVERY ELEMENT CANDIDATE GREYED, ON A DISABLED ACTION. BoardSmith #187: the
+ *    verb is offered WITH its reason and its greyed candidates. This is the
+ *    shape that shipped to `example-rts` unrecorded.
+ *  - EVERY ELEMENT CANDIDATE GREYED, ON AN ENABLED ACTION. #187's other half,
+ *    which the fix must not undo: a pick that opens on nothing is still
+ *    dropped. Fingerprinted by its ABSENCE from the offer, which is a payload
+ *    difference like any other.
+ */
+function assertCoversWorldOffer(facts: {
+  selectionShapes: readonly (readonly string[])[];
+  ownLandIsBare: boolean;
+  everyNeighbourIsGreyed: boolean;
+}): void {
+  const shapes = facts.selectionShapes;
+
+  const covers: readonly (readonly [string, boolean])[] = [
+    ['an action with no selection at all', shapes.some((shape) => shape.length === 0)],
+    ['an action whose selection is a number', shapes.some((shape) => shape.join() === 'number')],
+    ['an action whose selection is an element', shapes.some((shape) => shape.join() === 'element')],
+    // The two element verbs share one predicate with the actions themselves, so
+    // this asks the world the same question `tend`'s and `raze`'s own
+    // `disabled` callbacks ask it rather than restating their rule.
+    ["the looker's own land bare, so the disabled reason is live", facts.ownLandIsBare],
+    ['every neighbour at full growth, so every candidate is greyed', facts.everyNeighbourIsGreyed],
+  ];
+
+  assertCovers(
+    'a world offer',
+    covers,
+    'payloadHash would still change and still look healthy while covering which verbs every '
+    + 'seat in every world is offered not at all -- which is how BoardSmith #187 shipped with '
+    + 'the contract still reading revision 41.',
+  );
+}
+
+/**
+ * ONE SEAT'S VIEW OF A WORLD, AND ONE SEAT'S OFFER, which together are the
+ * other backend's whole read path.
  *
  * A world is not a table with different storage: a table holds its tree
  * resident and ships a `PlayerState.view`, while a world keeps only named
@@ -515,16 +680,42 @@ function hasPlayerReference(value: unknown): boolean {
  * one game and only its BYTES survive, and the engine under fingerprint adopts
  * them. A fixture that handed the engine live objects would fingerprint a path
  * no world takes after its first hour.
+ *
+ * THE VERBS ARE THIS FILE'S OWN, and small on purpose. They are here rather
+ * than imported from `src/world/village.test-helper.ts` or from an example game
+ * for the reason the table fixture gives: a shared helper is reshaped by
+ * whoever is writing tests and an example game is reshaped by its designer,
+ * either of which would move this hash for a reason that is not an engine
+ * change. What they must be is exhaustive over the DECISIONS `offerOf` makes,
+ * which `assertCoversWorldOffer` is what pins.
  */
-async function computeWorldViewFixture(): Promise<unknown> {
+async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }> {
   const engine = await import('../engine/index.js');
-  const { BoardSmithWorldEngine } = await import('../world/index.js');
+  const { BoardSmithWorldEngine, worldAction } = await import('../world/index.js');
   const { Game, Player, Space } = engine as any;
 
   const SEATS = 5;
   const COMMONS = 'commons';
   const LOOKER = 'p1';
+  const LOOKER_SEAT = 1;
   const holdingPartition = (seat: number): string => `holding:${seat}`;
+
+  // THE RING, so "a neighbouring holding" is two candidates and not the whole
+  // village -- the distinction #169 exists for.
+  const neighboursOf = (seat: number): number[] => [
+    seat === 1 ? SEATS : seat - 1,
+    seat === SEATS ? 1 : seat + 1,
+  ];
+
+  // GENESIS STANDS HOLDING N AT N, so seat one's own land is the only bare one
+  // and both of its neighbours are at or above the cap. That single fact is
+  // what puts the fixture in #187's exact field state: an action disabled for
+  // the looker whose every candidate is also greyed. The two predicates below
+  // are shared with `assertCoversWorldOffer`, so the guard asks the world the
+  // same question the verbs do rather than restating their rule.
+  const GROWTH_CAP = 2;
+  const isBare = (holding: any): boolean => holding.standing < GROWTH_CAP;
+  const isAtFullGrowth = (holding: any): boolean => holding.standing >= GROWTH_CAP;
 
   class WorldFixtureHolding extends Space<any> {
     seat = 0;
@@ -542,6 +733,56 @@ async function computeWorldViewFixture(): Promise<unknown> {
       this.registerElements([WorldFixtureHolding, WorldFixtureCommons]);
     }
   }
+
+  const holdingOf = (game: any, seat: number): any => {
+    const found = game.first(WorldFixtureHolding, `holding-${seat}`);
+    if (!found) throw new Error(`the world fixture has no holding for seat ${seat}`);
+    return found;
+  };
+
+  // FOUR VERBS, ONE FOR EACH DECISION `offerOf` MAKES. See
+  // `assertCoversWorldOffer` for what each is standing in for.
+  const look = worldAction<any>('look')
+    .prompt('Look about you')
+    .needs(({ player }: any) => [holdingPartition(player.seat)])
+    .execute((_args: unknown, ctx: any) => {
+      ctx.world.emit(holdingPartition(ctx.player.seat), { looked: true });
+    });
+
+  const kindle = worldAction<any>('kindle')
+    .prompt('Put logs on the common fire')
+    .needs(() => [COMMONS])
+    .enterNumber('logs', { prompt: 'How many?', min: 1, max: 9 })
+    .execute((args: any, ctx: any) => {
+      (ctx.world.partition(COMMONS) as any).embers += args.logs;
+    });
+
+  const neighbourPick = {
+    prompt: "Whose land?",
+    needs: ({ player }: any) => neighboursOf(player.seat).map(holdingPartition),
+    elements: ({ game, player }: any) =>
+      neighboursOf(player.seat).map((seat: number) => holdingOf(game, seat)),
+    disabled: (holding: any) => (isAtFullGrowth(holding) ? 'Already at full growth' : false),
+  };
+
+  const tend = worldAction<any>('tend')
+    .prompt("Put timber back on a neighbour's land")
+    .needs(({ player }: any) => [holdingPartition(player.seat)])
+    .disabled(({ game, player }: any) =>
+      isBare(holdingOf(game, player.seat)) ? 'Your own land is bare' : false,
+    )
+    .chooseElement('neighbour', neighbourPick)
+    .execute((args: any) => {
+      args.neighbour.standing += 1;
+    });
+
+  const raze = worldAction<any>('raze')
+    .prompt("Clear a neighbour's land")
+    .needs(({ player }: any) => [holdingPartition(player.seat)])
+    .chooseElement('neighbour', neighbourPick)
+    .execute((args: any) => {
+      args.neighbour.standing = 0;
+    });
 
   const newWorld = (): any =>
     new WorldFixtureWorld({
@@ -579,10 +820,7 @@ async function computeWorldViewFixture(): Promise<unknown> {
       },
       forget() {},
     },
-    // No verbs: a world's DISPATCH is not fingerprinted, and registering
-    // actions here would put game logic of this file's own invention into the
-    // hash. See KNOWN LIMITS.
-    actions: [],
+    actions: [look, kindle, tend, raze],
     // A SUBSET, which is the point: the commons and the looker's own land, and
     // never anybody else's.
     view: (seat: number) => [COMMONS, holdingPartition(seat)],
@@ -601,8 +839,48 @@ async function computeWorldViewFixture(): Promise<unknown> {
     declaredNames: world.viewPartitions(LOOKER),
     state: view.state,
   });
-  return view;
+
+  // THE OFFER, DRIVEN THE WAY A HOST DRIVES IT: ask what the offer still needs,
+  // supply it, ask again. The engine names and the host reads, because a child
+  // isolate has no storage binding -- so a fixture that called `offersFor`
+  // against whatever happened to be resident would fingerprint a road no
+  // platform travels, and would silently stop covering the neighbours' greying
+  // the moment their partitions fell out of residency.
+  for (;;) {
+    const needs = world.offerPartitions(LOOKER);
+    if (needs.length === 0) break;
+    await world.hydrate(needs);
+  }
+  const offer = await world.offersFor(LOOKER, OFFER_STAMP);
+
+  // The guard below reads the neighbouring holdings directly, so it must not
+  // depend on the offer having loaded them. An offer that stopped asking for
+  // them is precisely the narrowing it is there to report, and it should say so
+  // rather than die looking for an element that is no longer resident.
+  await world.hydrate(neighboursOf(LOOKER_SEAT).map(holdingPartition));
+
+  assertCoversWorldOffer({
+    selectionShapes: [look, kindle, tend, raze].map((definition) =>
+      definition.selections.map((selection) => selection.type),
+    ),
+    ownLandIsBare: isBare(holdingOf(live, LOOKER_SEAT)),
+    everyNeighbourIsGreyed: neighboursOf(LOOKER_SEAT).every((seat) =>
+      isAtFullGrowth(holdingOf(live, seat)),
+    ),
+  });
+
+  return { view, offer };
 }
+
+/**
+ * WHAT THE HOST KNOWS WHEN IT ASKS FOR AN OFFER, fixed.
+ *
+ * Time and presence live outside a world and arrive as arguments, precisely so
+ * that a world computes the same offer however busy its host is. Fixed here for
+ * the same reason the seed is: a fingerprint that read a clock would drift on
+ * its own, and a fingerprint that drifts trains everyone to re-record it.
+ */
+const OFFER_STAMP = { now: 1_700_000_000_000, presence: [1] as readonly number[] };
 
 /** A cold-storage round trip, which is what a world's engine is really fed. */
 function throughStorage(json: unknown): unknown {
@@ -769,16 +1047,18 @@ export async function computePayloadHash(): Promise<string> {
   const flowPosition = game.getFlowState()?.position;
   assertCoversElementBindings(flowPosition);
 
-  // Four parts hashed together: the per-player payload the platform ships, the
+  // Five parts hashed together: the per-player payload the platform ships, the
   // serialized flow position the platform STORES and restores (not reachable
   // from the views — createPlayerView omits `position` — so a
   // flow-serialization regression was previously invisible here), the world
-  // wire the platform's host page speaks to a bundle's world UI, and ONE SEAT'S
+  // wire the platform's host page speaks to a bundle's world UI, ONE SEAT'S
   // PROJECTED WORLD VIEW (#181), which is what every watcher of every world
-  // receives and what nothing here could see until it was added.
-  const worldView = await computeWorldViewFixture();
+  // receives, and ONE SEAT'S OFFER (#187), which is which verbs that watcher is
+  // given — the last two being what nothing here could see until they were
+  // added.
+  const { view: worldView, offer: worldOffer } = await computeWorldFixture();
   return sha256(
-    canonicalize({ views, flowPosition, worldWire: WORLD_WIRE_FIXTURE, worldView }),
+    canonicalize({ views, flowPosition, worldWire: WORLD_WIRE_FIXTURE, worldView, worldOffer }),
   );
 }
 
