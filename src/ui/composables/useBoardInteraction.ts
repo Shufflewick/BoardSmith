@@ -101,6 +101,17 @@ export interface BoardInteractionState {
 
   /** Name of the current pick being filled */
   currentPickName: string | null;
+
+  /**
+   * Monotonic counter, bumped by {@link BoardInteractionActions.requestBoardFocus}.
+   *
+   * #172: a large choice that the panel hands to the board needs FOCUS to make
+   * the same journey, or the keyboard player who pressed "choose on the board"
+   * is left standing on a control that has just unmounted. A board watches this
+   * and puts focus on its first candidate. It is a counter and not a boolean so
+   * a second handoff for the same pick still fires, and it never rewinds.
+   */
+  boardFocusRequest: number;
 }
 
 /**
@@ -183,6 +194,12 @@ export interface BoardInteractionActions {
 
   /** Read and clear the most recent dropped element ID (for animation suppression) */
   consumeLastDroppedElementId: () => number | null;
+
+  /**
+   * Ask the board to take keyboard focus, on its first valid target for the
+   * current pick. Called when the panel hands a choice to the board (#172).
+   */
+  requestBoardFocus: () => void;
 }
 
 export type BoardInteraction = BoardInteractionState & BoardInteractionActions;
@@ -209,6 +226,7 @@ export function createBoardInteraction(): BoardInteraction {
     currentAction: null,
     currentPickIndex: 0,
     currentPickName: null,
+    boardFocusRequest: 0,
   });
 
   // Callback for when element is dropped on valid target
@@ -389,6 +407,10 @@ export function createBoardInteraction(): BoardInteraction {
         return;
       }
       state.onChoiceSelect(selectionName, value);
+    },
+
+    requestBoardFocus() {
+      state.boardFocusRequest++;
     },
 
     consumeLastDroppedElementId() {

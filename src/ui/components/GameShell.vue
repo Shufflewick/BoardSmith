@@ -44,6 +44,7 @@ import BoardMessage from './helpers/BoardMessage.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useBoardActionBridge } from '../composables/useBoardActionBridge';
+import { useBoardFocusHandoff } from '../composables/useBoardFocusHandoff';
 import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
 import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
 import { createAnnouncer, provideAnnouncer } from '../composables/useAnnouncer.js';
@@ -1058,6 +1059,11 @@ setupDragDropOrchestration({
   actionMetadata,
   isMyTurn,
 });
+
+// #172: the floor beneath the panel→board handoff. AutoUI's grid/hex boards move
+// focus onto a real candidate themselves; this catches a CUSTOM board that has
+// not wired anything up, so "Choose on the board" can never leave focus on <body>.
+useBoardFocusHandoff(boardInteraction, zoomContainerEl);
 
 // Board-centric playability bridge (Phase 94): feeds the board-interaction
 // substrate (selectable elements, click dispatch, auto-start, choice callback)

@@ -282,6 +282,67 @@ The auto-generated UI includes:
 - **ActionPanel**: Displays available actions with selection UI
 - Ships as your production UI for simple games — no custom UI required
 
+#### The ActionPanel offers hierarchy, never free text
+
+The panel is a hierarchy a person walks with a few buttons. **It has no search
+box, no typed coordinate entry and no filter field, and it will not get one.** A
+search box is a second enumeration: it has to decide what matches, and the moment
+it decides differently from the engine the panel is showing a different game from
+the board and the bots.
+
+For the same reason, **the panel never applies a filter of its own.** Hiding an
+option the engine allows is a divergence bug, not a layout improvement. Scoping
+by selection is authored inside the action system — a first `chooseElement` step
+with a dependent `filter` — so the panel, the board and move enumeration all read
+one enumeration. See
+[Actions & Flow](./actions-and-flow.md#the-panel-offers-hierarchy-never-free-text),
+which is where that rule is stated in full.
+
+**Cardinality is the author's to shape**, with `boardRef` (anchor the step on the
+board) or `dependsOn` (narrow it with an earlier step).
+
+**What the panel does with a set that is still too large.** Above
+`MAX_FLAT_CHOICE_CANDIDATES` (24, in
+`components/auto-ui/action-panel-helpers.ts`), an `element`/`elements` pick whose
+candidates ALL carry a board ref is handed to the board: the panel keeps the
+prompt and renders one control, "Choose on the board (N)", instead of N buttons.
+The board is the better surface for a set that size — it draws the candidates in
+the geometry the choice actually has.
+
+This is a change of surface, not of content, and three things keep it honest:
+
+- The board offers the identical enumeration. Nothing is dropped, nothing is
+  hidden, and the count is stated on the control so a screen-reader user knows
+  the size of the choice before walking into it.
+- If even ONE candidate lacks a board ref the panel keeps every button, because
+  deferring would leave that candidate reachable from neither surface.
+- **Focus goes with the choice** (see "Board keyboard handoff" below). Without
+  that the player who pressed the control would be standing on something that
+  just unmounted.
+
+`choice` picks are never deferred — their values are not board elements. Those
+are partitioned by `splitAnchoredChoices` instead, which keeps every choice in
+the panel by design.
+
+#### Board keyboard handoff
+
+When the panel hands a choice to the board, the board becomes the only path into
+it, so it has to be operable without a pointer.
+
+- `boardInteraction.requestBoardFocus()` asks the board to take focus; it bumps
+  the monotonic `boardInteraction.boardFocusRequest` counter.
+- AutoUI's `GridBoardRenderer` and `HexBoardRenderer` watch that counter and move
+  focus onto their **first valid target for the current pick** — not cell 0. They
+  get that from `useSelectableGrid`'s new `isCandidate` predicate, which also
+  parks the roving tab stop on a candidate whenever a pick starts. Arrow keys
+  then move between cells and Enter chooses, exactly as before.
+- `useBoardFocusHandoff` (installed by GameShell for every board, custom ones
+  included) is the floor beneath that: if nothing inside the board region took
+  focus, it focuses the board's first tab stop. A custom board that wants the
+  cursor on a real candidate should watch `boardFocusRequest` itself, which
+  pre-empts the fallback.
+
+
 ### Dev-time UI switcher
 
 Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
@@ -1673,6 +1734,13 @@ Each `ValidElement` includes:
 | `display` | `string?` | Display text for UI |
 | `ref` | `{ id: number }?` | Reference for board highlighting |
 | `element` | `GameElement?` | Full element with all attributes |
+
+**A large candidate set is a board choice, not a long list.** If a custom UI
+renders one button per `validElement`, decide what it does past a couple of
+dozen. The auto panel's answer — hand the choice to the board and send focus with
+it — is described under [AutoUI](#the-actionpanel-offers-hierarchy-never-free-text).
+What a custom UI must NOT do is filter the list down: the engine's enumeration is
+the whole enumeration, and narrowing belongs in the action definition.
 
 **Why not `getValidElements()`?** Maps aren't reactive in Vue, so `getValidElements()` won't trigger re-renders when choices load. The `validElements` computed has built-in reactivity tracking.
 

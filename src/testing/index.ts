@@ -60,6 +60,7 @@ export {
   type ReplayRandomGameOptions,
   type SingleGameResult,
   type SimulationResults,
+  type SelectionChoicesObservation,
 } from './random-simulation.js';
 
 // Assertion helpers

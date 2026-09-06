@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { splitAnchoredChoices } from './action-panel-helpers.js';
-import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
+import { splitAnchoredChoices, shouldDeferElementPickToBoard } from './action-panel-helpers.js';
+import type { ChoiceWithRefs, ValidElement } from '../../composables/useActionControllerTypes.js';
 
 describe('splitAnchoredChoices', () => {
   const notationChoice: ChoiceWithRefs = {
@@ -63,5 +63,39 @@ describe('splitAnchoredChoices', () => {
     const result = splitAnchoredChoices([idOnlyChoice], 'choice');
     expect(result.anchored).toHaveLength(0);
     expect(result.primary).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #172 — the panel defers a large anchored element pick to the board
+// ---------------------------------------------------------------------------
+
+describe('shouldDeferElementPickToBoard', () => {
+  const anchored = (n: number): ValidElement[] =>
+    Array.from({ length: n }, (_, i) => ({ id: i, display: `c${i}`, refs: [{ role: 'target' as const, ref: { id: i, notation: `n${i}` } }] }));
+
+  it('defers an element pick larger than the threshold when every candidate is on the board', () => {
+    expect(shouldDeferElementPickToBoard('element', anchored(25), 24)).toBe(true);
+  });
+
+  it('keeps a pick at the threshold in the panel', () => {
+    expect(shouldDeferElementPickToBoard('element', anchored(24), 24)).toBe(false);
+  });
+
+  it('applies to multi-element picks too', () => {
+    expect(shouldDeferElementPickToBoard('elements', anchored(40), 24)).toBe(true);
+  });
+
+  it('never defers a choice pick — choice values are not board elements', () => {
+    expect(shouldDeferElementPickToBoard('choice', anchored(40), 24)).toBe(false);
+  });
+
+  it('never defers when a candidate carries no board ref — that one would vanish', () => {
+    const mixed = [...anchored(40), { id: 999, display: 'off-board' }];
+    expect(shouldDeferElementPickToBoard('element', mixed, 24)).toBe(false);
+  });
+
+  it('never defers an empty candidate list', () => {
+    expect(shouldDeferElementPickToBoard('element', [], 0)).toBe(false);
   });
 });

@@ -207,3 +207,54 @@ describe('simulateRandomGames', () => {
     });
   });
 });
+
+/**
+ * #172: the harness is the only thing that knows a step's REAL candidate count,
+ * because a count only exists once a game is running. `onSelectionChoices` is
+ * how `boardsmith validate` gets those counts without re-implementing move
+ * enumeration.
+ */
+describe('onSelectionChoices observer', () => {
+  it('reports every enumerated selection with its enabled candidate count', async () => {
+    const seen: Array<{ action: string; selection: string; count: number; type: string }> = [];
+
+    await simulateRandomGames(PickGame, {
+      count: 1,
+      playerCounts: [2],
+      seed: 'observer-seed',
+      onSelectionChoices: ({ action, selection, candidateCount }) => {
+        seen.push({
+          action,
+          selection: selection.name,
+          count: candidateCount,
+          type: selection.type,
+        });
+      },
+    });
+
+    expect(seen.length).toBeGreaterThan(0);
+    for (const s of seen) {
+      expect(s.action).toBe('pick');
+      expect(s.selection).toBe('value');
+      expect(s.type).toBe('choice');
+      // chooseFrom('value', { choices: [1, 2, 3] })
+      expect(s.count).toBe(3);
+    }
+  });
+
+  it('is optional — a run without it behaves identically', async () => {
+    const withObserver = await simulateRandomGames(PickGame, {
+      count: 1,
+      playerCounts: [2],
+      seed: 'same-seed',
+      onSelectionChoices: () => {},
+    });
+    const without = await simulateRandomGames(PickGame, {
+      count: 1,
+      playerCounts: [2],
+      seed: 'same-seed',
+    });
+    expect(withObserver.games[0].actionCount).toBe(without.games[0].actionCount);
+    expect(withObserver.completed).toBe(without.completed);
+  });
+});

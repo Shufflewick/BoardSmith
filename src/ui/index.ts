@@ -105,6 +105,15 @@ export {
   useSelectableGrid,
 } from './composables/useSelectable.js';
 
+// #172: the panel hands an oversized board-anchored choice to the board, and
+// focus goes with it. GameShell installs the fallback for every board; a custom
+// board that wants the cursor on a real CANDIDATE watches
+// `boardInteraction.boardFocusRequest` itself and pre-empts it.
+export {
+  useBoardFocusHandoff,
+  focusFirstBoardTarget,
+} from './composables/useBoardFocusHandoff.js';
+
 // The bridge that keeps a custom board's selection in step with the action
 // controller's fill -> fetchChoicesForPick -> snapshotVersion++ -> currentChoices
 // chain. GameShell calls it internally, so a game built on the shell gets it for

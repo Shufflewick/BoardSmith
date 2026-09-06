@@ -22,13 +22,18 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ref } from 'vue';
+import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
 import { DISABLED_TOOLTIP_ID } from '../../composables/useDisabledReasonTooltip.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
+import {
+  createBoardInteraction,
+  provideBoardInteraction,
+  type BoardInteraction,
+} from '../../composables/useBoardInteraction.js';
 
 // ---------------------------------------------------------------------------
 // useToast mock — hoisted so the factory runs before module imports
@@ -668,5 +673,87 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     expect(done.attributes('aria-disabled')).toBe('true');
     expect(done.attributes('data-bs-disabled-reason')).toContain('2');
     wrapper.unmount();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #172 — a large board-anchored element pick is handed to the board
+// ---------------------------------------------------------------------------
+
+describe('ActionPanel large element picks (#172)', () => {
+  function anchoredElements(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      id: i,
+      display: `cell-${i}`,
+      refs: [{ role: 'target' as const, ref: { id: i, notation: `n${i}` } }],
+    }));
+  }
+
+  /** The 'placeStone' cell pick, with N board-anchored candidates. */
+  function mountCellPick(count: number, bi: BoardInteraction = createBoardInteraction()) {
+    const controller = makeTestController({
+      currentAction: ref('placeStone'),
+      currentPick: ref({ name: 'cell', type: 'element', prompt: 'Select a cell' }),
+      validElements: ref(anchoredElements(count)),
+    });
+    return mountWithBoard(controller, bi);
+  }
+
+  function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction) {
+    const Host = defineComponent({
+      setup() {
+        provideBoardInteraction(bi);
+        return () => h(ActionPanel, { availableActions: [], playerSeat: 1, isMyTurn: true });
+      },
+    });
+    return mount(Host, {
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
+    });
+  }
+
+  it('renders one board handoff control instead of a wall of buttons', () => {
+    const wrapper = mountCellPick(50);
+
+    expect(wrapper.findAll('.element-btn')).toHaveLength(0);
+    const handoff = wrapper.find('.board-handoff-btn');
+    expect(handoff.exists()).toBe(true);
+    // The count is stated, so a screen-reader user knows the size of the choice
+    // they are being sent to rather than walking into it blind.
+    expect(handoff.text()).toContain('50');
+  });
+
+  it('still keeps the prompt in the panel', () => {
+    expect(mountCellPick(50).text()).toContain('Select a cell');
+  });
+
+  it('hands keyboard focus to the board when the control is activated', async () => {
+    const bi = createBoardInteraction();
+    const wrapper = mountCellPick(50, bi);
+
+    expect(bi.boardFocusRequest).toBe(0);
+    await wrapper.find('.board-handoff-btn').trigger('click');
+    expect(bi.boardFocusRequest).toBe(1);
+  });
+
+  it('renders buttons as before for a set the panel can still read', () => {
+    const wrapper = mountCellPick(6);
+
+    expect(wrapper.findAll('.element-btn')).toHaveLength(6);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+
+  it('keeps every button when a large set has a candidate the board cannot draw', () => {
+    // Deferring here would make that one candidate reachable from NEITHER
+    // surface — the divergence bug this rule exists to forbid.
+    const elements = [...anchoredElements(50), { id: 999, display: 'off-board' }];
+    const controller = makeTestController({
+      currentAction: ref('placeStone'),
+      currentPick: ref({ name: 'cell', type: 'element', prompt: 'Select a cell' }),
+      validElements: ref(elements),
+    });
+    const wrapper = mountWithBoard(controller, createBoardInteraction());
+
+    expect(wrapper.findAll('.element-btn')).toHaveLength(51);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
   });
 });

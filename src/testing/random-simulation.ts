@@ -22,6 +22,24 @@ import type {
 import { createTestGame, type TestGame } from './test-game.js';
 import { SeededRandom } from '../utils/random.js';
 
+/**
+ * One enumerated selection, reported to {@link SimulateRandomGamesOptions.onSelectionChoices}
+ * as the simulator builds a move.
+ *
+ * A choice step's candidate count only exists while a game is running, so this
+ * is the one place a build-time tool can learn it without re-implementing move
+ * enumeration. `boardsmith validate` uses it for the choice-cardinality audit
+ * (#172).
+ */
+export interface SelectionChoicesObservation {
+  /** Name of the action being enumerated. */
+  action: string;
+  /** The selection definition, verbatim — carries boardRef/boardRefs/dependsOn. */
+  selection: Selection;
+  /** How many ENABLED candidates the step offered at this moment. */
+  candidateCount: number;
+}
+
 /** Stop a single game after this many consecutive rejected actions. */
 const MAX_CONSECUTIVE_FAILURES = 10;
 
@@ -58,6 +76,13 @@ export interface SimulateRandomGamesOptions {
    * naming one of them here throws rather than being silently overridden.
    */
   gameOptions?: Record<string, unknown>;
+  /**
+   * Called for every choice / element / elements selection the simulator
+   * enumerates, with the count of candidates it found. Purely observational —
+   * it cannot affect the run, so a seeded simulation produces the same games
+   * with or without it.
+   */
+  onSelectionChoices?: (observation: SelectionChoicesObservation) => void;
 }
 
 /**
@@ -219,7 +244,8 @@ function buildRandomArgs(
   game: Game,
   actionDef: ActionDefinition,
   player: Player,
-  rng: SeededRandom
+  rng: SeededRandom,
+  onSelectionChoices?: (observation: SelectionChoicesObservation) => void
 ): { ok: true; args: Record<string, unknown> } | { ok: false; reason: string } {
   // Keep element objects in `working` so dependent selections receive proper
   // objects; serialize to IDs only at the end.
@@ -262,6 +288,7 @@ function buildRandomArgs(
     // choice / element / elements -- driven by engine-provided choices
     const annotated = game.getSelectionChoices(actionDef.name, sel.name, player, working);
     const choices = annotated.filter(c => c.disabled === false).map(c => c.value);
+    onSelectionChoices?.({ action: actionDef.name, selection: sel, candidateCount: choices.length });
 
     const multiSelectRaw =
       sel.type === 'choice'
@@ -312,7 +339,8 @@ function buildRandomMoves<G extends Game>(
   testGame: TestGame<G>,
   seat: number,
   actionNames: string[],
-  rng: SeededRandom
+  rng: SeededRandom,
+  onSelectionChoices?: (observation: SelectionChoicesObservation) => void
 ): { moves: Array<{ name: string; args: Record<string, unknown> }>; reasons: string[] } {
   const game = testGame.game;
   const player = game.getPlayer(seat);
@@ -329,7 +357,7 @@ function buildRandomMoves<G extends Game>(
       reasons.push(`action '${name}' is not registered on the game`);
       continue;
     }
-    const built = buildRandomArgs(game, actionDef, player, rng);
+    const built = buildRandomArgs(game, actionDef, player, rng, onSelectionChoices);
     if (built.ok) {
       moves.push({ name, args: built.args });
     } else {
@@ -376,6 +404,7 @@ async function simulateSingleGame<G extends Game>(
   timeout: number,
   maxActions: number,
   gameOptions: Record<string, unknown> | undefined,
+  onSelectionChoices: ((observation: SelectionChoicesObservation) => void) | undefined,
 ): Promise<SingleGameResult> {
   const startTime = Date.now();
   const rng = new SeededRandom(seed);
@@ -433,7 +462,13 @@ async function simulateSingleGame<G extends Game>(
         break;
       }
 
-      const { moves, reasons } = buildRandomMoves(testGame, actor.seat, actor.actionNames, rng);
+      const { moves, reasons } = buildRandomMoves(
+        testGame,
+        actor.seat,
+        actor.actionNames,
+        rng,
+        onSelectionChoices,
+      );
       if (moves.length === 0) {
         stuck = true;
         stuckReason =
@@ -527,7 +562,15 @@ export async function replayRandomGame<G extends Game>(
 ): Promise<SingleGameResult> {
   const { seed, playerCount, timeout = 5000, maxActions = 10000, gameOptions } = options;
   assertGameOptionsAreGameSpecific(gameOptions);
-  return simulateSingleGame(GameClass, playerCount, seed, timeout, maxActions, gameOptions);
+  return simulateSingleGame(
+    GameClass,
+    playerCount,
+    seed,
+    timeout,
+    maxActions,
+    gameOptions,
+    undefined,
+  );
 }
 
 /**
@@ -595,6 +638,7 @@ export async function simulateRandomGames<G extends Game>(
         timeout,
         maxActions,
         gameOptions,
+        options.onSelectionChoices,
       );
 
       games.push(result);

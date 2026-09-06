@@ -13,7 +13,7 @@
  * boardInteraction.selectElement() on activation (same as click).
  */
 
-import { computed, provide, watchEffect, ref, inject, nextTick, type ComputedRef } from 'vue';
+import { computed, provide, watch, watchEffect, ref, inject, nextTick, type ComputedRef } from 'vue';
 import { resolveGridSize } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
@@ -157,12 +157,21 @@ function isCellDisabled(cell: GameElement): boolean {
 const colsRef = computed(() => (gridResult.value.ok ? gridResult.value.cols : 0));
 const rowsRef = computed(() => (gridResult.value.ok ? gridResult.value.rows : 0));
 
-const { currentIdx, focusCell, handleGridKeydown: _composableKeydown, cellAttrs } = useSelectableGrid(
+const {
+  currentIdx,
+  focusCell,
+  handleGridKeydown: _composableKeydown,
+  cellAttrs,
+  focusFirstCandidate,
+} = useSelectableGrid(
   children,
   colsRef,
   cellIdentity,
   boardInteraction,
   'grid-cell',
+  // #172: the roving cursor has to know which cells the current choice accepts,
+  // or a keyboard player arrows blind across a board of unpickable squares.
+  isCellActionSelectable,
 );
 
 // DOM refs for each cell — needed to call .focus() after arrow-key navigation
@@ -204,6 +213,21 @@ function handleGridKeydown(e: KeyboardEvent) {
     cellRefs[currentIdx.value]?.focus();
   });
 }
+
+// #172: when the Action Panel hands a large board-anchored choice to the board,
+// the board is the ONLY path into it — so focus has to make the journey too.
+// Without this, the player who pressed "Choose on the board" is left on a button
+// that just unmounted, with focus on <body>.
+watch(
+  () => boardInteraction?.boardFocusRequest,
+  (tick) => {
+    if (!tick) return;
+    if (!focusFirstCandidate()) return;
+    void nextTick(() => {
+      cellRefs[currentIdx.value]?.focus();
+    });
+  },
+);
 
 // Per-cell aria-label: coordinate notation + state, mirroring mockup:574-581
 function cellAriaLabel(cell: GameElement, idx: number): string {

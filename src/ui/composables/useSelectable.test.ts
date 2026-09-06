@@ -11,7 +11,7 @@
  *   - Grid mode: Enter/Space activates current cell via triggerElementSelect
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { useSelectable, useSelectableGrid } from './useSelectable.js';
 import type { BoardInteraction } from './useBoardInteraction.js';
 
@@ -314,5 +314,96 @@ describe('useSelectableGrid (grid mode)', () => {
     handleGridKeydown(makeKeyEvent(' '));
     expect(currentIdx.value).toBe(0);
     expect(bi.triggerElementSelect).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useSelectableGrid — candidate awareness (#172)
+//
+// When the panel yields to the board for a large choice, the board is the ONLY
+// path into that choice. A roving cursor parked on cell 0 of a 121-cell board
+// leaves a keyboard player arrowing blind, so the cursor must land on a real
+// candidate.
+// ---------------------------------------------------------------------------
+
+describe('useSelectableGrid candidate awareness', () => {
+  function makeCandidateGrid(candidateIds: number[]) {
+    const cells = Array.from({ length: 9 }, (_, i) => ({ id: i }));
+    const ids = ref(candidateIds);
+    return {
+      cellsRef: computed(() => cells),
+      colsRef: computed(() => 3),
+      ids,
+      isCandidate: (c: { id: number }) => ids.value.includes(c.id),
+    };
+  }
+
+  it('starts the cursor on the first candidate when a pick is already in progress', () => {
+    // A board can mount mid-pick (a followUp, a reconnect, a time-travel jump).
+    // That cursor is just as stranded as one that never moved.
+    expect(candidateGrid([4, 7]).currentIdx.value).toBe(4);
+  });
+
+  /** A 3x3 grid wired to a candidate predicate, with the ids list left mutable. */
+  function candidateGrid(candidateIds: number[]) {
+    const { cellsRef, colsRef, ids, isCandidate } = makeCandidateGrid(candidateIds);
+    return {
+      ids,
+      ...useSelectableGrid(
+        cellsRef,
+        colsRef,
+        (c) => ({ id: c.id }),
+        makeMockInteraction() as BoardInteraction,
+        'grid-cell',
+        isCandidate,
+      ),
+    };
+  }
+
+  it('focusFirstCandidate moves the cursor back onto the first candidate', () => {
+    const { currentIdx, focusCell, focusFirstCandidate } = candidateGrid([4, 7]);
+    focusCell(0);
+    expect(currentIdx.value).toBe(0);
+    expect(focusFirstCandidate()).toBe(true);
+    expect(currentIdx.value).toBe(4);
+  });
+
+  it('focusFirstCandidate reports false and leaves the cursor alone with no candidates', () => {
+    const { currentIdx, focusCell, focusFirstCandidate } = candidateGrid([]);
+    focusCell(3);
+    expect(focusFirstCandidate()).toBe(false);
+    expect(currentIdx.value).toBe(3);
+  });
+
+  it('snaps the cursor to the first candidate when a pick makes candidates appear', async () => {
+    const { currentIdx, ids } = candidateGrid([]);
+    expect(currentIdx.value).toBe(0);
+    ids.value = [5, 8];
+    await nextTick();
+    expect(currentIdx.value).toBe(5);
+  });
+
+  it('leaves the cursor where it is when it already sits on a candidate', async () => {
+    const { currentIdx, focusCell, ids } = candidateGrid([]);
+    focusCell(8);
+    ids.value = [5, 8];
+    await nextTick();
+    expect(currentIdx.value).toBe(8);
+  });
+
+  it('reports no candidates at all when no predicate is supplied', () => {
+    const { cellsRef, colsRef } = makeCandidateGrid([1, 2]);
+    const { candidateIndices, focusFirstCandidate } = useSelectableGrid(
+      cellsRef,
+      colsRef,
+      (c) => ({ id: c.id }),
+      makeMockInteraction() as BoardInteraction,
+    );
+    expect(candidateIndices.value).toEqual([]);
+    expect(focusFirstCandidate()).toBe(false);
+  });
+
+  it('exposes the indices of the current candidates', () => {
+    expect(candidateGrid([4, 7]).candidateIndices.value).toEqual([4, 7]);
   });
 });
