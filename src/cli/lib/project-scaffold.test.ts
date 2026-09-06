@@ -1,6 +1,6 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname, isAbsolute, resolve } from 'node:path';
+import { join, dirname, basename, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
@@ -154,6 +154,10 @@ describe('generateBoardsmithJson', () => {
 describe('getDependencyPaths — local-dev boardsmith link (issue 142)', () => {
   // This suite runs FROM the monorepo, so the local-dev branch is the one under test.
   const monorepoRoot = getMonorepoRoot();
+  // The checkout's directory name, not the literal string "BoardSmith". A git
+  // worktree is a checkout under a different name, and hardcoding the name made
+  // these two cases fail in every worktree while saying nothing about the code.
+  const rootName = monorepoRoot === null ? 'BoardSmith' : basename(monorepoRoot);
 
   it('emits a path relative to the project, never one carrying a home directory', () => {
     expect(monorepoRoot).not.toBeNull();
@@ -163,7 +167,7 @@ describe('getDependencyPaths — local-dev boardsmith link (issue 142)', () => {
     expect(deps.isLocalDev).toBe(true);
     const linked = deps.boardsmith.replace(/^file:/, '');
     expect(isAbsolute(linked)).toBe(false);
-    expect(deps.boardsmith).toBe('file:../../BoardSmith');
+    expect(deps.boardsmith).toBe(`file:../../${rootName}`);
   });
 
   it('resolves from the project directory back to the monorepo root', () => {
@@ -176,7 +180,7 @@ describe('getDependencyPaths — local-dev boardsmith link (issue 142)', () => {
   it('puts the same relative path into the scaffolded package.json', () => {
     const projectPath = join(monorepoRoot as string, '..', 'BoardSmithGames', 'my-game');
     const pkg = JSON.parse(generatePackageJson(config, projectPath));
-    expect(pkg.dependencies.boardsmith).toBe('file:../../BoardSmith');
+    expect(pkg.dependencies.boardsmith).toBe(`file:../../${rootName}`);
   });
 });
 
