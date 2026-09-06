@@ -324,7 +324,13 @@ describe("what stops an author writing an O(world) enumeration", () => {
       store: new CountingStore(genesis()),
       actions: [roster],
       view: () => [],
-      budgets: worldBudgets({ maxCandidatesPerSelection: 1 }),
+      // The floor `worldBudgets()` enforces (#170 R2: the safety net must sit
+      // above the Action Panel's reading threshold) is deliberately stepped over
+      // here, because what is under test is the ENGINE's enforcement of the
+      // number rather than the config validator's. A real host reaches this
+      // shape only by spreading a validated set and overriding a field by hand,
+      // which is exactly as deliberate as it should be.
+      budgets: { ...worldBudgets(), maxCandidatesPerSelection: 1 },
     });
     await expect(engine.offersFor("p1", OFFER)).rejects.toThrow(/allows 1 per selection/);
   });

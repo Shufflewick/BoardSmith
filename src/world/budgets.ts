@@ -28,7 +28,7 @@
  * deliberate.
  */
 
-import { MAX_FLAT_CHOICE_CANDIDATES } from "../ui/components/auto-ui/action-panel-helpers.js";
+import { MAX_FLAT_CHOICE_CANDIDATES } from "../engine/element/action-metadata.js";
 
 /** Every budget a world runs against. Complete, so nothing reads a default at
  *  the point of enforcement. */

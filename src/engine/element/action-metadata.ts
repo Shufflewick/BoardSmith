@@ -228,3 +228,31 @@ export function buildPickMetadata(
 
   return base;
 }
+
+/**
+ * THE LARGEST FLAT CANDIDATE SET A SELECTION MAY PRESENT AS BUTTONS.
+ *
+ * It lives beside `buildPickMetadata`, which is where a pick's candidates are
+ * actually built, because THREE things now read it and no two of them may
+ * disagree: the Action Panel (which hands a wider pick to the board), the
+ * `boardsmith validate` choice-cardinality audit, and `worldBudgets`, whose own
+ * `maxCandidatesPerSelection` must sit strictly above it (BoardSmith #170 R2).
+ * `boardsmith/world` may reach the engine and nothing else, so the engine is the
+ * only place all three can meet.
+ *
+ * 24 is where a wrapping row of pills stops being a sentence and becomes an
+ * unlabelled grid the player must scan — roughly two full rows in the action bar
+ * at a normal window width — and it is past the point where a screen-reader user
+ * can hold the list in their head while walking it.
+ *
+ * It clears the reference games by a wide margin. Measured on 2026-09-05 by
+ * running the audit over hex, go-fish, checkers, chess, cribbage, seven and
+ * polyhedral-potions, the largest UNANCHORED flat set any of them ever offers is
+ * 11 (seven's `discard.card`); the largest anchored one is Hex's 49 empty cells,
+ * which is exactly the set that should go to the board rather than the panel.
+ * Lacuna's planned hundreds of verbs trip it decisively.
+ *
+ * The number is a judgement about reading, not a measurement, so it is stated
+ * once, here, and every consumer reads it rather than restating it.
+ */
+export const MAX_FLAT_CHOICE_CANDIDATES = 24;

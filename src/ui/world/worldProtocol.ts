@@ -115,6 +115,44 @@ export type WorldActionOffer = ActionMetadata & {
 export interface WorldNarration {
   readonly scope: string;
   readonly payload: unknown;
+  /**
+   * THE SENTENCE, IF THE GAME WROTE ONE (BoardSmith #170).
+   *
+   * `payload` is the board's and stays uninterpretable by everything between
+   * the rules and the game's own UI. But the shared shell has a message log now,
+   * and a log that could only print JSON would be a debug console rather than
+   * chrome -- which is exactly what `WorldDevBoard` was.
+   *
+   * So the game writes the line it wants said, in the same shape a table's
+   * `game.messages` already has (`GameHistory` takes `string | {text, type}`).
+   * OPTIONAL, and absent means silence: an event with no `text` puts no line in
+   * the log. The shell renders nothing rather than inventing a sentence out of a
+   * scope name and a payload it is not allowed to read.
+   */
+  readonly text?: string;
+  /** The line's kind, verbatim to `GameHistory` -- what a table's message log
+   *  already carries. Presentation only; the shell never reads it as a rule. */
+  readonly type?: string;
+}
+
+/**
+ * ONE SEAT'S IDENTITY, AS THE HOST KNOWS IT (BoardSmith #170).
+ *
+ * The shared shell draws a seat row per player, and a row needs a name. A
+ * TABLE's names come from `PlayerState.players`, which the session composes from
+ * the lobby. A world has no lobby: the wire carries a seat number and a presence
+ * set, and who seat 7 IS belongs to whoever owns accounts -- ShufflewickPub, or
+ * `boardsmith dev`'s seat switcher.
+ *
+ * So the host composes this and BoardSmith never derives it. A host that sends
+ * nothing gets seat-numbered rows, which is honest: the shell knows the seat and
+ * does not know the person. Inventing "Player 7" inside the library would be a
+ * name that outranks the real one on the platform that has it.
+ */
+export interface WorldPlayer {
+  readonly seat: number;
+  readonly name: string;
+  readonly color?: string;
 }
 
 /**
@@ -156,6 +194,12 @@ interface WorldStateMessage {
    * where the truth is "this page no longer knows".
    */
   readonly presence: readonly number[] | null;
+  /**
+   * Who the seats are, host-composed, or absent when the host has no names to
+   * give. See {@link WorldPlayer}: the shell renders seat numbers without it and
+   * never derives a name of its own.
+   */
+  readonly players?: readonly WorldPlayer[];
 }
 
 /**

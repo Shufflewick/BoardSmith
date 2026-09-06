@@ -42,9 +42,20 @@ export interface TimeTravelDiff {
  * actually provides — if a field is here, the shell provides it, and if it is
  * not, no amount of guessing at a string key will find it.
  */
-export interface GameContext {
-  /** The whole server state for this seat, or null before the first frame. */
-  gameState: Ref<GameState | null>;
+/**
+ * WHAT BOTH BACKENDS PUBLISH (BoardSmith #170).
+ *
+ * The half of the context a world can honestly provide, and it is most of it.
+ * A world has a seat, an element tree, an enumerated action list and an action
+ * controller; what it does not have is a `GameState` — there is no flow, no
+ * turn, no per-action snapshot — and therefore no time-travel diff either.
+ *
+ * Splitting it is what lets `PlayShell`, `ActionPanel` and the board bridge be
+ * ONE implementation each. Keeping the table-only fields in the same interface
+ * would have forced a world to fabricate a `gameState`, which is exactly the
+ * lie `worldProtocol.ts` was written to prevent.
+ */
+export interface PlayContext {
   /** The game's own player view — what a board component renders. */
   gameView: ComputedRef<unknown>;
   /** Every player at the table. */
@@ -59,8 +70,6 @@ export interface GameContext {
   availableActions: ComputedRef<string[]>;
   /** The action controller — the one write path for taking an action. */
   actionController: UseActionControllerReturn;
-  /** What a time-travel step changed, or null when not time travelling. */
-  timeTravelDiff: Ref<TimeTravelDiff | null>;
   /** Issue a host op (dev/debug surfaces). */
   platformRequest: (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /** The presentation overlay, if the host supplied one. */
@@ -68,6 +77,27 @@ export interface GameContext {
   /** Element id the debug panel is highlighting, or null. */
   debugHighlight: Ref<number | null>;
 }
+
+/**
+ * Everything `GameShell` makes available — the shared context plus the two
+ * fields only a table has.
+ *
+ * Every field is reactive; read `.value` as usual. The shape is what the shell
+ * actually provides — if a field is here, the shell provides it, and if it is
+ * not, no amount of guessing at a string key will find it.
+ */
+export interface GameContext extends PlayContext {
+  /** The whole server state for this seat, or null before the first frame. */
+  gameState: Ref<GameState | null>;
+  /** What a time-travel step changed, or null when not time travelling. */
+  timeTravelDiff: Ref<TimeTravelDiff | null>;
+}
+
+/** The keys both backends publish. */
+const PLAY_CONTEXT_KEY_NAMES = [
+  'gameView', 'players', 'myPlayer', 'playerSeat', 'isMyTurn', 'availableActions',
+  'actionController', 'platformRequest', 'presentation', 'debugHighlight',
+] as const satisfies readonly (keyof PlayContext)[];
 
 /** One typed key per field of {@link GameContext}. */
 export const GAME_CONTEXT_KEYS: { [K in keyof GameContext]: InjectionKey<GameContext[K]> } = {
@@ -93,6 +123,23 @@ export const GAME_CONTEXT_KEYS: { [K in keyof GameContext]: InjectionKey<GameCon
  */
 export function provideGameContext(context: GameContext): void {
   for (const key of Object.keys(GAME_CONTEXT_KEYS) as Array<keyof GameContext>) {
+    provide(GAME_CONTEXT_KEYS[key] as InjectionKey<unknown>, context[key]);
+  }
+}
+
+/**
+ * Publish the shared half. Called by `WorldShell` and by nothing else.
+ *
+ * The table-only keys are deliberately left UNPROVIDED rather than filled with
+ * nulls: a component that reads `gameState` inside a world is asking a question
+ * a world cannot answer, and `useGameContext()`'s error naming the missing
+ * fields is a better answer than a `null` that reads as "the game has not
+ * started yet".
+ *
+ * @internal
+ */
+export function providePlayContext(context: PlayContext): void {
+  for (const key of PLAY_CONTEXT_KEY_NAMES) {
     provide(GAME_CONTEXT_KEYS[key] as InjectionKey<unknown>, context[key]);
   }
 }

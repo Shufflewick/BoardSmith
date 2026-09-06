@@ -164,18 +164,29 @@ describe('action bar identity token', () => {
   });
 });
 
-describe('GameShell.vue wires the token to panelToken', () => {
+describe('the shared action bar wires the token to panelToken', () => {
+  // The action bar moved into `PlayShell` in #170; `panelToken` is still
+  // computed by the adapter and still the ONLY thing the token binds to.
   const source = readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'),
     'utf8',
   );
+  const shellSource = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), 'PlayShell.vue'),
+    'utf8',
+  );
 
   it('renders the action-bar token from panelToken, not activePlayer', () => {
-    const block = source.slice(source.indexOf('<PlayerToken'), source.indexOf('<PlayerToken') + 400);
+    const block = shellSource.slice(
+      shellSource.indexOf('<PlayerToken'),
+      shellSource.indexOf('<PlayerToken') + 400,
+    );
     expect(block).toMatch(/v-if="panelToken"/);
     expect(block).toMatch(/:seat="panelToken\.seat"/);
     expect(block, 'binding straight to activePlayer would restore the blank simultaneous bar')
       .not.toMatch(/activePlayer/);
+    expect(source, 'the adapter hands the shell its panelToken and nothing else')
+      .toMatch(/:panel-token="panelToken"/);
   });
 
   it('draws the you-token exactly like the whose-turn token', () => {
@@ -183,7 +194,10 @@ describe('GameShell.vue wires the token to panelToken', () => {
     // identity glyph a decoration reads as unexplained decoration rather than as
     // meaning, and it competes with shape — the stable identity channel, and the
     // only one in a colourless game. `kind` selects WHICH seat, never how it looks.
-    const block = source.slice(source.indexOf('<PlayerToken'), source.indexOf('<PlayerToken') + 400);
+    const block = shellSource.slice(
+      shellSource.indexOf('<PlayerToken'),
+      shellSource.indexOf('<PlayerToken') + 400,
+    );
     expect(block, 'the token must carry no kind-dependent class').not.toMatch(/is-you/);
     expect(block, 'the token must carry no kind-dependent styling prop').not.toMatch(/emphasis/);
 

@@ -202,9 +202,22 @@ describe('source: the guarantee lives in the filter, not in a shell guard', () =
     expect(gameShellSource).not.toContain('hasInProgressPick');
   });
 
-  it('GameShell still honours the platform escape hatch (decl + default + both usages)', () => {
-    const occurrences = gameShellSource.split('platformActionPanelEscapeHatch').length - 1;
-    expect(occurrences).toBeGreaterThanOrEqual(4);
+  it('the platform escape hatch survives the #170 split, relayed and not re-decided', () => {
+    // The adapter DECLARES it, defaults it, and RELAYS it; the shared chrome
+    // declares it and branches on it ONCE -- the prompt strip it turns on and
+    // the panel it turns off are the two arms of one v-if/v-else, which is why
+    // neither surface can go missing. What must never appear is a SECOND
+    // decision: the shell re-deriving the hatch from something of its own.
+    const playShellSource = fs.readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), 'PlayShell.vue'),
+      'utf-8',
+    );
+    expect(gameShellSource.split('platformActionPanelEscapeHatch').length - 1)
+      .toBeGreaterThanOrEqual(3);
+    expect(playShellSource.split('platformActionPanelEscapeHatch').length - 1)
+      .toBeGreaterThanOrEqual(2);
+    expect(playShellSource).toMatch(/v-if="platformActionPanelEscapeHatch"[\s\S]{0,400}<template v-else>/);
     expect(gameShellSource).not.toContain('suppressActionPanel');
+    expect(playShellSource).not.toContain('suppressActionPanel');
   });
 });

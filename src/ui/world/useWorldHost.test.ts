@@ -308,3 +308,52 @@ describe('useWorldHost — the world narrating (#331)', () => {
     expect(host.events.value).toEqual([]);
   });
 });
+
+/**
+ * WHO THE SEATS ARE (#170 §2.2).
+ *
+ * The shared shell draws a seat row per player and a row needs a name. A world
+ * has no lobby, so the wire carries a seat number and the host -- the thing that
+ * owns accounts -- composes the names. BoardSmith derives none.
+ */
+describe('the host names the seats, or nobody does', () => {
+  it('takes the roster the host composed', () => {
+    const host = useWorldHost({ post: () => {} });
+    deliver(host, stateFrame({
+      players: [{ seat: 2, name: 'Rook' }, { seat: 4, name: 'Ivy', color: '#0f0' }],
+    }));
+    expect(host.players.value).toEqual([
+      { seat: 2, name: 'Rook' },
+      { seat: 4, name: 'Ivy', color: '#0f0' },
+    ]);
+  });
+
+  it('holds nobody when the host sent nothing, rather than inventing seats', () => {
+    const host = useWorldHost({ post: () => {} });
+    deliver(host, stateFrame());
+    expect(host.players.value).toEqual([]);
+  });
+});
+
+/**
+ * THE SENTENCE, WHEN THE GAME WROTE ONE (#170 §2.4).
+ *
+ * `payload` stays uninterpretable all the way here. `text` is the game's own
+ * line for the shared log, and it rides on the narration it belongs to.
+ */
+describe('narration can carry a sentence', () => {
+  it('keeps text and type verbatim beside the payload', () => {
+    const host = useWorldHost({ post: () => {} });
+    deliver(host, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_events',
+      events: [{ scope: 'room:cellar', payload: { kind: 'fire' }, text: 'The fire gutters.', type: 'ambient' }],
+    });
+    expect(host.events.value[0]).toEqual({
+      scope: 'room:cellar',
+      payload: { kind: 'fire' },
+      text: 'The fire gutters.',
+      type: 'ambient',
+    });
+  });
+});

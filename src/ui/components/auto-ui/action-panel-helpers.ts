@@ -4,6 +4,7 @@
  */
 
 import type { ChoiceWithRefs, ValidElement } from '../../composables/useActionControllerTypes.js';
+import { MAX_FLAT_CHOICE_CANDIDATES } from '../../../engine/element/action-metadata.js';
 
 /**
  * D-03 anchored-choice splitter.
@@ -57,27 +58,6 @@ export function splitAnchoredChoices(
   }
   return { primary, anchored };
 }
-
-/**
- * The largest flat candidate set the Action Panel will render as buttons.
- *
- * 24 is where a wrapping row of pills stops being a sentence and becomes an
- * unlabelled grid the player must scan — roughly two full rows in the action bar
- * at a normal window width — and it is past the point where a screen-reader user
- * can hold the list in their head while walking it.
- *
- * It clears the reference games by a wide margin. Measured on 2026-09-05 by
- * running the audit over hex, go-fish, checkers, chess, cribbage, seven and
- * polyhedral-potions, the largest UNANCHORED flat set any of them ever offers is
- * 11 (seven's `discard.card`); the largest anchored one is Hex's 49 empty cells,
- * which is exactly the set that should go to the board rather than the panel.
- * Lacuna's planned hundreds of verbs trip it decisively.
- *
- * The number is a judgement about reading, not a measurement, so it is stated
- * once, here, and read by both the panel and `boardsmith validate`'s
- * choice-cardinality audit.
- */
-export const MAX_FLAT_CHOICE_CANDIDATES = 24;
 
 /**
  * #172 — should the panel hand this element pick to the board?

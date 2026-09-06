@@ -134,9 +134,18 @@ export {
   GAME_CONTEXT_KEYS,
   injectPlayerSeat,
   type GameContext,
+  // What BOTH backends publish (#170). A world provides this half and nothing
+  // more: it has no `GameState` and no time-travel diff, and fabricating either
+  // would be the lie the world protocol exists to prevent.
+  type PlayContext,
   type GameContextPlayer,
   type TimeTravelDiff,
 } from './composables/useGameContext.js';
+
+// THE CHROME BOTH BACKENDS RENDER (#170). A game never mounts this itself --
+// `GameShell` and `WorldShell` do -- but a custom board reads its board-area
+// contract, and the connection shape is what an adapter fills in.
+export { default as PlayShell, type PlayConnection } from './components/PlayShell.vue';
 
 // Drag-and-drop composable for custom UIs
 export {
@@ -419,6 +428,10 @@ export type { AnimationEvent } from '../engine/index.js';
 export { default as WorldShell } from './world/WorldShell.vue';
 export { useWorld, WORLD_CONTEXT_KEY, type WorldContext } from './world/useWorld.js';
 export { useWorldHost, type WorldHost, type WorldHostOptions } from './world/useWorldHost.js';
+// A world's answers to the questions the shared shell and controller ask (#170),
+// including the LOCAL `fetchPickChoices` that resolves each pick from the offer
+// the shell already holds rather than over the wire.
+export { useWorldPlay, type WorldPlay } from './world/useWorldPlay.js';
 export {
   WORLD_HOST_SOURCE,
   WORLD_NARRATION_KEPT,
@@ -426,6 +439,7 @@ export {
   type WorldActionOutcome,
   type WorldActionOffer,
   type WorldNarration,
+  type WorldPlayer,
   type WorldPhase,
   type WorldHostMessage,
 } from './world/worldProtocol.js';

@@ -15,7 +15,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { worldBudgets } from './budgets.js';
-import { MAX_FLAT_CHOICE_CANDIDATES } from '../ui/components/auto-ui/action-panel-helpers.js';
+import { MAX_FLAT_CHOICE_CANDIDATES } from '../engine/element/action-metadata.js';
 
 describe('R2: the engine cap is the safety net above the panel threshold', () => {
   it('ships a default well above the panel threshold', () => {

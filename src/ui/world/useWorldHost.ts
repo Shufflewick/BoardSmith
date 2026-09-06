@@ -11,6 +11,7 @@ import {
   type WorldHostMessage,
   type WorldNarration,
   type WorldPhase,
+  type WorldPlayer,
   type WorldUiMessage,
 } from './worldProtocol.js';
 
@@ -29,14 +30,28 @@ export interface WorldHost {
   phase: Ref<WorldPhase>;
   view: ShallowRef<unknown>;
   seat: Ref<number | null>;
-  /** What this seat may do, enumerated by the world over what it can see. */
-  actions: Ref<readonly WorldActionOffer[]>;
+  /**
+   * What this seat may do, enumerated by the world over what it can see.
+   *
+   * `shallowRef` for the reason `view` is one: an offer carries every
+   * selection's candidates resolved (#169), so a deep `ref` would install
+   * proxies over every candidate of every action on every state push -- a
+   * per-frame cost proportional to what the seat may do. It is only ever
+   * REPLACED, never mutated in place.
+   */
+  actions: ShallowRef<readonly WorldActionOffer[]>;
   notice: Ref<string | null>;
   worldName: Ref<string | null>;
   /** Who holds an open connection right now, or `null` when the host has no
    *  live claim. The contract, in full, is on `world_state` in
    *  `worldProtocol.ts`; this is that field, copied and nothing more. */
   presence: Ref<readonly number[] | null>;
+  /**
+   * WHO THE SEATS ARE, as the host composed them, or empty when it sent
+   * nothing. The shell renders seat numbers without it and never derives a name
+   * of its own -- the reasoning is on `WorldPlayer` in `worldProtocol.ts`.
+   */
+  players: ShallowRef<readonly WorldPlayer[]>;
   /**
    * WHAT THE WORLD HAS NARRATED TO THIS SEAT, oldest first
    * (ShufflewickPub #331).
@@ -51,7 +66,7 @@ export interface WorldHost {
    * its own state, where it is durable and where the game decides what it
    * costs.
    */
-  events: Ref<readonly WorldNarration[]>;
+  events: ShallowRef<readonly WorldNarration[]>;
   /** True once the host has sent one frame this UI understood. */
   heardFromHost: Ref<boolean>;
   /** True when the hello window passed with nothing from the host at all. */
@@ -106,11 +121,12 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    */
   const view = shallowRef<unknown>(null);
   const seat = ref<number | null>(null);
-  const actions = ref<readonly WorldActionOffer[]>([]);
+  const actions = shallowRef<readonly WorldActionOffer[]>([]);
   const notice = ref<string | null>(null);
   const worldName = ref<string | null>(null);
   const presence = ref<readonly number[] | null>(null);
-  const events = ref<readonly WorldNarration[]>([]);
+  const players = shallowRef<readonly WorldPlayer[]>([]);
+  const events = shallowRef<readonly WorldNarration[]>([]);
   const heardFromHost = ref(false);
   const hostSilent = ref(false);
   const acting = ref(false);
@@ -153,6 +169,9 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     notice.value = data.notice;
     worldName.value = data.worldName;
     presence.value = data.presence;
+    // Absent is not empty: a host with no names to give leaves the shell with
+    // seat numbers, which is what it honestly knows.
+    players.value = data.players ?? [];
   }
 
   /**
@@ -257,6 +276,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     notice,
     worldName,
     presence,
+    players,
     events,
     heardFromHost,
     hostSilent,

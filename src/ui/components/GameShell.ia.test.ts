@@ -172,15 +172,27 @@ describe('GameShell actionbar — IA-04 constant panel footprint (#13)', () => {
     path.join(path.dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'),
     'utf-8',
   );
+  // The action bar and the board region moved into the shared chrome in #170.
+  // The footprint decision did not move with them -- it is still one constant
+  // reserved in CSS, and it is now reserved for BOTH backends at once.
+  const shellSource = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'PlayShell.vue'),
+    'utf-8',
+  );
 
   it('caps the actionbar with the shared ceiling token', () => {
-    expect(gameShellSource).toMatch(/\.actionbar \{[\s\S]*?max-height: var\(--bsg-panel-max\);/);
+    expect(shellSource).toMatch(/\.actionbar \{[\s\S]*?max-height: var\(--bsg-panel-max\);/);
   });
 
   it('reserves the panel footprint as .boardregion padding, not as a measured value', () => {
-    expect(gameShellSource).toMatch(
+    expect(shellSource).toMatch(
       /\.boardregion \{[\s\S]*?padding-bottom: var\(--bsg-panel-reserved\);/,
     );
+  });
+
+  it('observes nothing on the actionbar in the shared chrome either', () => {
+    expect(shellSource).not.toContain('actionbarEl');
+    expect(shellSource).not.toContain('--action-panel-h');
   });
 
   it('observes nothing on the actionbar — no ref, no ResizeObserver, no custom property', () => {

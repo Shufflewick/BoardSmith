@@ -8,6 +8,11 @@
       the confusion ShufflewickPub #95 was about, arriving here by a different
       road. A frame reaches this state only when the page hosting it never sent
       a `world_state`, which is a host bug and not a world state.
+
+      It is deliberately NOT the platform's "this world's UI is missing": that
+      one answers "there was nothing to load", and this code could not be
+      running if that were true. The two are mutually exclusive by construction
+      and neither can report the other's fault (ShufflewickPub #357).
     -->
     <div v-if="host.hostSilent.value && !host.heardFromHost.value" class="world-shell__silent">
       <h1>{{ displayName }}</h1>
@@ -18,94 +23,222 @@
     </div>
 
     <!-- REFUSED. The host's own sentence, shown as written: it is the one the
-         player can act on ("you are not a member of this world"). -->
+         player can act on ("you are not a member of this world"). A door, not a
+         refusal -- which is why it is a full surface rather than the toast every
+         refused ACTION speaks through, and why it stays here rather than moving
+         into the shared chrome a table also renders. -->
     <div v-else-if="host.phase.value === 'refused'" class="world-shell__refused" role="alert">
       <h1>{{ worldTitle }}</h1>
       <p>{{ host.notice.value ?? 'This world did not let you in.' }}</p>
     </div>
 
-    <template v-else>
+    <!-- NO VIEW YET. Narration alone does not draw a board: a frame that has
+         only been narrated at has been told nothing about what the world IS,
+         and mounting the chrome over a null view would put an empty room on
+         screen for a world that has simply not answered yet. -->
+    <div v-else-if="host.view.value === null" class="world-shell__waiting">
+      <h1>{{ worldTitle }}</h1>
+      <p>Looking around…</p>
+    </div>
+
+    <PlayShell
+      v-else
+      :players="play.players.value"
+      :player-seat="host.seat.value ?? -1"
+      :present-seats="host.presence.value"
+      :messages="play.messages.value"
+      :log-empty-text="LOG_EMPTY_TEXT"
+      :may-act="play.mayAct.value"
+      :available-actions="play.availableActions.value"
+      :action-metadata="play.actionMetadata.value"
+      :disabled-actions="play.disabledActions.value"
+      :panel-token="panelToken"
+      :prompt="actionController.currentPick.value?.prompt"
+      :connection="connectionIndicator"
+      v-model:sidebar-rail="sidebarRail"
+      v-model:mobile-expanded="mobileExpanded"
+      :is-compact="isCompact"
+    >
       <!-- LOST. The last view stays on screen, marked as no longer live: it is
            the only thing the player has, and taking it away tells them nothing
            the banner does not already say. -->
-      <p v-if="host.phase.value === 'lost'" class="world-shell__lost" role="alert">
-        {{ host.notice.value ?? 'The connection to this world dropped. This is the last view it sent.' }}
-      </p>
+      <template v-if="host.phase.value === 'lost'" #board-overlays>
+        <p class="world-shell__lost" role="alert">
+          {{ host.notice.value ?? 'The connection to this world dropped. This is the last view it sent.' }}
+        </p>
+      </template>
 
-      <!-- WHY THE LAST THING YOU TRIED DID NOT HAPPEN.
-           A world refuses constantly and legitimately -- a bare holding, a door
-           that is not there -- and the sentence is the one the player can act
-           on. A board that emits `act` rather than awaiting `useWorld().act()`
-           has nowhere of its own to put that sentence, so the SHELL puts it
-           here: this is one of the three states the shell owns precisely
-           because a game should never have to write it. Replaced by the next
-           attempt and cleared by the one that succeeds, so it can only ever
-           describe the thing that just failed. -->
-      <p v-if="refusal !== null" class="world-shell__refusal" role="alert">
-        {{ refusal }}
-      </p>
-
-      <!-- NO VIEW YET. Narration alone does not draw a board: a frame that has
-           only been narrated at has been told nothing about what the world IS,
-           and mounting the game's UI over a null view would put an empty room
-           on screen for a world that has simply not answered yet. -->
-      <div v-if="host.view.value === null" class="world-shell__waiting">
-        <h1>{{ worldTitle }}</h1>
-        <p>Looking around…</p>
-      </div>
-
-      <component
-        :is="ui"
-        v-else
-        :view="host.view.value"
-        :seat="host.seat.value"
-        :actions="host.actions.value"
-        :acting="host.acting.value"
-        :world-name="host.worldName.value"
-        :presence="host.presence.value"
-        :events="host.events.value"
-        @act="onAct"
-      />
-    </template>
+      <template #board>
+        <component
+          :is="boardComponent"
+          v-if="boardComponent"
+          :game-view="play.gameView.value"
+          :players="play.players.value"
+          :my-player="play.myPlayer.value"
+          :player-seat="host.seat.value ?? -1"
+          :is-my-turn="play.mayAct.value"
+          :available-actions="play.availableActions.value"
+          :action-args="actionController.currentArgs.value"
+          :set-board-prompt="() => {}"
+          :action-controller="actionController"
+          :is-action-help-visible="false"
+          :disabled-actions="play.disabledActions.value"
+          :presence="host.presence.value"
+          :events="host.events.value"
+          :world-name="host.worldName.value"
+          :phase="host.phase.value"
+        />
+        <!-- Only reachable if the registry's default entry resolved to no
+             component — a broken uis.ts. Name the fix, don't render blank. -->
+        <div v-else class="empty-game-area">
+          <p>No board to render. Mark one UI with defaultUI() in src/ui/uis.ts.</p>
+        </div>
+      </template>
+    </PlayShell>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, provide, ref, type Component } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useWorldHost } from './useWorldHost.js';
+import { useWorldPlay } from './useWorldPlay.js';
 import { WORLD_CONTEXT_KEY } from './useWorld.js';
+import { provide } from 'vue';
+import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
+import { resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
+import { useActionController } from '../composables/useActionController.js';
+import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction.js';
+import { useBoardActionBridge } from '../composables/useBoardActionBridge.js';
+import { providePlayContext } from '../composables/useGameContext.js';
+import { useToast } from '../composables/useToast.js';
+import { BREAKPOINTS } from '../theme.js';
 
 /**
- * A BUNDLE'S OWN SURFACE FOR A RESIDENT WORLD (ShufflewickPub #128).
+ * A BUNDLE'S OWN SURFACE FOR A RESIDENT WORLD (ShufflewickPub #128, #170).
  *
- * `GameShell`'s twin, and deliberately not a mode of it. The reasoning is in
- * `worldProtocol.ts`: a table's shell needs a turn, a flow position and an
- * action table to render anything at all, and a world has none of the three.
- * Rather than fabricate them -- which would put buttons on screen for actions
- * the world refuses -- a world mounts this, from the bundle's `world.html`
- * entry, and renders the verbs the world actually declared.
+ * `GameShell`'s twin, and still deliberately not a mode of it -- but for a
+ * narrower reason than before. `GameShell` is ~2,700 lines and most of them are
+ * a table's LIFECYCLE: the lobby, the waiting room, the standalone connection,
+ * flow, undo, time travel, bots, the flow boundary key stamped on every op,
+ * game over. A world has none of that and never will.
  *
- * WHAT THIS SHELL OWNS: the wire, and the three states a game should never
- * have to write itself -- a host that has said nothing, a refusal, and a
- * dropped connection. WHAT THE GAME OWNS: everything a player looks at once
- * they are in, which is the `ui` component and the whole point of the ticket.
+ * What it DOES have, since #169, is the same action system a table has. So both
+ * shells are transport-and-lifecycle adapters over one chrome (`PlayShell`) and
+ * one controller (`useActionController`), and this file is the world's adapter:
+ * the wire, the four phases, the hello timeout, and the four states the game
+ * should never have to write itself.
+ *
+ * WHAT THIS SHELL OWNS: a host that has said nothing, a world that refused you,
+ * a world that has not answered yet, and a dropped connection. WHAT THE GAME
+ * OWNS: the BOARD, and only the board -- a custom UI is a board area inside the
+ * shared shell, never a replacement for it.
  */
 const props = defineProps<{
-  /** The game's own world UI. Handed `view`, `seat`, `actions`, `acting`,
-   *  `worldName`, `presence` and `events`, and expected to emit
-   *  `act(command, args)`. */
-  ui: Component;
+  /**
+   * The game's UI registry, from `src/ui/uis.ts` -- the same one a table
+   * declares, and the reason `WorldShell` no longer takes a single `ui`
+   * component with a hand-rolled prop bag.
+   *
+   * A world had no registry because (said `validate.ts`) it had "no turn, no
+   * flow position and no action table to switch boards over". #169 gave it an
+   * action table, so the reason expired: the dev UI switcher works for a world
+   * now, and `devUI(() => import('boardsmith/ui/auto-ui'))` makes AutoUI a
+   * world's default board with no new renderer at all -- a world's view IS the
+   * serialized element tree a table's is.
+   */
+  uis: GameUIRegistry;
   /** What to call this game before the host has said what this world is called. */
   displayName: string;
   /** Origins allowed to talk to this frame. See `GameShellInit.isOriginAllowed`. */
   trustedOrigins?: string[];
 }>();
 
+/**
+ * WHAT AN EMPTY WORLD LOG MEANS, which is not what an empty table log means.
+ *
+ * A table's log is state: re-sent whole, durable across a reload, the whole
+ * history. A world's is a live tail bounded at 200 lines that starts empty on
+ * every mount and is gone on reload. "No activity yet" here would be a claim
+ * about a silence the log has no way to know about.
+ */
+const LOG_EMPTY_TEXT = 'Nothing has been said since you arrived';
+
 const host = useWorldHost({ trustedOrigins: props.trustedOrigins });
+const play = useWorldPlay(host);
+const toast = useToast();
 
 /** The world's own name once the host has said it, and the game's until then --
  *  two worlds of the same game have different names and only one is this one. */
 const worldTitle = computed(() => host.worldName.value ?? props.displayName);
+
+const isDevBuild = import.meta.env.DEV;
+const selectedUiName = ref('');
+const boardComponent = computed(() =>
+  resolveUiComponent(props.uis, selectedUiName.value, isDevBuild),
+);
+
+const playerSeat = computed(() => host.seat.value ?? -1);
+
+/**
+ * THE TABLE'S CONTROLLER, UNCHANGED, WITH A WORLD'S ANSWERS.
+ *
+ * Everything it needs is injected, and nothing in it knows what a table is. The
+ * one piece that has to be a world's own is `fetchPickChoices`: a world's offer
+ * arrives with every selection's candidates resolved, so the answer is already
+ * in hand and no round trip happens. See `useWorldPlay` for why that is an
+ * adapter rather than a change to the controller.
+ *
+ * `pickStep` and `cancelPendingAction` are absent because a world has no
+ * step-wise protocol to reach: a submit carries every selection at once.
+ */
+const actionController = useActionController({
+  sendAction: play.sendAction,
+  availableActions: play.availableActions,
+  actionMetadata: play.actionMetadata,
+  isMyTurn: play.mayAct,
+  disabledActions: play.disabledActions,
+  gameView: play.gameView as never,
+  playerSeat,
+  fetchPickChoices: play.fetchPickChoices,
+});
+
+/**
+ * THE BOARD SUBSTRATE, SHARED VERBATIM.
+ *
+ * `useBoardInteraction` is pure element-ref plumbing and reads no game state,
+ * and the bridge feeds the board off the controller's `validElements` -- which
+ * is precisely why the local `fetchPickChoices` above is load-bearing rather
+ * than a nicety. Without it a pre-filled offer would light the action panel and
+ * leave the board dead, which is the divergence the bridge exists to forbid.
+ */
+const boardInteraction = createBoardInteraction();
+provideBoardInteraction(boardInteraction);
+useBoardActionBridge({
+  controller: actionController,
+  boardInteraction,
+  isMyTurn: play.mayAct,
+  autoEndTurn: computed(() => true),
+  actionMetadata: play.actionMetadata,
+  availableActions: play.availableActions,
+  disabledActions: play.disabledActions,
+  // A world checkpoints on dirty and keeps no per-action snapshot, so there is
+  // no history to view and no restore epoch to invalidate a pick against.
+  isViewingHistory: computed(() => false),
+  restoreEpoch: computed(() => undefined),
+});
+
+providePlayContext({
+  gameView: play.gameView,
+  players: play.players,
+  myPlayer: play.myPlayer,
+  playerSeat,
+  isMyTurn: play.mayAct,
+  availableActions: play.availableActions,
+  actionController,
+  platformRequest: async () => ({}),
+  presentation: ref(undefined),
+  debugHighlight: ref(null),
+});
 
 provide(WORLD_CONTEXT_KEY, {
   phase: host.phase,
@@ -117,41 +250,79 @@ provide(WORLD_CONTEXT_KEY, {
   presence: host.presence,
   events: host.events,
   acting: host.acting,
-  act: host.act,
+  act,
+});
+
+/** The identity token at the head of the action bar: always the VIEWER's own
+ *  seat. A world has no turn, so there is no other claim it could make. */
+const panelToken = computed(() => play.myPlayer.value ?? null);
+
+/**
+ * THE ATTACHMENT LIFECYCLE, THROUGH ONE SHARED INDICATOR (#170 §2.5).
+ *
+ * Deliberately NOT merged with a table's socket health: this axis has states a
+ * table has no analogue for. Only the dot is shared; the two state machines are
+ * not, and `refused` never reaches here at all because it is a full surface.
+ */
+const connectionIndicator = computed<PlayConnection | null>(() => {
+  if (host.phase.value === 'watching') return null;
+  if (host.phase.value === 'lost') {
+    return { tone: 'lost', title: 'The connection to this world dropped.' };
+  }
+  return { tone: 'attaching', title: 'Attaching to this world…' };
 });
 
 /**
- * WHY THE EMIT PATH GETS ITS ANSWER SHOWN AND THE INJECTED PATH DOES NOT.
+ * WHY AN EMITTED ACT'S REFUSAL IS THE SHELL'S TO SHOW.
  *
  * `useWorld().act()` RETURNS the outcome, so a board that injects it already
- * has the world's sentence and decides where it belongs -- next to the button
- * that failed, over the room that refused, wherever the game means it. A board
- * that EMITS has no return value to hold, and this used to drop the outcome on
- * the floor: a player pressed a button, the world refused, and nothing at all
- * appeared. That is not degradation, it is silence, and it hid exactly the
- * refusals `boardsmith dev` exists to make identical to the platform's.
+ * has the world's sentence and decides where it belongs. A board that EMITS has
+ * no return value to hold, and this used to drop the outcome on the floor: a
+ * player pressed a button, the world refused, and nothing at all appeared.
  *
- * So an emitted act's refusal is shown by the shell. It is deliberately not
- * pushed back into the emitting board: a board that had to render it would be
- * every board having to write the same three lines, which is the thing the
- * shell is for.
+ * It speaks through `Toast`, which is where a TABLE's post-hoc refusals go, so
+ * the two backends refuse in one voice. The rule both now share: a refusal you
+ * can PREDICT is a greyed control with a reason (that is `disabled` on the
+ * offer, reaching the panel through `disabledActions`); a refusal you can only
+ * discover by TRYING is a sentence next to the thing you tried.
  */
-const refusal = ref<string | null>(null);
-
-async function onAct(command: string, args: Record<string, unknown> = {}): Promise<void> {
-  refusal.value = null;
+async function act(command: string, args: Record<string, unknown> = {}) {
   const outcome = await host.act(command, args);
   // A refusal RESOLVES rather than throwing -- a world refuses legitimately --
   // so `ok` is the only place the answer lives. A refusal with no message is a
   // host that answered without saying anything, which the player still has to
   // be told about rather than left guessing at.
   if (!outcome.ok) {
-    refusal.value = outcome.message ?? 'The world refused that, and did not say why.';
+    toast.show(outcome.message ?? 'The world refused that, and did not say why.', {
+      type: 'error',
+      duration: 5000,
+    });
   }
+  return outcome;
 }
 
-onMounted(host.start);
-onUnmounted(host.stop);
+// ── Chrome layout state, the shell's own ──────────────────────────────────────
+const sidebarRail = ref(false);
+const mobileExpanded = ref(false);
+const isCompact = ref(false);
+let compactQuery: MediaQueryList | null = null;
+function trackCompact(event: MediaQueryListEvent | MediaQueryList): void {
+  isCompact.value = event.matches;
+  if (!event.matches) mobileExpanded.value = false;
+}
+
+onMounted(() => {
+  host.start();
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    compactQuery = window.matchMedia(`(max-width: ${BREAKPOINTS.compact - 1}px)`);
+    trackCompact(compactQuery);
+    compactQuery.addEventListener('change', trackCompact);
+  }
+});
+onUnmounted(() => {
+  host.stop();
+  compactQuery?.removeEventListener('change', trackCompact);
+});
 
 defineExpose({ host });
 </script>
@@ -159,30 +330,38 @@ defineExpose({ host });
 <style scoped>
 .world-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   box-sizing: border-box;
-  padding: 1rem;
+  font-family: var(--bsg-font);
+  background: var(--bsg-bg);
+  color: var(--bsg-ink);
 }
 
-.world-shell__lost {
-  margin: 0 0 1rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  background: #4a3410;
-  color: #f7e6c4;
-}
-
-.world-shell__refusal {
-  margin: 0 0 1rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  background: #4a1414;
-  color: #f7cdcd;
-}
-
+/* The three full surfaces the shell owns: they replace the chrome rather than
+   sitting inside it, because in each of them there is no world to draw. */
 .world-shell__silent,
 .world-shell__refused,
 .world-shell__waiting {
   max-width: 42rem;
   margin: 0 auto;
+  padding: 1rem;
+}
+
+/* LOST sits over the board region, marking the last view as no longer live. */
+.world-shell__lost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: #4a3410;
+  color: #f7e6c4;
+}
+
+.empty-game-area {
+  padding: 2rem;
+  color: var(--bsg-ink-2);
 }
 </style>

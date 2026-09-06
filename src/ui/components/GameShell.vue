@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted, provide, toRef, nextTick 
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
-import type { GameUIRegistry } from '../game-uis.js';
+import { devUiNames, resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
 import { selectArchetype } from './auto-ui/archetype-selector.js';
 import {
   announceTurnChange,
@@ -26,16 +26,12 @@ import ActionPanel from './auto-ui/ActionPanel.vue';
 import ControlsMenu from './ControlsMenu.vue';
 import DebugPanel from './DebugPanel.vue';
 import GameHeader from './GameHeader.vue';
-import GameHistory from './GameHistory.vue';
 import GameLobby from './GameLobby.vue';
-import PlayersPanel from './PlayersPanel.vue';
-import PlayerToken from './PlayerToken.vue';
+import PlayShell, { type PlayConnection } from './PlayShell.vue';
 import WaitingRoom from './WaitingRoom.vue';
-import Toast from './Toast.vue';
 import { provideGameContext } from '../composables/useGameContext.js';
 import { useTeachingActions } from '../composables/useTeachingActions.js';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
-import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import GameOverCard from './GameOverCard.vue';
 import TutorialOverlay from './helpers/TutorialOverlay.vue';
 import HintOverlay from './helpers/HintOverlay.vue';
@@ -249,20 +245,14 @@ const isDevBuild = import.meta.env.DEV;
 // Elimination is a property of the WHOLE graph. Only the built artifact proves
 // it, which is what treeshake-bundle.test.ts asserts, for CSS as well as JS.
 const registry = computed(() => props.uis);
-const devUiNames = computed(() =>
-  // In production every non-default entry has a null component; listing only
-  // resolvable UIs keeps the switcher honest if it is ever shown outside dev.
-  registry.value.names.filter(
-    (name) => name === registry.value.defaultName || registry.value.entries[name]?.component,
-  ),
-);
+// Both shells resolve a registry the same way since #170, so the two lines that
+// do it live in `game-uis.ts` beside the registry itself.
+const uiNames = computed(() => devUiNames(registry.value));
 const selectedUiName = ref('');
 /** The board to render: the dev selection when there is one, else the default. */
-const selectedUiComponent = computed(() => {
-  const reg = registry.value;
-  const name = selectedUiName.value && isDevBuild ? selectedUiName.value : reg.defaultName;
-  return (reg.entries[name] ?? reg.entries[reg.defaultName])?.component ?? null;
-});
+const selectedUiComponent = computed(() =>
+  resolveUiComponent(registry.value, selectedUiName.value, isDevBuild),
+);
 // Tell the dev host which UIs are available so it can populate the dropdown.
 function postDevUiList(): void {
   if (!isDevBuild || !platformMode.value || typeof window === 'undefined') return;
@@ -270,7 +260,7 @@ function postDevUiList(): void {
     // gameType lets the dev host detect when its outer page is stale relative to
     // the game now running in the iframe (e.g. the dev server was restarted with a
     // different game on the same port) and force a full reload.
-    { source: 'shufflewick-game', type: 'dev-ui-list', uis: devUiNames.value, gameType: props.gameType },
+    { source: 'shufflewick-game', type: 'dev-ui-list', uis: uiNames.value, gameType: props.gameType },
     '*'
   );
 }
@@ -298,7 +288,18 @@ const teachingDisabled = ref(false);
 const debugExpanded = ref(false);
 // Ref to the mounted GameHistory (lives in the players panel). GameShell mediates
 // Copy/Clear from DebugPanel without duplicating message state.
-const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
+/**
+ * THE CHROME, REACHED THROUGH ITS ONE HANDLE.
+ *
+ * The board region, the zoom container and the log all live in `PlayShell` now,
+ * and the table's own behaviour still drives them: the zoom fit measures the
+ * region and scales the container, the focus handoff returns focus to the
+ * board, and the debug panel copies and clears the log. Reaching them through
+ * the shell's exposed refs keeps ONE definition of each element -- a second
+ * element here would be a second thing to disagree with the first.
+ */
+const playShell = ref<InstanceType<typeof PlayShell> | null>(null);
+const historyPanel = computed(() => playShell.value?.historyPanel ?? null);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
 
 // IA-06: Sidebar rail state. Default expanded; collapses to --bsg-rail on compact phones.
@@ -333,8 +334,8 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
 // mid-game content growth and window resizes never move the zoom. The user
 // adjusts with the slider, or re-fits on demand via the header percent button
 // / menu "Fit".
-const boardregionEl = ref<HTMLElement | null>(null);
-const zoomContainerEl = ref<HTMLElement | null>(null);
+const boardregionEl = computed(() => playShell.value?.boardRegionEl ?? null);
+const zoomContainerEl = computed(() => playShell.value?.zoomContainerEl ?? null);
 const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
   boardEl: zoomContainerEl,
   regionEl: boardregionEl,
@@ -345,6 +346,29 @@ const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
 // staleness timer (~10s). Replaces the hardcoded 'connected' string that was
 // passed to the GameHeader badge.
 const connectionHealth = ref<'connecting' | 'connected' | 'stale'>('connecting');
+
+/**
+ * THE TABLE'S HALF OF ONE SHARED INDICATOR (#170 §2.5).
+ *
+ * `PlayShell` draws one dot; the two backends feed it from different state
+ * machines, deliberately unmerged -- a table's is socket health, a world's is an
+ * attachment lifecycle with two states (`refused`, and the platform's fifth,
+ * `ejected`) a table has no analogue for.
+ *
+ * `null` when there is nothing to say. It is surfaced only in platform mode,
+ * because dev and standalone show the GameHeader connection badge instead, and
+ * a healthy connection surfaces nothing at all: a persistent green dot over the
+ * board reads as a mystery speck (IA-01).
+ */
+const connectionIndicator = computed<PlayConnection | null>(() => {
+  if (!props.platformMode || connectionHealth.value === 'connected') return null;
+  return {
+    tone: connectionHealth.value,
+    title: connectionHealth.value === 'stale'
+      ? 'Connection lost — reconnecting…'
+      : 'Connecting…',
+  };
+});
 let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Winner seats captured from the game_state postMessage (IA-07).
@@ -822,15 +846,6 @@ watch(
   },
   { immediate: true }
 );
-
-/** The toggle's label, carrying the unread count for screen readers too. */
-const mobileToggleLabel = computed(() => {
-  if (mobileExpanded.value) return 'Hide players and log';
-  const unread = unreadLogCount.value;
-  return unread > 0
-    ? `Show players and log, ${unread} new`
-    : 'Show players and log';
-});
 
 // Computed properties derived from game view
 const players = computed(() => state.value?.state.players || []);
@@ -1823,347 +1838,253 @@ if ((import.meta as any).hot) {
     />
 
     <!-- GAME SCREEN -->
-    <div v-if="currentScreen === 'game'" class="game-shell__game">
-      <!-- Top Header Bar — dev/standalone only; absent in platform mode (IA-01) -->
-      <GameHeader
-        v-if="!platformMode"
-        :game-title="displayName || gameType"
-        :game-id="gameId"
-        :connection-status="connectionStatus"
-        :zoom="zoomLevel"
-        v-model:auto-end-turn="autoEndTurn"
-        @update:zoom="setZoom"
-        @fit-zoom="fitZoom"
-        @menu-item-click="handleMenuItemClick"
-      />
+    <PlayShell
+      v-if="currentScreen === 'game'"
+      ref="playShell"
+      :players="playersWithConnection"
+      :player-seat="playerSeat"
+      :current-player-seat="state?.state.currentPlayer"
+      :awaiting-player-seats="awaitingPlayerSeats"
+      :show-turn-status="props.showTurnStatus"
+      :messages="gameMessages"
+      :unread-log-count="unreadLogCount"
+      :may-act="isMyTurn"
+      :available-actions="isViewingHistory ? [] : availableActions"
+      :action-metadata="isViewingHistory ? {} : actionMetadata"
+      :disabled-actions="isViewingHistory ? undefined : disabledActions"
+      :is-action-help-visible="isActionHelpVisible"
+      :panel-token="panelToken"
+      :prompt="boardPrompt ?? actionController.currentPick.value?.prompt"
+      :awaiting-players="awaitingPlayerNames"
+      :current-player-name="currentPlayerName"
+      :current-player-color="currentPlayerColor"
+      :completed="myCompleted"
+      :can-undo="canUndo && !isViewingHistory"
+      :auto-end-turn="autoEndTurn"
+      :platform-action-panel-escape-hatch="props.platformActionPanelEscapeHatch"
+      :connection="connectionIndicator"
+      :zoom-level="zoomLevel"
+      v-model:sidebar-rail="sidebarRail"
+      v-model:mobile-expanded="mobileExpanded"
+      :is-compact="isCompact"
+      @undo="handleUndo"
+    >
+      <template #header>
+        <!-- Top Header Bar — dev/standalone only; absent in platform mode (IA-01) -->
+        <GameHeader
+          v-if="!platformMode"
+          :game-title="displayName || gameType"
+          :game-id="gameId"
+          :connection-status="connectionStatus"
+          :zoom="zoomLevel"
+          v-model:auto-end-turn="autoEndTurn"
+          @update:zoom="setZoom"
+          @fit-zoom="fitZoom"
+          @menu-item-click="handleMenuItemClick"
+        />
+      </template>
 
-      <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a sibling, below) -->
-      <div class="stage">
-        <!-- Sidebar: always-visible player status + history; collapses to rail (IA-06) -->
-        <aside class="sidebar" :class="{ rail: sidebarRail, 'mobile-expanded': mobileExpanded }" aria-label="Players and log">
-          <!-- Rail toggle button: absolutely positioned on the right edge of the sidebar (IA-06) -->
-          <button
-            class="side-edge"
-            type="button"
-            :aria-label="sidebarRail ? 'Expand panel' : 'Collapse panel'"
-            :aria-expanded="!sidebarRail"
-            @click="sidebarRail = !sidebarRail"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-
-          <!-- Mobile only (CSS-gated): a one-line player-icon strip with an expand
-               toggle. Keeps the board the hero; the full panel + log open as an
-               overlay below (see .mobile-expanded). -->
-          <div class="mobile-strip">
-            <PlayersPanel
-              class="mobile-strip__players"
-              :players="panelPlayers"
-              :player-seat="playerSeat"
-              :current-player-seat="state?.state.currentPlayer"
-              :awaiting-player-seats="awaitingPlayerSeats"
-              seat-strip
-            />
-            <button
-              class="mobile-strip__toggle"
-              type="button"
-              :aria-expanded="mobileExpanded"
-              :aria-label="mobileToggleLabel"
-              @click="mobileExpanded = !mobileExpanded"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <!-- Unread badge (#22). aria-hidden because the count is already
-                   in the button's own label — announcing it twice is worse than
-                   once. Capped at 99+ so the badge cannot grow the control. -->
-              <span
-                v-if="unreadLogCount > 0"
-                class="mobile-strip__unread"
-                data-bs-unread
-                aria-hidden="true"
-              >{{ unreadLogCount > 99 ? '99+' : unreadLogCount }}</span>
-            </button>
-          </div>
-
-          <!-- No header band: host branding (ShufflewickPub pull-down tab) overlays
-               the top in production, and the ⋯ controls now live in the action bar. -->
-          <div class="side-scroll">
-            <PlayersPanel
-              :players="playersWithConnection"
-              :player-seat="playerSeat"
-              :current-player-seat="state?.state.currentPlayer"
-              :awaiting-player-seats="awaitingPlayerSeats"
-              :seat-strip="!isCompact && sidebarRail"
-              :show-turn-status="props.showTurnStatus"
-            >
-              <!-- Beneath the identity token, in the card's narrow first column —
-                   for content that reads as part of the seat's identity (a
-                   portrait, a rank pip) and would otherwise have to stack under
-                   the name row and make every card taller. -->
-              <template #player-token-extra="{ player }">
-                <slot
-                  name="player-token-extra"
-                  :player="player"
-                  :game-view="gameView"
-                  :player-seat="playerSeat"
-                ></slot>
-              </template>
-              <template #player-stats="{ player }">
-                <!-- Expose interaction state so a game's player-stats can be actionable
-                     (e.g. tap your own special ability to use it), not just informational.
-                     player is the panel's player; playerSeat is the local seat. -->
-                <slot
-                  name="player-stats"
-                  :player="player"
-                  :game-view="gameView"
-                  :players="players"
-                  :player-seat="playerSeat"
-                  :is-my-turn="isMyTurn"
-                  :available-actions="availableActions"
-                  :action-controller="actionController"
-                ></slot>
-              </template>
-            </PlayersPanel>
-
-            <slot name="sidebar-extra"
-              :state="displayedState"
-              :game-view="gameView"
-              :players="players"
-            ></slot>
-
-            <!-- Game History in the side-scroll: shown when expanded on desktop, and
-                 always on mobile (inside the overlay).
-
-                 A game cannot turn this off. The log is the shell's record of what
-                 happened, and the only gate on it is the PLAYER's own sidebar-rail
-                 collapse — reversible, by the person who chose it. There is
-                 deliberately no prop here: a game rendering its own narration
-                 elsewhere adds a surface, it does not remove this one, and a game
-                 that publishes nothing to `game.messages` gets an honestly empty
-                 log rather than no log at all. -->
-            <GameHistory
-              v-if="isCompact || !sidebarRail"
-              ref="historyPanel"
-              :messages="gameMessages"
-              class="sidebar-history"
-            />
-          </div>
-        </aside>
-
-        <!-- Board region: hero; ~zero chrome padding; container-query-sized.
-             Its padding-bottom reserves the Action Panel's CONSTANT footprint
-             (--bsg-panel-reserved), so the board is fitted above the panel without
-             anything measuring the panel. -->
-        <main class="boardregion" id="main" role="main" ref="boardregionEl" tabindex="-1">
-          <!-- Connection health dot: platform mode only, and only surfaced when there's
-               something to say (stale/connecting). A healthy connection shows nothing —
-               a persistent green dot over the board just reads as a mystery speck (IA-01).
-               Dev/standalone uses the GameHeader connection badge instead. -->
-          <span
-            v-if="platformMode && connectionHealth !== 'connected'"
-            class="conn-dot"
-            :class="connectionHealth"
-            :title="connectionHealth === 'stale' ? 'Connection lost — reconnecting…' : 'Connecting…'"
-            aria-hidden="true"
-          ></span>
-          <!-- Game Over result card: overlays the board behind a Slate scrim (IA-07, D10).
-               Scrim is absolute inside .boardregion — cannot cover the .actionbar sibling
-               or browser chrome (T-100-06-02). winnerSeats degrades to [] in dev-WS mode;
-               isDraw distinguishes that degrade from a genuine draw.
-               A filled #game-over slot replaces the default card entirely; providesOwnGameOverUI
-               suppresses BOTH (the game renders its own end state on its own board). Dismissing
-               (close button / Escape) reveals the board without restarting or leaving.
-               @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02);
-               @leave (menu-only) is the only forward exit that returns to the lobby. -->
-          <template v-if="state?.flowState?.complete && !props.providesOwnGameOverUI && !gameOverDismissed">
-            <slot
-              v-if="$slots['game-over']"
-              name="game-over"
-              :winners="gameOverWinners"
-              :players="players"
-              :is-draw="isDraw"
-              :rematch="handleRestartGame"
-              :new-game="() => handleMenuItemClick('new-game')"
-              :dismiss="dismissGameOver"
-            />
-            <GameOverCard
-              v-else
-              :winner-seats="winnerSeats"
-              :players="players"
-              :is-draw="isDraw"
-              @new-game="handleMenuItemClick('new-game')"
-              @rematch="handleRestartGame"
-              @dismiss="dismissGameOver"
-            />
-          </template>
-          <!-- Tutorial annotation overlay: mounts once here so it appears over BOTH
-               the registry's board component (default or dev-switcher selection)
-               path. Position is absolute inside .boardregion (inset: 0, z-index: 20).
-               Sits above the turn prompt (z-5) and below GameOverCard scrim (z-50).
-               No props — injects gameState and renders only when tutorial.content
-               is present (v-if internal). Not inside zoom-container so it measures
-               boardregion rects unscaled by --zoom-level. -->
-          <TutorialOverlay />
-          <!-- bot hint overlay (bot-01): renders when state.hint is set.
-               Shares z-index 20 with TutorialOverlay — both may coexist (Phase 109).
-               Teleports to body (position:fixed); resolves data-bs-el-* anchors the
-               same way TutorialOverlay does — no renderer coupling (project hard-rule). -->
-          <HintOverlay />
-          <!-- Heatmap overlay (bot-03): renders when state.heatmap.visible is true.
-               z-index 15 — below TutorialOverlay/HintOverlay, above turn prompt (z-5).
-               pointer-events:none throughout. Resolves same data-bs-el-* anchors. -->
-          <HeatmapOverlay />
-          <!-- bot demo narration card (bot-02): announces each move before it executes.
-               Rendered via BoardMessage variant="narration" (position:fixed, top, z-10).
-               Text is from broadcast state.narration (engine-derived, plain string —
-               never v-html, T-107-08 mitigated). -->
-          <BoardMessage
-            v-if="(state?.state as any)?.narration?.text"
-            variant="narration"
-            :visible="true"
-          >{{ (state?.state as any)?.narration?.text }}</BoardMessage>
-          <!-- bot demo playback controls — speed + step so the learner follows at
-               their own pace. Fixed bottom-center (never over the board). -->
-          <div
-            v-if="isDemoRunning && demoControls"
-            class="bsg-demo-controls"
-            role="group"
-            aria-label="bot demo playback controls"
-          >
-            <div class="bsg-demo-controls__speeds" role="group" aria-label="Speed">
-              <button
-                v-for="s in DEMO_SPEEDS"
-                :key="s.label"
-                type="button"
-                class="bsg-demo-btn bsg-demo-btn--speed"
-                :class="{ 'is-active': demoControls.delay === s.delay }"
-                :aria-pressed="demoControls.delay === s.delay"
-                @click="setDemoSpeed(s.delay)"
-              >{{ s.label }}</button>
-            </div>
-            <span class="bsg-demo-controls__sep" aria-hidden="true"></span>
-            <button
-              type="button"
-              class="bsg-demo-btn"
-              :disabled="!demoControls.canStepBack"
-              aria-label="Step back one move"
-              title="Step back"
-              @click="sendDemoControl('back')"
-            >◀</button>
-            <button
-              type="button"
-              class="bsg-demo-btn bsg-demo-btn--play"
-              :aria-label="demoControls.paused ? 'Play' : 'Pause'"
-              :title="demoControls.paused ? 'Play' : 'Pause'"
-              @click="sendDemoControl(demoControls.paused ? 'play' : 'pause')"
-            >{{ demoControls.paused ? '▶' : '⏸' }}</button>
-            <button
-              type="button"
-              class="bsg-demo-btn"
-              aria-label="Step forward one move"
-              title="Step forward"
-              @click="sendDemoControl('step')"
-            >▶❘</button>
-            <span class="bsg-demo-controls__sep" aria-hidden="true"></span>
-            <button
-              type="button"
-              class="bsg-demo-btn bsg-demo-btn--stop"
-              aria-label="Stop demo"
-              @click="handleTeachingAction('demo-toggle')"
-            >Stop</button>
-          </div>
-          <!-- Game modal host: the sanctioned full-board-region overlay layer for custom
-               UIs. A game Teleports a blocking modal here (`<Teleport to="#bs-game-modal">`)
-               to cover the board area (e.g. an end-of-round summary). It is a direct child
-               of .boardregion, so — like GameOverCard/TutorialOverlay — it can cover the
-               board but NEVER the header or .actionbar chrome (those are siblings outside
-               .boardregion). `contain: layout` re-establishes the containing block, so even
-               a teleported overlay that uses `position: fixed` is confined to THIS box (the
-               board region) instead of escaping to the viewport — the board-area sandbox
-               invariant holds no matter what the game designer does. pointer-events are
-               none on the host (click-through when no modal is open) and auto on its
-               children (a teleported modal is interactive), so games need no extra wiring.
-               The game UI is mounted one tick after this host is in the document (the
-               `shellMounted` gate), so a plain `<Teleport to="#bs-game-modal">` in a
-               game component always resolves — no `defer` required. -->
-          <div class="game-shell__game-modal-host" id="bs-game-modal"></div>
-          <div class="game-shell__zoom-container" ref="zoomContainerEl" :style="{ '--zoom-level': zoomLevel }">
-            <!--
-              Game Board Slot Props:
-              - actionController: USE THIS for all action handling (start, fill, execute, cancel)
-              - actionArgs: Read-only view of current selection args (for UI display)
-              - Other props: game state for rendering
-            -->
-            <!-- ONE render path for the board: the registry's default UI, or the
-                 dev switcher's selection. There is no #game-board slot — a second
-                 way to name the default UI would be a second thing to disagree
-                 with `src/ui/uis.ts`, and props drifted between the two paths for
-                 real while both existed (the slot never received flow-state or
-                 @retry). Games declare boards in defineGameUIs(); nothing else. -->
-            <!-- `shellMounted` gate: the game UI mounts one tick after GameShell's
-                 DOM is in the document, so a game's `<Teleport to="#bs-game-modal">`
-                 always resolves its target (see the shellMounted declaration). -->
-            <!-- TIME TRAVEL (LIBX-04/D31): a custom board is a PEER of the auto-UI,
-                 so it gets the identical treatment the auto ActionPanel gets below
-                 — `isViewingHistory` STATED as a prop, and every actionability
-                 signal pre-gated on it. Ungated is not a smaller bug than
-                 undocumented: what the board DRAWS comes from the historical
-                 `gameView`, so an ungated `is-my-turn`/`available-actions` lets it
-                 offer a real, clickable control positioned from a state that is no
-                 longer true, and the click commits against the LIVE game. Gate here,
-                 once, rather than leaving every game to re-derive it from the nulled
-                 `flowState`. -->
-            <template v-if="shellMounted">
-            <component
-              v-if="selectedUiComponent"
-              :is="selectedUiComponent"
-              :state="displayedState"
-              :game-view="gameView || null"
-              :players="players"
-              :my-player="myPlayer"
-              :player-seat="playerSeat"
-              :is-my-turn="isMyTurn && !isViewingHistory"
-              :available-actions="isViewingHistory ? [] : availableActions"
-              :action-args="actionArgs"
-              :set-board-prompt="setBoardPrompt"
-              :can-undo="canUndo && !isViewingHistory"
-              :is-viewing-history="isViewingHistory"
-              :undo="handleUndo"
-              :action-controller="actionController"
-              :is-action-help-visible="isActionHelpVisible"
-              :disabled-actions="isViewingHistory ? undefined : disabledActions"
-              :flow-state="displayedState?.flowState"
-              @retry="handleRetry"
-            />
-            <!-- Only reachable if the registry's default entry resolved to no
-                 component — a broken uis.ts. Name the fix, don't render blank. -->
-            <div v-else class="empty-game-area">
-              <p>No board to render. Mark one UI with defaultUI() in src/ui/uis.ts.</p>
-            </div>
-            </template>
-          </div>
-        </main>
-        <!-- No floating log button: the log lives in the players panel. Collapse the
-             sidebar rail / mobile strip to hide it; expand to read it. -->
-        <!-- Scrim: active only on mobile when the player strip is expanded into the
-             full overlay. Tapping it collapses back to the strip. Sibling of .stage
-             children so it sits inside .stage and never covers the .actionbar below. -->
+      <!-- The table's own overlays over the board region: the game-over card,
+           the tutorial, the bot hint and heatmap, the demo narration and its
+           playback bar. Every one of them reads a table fact -- `flowState`,
+           `state.hint`, `state.heatmap` -- so none of them is the shell's. -->
+      <template #board-overlays>
+             Scrim is absolute inside .boardregion — cannot cover the .actionbar sibling
+             or browser chrome (T-100-06-02). winnerSeats degrades to [] in dev-WS mode;
+             isDraw distinguishes that degrade from a genuine draw.
+             A filled #game-over slot replaces the default card entirely; providesOwnGameOverUI
+             suppresses BOTH (the game renders its own end state on its own board). Dismissing
+             (close button / Escape) reveals the board without restarting or leaving.
+             @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02);
+             @leave (menu-only) is the only forward exit that returns to the lobby. -->
+        <template v-if="state?.flowState?.complete && !props.providesOwnGameOverUI && !gameOverDismissed">
+          <slot
+            v-if="$slots['game-over']"
+            name="game-over"
+            :winners="gameOverWinners"
+            :players="players"
+            :is-draw="isDraw"
+            :rematch="handleRestartGame"
+            :new-game="() => handleMenuItemClick('new-game')"
+            :dismiss="dismissGameOver"
+          />
+          <GameOverCard
+            v-else
+            :winner-seats="winnerSeats"
+            :players="players"
+            :is-draw="isDraw"
+            @new-game="handleMenuItemClick('new-game')"
+            @rematch="handleRestartGame"
+            @dismiss="dismissGameOver"
+          />
+        </template>
+        <!-- Tutorial annotation overlay: mounts once here so it appears over BOTH
+             the registry's board component (default or dev-switcher selection)
+             path. Position is absolute inside .boardregion (inset: 0, z-index: 20).
+             Sits above the turn prompt (z-5) and below GameOverCard scrim (z-50).
+             No props — injects gameState and renders only when tutorial.content
+             is present (v-if internal). Not inside zoom-container so it measures
+             boardregion rects unscaled by --zoom-level. -->
+        <TutorialOverlay />
+        <!-- bot hint overlay (bot-01): renders when state.hint is set.
+             Shares z-index 20 with TutorialOverlay — both may coexist (Phase 109).
+             Teleports to body (position:fixed); resolves data-bs-el-* anchors the
+             same way TutorialOverlay does — no renderer coupling (project hard-rule). -->
+        <HintOverlay />
+        <!-- Heatmap overlay (bot-03): renders when state.heatmap.visible is true.
+             z-index 15 — below TutorialOverlay/HintOverlay, above turn prompt (z-5).
+             pointer-events:none throughout. Resolves same data-bs-el-* anchors. -->
+        <HeatmapOverlay />
+        <!-- bot demo narration card (bot-02): announces each move before it executes.
+             Rendered via BoardMessage variant="narration" (position:fixed, top, z-10).
+             Text is from broadcast state.narration (engine-derived, plain string —
+             never v-html, T-107-08 mitigated). -->
+        <BoardMessage
+          v-if="(state?.state as any)?.narration?.text"
+          variant="narration"
+          :visible="true"
+        >{{ (state?.state as any)?.narration?.text }}</BoardMessage>
+        <!-- bot demo playback controls — speed + step so the learner follows at
+             their own pace. Fixed bottom-center (never over the board). -->
         <div
-          class="scrim"
-          :class="{ active: mobileExpanded }"
-          aria-hidden="true"
-          @click="mobileExpanded = false"
-        ></div>
-      </div>
+          v-if="isDemoRunning && demoControls"
+          class="bsg-demo-controls"
+          role="group"
+          aria-label="bot demo playback controls"
+        >
+          <div class="bsg-demo-controls__speeds" role="group" aria-label="Speed">
+            <button
+              v-for="s in DEMO_SPEEDS"
+              :key="s.label"
+              type="button"
+              class="bsg-demo-btn bsg-demo-btn--speed"
+              :class="{ 'is-active': demoControls.delay === s.delay }"
+              :aria-pressed="demoControls.delay === s.delay"
+              @click="setDemoSpeed(s.delay)"
+            >{{ s.label }}</button>
+          </div>
+          <span class="bsg-demo-controls__sep" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="bsg-demo-btn"
+            :disabled="!demoControls.canStepBack"
+            aria-label="Step back one move"
+            title="Step back"
+            @click="sendDemoControl('back')"
+          >◀</button>
+          <button
+            type="button"
+            class="bsg-demo-btn bsg-demo-btn--play"
+            :aria-label="demoControls.paused ? 'Play' : 'Pause'"
+            :title="demoControls.paused ? 'Play' : 'Pause'"
+            @click="sendDemoControl(demoControls.paused ? 'play' : 'pause')"
+          >{{ demoControls.paused ? '▶' : '⏸' }}</button>
+          <button
+            type="button"
+            class="bsg-demo-btn"
+            aria-label="Step forward one move"
+            title="Step forward"
+            @click="sendDemoControl('step')"
+          >▶❘</button>
+          <span class="bsg-demo-controls__sep" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="bsg-demo-btn bsg-demo-btn--stop"
+            aria-label="Stop demo"
+            @click="handleTeachingAction('demo-toggle')"
+          >Stop</button>
+        </div>
+      </template>
 
-      <!-- Floating Action Panel: absolutely positioned over the BOTTOM of the game
-           area (full width) so showing/growing it NEVER reflows or moves the board.
-           Its options list caps at 5 rows and scrolls; the board reserves the Action Panel's
-           measured height as scroll room so anything it floats over stays reachable. -->
-      <div class="actionbar" role="region" aria-label="Actions">
+      <template #board>
+        <!--
+          Game Board Slot Props:
+          - actionController: USE THIS for all action handling (start, fill, execute, cancel)
+          - actionArgs: Read-only view of current selection args (for UI display)
+          - Other props: game state for rendering
+        -->
+        <!-- ONE render path for the board: the registry's default UI, or the
+             dev switcher's selection. There is no #game-board slot — a second
+             way to name the default UI would be a second thing to disagree
+             with `src/ui/uis.ts`, and props drifted between the two paths for
+             real while both existed (the slot never received flow-state or
+             @retry). Games declare boards in defineGameUIs(); nothing else. -->
+        <!-- `shellMounted` gate: the game UI mounts one tick after GameShell's
+             DOM is in the document, so a game's `<Teleport to="#bs-game-modal">`
+             always resolves its target (see the shellMounted declaration). -->
+        <!-- TIME TRAVEL (LIBX-04/D31): a custom board is a PEER of the auto-UI,
+             so it gets the identical treatment the auto ActionPanel gets below
+             — `isViewingHistory` STATED as a prop, and every actionability
+             signal pre-gated on it. Ungated is not a smaller bug than
+             undocumented: what the board DRAWS comes from the historical
+             `gameView`, so an ungated `is-my-turn`/`available-actions` lets it
+             offer a real, clickable control positioned from a state that is no
+             longer true, and the click commits against the LIVE game. Gate here,
+             once, rather than leaving every game to re-derive it from the nulled
+             `flowState`. -->
+        <template v-if="shellMounted">
+        <component
+          v-if="selectedUiComponent"
+          :is="selectedUiComponent"
+          :state="displayedState"
+          :game-view="gameView || null"
+          :players="players"
+          :my-player="myPlayer"
+          :player-seat="playerSeat"
+          :is-my-turn="isMyTurn && !isViewingHistory"
+          :available-actions="isViewingHistory ? [] : availableActions"
+          :action-args="actionArgs"
+          :set-board-prompt="setBoardPrompt"
+          :can-undo="canUndo && !isViewingHistory"
+          :is-viewing-history="isViewingHistory"
+          :undo="handleUndo"
+          :action-controller="actionController"
+          :is-action-help-visible="isActionHelpVisible"
+          :disabled-actions="isViewingHistory ? undefined : disabledActions"
+          :flow-state="displayedState?.flowState"
+          @retry="handleRetry"
+        />
+        <!-- Only reachable if the registry's default entry resolved to no
+             component — a broken uis.ts. Name the fix, don't render blank. -->
+        <div v-else class="empty-game-area">
+          <p>No board to render. Mark one UI with defaultUI() in src/ui/uis.ts.</p>
+        </div>
+        </template>
+      </template>
+
+      <template #sidebar-extra>
+        <slot name="sidebar-extra"
+          :state="displayedState"
+          :game-view="gameView"
+          :players="players"
+        ></slot>
+      </template>
+
+      <template #player-token-extra="{ player }">
+        <slot
+          name="player-token-extra"
+          :player="player"
+          :game-view="gameView"
+          :player-seat="playerSeat"
+        ></slot>
+      </template>
+
+      <!-- Expose interaction state so a game's player-stats can be actionable
+           (e.g. tap your own special ability to use it), not just informational. -->
+      <template #player-stats="{ player }">
+        <slot
+          name="player-stats"
+          :player="player"
+          :game-view="gameView"
+          :players="players"
+          :player-seat="playerSeat"
+          :is-my-turn="isMyTurn"
+          :available-actions="availableActions"
+          :action-controller="actionController"
+        ></slot>
+      </template>
+
+      <template #controls>
         <!-- ⋯ controls menu: always available at the far-left of the bar (the sole
              control surface in platform mode, where GameHeader is hidden). Opens
              upward since the bar is bottom-anchored. -->
@@ -2190,94 +2111,66 @@ if ((import.meta as any).hot) {
           @menu-item-click="handleMenuItemClick"
           @teaching-action="handleTeachingAction"
         />
-        <!-- Action Panel: only render when player is actionable (IA-04) -->
-        <template v-if="isMyTurn || awaitingPlayerNames.length">
-          <!-- Identity token at the head of the Action Panel, so the action bar always
-               carries WHO (IA-02) regardless of whether the ActionPanel or the fallback
-               prompt strip renders the WHAT.
+      </template>
 
-               Turn-based: whose turn it is. Simultaneous: the VIEWER's own seat — see
-               `panelToken` for why those are different claims, and why they are drawn
-               the same. Never absent while the bar is up: an identity anchor that comes
-               and goes between phases reads as broken. -->
-          <PlayerToken
-            v-if="panelToken"
-            class="turn-token"
-            :name="panelToken.name"
-            :seat="panelToken.seat"
-            :color="panelToken.color"
-            :size="30"
+      <template #action-panel>
+        <slot name="action-panel">
+          <ActionPanel
+            :available-actions="isViewingHistory ? [] : availableActions"
+            :action-metadata="isViewingHistory ? {} : actionMetadata"
+            :is-action-help-visible="isActionHelpVisible"
+            :disabled-actions="isViewingHistory ? undefined : disabledActions"
+            :players="players"
+            :player-seat="playerSeat"
+            :is-my-turn="isMyTurn && !isViewingHistory"
+            :completed="myCompleted"
+            :can-undo="canUndo && !isViewingHistory"
+            :auto-end-turn="autoEndTurn"
+            :messages="gameMessages"
+            :current-player-name="currentPlayerName"
+            :current-player-color="currentPlayerColor"
+            :awaiting-players="awaitingPlayerNames"
+            @undo="handleUndo"
           />
-          <!-- Turn strip: the fallback prompt surface, shown ONLY when the platform
-               takes the panel away entirely (the D-02 escape hatch). The prompt
-               survives even when no panel renders (IA-03, never a silent board /
-               no turn indicator). Per-action `.suppressFromActionPanel()` no longer
-               reaches this branch: it can hide redundant buttons but never the
-               last one, so it can never leave the Action Panel empty (LIBX-01, see
-               ActionPanel's `visibleActions`). -->
-          <span v-if="props.platformActionPanelEscapeHatch" class="turn">
-            <span class="pr">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
-          </span>
-          <!-- Action panel: mounted unless the platform escape hatch removes it.
-               It always carries at least one operable control — including in the
-               all-board-anchored case, where it renders its anchored-choices
-               button list ("Select on board or choose here"). That focusable list
-               is the keyboard/SR safety net (A11Y C-2): custom UIs whose board
-               isn't keyboard-operable still expose an operable control. -->
-          <template v-if="!props.platformActionPanelEscapeHatch">
-            <slot name="action-panel">
-              <ActionPanel
-                :available-actions="isViewingHistory ? [] : availableActions"
-                :action-metadata="isViewingHistory ? {} : actionMetadata"
-                :is-action-help-visible="isActionHelpVisible"
-                :disabled-actions="isViewingHistory ? undefined : disabledActions"
-                :players="players"
-                :player-seat="playerSeat"
-                :is-my-turn="isMyTurn && !isViewingHistory"
-                :completed="myCompleted"
-                :can-undo="canUndo && !isViewingHistory"
-                :auto-end-turn="autoEndTurn"
-                :messages="gameMessages"
-                :current-player-name="currentPlayerName"
-                :current-player-color="currentPlayerColor"
-                :awaiting-players="awaitingPlayerNames"
-                @undo="handleUndo"
-              />
-            </slot>
-            <!-- Time travel banner -->
-            <div v-if="isViewingHistory" class="time-travel-banner">
-              <span class="time-travel-icon">⏰</span>
-              Viewing historical state (action {{ timeTravelActionIndex }}) - Actions disabled
-            </div>
-          </template>
-        </template>
-      </div>
+        </slot>
+      </template>
 
-      <!-- Debug Panel: dev only. Renders inside the dev host iframe (platform
-           mode + dev build); never in a deployed/production embed. -->
-      <DebugPanel
-        v-if="debugMode && platformMode && isDevBuild"
-        :state="state"
-        :player-seat="playerSeat"
-        :player-count="playerCount"
-        :game-id="gameId"
-        :history-has-messages="historyPanel?.hasMessages ?? false"
-        v-model:expanded="debugExpanded"
-        @switch-player="handleSwitchPlayer"
-        @restart-game="handleRestartGame"
-        @time-travel="handleTimeTravel"
-        @highlight-element="handleHighlightElement"
-        @copy-history="() => historyPanel?.copyHistory()"
-        @clear-history="() => historyPanel?.clearHistory()"
-      />
+      <!-- Time travel banner: a table fact by construction -- a world
+           checkpoints on dirty and has no per-action snapshot to rewind to. -->
+      <template #actionbar-extra>
+        <div v-if="isViewingHistory" class="time-travel-banner">
+          <span class="time-travel-icon">⏰</span>
+          Viewing historical state (action {{ timeTravelActionIndex }}) - Actions disabled
+        </div>
+      </template>
 
-      <!-- Error display -->
-      <div v-if="error" class="error-banner">
-        {{ error.message }}
-      </div>
+      <template v-if="debugMode && platformMode && isDevBuild" #debug>
+    <!-- Debug Panel: dev only. Renders inside the dev host iframe (platform
+         mode + dev build); never in a deployed/production embed. -->
+    <DebugPanel
+      v-if="debugMode && platformMode && isDevBuild"
+      :state="state"
+      :player-seat="playerSeat"
+      :player-count="playerCount"
+      :game-id="gameId"
+      :history-has-messages="historyPanel?.hasMessages ?? false"
+      v-model:expanded="debugExpanded"
+      @switch-player="handleSwitchPlayer"
+      @restart-game="handleRestartGame"
+      @time-travel="handleTimeTravel"
+      @highlight-element="handleHighlightElement"
+      @copy-history="() => historyPanel?.copyHistory()"
+      @clear-history="() => historyPanel?.clearHistory()"
+    />
+      </template>
+
+    </PlayShell>
+
+    <!-- Error display: the adapter's, not the shell's -- it reports a
+         transport failure, which a world reports through its own phases. -->
+    <div v-if="error && currentScreen === 'game'" class="error-banner">
+      {{ error.message }}
     </div>
-
-    <!-- Zoom preview overlay (Alt+hover to enlarge cards) -->
     <ZoomPreviewOverlay :preview-state="previewState" />
 
     <!-- The single tooltip every dimmed control borrows to explain itself.
@@ -2362,33 +2255,6 @@ if ((import.meta as any).hot) {
   font-family: var(--bsg-font);
   background: var(--bsg-bg);
   color: var(--bsg-ink);
-
-  /* ── Action Panel footprint tokens ────────────────────────────────────────
-     The board is fitted above a CONSTANT reserved footprint, never above the
-     panel's measured height. The panel's height legitimately changes on every
-     selection step, so it has no single value and a fit that reserved it was
-     not reproducible between two loads of the same state (issue #13). These
-     tokens are derived from the panel's own control metrics, so there is one
-     definition of a "row" for both the ceiling and the reservation. */
-  --bsg-panel-row: 44px;   /* one control row: the WCAG 2.5.8 touch-target floor */
-  --bsg-panel-gap: 8px;    /* .actionbar row gap */
-  --bsg-panel-pad: 9px;    /* .actionbar vertical padding */
-
-  /* Visual ceiling: the panel's content lays out inside this and scrolls past it. */
-  --bsg-panel-max: calc(5 * var(--bsg-panel-row) + 4 * var(--bsg-panel-gap)
-                        + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
-
-  /* Reserved footprint the board is fitted above: TWO rows. The panel has two
-     resting states a player sits in between picks — the action-choice row (which
-     routinely wraps once on a phone) and prompt + one row of choices during a
-     pick. One row guarantees routine overlap; three would cost 158px of board on
-     every load to buy headroom that only many-choice moments need, and internal
-     scroll already serves those. */
-  --bsg-panel-reserved: min(
-    calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
-         + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom)),
-    var(--bsg-panel-max)
-  );
 }
 
 /* Platform mode: embedded in host iframe. Paint the Slate ground (var(--bsg-bg))
@@ -2421,396 +2287,6 @@ if ((import.meta as any).hot) {
 }
 .game-shell--platform :deep(.header-right) {
   margin-left: auto;
-}
-
-/* Game Screen: flex column, full viewport height. Positioning context for the
-   floating Action Panel (.actionbar), which is absolutely positioned within it. */
-.game-shell__game {
-  display: flex;
-  flex-direction: column;
-  height: 100vh; /* fallback: browsers without dvh support */
-  height: 100dvh;
-  position: relative;
-}
-
-/* Stage: sidebar + boardregion side by side; fills remaining height */
-.stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  position: relative;
-}
-
-/* Sidebar: always-visible player status + history; collapses to rail (IA-06) */
-.sidebar {
-  flex: none;
-  width: clamp(220px, 22vw, 320px);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--bsg-surface);
-  border-right: 1px solid var(--bsg-line);
-  position: relative;
-  transition: width var(--bsg-dur-base) cubic-bezier(.4, 0, .2, 1);
-}
-
-/* Rail mode: slim sidebar showing only icon tokens (IA-06) */
-.sidebar.rail {
-  width: var(--bsg-rail);
-}
-.sidebar.rail .side-scroll {
-  padding: var(--bsg-s2) 0;
-}
-/* In rail, hide sidebar text labels; keep only the player tokens visible */
-.sidebar.rail :deep(.player-name-row),
-.sidebar.rail :deep(.you-badge) {
-  display: none;
-}
-/* History hidden in rail mode */
-.sidebar.rail .sidebar-history {
-  display: none;
-}
-
-/* Rail toggle button: floats on the right edge of the sidebar */
-.side-edge {
-  position: absolute;
-  top: 14px;
-  right: -13px;
-  z-index: 6;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--bsg-surface);
-  border: 1px solid var(--bsg-line);
-  box-shadow: var(--bsg-shadow-sm);
-  color: var(--bsg-ink-2);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.side-edge svg {
-  width: 15px;
-  height: 15px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  transition: transform var(--bsg-dur-fast);
-}
-.sidebar.rail .side-edge svg {
-  transform: rotate(180deg);
-}
-
-/* Scrim: transparent cover over board area; visible only on mobile when the player
-   strip is expanded into the overlay (IA-06). Inside .stage so it never covers the
-   .actionbar sibling below. */
-.scrim {
-  position: absolute;
-  inset: 0;
-  z-index: 45;
-  background: rgba(0, 0, 0, .5);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--bsg-dur-base);
-}
-.scrim.active {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* Mobile player strip (one-line icons + expand toggle). Hidden on desktop;
-   shown only inside the mobile @media block below. */
-.mobile-strip {
-  display: none;
-}
-
-/* Side scroll: players panel + game history (scrollable) */
-.side-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: var(--bsg-s3);
-}
-
-/* Connection health dot: absolute corner of boardregion; platform mode only (IA-01).
-   Class bound to connectionHealth ref: connected / stale / connecting. */
-.conn-dot {
-  position: absolute;
-  top: var(--bsg-s2);
-  right: var(--bsg-s2);
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--bsg-away);
-  z-index: 5;
-  pointer-events: none;
-}
-.conn-dot.connected { background: var(--bsg-ok); }
-.conn-dot.stale     { background: var(--bsg-warn); }
-.conn-dot.connecting { background: var(--bsg-away); }
-
-/* Board region: hero; container-query-sized; ~zero chrome padding (IA-05).
-   The board renders at its NATURAL size, pinned top-left; at startup a
-   one-shot fit (useAutoZoom) zooms it to fill this region without scrolling,
-   clamped to the 0.5–2.0 slider range, then leaves it alone. Whenever the
-   board — grown mid-game, clamped, or manually zoomed — is larger than the
-   region, this region scrolls (both axes): scroll is the contract after
-   startup, never clipping and never auto-rescaling. */
-.boardregion {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  overflow: auto;
-  /* Reserve scrollbar space so a fit landing near the overflow boundary can't
-     toggle the scrollbar on/off, which would change clientWidth/clientHeight
-     and create a resize-observer feedback path into useAutoZoom's re-fit. */
-  scrollbar-gutter: stable;
-  padding: var(--bsg-s1);
-  /* The Action Panel's reserved footprint is LAYOUT, not arithmetic: the region's
-     own padding excludes it, so the fit's `region.clientHeight - padding` already
-     accounts for it and nothing in JS has to know the panel exists. It is a
-     constant, so this padding never changes and the persistent region observer
-     fires only on genuine viewport changes. Includes the safe-area inset. */
-  padding-bottom: var(--bsg-panel-reserved);
-}
-
-/* Floating Action Panel: absolutely anchored to the bottom, FULL WIDTH (spans under
-   the sidebar too). Out of flow, so it never reflows/moves the board — it floats over
-   the board's bottom; the board reserves a CONSTANT footprint (--bsg-panel-reserved,
-   in .boardregion's padding) plus scroll room up to the panel's ceiling, so covered
-   content stays reachable however tall the panel grows. Everything inside wraps
-   naturally (flex-wrap) — no reserved columns; the options list caps at 5 rows and scrolls. */
-.actionbar {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 30;
-  background: var(--bsg-surface);
-  border-top: 1px solid var(--bsg-line);
-  box-shadow: var(--bsg-shadow);
-  /* One inline-wrapping flow: the ⋯ menu, player token, prompt text, cancel, and
-     every option button are flattened into THIS flex container (ActionPanel wrappers
-     use display:contents) so they wrap together like words in a sentence — no header
-     row / carriage return before the buttons. */
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  align-content: flex-start;
-  gap: 8px;
-  padding: 9px var(--bsg-s4);
-  padding-bottom: calc(9px + env(safe-area-inset-bottom));
-  /* Cap at 5 button-rows, then the whole flow scrolls. The ⋯ menu popover teleports
-     to <body>, so overflow is safe. */
-  max-height: var(--bsg-panel-max);
-  overflow-y: auto;
-}
-
-/* ⋯ controls menu — first item in the inline action bar flow. */
-.actionbar-controls {
-  margin-right: 4px;
-}
-
-/* Active-player identity token — flows inline right after the ⋯ menu. */
-.turn-token {
-  margin-right: 4px;
-}
-
-/* The token in a simultaneous step gets NO decoration of its own — it is drawn
-   exactly as the whose-turn token is. Do not add a ring, outline, or opacity
-   here: a treatment on the identity glyph reads as an unexplained decoration
-   rather than as meaning, and it competes with shape, which is the stable
-   identity channel and the only one in a colourless game. Which seat the token
-   names is `panelToken`'s job; how it looks never varies. */
-
-/* Turn strip: prompt sentence (fallback when ActionPanel is not rendering) */
-.turn {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px 0 4px;
-  min-height: 46px;
-  border-right: 1px solid var(--bsg-line);
-  margin-right: 4px;
-}
-.turn .pr {
-  font-size: 13.5px;
-  color: var(--bsg-ink);
-  font-weight: 600;
-}
-
-/* ─── Responsive Tiers (IA-06) ──────────────────────────────────────────────
-   Shared breakpoint scale: 640 / 768 / 1024 / 1440.
-   @media queries drive shell chrome; @container for renderer reflow (plan 100-02).
-   ──────────────────────────────────────────────────────────────────────────── */
-
-/* Compact (phones ≤639px): the board is the hero. The sidebar collapses to a single
-   one-line player-icon strip across the top; tapping its chevron opens the full
-   players + log as an overlay over the board (never the action bar), with a scrim. */
-@media (max-width: 639px) {
-  .stage {
-    flex-direction: column;
-  }
-  /* Sidebar = just the strip height by default; positioned so the expanded overlay
-     (top:100%) anchors right below the strip. */
-  .sidebar,
-  .sidebar.rail {
-    position: relative;
-    width: 100%;
-    flex: none;
-    max-height: none;
-    overflow: visible;
-    border-right: none;
-    border-bottom: 1px solid var(--bsg-line);
-    box-shadow: none;
-  }
-  /* The desktop rail toggle has no role on phones. */
-  .side-edge {
-    display: none;
-  }
-  /* Compact strip: player icons on the left, expand chevron on the right. */
-  .mobile-strip {
-    display: flex;
-    align-items: center;
-    gap: var(--bsg-s2);
-    padding: 6px var(--bsg-s3);
-  }
-  .mobile-strip__players {
-    flex: 1;
-    min-width: 0;
-  }
-  /* Strip icons hug the left and never wrap to a second row. */
-  .mobile-strip :deep(.seat-strip) {
-    justify-content: flex-start;
-  }
-  .mobile-strip :deep(.strip-tokens) {
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-  }
-  /* Un-hide the turn-status sentence in the phone strip so off-turn players can
-     READ whose turn it is (the desktop rail keeps it icon-only — see PlayersPanel).
-     Scoped to .mobile-strip so only the wide phone bar gets the text. */
-  .mobile-strip :deep(.strip-status) {
-    display: inline-block;
-    margin-left: var(--bsg-s2);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--bsg-accent);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-  }
-  .mobile-strip__unread {
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    box-sizing: border-box;
-    display: grid;
-    place-items: center;
-    border-radius: 999px;
-    /* Accent on the page background rather than white on accent: the accent is
-       a mid-tone in both themes, so white text on it does not carry. */
-    background: var(--bsg-accent);
-    color: var(--bsg-bg);
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    pointer-events: none;
-  }
-
-  .mobile-strip__toggle {
-    flex: none;
-    display: grid;
-    place-items: center;
-    position: relative;
-    width: 32px;
-    height: 32px;
-    border-radius: var(--bsg-r-sm);
-    background: transparent;
-    border: 1px solid var(--bsg-line);
-    color: var(--bsg-ink-2);
-    cursor: pointer;
-  }
-  .mobile-strip__toggle svg {
-    width: 16px;
-    height: 16px;
-    stroke: currentColor;
-    fill: none;
-    stroke-width: 2;
-    transition: transform var(--bsg-dur-fast);
-  }
-  .sidebar.mobile-expanded .mobile-strip__toggle svg {
-    transform: rotate(180deg);
-  }
-  /* Full panel + log: hidden by default; shown as an overlay below the strip when
-     expanded (board stays the hero underneath, dimmed by the scrim). */
-  .side-scroll {
-    display: none;
-  }
-  /* Lift the whole sidebar (strip + overlay) above the scrim so the toggle stays tappable. */
-  .sidebar.mobile-expanded {
-    z-index: 50;
-    background: var(--bsg-surface);
-  }
-  .sidebar.mobile-expanded .side-scroll {
-    display: block;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    max-height: 60dvh;
-    overflow-y: auto;
-    background: var(--bsg-surface);
-    border-bottom: 1px solid var(--bsg-line);
-    box-shadow: var(--bsg-shadow);
-  }
-  /* Phones use the SAME 5-row Action Panel row cap as desktop (no override) — the base
-     .actionbar max-height applies. */
-}
-
-/* Medium (640px–1023px): standard sidebar + board. Lower bound aligns with the
-   compact ceiling (639px) so 640–767px is a real tier, not an untiered gap. */
-@media (min-width: 640px) and (max-width: 1023px) {
-  .boardregion {
-    min-height: 380px;
-  }
-}
-
-/* Large (≥1024px): wider board min-height. The board is NOT centered or width-capped
-   — many games have more content than fits the viewport, so the board sits top-left
-   and the region scrolls (both axes) when the board is larger than the viewport. */
-@media (min-width: 1024px) {
-  .boardregion {
-    min-height: 480px;
-  }
-}
-
-/* Landscape phone (short screen): prevent the actionbar from crushing the board.
-   The stage already uses the row layout (sidebar | board); this branch only
-   reduces the actionbar height cap so the board retains adequate vertical space. */
-@media (orientation: landscape) and (max-height: 600px) {
-  .game-shell {
-    --bsg-panel-max: min(22dvh, 120px);
-    /* One row on a short screen: vertical space is the scarce axis here. */
-    --bsg-panel-reserved: min(
-      calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom)),
-      var(--bsg-panel-max)
-    );
-  }
-  .actionbar {
-    padding-top: 6px;
-    padding-bottom: max(6px, env(safe-area-inset-bottom));
-  }
 }
 
 /* ── bot demo playback control bar ─────────────────────────────────────────── */
@@ -2880,57 +2356,6 @@ if ((import.meta as any).hot) {
   font-size: 0.8rem;
   color: var(--bsg-ink-2);
 }
-
-.game-shell__zoom-container {
-  --zoom-level: 1;
-  /* Size to the board's NATURAL content (not stretched to the region), so the board
-     keeps its intrinsic size top-left and the region scrolls when it's bigger. */
-  flex: none;
-  width: max-content;
-  max-width: none;
-  /* Use the `zoom` property (not transform): it scales the LAYOUT box, so a
-     zoomed-up board genuinely overflows .boardregion and becomes scrollable in both
-     axes (the board has an intrinsic size to multiply) — unlike transform:scale,
-     which only shifts the paint and left the board un-scrollable / drifting sideways. */
-  zoom: var(--zoom-level);
-
-  /* Total clearance below the board = .boardregion's padding-bottom
-     (--bsg-panel-reserved) + this margin = --bsg-panel-max, the panel's ceiling.
-     So even a panel grown to its full 5 rows can always be scrolled clear of, while
-     the board is still FITTED against only the constant reserved footprint.
-     Divided by --zoom-level because `zoom` scales this element's whole layout box,
-     margin included: at zoom 0.82 an undivided margin delivered only 82% of the
-     clearance and the board's last ~27px stayed pinned under the panel. */
-  margin-bottom: calc((var(--bsg-panel-max) - var(--bsg-panel-reserved)) / var(--zoom-level));
-
-  /* CONTAINMENT: Prevents position:fixed from escaping to viewport.
-     Any fixed-position elements inside will behave like absolute positioning
-     relative to this container - they cannot cover the navbar or ActionPanel. */
-  contain: layout;
-}
-
-/* Sanctioned full-board-region overlay layer for custom-UI modals (see the
-   #bs-game-modal host in the template). Fills .boardregion exactly (like the
-   GameOverCard scrim) so a game modal covers the board but not the chrome, and
-   `contain: layout` keeps a teleported position:fixed overlay confined to this
-   box — the board cannot be escaped. */
-.game-shell__game-modal-host {
-  position: absolute;
-  inset: 0;
-  /* Same stacking level as the GameOverCard scrim: above the board content and
-     the tutorial/hint/heatmap overlays, but NOT above the floating .actionbar
-     Action Panel (also z-index 30, a later sibling that therefore stays on top). A game
-     modal covers the board area only — never the Action Panel/header chrome. */
-  z-index: 30;
-  contain: layout;
-  /* Transparent to pointer events when no modal is open; a teleported modal
-     (a direct child) re-enables them, so it blocks the board as expected. */
-  pointer-events: none;
-}
-.game-shell__game-modal-host > * {
-  pointer-events: auto;
-}
-
 /* Time travel banner */
 .time-travel-banner {
   background: color-mix(in srgb, var(--bsg-warn) 20%, transparent);
@@ -2971,19 +2396,6 @@ if ((import.meta as any).hot) {
   color: var(--bsg-ink-2);
   background: var(--bsg-field);
   border-radius: 12px;
-}
-
-/* GameHistory when used in sidebar (not standalone left column) */
-.sidebar-history {
-  width: 100% !important;
-  min-width: unset !important;
-  border-right: none !important;
-  border-top: 1px solid var(--bsg-line);
-  height: auto !important;
-  max-height: 300px;
-  margin-top: 20px;
-  border-radius: 8px;
-  overflow: hidden;
 }
 
 /* Platform mode: drawer backdrop transparent so host shows through */

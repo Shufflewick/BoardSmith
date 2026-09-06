@@ -173,3 +173,35 @@ export function defineGameUIs<T extends Record<string, GameUIEntry>>(
     entries,
   };
 }
+
+/**
+ * The UIs a dev switcher may offer, in declared order.
+ *
+ * In a production build every non-default entry has a `null` component, so
+ * listing only the resolvable ones keeps the switcher honest if it is ever
+ * shown outside dev.
+ *
+ * Read by BOTH shells since #170: a world project has a registry now, so the
+ * dev UI switcher works for a world, which it could not before.
+ */
+export function devUiNames(registry: GameUIRegistry): string[] {
+  return registry.names.filter(
+    (name) => name === registry.defaultName || registry.entries[name]?.component,
+  );
+}
+
+/**
+ * The board to render: the dev switcher's selection when there is one, else the
+ * registry's default.
+ *
+ * `null` only when the default entry resolved to no component — a broken
+ * `uis.ts`. Both shells name that fix rather than rendering blank.
+ */
+export function resolveUiComponent(
+  registry: GameUIRegistry,
+  selectedName: string,
+  isDevBuild: boolean,
+): Component | null {
+  const name = selectedName && isDevBuild ? selectedName : registry.defaultName;
+  return (registry.entries[name] ?? registry.entries[registry.defaultName])?.component ?? null;
+}
