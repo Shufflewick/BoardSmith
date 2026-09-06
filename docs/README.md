@@ -2,6 +2,20 @@
 
 This folder contains documentation for the BoardSmith game framework.
 
+## The path from an idea to players
+
+BoardSmith is one install and one command away from a game you can play.
+`npx boardsmith init my-game` scaffolds the project, `npm install` pulls in the
+whole engine, `boardsmith dev` hosts real multiplayer on your own machine with
+no server, database or service to provision, and `boardsmith test` drives the
+same rules headlessly. When the game is ready, `boardsmith publish` sends the
+bundle to ShufflewickPub, where a single account supplies the networking, the
+hosting and the social platform around it. Persistent worlds are the one part of
+this path still being built: a world's rules run locally today under
+`boardsmith test`, but a world itself runs only on the hosting platform, and
+`boardsmith dev` plays a world project's table half. See
+[Persistent worlds](./persistent-worlds.md) for which half is which.
+
 ## Documents
 
 | Document | Description |

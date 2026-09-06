@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "type": "module",
   "description": "Library for designing digital board games",
+  "repository": "github:Shufflewick/BoardSmith",
   "bin": {
     "boardsmith": "./bin/boardsmith.js"
   },
