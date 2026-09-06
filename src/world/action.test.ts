@@ -140,6 +140,57 @@ describe("a world action's offer", () => {
     expect(byId.get(game.holdingOf(4).id)).toBeUndefined();
   });
 
+  it("still offers a DISABLED action whose every candidate is greyed out, with its reason", async () => {
+    // BOARDSMITH #187, AND THE FIELD CASE IT WAS FOUND IN.
+    //
+    // `example-rts` stands every holding at its cap at genesis, so a settler's
+    // two neighbours are both greyed ("already at full growth") from the first
+    // instant of the world. `tend` therefore had NO enabled candidate, was
+    // dropped by the satisfiability rule, and never reached the panel at all --
+    // while `kindle`, whose selection is a number and can never be
+    // candidateless, sat beside it correctly greyed. A seat was told two of its
+    // three verbs existed.
+    //
+    // A DISABLED ACTION IS NEVER STARTED, so whether its questions have answers
+    // decides nothing: the reason it cannot be taken is the reason, and it is
+    // the one `candidateless` itself says belongs on the action.
+    const { engine, game } = newEngine();
+    // Fill BOTH of seat 3's neighbours, and spend seat 3's only log doing half
+    // of it, so `tend` is disabled AND every candidate it could name is greyed.
+    await apply(engine, "p3", { name: "tend", args: { neighbour: await holdingId(engine, game, 2) } });
+    await apply(engine, "p5", { name: "tend", args: { neighbour: await holdingId(engine, game, 4) } });
+    expect(game.holdingOf(2).standing).toBeGreaterThanOrEqual(STANDING_MAX);
+    expect(game.holdingOf(4).standing).toBeGreaterThanOrEqual(STANDING_MAX);
+    expect(game.holdingOf(3).woodpile).toBe(0);
+
+    const offers = await engine.offersFor("p3", OFFER);
+    const tendOffer = offers.find((offer) => offer.name === "tend");
+    expect(tendOffer, `The world offered this seat ${JSON.stringify(offers.map((o) => o.name))}.`)
+      .toBeDefined();
+    expect(tendOffer!.disabled).toBe("You have no log to spend");
+    // The candidates travel with it, each carrying its own reason, so the panel
+    // greys the verb and can still say what it would have asked.
+    expect(tendOffer!.selections[0]!.validElements).toHaveLength(2);
+  });
+
+  it("still drops an ENABLED action whose every candidate is greyed out", async () => {
+    // THE OTHER HALF OF THE SAME RULE, and the reason the rule exists: an
+    // action a seat may take, whose only question has no answer, is a button
+    // whose every press is refused and a pick that opens on nothing. That was
+    // #187's first symptom and it stays cured -- what changed is only that a
+    // DISABLED action is no longer dropped for the same reason.
+    const nothingToTake = worldAction<VillageFixture>("nothingToTake")
+      .needs(({ player }) => [holdingPartition(player.seat)])
+      .chooseElement("neighbour", {
+        needs: ({ player }) => neighbourSeats(player.seat).map(holdingPartition),
+        elements: ({ game, player }) => neighbourSeats(player.seat).map((s) => game.holdingOf(s)),
+        disabled: () => "Not this one",
+      })
+      .execute(() => {});
+    const { engine } = newEngine([nothingToTake]);
+    expect((await engine.offersFor("p3", OFFER)).map((offer) => offer.name)).toEqual([]);
+  });
+
   it("loads nothing beyond what the seat's own view already names", async () => {
     const { engine, store } = newEngine();
     // A look first, exactly as a watching client does.

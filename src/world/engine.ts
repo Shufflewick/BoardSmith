@@ -614,9 +614,28 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // question it asks have at least one answer".
         if (!pick.optional && candidateless(pick)) satisfiable = false;
       }
-      if (!satisfiable) return null;
+      // THE REASON IT CANNOT BE TAKEN OUTRANKS WHETHER IT HAS AN ANSWER (#187).
+      //
+      // A disabled action is never STARTED, so whether its questions still have
+      // answers decides nothing about it -- and dropping it for that leaves the
+      // seat looking at a world where the verb does not exist, which is the one
+      // thing `disabled` is for saying instead. It is also what `candidateless`
+      // already points at: "an action offered on that basis is a button whose
+      // every press is refused -- which is what `disabled` on the ACTION exists
+      // to say". That sentence is only true if the engine reads the reason
+      // BEFORE it decides. `example-rts` is the case that proved it did not:
+      // every holding stands at its cap from genesis, so `tend`'s two
+      // neighbours are both greyed and the verb vanished from every seat's
+      // offer, while `kindle` -- a number, which can never be candidateless --
+      // sat beside it correctly greyed.
+      //
+      // An ENABLED action with no answerable question is still dropped, and
+      // that is the half this must not undo: it is a pick that opens on
+      // nothing, which is what #187 was first reported as.
+      const disabled = this.game.getActionDisabledReason(definition, acting);
+      if (disabled === null && !satisfiable) return null;
 
-      return offerOf(definition, selections, this.game.getActionDisabledReason(definition, acting));
+      return offerOf(definition, selections, disabled);
     } finally {
       bindWorldFacilities(this.game, null);
     }
