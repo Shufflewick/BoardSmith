@@ -99,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useWorldHost } from './useWorldHost.js';
 import { useWorldPlay } from './useWorldPlay.js';
 import { WORLD_CONTEXT_KEY } from './useWorld.js';
@@ -200,6 +200,27 @@ const actionController = useActionController({
   gameView: play.gameView as never,
   playerSeat,
   fetchPickChoices: play.fetchPickChoices,
+});
+
+/**
+ * THE OTHER HALF OF #169: A REFUSAL THE PANEL EARNED.
+ *
+ * `act()` below covers a board that EMITS. But the board a world with no board
+ * of its own gets — the supported shape since #170/#181 — never calls `act()`:
+ * its player presses the SHARED ACTION PANEL, which submits through the
+ * controller. A refusal there only sets `lastError` and bumps `errorTick`, and
+ * with nobody in this shell watching, a refused command was invisible on the
+ * generic board — the player pressed a button and the page said nothing.
+ *
+ * `GameShell` watches the same pair for the same reason, and watching
+ * `errorTick` rather than `lastError` is load-bearing there and here: a
+ * repeated IDENTICAL refusal leaves the string unchanged, so a watch on the
+ * message alone would silently drop the second one.
+ */
+watch(actionController.errorTick, () => {
+  const refusal = actionController.lastError.value;
+  if (!refusal) return;
+  toast.show(refusal, { type: 'error', duration: 5000 });
 });
 
 /**
