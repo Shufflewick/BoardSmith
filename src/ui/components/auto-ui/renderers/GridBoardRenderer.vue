@@ -157,30 +157,6 @@ function isCellDisabled(cell: GameElement): boolean {
 const colsRef = computed(() => (gridResult.value.ok ? gridResult.value.cols : 0));
 const rowsRef = computed(() => (gridResult.value.ok ? gridResult.value.rows : 0));
 
-const {
-  currentIdx,
-  focusCell,
-  handleGridKeydown: _composableKeydown,
-  cellAttrs,
-  focusFirstCandidate,
-} = useSelectableGrid(
-  children,
-  colsRef,
-  cellIdentity,
-  boardInteraction,
-  'grid-cell',
-  // #172: the roving cursor has to know which cells the current choice accepts,
-  // or a keyboard player arrows blind across a board of unpickable squares.
-  isCellActionSelectable,
-);
-
-// DOM refs for each cell — needed to call .focus() after arrow-key navigation
-// (composable tracks authoritative index; DOM wiring belongs here per useSelectable.ts)
-const cellRefs: (HTMLElement | null)[] = [];
-function setCellRef(el: Element | null, idx: number) {
-  cellRefs[idx] = el instanceof HTMLElement ? el : null;
-}
-
 // Cell activation: handles selectable AND passive selectElement branches.
 // Called from both click and keyboard (Enter/Space) for consistent behavior.
 // Passive branch: non-selectable named cells call selectElement() so the board
@@ -195,24 +171,25 @@ function handleCellActivate(cell: GameElement) {
   }
 }
 
-// Grid keydown handler: intercepts Enter/Space to apply the passive branch,
-// delegates all navigation keys (Arrow/Home/End) to the composable.
-// After navigation, moves DOM focus to the new current cell so keyboard
-// users see a visible focus ring without a second Tab press.
-function handleGridKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' || e.key === ' ') {
-    const cell = children.value[currentIdx.value];
-    if (cell) handleCellActivate(cell);
-    e.preventDefault();
-    return;
-  }
-  _composableKeydown(e);
-  // Move DOM focus to match the new currentIdx (composable updates state synchronously;
-  // DOM attribute update is deferred to the next microtask via nextTick)
-  void nextTick(() => {
-    cellRefs[currentIdx.value]?.focus();
-  });
-}
+const {
+  currentIdx,
+  handleGridKeydown,
+  handleGridFocusIn,
+  registerCell,
+  focusCursorCell,
+  cellAttrs,
+  focusFirstCandidate,
+} = useSelectableGrid(
+  children,
+  colsRef,
+  cellIdentity,
+  boardInteraction,
+  handleCellActivate,
+  'grid-cell',
+  // #172: the roving cursor has to know which cells the current choice accepts,
+  // or a keyboard player arrows blind across a board of unpickable squares.
+  isCellActionSelectable,
+);
 
 // #172: when the Action Panel hands a large board-anchored choice to the board,
 // the board is the ONLY path into it — so focus has to make the journey too.
@@ -223,9 +200,7 @@ watch(
   (tick) => {
     if (!tick) return;
     if (!focusFirstCandidate()) return;
-    void nextTick(() => {
-      cellRefs[currentIdx.value]?.focus();
-    });
+    void nextTick(focusCursorCell);
   },
 );
 
@@ -299,11 +274,12 @@ function handleDrop(event: DragEvent, cell: GameElement) {
           role="grid"
           :aria-label="`Game board, ${colsRef} by ${rowsRef}`"
           @keydown="handleGridKeydown"
+          @focusin="handleGridFocusIn"
         >
           <div
             v-for="(cell, idx) in children"
             :key="cell.id"
-            :ref="(el) => setCellRef(el as Element | null, idx)"
+            :ref="(el) => registerCell(el as Element | null, idx)"
             v-bind="cellAttrs(cell)"
             class="grid-cell"
             role="gridcell"
@@ -321,7 +297,6 @@ function handleDrop(event: DragEvent, cell: GameElement) {
               'is-disabled': isCellDisabled(cell),
             }"
             :title="cell.name ?? undefined"
-            @focus="focusCell(idx)"
             @click.stop="handleCellActivate(cell)"
             @dragover="handleDragOver($event, cell)"
             @drop="handleDrop($event, cell)"

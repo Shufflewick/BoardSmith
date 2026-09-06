@@ -193,3 +193,98 @@ describe('GridBoardRenderer candidate focus (#172)', () => {
     expect(cells[0].attributes('tabindex')).toBe('0');
   });
 });
+
+/**
+ * #190 — the roving cursor and real focus must never disagree.
+ *
+ * Reported against HexBoardRenderer, but the wiring is shared: the grid keydown
+ * handler activates the cursor's cell, and the candidate cursor (#172) can move
+ * without focus moving with it. So the same silent wrong move is reachable here.
+ */
+describe('GridBoardRenderer keyboard activation follows focus (#190)', () => {
+  function pickableGrid(candidateIds: number[]) {
+    const interaction = createBoardInteraction();
+    const picked: number[] = [];
+    interaction.setValidElements(
+      candidateIds.map((id) => ({ id, ref: { id } })),
+      (id) => picked.push(id),
+    );
+    return { ...mountGrid(buildGridElement(3, 2), interaction), picked };
+  }
+
+  it('Enter resolves the cell that holds focus, not the one the cursor parked on', async () => {
+    const { wrapper, picked } = pickableGrid([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+    expect(cells[2].attributes('tabindex')).toBe('0');
+
+    (cells[4].element as HTMLElement).focus();
+    await nextTick();
+    await wrapper.find('[role="grid"]').trigger('keydown', { key: 'Enter' });
+
+    expect(picked).toEqual([104]);
+  });
+
+  it('Enter resolves the cell it was delivered to even when no focus event ever fired', async () => {
+    // Measured in Chrome: .focus() on a cell in a document that does not hold
+    // system focus moves document.activeElement and fires neither focus nor
+    // focusin. The key still arrives at that cell, and that is what must decide.
+    const { wrapper, picked } = pickableGrid([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+    expect(cells[2].attributes('tabindex')).toBe('0');
+
+    await cells[4].trigger('keydown', { key: 'Enter' });
+
+    expect(picked).toEqual([104]);
+  });
+
+  it('Space resolves the cell that holds focus too', async () => {
+    const { wrapper, picked } = pickableGrid([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+
+    (cells[4].element as HTMLElement).focus();
+    await nextTick();
+    await wrapper.find('[role="grid"]').trigger('keydown', { key: ' ' });
+
+    expect(picked).toEqual([104]);
+  });
+
+  it('a re-offer does not drag the cursor off the cell the player has focused', async () => {
+    const { wrapper, interaction, picked } = pickableGrid([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+
+    (cells[5].element as HTMLElement).focus();
+    await nextTick();
+    expect(cells[5].attributes('tabindex')).toBe('0');
+
+    interaction.setValidElements(
+      [102, 104].map((id) => ({ id, ref: { id } })),
+      (id) => picked.push(id),
+    );
+    await nextTick();
+
+    expect(document.activeElement).toBe(cells[5].element);
+
+    await wrapper.find('[role="grid"]').trigger('keydown', { key: 'Enter' });
+    expect(picked).toEqual([]);
+    expect(interaction.isSelected({ id: 105 })).toBe(true);
+    expect(cells[5].attributes('tabindex')).toBe('0');
+  });
+
+  it('ArrowRight steps from the cell that holds focus, not from a stale cursor', async () => {
+    const { wrapper } = pickableGrid([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+
+    (cells[4].element as HTMLElement).focus();
+    await nextTick();
+    await wrapper.find('[role="grid"]').trigger('keydown', { key: 'ArrowRight' });
+    await nextTick();
+
+    expect(cells[5].attributes('tabindex')).toBe('0');
+    expect(document.activeElement).toBe(cells[5].element);
+  });
+});
