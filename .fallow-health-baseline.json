@@ -175,14 +175,6 @@
         "count": 1
       }
     },
-    "src/cli/commands/dev.ts": {
-      "complexity_moderate": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "src/cli/commands/doctor.ts": {
       "complexity_high": {
         "count": 1
@@ -230,7 +222,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       },
       "crap_critical": {
         "count": 1
@@ -1033,25 +1025,25 @@
     "src/ui/components/debug/debug-format.ts:high impact",
     "src/engine/element/game.ts:complexity",
     "src/engine/action/action.ts:circular dependency",
-    "src/engine/element/game-element.ts:complexity",
     "src/ui/composables/useActionController.ts:complexity",
+    "src/engine/element/game-element.ts:complexity",
     "src/session/pick-handler.ts:complexity",
     "src/session/game-session.ts:complexity",
     "src/engine/tutorial/progress.ts:complexity",
     "src/session/stateless-ops.ts:complexity",
+    "src/cli/commands/dev.ts:complexity",
     "src/engine/command/inverse.ts:circular dependency",
     "src/bot-trainer/benchmark.ts:complexity",
-    "src/cli/commands/drift-check.ts:complexity",
-    "src/session/snapshot-session-host.ts:complexity",
-    "src/ui/composables/useBoardActionBridge.ts:high impact",
-    "src/bot/mcts-bot.ts:complexity",
     "src/contract/fingerprint.ts:dead code",
     "src/cli/commands/publish.ts:complexity",
-    "src/cli/commands/dev.ts:complexity",
-    "src/cli/commands/chunk-provenance.ts:complexity",
+    "src/session/snapshot-session-host.ts:complexity",
+    "src/ui/composables/useBoardActionBridge.ts:high impact",
+    "src/cli/commands/drift-check.ts:complexity",
+    "src/bot/mcts-bot.ts:complexity",
     "src/ui/composables/useFlyingElements.ts:complexity",
-    "src/cli/commands/ingest-archive.ts:complexity",
+    "src/cli/commands/chunk-provenance.ts:complexity",
     "src/cli/commands/verify-example-replay.ts:complexity",
+    "src/cli/commands/ingest-archive.ts:complexity",
     "src/cli/commands/verify-derive-check.ts:circular dependency",
     "src/cli/commands/verify-run.ts:complexity",
     "src/bot-trainer/feature-generator.ts:complexity",
@@ -1066,10 +1058,10 @@
     "src/ui/components/auto-ui/auto-ui-helpers.ts:complexity",
     "src/bot-trainer/introspector.ts:complexity",
     "src/testing/simulate-action.ts:complexity",
+    "src/testing/random-simulation.ts:complexity",
     "src/cli/commands/verify-enumerate.ts:complexity",
     "src/cli/lib/asset-scan.ts:complexity",
     "src/cli/commands/trace-check.ts:complexity",
-    "src/testing/random-simulation.ts:complexity",
     "src/cli/commands/evolve-bot-weights.ts:complexity",
     "src/session/lobby-manager.ts:complexity",
     "src/ui/components/dice/Die3D.vue:complexity",
