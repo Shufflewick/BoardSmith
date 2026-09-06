@@ -207,3 +207,37 @@ describe('per-line type reaches the DOM (#21)', () => {
     expect(wrapper.find('.message').classes()).toContain('log-type-action');
   });
 });
+
+/**
+ * THE LINE IS THE CONTRACT, NOT THE CONTAINER.
+ *
+ * `PlayShell` promises `data-testid="bs-log"` on this component and keeps it,
+ * but everything inside it was private markup: a `<div class="message">` with
+ * no per-line hook and no list element. ShufflewickPub's world e2e reader asked
+ * `bs-log` for `li`, got `[]` for every world on both hosts always, and a
+ * spec's NEGATIVE assertion ("the garden never hears the cellar") was satisfied
+ * by that same empty array — half a claim proven by nothing.
+ *
+ * A class is a styling handle and restyling is free; a `data-testid` is a
+ * promise. So the line carries one, and a reader outside this repo can name a
+ * line without reading this file.
+ */
+describe('a log line is nameable from outside', () => {
+  it('marks every line with the shell-stable bs-log-line testid', async () => {
+    const wrapper = mount(GameHistory, {
+      props: { messages: ['The fire gutters.', { text: 'Rook says hello.', type: 'shout' }] },
+    });
+    await nextTick();
+
+    const lines = wrapper.findAll('[data-testid="bs-log-line"]');
+    expect(lines).toHaveLength(2);
+    expect(lines[0].text()).toContain('The fire gutters.');
+    expect(lines[1].text()).toContain('Rook says hello.');
+  });
+
+  it('leaves an empty log with no lines to find, so [] is a real answer', async () => {
+    const wrapper = mount(GameHistory, { props: { messages: [] } });
+    await nextTick();
+    expect(wrapper.findAll('[data-testid="bs-log-line"]')).toHaveLength(0);
+  });
+});

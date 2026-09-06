@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import WorldShell from './WorldShell.vue';
 import { useWorld, type WorldContext } from './useWorld.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from './worldProtocol.js';
@@ -349,7 +349,19 @@ describe('WorldShell — the shared chrome (#170)', () => {
     wrapper.unmount();
   });
 
-  it('speaks a post-hoc refusal through the toast a table refuses through', async () => {
+  /**
+   * PRESS SOMETHING, HAVE THE WORLD REFUSE IT, AND ANSWER WHAT THE PLAYER WAS
+   * TOLD.
+   *
+   * One helper for both roads into a refusal because the two tests below differ
+   * only in WHICH CONTROL is pressed -- everything after the press is the same
+   * frame answered the same way, and writing it twice would let one copy drift
+   * into proving something the other does not.
+   */
+  async function refusedAfter(
+    press: (wrapper: ReturnType<typeof mountShell>) => Promise<void>,
+    sentence: string,
+  ): Promise<{ messages: unknown[]; types: unknown[] }> {
     const posted: any[] = [];
     const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
     const { toasts } = useToast();
@@ -357,22 +369,63 @@ describe('WorldShell — the shared chrome (#170)', () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame());
     await nextTick();
-    await wrapper.find('.go').trigger('click');
-    // The host answers the request the board just sent.
-    const requestId = posted.find((m) => m.type === 'world_command').requestId;
+
+    await press(wrapper);
+    await nextTick();
+
+    const command = posted.find((m) => m.type === 'world_command');
+    expect(command, 'pressing it sends the world a command').toBeTruthy();
+    // The host answers the request that press just sent.
     tell(wrapper, {
       source: WORLD_HOST_SOURCE,
       type: 'world_response',
-      requestId,
+      requestId: command.requestId,
       ok: false,
-      message: 'Your holding is bare.',
+      message: sentence,
     });
-    await nextTick();
-    await nextTick();
-    expect(toasts.value.slice(before).map((t) => t.message)).toContain('Your holding is bare.');
-    expect(toasts.value.slice(before).map((t) => t.type)).toContain('error');
+    // A panel submit is several awaits deep in the controller before the
+    // refusal lands, so drain the queue rather than counting ticks.
+    await flushPromises();
+
+    const said = toasts.value.slice(before);
     spy.mockRestore();
     wrapper.unmount();
+    return { messages: said.map((t) => t.message), types: said.map((t) => t.type) };
+  }
+
+  it('speaks a post-hoc refusal through the toast a table refuses through', async () => {
+    const said = await refusedAfter(
+      // The board's own control, which EMITS through `useWorld().act()`.
+      async (wrapper) => void (await wrapper.find('.go').trigger('click')),
+      'Your holding is bare.',
+    );
+    expect(said.messages).toContain('Your holding is bare.');
+    expect(said.types).toContain('error');
+  });
+
+  /**
+   * THE OTHER HALF OF #169.
+   *
+   * #169 fixed the board that EMITS: `useWorld().act()` used to drop its
+   * outcome on the floor. But a world with no board of its own -- the supported
+   * shape since #170/#181 -- never calls `act()` at all. Its player presses the
+   * SHARED ACTION PANEL, which goes through `useActionController`, and a refusal
+   * there set `lastError` and bumped `errorTick` with nobody in this shell
+   * watching. So on the generic board a refused command was invisible in the
+   * DOM: ShufflewickPub's e2e had to read the refusal off the `world_response`
+   * frame because the page never said it (its docs/E2E-TESTING.md notes this as
+   * a real gap upstream).
+   */
+  it('speaks a refusal of an action taken through the shared panel, which is all a generic board has', async () => {
+    const said = await refusedAfter(async (wrapper) => {
+      const look = wrapper
+        .findAll('[data-testid="bs-action-panel"] button')
+        .find((button) => button.text().toLowerCase().includes('look'));
+      expect(look, "the shared panel offers the world's enumerated action").toBeTruthy();
+      await look!.trigger('click');
+    }, 'It is too dark to see anything.');
+    expect(said.messages).toContain('It is too dark to see anything.');
+    expect(said.types).toContain('error');
   });
 
   it('names the fix rather than rendering blank when the registry resolves to nothing', async () => {

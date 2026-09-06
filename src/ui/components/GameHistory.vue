@@ -260,11 +260,16 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
 
     <!-- Messages: role=log so screen readers announce new entries as they arrive -->
     <div ref="messagesContainer" class="messages-container" role="log" aria-live="polite" aria-relevant="additions">
+      <!-- `data-testid="bs-log-line"` is a promise, the way `bs-log` is on the
+           container. Without it the only handle on a line was `.message`, a
+           styling class this component is free to rename — and a reader outside
+           this repo that guessed `li` matched nothing while looking green. -->
       <div
         v-for="msg in processedMessages"
         :key="msg.id"
         class="message"
         :class="[msg.type, typeClass(msg.type)]"
+        data-testid="bs-log-line"
       >
         <span class="timestamp">{{ formatTime(msg.timestamp) }}</span>
         <span class="text">{{ msg.text }}</span>
